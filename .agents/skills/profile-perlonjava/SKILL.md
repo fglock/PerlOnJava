@@ -83,4 +83,5 @@ Do not fold terminal latency into compute-only parity results.
 Link the source-matched report, JFR/profile artifacts, benchmark protocol, and
 remaining work from the relevant issue. Read the
 [issue triage guide](../../../docs/guides/issue-triage.md) when classifying or
-updating an issue. Use established repository labels and workflows.
+updating an issue. Keep its agent claim/checkpoint concise and link complete
+measurement artifacts; use established repository labels and workflows.

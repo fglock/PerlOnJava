@@ -203,9 +203,8 @@ and do not open a duplicate issue.
 Do not create the issue unless the user explicitly asks for that external
 action.
 
-## Issue reporting and triage
+## Issue coordination and reporting
 
-When reporting, classifying, or updating an issue, read the
-[issue triage guide](../../../docs/guides/issue-triage.md) for evidence, labels,
-ownership, related failures, and completion criteria. Its proposed labels and
-planning conventions require rollout; use existing GitHub labels until then.
+Use the [triage guide](../../../docs/guides/issue-triage.md) for issue evidence,
+agent claims, dependencies and concise checkpoints. Follow
+[AGENTS.md](../../../AGENTS.md) for work preservation and validation.

@@ -6,6 +6,8 @@ priorities and future plans.
 
 ## Work in progress
 
+- Separate organizational and project issue queues, record temporary agent claims and dependencies, and keep agent checkpoints concise (#1895).
+
 - Preserve scalar context for short-circuit expressions passed to scalar prototypes (#1891).
 - Include operating-system CA bundles and the Windows root store in verified `HTTP::Tiny` HTTPS connections while retaining JVM trust roots.
 - Keep nested Rose::HTML::Objects form results alive with counted argument owners so weak parent links and qualified field names survive argument evaluation (#1851).

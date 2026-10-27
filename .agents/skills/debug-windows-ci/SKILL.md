@@ -76,7 +76,7 @@ gh run view <run-id> --log-failed 2>&1 | grep "Tests run:"
 
 **Symptom**: "Cannot open/create <filename>: open failed"
 
-**Root Cause**: 
+**Root Cause**:
 - Windows uses different path separators (`\` vs `/`)
 - Temp directory permissions may differ
 - File locking behavior differs on Windows
@@ -200,9 +200,8 @@ gh run view <run-id> --log-failed 2>&1 | grep "DEBUG:"
 
 Remember to remove debug output before final commit.
 
-## Issue reporting and triage
+## Issue coordination and reporting
 
-When reporting, classifying, or updating an issue, read the
-[issue triage guide](../../../docs/guides/issue-triage.md) for evidence, labels,
-ownership, related failures, and completion criteria. Its proposed labels and
-planning conventions require rollout; use existing GitHub labels until then.
+Use the [triage guide](../../../docs/guides/issue-triage.md) for issue evidence,
+agent claims, dependencies and concise checkpoints. Follow
+[AGENTS.md](../../../AGENTS.md) for work preservation and validation.

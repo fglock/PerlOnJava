@@ -1,139 +1,155 @@
 # Issue reporting and triage
 
-Status: proposed workflow, 2026-10-01. Existing labels remain usable; the new
-labels and planning conventions below require rollout. See the
-[audit and implementation plan](../../dev/design/issue-organization.md).
+The minimal workflow from [#1895](https://github.com/fglock/PerlOnJava/issues/1895)
+uses a [planning index](../../dev/design/issue-queue.md), explicit dependencies,
+and temporary agent claims. It supersedes #1593's proposed large rollout; see
+[the implementation design](../../dev/design/issue-organization.md).
 
-## Reporting an actionable issue
+## Report an actionable issue
 
-Search open and closed issues for the behavior, diagnostic, and affected module.
-Use a title describing the failing behavior. Include:
+Search open and closed issues for the behavior, diagnostic and affected module.
+Describe the failing behavior and include:
 
-- A minimal reproducer, expected output, and actual output or diagnostic.
-- PerlOnJava version or commit, Java version, OS, and system Perl version.
-- System Perl, JVM backend, and interpreter backend results. Mark untested
-  combinations explicitly.
-- For CPAN failures: distribution/version, tester run ID, failing test and
-  assertion, prerequisites, full log location, and affected dependants.
-- For regressions: the last known working version or commit, if available.
-- For performance: input size, wall time, timeout, resource settings, and
-  comparison conditions. Distinguish a slow run from a confirmed hang.
+- Minimal reproducer, expected/actual output, version or commit, Java, OS and
+  system Perl version.
+- System Perl, JVM and interpreter results; mark untested combinations.
+- For CPAN: distribution/version, run identifier, failing tests, prerequisites,
+  durable evidence and affected dependants when known.
+- For regressions: last known working revision when available.
+- For performance: workload/input size, timing or timeout, resource settings and
+  matched comparison conditions. A timeout alone does not establish a hang.
 
-Follow [testing requirements](../../AGENTS.md#testing) when collecting evidence,
-including timeouts and capturing full output. Use
-[Discussions](https://github.com/fglock/PerlOnJava/discussions) for support and
-early ideas; move an agreed, actionable proposal into an issue. Follow the
-[security policy](../../SECURITY.md) for vulnerability reports.
+Follow [repository testing requirements](../../AGENTS.md#testing). Route support
+and early ideas to [Discussions](https://github.com/fglock/PerlOnJava/discussions)
+and vulnerabilities through the [security policy](../../SECURITY.md).
 
-## Labels
+## Classification and planning
 
-Each triaged issue has one primary type and at least one area. Add other areas
-only when evidence identifies shared ownership or affected code. A CPAN
-discovery alone does not imply a defect in a module port.
+The checked-in planning index records `Kind`, priority, next action and readiness
+for reviewed work. Every indexed item has one kind:
 
-| Dimension | Labels | Rule |
-|---|---|---|
-| Primary type | `bug`, `enhancement`, `documentation`, proposed `maintenance`, proposed `tracking` | Choose one; use `tracking` for a bounded parent with child issues |
-| Area | Existing `area:*` labels | Choose the code responsible for the behavior; retain useful secondary areas |
-| Triage | Proposed `needs-triage`, `needs-info`, `needs-repro` | Remove `needs-triage` after classification and next action are recorded; information requests may remain |
-| Priority | Proposed `priority:critical`, `priority:high`, `priority:normal`, `priority:low` | Choose one for accepted actionable work; unset means undecided |
-| Evidence | Proposed `regression`, `backend-parity` | Apply after confirming a previously working behavior or a backend difference |
-| Impact | Existing `high-impact` | Document broad ecosystem impact with named consumers or dependency evidence |
-| Participation | Existing `help wanted`, `good first issue` | Supply a reproducer, code pointers, acceptance criteria, and an available reviewer |
+| Kind | Requested outcome |
+|---|---|
+| Organizational | Select, coordinate, qualify, report or release work; examples: #1895, port-selection plan #1110, qualification tracker #1646 |
+| Project | Deliver software behavior, a bug fix, feature, compatibility port, performance improvement or executable tooling; examples: updater #1114/#1278 and Maven artifact publication #32 |
 
-Priority records scheduling urgency. `high-impact` records ecosystem reach.
-Critical means urgent severe failure such as data corruption or a release
-blocker; high means a confirmed regression, common crash/hang, or substantial
-compatibility blocker; normal means accepted routine work; low means a narrow
-edge case or exploratory improvement. Record the rationale, including
-workarounds and confidence. A high dependant count alone does not establish
-critical priority.
+Classify by outcome. `area:release` can describe either kind. An organizational
+tracker links independently actionable project fixes rather than absorbing them.
+Issues outside the index remain unreviewed for this convention, not implicitly
+project work. Add or revise a row when selecting new work.
 
-Keep `area:backend` for backend implementation defects. Use `backend-parity`
-for a verified difference between JVM and interpreter execution. Use
-`area:cpan-port` for provider/shim/port/install compatibility work, and the
-responsible compiler/runtime area for language defects found through CPAN.
+Retain existing primary type labels (`bug`, `enhancement`, `documentation`) and
+at least one responsible `area:*` on triaged issues. A CPAN discovery is not
+necessarily a port defect; use `area:cpan-port` for providers/install/port work.
+`area:backend` identifies backend code, not merely failure on both backends.
+Use `high-impact` only with named consumers or dependency evidence. Keep
+`help wanted`/`good first issue` for work with scope, evidence and review support.
+No new label taxonomy or Project board is required.
 
-## Triage and ownership
+Priority in the index is a recommendation with rationale: **high** for severe
+confirmed failures or broad blockers, **normal** for bounded routine work,
+**low** for narrow/exploratory work. Assess workarounds and evidence rather than
+issue age alone. Readiness is independent:
 
-1. Check whether the report belongs here and whether it reproduces under
-   system Perl and current PerlOnJava. Request the specific missing evidence.
-2. Search for a common root cause. Link potentially related issues before
-   deciding they are duplicates.
-3. Set primary type, areas, evidence labels, and priority when justified.
-4. Record the next action: minimize, investigate, design, implement, or verify.
-5. Remove `needs-triage` and put accepted work in the planning backlog.
+| State | Meaning |
+|---|---|
+| Investigate | Reproduction, root cause, scope or prerequisite remains unresolved |
+| Ready | Scope, acceptance and next implementation action are clear; refresh the reproducer on the intended base before changing code |
+| Active | Current claim or linked live PR records execution; identify which evidence supports this |
+| Blocked | A named prerequisite prevents the recorded next action; state an observable unblock condition |
+| Verify | Candidate or reported delivery needs acceptance checks or reconciliation with issue state |
 
-Assignment means someone has accepted responsibility for the next action.
-Unassigned backlog issues are valid. Active work must have an owner and a
-linked branch/PR or investigation note. Start with at most two active issues
-per owner; review the limit after a month.
+Live claims and PRs override a dated planning snapshot. Recheck before claiming
+work; do not maintain a second live status in a Project. If a Project is adopted
+later, designate one source of truth and make the index a dated selection aid.
+Milestones are optional and represent agreed finite delivery/release scope.
 
-Review the incoming queue weekly and the accepted backlog monthly. Review
-regressions, critical/high priority items, and missing evidence first. Revisit
-old reports against the current version before closing. Confirmed compatibility
-bugs stay open while actionable; elapsed time alone is not a closure reason.
+## Dependencies and useful groups
 
-## Planning
+Record `Blocked by #N: <required delivered behavior/milestone>` in the issue or
+current checkpoint, with a reference in the index. A related issue is not a
+blocker without evidence of a prerequisite. Distinguish confirmed prerequisites
+from suspected overlap, and identify independent investigation that can proceed.
 
-Use one GitHub Project for planning, with a single authoritative `Status` field:
-`Inbox`, `Backlog`, `Ready`, `In progress`, `In review`, `Done`.
+#1649 is active. Work requiring its ownership paths waits for those paths and
+their acceptance evidence; it need not wait for every later phase if its own
+prerequisite is delivered. Do not run a parallel replacement of the same cleanup
+paths. An independent bug sharing an area remains independently actionable.
 
-`Ready` means the reproducer or feature scope, acceptance criteria, and next
-action are clear. Add a `Blocked by` reference when a dependency prevents
-progress; leave the item in its current status. Use labels for priority so that
-issue searches and the Project agree without maintaining a second priority
-field. Use assignees for ownership.
+Group issues around shared code, test infrastructure or concrete delivery
+prerequisites. A routing group does not authorize a combined fix or concurrent
+edits. Create parent/sub-issues only for a finite shared deliverable with scope,
+dependency order and completion criteria. Group sizes follow the work.
 
-Milestones represent a committed release or a bounded delivery with completion
-criteria. Backlog items may have no milestone. Select a small release scope;
-record the reason when moving unfinished work to a later milestone.
+## Agent work claims
 
-Create Project views for Inbox, Ready work by priority, active work by owner,
-release scope, and work grouped by area or parent issue. If Project access is
-unavailable, use issue searches and a bounded tracking issue until it is set up.
+Agents execute work without permanent subsystem owners. GitHub assignees are
+optional. The shared default is **one marked current claim comment per agent
+attempt on the issue**; its URL is the stable checkpoint location. Read all
+marked claims and linked PRs before publishing a new one. Claim only authorized
+work and scope it before implementation.
 
-## Related failures and tracking issues
+```text
+<!-- agent-work-claim -->
+State: active | blocked | handed-off | released
+Agent/session: <unique attempt identifier>
+Scope: #<issue>, intended outcome and overlapping files/subsystems
+Work: <branch>, <source commit>, <PR or investigation reference>
+Checkpoint: <UTC timestamp>; <current result>
+Evidence: <commands/source identity, outcomes, links to full logs>
+Blocked by: <issue + required milestone, or none/unknown>
+Next: <immediate action>
+```
 
-Keep one issue per independently fixable behavior. Add multiple CPAN
-observations to the same issue when they demonstrate the same root cause.
-Preserve distribution versions, test identities, and logs when consolidating.
+Edit only your own designated comment as state changes; when editing it is
+unavailable, append one concise superseding checkpoint with the previous URL.
+Never change another agent's record. GitHub comments are advisory: reread after
+posting and check for simultaneous or overlapping claims. They do not provide
+atomic exclusion. If overlap appears, stop overlapping mutations, preserve work,
+and agree a split or handoff. Use separate worktrees for concurrent writers.
 
-Use parent issues and sub-issues for finite efforts such as Unicode property
-compatibility or an XS feasibility study. A parent contains the goal, design
-link, child issues, dependency order, acceptance criteria, and completion rule.
-Close it when the agreed scope is delivered. Cross-link related work that does
-not belong under one parent.
+For a file-coordinated pool, follow the
+[mailbox protocol](../../.agents/skills/file-mailbox-coordination/SKILL.md):
+its coordinator, leases and fences govern assignment. Link the issue checkpoint
+to that coordination record; do not create a competing scheduler. Local paths
+may help local agents but cannot be the only durable evidence in a public issue.
+
+A quiet or old claim prompts reconciliation: inspect PR/branch changes and any
+known process or pool state, then contact the agent/coordinator through an
+available authorized channel. Require explicit release/handoff or authorized
+recovery; elapsed time alone never grants ownership. Record unresolved claims
+as blocked when coordination is unavailable. No authority to merge, publish or
+expand scope is granted by a claim.
+
+On handoff, identify the successor and source/evidence boundary; the successor
+accepts in its own claim before execution. On completion or stopping, release
+the claim, identify surviving changes, logs and processes, and record any work
+left. A released implementation claim can leave an issue awaiting verification.
+
+## Concise current checkpoints
+
+Use [AGENTS.md's checkpoint rule](../../AGENTS.md#agent-claims-and-concise-checkpoints):
+normally 200–400 words, self-contained current state, not a session transcript.
+Refresh after a material result and before handoff, context compaction or exit.
+Keep full build/test logs as separate evidence; include commands, source identity,
+results and durable links rather than raw output. Preserve necessary decisions,
+failing-parent evidence and unresolved findings regardless of the word guideline.
+
+For append-only coordination, retain immutable messages and maintain a separate
+summary with the last processed message ID. Resume from that summary plus new
+messages; replay older entries only to resolve a specific uncertainty. Never
+truncate a journal or rewrite another agent's messages to shorten context.
 
 ## Completion
 
-A fix links its PR and permanent project regression test. Follow the repository
-requirements for system Perl validation, failure evidence on the unfixed parent,
-both backends, direct engine coverage when applicable, and integration gates.
-Retain upstream CPAN results as supporting evidence.
+A fix links its PR and permanent project regression coverage. Apply the
+repository requirements for system Perl validation, unfixed-parent evidence,
+both backends, direct engine coverage where applicable, and immutable build
+and integration gates. Upstream suites support, but do not replace, focused
+coverage. Documentation-only work follows the link-check exception.
 
-Use a closing reference only when the PR resolves the full issue. Partial work
-uses a related reference and leaves the remaining scope explicit. A merged fix
-is complete on the development branch; the milestone identifies its intended
-release. Close duplicates with a link to the canonical issue and close
-unsupported requests with a reason. Avoid automatic closure of known bugs.
-
-## Useful searches
-
-Paste these into GitHub Issues after the proposed labels exist:
-
-| Queue | Query |
-|---|---|
-| Incoming | `repo:fglock/PerlOnJava is:issue is:open label:needs-triage` |
-| Missing all labels | `repo:fglock/PerlOnJava is:issue is:open no:label` |
-| Regressions | `repo:fglock/PerlOnJava is:issue is:open label:regression` |
-| High priority | `repo:fglock/PerlOnJava is:issue is:open label:priority:high` |
-| Regex work | `repo:fglock/PerlOnJava is:issue is:open label:area:regex` |
-| Community work | `repo:fglock/PerlOnJava is:issue is:open label:"help wanted" no:assignee` |
-
-## Related guidance
-
-- [Contributing](../../CONTRIBUTING.md)
-- [CPAN prioritization](../../dev/design/cpan-port-prioritization.md)
-- [CPAN failure classification skill](../../.agents/skills/classify-cpan-failures/SKILL.md)
-- [Regex debugging skill](../../.agents/skills/debug-regex-engine/SKILL.md)
+Use closing references only for full resolution. Partial deliveries identify
+remaining work. Close duplicates only with a confirmed canonical cause and
+preserved evidence; do not automatically close confirmed bugs because of age.
+Existing reporting and test rules continue to apply without the superseded
+mandatory human-owner limit, label migration or scheduled review rollout.

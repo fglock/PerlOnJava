@@ -230,36 +230,44 @@ incident exposes a reusable lesson, integrate the prevention into the relevant
 main-text rule or design document; otherwise record it in the commit message.
 Skills must describe the current workflow, not its history.
 
-### Progress Tracking for Multi-Phase Work
+### Agent claims and concise checkpoints
 
-When working on multi-phase projects (like the Shared AST Transformer), **always update the design document when completing a phase**:
+Before implementing an issue, read its latest comments and linked PRs, then use
+[the claim protocol](docs/guides/issue-triage.md#agent-work-claims). Claims are
+temporary agent/session work records; GitHub assignees and permanent subsystem
+owners are optional. Respect existing claims and dependencies. Do not interpret
+a stale timestamp as permission to take over or overwrite work.
 
-1. **Mark the phase as completed** with date
-2. **Document what was done** (files changed, key decisions)
-3. **Update "Next Steps"** section so the user knows where to resume
-4. **Note any blockers or open questions**
+For long work, maintain one current checkpoint, normally 200–400 words. Include
+issue/scope, agent/session, branch and source commit or PR, completed result,
+decisive evidence, blockers, and immediate next action. Refresh it after a
+material result, before handoff or context compaction, and before stopping.
+Resume from that checkpoint and relevant changes since it, rather than rereading
+the entire history. Check live issue/PR state before acting on a saved summary.
 
-Example format at the end of a design doc:
+Keep conversation updates and issue comments brief. Replace your designated
+current-state summary instead of appending repeated plans, full transcripts,
+command-by-command diaries, or unchanged status. Capture complete test output
+in separate logs; summarize commands, source identity, outcomes and evidence
+links. Preserve required failure evidence, decisions and unresolved findings;
+the word range does not constrain necessary design documents or test logs.
 
-```markdown
-## Progress Tracking
+Preserve append-only mailboxes and other agents' messages. Use a separate current
+summary with a processed-message cursor; never truncate history to save context.
+Follow [mailbox coordination](.agents/skills/file-mailbox-coordination/SKILL.md)
+when a file-coordinated pool is actually in use.
 
-### Current Status: Phase 2 in progress
+### Progress tracking for multi-phase work
 
-### Completed Phases
-- [x] Phase 1: Infrastructure (2024-03-09)
-  - Created ASTAnnotation class
-  - Added typed fields to AbstractNode
-  - Files: AbstractNode.java, ASTAnnotation.java
+When completing a phase, update its design document with the date, delivered
+scope and source/merged commit, key decisions, evidence links, next phase and
+blockers. Keep one current-state section and a compact completed-phase table.
+Replace superseded next steps; retain durable design decisions and acceptance
+evidence without accumulating a chronological execution log.
 
-### Next Steps
-1. Implement VariableResolver visitor
-2. Add closure capture detection
-3. Run differential tests
-
-### Open Questions
-- Should we cache lvalue analysis results?
-```
+The [planning index](dev/design/issue-queue.md) separates organizational work
+from project deliverables. Its dated shortlist supports task selection; current
+issue claims and PR state determine whether work is available.
 
 ### Design Documents
 
