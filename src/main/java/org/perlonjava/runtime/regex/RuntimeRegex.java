@@ -226,6 +226,106 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     public void emitCompileDebugTraceForSplit() { emitCompileDebugTrace(true); }
     private boolean lexicalReStrict;
     private ParseDebugTrace failedParseDebugTrace = ParseDebugTrace.EMPTY;
+    transient String literalFastPathString;
+    private transient boolean literalFastPathChecked;
+
+    void ensureLiteralFastPathChecked() {
+        if (!literalFastPathChecked) {
+            literalFastPathChecked = true;
+            if (replacement == null
+                    && !matched
+                    && !quoteConstruction
+                    && warningsOnUse.isEmpty()
+                    && !hasPreservesMatch
+                    && !useGAssertion
+                    && !hasCodeBlockCaptures
+                    && lexicalDebugMode == 0
+                    && regexFlags != null
+                    && !regexFlags.isGlobalMatch()
+                    && !regexFlags.isMatchExactlyOnce()
+                    && recursivePattern != null) {
+                literalFastPathString = recursivePattern.getFixedLiteral();
+            }
+        }
+    }
+
+    private static final ThreadLocal<LiteralMatcher> LITERAL_MATCHER =
+            ThreadLocal.withInitial(LiteralMatcher::new);
+
+    private static RuntimeBase matchLiteralScalar(RuntimeRegex regex, String literal, RuntimeScalar string) {
+        RuntimeScalar inputValue = RuntimeScalarType.blessedId(string) != 0
+                ? Overload.stringify(string) : string;
+        String inputStr = inputValue.toString();
+
+        int idx = inputStr.indexOf(literal);
+        boolean found = idx >= 0;
+
+        if (found) {
+            PerlRuntime runtime = PerlRuntime.current();
+            RuntimeRegexState regexState = runtime.regexState;
+            regexState.lastMatchResultsTainted = runtime.executionState.taintMode
+                    && string.isTainted();
+            regexState.lastMatchWasByteString =
+                    inputValue.type == RuntimeScalarType.BYTE_STRING;
+            int end = idx + literal.length();
+            LiteralMatcher lm = LITERAL_MATCHER.get();
+            lm.update(inputStr, idx, end);
+            regexState.globalMatcher = lm;
+            regexState.globalMatchString = inputStr;
+            regexState.lastMatchUsedBackslashK = false;
+            regexState.lastMatchUsedPFlag = regex.hasPreservesMatch;
+            regexState.lastNamedCaptureGroups = null;
+            regexState.lastParenMatchOverrideActive = false;
+            regexState.lastParenMatchOverride = null;
+            regexState.manualCaptureStarts = null;
+            regexState.manualCaptureEnds = null;
+            regexState.provisionalCaptureResolver = null;
+            regexState.provisionalNamedCaptureGroups = null;
+            regexState.lastClosedCapture = null;
+            regexState.lastCaptureGroups = null;
+            regexState.lastMatchedString = literal;
+            regexState.lastMatchStart = idx;
+            regexState.lastMatchEnd = end;
+            regexState.lastSuccessfulPattern = regex;
+            regexState.lastSuccessfulMatchedString = literal;
+            regexState.lastSuccessfulMatchStart = idx;
+            regexState.lastSuccessfulMatchEnd = end;
+            regexState.lastSuccessfulMatchString = inputStr;
+        }
+
+        return RuntimeScalarCache.getScalarBoolean(found);
+    }
+
+    private static final class LiteralMatcher implements RegexMatcher {
+        private String input;
+        private int matchStart;
+        private int matchEnd;
+
+        void update(String input, int start, int end) {
+            this.input = input;
+            this.matchStart = start;
+            this.matchEnd = end;
+        }
+
+        @Override public boolean find() { return false; }
+        @Override public void region(int start, int end) {}
+        @Override public void useAnchoringBounds(boolean enabled) {}
+        @Override public void useTransparentBounds(boolean enabled) {}
+        @Override public int start() { return matchStart; }
+        @Override public int end() { return matchEnd; }
+        @Override public int start(int index) { return index == 0 ? matchStart : -1; }
+        @Override public int end(int index) { return index == 0 ? matchEnd : -1; }
+        @Override public int start(String name) { return -1; }
+        @Override public int end(String name) { return -1; }
+        @Override public String group(int index) {
+            return index == 0 ? input.substring(matchStart, matchEnd) : null;
+        }
+        @Override public String group(String name) { return null; }
+        @Override public int groupCount() { return 0; }
+        @Override public Map<String, Integer> namedGroups() { return null; }
+        @Override public String patternDescription() { return ""; }
+    }
+
     public RuntimeRegex() {
         this.regexFlags = null;
     }
@@ -3599,12 +3699,27 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             WarnDie.warnWithCategory(new RuntimeScalar(message),
                     RuntimeScalarCache.scalarEmptyString, "uninitialized");
         }
-        RuntimeRegex regex = resolveRegex(quotedRegex);
+        // Inline fast resolution for pre-compiled REGEX type (avoids ResolvedRegex record)
+        RuntimeScalar resolvedQuotedRegex = quotedRegex.type == RuntimeScalarType.READONLY_SCALAR
+                ? (RuntimeScalar) quotedRegex.value : quotedRegex;
+        RuntimeRegex regex;
+        if (resolvedQuotedRegex.type == RuntimeScalarType.REGEX) {
+            regex = (RuntimeRegex) resolvedQuotedRegex.value;
+        } else {
+            regex = resolveRegex(quotedRegex);
+        }
         if (regex.replacement != null) {
             if (regex.bytesSubstitution) {
                 return replaceRegexBytes(quotedRegex, string, ctx);
             }
             return replaceRegex(quotedRegex, string, ctx);
+        }
+
+        // Ultra-fast path: pure literal pattern in scalar/void context
+        regex.ensureLiteralFastPathChecked();
+        String literal = regex.literalFastPathString;
+        if (literal != null && ctx != RuntimeContextType.LIST) {
+            return matchLiteralScalar(regex, literal, string);
         }
 
         // Check if alarm is active - if so, use timeout wrapper to prevent catastrophic backtracking

@@ -49,7 +49,25 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         @Override public long longValue() { return value; }
         @Override public float floatValue() { return value; }
         @Override public double doubleValue() { return value; }
-        @Override public String toString() { return Long.toString(value); }
+        @Override public String toString() { return integerToString(value); }
+    }
+
+    private static final int INT_STRING_CACHE_SIZE = 512;
+    private static final String[] INT_STRING_CACHE = buildIntStringCache();
+
+    private static String[] buildIntStringCache() {
+        String[] cache = new String[INT_STRING_CACHE_SIZE];
+        for (int i = 0; i < INT_STRING_CACHE_SIZE; i++) {
+            cache[i] = Integer.toString(i);
+        }
+        return cache;
+    }
+
+    static String integerToString(long value) {
+        if (value >= 0 && value < INT_STRING_CACHE_SIZE) {
+            return INT_STRING_CACHE[(int) value];
+        }
+        return Long.toString(value);
     }
 
     private static Object copyScalarPayload(int scalarType, Object payload) {
@@ -3361,6 +3379,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             return materializeGrowingString();
         }
         if (type == INTEGER) {
+            if (value instanceof Integer i) {
+                return integerToString(i);
+            }
             return value.toString();
         }
         return toStringLarge();

@@ -346,6 +346,7 @@ final class JoniRegexPattern {
     private final boolean byteMode;
     private final java.nio.charset.Charset sourceCharset;
     private final List<String> compileWarnings;
+    private final String fixedLiteral;
 
     JoniRegexPattern(String perlPattern, RegexFlags flags) {
         this(perlPattern, flags, 0, false);
@@ -477,6 +478,27 @@ final class JoniRegexPattern {
         NamedGroupMaps groupMaps = collectNamedGroups(regex);
         namedGroups = groupMaps.logical();
         physicalNamedGroups = groupMaps.physical();
+        fixedLiteral = detectFixedLiteral(sourcePattern, regex, flags, byteMode);
+    }
+
+    private static String detectFixedLiteral(String pattern, Regex compiled,
+                                              RegexFlags flags, boolean byteMode) {
+        if (compiled.numberOfCaptures() != 0 || byteMode) return null;
+        if (flags != null && (flags.isCaseInsensitive() || flags.isExtended())) return null;
+        for (int i = 0; i < pattern.length(); i++) {
+            char c = pattern.charAt(i);
+            if (c == '\\' || c == '.' || c == '^' || c == '$' || c == '*'
+                    || c == '+' || c == '?' || c == '{' || c == '}'
+                    || c == '[' || c == ']' || c == '(' || c == ')'
+                    || c == '|') {
+                return null;
+            }
+        }
+        return pattern.isEmpty() ? null : pattern;
+    }
+
+    String getFixedLiteral() {
+        return fixedLiteral;
     }
 
     private record WarningDisplay(String pattern, int offset) {}

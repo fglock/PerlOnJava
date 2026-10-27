@@ -7,8 +7,14 @@ import org.perlonjava.runtime.runtimetypes.WarningFlags;
 
 public class RegexQuoteMeta {
     private static final int CALL_SITE_WARNING_UNSET = Integer.MIN_VALUE;
-    private static final ThreadLocal<int[]> CALL_SITE_WARNING_STATE = ThreadLocal.withInitial(() -> new int[]{CALL_SITE_WARNING_UNSET});
-    private static final ThreadLocal<String[]> CALL_SITE_WARNING_BITS = ThreadLocal.withInitial(() -> new String[]{null});
+
+    static final class CallSiteWarningHolder {
+        int state = CALL_SITE_WARNING_UNSET;
+        String bits;
+    }
+
+    private static final ThreadLocal<CallSiteWarningHolder> CALL_SITE_WARNING =
+            ThreadLocal.withInitial(CallSiteWarningHolder::new);
     private static final ThreadLocal<String> PARSER_WARNING_BITS = new ThreadLocal<>();
     private static final ThreadLocal<String> MATCH_TARGET_NAME = new ThreadLocal<>();
 
@@ -17,21 +23,27 @@ public class RegexQuoteMeta {
     }
 
     public static void setCallSiteWarningState(int state) {
-        int[] holder = CALL_SITE_WARNING_STATE.get();
-        if (holder[0] != state) holder[0] = state;
+        CallSiteWarningHolder h = CALL_SITE_WARNING.get();
+        if (h.state != state) h.state = state;
     }
 
     public static void setCallSiteWarningBits(String bits) {
-        String[] holder = CALL_SITE_WARNING_BITS.get();
-        if (holder[0] != bits) holder[0] = bits;
+        CallSiteWarningHolder h = CALL_SITE_WARNING.get();
+        if (h.bits != bits) h.bits = bits;
+    }
+
+    public static void setCallSiteWarning(int state, String bits) {
+        CallSiteWarningHolder h = CALL_SITE_WARNING.get();
+        if (h.state != state) h.state = state;
+        if (h.bits != bits) h.bits = bits;
     }
 
     public static String getCallSiteWarningBits() {
-        return CALL_SITE_WARNING_BITS.get()[0];
+        return CALL_SITE_WARNING.get().bits;
     }
 
     public static boolean isCallSiteWarningExplicitlyDisabled() {
-        int state = CALL_SITE_WARNING_STATE.get()[0];
+        int state = CALL_SITE_WARNING.get().state;
         return state != CALL_SITE_WARNING_UNSET && state < 0;
     }
 
@@ -61,10 +73,11 @@ public class RegexQuoteMeta {
         // This warning belongs to construction of the interpolated pattern.
         // Retaining it on the cached RuntimeRegex re-emits it for every match
         // and can leak a warning-enabled compilation into a no-warnings use.
-        int state = CALL_SITE_WARNING_STATE.get()[0];
+        CallSiteWarningHolder h = CALL_SITE_WARNING.get();
+        int state = h.state;
         RuntimeScalar warning = new RuntimeScalar(message);
         RuntimeScalar where = new RuntimeScalar("");
-        String warningBits = CALL_SITE_WARNING_BITS.get()[0];
+        String warningBits = h.bits;
         if (warningBits == null) {
             // Synthetic/interpolated regex wrappers do not always have a
             // dedicated quote opcode. Use the active statement mask rather
@@ -93,7 +106,8 @@ public class RegexQuoteMeta {
     public static ConstructionWarningDisposition constructionWarningDisposition(
             String message, boolean strictDefault) {
         String category = warningCategory(message);
-        String warningBits = CALL_SITE_WARNING_BITS.get()[0];
+        CallSiteWarningHolder h = CALL_SITE_WARNING.get();
+        String warningBits = h.bits;
         if (warningBits == null) {
             warningBits = WarningBitsRegistry.getRuntimeWarningBits();
         }
@@ -108,7 +122,7 @@ public class RegexQuoteMeta {
                     enabled && WarningFlags.isFatalInBits(warningBits, category));
         }
 
-        int state = CALL_SITE_WARNING_STATE.get()[0];
+        int state = h.state;
         if (state != CALL_SITE_WARNING_UNSET) {
             return new ConstructionWarningDisposition(state > 0, state == 2);
         }

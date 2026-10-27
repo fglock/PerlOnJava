@@ -4387,9 +4387,8 @@ public class BytecodeInterpreter {
                 if (implicitU != 0) {
                     flags = RuntimeRegex.applyUnicodeStringsFeatureToModifiers(flags);
                 }
-                RegexQuoteMeta.setCallSiteWarningState(warningState);
-                RegexQuoteMeta.setCallSiteWarningBits(warningBitsIndex >= 0
-                        ? code.stringPool[warningBitsIndex] : null);
+                RegexQuoteMeta.setCallSiteWarning(warningState,
+                        warningBitsIndex >= 0 ? code.stringPool[warningBitsIndex] : null);
                 registers[rd] = RuntimeRegex.getQuotedRegex(
                         registers[patternReg].scalar(), flags,
                         namedCharacterExpansions);
@@ -4419,9 +4418,8 @@ public class BytecodeInterpreter {
                 if (implicitU != 0) {
                     flags = RuntimeRegex.applyUnicodeStringsFeatureToModifiers(flags);
                 }
-                RegexQuoteMeta.setCallSiteWarningState(warningState);
-                RegexQuoteMeta.setCallSiteWarningBits(warningBitsIndex >= 0
-                        ? code.stringPool[warningBitsIndex] : null);
+                RegexQuoteMeta.setCallSiteWarning(warningState,
+                        warningBitsIndex >= 0 ? code.stringPool[warningBitsIndex] : null);
                 registers[rd] = RuntimeRegex.getQuotedRegex(
                         registers[patternReg].scalar(), flags, callsiteId,
                         namedCharacterExpansions);

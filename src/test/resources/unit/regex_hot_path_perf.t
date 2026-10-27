@@ -8,7 +8,7 @@ use Test::More;
 # - Integer-to-string conversion in regex matching context
 # - Non-ASCII fallback still works correctly
 
-plan tests => 29;
+plan tests => 37;
 
 # --- ASCII string matching (exercises fast-path input encoding) ---
 
@@ -102,4 +102,23 @@ ok($str !~ /a/, "empty string does not match 'a'");
 
 $str = "x";
 ok($str =~ /x/, "single char ASCII match");
+
+# --- Literal fast path: match position variables ---
+
+$str = "hello world";
+if ($str =~ /world/) {
+    is($-[0], 6, "literal match \$-[0] position");
+    is($+[0], 11, "literal match \$+[0] position");
+    is($&, "world", "literal match \$& value");
+    is($`, "hello ", "literal match \$` prematch");
+    is($', "", "literal match \$' postmatch");
+}
+
+# Literal fast path with integer input
+$i = 12345;
+if ($i =~ /234/) {
+    is($-[0], 1, "integer literal match \$-[0]");
+    is($+[0], 4, "integer literal match \$+[0]");
+    is($&, "234", "integer literal match \$&");
+}
 

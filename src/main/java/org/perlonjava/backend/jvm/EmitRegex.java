@@ -76,9 +76,6 @@ public class EmitRegex {
         emitterVisitor.ctx.mv.visitInsn(suppressed ? Opcodes.ICONST_M1
                 : fatal ? Opcodes.ICONST_2
                 : enabled ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
-        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                "org/perlonjava/runtime/regex/RegexQuoteMeta",
-                "setCallSiteWarningState", "(I)V", false);
         Object warningBits = node.getAnnotation("regexWarningBits");
         if (warningBits instanceof String bits) {
             emitterVisitor.ctx.mv.visitLdcInsn(bits);
@@ -87,7 +84,7 @@ public class EmitRegex {
         }
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/regex/RegexQuoteMeta",
-                "setCallSiteWarningBits", "(Ljava/lang/String;)V", false);
+                "setCallSiteWarning", "(ILjava/lang/String;)V", false);
     }
 
     /** Stack: pattern -> pattern carrying this literal's immutable lexical results. */
