@@ -2954,6 +2954,7 @@ public class SubroutineParser {
         }
 
         ArrayList<RuntimeScalar> capturedScalars = new ArrayList<>();
+        ArrayList<PerlOwnerSlot> capturedScalarOwnerSlots = new ArrayList<>();
         ArrayList<RuntimeBase> capturedAggregates = new ArrayList<>();
         ArrayList<PerlOwnerSlot> capturedAggregateOwnerSlots = new ArrayList<>();
         for (int i = 0; i < capturedValues.size(); i++) {
@@ -2967,7 +2968,7 @@ public class SubroutineParser {
             }
             if (value instanceof RuntimeScalar scalar) {
                 capturedScalars.add(scalar);
-                scalar.retainClosureCapture();
+                capturedScalarOwnerSlots.add(scalar.retainClosureCaptureSlot());
             } else if (value instanceof RuntimeArray || value instanceof RuntimeHash) {
                 RuntimeBase aggregate = (RuntimeBase) value;
                 capturedAggregates.add(aggregate);
@@ -2976,6 +2977,8 @@ public class SubroutineParser {
         }
         if (!capturedScalars.isEmpty()) {
             code.capturedScalars = capturedScalars.toArray(new RuntimeScalar[0]);
+            code.capturedScalarOwnerSlots =
+                    capturedScalarOwnerSlots.toArray(new PerlOwnerSlot[0]);
         }
         if (!capturedAggregates.isEmpty()) {
             code.capturedAggregates = capturedAggregates.toArray(new RuntimeBase[0]);

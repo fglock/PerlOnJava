@@ -386,9 +386,18 @@ public class Internals extends PerlModuleBase {
                 && code.capturedScalars != null) {
             for (int i = 0; i < code.capturedScalars.length; i++) {
                 if (code.capturedScalars[i] == previous) {
-                    scalar.retainClosureCapture();
-                    previous.releaseClosureCapture();
+                    PerlOwnerSlot replacementOwner = scalar.retainClosureCaptureSlot();
+                    PerlOwnerSlot[] ownerSlots = code.capturedScalarOwnerSlots;
+                    PerlOwnerSlot previousOwner = ownerSlots != null
+                                    && i < ownerSlots.length
+                            ? ownerSlots[i] : null;
+                    ((RuntimeScalar) previous).releaseClosureCaptureSlot(previousOwner);
                     code.capturedScalars[i] = scalar;
+                    if (ownerSlots == null || ownerSlots.length != code.capturedScalars.length) {
+                        ownerSlots = new PerlOwnerSlot[code.capturedScalars.length];
+                        code.capturedScalarOwnerSlots = ownerSlots;
+                    }
+                    ownerSlots[i] = replacementOwner;
                     return;
                 }
             }
@@ -492,12 +501,12 @@ public class Internals extends PerlModuleBase {
         if (base != null) {
             int rc = base.refCount;
             if (rc == Integer.MIN_VALUE) return new RuntimeScalar(0).getList();
-            int nativeCaptureOwners = base.nativeCaptureOwnerCount();
+            int nativeOwners = base.nativeOwnerSlotCount();
             if (rc < 0) {
-                if (nativeCaptureOwners == 0) return new RuntimeScalar(1).getList(); // untracked
-                rc = nativeCaptureOwners;
+                if (nativeOwners == 0) return new RuntimeScalar(1).getList(); // untracked
+                rc = nativeOwners;
             } else {
-                rc += nativeCaptureOwners;
+                rc += nativeOwners;
             }
             // An ampersand-style call may pass a weak qr// scalar directly
             // (qr-72922's refcount_is helper does this).  The call-frame alias

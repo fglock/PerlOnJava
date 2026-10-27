@@ -1165,6 +1165,14 @@ public class BytecodeCompiler implements Visitor {
         }
     }
 
+    int separateReturnRegister(int sourceReg) {
+        int resultReg = allocateRegister();
+        emit(Opcodes.ALIAS);
+        emitReg(resultReg);
+        emitReg(sourceReg);
+        return resultReg;
+    }
+
     private void emitScopeCleanup(int scopeIdx, boolean flush) {
         // Gather variable indices to determine if cleanup is needed.
         java.util.List<Integer> scalarIndices = symbolTable.getMyScalarIndicesInScope(scopeIdx);
@@ -1191,6 +1199,12 @@ public class BytecodeCompiler implements Visitor {
         // implicit `($left, $right)` return closes both socketpair ends before
         // the caller receives them.
         boolean preserveImplicitReturn = scopeIndices.isEmpty() && lastResultReg >= 0;
+        if (preserveImplicitReturn) {
+            // Return materialization replaces this register with an owned RV
+            // snapshot. Keep it separate from every lexical register, since
+            // an earlier local's cleanup can prepare a later local's value.
+            lastResultReg = separateReturnRegister(lastResultReg);
+        }
 
         // Emit SCOPE_EXIT_CLEANUP for each my-scalar register in the exiting scope.
         // This calls RuntimeScalar.scopeExitCleanup() which handles:
@@ -9122,6 +9136,23 @@ public class BytecodeCompiler implements Visitor {
             int endPos = bytecode.size();
             patchIntOffset(gotoEndPos + 1, endPos);
             lastResultReg = resultReg;
+        }
+        boolean conditionOwnsLocals = !symbolTable.getMyScalarIndicesInScope(ifScopeIndex).isEmpty()
+                || !symbolTable.getMyHashIndicesInScope(ifScopeIndex).isEmpty()
+                || !symbolTable.getMyArrayIndicesInScope(ifScopeIndex).isEmpty();
+        if (conditionOwnsLocals) {
+            if (lastResultReg >= 0 && currentCallContext != RuntimeContextType.VOID) {
+                // A conditional can yield its declaring lexical, including a
+                // false overloaded reference or a reference to a local hash.
+                // Acquire the expression's own owners before retiring that scope.
+                int sourceReg = lastResultReg;
+                lastResultReg = allocateRegister();
+                emit(Opcodes.SNAPSHOT_SCOPE_RESULT);
+                emitReg(lastResultReg);
+                emitReg(sourceReg);
+                emit(currentCallContext);
+            }
+            emitScopeCleanup(ifScopeIndex, true);
         }
         symbolTable.exitScope(ifScopeIndex);
     }

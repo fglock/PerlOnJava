@@ -152,6 +152,9 @@ public class WeakRefRegistry {
                 && weakenedLiveLexical;
 
         if (base.refCount > 0 && ref.refCountOwned) {
+            PerlOwnerSlot releasedSlot = ref.countedOwnerSlot();
+            boolean identifiedOwner = releasedSlot != null && releasedSlot.isActive()
+                    && releasedSlot.referent() == base;
             // Tracked object with a properly-counted reference:
             // decrement strong count (weak ref doesn't count).
             // Only decrement if refCountOwned=true, meaning the hash element
@@ -168,7 +171,9 @@ public class WeakRefRegistry {
             base.releaseOwner(ref, "weaken");
             base.releaseActiveOwner(ref);
             if (--base.refCount == 0) {
-                if (base.hasSemanticCaptureOwner()) {
+                if (base instanceof RuntimeCode code && code.hasActiveCodeOwner()) {
+                    code.deferFinalReleaseToActiveCode();
+                } else if (base.hasSemanticCaptureOwner()) {
                     // A captured pad is an authoritative Perl owner even when
                     // the weak probe being weakened held the last ordinary
                     // counted slot.  Keep the referent alive until the shared
@@ -180,7 +185,9 @@ public class WeakRefRegistry {
                     // slot holds a strong reference not counted in refCount.
                     // Don't call callDestroy — the container is still alive.
                     // Cleanup will happen at scope exit (scopeExitCleanupHash/Array).
-                } else if (!(base instanceof RuntimeScalar scalar
+                } else if (!(identifiedOwner && snapshotRoots.isEmpty()
+                        && MortalList.canTrustFinalCountedRelease(base))
+                        && !(base instanceof RuntimeScalar scalar
                         && scalar.ephemeralScalarReferenceReferent)
                         && hasWeakRefsTo(base)
                         && (ReachabilityWalker.isReachableFromRoots(base)
@@ -199,7 +206,12 @@ public class WeakRefRegistry {
                     // No local binding: refCount==0 means truly no strong refs.
                     // Trigger DESTROY + clear weak refs.
                     base.refCount = Integer.MIN_VALUE;
-                    DestroyDispatch.callDestroy(base);
+                    if (identifiedOwner && snapshotRoots.isEmpty()
+                            && MortalList.canTrustFinalCountedRelease(base)) {
+                        DestroyDispatch.callDestroyFromCountedOwner(base);
+                    } else {
+                        DestroyDispatch.callDestroy(base);
+                    }
                 }
             }
             // Note: we do NOT transition unblessed tracked objects to WEAKLY_TRACKED
@@ -364,6 +376,10 @@ public class WeakRefRegistry {
      * before DESTROY. Sets all weak scalars pointing to this referent to undef.
      */
     public static void clearWeakRefsTo(RuntimeBase referent) {
+        clearWeakRefsTo(referent, false);
+    }
+
+    static void clearWeakRefsTo(RuntimeBase referent, boolean finalCountedOwner) {
         // A captured pad is a semantic strong owner even when the selective
         // refcount has reached a weak-tracking sentinel. All destruction and
         // sweeping paths funnel through this method, so preserve that edge at
@@ -375,7 +391,8 @@ public class WeakRefRegistry {
         // Sub::Quote/Sub::Defer store weak backrefs to anonymous deferred subs;
         // leaving those weak scalars defined keeps the whole quoted/deferred
         // metadata graph Java-reachable and leaks until global destruction.
-        if (referent instanceof RuntimeCode code && shouldKeepCodeWeakRefs(code)) return;
+        if (!finalCountedOwner && referent instanceof RuntimeCode code
+                && shouldKeepCodeWeakRefs(code)) return;
         LifecycleRuntimeState state = state();
         Set<RuntimeScalar> weakRefs = state.referentToWeakRefs.remove(referent);
         if (weakRefs == null) return;

@@ -1,6 +1,16 @@
 # Perl-compatible ownership rewrite
 
-**Status:** Phase 1 closure-pad path is implemented and validated on both backends. Full UAT comparison, local gates, selected CPAN workloads, and PR CI pass. PR #1653 remains a draft pending review.
+**Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. Destructor exception cleanup also passes without sweeps. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
+
+**Sweep policy (2026-10-27):** Corrective sweeps are disabled by default, as
+requested. `JPERL_ENABLE_CORRECTIVE_SWEEPS=1` temporarily enables legacy
+comparison; a nonempty `JPERL_DISABLE_CORRECTIVE_SWEEPS` overrides it. Disabled
+runs skip automatic scheduling, discarded-container sweep preparation,
+scope-exit capture candidate processing, and the pre-END reachability sweep.
+Post-END global teardown remains separate from ordinary reference release.
+The build tracks both switches as test inputs so Gradle's configuration cache
+cannot silently reuse another run's policy. Default-off is a migration step,
+not evidence that every owner family is complete.
 
 **Tracking:** [#1649](https://github.com/fglock/PerlOnJava/issues/1649)
 
@@ -102,7 +112,10 @@ and first path establish implementation cost.
 
 ## Progress tracking
 
-### Current status: Phase 1 complete; merged in PR #1653 as `84f32be179bdc2b351c3eaae1cb26df39964ab6b` (2026-10-07)
+### Current status: Phase 1 complete; Phase 2 in progress
+
+Phase 1 merged in PR #1653 as `84f32be179bdc2b351c3eaae1cb26df39964ab6b`
+(2026-10-07).
 
 ### Completed
 
@@ -427,3 +440,329 @@ and first path establish implementation cost.
   investigation is safe snapshot reuse across unchanged root sets or an
   ownership path that removes the ordinary cleanup fallback. Full release
   acceptance also remains required before closing the issue.
+
+### Phase 2 progress (2026-10-27)
+
+- JVM lexical cleanup now includes captured scalar cells at ordinary scope and
+  subroutine fall-through boundaries. The new `closure_capture_scope_exit.t`
+  regression passes on system Perl and both backends. The existing recursive
+  builder regression also passes on both backends with corrective sweeps
+  disabled.
+- Explicit return cleanup now leaves the interpreter's `RETURN` opcode
+  decrements queued until the `RuntimeCode` boundary has removed the callee's
+  lexical registrations. The explicit-return regression passes 6/6 on JVM and
+  interpreter with corrective sweeps disabled. Declaration-scope provenance
+  still distinguishes locals from outer cells borrowed by a closure.
+- JVM and interpreter closure creation now assign a distinct `SCALAR_CAPTURE`
+  identity to each captured scalar pad cell. `releaseCaptures`, pad rebinding,
+  and thread cloning balance those identities; a focused Java test passes.
+  The slots remain owned by their closure metadata while the selective count
+  bridge is active. Registering them as a second global root retained a
+  Catalyst request tempfile, so native root-ledger integration still needs a
+  closure-liveness boundary.
+- [x] Counted scalar, array-element, and hash-element stores now have distinct
+  `PerlOwnerSlot` identities (2026-10-27). Overwrite preserves the cell's
+  identity; deferred releases carry an immutable slot identity and sequence,
+  so draining an old value cannot retire a newer assignment. These slots
+  identify the selective-count bridge without becoming global roots.
+  `RuntimeHash.put` acquires its element owner and releases displaced values;
+  array removal and scope cleanup retain release provenance. A final
+  identified scalar/element release can destroy its referent directly rather
+  than restoring a synthetic count from a stale root snapshot.
+- [x] Local-array rvalue returns now transfer through distinct `RETURN_VALUE`
+  slots before lexical cleanup on both backends (2026-10-27). Void returns
+  retain no element owners; scalar returns yield the count; list returns keep
+  mortal ownership until the receiving caller consumes the values. The new
+  [`local_array_return_owner_release.t`](../../src/test/resources/unit/refcount/local_array_return_owner_release.t)
+  passes 8/8 on system Perl and both backends with corrective sweeps disabled;
+  the unfixed implementation failed five assertions on each backend. The
+  equivalent implicit-return probe also passes 8/8 on all three runtimes.
+- [x] Weak links and captured/container-owned scalar results are treated as
+  borrows during recursive release and void discard (2026-10-27). This keeps
+  self-retaining closure cycles alive after invocation. The existing closure
+  cycle regression passes 3/3, the weak localized-cache regression 7/7, and
+  the new repeated-element/cycle regression 6/6 on both backends with sweeps
+  disabled. Seven Java owner-slot tests cover replacement, shared referents,
+  queue provenance, weak edges, borrowed captures, and a final element release
+  with zero root queries or snapshot builds.
+- [x] Unchanged HTML-Tree 5.07 `t/refloop.t` passes 8/8 on JVM and interpreter
+  with `JPERL_DISABLE_CORRECTIVE_SWEEPS=1` (2026-10-27). The full unfiltered
+  `nice -n 19 make` passes in 6m45s. Focused no-sweep qualification also passes
+  `destroy_edge_cases.t` (27/27), `weaken_edge_cases.t` (43/43), and END
+  destruction ordering (5/5) on both backends.
+- [x] Successful and throwing `DESTROY` callbacks now share ownership
+  finalization (2026-10-27). Synthetic callback arguments are balanced before
+  reblessing and resurrection checks; dead referents clear weak observers and
+  release owned children even when the callback dies or warning delivery
+  throws. Real escaped owners preserve the referent and allow its next
+  destruction. `issue_1649_destroy_exception_cleanup.t` now passes 10/10
+  without sweeps on both backends, resolving its two weak-clearing failures.
+  The new
+  [`destroy_exception_resurrection.t`](../../src/test/resources/unit/refcount/destroy_exception_resurrection.t)
+  passes 11/11 on system Perl and both backends without sweeps, covering
+  resurrection followed by final release, reblessing, cleanup warnings, and
+  preservation of `$@`. A Java regression verifies observer clearing and
+  child-owner release with automatic sweeps suppressed. HTML::Tree remains
+  8/8 on both backends without sweeps; the latest unfiltered
+  `nice -n 19 make` passes in 7m05s.
+
+- [x] Shared scalar/list return boundaries now snapshot reference values,
+  including CODE values, into mortal `RETURN_VALUE` slots (2026-10-27).
+  Forwarding an existing temporary avoids duplicate acquisition; lvalue returns
+  retain their cell aliases. Staged reference-valued list arguments acquire
+  distinct `ARGUMENT_VALUE` slots and queue their release once, including
+  repeated referents. Pending return owners protect closure captures until
+  the caller consumes the result. Five Java transfer tests pass. The new
+  [`code_return_argument_snapshot.t`](../../src/test/resources/unit/refcount/code_return_argument_snapshot.t)
+  passes 4/4 on system Perl and both backends without sweeps; the unfixed
+  implementation failed two assertions on each backend. Focused no-sweep
+  checks also pass local-array returns (8/8), throwing destructor resurrection
+  (11/11), self-retaining closure cycles (3/3), explicit closure returns
+  (6/6), and unchanged HTML::Tree (8/8) on both backends. The bundled
+  candidate passes the unfiltered `nice -n 19 make` gate in 8m18s.
+
+- [x] Partially evaluated method arguments now retire their explicit owners
+  on exceptions and frame exit (2026-10-27). JVM argument emission installs
+  an exception handler; interpreter inline-eval unwinding retires staging
+  registers created within that eval. Strong staging registrations and call
+  depth distinguish abandoned calls from still-active outer evaluations.
+  Staged argument owners and pending return tokens retain their referents
+  through the runtime positive-owner registry, releasing that retention once
+  their exact token drains. Existing corrective sweeps respect these explicit
+  transfer owners rather than reclaiming them from an incomplete root walk.
+  Non-local map returns preserve their result mortals during interpreter and
+  shared-call cleanup. The new
+  [`argument_evaluation_unwind.t`](../../src/test/resources/unit/refcount/argument_evaluation_unwind.t)
+  passes 20/20 and
+  [`argument_evaluation_return.t`](../../src/test/resources/unit/refcount/argument_evaluation_return.t)
+  passes 18/18 on standard Perl and both backends without sweeps. Unfixed
+  backends failed six unwind assertions each and six/seven return assertions
+  on JVM/interpreter respectively. Four Java checks cover repeated argument
+  identities, caller-frame preservation, non-local return transfer, and child
+  retention through an explicit argument owner. All Java tests and the
+  focused normal-mode refcount corpus pass (`nice -n 19 make`, 2m16s).
+
+### Final owner releases and default-off qualification (2026-10-27)
+
+- [x] Final weakening and scalar/element overwrite use their identified owner
+  edge instead of restoring a count from a root walk. Unblessed scalar cells
+  finalize when their lexical binding or last capture ends; escaped strong
+  references keep the cell and its contents alive. Scalar capture identities
+  are visible in the referent's local ledger without becoming global roots.
+  Legacy sweeps respect those binding/capture owners. Java coverage verifies
+  final release with zero root queries and no duplicate lifecycle transition.
+- [x] Whole-array replacement, undef, and local restoration release only owned
+  element cells. Clearing aliased `@_` preserves the caller's scalar owners,
+  including independently weakened probe copies; inserted elements still
+  release once. Files: `RuntimeArray.java`, `PerlArgumentUnwindOwnerTest.java`.
+- [x] JVM and interpreter acquire rvalue return owners before lexical cleanup.
+  Both interpreter return emitters reserve a separate result register, so
+  cleanup of an earlier local cannot replace a later local's owner cell.
+  Referenced scalar cells keep their contents until the receiving caller
+  releases or overwrites them. Lvalue aliases and socket ownership remain
+  covered by the existing regressions. Files: `RuntimeCode.java`,
+  `EmitStatement.java`, `EmitControlFlow.java`, `BytecodeCompiler.java`,
+  `CompileOperator.java`, `BytecodeInterpreter.java`, `MortalList.java`.
+- [x] Temporary-expression protection no longer follows scalar references into
+  arbitrary hash/array graphs. The referent and its element slots supply
+  ownership; only direct expression references are inspected. A Java
+  regression rejects traversal into unrelated metadata. This removes a
+  recursive Moose metadata walk observed during Catalyst bootstrap: the JVM
+  probe now reaches its tempfile assertion instead of timing out at 240s.
+
+New permanent Perl regressions pass on standard Perl and both backends with
+sweeps disabled by default:
+
+| Regression | Assertions |
+| --- | --- |
+| `refcount/scalar_cell_scope_owner_release.t` | 11/11 |
+| `refcount/scalar_cell_return_contents_owner.t` | 8/8 |
+| `refcount/argument_array_clear_borrowed_cells.t` | 9/9 |
+| `refcount/lexical_return_slot_owner_release.t` | 6/6 |
+
+The corresponding unfixed failures were retained before each correction.
+Existing default-off checks pass on both backends: probe copies (5/5), scalar
+assignment guards (6/6), weaken/DESTROY (24/24), scalar weak references
+(10/10), sliding-window release (12/12), argument exception/return cleanup
+(20/20 and 18/18), local-array returns (8/8), explicit closure returns (6/6),
+self-retaining closure cycles (3/3), and unchanged HTML::Tree (8/8). Existing
+socket lifetime and blessed-descriptor checks also pass on both backends.
+
+### Active call owners and final default-off gate (2026-10-27)
+
+- [x] Every active call frame owns an `ACTIVE_CODE` identity. Recursive calls
+  retain distinct tokens; removing one frame retires one token. A counted final
+  release waits for the last active frame, then clears observers and captures
+  without a root query. Borrowed CODE with no counted release keeps its captures;
+  template, stash, and pinned CODE ownership still require migration.
+- [x] Capture sweeps cannot override explicit live call/capture tokens, including
+  in legacy comparison mode. Default-off also skips capture candidate queuing
+  and processing and the pre-END reachability cleanup. The default-policy Java
+  regression verifies no candidate retention or pre-END root queries.
+- [x] Preserve genuine self-capture cycles rather than breaking them at lexical
+  exit. Assigning CODE into an already captured cell acquires the capture's
+  referent edge separately from the lexical store. Explicitly breaking the
+  cycle allows the final external owner to release its captured data.
+
+New permanent regressions pass on standard Perl and both backends without
+sweeps: `active_callback_owner_release.t` (13/13),
+`self_capture_cycle_owner.t` (9/9), and `code_template_owner_lifetime.t` (4/4).
+The callback and self-cycle failures were retained on the unfixed candidate.
+`ActiveCodeOwnerTest` passes all four cases, including zero root queries on
+final release. Existing `weak_active_coderef_dispatch.t` now passes 3/3 on both
+backends, and unchanged HTML::Tree still passes 8/8 on both.
+
+### Eval, tied handlers, and native parser arguments (2026-10-27)
+
+- [x] Tied hash, array, scalar, and handle wrappers acquire distinct
+  `TIE_HANDLER` identities on independent handler snapshots. Repeated release
+  retires the owner once. A released snapshot remains borrowable while dynamic
+  localization restores magic; clearing its payload caused five observed
+  regressions, all now passing on both backends without sweeps.
+- [x] Final container destruction releases magic and child slots independently
+  of temporary expression borrows. Ordinary lexical cleanup still protects
+  live aggregates. The final destruction path runs after resurrection checks.
+  Java coverage verifies hash/array child retirement and final tie release
+  without root queries.
+- [x] JVM eval callback returns clean eval lexicals before returning to their
+  caller. Interpreter evals consume untargeted callback returns as successful
+  eval results rather than errors. Explicit return owners protect referenced
+  results throughout lexical cleanup, abandoned method arguments, invocant
+  release, and local restoration. Targeted try/finally paths remain a separate
+  ownership boundary to complete.
+- [x] Scalar overwrite's external-root fallback cannot clear weak observers
+  while identified strong slots remain. This exposed an actual native-call
+  argument leak in `HTMLParser.fireEvent`: freshly owned event-data and call
+  arrays were never retired. Both arrays now release on success, exceptions,
+  and absent-method dispatch. Native parser containers use anonymous references
+  instead of inventing lexical bindings. Accumulated event arrays retain their
+  own contents until the program clears them.
+
+Permanent focused Perl coverage passes on standard Perl and both backends
+with corrective sweeps off:
+
+| Regression | Assertions |
+| --- | --- |
+| `refcount/tied_handler_owner_release.t` | 13/13 |
+| `refcount/eval_callback_return_owner_release.t` | 12/12 |
+| `refcount/native_parser_callback_owner_release.t` | 9/9 |
+
+Unfixed failures were retained before the corrections. `TiedHandlerOwnerTest`
+adds three Java cases for distinct identities, exactly-once retirement, magic
+restoration borrows, and final child release. The latest focused comparison
+gate passes in 1m36s:
+`JPERL_ENABLE_CORRECTIVE_SWEEPS=1 JPERL_TEST_FILTER=refcount/ nice -n 19 make`.
+Log: `/tmp/make-issue1649-native-parser-owner-batch.log`.
+
+Final direct default-off checks restore unchanged HTML::Tree to **8/8 on both
+backends**. All eight existing `html_parser_*.t` regressions pass on both
+backends. The preceding default-off reader batch also passes eval/map cleanup
+(3/3), simple tied-hash destruction (2/2), explicit closure returns (6/6),
+destructor exception/resurrection (11/11), and self-capture cycles (9/9).
+The JVM tied-hash autovivification loop passes 6/6. Five compatibility
+regressions exposed by clearing retired handler snapshots now pass on both
+backends: `eval_tied_local_cleanup.t`,
+`issue_1630_repeated_local_alias_io.t`, `signature_eval_tie_caller.t`,
+`symbol_table_glob_identity.t`, and `tied_lvalue_sub_return.t`.
+
+### Conditional scopes and method holds completed (2026-10-27)
+
+Method invocant holds now have independent `ARGUMENT_VALUE` identities and
+retire exactly once, including abandoned calls. Three Java cases cover distinct
+holds, deferred final release, and immediate abandoned-call release without
+reachability queries.
+
+The interpreter now closes condition-local scopes. Opcode 639 snapshots their
+result before cleanup; the JVM likewise acquires conditional results before
+retiring locals. Tied scalar, hash-element, and array-element lvalue results
+retain their storage through the caller's STORE. Legacy capture correction
+skips pads with identified capture owners.
+
+Standard Perl and both default-off backends pass the new conditional regressions
+(12/12, 6/6, and 7/7). The original tied-hash autovivification regression now
+passes 6/6 on both backends. Unchanged HTML::Tree remains 8/8 on both.
+
+The subsequent unfiltered default-off gate completed in 9m49s with eight
+failures: three Perl acceptance cases listed below and five Java cases that
+expect legacy sweeps. Log:
+`/tmp/make-issue1649-method-conditional-final-full.log`.
+
+### Final CV state-storage cleanup completed (2026-10-27)
+
+Final CV destruction now detaches and retires persistent scalar, array, and hash
+bindings after CODE destructor callbacks and the resurrection decision. A blessed
+CV that resurrects keeps its original state until its final destruction. Escaped scalar cells and aggregates retain their values until their
+own last owner ends. Persistent scalar cells are born with a binding rather
+than being mistaken for ephemeral returned scalars.
+
+State aggregate refaliases own separate counted reference slots. Releasing a
+CV retires those slots without ending the source aggregate's lexical binding.
+Lazy definition adoption shares this ownership metadata with the state maps;
+ithread cloning copies it with the cloned graph.
+
+Permanent regressions `refcount/closure_state_owner_release.t` (10/10),
+`refcount/state_aggregate_alias_owner_release.t` (6/6), and
+`refcount/blessed_code_state_resurrection.t` (10/10) pass standard Perl and
+both backends with sweeps explicitly disabled. Unfixed-parent failures are
+retained in `/tmp`. The final focused comparison gate passes in 2m35s:
+`/tmp/make-issue1649-state-resurrection-final-batch.log`. Destructor exceptions,
+true cycles, and unchanged HTML::Tree 8/8 also pass on both backends:
+`/tmp/issue1649-state-resurrection-final-backend-results.txt`.
+
+The full default-off gate before the final CODE-destructor ordering correction
+finished in 7m07s with the same eight known failures and no new failures from
+state-storage cleanup. The final ordering correction received the focused and
+backend checks above; another full gate remains required before publication.
+Evidence: `/tmp/make-issue1649-state-storage-final-full.log` and
+`/tmp/issue1649-state-storage-full-failures.txt`.
+
+Adjacent default-off checks preserve state refaliases, declared-reference list
+identity, true self-capture cycles, CODE template lifetimes, and HTML::Tree 8/8
+on both backends. `state.t` passes the JVM; its interpreter failures at 6, 7,
+and 13 reproduce on the saved pre-change JAR. Evidence:
+`/tmp/issue1649-state-final-backend-results.txt` and
+`/tmp/issue1649-state-parent-interpreter.log`.
+
+This completes state-storage retirement for CVs that actually reach final
+release. Named CODE/glob lifetime accounting still prevents that transition in
+the remaining named-state acceptance case. No remaining sweep or compatibility
+bridge has been removed on the strength of these focused passes.
+
+Unresolved acceptance cases:
+
+- Interpreter `catalyst_request_body_tempfile_lifetime.t` still retains the old
+  request tempfile; the JVM passes 2/2.
+- Removing installed CODE still does not retire its state metadata in
+  `weak_deferred_capture_full_sweep.t`.
+- Shared-proxy release and weak-slot resurrection remain unresolved in
+  `threads_shared_nested_proxies.t` and `threads_destroy_weak_slot_rescue.t`.
+- Escaping proxy/lvalue magic and other native call buffers still need explicit
+  ownership completion; compatibility borrows are not a substitute for strong
+  alias owners.
+
+Five Java acceptance cases explicitly depend on legacy sweeps: two capture
+retirement assertions in `MortalListDeferredCaptureTest`, two targeted-walker
+assertions in `ReachabilityQueryCostTest`, and the walker assertion in
+`WeakBackrefCodeCaptureSweepTest`. Keep existing tests intact. Default-off and
+these focused passes do not establish acceptance for removing remaining bridge
+and fallback code.
+
+Phase 2 remains in progress: the integer count is still the compatibility
+bridge for these new identities, argument ownership and other return paths
+are not fully migrated, and the complete unit suite has not passed with
+sweeps disabled. Passing the focused lifecycle tests does not establish that
+every producer, alias, or cleanup boundary uses semantic ownership alone.
+
+### Next steps
+
+1. Extend staged argument-value ownership to argument-cell lifetimes while
+   preserving caller aliases: removal, shared argument arrays, tail calls,
+   and exception unwinding still need explicit balanced ownership.
+2. Give named CODE/glob slots and localized saved CODE slots explicit ownership
+   so state retirement occurs after the last reference, alias, or active call.
+   Extend native call-buffer cleanup beyond HTML::Parser; complete shared-proxy
+   release and resurrection. Finish escaping proxy,
+   refalias, argument-removal, and targeted try/finally return ownership.
+3. Make semantic owner counts and runtime positive-count retention authoritative;
+   require lifecycle, resurrection, cycle, and full-suite success without sweeps.
+4. Remove corrective sweeps and reachability fallbacks after those gates pass.

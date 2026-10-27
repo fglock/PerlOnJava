@@ -851,6 +851,17 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         return ownedAliasElements != null && ownedAliasElements.contains(scalar);
     }
 
+    /** Whole-array replacement releases owned SVs, preserving borrowed caller cells. */
+    private void deferOwnedElementReleases() {
+        if (!elementsAliased) {
+            MortalList.deferDestroyForContainerClear(elements);
+        } else if (ownedAliasElements != null) {
+            MortalList.deferDestroyForContainerClear(new ArrayList<>(ownedAliasElements));
+            ownedAliasElements = null;
+            elementsOwned = false;
+        }
+    }
+
     public void forgetOwnedAliasElement(RuntimeScalar scalar) {
         if (ownedAliasElements == null || scalar == null) return;
         ownedAliasElements.remove(scalar);
@@ -934,7 +945,6 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                             && base.refCount > 0) {
                         result.refCountOwned = false;
                         runtimeArray.forgetOwnedAliasElement(result);
-                        base.releaseActiveOwner(result);
                         MortalList.requestWeakSweepsForDestroyedContainer(base);
                         MortalList.deferDecrementFromArraySlot(
                                 base, result, "RuntimeArray.pop");
@@ -977,7 +987,6 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                             && base.refCount > 0) {
                         result.refCountOwned = false;
                         runtimeArray.forgetOwnedAliasElement(result);
-                        base.releaseActiveOwner(result);
                         MortalList.requestWeakSweepsForDestroyedContainer(base);
                         MortalList.deferDecrementFromArraySlot(
                                 base, result, "RuntimeArray.shift");
@@ -1831,7 +1840,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         }
         this.eachIteratorIndex = null;
         notePackageRootMutation();
-        MortalList.deferDestroyForContainerClear(this.elements);
+        this.deferOwnedElementReleases();
         this.elements.clear();
         this.ownedAliasElements = null;
         this.elementsAliased = false;
@@ -1864,7 +1873,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 }
 
                 int originalSize = this.elements.size();
-                MortalList.deferDestroyForContainerClear(this.elements);
+                this.deferOwnedElementReleases();
                 if (needsCopy) {
                     // Make a defensive copy of the list before clearing
                     RuntimeList listCopy = new RuntimeList();
@@ -1984,7 +1993,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         }
         this.eachIteratorIndex = null;
         notePackageRootMutation();
-        MortalList.deferDestroyForContainerClear(this.elements);
+        this.deferOwnedElementReleases();
         this.elements.clear();
         list.addToArray(this);
         // Elements are aliases: mark as non-owning. setLarge in later
@@ -2013,7 +2022,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         RuntimeArray references = new RuntimeArray();
         references.setFromList(list);
         notePackageRootMutation();
-        MortalList.deferDestroyForContainerClear(this.elements);
+        this.deferOwnedElementReleases();
         this.elements.clear();
         for (RuntimeScalar reference : references.elements) {
             // This is refaliasing, not an ordinary dereference.  In
@@ -2599,7 +2608,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         }
         notePackageRootMutation();
         markScalarLocalContainerCleared();
-        MortalList.deferDestroyForContainerClear(this.elements);
+        this.deferOwnedElementReleases();
         if (elementSlotsAliasedIntoCallFrame) {
             for (RuntimeScalar element : this.elements) {
                 if (element != null
@@ -2743,7 +2752,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             // Without this, `local @_ = ($obj)` where $obj is tracked would
             // leak refCounts because the local elements are replaced without
             // ever going through scopeExitCleanup.
-            MortalList.deferDestroyForContainerClear(this.elements);
+            this.deferOwnedElementReleases();
             // Real Perl semantics: `local @arr` creates a fresh temporary AV
             // for the scope; `bless \@arr, 'X'` blesses that temporary; at
             // local-restore, the temporary is freed and DESTROY fires for

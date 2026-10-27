@@ -109,13 +109,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         private final java.util.ArrayList<RuntimeScalar> listResultOwners = new java.util.ArrayList<>();
         private int size;
         private final ExecutionRuntimeState ownerState;
-        private final java.lang.ref.WeakReference<CallArguments> registration;
+        private final int argumentDepth;
 
         private CallArguments(int capacity) {
             values = new RuntimeBase[Math.max(0, capacity)];
             ownerState = PerlRuntime.current().executionState();
-            registration = new java.lang.ref.WeakReference<>(this);
-            ownerState.callArgumentFrames.add(registration);
+            argumentDepth = ownerState.argsStack.size();
+            ownerState.callArgumentFrames.add(this);
         }
 
         public void add(RuntimeBase value) {
@@ -123,12 +123,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 throw new IllegalStateException("too many call arguments");
             }
             values[size++] = value;
-            // A list-valued call result can hold a fresh object returned by
-            // an inline constructor. The Java staging array keeps that list
-            // reachable, but it is not a Perl owner and cannot protect the
-            // returned object's weak observers when later arguments run.
-            // Give strong references in staged list results ordinary scalar
-            // owner slots until the enclosing call has consumed its arguments.
+            // Later argument expressions may drain the return's mortal owner.
+            // Retain each staged strong value through the enclosing call;
+            // scalar argument cells themselves keep their aliasing semantics.
             if (size < values.length && value instanceof RuntimeList) {
                 retainListResultOwners(value);
             }
@@ -140,12 +137,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     retainListResultOwners(element);
                 }
             } else if (value instanceof RuntimeScalar scalar
-                    && scalar.value instanceof RuntimeBase base
-                    && base.blessId != 0
-                    && WeakRefRegistry.hasWeakRefsTo(base)
+                    && scalar.value instanceof RuntimeBase
+                    && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
                     && !WeakRefRegistry.isweak(scalar)) {
-                RuntimeScalar owner = new RuntimeScalar();
-                owner.set(scalar);
+                RuntimeScalar owner = RuntimeScalar.retainStagedArgumentValue(scalar);
                 listResultOwners.add(owner);
             }
         }
@@ -191,12 +186,23 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
 
         public void finish() {
-            ownerState.callArgumentFrames.remove(registration);
+            ownerState.callArgumentFrames.remove(this);
             for (RuntimeScalar owner : listResultOwners) {
-                owner.set((RuntimeScalar) null);
+                MortalList.deferDecrementIfTracked(owner);
             }
             listResultOwners.clear();
             MortalList.drainDeferredArgumentOwnerReleases();
+        }
+
+        /** Release a partially evaluated call that will never enter its callee. */
+        public Throwable abandon(Throwable failure) {
+            finish();
+            // A non-local return carries a result whose mortal owner must
+            // survive until the receiving call boundary consumes it.
+            if (!(failure instanceof PerlNonLocalReturnException)) {
+                MortalList.flushAboveMark();
+            }
+            return failure;
         }
     }
 
@@ -210,11 +216,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
         }
         for (int i = state.callArgumentFrames.size() - 1; i >= 0; i--) {
-            java.lang.ref.WeakReference<CallArguments> reference = state.callArgumentFrames.get(i);
-            CallArguments frame = reference.get();
-            if (frame == null) {
-                state.callArgumentFrames.remove(i);
-            } else if (frame.containsReferent(referent)) {
+            CallArguments frame = state.callArgumentFrames.get(i);
+            if (frame.containsReferent(referent)) {
                 return true;
             }
         }
@@ -1084,6 +1087,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * Java thread. Weak CODE backrefs, especially Sub::Defer's self slot, must
      * not be cleared while the referent CODE is still running.
      */
+    /** An executing frame retains each of its explicit scalar capture slots. */
+    static boolean activeCodeOwnsCapture(RuntimeScalar scalar) {
+        for (RuntimeCode code : activeCodeStack()) {
+            if (code.capturedScalarOwnerSlots == null) continue;
+            for (PerlOwnerSlot slot : code.capturedScalarOwnerSlots) {
+                if (slot != null && slot.isActive() && slot.referent() == scalar) return true;
+            }
+        }
+        return false;
+    }
+
     private static Deque<RuntimeCode> activeCodeStack() {
         return PerlRuntime.current().executionState().activeCodeStack;
     }
@@ -1093,6 +1107,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     private static final class ActiveLexicalFrame {
+        private final PerlOwnerSlot codeOwner = new PerlOwnerSlot(PerlOwnerSlot.Kind.ACTIVE_CODE);
         private RuntimeCode code;
         private Map<String, RuntimeBase> cells;
         private String previousCallerPackage;
@@ -1100,9 +1115,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
         private ActiveLexicalFrame(RuntimeCode code, String previousCallerPackage,
                 String callSitePackage) {
-            this.code = code;
-            this.previousCallerPackage = previousCallerPackage;
-            this.callSitePackage = callSitePackage;
+            rebind(code, previousCallerPackage, callSitePackage);
         }
 
         private RuntimeCode code() {
@@ -1114,6 +1127,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             this.code = code;
             this.previousCallerPackage = previousCallerPackage;
             this.callSitePackage = callSitePackage;
+            codeOwner.acquireActiveCodeIdentity(code);
         }
 
         private String previousCallerPackage() {
@@ -1125,6 +1139,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
 
         private void clearForReuse() {
+            codeOwner.release();
             code = null;
             cells = null;
             previousCallerPackage = null;
@@ -1383,6 +1398,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 if (frame.code() == code) {
                     iterator.remove();
                     recycleActiveLexicalFrame(frame, executionState);
+                    break;
                 }
             }
         }
@@ -1392,6 +1408,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             if (!executionState.activeCodeCallSites.isEmpty()) {
                 executionState.activeCodeCallSites.pop();
             }
+            code.finishActiveCodeOwnerRelease();
             return;
         }
         int index = 0;
@@ -1399,6 +1416,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             if (iterator.next() == code) {
                 iterator.remove();
                 removeActiveCodeCallSiteAt(executionState, index);
+                code.finishActiveCodeOwnerRelease();
                 break;
             }
             index++;
@@ -1432,6 +1450,26 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             if (active == code) return true;
         }
         return false;
+    }
+
+    private boolean finalReleaseDeferredToActiveCode;
+
+    boolean hasActiveCodeOwner() {
+        return ownerSlotCount(PerlOwnerSlot.Kind.ACTIVE_CODE) != 0;
+    }
+
+    void deferFinalReleaseToActiveCode() {
+        finalReleaseDeferredToActiveCode = true;
+        if (refCount == Integer.MIN_VALUE) refCount = 0;
+    }
+
+    private void finishActiveCodeOwnerRelease() {
+        if (!finalReleaseDeferredToActiveCode || hasActiveCodeOwner()) return;
+        finalReleaseDeferredToActiveCode = false;
+        if (refCount != 0 || localBindingExists
+                || !MortalList.canTrustFinalCountedRelease(this)) return;
+        refCount = Integer.MIN_VALUE;
+        DestroyDispatch.callDestroyFromCountedOwner(this);
     }
 
     public static RuntimeCode getActiveCodeAt(int depth) {
@@ -1822,6 +1860,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (!stack.isEmpty()) {
             exitedArgs = stack.pop();
         }
+        // A return inside an argument expression can bypass the invocation
+        // wrapper without throwing. Retire staging frames belonging to this
+        // callee, preserving frames created in its still-active callers.
+        if (!executionState.callArgumentFrames.isEmpty()) {
+            for (CallArguments frame : executionState.callArgumentFrames.toArray(new CallArguments[0])) {
+                if (frame.argumentDepth > stack.size()) {
+                    frame.finish();
+                }
+            }
+        }
         Deque<java.util.List<RuntimeScalar>> pStack = executionState.pristineArgsStack;
         if (!pStack.isEmpty()) {
             pStack.pop();
@@ -1858,6 +1906,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     && scalar.value instanceof RuntimeCode code
                     && (code.capturedScalars != null || code.capturedAggregates != null)
                     && code.refCount > 0
+                    && !code.hasPendingReturnOwner()
                     && !isActiveCode(code)
                     && !ReachabilityWalker.isReachableFromRoots(code)) {
                 // A closure may have reached @_ after its lexical scope had
@@ -2168,6 +2217,84 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return returnList(retVal, callContext, true);
     }
 
+    /** Materialize context-sensitive aggregate values before their declaring scope ends. */
+    public static RuntimeBase prepareScopeResult(RuntimeBase result, int context) {
+        if (context == RuntimeContextType.LVALUE || context == RuntimeContextType.LVALUE_LIST
+                || context == RuntimeContextType.OBJECT) {
+            retainTiedScopeResultOwners(result);
+        } else if (context != RuntimeContextType.VOID && result instanceof RuntimeScalar scalar
+                && scalar.type == RuntimeScalarType.TIED_SCALAR) {
+            // FETCH belongs to this rvalue evaluation, before its lexical magic
+            // can retire. A returned lvalue instead retains the magic's storage.
+            result = scalar.tiedFetch();
+        }
+        if (result instanceof RuntimeArray || result instanceof RuntimeHash) {
+            if (context == RuntimeContextType.LIST) {
+                result = result.getList();
+            } else if (context == RuntimeContextType.SCALAR || context == RuntimeContextType.OBJECT) {
+                result = result.scalar();
+            }
+        }
+        return prepareScopeReturn(result, context, true);
+    }
+
+    private static void retainTiedScopeResultOwners(RuntimeBase result) {
+        if (result instanceof RuntimeList list) {
+            for (RuntimeBase value : list.elements) retainTiedScopeResultOwners(value);
+            return;
+        }
+        TiedVariableBase magic = result instanceof TiedVariableBase tied ? tied
+                : result instanceof RuntimeScalar scalar
+                    && scalar.type == RuntimeScalarType.TIED_SCALAR
+                    && scalar.value instanceof TiedVariableBase tied ? tied : null;
+        if (magic != null) {
+            RuntimeScalar storage = magic.storageOwnerReference();
+            if (storage != null) RuntimeScalar.copyToMortalReturnSlot(storage);
+        }
+    }
+
+    /** Acquire rvalue reference owners before lexical cleanup can retire their referents. */
+    public static RuntimeBase prepareScopeReturn(
+            RuntimeBase returned, int callContext, boolean copyScalars) {
+        if (!copyScalars || callContext == RuntimeContextType.VOID
+                || callContext == RuntimeContextType.LVALUE
+                || callContext == RuntimeContextType.LVALUE_LIST) return returned;
+        if (returned instanceof RuntimeScalar scalar
+                && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                && !scalar.isMortalReturnSnapshot()) {
+            return RuntimeScalar.copyToMortalReturnSlot(scalar);
+        }
+        if (returned instanceof RuntimeList list && !(returned instanceof RuntimeControlFlowList)) {
+            for (RuntimeBase value : list.elements) {
+                if (value instanceof RuntimeScalar scalar
+                        && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                        && !scalar.isMortalReturnSnapshot()) {
+                    return list.copyToMortalReturnSlots();
+                }
+            }
+        }
+        return returned;
+    }
+
+    /** Materialize a local array's rvalue return before its element slots end. */
+    public static RuntimeBase prepareLocalArrayReturn(
+            RuntimeBase returned, RuntimeArray localArray, int callContext, boolean copyScalars) {
+        if (localArray == null || returned != localArray || !copyScalars
+                || callContext == RuntimeContextType.LVALUE
+                || callContext == RuntimeContextType.LVALUE_LIST) return returned;
+        if (callContext == RuntimeContextType.VOID) return new RuntimeList();
+        if (callContext == RuntimeContextType.SCALAR || callContext == RuntimeContextType.OBJECT) {
+            return localArray.scalar();
+        }
+        RuntimeList result = new RuntimeList();
+        for (int i = 0, size = localArray.size(); i < size; i++) {
+            RuntimeScalar value = localArray.get(i);
+            result.elements.add(value == null ? new RuntimeScalar()
+                    : RuntimeScalar.copyToMortalReturnSlot(value));
+        }
+        return result;
+    }
+
     /** Return the scalar lvalue represented by {@code keys %hash}. */
     public static RuntimeScalar keysLvalue(RuntimeBase container) {
         RuntimeScalar result = new RuntimeScalar(container.keys(RuntimeContextType.SCALAR));
@@ -2423,11 +2550,64 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
     }
 
+    /** Consume a map/grep return at an eval boundary after releasing its lexical owners. */
+    public static RuntimeList finishEvalCallbackReturn(
+            PerlNonLocalReturnException transfer, Object[] locals, int context) {
+        return finishEvalCallbackReturn(transfer, locals, context, () -> {});
+    }
+
+    /** Keep the return owners through backend-specific argument and local restoration. */
+    public static RuntimeList finishEvalCallbackReturn(
+            PerlNonLocalReturnException transfer, Object[] locals, int context, Runnable unwind) {
+        java.util.ArrayList<RuntimeScalar> owners = new java.util.ArrayList<>();
+        RuntimeBase value = retainEvalReturnReferences(transfer.returnValue, owners);
+        try {
+            // The return slots above remain counted during nested DESTROY and
+            // flushes. Only expression values are traversed, never referent graphs.
+            for (int i = locals.length - 1; i >= 0; i--) {
+                MortalList.evalExceptionScopeCleanup(locals[i]);
+                MyVarCleanupStack.unregister(locals[i]);
+            }
+            unwind.run();
+            MortalList.flush();
+            GlobalVariable.setGlobalVariable("main::@", "");
+            return coerceScalarCallResult(value == null ? new RuntimeList() : value.getList(),
+                    context, context, true);
+        } finally {
+            for (RuntimeScalar owner : owners) MortalList.deferDecrementIfTracked(owner);
+        }
+    }
+
+    private static RuntimeBase retainEvalReturnReferences(
+            RuntimeBase value, java.util.List<RuntimeScalar> owners) {
+        if (value instanceof RuntimeList list) {
+            RuntimeList copy = new RuntimeList();
+            for (RuntimeBase element : list.elements) {
+                copy.elements.add(retainEvalReturnReferences(element, owners));
+            }
+            return copy;
+        }
+        if (value instanceof RuntimeScalar scalar
+                && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0) {
+            RuntimeScalar owner = RuntimeScalar.retainEvalReturnValue(scalar);
+            owners.add(owner);
+            return owner;
+        }
+        return value;
+    }
+
     /** True when draining a callee's scope exits cannot invalidate its result. */
     private static boolean containsNoReference(RuntimeList result) {
+        if (result instanceof RuntimeControlFlowList flow
+                && flow.getControlFlowType() == ControlFlowType.RETURN) {
+            RuntimeBase value = flow.getReturnValue();
+            return value == null || containsNoReference(value.getList());
+        }
         return result != null && result.elements.stream().noneMatch(
                 element -> element instanceof RuntimeScalar scalar
-                        && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0);
+                        && ((scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                            || scalar.type == RuntimeScalarType.TIED_SCALAR
+                            || scalar instanceof TiedVariableBase));
     }
 
     /**
@@ -2440,7 +2620,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (result instanceof RuntimeList list) {
             resultHasNoReferences = containsNoReference(list);
         } else if (result instanceof RuntimeScalar scalar) {
-            resultHasNoReferences = (scalar.type & RuntimeScalarType.REFERENCE_BIT) == 0;
+            resultHasNoReferences = (scalar.type & RuntimeScalarType.REFERENCE_BIT) == 0
+                    && scalar.type != RuntimeScalarType.TIED_SCALAR
+                    && !(scalar instanceof TiedVariableBase);
         } else {
             resultHasNoReferences = true;
         }
@@ -2461,27 +2643,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         for (RuntimeBase value : result.elements) {
             if (value instanceof RuntimeScalar scalar
-                    && !isCodeScalar(scalar)) {
+                    && !scalar.isMortalReturnSnapshot()) {
                 if (recyclableScalarResult && result.elements.size() == 1) {
                     // Scalar-context callers discard the list wrapper after extracting this
                     // copied rvalue. Reuse a private one-scalar input wrapper when possible;
                     // otherwise acquire a runtime-local wrapper for the copied value.
-                    RuntimeScalar copied = scalar.clone();
+                    RuntimeScalar copied = RuntimeScalar.copyToMortalReturnSlot(scalar);
                     if (result.replaceRecyclableScalarResult(copied)) return result;
                     return RuntimeList.acquireScalarResult(copied);
                 }
-                return result.cloneScalars();
+                return result.copyToMortalReturnSlots();
             }
         }
         return result;
-    }
-
-    private static boolean isCodeScalar(RuntimeScalar scalar) {
-        RuntimeScalar current = scalar;
-        while (current != null && current.type == RuntimeScalarType.READONLY_SCALAR) {
-            current = (RuntimeScalar) current.value;
-        }
-        return current != null && current.type == RuntimeScalarType.CODE;
     }
 
     private static RuntimeList copyReadonlyListReturns(RuntimeList result, int effectiveContext) {
@@ -2541,51 +2715,56 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (base.refCount < 0) {
             return null;
         }
-        base.traceRefCount(+1, "RuntimeCode.method invocant hold (+1)");
-        base.refCount++;
-        base.acquireTransientTraceOwner("method invocant hold", "RuntimeCode.acquireMethodInvocantHold");
-        return base;
+        return new MethodInvocantHold(base);
+    }
+
+    /** One call's invocant edge, kept separate from every other hold of the same value. */
+    private static final class MethodInvocantHold extends RuntimeScalar {
+        private final RuntimeBase referent;
+        private final PerlOwnerSlot owner = new PerlOwnerSlot(PerlOwnerSlot.Kind.ARGUMENT_VALUE);
+
+        MethodInvocantHold(RuntimeBase referent) {
+            this.referent = referent;
+            owner.acquireCountedIdentity(referent);
+            referent.traceRefCount(+1, "RuntimeCode.method invocant hold (+1)");
+            referent.refCount++;
+            referent.hadCountedReference = true;
+            referent.acquireTransientTraceOwner("method invocant hold", "RuntimeCode.acquireMethodInvocantHold");
+        }
+
+        void release(boolean abandoned) {
+            if (!owner.isActive()) return;
+            PerlOwnerSlot.PendingRelease release = owner.releaseCountedIdentity();
+            referent.releaseTransientTraceOwner("method invocant hold", "RuntimeCode.MethodInvocantHold.release");
+            if (referent.refCount <= 0 || referent.currentlyDestroying) {
+                release.complete();
+                return;
+            }
+            if (referent.refCount > 1) {
+                // Other counted owners remain. Preserve the existing immediate
+                // decrement without losing this call's distinct release identity.
+                referent.traceRefCount(-1, "RuntimeCode.method invocant hold release (-1)");
+                referent.refCount--;
+                release.complete();
+                return;
+            }
+            // Normal returns need a mortal boundary so their receiver can
+            // acquire the result. Abandoned calls have no receiver and drain
+            // this exact release immediately, including within DESTROY.
+            int checkpoint = MortalList.pendingSize();
+            MortalList.deferOwnerSlotDecrement(referent, null, release);
+            if (abandoned) MortalList.drainPendingSince(checkpoint);
+        }
     }
 
     /** Release a hold returned by {@link #acquireMethodInvocantHold(RuntimeScalar)}. */
-    public static void releaseMethodInvocantHold(RuntimeBase holdBase) {
-        if (holdBase == null) {
-            return;
-        }
-        holdBase.traceRefCount(-1, "RuntimeCode.method invocant hold release (-1)");
-        holdBase.releaseTransientTraceOwner("method invocant hold",
-                "RuntimeCode.releaseMethodInvocantHold");
-        if (holdBase.refCount > 0 && holdBase.refCount != Integer.MIN_VALUE && !holdBase.currentlyDestroying) {
-            if (holdBase.refCount == 1) {
-                // Keep the invocant alive until the caller has had a chance to
-                // capture a method's return value. If no real owner is added,
-                // the deferred decrement destroys it at the statement boundary.
-                MortalList.deferDecrement(holdBase);
-            } else {
-                holdBase.refCount--;
-            }
-        }
+    public static void releaseMethodInvocantHold(RuntimeBase hold) {
+        if (hold != null) ((MethodInvocantHold) hold).release(false);
     }
 
-    /**
-     * Release a method-invocant hold when control flow abandoned the call that
-     * would have transferred the result. Unlike an ordinary post-call release,
-     * reaching zero here is final and must run Perl destruction immediately.
-     */
-    public static void releaseAbandonedMethodInvocantHold(RuntimeBase holdBase) {
-        if (holdBase == null) {
-            return;
-        }
-        holdBase.traceRefCount(-1, "RuntimeCode.abandoned method invocant hold release (-1)");
-        holdBase.releaseTransientTraceOwner("method invocant hold",
-                "RuntimeCode.releaseAbandonedMethodInvocantHold");
-        if (holdBase.refCount > 0
-                && holdBase.refCount != Integer.MIN_VALUE
-                && !holdBase.currentlyDestroying
-                && --holdBase.refCount == 0) {
-            holdBase.refCount = Integer.MIN_VALUE;
-            DestroyDispatch.callDestroy(holdBase);
-        }
+    /** Retire an abandoned call's invocant edge without waiting for a result receiver. */
+    public static void releaseAbandonedMethodInvocantHold(RuntimeBase hold) {
+        if (hold != null) ((MethodInvocantHold) hold).release(true);
     }
 
     private static boolean isReferenceToGlobInvocant(RuntimeScalar invocant) {
@@ -3022,6 +3201,65 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public Map<String, RuntimeScalar> stateVariable = new HashMap<>();
     public Map<String, RuntimeArray> stateArray = new HashMap<>();
     public Map<String, RuntimeHash> stateHash = new HashMap<>();
+    Map<String, RuntimeScalar> stateAggregateAliasOwners = new HashMap<>();
+
+    void bindStateAggregateAlias(String name, RuntimeBase aggregate) {
+        boolean array = aggregate instanceof RuntimeArray;
+        String ownerKey = (array ? "@" : "%") + name;
+        RuntimeScalar owner = new RuntimeScalar();
+        owner.set(array ? ((RuntimeArray) aggregate).createAnonymousReference()
+                : ((RuntimeHash) aggregate).createAnonymousReference());
+        RuntimeBase previous = array ? stateArray.put(name, (RuntimeArray) aggregate)
+                : stateHash.put(name, (RuntimeHash) aggregate);
+        RuntimeScalar previousOwner = stateAggregateAliasOwners.put(ownerKey, owner);
+        if (previousOwner != null) {
+            RuntimeScalar.scopeExitCleanup(previousOwner);
+        } else if (previous instanceof RuntimeArray previousArray) {
+            MortalList.scopeExitCleanupArray(previousArray);
+        } else if (previous instanceof RuntimeHash previousHash) {
+            MortalList.scopeExitCleanupHash(previousHash);
+        }
+    }
+
+    /** Retire this CV's persistent pad bindings at final CV destruction. */
+    void releaseStateStorage() {
+        if (stateVariable.isEmpty() && stateArray.isEmpty() && stateHash.isEmpty()
+                && stateAggregateAliasOwners.isEmpty()) {
+            stateVariableInitialized.clear();
+            return;
+        }
+        // Detach all bindings before cleanup: destructors may re-enter Perl.
+        // State aliases can address the same cell under more than one name.
+        Set<RuntimeBase> bindings = Collections.newSetFromMap(new IdentityHashMap<>());
+        bindings.addAll(stateVariable.values());
+        for (var entry : stateArray.entrySet()) {
+            if (!stateAggregateAliasOwners.containsKey("@" + entry.getKey())) {
+                bindings.add(entry.getValue());
+            }
+        }
+        for (var entry : stateHash.entrySet()) {
+            if (!stateAggregateAliasOwners.containsKey("%" + entry.getKey())) {
+                bindings.add(entry.getValue());
+            }
+        }
+        // A refalias owns a reference, rather than the source aggregate's
+        // lexical binding. Retiring it must leave the caller's binding intact.
+        bindings.addAll(stateAggregateAliasOwners.values());
+        stateVariable.clear();
+        stateArray.clear();
+        stateHash.clear();
+        stateAggregateAliasOwners.clear();
+        stateVariableInitialized.clear();
+        for (RuntimeBase binding : bindings) {
+            if (binding instanceof RuntimeScalar scalar) {
+                RuntimeScalar.scopeExitCleanup(scalar);
+            } else if (binding instanceof RuntimeArray array) {
+                MortalList.scopeExitCleanupArray(array);
+            } else if (binding instanceof RuntimeHash hash) {
+                MortalList.scopeExitCleanupHash(hash);
+            }
+        }
+    }
     public RuntimeList constantValue;
     // Field to hold the thread compiling this code
     public Supplier<Void> compilerSupplier;
@@ -3083,6 +3321,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * exit, but only when the closure itself is released.
      */
     public RuntimeScalar[] capturedScalars;
+
+    /** One owner identity for each captured scalar pad cell. */
+    public PerlOwnerSlot[] capturedScalarOwnerSlots;
 
     /** Generated closure fields were copied into capturedScalars/aggregates. */
     public boolean captureFieldsRecorded;
@@ -3402,11 +3643,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * captures, those are released recursively.
      */
     public void releaseCaptures() {
+        if (hasActiveCodeOwner()) {
+            deferFinalReleaseToActiveCode();
+            return;
+        }
         if (capturedScalars != null) {
             RuntimeScalar[] scalars = capturedScalars;
             capturedScalars = null;  // null out first to prevent re-entry
-            for (RuntimeScalar s : scalars) {
-                s.releaseClosureCapture();
+            PerlOwnerSlot[] ownerSlots = capturedScalarOwnerSlots;
+            capturedScalarOwnerSlots = null;
+            for (int i = 0; i < scalars.length; i++) {
+                RuntimeScalar s = scalars[i];
+                s.releaseClosureCaptureSlot(
+                        ownerSlots != null && i < ownerSlots.length ? ownerSlots[i] : null);
                 if (s.captureCount == 0) {
                     // If the captured scalar itself holds an unowned CODE ref with
                     // captures, release those recursively (handles nested closures).
@@ -3437,8 +3686,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             continue;
                         }
                         if ((s.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                                && s.value instanceof RuntimeBase rb
-                                && (rb.blessId != 0 || !WeakRefRegistry.hasWeakRefsTo(rb))) {
+                                && s.value instanceof RuntimeBase) {
                             MortalList.releaseCapturedDecrement(s);
                         }
                         MortalList.noteDeferredCaptureMayBeReady();
@@ -4345,6 +4593,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         this.stateVariable = codeFrom.stateVariable;
         this.stateArray = codeFrom.stateArray;
         this.stateHash = codeFrom.stateHash;
+        this.stateAggregateAliasOwners = codeFrom.stateAggregateAliasOwners;
         this.constantValue = codeFrom.constantValue;
         if (sourceNeedsDelegation) {
             this.subroutine = (runtimeArgs, callContext) ->
@@ -4356,6 +4605,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         this.__SUB__ = codeFrom.__SUB__;
         this.capturedScalars = codeFrom.capturedScalars;
+        this.capturedScalarOwnerSlots = codeFrom.capturedScalarOwnerSlots;
         this.capturedAggregates = codeFrom.capturedAggregates;
         this.captureFieldsRecorded = codeFrom.captureFieldsRecorded;
         this.capturedAggregateOwnerSlots = codeFrom.capturedAggregateOwnerSlots;
@@ -6144,6 +6394,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         code.captureFieldsRecorded = true;
         if (meta.hasCaptures()) {
             List<RuntimeScalar> captured = new ArrayList<>();
+            List<PerlOwnerSlot> capturedScalarOwnerSlots = new ArrayList<>();
             List<RuntimeBase> capturedAggregates = new ArrayList<>();
             List<PerlOwnerSlot> capturedAggregateOwnerSlots = new ArrayList<>();
             Set<RuntimeScalar> seenScalars = Collections.newSetFromMap(new IdentityHashMap<>());
@@ -6154,7 +6405,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     if (!seenScalars.add(capturedVar)) continue;
                     code.putClosedOverVariable(f.getName(), capturedVar);
                     captured.add(capturedVar);
-                    capturedVar.retainClosureCapture();
+                    capturedScalarOwnerSlots.add(capturedVar.retainClosureCaptureSlot(code));
                 }
             }
             for (Field f : meta.capturedAggregateFields) {
@@ -6163,12 +6414,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     if (!seenAggregates.add(capturedAggregate)) continue;
                     code.putClosedOverVariable(f.getName(), capturedAggregate);
                     capturedAggregates.add(capturedAggregate);
-                    PerlOwnerSlot ownerSlot = capturedAggregate.retainClosureCaptureOwner();
+                    PerlOwnerSlot ownerSlot = capturedAggregate.retainClosureCaptureOwner(code);
                     capturedAggregateOwnerSlots.add(ownerSlot);
                 }
             }
             if (!captured.isEmpty()) {
                 code.capturedScalars = captured.toArray(new RuntimeScalar[0]);
+                code.capturedScalarOwnerSlots =
+                        capturedScalarOwnerSlots.toArray(new PerlOwnerSlot[0]);
             }
             if (!capturedAggregates.isEmpty()) {
                 code.capturedAggregates = capturedAggregates.toArray(new RuntimeBase[0]);
@@ -6940,8 +7193,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         bound.subName = target.subName;
         bound.refCount = 0;
         bound.capturedScalars = new RuntimeScalar[] { new RuntimeScalar(codeRef), invocant };
-        for (RuntimeScalar captured : bound.capturedScalars) {
-            captured.retainClosureCapture();
+        bound.capturedScalarOwnerSlots = new PerlOwnerSlot[bound.capturedScalars.length];
+        for (int i = 0; i < bound.capturedScalars.length; i++) {
+            bound.capturedScalarOwnerSlots[i] =
+                    bound.capturedScalars[i].retainClosureCaptureSlot();
         }
         registerJvmClosure(bound);
         return new RuntimeScalar(bound).getList();
@@ -8572,6 +8827,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             RuntimeScalar nextTailCode = null;
             RuntimeArray nextTailArgs = null;
             boolean returnedTailCall = false;
+            boolean flushAfterScopeExit = false;
             boolean cleanupArgsAfterCall = curArgsFromTailCall;
             RuntimeScalar codeRefForCall = curScalar;
             RuntimeArray argsForCall = curArgs;
@@ -8635,7 +8891,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                     + flow.marker.fileName + " line " + line + ".\n");
                         }
                         MyVarCleanupStack.unwindTo(cleanupMark);
-                        MortalList.flush();
+                        // A non-local return still transfers its value through
+                        // the enclosing call. Its mortals cannot be drained
+                        // until that receiving boundary has acquired them.
+                        if (flowType != ControlFlowType.RETURN) {
+                            MortalList.flush();
+                        }
                     }
                     // Mortal-ize blessed refs with refCount==0 in void-context calls.
                     // These are objects that were created but never stored in a named
@@ -8663,7 +8924,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     // Reference-valued results deliberately remain deferred until the
                     // caller has materialized them into their destination.
                     if (containsNoReference(returned)) {
-                        MortalList.flushAboveMark();
+                        flushAfterScopeExit = true;
                     }
                     MyVarCleanupStack.releaseOrTransferSocketOwnersOnReturn(
                             cleanupMark, returned);
@@ -8681,7 +8942,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // Perl treats `return` inside eval { ... } as the eval value,
                 // including when it originates from a nested map/grep block.
                 RuntimeList result = e.returnValue != null ? e.returnValue.getList() : new RuntimeList();
-                return coerceScalarCallResult(result, effectiveContext, callContext, !isLvalueCode(code));
+                RuntimeList returned = coerceScalarCallResult(
+                        result, effectiveContext, callContext, !isLvalueCode(code));
+                if (effectiveContext == RuntimeContextType.VOID) {
+                    MortalList.mortalizeForVoidDiscard(returned);
+                    flushAfterScopeExit = true;
+                } else if (containsNoReference(returned)) {
+                    flushAfterScopeExit = true;
+                }
+                MyVarCleanupStack.releaseOrTransferSocketOwnersOnReturn(
+                        cleanupMark, returned);
+                return returned;
             } catch (RuntimeException e) {
                 e = WarnDie.maybeInvokeUnhandledDieHandler(e);
                 // On die: run scopeExitCleanup for my-variables whose normal
@@ -8695,22 +8966,24 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 throw e;
             } finally {
                 if (returnedTailCall) {
-                    // A goto &sub retires this frame before the replacement
-                    // executes. Drain only this frame's scope exits, not the
-                    // caller's deferred coderef metadata.
-                    MortalList.flushAboveMark();
+                    flushAfterScopeExit = true;
                 }
                 if (cleanupArgsAfterCall) {
                     cleanupTailCallArgs(argsForCall);
                     cleanupTailCallCodeRef(codeRefForCall);
                 }
-                // Pop the function-scoped mortal mark. Entries added by this
-                // function's scope-exit cleanup "fall" to the caller's scope
-                // and will be processed by the caller's flushAboveMark().
-                MortalList.popMark();
-                // After unwindTo, entries are already removed; popMark is a no-op.
-                // On normal return, popMark discards registrations without cleanup.
-                MyVarCleanupStack.popMark(cleanupMark);
+                if (flushAfterScopeExit) {
+                    // Release the frame's lexical owners before processing the
+                    // decrements they queued, so a stale registration cannot
+                    // keep an explicitly returned capture alive.
+                    MyVarCleanupStack.popMark(cleanupMark);
+                    MortalList.flushAboveMark();
+                    MortalList.popMark();
+                } else {
+                    // Entries added by ordinary scope exit fall to the caller.
+                    MortalList.popMark();
+                    MyVarCleanupStack.popMark(cleanupMark);
+                }
                 WarningBitsRegistry.setCallSiteHints(compilationState, callerCallSiteHints);
                 WarningBitsRegistry.setCallSiteBits(callerCallSiteWarningBits);
                 HintHashRegistry.popCallerHintHash(compilationState);
@@ -9357,6 +9630,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 int cleanupMark = MyVarCleanupStack.pushMark();
                 MortalList.pushMark();
                 boolean returnedTailCall = false;
+                boolean flushAfterScopeExit = false;
                 try {
                     // Cast the value to RuntimeCode and call apply()
                     RuntimeList result = code.apply(subroutineName, a, callContext);
@@ -9366,9 +9640,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     // See the 3-arg apply() overload for detailed rationale.
                     if (effectiveContext == RuntimeContextType.VOID) {
                         MortalList.mortalizeForVoidDiscard(result);
-                        MortalList.flushAboveMark();
+                        flushAfterScopeExit = true;
                     } else if (containsNoReference(result)) {
-                        MortalList.flushAboveMark();
+                        flushAfterScopeExit = true;
                     }
                     MyVarCleanupStack.releaseOrTransferSocketOwnersOnReturn(
                             cleanupMark, result);
@@ -9393,14 +9667,25 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     throw e;
                 } finally {
                     if (returnedTailCall) {
-                        MortalList.flushAboveMark();
+                        flushAfterScopeExit = true;
                     }
                     if ("tailcall".equals(subroutineName)) {
                         cleanupTailCallArgs(a);
                         cleanupTailCallCodeRef(runtimeScalar);
                     }
-                    MortalList.popMark();
-                    MyVarCleanupStack.popMark(cleanupMark);
+                    if (flushAfterScopeExit) {
+                        // Drain return-path decrements only after the callee's
+                        // lexical registrations are gone. Otherwise a captured
+                        // blessed referent can be counted as a live lexical
+                        // owner during this flush and survive until the
+                        // corrective scope-exit sweep.
+                        MyVarCleanupStack.popMark(cleanupMark);
+                        MortalList.flushAboveMark();
+                        MortalList.popMark();
+                    } else {
+                        MortalList.popMark();
+                        MyVarCleanupStack.popMark(cleanupMark);
+                    }
                     WarningBitsRegistry.setCallSiteHints(compilationState, callerCallSiteHints);
                     WarningBitsRegistry.setCallSiteBits(callerCallSiteWarningBits);
                     HintHashRegistry.popCallerHintHash(compilationState);

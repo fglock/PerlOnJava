@@ -2787,6 +2787,9 @@ public class Opcodes {
     /** Restore a loop regex baseline and retain a fresh baseline for its next iteration. Format: register. */
     public static final short RESTORE_LOOP_REGEX_STATE = 631;
 
+    /** Preserve rvalue reference owners before a nested scope exits. Format: rd sourceReg context. */
+    public static final short SNAPSHOT_SCOPE_RESULT = 639;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

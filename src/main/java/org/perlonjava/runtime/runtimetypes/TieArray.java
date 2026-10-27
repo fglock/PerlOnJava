@@ -62,15 +62,9 @@ public class TieArray extends ArrayList<RuntimeScalar> {
     public TieArray(String tiedPackage, RuntimeArray previousValue, RuntimeScalar self, RuntimeArray parent) {
         this.tiedPackage = tiedPackage;
         this.previousValue = previousValue;
-        this.self = self;
+        this.self = RuntimeScalar.retainTiedHandlerValue(self);
         this.parent = parent;
-        // Increment refCount: the tie wrapper holds a strong reference to the tied object.
-        if (self != null && (self.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                && self.value instanceof RuntimeBase base
-                && base.refCount >= 0) {
-            base.refCount++;
-            base.acquireTransientTraceOwner("tie wrapper", "TieArray");
-        }
+
     }
 
     /**
@@ -302,13 +296,6 @@ public class TieArray extends ArrayList<RuntimeScalar> {
         if (tiedObjectReleased) return;
         tiedObjectReleased = true;
         if (self == null) return;
-        if ((self.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                && self.value instanceof RuntimeBase base) {
-            base.releaseTransientTraceOwner("tie wrapper", "TieArray");
-            if (base.refCount > 0 && --base.refCount == 0) {
-                base.refCount = Integer.MIN_VALUE;
-                DestroyDispatch.callDestroy(base);
-            }
-        }
+        RuntimeScalar.releaseTiedHandlerValue(self);
     }
 }

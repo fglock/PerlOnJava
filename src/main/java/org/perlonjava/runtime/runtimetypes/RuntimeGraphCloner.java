@@ -420,6 +420,7 @@ public class RuntimeGraphCloner {
         target.stateVariable = cloneScalarMap(source.stateVariable);
         target.stateArray = cloneArrayMap(source.stateArray);
         target.stateHash = cloneHashMap(source.stateHash);
+        target.stateAggregateAliasOwners = cloneScalarMap(source.stateAggregateAliasOwners);
         if (source.__SUB__ != null) {
             target.restoreClonedSelfReference(
                     (RuntimeScalar) cloneValue(source.__SUB__));
@@ -447,13 +448,16 @@ public class RuntimeGraphCloner {
         // return to DESTROY a still-live captured object in an ithread.
         if (source.capturedScalars != null) {
             target.capturedScalars = new RuntimeScalar[source.capturedScalars.length];
+            target.capturedScalarOwnerSlots =
+                    new PerlOwnerSlot[source.capturedScalars.length];
             for (int i = 0; i < source.capturedScalars.length; i++) {
                 target.capturedScalars[i] =
                         (RuntimeScalar) cloneValue(source.capturedScalars[i]);
             }
             try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
-                for (RuntimeScalar captured : target.capturedScalars) {
-                    captured.retainThreadCloneClosureCapture();
+                for (int i = 0; i < target.capturedScalars.length; i++) {
+                    target.capturedScalarOwnerSlots[i] =
+                            target.capturedScalars[i].retainThreadCloneClosureCapture();
                 }
             }
         }
