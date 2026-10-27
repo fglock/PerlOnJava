@@ -40,10 +40,15 @@ XSLoader::load('Encode', $VERSION);
         my $enc = eval { _java_find_encoding($name) };
         if (defined $enc) {
             $_encoding_cache{$key} = $enc;
-            eval {
-                $_encoding_cache{lc $enc->name} ||= $enc;
-                $_encoding_cache{lc $enc->mime_name} ||= $enc;
-            };
+            # The HZ codec's Perl canonical name is euc-cn, but that name
+            # refers to a distinct stateless encoding. Do not cache the HZ
+            # object under its canonical name or MIME name.
+            unless ($key eq 'hz' || $key eq 'hz-gb-2312') {
+                eval {
+                    $_encoding_cache{lc $enc->name} ||= $enc;
+                    $_encoding_cache{lc $enc->mime_name} ||= $enc;
+                };
+            }
         }
         return $enc;
     };

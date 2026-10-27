@@ -81,6 +81,8 @@ public class Encode extends PerlModuleBase {
         CHARSET_ALIASES.put("ASCII", StandardCharsets.US_ASCII);
         CHARSET_ALIASES.put("us-ascii", StandardCharsets.US_ASCII);
         CHARSET_ALIASES.put("US-ASCII", StandardCharsets.US_ASCII);
+        CHARSET_ALIASES.put("ANSI X3.4-1968", StandardCharsets.US_ASCII);
+        CHARSET_ALIASES.put("ANSI_X3.4-1968", StandardCharsets.US_ASCII);
 
         CHARSET_ALIASES.put("utf16", StandardCharsets.UTF_16);
         CHARSET_ALIASES.put("UTF16", StandardCharsets.UTF_16);
@@ -127,6 +129,25 @@ public class Encode extends PerlModuleBase {
             Charset eucJP = Charset.forName("EUC-JP");
             CHARSET_ALIASES.put("euc-jp", eucJP);
             CHARSET_ALIASES.put("eucjp", eucJP);
+        } catch (Exception ignored) {
+        }
+
+        // Perl Encode treats HZ-GB-2312 as an alias for EUC-CN. The JDK has
+        // no HZ codec, but does provide the compatible EUC-CN/GB2312 charset.
+        try {
+            Charset eucCN = Charset.forName("GB2312");
+            CHARSET_ALIASES.put("HZ-GB-2312", eucCN);
+            CHARSET_ALIASES.put("hz-gb-2312", eucCN);
+            CHARSET_ALIASES.put("euc-cn", eucCN);
+            CHARSET_ALIASES.put("EUC-CN", eucCN);
+        } catch (Exception ignored) {
+        }
+
+        // The WHATWG visual-order Hebrew alias maps to Windows-1255.
+        try {
+            Charset hebrewVisual = Charset.forName("windows-1255");
+            CHARSET_ALIASES.put("ISO-8859-8-I", hebrewVisual);
+            CHARSET_ALIASES.put("iso-8859-8-i", hebrewVisual);
         } catch (Exception ignored) {
         }
 
@@ -575,6 +596,9 @@ public class Encode extends PerlModuleBase {
         }
 
         String string = args.get(1).toString();
+        if (isHzEncodingName(encodingName)) {
+            return encodeHz(string).getList();
+        }
         int check = parseCheck(args, 2);
         RuntimeScalar codeRef = getCheckCodeRef(args, 2);
 
@@ -583,11 +607,27 @@ public class Encode extends PerlModuleBase {
         if (check == FB_DEFAULT_VAL) {
             // Fast path: no error handling, use Java's default replacement
             byte[] bytes = string.getBytes(charset);
-            return new RuntimeScalar(bytes).getList();
+            return addGenericUtf32Bom(new RuntimeScalar(bytes), encodingName, charset).getList();
         }
 
         // Use shared encode helper
-        return encodeWithCharset(string, charset, encodingName, check, codeRef, args, 1).getList();
+        RuntimeScalar encoded = encodeWithCharset(string, charset, encodingName, check, codeRef, args, 1);
+        return addGenericUtf32Bom(encoded, encodingName, charset).getList();
+    }
+
+    /** Perl's generic UTF-32 encoder emits a big-endian BOM; Java's does not. */
+    private static RuntimeScalar addGenericUtf32Bom(RuntimeScalar encoded, String name, Charset charset) {
+        String normalized = name.toLowerCase(Locale.ROOT).replace("-", "").replace("_", "");
+        if (!"utf32".equals(normalized) || !"UTF-32".equalsIgnoreCase(charset.name())) {
+            return encoded;
+        }
+        String bytes = encoded.toString();
+        if (bytes.startsWith("\0\0\u00FE\u00FF")) {
+            return encoded;
+        }
+        encoded.value = "\0\0\u00FE\u00FF" + bytes;
+        encoded.type = BYTE_STRING;
+        return encoded;
     }
 
     /**
@@ -696,6 +736,9 @@ public class Encode extends PerlModuleBase {
         }
 
         String octets = args.get(1).toString();
+        if (isHzEncodingName(encodingName)) {
+            return new RuntimeScalar(decodeHz(octets)).getList();
+        }
         int check = parseCheck(args, 2);
         RuntimeScalar codeRef = getCheckCodeRef(args, 2);
 
@@ -950,6 +993,10 @@ public class Encode extends PerlModuleBase {
             return perlEncObj.getList();
         }
 
+        if (isHzEncodingName(encodingName)) {
+            return createEncodingObject(getCharset("GB2312"), "HZ").getList();
+        }
+
         try {
             Charset charset = getCharset(encodingName);
             return createEncodingObject(charset).getList();
@@ -969,15 +1016,104 @@ public class Encode extends PerlModuleBase {
     }
 
     private static RuntimeScalar createEncodingObject(Charset charset) {
+        return createEncodingObject(charset, null);
+    }
+
+    private static RuntimeScalar createEncodingObject(Charset charset, String codec) {
         RuntimeHash encObj = new RuntimeHash();
         encObj.put("Name", new RuntimeScalar(perlCanonicalName(charset.name())));
         encObj.put("MimeName", new RuntimeScalar(charset.name()));
+        if (codec != null) {
+            encObj.put("PerlOnJavaCodec", new RuntimeScalar(codec));
+        }
         RuntimeScalar ref = encObj.createReference();
         String packageName = charset.equals(StandardCharsets.UTF_8)
                 ? "Encode::utf8"
                 : "Encode::Encoding";
         ReferenceOperators.bless(ref, new RuntimeScalar(packageName));
         return ref;
+    }
+
+    private static boolean isHzEncodingName(String name) {
+        return "hz".equalsIgnoreCase(name) || "hz-gb-2312".equalsIgnoreCase(name);
+    }
+
+    private static boolean isHzCodec(RuntimeHash encoding) {
+        RuntimeScalar codec = encoding.get("PerlOnJavaCodec");
+        return codec != null && codec.getDefinedBoolean() && "HZ".equals(codec.toString());
+    }
+
+    private static RuntimeScalar encodeHz(String text) {
+        byte[] gb2312 = text.getBytes(getCharset("GB2312"));
+        java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream(gb2312.length + 8);
+        boolean gbMode = false;
+        for (byte value : gb2312) {
+            int current = value & 0xff;
+            if (current < 0x80) {
+                if (gbMode) {
+                    output.write('~');
+                    output.write('}');
+                    gbMode = false;
+                }
+                if (current == '~') {
+                    output.write('~');
+                    output.write('~');
+                } else {
+                    output.write(current);
+                }
+            } else {
+                if (!gbMode) {
+                    output.write('~');
+                    output.write('{');
+                    gbMode = true;
+                }
+                output.write(current & 0x7f);
+            }
+        }
+        if (gbMode) {
+            output.write('~');
+            output.write('}');
+        }
+        return new RuntimeScalar(output.toByteArray());
+    }
+
+    private static String decodeHz(String octets) {
+        java.io.ByteArrayOutputStream gb2312 = new java.io.ByteArrayOutputStream(octets.length());
+        boolean gbMode = false;
+        for (int i = 0; i < octets.length(); i++) {
+            int current = octets.charAt(i) & 0xff;
+            if (current == '~' && i + 1 == octets.length()) {
+                continue;
+            }
+            if (current == '~' && i + 1 < octets.length()) {
+                char next = octets.charAt(i + 1);
+                if (next == '{') {
+                    gbMode = true;
+                    i++;
+                    continue;
+                }
+                if (next == '}') {
+                    gbMode = false;
+                    i++;
+                    continue;
+                }
+                if (next == '~') {
+                    gb2312.write('~');
+                    i++;
+                    continue;
+                }
+                if (next == '\n') {
+                    i++;
+                    continue;
+                }
+                if (next == '\r' && i + 2 < octets.length() && octets.charAt(i + 2) == '\n') {
+                    i += 2;
+                    continue;
+                }
+            }
+            gb2312.write(gbMode && current >= 0x21 && current <= 0x7e ? current | 0x80 : current);
+        }
+        return new String(gb2312.toByteArray(), getCharset("GB2312"));
     }
 
     /**
@@ -990,6 +1126,8 @@ public class Encode extends PerlModuleBase {
         switch (javaName) {
             case "US-ASCII":  return "ascii";
             case "UTF-8":     return "utf-8-strict";
+            case "GB2312":    return "euc-cn";
+            case "windows-1255": return "cp1255";
             case "ISO-8859-1": return "iso-8859-1";
             case "ISO-8859-15": return "iso-8859-15";
             case "windows-1252": return "cp1252";
@@ -1029,6 +1167,9 @@ public class Encode extends PerlModuleBase {
         // Extract charset name from the blessed hash
         RuntimeHash hash = (RuntimeHash) self.value;
         String charsetName = hash.get("Name").toString();
+        if (isHzCodec(hash)) {
+            return encodeHz(string).getList();
+        }
 
         int check = parseCheck(args, 2);
         RuntimeScalar codeRef = getCheckCodeRef(args, 2);
@@ -1039,11 +1180,12 @@ public class Encode extends PerlModuleBase {
             if (check == FB_DEFAULT_VAL) {
                 // Fast path: no error handling
                 byte[] bytes = string.getBytes(charset);
-                return new RuntimeScalar(bytes).getList();
+                return addGenericUtf32Bom(new RuntimeScalar(bytes), charsetName, charset).getList();
             }
 
             // Slow path with error handling
-            return encodeWithCharset(string, charset, charsetName, check, codeRef, args, 1).getList();
+            RuntimeScalar encoded = encodeWithCharset(string, charset, charsetName, check, codeRef, args, 1);
+            return addGenericUtf32Bom(encoded, charsetName, charset).getList();
         } catch (Exception e) {
             throw new RuntimeException("Cannot encode string with " + charsetName + ": " + e.getMessage());
         }
@@ -1069,6 +1211,9 @@ public class Encode extends PerlModuleBase {
         // Extract charset name from the blessed hash
         RuntimeHash hash = (RuntimeHash) self.value;
         String charsetName = hash.get("Name").toString();
+        if (isHzCodec(hash)) {
+            return new RuntimeScalar(decodeHz(octets)).getList();
+        }
 
         int check = parseCheck(args, 2);
         RuntimeScalar codeRef = getCheckCodeRef(args, 2);
