@@ -894,6 +894,17 @@ This removes root walks for migrated capture-owner decisions, but weak
 referent candidate discovery and the weak-CODE capture graph are still
 sweep-based.
 
+### Weak referents with explicit owner slots
+
+Quiet weak sweeps now check a referent's strong owner-slot ledger before
+consulting the legacy captured-element proof. A candidate with an active slot
+is preserved directly, so the weak-CODE capture graph is built lazily only for
+aggregate candidates that still lack owner identities. The new
+`WeakBackrefOwnerSlotFastPathTest` covers an array-element owner, while the
+existing weak-CODE capture test continues to cover the legacy fallback. The
+sweep-enabled full `nice -n 19 make` gate passes, and HTML-Tree 5.07
+`t/refloop.t` passes 8/8 on both backends with sweeps disabled.
+
 ### Next steps
 
 1. Continue replacing targeted weak-release and weak-CODE capture walks with
