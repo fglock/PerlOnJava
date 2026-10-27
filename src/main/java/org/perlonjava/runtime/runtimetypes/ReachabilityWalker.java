@@ -3393,6 +3393,17 @@ public class ReachabilityWalker {
         // the full reachability walk below.
         Set<RuntimeBase> directlyOwned =
                 Collections.newSetFromMap(new IdentityHashMap<>());
+        for (RuntimeBase referent : pending) {
+            if (referent.hasOwnerSlots()) directlyOwned.add(referent);
+        }
+        if (directlyOwned.containsAll(pending)) {
+            return new ReleasedWeakSweepResult(null, Collections.emptySet(),
+                    directlyOwned, 0);
+        }
+
+        // Owner-slot identities cover the migrated scalar, element, capture,
+        // and call-transfer families. Only take the legacy scalar registry
+        // snapshot for targets that still need its compatibility proof.
         for (RuntimeScalar owner : ScalarRefRegistry.snapshot()) {
             if (owner == null || !owner.refCountOwned || owner.scopeExited
                     || !MyVarCleanupStack.isLive(owner) || WeakRefRegistry.isweak(owner)
@@ -3401,9 +3412,6 @@ public class ReachabilityWalker {
                 continue;
             }
             if (pending.contains(target)) directlyOwned.add(target);
-        }
-        for (RuntimeBase referent : pending) {
-            if (referent.hasOwnerSlots()) directlyOwned.add(referent);
         }
         if (directlyOwned.containsAll(pending)) {
             return new ReleasedWeakSweepResult(null, Collections.emptySet(),
