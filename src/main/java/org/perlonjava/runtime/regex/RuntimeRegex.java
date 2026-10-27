@@ -377,6 +377,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     }
 
     private void emitWarningsOnUse() {
+        if (warningsOnUse.isEmpty()) return;
         // These warnings belong to the regex use site, not the earlier qr//
         // construction site. The active Perl code supplies the baseline lexical
         // warning bits.  Each retained diagnostic keeps its Perl warning
@@ -3333,14 +3334,16 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             int callsiteId, String lexicalPackage, boolean sourceCompiledBeforeRun) {
         RuntimeScalar currentPackage = InterpreterState.currentPackage.get();
         String previousPackage = currentPackage.toString();
+        boolean packageChanged = !lexicalPackage.equals(previousPackage);
         boolean previousSourceLifecycle = SOURCE_REGEX_COMPILED_BEFORE_RUN.get();
-        currentPackage.set(lexicalPackage);
-        SOURCE_REGEX_COMPILED_BEFORE_RUN.set(sourceCompiledBeforeRun);
+        boolean sourceLifecycleChanged = sourceCompiledBeforeRun != previousSourceLifecycle;
+        if (packageChanged) currentPackage.set(lexicalPackage);
+        if (sourceLifecycleChanged) SOURCE_REGEX_COMPILED_BEFORE_RUN.set(sourceCompiledBeforeRun);
         try {
             return getQuotedRegex(patternString, modifiers, callsiteId);
         } finally {
-            currentPackage.set(previousPackage);
-            SOURCE_REGEX_COMPILED_BEFORE_RUN.set(previousSourceLifecycle);
+            if (packageChanged) currentPackage.set(previousPackage);
+            if (sourceLifecycleChanged) SOURCE_REGEX_COMPILED_BEFORE_RUN.set(previousSourceLifecycle);
         }
     }
 
@@ -3619,8 +3622,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         }
 
         // Fast path: no alarm active, use direct matching
-        RuntimeBase result = matchRegexDirect(quotedRegex, string, ctx, false);
-        return result;
+        return matchRegexDirect(quotedRegex, string, ctx, false, regex);
     }
 
     /** Apply a regex under lexical {@code use bytes} while preserving an s/// lvalue. */
@@ -3755,8 +3757,14 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
     private static RuntimeBase matchRegexDirect(RuntimeScalar quotedRegex, RuntimeScalar string,
                                                 int ctx, boolean alarmInterruptMode) {
+        return matchRegexDirect(quotedRegex, string, ctx, alarmInterruptMode, null);
+    }
+
+    private static RuntimeBase matchRegexDirect(RuntimeScalar quotedRegex, RuntimeScalar string,
+                                                int ctx, boolean alarmInterruptMode,
+                                                RuntimeRegex preResolved) {
         RuntimeRegexState regexState = state();
-        RuntimeRegex regex = resolveRegex(quotedRegex);
+        RuntimeRegex regex = preResolved != null ? preResolved : resolveRegex(quotedRegex);
         
         // Save original flags before potentially changing regex
         RegexFlags originalFlags = regex.regexFlags;
@@ -3918,8 +3926,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         }
 
         boolean found = false;
-        RuntimeList result = new RuntimeList();
-        List<RuntimeBase> matchedGroups = result.elements;
+        RuntimeList result = null;
+        List<RuntimeBase> matchedGroups = null;
 
         int capture = 1;
         int previousPos = startPos; // Track the previous position  
@@ -3937,9 +3945,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // Clearing these variables would incorrectly erase the previous successful capture
         // state and break tests that rely on @-/@+.
 
-        int previousActiveDebugMode = ACTIVE_DEBUG_MODE.get();
-        ACTIVE_DEBUG_MODE.set(regex.lexicalDebugMode == 0
-                ? previousActiveDebugMode : regex.lexicalDebugMode);
+        int previousActiveDebugMode = 0;
+        boolean debugModeChanged = regex.lexicalDebugMode != 0;
+        if (debugModeChanged) {
+            previousActiveDebugMode = ACTIVE_DEBUG_MODE.get();
+            ACTIVE_DEBUG_MODE.set(regex.lexicalDebugMode);
+        }
         try {
             while (skipFirstFind || matcher.find()) {
                 skipFirstFind = false;
@@ -3971,15 +3982,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 regexState.lastMatchEnd = matcher.end();
 
                 if (regex.regexFlags.isGlobalMatch() && captureCount < 1 && ctx == RuntimeContextType.LIST) {
-                    // Global match and no captures, in list context return the matched string
+                    if (result == null) { result = new RuntimeList(); matchedGroups = result.elements; }
                     matchedGroups.add(makeMatchResultScalar(matcher.group(0)));
                 } else {
-                    // save captures in return list if needed
                     if (ctx == RuntimeContextType.LIST) {
+                        if (result == null) { result = new RuntimeList(); matchedGroups = result.elements; }
                         for (int i = 1; i <= captureCount; i++) {
                             String matchedStr = matcher.group(i);
-                            // Include undef for groups that didn't participate in the match.
-                            // The matcher adapter exposes native Perl numbering for (?|...).
                             matchedGroups.add(makeMatchResultScalar(matchedStr));
                         }
                     }
@@ -4066,7 +4075,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             // whole program for the equivalent pathological failure case.
             found = false;
         } finally {
-            ACTIVE_DEBUG_MODE.set(previousActiveDebugMode);
+            if (debugModeChanged) {
+                ACTIVE_DEBUG_MODE.set(previousActiveDebugMode);
+            }
         }
 
         if (!found) {
@@ -4122,9 +4133,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         }
 
         if (ctx == RuntimeContextType.LIST) {
-            // In LIST context: return captured groups, or (1) for success with no captures (non-global)
+            if (result == null) result = new RuntimeList();
             if (found && result.elements.isEmpty() && !regex.regexFlags.isGlobalMatch()) {
-                // Non-global match with no captures in LIST context returns (1)
                 result.elements.add(RuntimeScalarCache.getScalarInt(1));
             }
             return result;

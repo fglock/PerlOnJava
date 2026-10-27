@@ -891,6 +891,7 @@ final class JoniRegexPattern {
         private final int[] byteToChar;
         private Matcher matcher;
         private Region captures;
+        private final int captureCount;
         private int regionStart;
         private int regionEnd;
         private int nextStart;
@@ -929,6 +930,8 @@ final class JoniRegexPattern {
             this.deferredPropertyResolver = deferredPropertyResolver;
             this.nonUnicodePropertyWarning = nonUnicodePropertyWarning;
             this.alarmInterruptMode = alarmInterruptMode;
+            this.captureCount = regex.numberOfCaptures();
+            this.captures = Region.newRegion(captureCount + 1);
             InputEncoding encoding = inputEncoding(input, subject, byteMode);
             this.bytes = encoding.bytes();
             this.charToByte = encoding.charToByte();
@@ -952,7 +955,7 @@ final class JoniRegexPattern {
                 committedLastClosedCapture = -1;
                 return false;
             }
-            matcher = regex.matcher(bytes);
+            matcher = regex.matcherNoRegion(bytes);
             matcher.setAlarmInterruptMode(alarmInterruptMode);
             boolean localeMatcher = flags.isLocale()
                     || regex.getParsedProgramMetadata().has(
@@ -979,7 +982,7 @@ final class JoniRegexPattern {
                     result = search(charToByte[globalPosition], charToByte[nextStart],
                             charToByte[regionEnd], option);
                     if (result < 0 && searchBeforeGlobalPosition && nextStart > 0) {
-                        matcher = regex.matcher(bytes);
+                        matcher = regex.matcherNoRegion(bytes);
                         matcher.setAlarmInterruptMode(alarmInterruptMode);
                         if (localeMatcher) {
                             matcher.setLocaleResolver(localeResolver(
@@ -1031,8 +1034,7 @@ final class JoniRegexPattern {
                 return false;
             }
             consumedStart = directMatch ? nextStart : toCharOffset(result);
-            captures = Region.newRegion(regex.numberOfCaptures() + 1);
-            for (int group = 0; group <= regex.numberOfCaptures(); group++) {
+            for (int group = 0; group <= captureCount; group++) {
                 captures.setBeg(group, matcher.captureBegin(group));
                 captures.setEnd(group, matcher.captureEnd(group));
             }
