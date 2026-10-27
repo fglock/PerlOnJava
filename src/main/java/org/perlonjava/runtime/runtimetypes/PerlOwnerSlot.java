@@ -20,6 +20,7 @@ public final class PerlOwnerSlot {
         CLOSURE_PAD,
         SCALAR_CAPTURE,
         SCALAR_CELL,
+        CODE_SLOT,
         ARRAY_ELEMENT,
         HASH_ELEMENT,
         ARGUMENT_VALUE,
@@ -58,7 +59,8 @@ public final class PerlOwnerSlot {
             this.sequence = sequence;
             this.kind = kind;
             PerlRuntime runtime = PerlRuntime.currentOrNull();
-            boolean transfer = kind == Kind.ARGUMENT_VALUE || kind == Kind.RETURN_VALUE;
+            boolean transfer = kind == Kind.ARGUMENT_VALUE || kind == Kind.RETURN_VALUE
+                    || kind == Kind.CODE_SLOT;
             retainedReferent = transfer ? referent : null;
             retainedState = retainedReferent == null || runtime == null
                     ? null : runtime.retainOwnerSlotReferent(retainedReferent);
@@ -251,7 +253,7 @@ public final class PerlOwnerSlot {
     }
 
     private static boolean isCountedKind(Kind kind) {
-        return kind == Kind.SCALAR_CELL || kind == Kind.ARRAY_ELEMENT
+        return kind == Kind.SCALAR_CELL || kind == Kind.CODE_SLOT || kind == Kind.ARRAY_ELEMENT
                 || kind == Kind.HASH_ELEMENT || kind == Kind.ARGUMENT_VALUE
                 || kind == Kind.RETURN_VALUE || kind == Kind.TIE_HANDLER;
     }

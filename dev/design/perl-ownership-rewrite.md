@@ -728,12 +728,66 @@ release. Named CODE/glob lifetime accounting still prevents that transition in
 the remaining named-state acceptance case. No remaining sweep or compatibility
 bridge has been removed on the strength of these focused passes.
 
+### Named CODE-slot ownership completed (2026-10-27)
+
+One physical CODE slot now owns one counted `CODE_SLOT` identity. Whole-glob
+names sharing its scalar share that edge; separate CODE slots have separate
+identities. Saved localization, compiled-GV pins, and retained compiled-call
+references keep the slot alive across namespace replacement or deletion.
+Restoration releases the temporary slot after the saved slot is installed.
+
+Native CODE final release uses these counted identities instead of historical
+stash counters or the discarded-closure root-walk correction. Capture attachment
+preserves counts already acquired by named slots. Cache notifications no longer
+acquire an extra owner during first assignment to an empty slot. Compatibility
+root-index shape metadata survives capture retirement without retaining captured
+values or influencing lifetime decisions.
+
+Interpreter frames borrow a stable self-reference for `__SUB__` and persistent
+state operations. Undefining the executing glob therefore leaves its active CV
+and state usable until the last frame returns. Thread snapshots reconstruct
+tracked CV counts, scalar owner identities, and namespace/compiled-GV bindings
+in the child runtime.
+
+Six `CodeSlotOwnerTest` cases cover independent and shared slot identities,
+first assignment and replacement, localization, compiled pins, active calls,
+and final release without reachability queries. Three new permanent Perl tests
+pass standard Perl and both backends with corrective sweeps explicitly disabled:
+
+| Regression | Assertions |
+| --- | --- |
+| `refcount/named_code_state_owner_release.t` | 9/9 |
+| `refcount/localized_code_state_owner_release.t` | 9/9 |
+| `refcount/compiled_glob_state_owner_release.t` | 4/4 |
+
+The original `weak_deferred_capture_full_sweep.t` now passes 3/3 on both
+backends. Existing glob redefinition, local alias restoration, current-sub map
+and sort, glob identity, inheritance cloning, CODE resurrection, and unchanged
+HTML::Tree 8/8 also pass on both backends. Evidence:
+`/tmp/issue1649-code-pin-final-backend-results.txt`.
+The focused comparison build passes in 1m33s:
+`/tmp/make-issue1649-code-slot-pin-batch.log`.
+
+The final unfiltered default-off gate completed in 7m19s with **seven failures**:
+the two existing shared-reference cases below and the five Java cases requiring
+legacy sweeps. Named state teardown now passes in the full gate, reducing its
+failure count from eight to seven. No new full-suite failure was introduced.
+Logs: `/tmp/make-issue1649-code-slot-final-full.log` and
+`/tmp/issue1649-code-slot-full-failures.txt`.
+
+Unfixed-parent evidence is retained for named-state release, the first-store
+localization leak, and premature state destruction after stash deletion.
+The earlier ownership work is preserved in WIP checkpoint `98e611e96`.
+
+This completes the named-slot retain/release paths tested here. Compiler
+templates, per-optree retirement of compiled-GV pins, raw descriptor/embedding
+borrows, and complete CODE producer ownership still need audit before the
+compatibility bridge can be removed. The complete rewrite remains in progress.
+
 Unresolved acceptance cases:
 
 - Interpreter `catalyst_request_body_tempfile_lifetime.t` still retains the old
   request tempfile; the JVM passes 2/2.
-- Removing installed CODE still does not retire its state metadata in
-  `weak_deferred_capture_full_sweep.t`.
 - Shared-proxy release and weak-slot resurrection remain unresolved in
   `threads_shared_nested_proxies.t` and `threads_destroy_weak_slot_rescue.t`.
 - Escaping proxy/lvalue magic and other native call buffers still need explicit
@@ -755,14 +809,12 @@ every producer, alias, or cleanup boundary uses semantic ownership alone.
 
 ### Next steps
 
-1. Extend staged argument-value ownership to argument-cell lifetimes while
-   preserving caller aliases: removal, shared argument arrays, tail calls,
-   and exception unwinding still need explicit balanced ownership.
-2. Give named CODE/glob slots and localized saved CODE slots explicit ownership
-   so state retirement occurs after the last reference, alias, or active call.
-   Extend native call-buffer cleanup beyond HTML::Parser; complete shared-proxy
-   release and resurrection. Finish escaping proxy,
-   refalias, argument-removal, and targeted try/finally return ownership.
-3. Make semantic owner counts and runtime positive-count retention authoritative;
-   require lifecycle, resurrection, cycle, and full-suite success without sweeps.
+1. Fix local shared-proxy weak release and weak-slot resurrection without
+   corrective sweeps.
+2. Finish CODE template ownership, per-optree compiled-pin retirement, and raw
+   descriptor/embedding borrows. Complete argument-cell lifetimes, shared/tail
+   call argument cleanup, native call buffers, escaping lvalues/refaliases, and
+   targeted try/finally returns.
+3. Make semantic owner counts and positive-count retention authoritative;
+   require weak/DESTROY, resurrection, cycle, and full-suite success without sweeps.
 4. Remove corrective sweeps and reachability fallbacks after those gates pass.

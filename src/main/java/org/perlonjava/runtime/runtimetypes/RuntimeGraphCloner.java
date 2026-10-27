@@ -164,6 +164,14 @@ public class RuntimeGraphCloner {
         finishCloneBoundary();
     }
 
+    void restoreCodeSlotBindings(java.util.Collection<RuntimeScalar> slots) {
+        try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
+            for (RuntimeScalar slot : slots) {
+                if (slot != null) slot.retainCodeSlotBinding();
+            }
+        }
+    }
+
     /** Package/runtime snapshot entry point that retains the shared graph map. */
     RuntimeBase cloneValue(RuntimeBase value) {
         if (value == null) return null;
@@ -213,12 +221,14 @@ public class RuntimeGraphCloner {
             // the parent's capturedVars array even though the placeholder's
             // metadata had been cloned correctly.
             target = new RuntimeCode((PerlSubroutine) null, source.prototype);
+            copyBase(source, target);
             clones.put(source, target);
             InterpretedCode clonedBody = cloneInterpretedCode(interpreted);
             target.subroutine = clonedBody;
             target.codeObject = clonedBody;
         } else {
             target = new RuntimeCode((PerlSubroutine) null, source.prototype);
+            copyBase(source, target);
             clones.put(source, target);
             if (source.subroutine instanceof CloneablePerlSubroutine cloneable) {
                 RuntimeBase[] captures = cloneable.capturedValues();
@@ -281,6 +291,7 @@ public class RuntimeGraphCloner {
                     source.evalSitePragmaFlags,
                     source.warningBitsString);
         }
+        copyBase(source, target);
         clones.put(source, target);
         target.ourVariableRegistry = source.ourVariableRegistry;
         target.declaredOurVariables = source.declaredOurVariables;
@@ -399,6 +410,7 @@ public class RuntimeGraphCloner {
         target.stashInstallPackage = source.stashInstallPackage;
         target.stashInstallSub = source.stashInstallSub;
         target.hadStashRef = source.hadStashRef;
+        target.hasCountedCodeSlots = source.hasCountedCodeSlots;
         target.explicitlyMaterializedGlob = source.explicitlyMaterializedGlob;
         target.captureFieldsRecorded = source.captureFieldsRecorded;
         target.installedViaAnonGlobAssign = source.installedViaAnonGlobAssign;
@@ -616,6 +628,7 @@ public class RuntimeGraphCloner {
         referent.hadCountedReference = true;
         target.refCountOwned = true;
         try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
+            target.recordCountedOwner(referent);
             ScalarRefRegistry.registerRef(target);
         }
     }

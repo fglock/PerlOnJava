@@ -279,6 +279,7 @@ public final class GlobalRuntimeState {
 
     synchronized int registerCompiledCodeRef(RuntimeScalar ref) {
         int id = nextCompiledCodeRefId++;
+        if (ref != null) ref.retainCodeSlotBinding();
         compiledCodeRefs.put(id, ref);
         return id;
     }
@@ -329,6 +330,7 @@ public final class GlobalRuntimeState {
     private static boolean isCodeRefEdgeRoot(RuntimeScalar scalar) {
         if (scalar == null) return false;
         return !(scalar.value instanceof RuntimeCode code)
+                || code.retiredOwnedEdges
                 || ReachabilityWalker.hasWalkableCodeEdges(code, true);
     }
 
@@ -455,9 +457,11 @@ public final class GlobalRuntimeState {
         cloneMap(foreachScalarAliases, target.foreachScalarAliases, cloner, RuntimeScalar.class);
         cloneMap(temporaryScalarAliases, target.temporaryScalarAliases, cloner, RuntimeScalar.class);
         cloneMap(codeRefs, target.codeRefs, cloner, RuntimeScalar.class);
+        cloner.restoreCodeSlotBindings(target.codeRefs.values());
         cloneMap(pseudoConstants, target.pseudoConstants, cloner, RuntimeScalar.class);
         cloneMap(compactStashValues, target.compactStashValues, cloner, RuntimeScalar.class);
         cloneMap(pinnedCodeRefs, target.pinnedCodeRefs, cloner, RuntimeScalar.class);
+        cloner.restoreCodeSlotBindings(target.pinnedCodeRefs.values());
         // Parsers register many inert glob placeholders (notably through eval).
         // Cloning all of them into every ithread makes snapshot cost quadratic
         // for regex matrices that compile thousands of evals. Only an IO slot
@@ -474,6 +478,7 @@ public final class GlobalRuntimeState {
             target.compiledCodeRefs.put(entry.getKey(),
                     (RuntimeScalar) cloner.cloneValue(entry.getValue()));
         }
+        cloner.restoreCodeSlotBindings(target.compiledCodeRefs.values());
 
         target.importedSubs.putAll(importedSubs);
         target.subsPragmaDeclarations.putAll(subsPragmaDeclarations);
@@ -525,6 +530,9 @@ public final class GlobalRuntimeState {
                         + entry.getKey());
             }
             target.compiledCodeRefs.put(entry.getKey(), cloned);
+            if (existing == null && cloned != null) {
+                cloner.restoreCodeSlotBindings(java.util.List.of(cloned));
+            }
         }
         target.nextCompiledCodeRefId = Math.max(target.nextCompiledCodeRefId,
                 nextCompiledCodeRefId);
