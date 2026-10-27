@@ -1065,6 +1065,8 @@ priorities and future plans.
 - Preserve objects captured by live closures across weak-reference sweeps and
   release them when the final closure is discarded.
 
+- Serialize XML::LibXSLT results directly instead of applying the stylesheet a second time (#1892).
+
 ## v5.44.1: Regex, Threads, Async/Await, and CPAN Compatibility
 
 - Reach 686,288 of 696,597 passing assertions in the Perl standard test suite
