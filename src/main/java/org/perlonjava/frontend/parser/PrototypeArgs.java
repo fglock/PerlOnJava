@@ -379,7 +379,17 @@ public class PrototypeArgs {
                 parser.tokenIndex = index;
                 Node expr = ParsePrimary.parsePrimary(parser);
                 if (expr instanceof ListNode listNode) {
-                    // TODO add more checks here
+                    // Parenthesized low-precedence operators are reparsed as one
+                    // expression. Keep the scalar context imposed by a leading
+                    // scalar prototype, or a list on the right side of `and`/`or`
+                    // can escape into the callee's argument list.
+                    if (hasLeadingScalarPrototype(prototype)) {
+                        Node scalarExpression = ParserNodeUtils.toScalarContext(listNode);
+                        scalarExpression.setAnnotation("context", "SCALAR");
+                        ListNode scalarArgument = new ListNode(listNode.getIndex());
+                        scalarArgument.elements.add(scalarExpression);
+                        return scalarArgument;
+                    }
                     return listNode;
                 }
                 parser.throwError("Not implemented: and/or/xor in argument list " + expr);
@@ -580,6 +590,20 @@ public class PrototypeArgs {
         if (TokenUtils.peek(parser).text.equals("(")) {
             TokenUtils.consume(parser);
             return true;
+        }
+        return false;
+    }
+
+    private static boolean hasLeadingScalarPrototype(String prototype) {
+        if (prototype == null) {
+            return false;
+        }
+        for (int i = 0; i < prototype.length(); i++) {
+            char c = prototype.charAt(i);
+            if (Character.isWhitespace(c) || c == ';' || c == ',') {
+                continue;
+            }
+            return c == '$' || c == '_' || c == '+';
         }
         return false;
     }
