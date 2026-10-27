@@ -168,6 +168,17 @@ public class EmitStatement {
         // scope exits (e.g., Foo->new()->method() chain temporaries) may need processing.
         boolean needsCleanup = !scalarIndices.isEmpty() || !hashIndices.isEmpty() || !arrayIndices.isEmpty();
 
+        if (needsCleanup && returnedLvalueSlot >= 0) {
+            ctx.mv.visitVarInsn(Opcodes.ALOAD, returnedLvalueSlot);
+            ctx.mv.visitVarInsn(Opcodes.ILOAD, 2);
+            ctx.mv.visitInsn(ctx.javaClassInfo.isLvalueSubroutine ? Opcodes.ICONST_0 : Opcodes.ICONST_1);
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode", "prepareScopeReturn",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;IZ)Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;",
+                    false);
+            ctx.mv.visitVarInsn(Opcodes.ASTORE, returnedLvalueSlot);
+        }
+
         // Phase 1: Run scopeExitCleanup for scalar variables.
         // This defers refCount decrements for blessed references with DESTROY,
         // and handles IO fd recycling for anonymous filehandle globs.
@@ -200,8 +211,19 @@ public class EmitStatement {
                     false);
         }
         for (int idx : arrayIndices) {
-            ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
             if (returnedLvalueSlot >= 0) {
+                ctx.mv.visitVarInsn(Opcodes.ALOAD, returnedLvalueSlot);
+                ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
+                ctx.mv.visitVarInsn(Opcodes.ILOAD, 2);
+                ctx.mv.visitInsn(ctx.javaClassInfo.isLvalueSubroutine
+                        ? Opcodes.ICONST_0 : Opcodes.ICONST_1);
+                ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                        "prepareLocalArrayReturn",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;IZ)Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;",
+                        false);
+                ctx.mv.visitVarInsn(Opcodes.ASTORE, returnedLvalueSlot);
+                ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
                 ctx.mv.visitVarInsn(Opcodes.ALOAD, returnedLvalueSlot);
                 ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                         "org/perlonjava/runtime/runtimetypes/MortalList",
@@ -210,6 +232,7 @@ public class EmitStatement {
                         false);
                 continue;
             }
+            ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
             ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/MortalList",
                     "scopeExitCleanupArray",
@@ -436,8 +459,7 @@ public class EmitStatement {
 
                 int scopeIndex = emitterVisitor.ctx.symbolTable.enterScope();
                 node.thenBranch.accept(branchVisitor(emitterVisitor, node.thenBranch));
-                emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex,
-                        emitterVisitor.ctx.contextType == RuntimeContextType.VOID);
+                emitConditionalScopeExit(emitterVisitor.ctx, scopeIndex);
                 emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
 
                 for (int i = 0; i < branchLabelsPushed; i++) {
@@ -452,8 +474,7 @@ public class EmitStatement {
 
                     int scopeIndex = emitterVisitor.ctx.symbolTable.enterScope();
                     node.elseBranch.accept(branchVisitor(emitterVisitor, node.elseBranch));
-                    emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex,
-                            emitterVisitor.ctx.contextType == RuntimeContextType.VOID);
+                    emitConditionalScopeExit(emitterVisitor.ctx, scopeIndex);
                     emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
 
                     for (int i = 0; i < branchLabelsPushed; i++) {
@@ -559,8 +580,7 @@ public class EmitStatement {
         emitterVisitor.ctx.mv.visitLabel(endLabel);
 
         // Exit the scope in the symbol table
-        emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex,
-                emitterVisitor.ctx.contextType == RuntimeContextType.VOID);
+        emitConditionalScopeExit(emitterVisitor.ctx, scopeIndex);
         emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
 
         for (int i = 0; i < branchLabelsPushed; i++) {
@@ -568,6 +588,31 @@ public class EmitStatement {
         }
 
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("IF end");
+    }
+
+    /** The conditional's result must own returned references before its lexicals end. */
+    private static void emitConditionalScopeExit(EmitterContext ctx, int scopeIndex) {
+        if (ctx.contextType != RuntimeContextType.VOID
+                && !ctx.symbolTable.getMyVariableIndicesInScope(scopeIndex).isEmpty()) {
+            if (ctx.contextType == RuntimeContextType.RUNTIME) {
+                ctx.mv.visitVarInsn(Opcodes.ILOAD, 2);
+            } else {
+                ctx.mv.visitLdcInsn(ctx.contextType);
+            }
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode", "prepareScopeResult",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;",
+                    false);
+            // Native magic cleanup can flush its own releases. Keep result
+            // owners below this mark until the caller receives the expression.
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/MortalList", "pushMark", "()V", false);
+            emitScopeExitNullStores(ctx, scopeIndex, false);
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/MortalList", "popAndFlush", "()V", false);
+            return;
+        }
+        emitScopeExitNullStores(ctx, scopeIndex, ctx.contextType == RuntimeContextType.VOID);
     }
 
     /** Return the branch that emitIf will retain, or null when both branches remain dynamic. */

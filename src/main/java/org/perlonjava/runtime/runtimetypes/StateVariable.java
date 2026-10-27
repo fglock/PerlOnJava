@@ -130,6 +130,11 @@ public class StateVariable {
                 return tagGeneratedLexicalSub(GlobalVariable.getGlobalVariable(beginVar), var);
             }
             variable = new RuntimeScalar();
+            // The persistent pad is a binding even though this SV is not on
+            // the per-invocation lexical cleanup stack. A returned \$state
+            // must keep the cell's value after the CV releases that binding.
+            variable.refCount = 0;
+            variable.localBindingExists = true;
             code.stateVariable.put(beginVar, variable);
             GlobalVariable.invalidateGlobalCodeRefGraphRoots();
             return tagGeneratedLexicalSub(variable, var);
@@ -197,7 +202,7 @@ public class StateVariable {
         if (!codeRef.getDefinedBoolean()) {
             GlobalVariable.aliasGlobalArray(beginVar, array);
         } else {
-            ((RuntimeCode) codeRef.value).stateArray.put(beginVar, array);
+            ((RuntimeCode) codeRef.value).bindStateAggregateAlias(beginVar, array);
             GlobalVariable.invalidateGlobalCodeRefGraphRoots();
         }
         markInitializedStateVariable(codeRef, var, id);
@@ -222,7 +227,7 @@ public class StateVariable {
         if (!codeRef.getDefinedBoolean()) {
             GlobalVariable.aliasGlobalHash(beginVar, hash);
         } else {
-            ((RuntimeCode) codeRef.value).stateHash.put(beginVar, hash);
+            ((RuntimeCode) codeRef.value).bindStateAggregateAlias(beginVar, hash);
             GlobalVariable.invalidateGlobalCodeRefGraphRoots();
         }
         markInitializedStateVariable(codeRef, var, id);

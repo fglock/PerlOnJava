@@ -1435,6 +1435,7 @@ public class CompileOperator {
                 // Explicit 'return' bypasses the normal block-end cleanup.
                 // Use return-specific cleanup opcodes so the returned register remains
                 // readable by RETURN while lexical owner counts are still released.
+                exprReg = bytecodeCompiler.separateReturnRegister(exprReg);
                 java.util.List<Integer> scalarIdxs = bytecodeCompiler.symbolTable.getMyScalarIndicesInScope(0);
                 for (int idx : scalarIdxs) {
                     bytecodeCompiler.emit(Opcodes.RETURN_SCOPE_CLEANUP);

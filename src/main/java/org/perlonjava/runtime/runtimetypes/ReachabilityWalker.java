@@ -40,6 +40,14 @@ import java.lang.ref.WeakReference;
  * </ul>
  */
 public class ReachabilityWalker {
+    /** Legacy corrective sweeps are opt-in while ownership migration continues. */
+    private static final boolean CORRECTIVE_SWEEPS_DISABLED =
+            System.getenv().getOrDefault("JPERL_ENABLE_CORRECTIVE_SWEEPS", "").isEmpty()
+                    || !System.getenv().getOrDefault("JPERL_DISABLE_CORRECTIVE_SWEEPS", "").isEmpty();
+
+    static boolean correctiveSweepsEnabled() {
+        return !CORRECTIVE_SWEEPS_DISABLED;
+    }
 
     private static final String WALKER_TRACE_CLASS =
             System.getenv("JPERL_WALKER_TRACE_CLASS");
@@ -2797,6 +2805,7 @@ public class ReachabilityWalker {
     static int sweepWeakRefs(boolean quiet, boolean forceJvmGc,
                              Set<RuntimeBase> releasedTargets,
                              ReleasedWeakSweepResult releasedSweepResult) {
+        if (CORRECTIVE_SWEEPS_DISABLED) return 0;
         return sweepWeakRefsPass(quiet, forceJvmGc, releasedTargets,
                 releasedSweepResult).cleared();
     }
@@ -2887,7 +2896,8 @@ public class ReachabilityWalker {
     }
 
     private static boolean hasExistingWeakRetentionRule(RuntimeBase referent) {
-        if (referent.hasSemanticCaptureOwner()) return true;
+        if (referent.hasSemanticCaptureOwner() || referent.hasCallTransferOwner()
+                || referent.hasScalarCellOwner()) return true;
         if ((referent instanceof RuntimeHash || referent instanceof RuntimeArray)
                 && referent.localBindingExists) return true;
         if (referent instanceof RuntimeScalar scalar) {
@@ -2899,7 +2909,8 @@ public class ReachabilityWalker {
     }
 
     private static boolean hasExistingDestroyRetentionRule(RuntimeBase referent) {
-        return referent.hasSemanticCaptureOwner()
+        return referent.hasSemanticCaptureOwner() || referent.hasCallTransferOwner()
+                || referent.hasScalarCellOwner()
                 || ((referent instanceof RuntimeHash || referent instanceof RuntimeArray)
                 && referent.localBindingExists);
     }
@@ -3020,7 +3031,8 @@ public class ReachabilityWalker {
             // Semantic closure ownership is an explicit Perl edge.  It is not
             // necessarily visible to this conservative graph walk because
             // generated closure fields and metadata are intentionally opaque.
-            if (!liveReferent && referent.hasSemanticCaptureOwner()) {
+            if (!liveReferent && (referent.hasSemanticCaptureOwner()
+                    || referent.hasCallTransferOwner() || referent.hasScalarCellOwner())) {
                 continue;
             }
             if (!liveReferent && hasCapturedAggregateElementOwner(referent)) {
@@ -3107,7 +3119,8 @@ public class ReachabilityWalker {
             if (live.contains(referent)) {
                 continue;
             }
-            if (referent.hasSemanticCaptureOwner()) {
+            if (referent.hasSemanticCaptureOwner() || referent.hasCallTransferOwner()
+                    || referent.hasScalarCellOwner()) {
                 continue;
             }
             if (hasCapturedAggregateElementOwner(referent)) {
@@ -3292,6 +3305,10 @@ public class ReachabilityWalker {
 
     public static ReleasedWeakSweepResult sweepReleasedWeakReferents(
             Set<RuntimeBase> referents) {
+        if (CORRECTIVE_SWEEPS_DISABLED) {
+            return new ReleasedWeakSweepResult(null, Collections.emptySet(),
+                    Collections.emptySet(), 0);
+        }
         if (referents == null || referents.isEmpty()) {
             return new ReleasedWeakSweepResult(null, Collections.emptySet(),
                     Collections.emptySet(), 0);
@@ -3401,7 +3418,8 @@ public class ReachabilityWalker {
             // conservative root walk cannot see the generated closure fields.
             // Match sweepWeakRefs() above: a targeted release of another edge
             // must not destroy an aggregate still captured by a live closure.
-            if (referent.hasSemanticCaptureOwner()) continue;
+            if (referent.hasSemanticCaptureOwner() || referent.hasCallTransferOwner()
+                    || referent.hasScalarCellOwner()) continue;
             // A targeted release only means that one explicit owner went
             // away. Other counted owners can still hold the referent through
             // local aggregate slots that are not represented in the lexical
@@ -3477,6 +3495,7 @@ public class ReachabilityWalker {
 
     /** Reconcile File::Temp-style external resources at a safe statement boundary. */
     static int sweepStatementBoundaryDestroyableObjects() {
+        if (CORRECTIVE_SWEEPS_DISABLED) return 0;
         java.util.List<RuntimeBase> candidates =
                 DestroyDispatch.snapshotStatementBoundaryDestroyableObjects();
         if (candidates.isEmpty()) return 0;

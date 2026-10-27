@@ -45,6 +45,11 @@ public class RuntimeTiedHashProxyEntry extends TiedVariableBase {
      * This ensures lvalue is populated with the current value from the tied array.
      */
     @Override
+    RuntimeScalar storageOwnerReference() {
+        return parent.createAnonymousReference();
+    }
+
+    @Override
     void vivify() {
         // Always fetch the current value from the tied object
         RuntimeScalar fetchedValue = TieHash.tiedFetch(parent, key);

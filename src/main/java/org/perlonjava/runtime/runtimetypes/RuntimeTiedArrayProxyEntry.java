@@ -41,6 +41,11 @@ public class RuntimeTiedArrayProxyEntry extends TiedVariableBase {
      * This ensures lvalue is populated with the current value from the tied array.
      */
     @Override
+    RuntimeScalar storageOwnerReference() {
+        return parent.createAnonymousReference();
+    }
+
+    @Override
     void vivify() {
         if (outOfRangeOriginalIndex != null) {
             // Negative subscript that normalizes to a still-negative index: Perl

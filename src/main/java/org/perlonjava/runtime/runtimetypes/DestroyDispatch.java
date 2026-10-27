@@ -42,6 +42,7 @@ public class DestroyDispatch {
     }
 
     static void requestSweepAfterOuterDestroy() {
+        if (!ReachabilityWalker.correctiveSweepsEnabled()) return;
         state().sweepPendingAfterOuterDestroy = true;
     }
 
@@ -210,7 +211,19 @@ public class DestroyDispatch {
      * @param referent the RuntimeBase object to destroy
      */
     public static void callDestroy(RuntimeBase referent) {
+        callDestroy(referent, false);
+    }
+
+    static void callDestroyFromCountedOwner(RuntimeBase referent) {
+        callDestroy(referent, true);
+    }
+
+    private static void callDestroy(RuntimeBase referent, boolean finalCountedOwner) {
         // refCount is already MIN_VALUE (set by caller)
+        if (referent instanceof RuntimeCode code && code.hasActiveCodeOwner()) {
+            code.deferFinalReleaseToActiveCode();
+            return;
+        }
 
         // Shared canonical objects carry a published class name across
         // runtimes, but numeric bless IDs are runtime-local. Destruction may
@@ -280,15 +293,19 @@ public class DestroyDispatch {
                 return;
             }
             referent.beginPerlDestruction();
-            WeakRefRegistry.clearWeakRefsTo(referent);
+            WeakRefRegistry.clearWeakRefsTo(referent, finalCountedOwner);
+            releaseTiedContainerOwner(referent);
             if (referent instanceof RuntimeHash hash) {
-                MortalList.scopeExitCleanupHash(hash);
+                MortalList.scopeExitCleanupDestroyedHash(hash);
                 MortalList.flush();
             } else if (referent instanceof RuntimeArray arr) {
-                MortalList.scopeExitCleanupArray(arr);
+                MortalList.scopeExitCleanupDestroyedArray(arr);
                 MortalList.flush();
             } else if (referent instanceof RuntimeScalar scalar) {
                 RuntimeScalar.scopeExitCleanup(scalar);
+                MortalList.flush();
+            } else if (referent instanceof RuntimeCode code) {
+                code.releaseStateStorage();
                 MortalList.flush();
             }
             if ((referent instanceof RuntimeHash || referent instanceof RuntimeArray)
@@ -324,7 +341,7 @@ public class DestroyDispatch {
                     code.rescuedActiveEndBlockOwner = true;
                     return;
                 }
-                if (ReachabilityWalker.strongCycleRetainsWeakReferent(code)) {
+                if (!finalCountedOwner && ReachabilityWalker.strongCycleRetainsWeakReferent(code)) {
                     code.refCount = 1;
                     return;
                 }
@@ -348,13 +365,16 @@ public class DestroyDispatch {
             // Unblessed object — clear weak refs immediately and cascade into elements
             // to decrement refCounts of any tracked references they hold.
             referent.beginPerlDestruction();
-            WeakRefRegistry.clearWeakRefsTo(referent);
+            WeakRefRegistry.clearWeakRefsTo(referent, finalCountedOwner);
+            releaseTiedContainerOwner(referent);
             if (referent instanceof RuntimeHash hash) {
-                MortalList.scopeExitCleanupHash(hash);
+                MortalList.scopeExitCleanupDestroyedHash(hash);
             } else if (referent instanceof RuntimeArray arr) {
-                MortalList.scopeExitCleanupArray(arr);
+                MortalList.scopeExitCleanupDestroyedArray(arr);
             } else if (referent instanceof RuntimeScalar scalar) {
                 RuntimeScalar.scopeExitCleanup(scalar);
+            } else if (referent instanceof RuntimeCode code) {
+                code.releaseStateStorage();
             }
             MortalList.requestWeakSweepsForDestroyedContainer(referent);
             referent.markPerlDestroyed();
@@ -393,14 +413,18 @@ public class DestroyDispatch {
             // Without this, blessed objects without DESTROY (e.g., Moo objects like
             // DBIx::Class::Storage::BlockRunner) leak their contained references.
             WeakRefRegistry.clearWeakRefsTo(referent);
+            releaseTiedContainerOwner(referent);
             if (referent instanceof RuntimeHash hash) {
-                MortalList.scopeExitCleanupHash(hash);
+                MortalList.scopeExitCleanupDestroyedHash(hash);
                 MortalList.flush();
             } else if (referent instanceof RuntimeArray arr) {
-                MortalList.scopeExitCleanupArray(arr);
+                MortalList.scopeExitCleanupDestroyedArray(arr);
                 MortalList.flush();
             } else if (referent instanceof RuntimeScalar scalar) {
                 RuntimeScalar.scopeExitCleanup(scalar);
+                MortalList.flush();
+            } else if (referent instanceof RuntimeCode code) {
+                code.releaseStateStorage();
                 MortalList.flush();
             }
             if ((referent instanceof RuntimeHash || referent instanceof RuntimeArray)
@@ -471,6 +495,7 @@ public class DestroyDispatch {
             referent.refCount = 0;
         }
 
+        boolean callbackCompleted = false;
         try {
             // Build $self reference to pass as $_[0]
             RuntimeScalar self = new RuntimeScalar();
@@ -536,105 +561,9 @@ public class DestroyDispatch {
                 }
             }
 
-            // Reblessing an object while its DESTROY method is running starts
-            // a new destruction lifecycle for the new class.  The original
-            // one-shot guard belongs to the old class, so do not let it
-            // suppress the new class's DESTROY (op/ref.t's _B -> A case).
-            // Invoke it directly while the object is still protected by the
-            // current DESTROY frame; going through callDestroy() here would
-            // be treated as re-entrance and discarded.
-            if (referent.blessId != destroyBlessId) {
-                String reblessedClassName = NameNormalizer.getBlessStr(referent.blessId);
-                // A same-class bless may receive a fresh runtime-local ID after
-                // method-cache invalidation.  It does not start a new Perl
-                // destruction lifecycle: cache implementations such as
-                // Class::Std::Fast use it while retaining the object.  Compare
-                // the Perl class names rather than their ephemeral IDs.
-                if (reblessedClassName != null && !reblessedClassName.isEmpty()
-                        && !reblessedClassName.equals(className)) {
-                    referent.destroyFired = false;
-                    doCallDestroy(referent, reblessedClassName);
-                    return;
-                }
-            }
-
-            // Phase 3: Resurrection detection. If refCount > 0 at this point,
-            // a strong ref to the object escaped DESTROY (e.g. Devel::StackTrace-
-            // like @DB::args capture into a persistent array, or Schema-style
-            // self-save). Mark needsReDestroy and let the next decrement-to-0
-            // re-invoke DESTROY. Don't clear weak refs or cascade — the object
-            // is still alive.
-            if (hasEscapedPerlOwner(referent, checkingGlobalOwnerDelta,
-                    activeOwnersAtStart, ownerSlotsAtStart)
-                    && !state.destroyTargetRescued) {
-                warnIfResurrectedDuringGlobalDestruction(referent, className);
-                referent.needsReDestroy = true;
-                return;
-            }
-
-            // Check if DESTROY rescued the object by storing $self somewhere.
-            // If destroyTargetRescued was set during DESTROY (detected by
-            // RuntimeScalar.setLargeRefCounted when the old value was a weak ref
-            // to currentDestroyTarget being overwritten by a strong ref to the
-            // same target), the object should survive — skip cascade cleanup.
-            //
-            // Example: Schema::DESTROY re-attaches itself to a ResultSource via
-            //   $source->{schema} = $self
-            // This triggers rescue detection because the old value ($source->{schema},
-            // a weak ref to Schema) is being replaced by a strong ref to Schema.
-            if (state.destroyTargetRescued) {
-                if ("DESTRUCT".equals(GlobalVariable.getGlobalVariable(
-                        GlobalContext.GLOBAL_PHASE).toString())) {
-                    warnIfResurrectedDuringGlobalDestruction(referent, className);
-                }
-                // Object was rescued by DESTROY (e.g., Schema::DESTROY self-save).
-                //
-                // refCount has been set to 1 by setLargeRefCounted during rescue
-                // detection (MIN_VALUE → 1). This represents the rescue container's
-                // single counted reference (e.g., $source->{schema} = $self).
-                //
-                // When the rescue source eventually dies and its DESTROY weakens
-                // source->{schema}, refCount goes 1→0→callDestroy. That callDestroy
-                // is intercepted by the rescuedObjects check (skip cleanup), keeping
-                // Schema's internals intact during the phantom chain. Proper cleanup
-                // happens later via processRescuedObjects at block scope exit.
-                //
-                // Keep destroyFired=true to prevent infinite DESTROY loops.
-                //
-                // Don't clear weak refs here — the rescued object is still alive,
-                // and other sources may still have weak refs to it that need to
-                // remain defined until the object truly dies.
-                //
-                // Don't cascade — the rescued object's internal fields (Storage,
-                // DBI::db, ResultSources) must remain intact because the object
-                // is still alive.
-                //
-                // Track rescued objects so clearRescuedWeakRefs can clean up
-                // at END time.
-                state.rescuedObjects.add(referent);
-                MortalList.invalidateExternalRootSnapshot();
-                return;
-            }
-
-            // Object was NOT rescued — clear weak refs now (deferred from callDestroy).
-            // In Perl 5, weak refs are cleared after DESTROY only if the object
-            // wasn't resurrected. We match that by clearing here.
-            WeakRefRegistry.clearWeakRefsTo(referent);
-
-            // Cascading destruction: after DESTROY runs and the object was NOT rescued,
-            // walk the destroyed object's internal fields for any blessed references
-            // and defer their refCount decrements. This ensures nested objects
-            // (e.g., $self->{inner}) are destroyed when their parent is destroyed.
-            if (referent instanceof RuntimeHash hash) {
-                MortalList.scopeExitCleanupHash(hash);
-                MortalList.flush();
-            } else if (referent instanceof RuntimeArray arr) {
-                MortalList.scopeExitCleanupArray(arr);
-                MortalList.flush();
-            } else if (referent instanceof RuntimeScalar scalar) {
-                RuntimeScalar.scopeExitCleanup(scalar);
-                MortalList.flush();
-            }
+            callbackCompleted = true;
+            finishDestroyOwnership(referent, className, destroyBlessId,
+                    checkingGlobalOwnerDelta, activeOwnersAtStart, ownerSlotsAtStart);
         } catch (Exception e) {
             String msg = e.getMessage();
             if (msg == null) msg = e.getClass().getName();
@@ -650,11 +579,18 @@ public class DestroyDispatch {
                     && dieException.getWarningBits() != null
                     ? dieException.getWarningBits()
                     : RuntimeCode.getWarningBitsForCode(code);
-            if (!(e instanceof PerlDieException dieException
-                    && dieException.isMiscWarningSuppressed())) {
-                WarnDie.warnWithCategoryFromCode(
-                        new RuntimeScalar(warning),
-                        new RuntimeScalar(""), "misc", warningBits);
+            try {
+                if (!(e instanceof PerlDieException dieException
+                        && dieException.isMiscWarningSuppressed())) {
+                    WarnDie.warnWithCategoryFromCode(
+                            new RuntimeScalar(warning),
+                            new RuntimeScalar(""), "misc", warningBits);
+                }
+            } finally {
+                if (!callbackCompleted) {
+                    finishDestroyOwnership(referent, className, destroyBlessId,
+                            checkingGlobalOwnerDelta, activeOwnersAtStart, ownerSlotsAtStart);
+                }
             }
         } finally {
             if (referent.needsReDestroy || state.destroyTargetRescued
@@ -691,6 +627,68 @@ public class DestroyDispatch {
         }
     }
 
+    /** Final destruction releases magic even when an expression still borrows the container. */
+    private static void releaseTiedContainerOwner(RuntimeBase referent) {
+        if (referent instanceof RuntimeHash hash && hash.elements instanceof TieHash tieHash) {
+            tieHash.releaseTiedObject();
+        } else if (referent instanceof RuntimeArray array && array.elements instanceof TieArray tieArray) {
+            tieArray.releaseTiedObject();
+        }
+    }
+
+    /** The callback's success or failure does not change its ownership obligations. */
+    private static void finishDestroyOwnership(
+            RuntimeBase referent, String className, int destroyBlessId,
+            boolean checkingGlobalOwnerDelta, Set<RuntimeScalar> activeOwnersAtStart,
+            Set<PerlOwnerSlot> ownerSlotsAtStart) {
+        LifecycleRuntimeState state = state();
+        if (referent.blessId != destroyBlessId) {
+            String reblessedClassName = NameNormalizer.getBlessStr(referent.blessId);
+            // Compare names: a same-class bless can receive a new runtime-local
+            // ID without starting a new destruction lifecycle. Dispatch directly
+            // while the current DESTROY frame still guards callDestroy reentry.
+            if (reblessedClassName != null && !reblessedClassName.isEmpty()
+                    && !reblessedClassName.equals(className)) {
+                referent.destroyFired = false;
+                doCallDestroy(referent, reblessedClassName);
+                return;
+            }
+        }
+        if (hasEscapedPerlOwner(referent, checkingGlobalOwnerDelta,
+                activeOwnersAtStart, ownerSlotsAtStart) && !state.destroyTargetRescued) {
+            referent.needsReDestroy = true;
+            warnIfResurrectedDuringGlobalDestruction(referent, className);
+            return;
+        }
+        if (state.destroyTargetRescued) {
+            if ("DESTRUCT".equals(GlobalVariable.getGlobalVariable(
+                    GlobalContext.GLOBAL_PHASE).toString())) {
+                warnIfResurrectedDuringGlobalDestruction(referent, className);
+            }
+            // A weak slot promoted to a rescuing strong owner keeps the
+            // object's contents and observers until its rescue lifetime ends.
+            state.rescuedObjects.add(referent);
+            MortalList.invalidateExternalRootSnapshot();
+            return;
+        }
+        WeakRefRegistry.clearWeakRefsTo(referent);
+        releaseTiedContainerOwner(referent);
+        if (referent instanceof RuntimeHash hash) {
+            MortalList.scopeExitCleanupDestroyedHash(hash);
+        } else if (referent instanceof RuntimeArray array) {
+            MortalList.scopeExitCleanupDestroyedArray(array);
+        } else if (referent instanceof RuntimeScalar scalar) {
+            RuntimeScalar.scopeExitCleanup(scalar);
+        } else if (referent instanceof RuntimeCode code) {
+            // Blessed CVs may resurrect in DESTROY. Their state pad remains
+            // intact through the callback and the resurrection decision.
+            code.releaseStateStorage();
+        } else {
+            return;
+        }
+        MortalList.flush();
+    }
+
     /**
      * Decide resurrection from Perl owner slots when the owner ledger is
      * active. During global destruction the legacy selective count can still
@@ -714,7 +712,8 @@ public class DestroyDispatch {
                         && ReachabilityWalker.isScalarReachable(owner)) return true;
             }
             for (PerlOwnerSlot ownerSlot : referent.ownerSlotSnapshot()) {
-                if (!ownerSlotsAtStart.contains(ownerSlot)) return true;
+                if ((ownerSlot.isNativeOwner() || ownerSlot.kind() == PerlOwnerSlot.Kind.CLOSURE_PAD)
+                        && !ownerSlotsAtStart.contains(ownerSlot)) return true;
             }
             return false;
         }

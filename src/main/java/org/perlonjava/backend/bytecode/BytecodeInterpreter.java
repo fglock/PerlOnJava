@@ -108,30 +108,6 @@ public class BytecodeInterpreter {
                 || scalar.type == RuntimeScalarType.READONLY_SCALAR;
     }
 
-    private static boolean returnListContainsTrackedReference(RuntimeList retList) {
-        if (retList == null || retList instanceof RuntimeControlFlowList) return true;
-        for (RuntimeBase elem : retList.elements) {
-            if (runtimeBaseIsTrackedReference(elem)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static boolean runtimeBaseIsTrackedReference(RuntimeBase elem) {
-        if (elem == null) return false;
-        if (elem instanceof RuntimeScalar scalar) {
-            if (!RuntimeScalarType.isReference(scalar)) {
-                return false;
-            }
-            if (!(scalar.value instanceof RuntimeBase base)) {
-                return false;
-            }
-            return base.blessId != 0 || base.refCount >= 0;
-        }
-        return elem.blessId != 0 || elem.refCount >= 0;
-    }
-
     private static void releaseConsumedTemp(RuntimeBase temp, RuntimeBase target) {
         if (!(temp instanceof RuntimeScalar tempScalar)
                 || !(target instanceof RuntimeScalar targetScalar)
@@ -602,10 +578,22 @@ public class BytecodeInterpreter {
                                 code.unbindActiveLexical(code.stringPool[nameIdx], registers[reg]);
                             }
 
+                            case Opcodes.SNAPSHOT_SCOPE_RESULT -> {
+                                int destination = bytecode[pc++];
+                                int source = bytecode[pc++];
+                                int resultContext = bytecode[pc++];
+                                if (resultContext == RuntimeContextType.RUNTIME) resultContext = callContext;
+                                registers[destination] = RuntimeCode.prepareScopeResult(
+                                        registers[source], resultContext);
+                            }
+
                             case Opcodes.RETURN_SCOPE_CLEANUP -> {
                                 int reg = bytecode[pc++];
                                 int returnReg = bytecode[pc++];
                                 RuntimeBase slot = registers[reg];
+                                registers[returnReg] = RuntimeCode.prepareScopeReturn(
+                                        registers[returnReg], callContext,
+                                        !RuntimeCode.isLvalueCode(code));
                                 if (slot instanceof RuntimeScalar rs) {
                                     RuntimeScalar.releaseOrTransferSocketIoOwnerOnReturn(
                                             rs, registers[returnReg]);
@@ -746,6 +734,9 @@ public class BytecodeInterpreter {
                                 int returnReg = bytecode[pc++];
                                 RuntimeBase slot = registers[reg];
                                 if (slot instanceof RuntimeArray ra) {
+                                    registers[returnReg] = RuntimeCode.prepareLocalArrayReturn(
+                                            registers[returnReg], ra, callContext,
+                                            !RuntimeCode.isLvalueCode(code));
                                     MortalList.scopeExitCleanupArray(ra, registers[returnReg]);
                                 }
                             }
@@ -772,7 +763,7 @@ public class BytecodeInterpreter {
                                                 savedLocalLevel + relativeLevel);
                                     }
                                     unwindEvalMethodInvocantHolds(
-                                            evalMethodInvocantHoldDepthStack, methodInvocantHolds);
+                                            evalMethodInvocantHoldDepthStack, methodInvocantHolds, evalBaseRegStack, registers);
                                     pc = evalCatchStack.pop();
                                     RuntimeCode.decrementEvalDepth();
                                     popEvalCallerFrame(frame);
@@ -784,10 +775,12 @@ public class BytecodeInterpreter {
                                 RuntimeCode.materializeSpecialVarsInResult(
                                         retList, RuntimeCode.currentRawCallContext());
                                 frame.returnedClosures = collectReturnedClosures(retList);
-                                if (!returnListContainsTrackedReference(retList)) {
-                                    MortalList.flushAboveMark();
-                                }
-
+                                // Leave frame-local decrements queued here. The
+                                // RuntimeCode call boundary releases lexical
+                                // registrations before flushing them; flushing
+                                // at the opcode can still see the returning
+                                // frame as an owner and postpone DESTROY until
+                                // a corrective sweep.
                                 return retList;
                             }
 
@@ -2217,7 +2210,7 @@ public class BytecodeInterpreter {
                                             }
                                             unwindEvalMethodInvocantHolds(
                                                     evalMethodInvocantHoldDepthStack,
-                                                    methodInvocantHolds);
+                                                    methodInvocantHolds, evalBaseRegStack, registers);
                                             // Jump to eval catch handler
                                             pc = evalCatchStack.pop();
                                             popEvalCallerFrame(frame);
@@ -2401,7 +2394,7 @@ public class BytecodeInterpreter {
                                             }
                                             unwindEvalMethodInvocantHolds(
                                                     evalMethodInvocantHoldDepthStack,
-                                                    methodInvocantHolds);
+                                                    methodInvocantHolds, evalBaseRegStack, registers);
                                             pc = evalCatchStack.pop();
                                             popEvalCallerFrame(frame);
                                             RuntimeCode.decrementEvalDepth();
@@ -2902,7 +2895,8 @@ public class BytecodeInterpreter {
                                 // Push catch PC onto eval stack
                                 evalCatchStack.push(catchPc);
                                 frame.evalControlBlockDepthStack.push(new int[]{
-                                        controlBlockStack.size(), labeledBlockStack.size()});
+                                        controlBlockStack.size(), labeledBlockStack.size(),
+                                        visibleEvalFrame ? 1 : 0});
 
                                 // Save first body register for scope cleanup on exception
                                 evalBaseRegStack.push(firstBodyReg);
@@ -3780,7 +3774,7 @@ public class BytecodeInterpreter {
                         int catchPc = evalCatchStack.pop();
                         popEvalCallerFrame(frame);
                         unwindEvalMethodInvocantHolds(
-                                evalMethodInvocantHoldDepthStack, methodInvocantHolds);
+                                evalMethodInvocantHoldDepthStack, methodInvocantHolds, evalBaseRegStack, registers);
                         // Restore local variables pushed inside the eval block
                         if (!evalLocalLevelStack.isEmpty()) {
                             int relativeLevel = evalLocalLevelStack.pop();
@@ -3820,6 +3814,41 @@ public class BytecodeInterpreter {
                     frame.propagatingException = e;
                     throw e;
                 } catch (Throwable e) {
+                    if (e instanceof PerlNonLocalReturnException transfer
+                            && transfer.targetCode == null && !evalCatchStack.isEmpty()
+                            && !frame.evalControlBlockDepthStack.isEmpty()
+                            && frame.evalControlBlockDepthStack.peek()[2] != 0) {
+                        int catchPc = evalCatchStack.pop();
+                        int baseReg = evalBaseRegStack.peek();
+                        java.util.ArrayList<Object> locals = new java.util.ArrayList<>();
+                        BitSet myVars = code.myVarRegisters;
+                        for (int i = myVars.nextSetBit(baseReg);
+                             i >= 0 && i < registers.length; i = myVars.nextSetBit(i + 1)) {
+                            if (registers[i] != null) locals.add(registers[i]);
+                        }
+                        int resultReg = bytecode[catchPc + 1];
+                        int resultContext = bytecode[catchPc + 2];
+                        if (resultContext == RuntimeContextType.RUNTIME) resultContext = callContext;
+                        registers[resultReg] = RuntimeCode.finishEvalCallbackReturn(
+                                transfer, locals.toArray(), resultContext, () -> {
+                                    popEvalCallerFrame(frame);
+                                    unwindEvalMethodInvocantHolds(evalMethodInvocantHoldDepthStack,
+                                            methodInvocantHolds, evalBaseRegStack, registers);
+                                    evalBaseRegStack.pop();
+                                    if (!evalLocalLevelStack.isEmpty()) {
+                                        int relativeLevel = evalLocalLevelStack.pop();
+                                        DynamicVariableManager.popToLocalLevel(savedLocalLevel + relativeLevel);
+                                    }
+                                    RuntimeCode.decrementEvalDepth();
+                                });
+                        for (int i = myVars.nextSetBit(baseReg);
+                             i >= 0 && i < registers.length; i = myVars.nextSetBit(i + 1)) {
+                            if (i != resultReg) registers[i] = null;
+                        }
+                        // Skip the failed-eval result opcode: this transfer succeeded.
+                        pc = catchPc + 3;
+                        continue outer;
+                    }
                     // Check if we're inside an eval block
                     if (!evalCatchStack.isEmpty()) {
                         Throwable evalException = e;
@@ -3827,7 +3856,7 @@ public class BytecodeInterpreter {
                         int catchPc = evalCatchStack.pop(); // Pop the catch handler
                         popEvalCallerFrame(frame);
                         unwindEvalMethodInvocantHolds(
-                                evalMethodInvocantHoldDepthStack, methodInvocantHolds);
+                                evalMethodInvocantHoldDepthStack, methodInvocantHolds, evalBaseRegStack, registers);
 
                         // Scope exit cleanup for lexical variables allocated inside the eval body.
                         // When die throws a PerlDieException, the SCOPE_EXIT_CLEANUP opcodes
@@ -4033,10 +4062,27 @@ public class BytecodeInterpreter {
 
     private static void unwindEvalMethodInvocantHolds(
             ArrayDeque<Integer> evalMethodInvocantHoldDepthStack,
-            ArrayList<RuntimeBase> methodInvocantHolds) {
+            ArrayList<RuntimeBase> methodInvocantHolds,
+            ArrayDeque<Integer> evalBaseRegStack, RuntimeBase[] registers) {
+        // Inline evals share their enclosing call frame. Retire only staging
+        // temporaries allocated in this eval; an outer call can still be
+        // evaluating its later arguments when the inner eval catches a die.
+        boolean releasedArguments = false;
+        if (!evalBaseRegStack.isEmpty()) {
+            for (int i = evalBaseRegStack.peek(); i < registers.length; i++) {
+                if (registers[i] instanceof RuntimeCode.CallArguments arguments) {
+                    arguments.finish();
+                    registers[i] = null;
+                    releasedArguments = true;
+                }
+            }
+        }
         if (!evalMethodInvocantHoldDepthStack.isEmpty()) {
             releaseMethodInvocantHoldsAbove(
                     methodInvocantHolds, evalMethodInvocantHoldDepthStack.pop());
+        }
+        if (releasedArguments) {
+            MortalList.flushAboveMark();
         }
     }
 

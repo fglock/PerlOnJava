@@ -43,6 +43,8 @@ class PerlOwnerSlotLegacyBridgeTest {
             RuntimeHash referent = new RuntimeHash();
             referent.refCount = 0;
             referent.localBindingExists = true;
+            int lexicalMark = MyVarCleanupStack.pushMark();
+            MyVarCleanupStack.register(referent);
             PerlOwnerSlot slot = new PerlOwnerSlot(PerlOwnerSlot.Kind.CLOSURE_PAD);
 
             slot.acquireLegacyCapture(referent);
@@ -65,6 +67,7 @@ class PerlOwnerSlotLegacyBridgeTest {
             assertEquals(0, referent.refCount);
             assertTrue(release.isCompleted());
             MortalList.popMark();
+            MyVarCleanupStack.popMark(lexicalMark);
         }
     }
 }

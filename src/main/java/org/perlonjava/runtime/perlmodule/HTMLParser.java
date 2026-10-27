@@ -133,7 +133,7 @@ public class HTMLParser extends PerlModuleBase {
             handlers.put(event + "_cb", scalarUndef);
             handlers.put(event + "_argspec", scalarUndef);
         }
-        pstate.put("_handlers", handlers.createReference());
+        pstate.put("_handlers", handlers.createAnonymousReference());
 
         // State tracking
         pstate.put("_parsing", scalarFalse);
@@ -147,7 +147,7 @@ public class HTMLParser extends PerlModuleBase {
         pstate.put("_input_is_byte_string", scalarFalse);
         pstate.put("_literal_mode", new RuntimeScalar(""));
         pstate.put("_ignore_current_element", scalarFalse);
-        pstate.put("_ignore_elements", new RuntimeArray().createReference());
+        pstate.put("_ignore_elements", new RuntimeArray().createAnonymousReference());
         pstate.put("_pending_end_tag", new RuntimeScalar(""));
         pstate.put("_bool_attr_val", scalarUndef);
         pstate.put("_in_cdata", scalarFalse);
@@ -162,7 +162,7 @@ public class HTMLParser extends PerlModuleBase {
         pstate.put("_event_column", new RuntimeScalar(1));
 
         // Store in self
-        selfHash.put("_hparser_xs_state", pstate.createReference());
+        selfHash.put("_hparser_xs_state", pstate.createAnonymousReference());
 
         return new RuntimeList();
     }
@@ -369,7 +369,7 @@ public class HTMLParser extends PerlModuleBase {
                     RuntimeArray.push(replacement, arg);
                 }
             }
-            pstate.put("_ignore_elements", replacement.createReference());
+            pstate.put("_ignore_elements", replacement.createAnonymousReference());
         }
         RuntimeList result = new RuntimeList();
         for (int i = 0; i < previous.size(); i++) result.add(previous.get(i));
@@ -558,48 +558,44 @@ public class HTMLParser extends PerlModuleBase {
             // Build event data per argspec and push as array ref onto accumulator
             RuntimeArray accum = (RuntimeArray) cb.value;
             RuntimeArray eventData = buildEventDataFromArgspec(argspec, eventName, eventArgs, self, false, pstate);
-            RuntimeArray.push(accum, eventData.createReference());
-        } else if (cb.type == RuntimeScalarType.STRING || cb.type == RuntimeScalarType.BYTE_STRING) {
-            // Method name - call as $self->method(...)
-            String methodName = cb.toString();
+            RuntimeArray.push(accum, eventData.createAnonymousReference());
+        } else if (cb.type == RuntimeScalarType.STRING || cb.type == RuntimeScalarType.BYTE_STRING
+                || cb.type == RuntimeScalarType.REFERENCE || cb.type == RuntimeScalarType.CODE) {
+            boolean methodCallback = cb.type == RuntimeScalarType.STRING
+                    || cb.type == RuntimeScalarType.BYTE_STRING;
             RuntimeArray callArgs = new RuntimeArray();
-            RuntimeArray.push(callArgs, self);
-            // Build args from argspec if available, otherwise pass raw eventArgs
-            // skipSelf=true: "self" in argspec specifies the invocant for method dispatch
-            // but should NOT be duplicated in the method arguments
-            if (!argspec.isEmpty()) {
-                RuntimeArray eventData = buildEventDataFromArgspec(argspec, eventName, eventArgs, self, true, pstate);
-                for (int idx = 0; idx < eventData.size(); idx++) {
-                    RuntimeArray.push(callArgs, eventData.get(idx));
+            RuntimeArray eventData = null;
+            try {
+                if (methodCallback) RuntimeArray.push(callArgs, self);
+                if (!argspec.isEmpty()) {
+                    // A method's invocant is already in callArgs. CODE callbacks
+                    // receive self only when their argspec explicitly requests it.
+                    eventData = buildEventDataFromArgspec(
+                            argspec, eventName, eventArgs, self, methodCallback, pstate);
+                    for (int idx = 0; idx < eventData.size(); idx++) {
+                        RuntimeArray.push(callArgs, eventData.get(idx));
+                    }
+                } else {
+                    for (RuntimeScalar arg : eventArgs) RuntimeArray.push(callArgs, arg);
                 }
-            } else {
-                for (RuntimeScalar arg : eventArgs) {
-                    RuntimeArray.push(callArgs, arg);
+                if (methodCallback) {
+                    int blessId = RuntimeScalarType.blessedId(self);
+                    String className = blessId != 0
+                            ? NameNormalizer.getBlessStr(blessId) : "HTML::Parser";
+                    RuntimeScalar method = InheritanceResolver.findMethodInHierarchy(
+                            cb.toString(), className, null, 0);
+                    if (method != null) RuntimeCode.apply(method, callArgs, RuntimeContextType.VOID);
+                } else {
+                    RuntimeCode.apply(cb, callArgs, RuntimeContextType.VOID);
                 }
+            } finally {
+                // These are owned native call buffers, including when callback
+                // dispatch fails or a method is absent. Escaped @_ references
+                // keep their own aggregate owner and remain usable.
+                MortalList.scopeExitCleanupArray(callArgs);
+                MortalList.scopeExitCleanupArray(eventData);
+                MortalList.flushAboveMark();
             }
-            // Look up method in the object's class hierarchy using the blessed class
-            int blessId = RuntimeScalarType.blessedId(self);
-            String className = (blessId != 0) ?
-                    NameNormalizer.getBlessStr(blessId) : "HTML::Parser";
-            RuntimeScalar method = InheritanceResolver.findMethodInHierarchy(
-                    methodName, className, null, 0);
-            if (method != null) {
-                RuntimeCode.apply(method, callArgs, RuntimeContextType.VOID);
-            }
-        } else if (cb.type == RuntimeScalarType.REFERENCE || cb.type == RuntimeScalarType.CODE) {
-            // Code reference - call directly
-            RuntimeArray callArgs = new RuntimeArray();
-            if (!argspec.isEmpty()) {
-                RuntimeArray eventData = buildEventDataFromArgspec(argspec, eventName, eventArgs, self, false, pstate);
-                for (int idx = 0; idx < eventData.size(); idx++) {
-                    RuntimeArray.push(callArgs, eventData.get(idx));
-                }
-            } else {
-                for (RuntimeScalar arg : eventArgs) {
-                    RuntimeArray.push(callArgs, arg);
-                }
-            }
-            RuntimeCode.apply(cb, callArgs, RuntimeContextType.VOID);
         }
     }
 
@@ -679,7 +675,7 @@ public class HTMLParser extends PerlModuleBase {
                         RuntimeArray.push(result, eventArgs[1]);
                     } else {
                         // Return empty hash ref for non-start events
-                        RuntimeArray.push(result, new RuntimeHash().createReference());
+                        RuntimeArray.push(result, new RuntimeHash().createAnonymousReference());
                     }
                     break;
 
@@ -688,7 +684,7 @@ public class HTMLParser extends PerlModuleBase {
                     if ("start".equals(eventName) && eventArgs.length > 2) {
                         RuntimeArray.push(result, eventArgs[2]);
                     } else {
-                        RuntimeArray.push(result, new RuntimeArray().createReference());
+                        RuntimeArray.push(result, new RuntimeArray().createAnonymousReference());
                     }
                     break;
 
@@ -834,7 +830,7 @@ public class HTMLParser extends PerlModuleBase {
                     //   declaration => [declaration_body]
                     //   process     => [pi_body]
                     RuntimeArray.push(result,
-                            buildTokensArray(eventName, eventArgs).createReference());
+                            buildTokensArray(eventName, eventArgs).createAnonymousReference());
                     break;
 
                 case "tokenpos":
@@ -852,9 +848,9 @@ public class HTMLParser extends PerlModuleBase {
                             RuntimeArray pair = new RuntimeArray();
                             RuntimeArray.push(pair, new RuntimeScalar(0));
                             RuntimeArray.push(pair, new RuntimeScalar(0));
-                            RuntimeArray.push(pos, pair.createReference());
+                            RuntimeArray.push(pos, pair.createAnonymousReference());
                         }
-                        RuntimeArray.push(result, pos.createReference());
+                        RuntimeArray.push(result, pos.createAnonymousReference());
                     }
                     break;
 
@@ -1311,8 +1307,8 @@ public class HTMLParser extends PerlModuleBase {
                     if (!ignoreElement) {
                         fireEvent(self, selfHash, pstate, "start",
                                 new RuntimeScalar(tagName),
-                                attrs.createReference(),
-                                attrSeq.createReference(),
+                                attrs.createAnonymousReference(),
+                                attrSeq.createAnonymousReference(),
                                 new RuntimeScalar(origText));
                     }
 
