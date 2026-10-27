@@ -6,8 +6,9 @@ import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.WarningFlags;
 
 public class RegexQuoteMeta {
-    private static final ThreadLocal<Integer> CALL_SITE_WARNING_STATE = new ThreadLocal<>();
-    private static final ThreadLocal<String> CALL_SITE_WARNING_BITS = new ThreadLocal<>();
+    private static final int CALL_SITE_WARNING_UNSET = Integer.MIN_VALUE;
+    private static final ThreadLocal<int[]> CALL_SITE_WARNING_STATE = ThreadLocal.withInitial(() -> new int[]{CALL_SITE_WARNING_UNSET});
+    private static final ThreadLocal<String[]> CALL_SITE_WARNING_BITS = ThreadLocal.withInitial(() -> new String[]{null});
     private static final ThreadLocal<String> PARSER_WARNING_BITS = new ThreadLocal<>();
     private static final ThreadLocal<String> MATCH_TARGET_NAME = new ThreadLocal<>();
 
@@ -16,20 +17,22 @@ public class RegexQuoteMeta {
     }
 
     public static void setCallSiteWarningState(int state) {
-        CALL_SITE_WARNING_STATE.set(state);
+        int[] holder = CALL_SITE_WARNING_STATE.get();
+        if (holder[0] != state) holder[0] = state;
     }
 
     public static void setCallSiteWarningBits(String bits) {
-        CALL_SITE_WARNING_BITS.set(bits);
+        String[] holder = CALL_SITE_WARNING_BITS.get();
+        if (holder[0] != bits) holder[0] = bits;
     }
 
     public static String getCallSiteWarningBits() {
-        return CALL_SITE_WARNING_BITS.get();
+        return CALL_SITE_WARNING_BITS.get()[0];
     }
 
     public static boolean isCallSiteWarningExplicitlyDisabled() {
-        Integer state = CALL_SITE_WARNING_STATE.get();
-        return state != null && state < 0;
+        int state = CALL_SITE_WARNING_STATE.get()[0];
+        return state != CALL_SITE_WARNING_UNSET && state < 0;
     }
 
     public static void setParserWarningBits(String bits) {
@@ -58,10 +61,10 @@ public class RegexQuoteMeta {
         // This warning belongs to construction of the interpolated pattern.
         // Retaining it on the cached RuntimeRegex re-emits it for every match
         // and can leak a warning-enabled compilation into a no-warnings use.
-        Integer state = CALL_SITE_WARNING_STATE.get();
+        int state = CALL_SITE_WARNING_STATE.get()[0];
         RuntimeScalar warning = new RuntimeScalar(message);
         RuntimeScalar where = new RuntimeScalar("");
-        String warningBits = CALL_SITE_WARNING_BITS.get();
+        String warningBits = CALL_SITE_WARNING_BITS.get()[0];
         if (warningBits == null) {
             // Synthetic/interpolated regex wrappers do not always have a
             // dedicated quote opcode. Use the active statement mask rather
@@ -75,7 +78,7 @@ public class RegexQuoteMeta {
         }
         if (disposition.fatal()) {
             WarnDie.die(warning, new RuntimeScalar(WarnDie.getPerlLocationFromStack()));
-        } else if (warningBits != null || state != null) {
+        } else if (warningBits != null || (state != CALL_SITE_WARNING_UNSET && state != 0)) {
             WarnDie.warn(warning, where);
         } else {
             WarnDie.warnWithCategory(warning, where, warningCategory(message));
@@ -90,7 +93,7 @@ public class RegexQuoteMeta {
     public static ConstructionWarningDisposition constructionWarningDisposition(
             String message, boolean strictDefault) {
         String category = warningCategory(message);
-        String warningBits = CALL_SITE_WARNING_BITS.get();
+        String warningBits = CALL_SITE_WARNING_BITS.get()[0];
         if (warningBits == null) {
             warningBits = WarningBitsRegistry.getRuntimeWarningBits();
         }
@@ -105,8 +108,8 @@ public class RegexQuoteMeta {
                     enabled && WarningFlags.isFatalInBits(warningBits, category));
         }
 
-        Integer state = CALL_SITE_WARNING_STATE.get();
-        if (state != null) {
+        int state = CALL_SITE_WARNING_STATE.get()[0];
+        if (state != CALL_SITE_WARNING_UNSET) {
             return new ConstructionWarningDisposition(state > 0, state == 2);
         }
         if (WarningFlags.isWarningSuppressedAtRuntime(category)) {
