@@ -42,6 +42,32 @@ is(
     'require Foo::Bar marks the package for following indirect constructor syntax'
 );
 
+{
+    package IndirectObject::ForwardFactory;
+    sub new {
+        my $class = shift;
+        my $tree = new IndirectObject::Forward::Tree(@_);
+        return bless { tree => $tree }, $class;
+    }
+}
+
+{
+    package IndirectObject::Forward::Tree;
+    sub new { bless { args => [@_[1 .. $#_]] }, shift }
+}
+
+my $forward_factory = IndirectObject::ForwardFactory->new('from-forward-class');
+is(
+    ref($forward_factory->{tree}),
+    'IndirectObject::Forward::Tree',
+    'qualified indirect constructor works for a package declared later'
+);
+is_deeply(
+    $forward_factory->{tree}->{args},
+    ['from-forward-class'],
+    'qualified indirect constructor forwards arguments to a later package'
+);
+
 # A fully-qualified class used only in platform-specific code need not be
 # loaded for Perl to parse an indirect constructor followed by a method call.
 # Argv::Win32Utils uses this exact form on non-Windows platforms.
