@@ -204,92 +204,11 @@ Check how the **original CPAN module** behaves on Windows, then match it:
 
 Never silently return success for a function that isn't actually working.
 
-### Common FFM Patterns
+### Binding examples
 
-#### Simple function (no args, returns int)
-```java
-// getuid() — no errno needed
-getuidHandle = linker.downcallHandle(
-    stdlib.find("getuid").orElseThrow(),
-    FunctionDescriptor.of(ValueLayout.JAVA_INT)
-);
-
-public int getuid() {
-    ensureInitialized();
-    try { return (int) getuidHandle.invokeExact(); }
-    catch (Throwable e) { return -1; }
-}
-```
-
-#### Function with string argument
-```java
-// chmod(path, mode) — needs Arena for string, captures errno
-public int chmod(String path, int mode) {
-    ensureInitialized();
-    try (Arena arena = Arena.ofConfined()) {
-        MemorySegment pathSegment = arena.allocateFrom(path);
-        MemorySegment capturedState = arena.allocate(
-            Linker.Option.captureStateLayout());
-        int result = (int) chmodHandle.invokeExact(
-            capturedState, pathSegment, mode);
-        if (result == -1) {
-            setErrno(capturedState.get(ValueLayout.JAVA_INT, errnoOffset));
-        }
-        return result;
-    } catch (Throwable e) { setErrno(5); return -1; }
-}
-```
-
-#### Function returning C string
-```java
-// ptsname(fd) — returns char*
-public String ptsname(int fd) {
-    ensureInitialized();
-    try {
-        MemorySegment result = (MemorySegment) ptsnameHandle.invokeExact(fd);
-        if (result.address() == 0) return null;
-        return result.reinterpret(1024).getString(0);
-    } catch (Throwable e) { return null; }
-}
-```
-
-#### Struct I/O (reading fields at offsets)
-```java
-// Platform-specific struct offsets (set in init method)
-private static long FIELD_OFFSET;
-
-private static void initStructOffsets() {
-    if (IS_MACOS) {
-        FIELD_OFFSET = 8;  // macOS layout
-    } else {
-        FIELD_OFFSET = 4;  // Linux layout
-    }
-}
-
-// Read struct from native memory
-MyRecord readStruct(MemorySegment ptr) {
-    MemorySegment s = ptr.reinterpret(STRUCT_SIZE);
-    int field1 = s.get(ValueLayout.JAVA_INT, FIELD1_OFFSET);
-    String field2 = readCString(s.get(ValueLayout.ADDRESS, FIELD2_OFFSET));
-    return new MyRecord(field1, field2);
-}
-```
-
-#### Variadic function (ioctl)
-```java
-// ioctl(fd, request, ...) — variadic after arg index 2
-ioctlHandle = linker.downcallHandle(
-    stdlib.find("ioctl").orElseThrow(),
-    FunctionDescriptor.of(
-        ValueLayout.JAVA_INT,     // return
-        ValueLayout.JAVA_INT,     // fd
-        ValueLayout.JAVA_LONG,    // request (unsigned long)
-        ValueLayout.ADDRESS       // variadic arg: pointer
-    ),
-    Linker.Option.firstVariadicArg(2),
-    captureErrno
-);
-```
+Read [FFM patterns](references/ffm-patterns.md) for simple functions, string
+arguments/returns, platform struct offsets and variadic ioctl bindings. Keep
+native memory lifetimes and errno behavior explicit.
 
 ### Phase 3: Bridge Native FDs to PerlOnJava I/O (if needed)
 
@@ -341,28 +260,13 @@ Same as `port-cpan-module`, plus:
 - Test errno propagation
 - Verify `isatty()` returns correct results for new handle types
 
-## Checklist (extends port-cpan-module checklist)
+## Acceptance checks
 
-### FFM Layer
-- [ ] Identify all C/POSIX functions needed
-- [ ] Check which are already in `FFMPosixInterface.java`
-- [ ] Add new methods to `FFMPosixInterface.java` with Javadoc
-- [ ] Implement in `FFMPosixLinux.java` with errno capture
-- [ ] Override in `FFMPosixMacOS.java` if platform-specific
-- [ ] Handle Windows in `FFMPosixWindows.java` (emulate or throw)
-- [ ] Add any new data records to `FFMPosixInterface.java`
-
-### I/O Bridge (if raw fds are involved)
-- [ ] Create new `IOHandle` implementation if needed
-- [ ] Register handles in `FileDescriptorTable`
-- [ ] Wire into `IOOperator.findFileHandleByDescriptor()`
-- [ ] Test `fileno()`, `sysread()`, `syswrite()`, `close()`
-- [ ] Test `select()` integration if applicable
-
-### Platform Constants
-- [ ] Identify platform-specific constants (ioctl codes, struct sizes)
-- [ ] Use `IS_MACOS` flag for conditional initialization
-- [ ] Document constant values and their sources
+In addition to the porting gates, cover invalid descriptors, permission failures,
+errno, platform struct/constants and their sources, and each supported OS. For
+native IOHandle bridges, test fileno, buffered/unbuffered operations, close order,
+isatty and select integration. Register new interface records and document
+platform constants. Never report unsupported Windows behavior as success.
 
 ## Existing FFM Functions (reference)
 
@@ -387,9 +291,8 @@ Also available outside FFM:
 - `src/main/java/org/perlonjava/runtime/nativ/ffm/` — existing FFM code (best reference)
 - `src/main/java/org/perlonjava/runtime/io/` — I/O handle implementations
 
-## Issue reporting and triage
+## Issue coordination and reporting
 
-When reporting, classifying, or updating an issue, read the
-[issue triage guide](../../../docs/guides/issue-triage.md) for evidence, labels,
-ownership, related failures, and completion criteria. Its proposed labels and
-planning conventions require rollout; use existing GitHub labels until then.
+Use the [triage guide](../../../docs/guides/issue-triage.md) for issue evidence,
+agent claims, dependencies and concise checkpoints. Follow
+[AGENTS.md](../../../AGENTS.md) for work preservation and validation.

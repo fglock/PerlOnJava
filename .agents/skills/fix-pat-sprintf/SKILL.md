@@ -1,10 +1,11 @@
 ---
 name: fix-pat-sprintf
 description: Fix re/pat.t and op/sprintf2.t test regressions on fix-exiftool-cli branch
-argument-hint: "[test-name or specific failure]"
-triggers:
-  - user
-  - model
+metadata:
+  argument-hint: "[test-name or specific failure]"
+  triggers:
+    - user
+    - model
 ---
 
 ## ⚠️⚠️⚠️ CRITICAL: NEVER USE `git stash` ⚠️⚠️⚠️
@@ -75,11 +76,9 @@ same host is not disrupted: `nice -n 19 make <target>`.
 | Command | What it does |
 |---------|--------------|
 | `make` | Build + run all unit tests (use before committing) |
-| `make dev` | Build only, skip tests (for quick iteration during debugging) |
 
 ```bash
 make       # Standard build - compiles and runs tests
-make dev   # Quick build - compiles only, NO tests
 ```
 
 Run individual tests via test runner (sets correct ENV vars):
@@ -206,9 +205,12 @@ LC_ALL=C diff \
 ./jperl --interpreter -E 'my $s="abcde"; pos $s=2; say $s =~ /^\G/ ? "match" : "no"'
 ```
 
-## Issue reporting and triage
+Use the shared [testing cadence](../debug-perlonjava/references/testing-cadence.md)
+and `nice -n 19 make`; the old build-only `make dev` target is disabled. Keep full
+logs separate from the current checkpoint.
 
-When reporting, classifying, or updating an issue, read the
-[issue triage guide](../../../docs/guides/issue-triage.md) for evidence, labels,
-ownership, related failures, and completion criteria. Its proposed labels and
-planning conventions require rollout; use existing GitHub labels until then.
+## Issue coordination and reporting
+
+Use the [triage guide](../../../docs/guides/issue-triage.md) for issue evidence,
+agent claims, dependencies and concise checkpoints. Follow
+[AGENTS.md](../../../AGENTS.md) for work preservation and validation.

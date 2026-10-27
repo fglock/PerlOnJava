@@ -1,9 +1,10 @@
 ---
 name: migrate-jna
 description: Migrate from JNA to a modern native access library (eliminate sun.misc.Unsafe warnings)
-argument-hint: "[library choice or file to migrate]"
-triggers:
-  - user
+metadata:
+  argument-hint: "[library choice or file to migrate]"
+  triggers:
+    - user
 ---
 
 # Migrate JNA to Modern Native Access Library
@@ -98,7 +99,6 @@ same host is not disrupted: `nice -n 19 make <target>`.
 | Command | What it does |
 |---------|--------------|
 | `make` | Build + run all unit tests (use before committing) |
-| `make dev` | Build only, skip tests (for quick iteration) |
 | `make test-all` | Run extended test suite |
 
 After each file migration:
@@ -141,9 +141,12 @@ jna-platform = { module = "net.java.dev.jna:jna-platform", version.ref = "jna" }
 - **Windows**: Limited support via `kernel32` (`GetCurrentProcessId`), `msvcrt` (`_getpid`, stat)
 - The replacement must handle both platforms, or gracefully degrade on Windows (as JNA currently does)
 
-## Issue reporting and triage
+Use the shared [testing cadence](../debug-perlonjava/references/testing-cadence.md)
+and `nice -n 19 make`; the old build-only `make dev` target is disabled. Keep full
+logs separate from the current checkpoint.
 
-When reporting, classifying, or updating an issue, read the
-[issue triage guide](../../../docs/guides/issue-triage.md) for evidence, labels,
-ownership, related failures, and completion criteria. Its proposed labels and
-planning conventions require rollout; use existing GitHub labels until then.
+## Issue coordination and reporting
+
+Use the [triage guide](../../../docs/guides/issue-triage.md) for issue evidence,
+agent claims, dependencies and concise checkpoints. Follow
+[AGENTS.md](../../../AGENTS.md) for work preservation and validation.

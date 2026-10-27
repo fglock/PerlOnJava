@@ -25,7 +25,7 @@ Continue implementing the Perl debugger (`-d` flag) for PerlOnJava. The debugger
 
 **IMPORTANT: Never push directly to master. Always use feature branches and PRs.**
 
-**IMPORTANT: Always commit or stash changes BEFORE switching branches.** If `git stash pop` has conflicts, uncommitted changes may be lost.
+**IMPORTANT: Preserve dirty work with the AGENTS.md patch and WIP-commit pre-flight before switching branches. Never use git stash.**
 
 ```bash
 git checkout -b feature/debugger-improvement
@@ -152,11 +152,9 @@ Tested side-by-side with `perl -d`:
 | Command | What it does |
 |---------|--------------|
 | `make` | Build + run all unit tests (use before committing) |
-| `make dev` | Build only, skip tests (for quick iteration during debugging) |
 
 ### Testing the debugger
 ```bash
-make dev   # Quick build after changes (no tests)
 
 # Test basic stepping
 echo 'n
@@ -215,9 +213,12 @@ Already working via `DebugState.stepOverDepth`:
 - **Step-over not working**: Ensure `callDepth` tracking is correct
 - **Duplicate lines**: Check for missing `skipDebug` on internal nodes
 
-## Issue reporting and triage
+Use the shared [testing cadence](../debug-perlonjava/references/testing-cadence.md)
+and `nice -n 19 make`; the old build-only `make dev` target is disabled. Keep full
+logs separate from the current checkpoint.
 
-When reporting, classifying, or updating an issue, read the
-[issue triage guide](../../../docs/guides/issue-triage.md) for evidence, labels,
-ownership, related failures, and completion criteria. Its proposed labels and
-planning conventions require rollout; use existing GitHub labels until then.
+## Issue coordination and reporting
+
+Use the [triage guide](../../../docs/guides/issue-triage.md) for issue evidence,
+agent claims, dependencies and concise checkpoints. Follow
+[AGENTS.md](../../../AGENTS.md) for work preservation and validation.
