@@ -682,6 +682,11 @@ final class JoniRegexPattern {
 
     private static InputEncoding buildInputEncoding(String input) {
         byte[] bytes = input.getBytes(StandardCharsets.UTF_8);
+        if (bytes.length == input.length()) {
+            int[] identity = new int[input.length() + 1];
+            for (int i = 0; i <= input.length(); i++) identity[i] = i;
+            return new InputEncoding(bytes, identity, identity);
+        }
         int[] charToByte = JoniRegexMatcher.buildCharToByte(input);
         int[] byteToChar = JoniRegexMatcher.buildByteToChar(input, bytes.length, charToByte);
         return new InputEncoding(bytes, charToByte, byteToChar);

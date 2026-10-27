@@ -3332,6 +3332,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     public static RuntimeScalar getQuotedRegexInPackage(
             RuntimeScalar patternString, RuntimeScalar modifiers,
             int callsiteId, String lexicalPackage, boolean sourceCompiledBeforeRun) {
+        if (callsiteId >= 0) {
+            RuntimeScalar cached = state().optimizedRegexCache.get(callsiteId);
+            if (cached != null) return cached;
+        }
         RuntimeScalar currentPackage = InterpreterState.currentPackage.get();
         String previousPackage = currentPackage.toString();
         boolean packageChanged = !lexicalPackage.equals(previousPackage);
@@ -3777,7 +3781,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             }
         }
 
-        regex.emitWarningsOnUse();
+        if (!regex.warningsOnUse.isEmpty()) regex.emitWarningsOnUse();
 
         if (originalFlags.isMatchExactlyOnce() && matchOnceState.matched) {
             // m?PAT? already matched once; now return false
@@ -4344,7 +4348,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             }
         }
 
-        regex.emitWarningsOnUse();
+        if (!regex.warningsOnUse.isEmpty()) regex.emitWarningsOnUse();
         regex.emitExecutionDebugTrace(inputStr);
 
         JoniRegexPattern selectedPattern = regex.selectRecursivePattern(inputValue);
