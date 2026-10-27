@@ -136,27 +136,41 @@ public class BytecodeInterpreter {
 
     private static java.util.Set<RuntimeCode> collectReturnedClosures(RuntimeBase value) {
         java.util.IdentityHashMap<RuntimeCode, Boolean> closures = new java.util.IdentityHashMap<>();
-        collectReturnedClosures(value, closures);
+        java.util.IdentityHashMap<RuntimeBase, Boolean> visited = new java.util.IdentityHashMap<>();
+        collectReturnedClosures(value, closures, visited);
         return closures.isEmpty() ? null : closures.keySet();
     }
 
-    private static void collectReturnedClosures(RuntimeBase value, java.util.IdentityHashMap<RuntimeCode, Boolean> closures) {
-        if (value == null) {
-            return;
-        }
+    private static void collectReturnedClosures(
+            RuntimeBase value,
+            java.util.IdentityHashMap<RuntimeCode, Boolean> closures,
+            java.util.IdentityHashMap<RuntimeBase, Boolean> visited) {
+        if (value == null || visited.put(value, Boolean.TRUE) != null) return;
         if (value instanceof RuntimeScalar scalar) {
             if (scalar.type == RuntimeScalarType.CODE && scalar.value instanceof RuntimeCode code) {
                 closures.put(code, Boolean.TRUE);
+            } else if (RuntimeScalarType.isReference(scalar)
+                    && scalar.value instanceof RuntimeBase referent
+                    && !WeakRefRegistry.isweak(scalar)) {
+                collectReturnedClosures(referent, closures, visited);
             }
             return;
         }
         if (value instanceof RuntimeControlFlowList flow && flow.returnValue != null) {
-            collectReturnedClosures(flow.returnValue, closures);
+            collectReturnedClosures(flow.returnValue, closures, visited);
             return;
         }
         if (value instanceof RuntimeList list) {
             for (RuntimeBase element : list.elements) {
-                collectReturnedClosures(element, closures);
+                collectReturnedClosures(element, closures, visited);
+            }
+        } else if (value instanceof RuntimeArray array) {
+            for (RuntimeScalar element : array.elements) {
+                collectReturnedClosures(element, closures, visited);
+            }
+        } else if (value instanceof RuntimeHash hash) {
+            for (RuntimeScalar element : hash.elements.values()) {
+                collectReturnedClosures(element, closures, visited);
             }
         }
     }

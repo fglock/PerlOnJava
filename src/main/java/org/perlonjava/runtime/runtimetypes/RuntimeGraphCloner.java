@@ -181,6 +181,17 @@ public class RuntimeGraphCloner {
         // shared synchronization identity.
         if (value.threadShared && !needsSharedRuntimeView(value)) return value;
         Object existing = clones.get(value);
+        if (existing instanceof RuntimeScalar clonedScalar
+                && clonedScalar.refCount == Integer.MIN_VALUE
+                && value instanceof RuntimeScalar sourceScalar
+                && sourceScalar.refCount != Integer.MIN_VALUE) {
+            // A lazy CODE definition can expose a pad cell after the initial
+            // thread snapshot. If this snapshot already cloned that source
+            // cell and the child has since retired the clone, reuse would
+            // attach the new closure metadata to a destroyed cell.
+            clones.remove(value);
+            existing = null;
+        }
         if (existing != null) return (RuntimeBase) existing;
 
         if (value instanceof RuntimeScalarReadOnly scalar
@@ -492,7 +503,12 @@ public class RuntimeGraphCloner {
                     new IdentityHashMap<>());
             if (captureValues != null) {
                 for (RuntimeBase capture : captureValues) {
-                    if (capture == null || !seenCaptureValues.add(capture)) continue;
+                    // Preserve the bytecode capture indexes, but do not create
+                    // ownership metadata for a dead cell left in a lazy CV's
+                    // conservative capture array. Such cells are placeholders,
+                    // not live Perl captures.
+                    if (capture == null || capture.refCount == Integer.MIN_VALUE
+                            || !seenCaptureValues.add(capture)) continue;
                     if (capture instanceof RuntimeScalar scalar) {
                         clonedCaptureScalars.add(scalar);
                     } else if (capture instanceof RuntimeArray || capture instanceof RuntimeHash) {
@@ -500,10 +516,18 @@ public class RuntimeGraphCloner {
                     }
                 }
             } else {
-                if (source.capturedScalars != null) {
-                    for (RuntimeScalar scalar : source.capturedScalars) {
+                RuntimeScalar[] sourceCapturedScalars = source.capturedScalars;
+                if (sourceCapturedScalars != null) {
+                    for (RuntimeScalar scalar : sourceCapturedScalars) {
+                        // Conservative capture metadata can outlive the pad
+                        // cell it once described, especially while lazy named
+                        // CODE definitions are copied into an ithread. A dead
+                        // cell is not a Perl owner and must not be resurrected
+                        // as a child closure capture.
+                        if (scalar == null || scalar.refCount == Integer.MIN_VALUE) continue;
                         RuntimeScalar cloned = (RuntimeScalar) cloneValue(scalar);
-                        if (cloned != null && seenCaptureValues.add(cloned)) {
+                        if (cloned != null && cloned.refCount != Integer.MIN_VALUE
+                                && seenCaptureValues.add(cloned)) {
                             clonedCaptureScalars.add(cloned);
                         }
                     }
