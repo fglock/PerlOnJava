@@ -309,6 +309,16 @@ Phase 1 merged in PR #1653 as `84f32be179bdc2b351c3eaae1cb26df39964ab6b`
   assertion failures remain separately unclassified under
   [#1646](https://github.com/fglock/PerlOnJava/issues/1646).
 
+### Targeted weak release with owner slots
+
+`sweepReleasedWeakReferents()` now treats an active owner slot as direct proof
+that a pending target is still strongly owned. When every target in the batch
+has that proof, it returns without building root snapshots or running the full
+walker. Remaining uncounted targets still use the existing fallback. The new
+`TargetedWeakReleaseOwnerSlotFastPathTest` passes with sweeps enabled, along
+with the existing targeted-query and weak-CODE fallback tests. HTML-Tree
+5.07 `t/refloop.t` still passes 8/8 on both backends with sweeps disabled.
+
 ### Next steps
 
 1. Extend the ownership path through scalar proxies and ordinary array/hash
