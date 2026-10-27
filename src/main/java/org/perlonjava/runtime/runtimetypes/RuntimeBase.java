@@ -315,6 +315,30 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     /** Identity ledger for migrated slots; selective refCount remains the
      * lifecycle bridge while owner families move to this API. */
     private java.util.Set<PerlOwnerSlot> ownerSlots = null;
+    private int pendingReturnOwners;
+
+    synchronized boolean hasPendingReturnOwner() {
+        return pendingReturnOwners != 0;
+    }
+
+    /** Explicit call-transfer owners remain authoritative during the legacy bridge. */
+    synchronized boolean hasCallTransferOwner() {
+        return pendingReturnOwners != 0
+                || ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_VALUE) != 0;
+    }
+
+    /** A referenced scalar cell is owned by its lexical binding or capture slots. */
+    boolean hasScalarCellOwner() {
+        return this instanceof RuntimeScalar scalar && scalar.referencedByScalarReference
+                && (scalar.localBindingExists
+                    || ownerSlotCount(PerlOwnerSlot.Kind.SCALAR_CAPTURE) != 0);
+    }
+
+    private synchronized void retainPendingReturnOwner(PerlOwnerSlot.PendingRelease release) {
+        if (release != null && release.kind() == PerlOwnerSlot.Kind.RETURN_VALUE) {
+            pendingReturnOwners++;
+        }
+    }
 
     synchronized void addOwnerSlot(PerlOwnerSlot slot) {
         if (ownerSlots == null) {
@@ -326,6 +350,10 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
 
     synchronized void removeOwnerSlot(PerlOwnerSlot slot) {
         if (ownerSlots != null) ownerSlots.remove(slot);
+    }
+
+    synchronized boolean hasOwnerSlots() {
+        return ownerSlots != null && !ownerSlots.isEmpty();
     }
 
     public boolean hasSemanticCaptureOwner() {
@@ -356,6 +384,16 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                     && slot.isNativeCaptureOwner()) {
                 count++;
             }
+        }
+        return count;
+    }
+
+    /** Count all slots whose owners are represented directly by the owner ledger. */
+    public synchronized int nativeOwnerSlotCount() {
+        if (ownerSlots == null) return 0;
+        int count = 0;
+        for (PerlOwnerSlot slot : ownerSlots) {
+            if (slot.isNativeOwner()) count++;
         }
         return count;
     }
@@ -416,12 +454,14 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     }
 
     public void recordActiveOwner(RuntimeScalar scalar) {
+        scalar.recordCountedOwner(this);
         if (activeOwners != null) {
             activeOwners.add(scalar);
         }
     }
 
     public void releaseActiveOwner(RuntimeScalar scalar) {
+        scalar.releaseCountedOwner(this);
         if (activeOwners != null) {
             activeOwners.remove(scalar);
         }
@@ -622,14 +662,24 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     }
 
     /** Move an active owner trace into the deferred-decrement queue. */
-    public synchronized PendingOwnerRelease queueOwnerRelease(RuntimeScalar owner, String queueSite) {
-        if (!refCountTrace || !REFCOUNT_TRACE_ENV) return null;
+    public PendingOwnerRelease queueOwnerRelease(RuntimeScalar owner, String queueSite) {
+        PerlOwnerSlot.PendingRelease slotRelease = owner.deferCountedOwnerRelease(this);
+        retainPendingReturnOwner(slotRelease);
+        if (!refCountTrace || !REFCOUNT_TRACE_ENV) {
+            return slotRelease == null ? null : new PendingOwnerRelease(
+                    System.identityHashCode(owner), 0, "counted owner-slot", queueSite, slotRelease);
+        }
+        return queueTracedOwnerRelease(owner, queueSite, slotRelease);
+    }
+
+    private synchronized PendingOwnerRelease queueTracedOwnerRelease(
+            RuntimeScalar owner, String queueSite, PerlOwnerSlot.PendingRelease slotRelease) {
         int scalarIdentity = System.identityHashCode(owner);
         java.util.LinkedHashMap<Integer, OwnerTrace> owners = traceOwners.get(this);
         OwnerTrace ownerTrace = owners == null ? null : owners.remove(scalarIdentity);
         String acquireSite = ownerTrace == null ? "<missing active owner trace>" : ownerTrace.acquireSite;
         PendingOwnerRelease release = new PendingOwnerRelease(
-                scalarIdentity, traceReferentGeneration(this), acquireSite, queueSite);
+                scalarIdentity, traceReferentGeneration(this), acquireSite, queueSite, slotRelease);
         pendingTraceOwnerReleases
                 .computeIfAbsent(this, k -> new java.util.ArrayList<>())
                 .add(release);
@@ -652,7 +702,12 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     /** Mark the exact queued trace record as drained without relying on scalar state. */
     public synchronized void completeQueuedOwnerRelease(PendingOwnerRelease release, String releaseSite) {
         if (release == null) return;
-        if (release.ownerSlotRelease != null) release.ownerSlotRelease.complete();
+        if (release.ownerSlotRelease != null && !release.ownerSlotRelease.isCompleted()) {
+            if (release.ownerSlotRelease.kind() == PerlOwnerSlot.Kind.RETURN_VALUE) {
+                pendingReturnOwners--;
+            }
+            release.ownerSlotRelease.complete();
+        }
         if (!REFCOUNT_TRACE_ENV) return;
         java.util.ArrayList<PendingOwnerRelease> releases = pendingTraceOwnerReleases.get(this);
         if (releases != null) {

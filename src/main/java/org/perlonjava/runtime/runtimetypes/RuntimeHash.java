@@ -830,7 +830,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                     if (value == null) existing.undefine();
                     else value.addToScalar(existing);
                 } else {
-                    elements.put(key, independentSlot(key, value));
+                    storeOwnedElement(key, existing, value);
                 }
             }
             case AUTOVIVIFY_HASH -> {
@@ -846,7 +846,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                     if (value == null) existing.undefine();
                     else value.addToScalar(existing);
                 } else {
-                    elements.put(key, independentSlot(key, value));
+                    storeOwnedElement(key, existing, value);
                 }
             }
             case TIED_HASH -> {
@@ -856,6 +856,23 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             }
             case READONLY_HASH -> throw new PerlCompilerException("Modification of a read-only value attempted");
             default -> throw new IllegalStateException("Unknown array type: " + type);
+        }
+    }
+
+    private void storeOwnedElement(String key, RuntimeScalar previous, RuntimeScalar value) {
+        RuntimeScalar stored = independentSlot(key, value);
+        elements.put(key, stored);
+        RuntimeScalar.incrementRefCountForContainerStore(stored);
+        if (previous != null && previous != stored) {
+            if (PerlRuntime.currentOrNull() != null) {
+                MortalList.deferDestroyForContainerClear(Collections.singletonList(previous));
+            } else if (previous.refCountOwned && previous.value instanceof RuntimeBase referent) {
+                // Host-side graph construction has no Perl callbacks or mortal
+                // queue, but replacing a field still retires its counted edge.
+                previous.refCountOwned = false;
+                referent.releaseActiveOwner(previous);
+                if (referent.refCount > 0) referent.refCount--;
+            }
         }
     }
 

@@ -17,17 +17,26 @@ public final class PerlOwnerSlot {
     private static final AtomicLong NEXT_ID = new AtomicLong();
 
     public enum Kind {
-        CLOSURE_PAD
+        CLOSURE_PAD,
+        SCALAR_CAPTURE,
+        SCALAR_CELL,
+        ARRAY_ELEMENT,
+        HASH_ELEMENT,
+        ARGUMENT_VALUE,
+        RETURN_VALUE,
+        ACTIVE_CODE,
+        TIE_HANDLER
     }
 
-    private final Kind kind;
+    private Kind kind;
     private final RuntimeScalar padCell;
     private final long identity = NEXT_ID.incrementAndGet();
     private RuntimeBase referent;
     private PerlRuntime ownerRuntime;
     private LifecycleRuntimeState ownerRuntimeState;
+    private boolean registeredInOwnerLedger;
     private int legacyCaptureCount;
-    private volatile boolean nativeCaptureOwner;
+    private volatile boolean nativeOwner;
     private long nextReleaseSequence;
 
     /** Provenance token carried with one queued legacy decrement. */
@@ -36,11 +45,23 @@ public final class PerlOwnerSlot {
         private final long sequence;
         private final Kind kind;
         private final AtomicBoolean completed = new AtomicBoolean();
+        private final LifecycleRuntimeState retainedState;
+        private final RuntimeBase retainedReferent;
 
         private PendingRelease(long ownerSlotIdentity, long sequence, Kind kind) {
+            this(ownerSlotIdentity, sequence, kind, null);
+        }
+
+        private PendingRelease(long ownerSlotIdentity, long sequence, Kind kind,
+                               RuntimeBase referent) {
             this.ownerSlotIdentity = ownerSlotIdentity;
             this.sequence = sequence;
             this.kind = kind;
+            PerlRuntime runtime = PerlRuntime.currentOrNull();
+            boolean transfer = kind == Kind.ARGUMENT_VALUE || kind == Kind.RETURN_VALUE;
+            retainedReferent = transfer ? referent : null;
+            retainedState = retainedReferent == null || runtime == null
+                    ? null : runtime.retainOwnerSlotReferent(retainedReferent);
         }
 
         public long ownerSlotIdentity() {
@@ -60,7 +81,9 @@ public final class PerlOwnerSlot {
         }
 
         void complete() {
-            completed.set(true);
+            if (completed.compareAndSet(false, true)) {
+                PerlRuntime.releaseOwnerSlotReferent(retainedState, retainedReferent);
+            }
         }
     }
 
@@ -86,7 +109,17 @@ public final class PerlOwnerSlot {
     }
 
     boolean isNativeCaptureOwner() {
-        return nativeCaptureOwner;
+        return kind == Kind.CLOSURE_PAD && nativeOwner;
+    }
+
+    /** True while this active slot is counted directly by the semantic owner ledger. */
+    public boolean isNativeOwner() {
+        return nativeOwner && referent != null;
+    }
+
+    /** True if this slot uses native-ledger release semantics, including after release. */
+    public boolean usesNativeOwnerLedger() {
+        return nativeOwner;
     }
 
     public synchronized RuntimeBase referent() {
@@ -126,12 +159,129 @@ public final class PerlOwnerSlot {
 
     /** Acquire a captured aggregate pad as an explicit owner slot. */
     public synchronized void acquireCapture(RuntimeBase target) {
+        if (kind != Kind.CLOSURE_PAD) {
+            throw new IllegalStateException("capture acquisition requires a closure-pad slot");
+        }
+        acquireNativeOwner(target);
+    }
+
+    /** Acquire this slot as one semantic Perl owner, without touching refCount. */
+    public synchronized void acquireNativeOwner(RuntimeBase target) {
         Objects.requireNonNull(target, "target");
         if (target.refCount == Integer.MIN_VALUE) {
-            throw new IllegalStateException("cannot capture a destroyed referent");
+            throw new IllegalStateException("cannot own a destroyed referent");
         }
-        nativeCaptureOwner = true;
+        if (legacyCaptureCount != 0) {
+            throw new IllegalStateException("cannot migrate a slot with pending legacy releases");
+        }
+        nativeOwner = true;
         transferTo(target);
+    }
+
+    /**
+     * Record a scalar-capture identity held by its RuntimeCode owner. The
+     * closure already strongly owns the pad cell through capturedScalars, so
+     * registering a second runtime root would let an unreachable closure's
+     * slot outlive the closure and retain request resources.
+     */
+    public synchronized void acquireCaptureIdentity(RuntimeBase target) {
+        if (kind != Kind.SCALAR_CAPTURE) {
+            throw new IllegalStateException("capture identity requires a scalar-capture slot");
+        }
+        Objects.requireNonNull(target, "target");
+        if (referent != null || nativeOwner) {
+            throw new IllegalStateException("capture identity is already active");
+        }
+        if (target.refCount == Integer.MIN_VALUE) {
+            throw new IllegalStateException("cannot capture a destroyed pad cell");
+        }
+        referent = target;
+        registeredInOwnerLedger = true;
+        target.addOwnerSlot(this);
+    }
+
+    /** The active frame already retains the CV; no second global root is needed. */
+    synchronized void acquireActiveCodeIdentity(RuntimeCode target) {
+        if (kind != Kind.ACTIVE_CODE || referent != null) {
+            throw new IllegalStateException("active CODE slot is not available");
+        }
+        referent = Objects.requireNonNull(target, "target");
+        nativeOwner = true;
+        registeredInOwnerLedger = true;
+        target.addOwnerSlot(this);
+    }
+
+    /** Identify a counted scalar or element edge without adding a global root. */
+    public synchronized void acquireCountedIdentity(RuntimeBase target) {
+        if (!isCountedKind(kind)) {
+            throw new IllegalStateException("counted acquisition requires a scalar or element slot");
+        }
+        Objects.requireNonNull(target, "target");
+        if (nativeOwner || legacyCaptureCount != 0) {
+            throw new IllegalStateException("counted identity cannot replace native or capture ownership");
+        }
+        if (referent == target) return;
+        release();
+        referent = target;
+        registeredInOwnerLedger = true;
+        target.addOwnerSlot(this);
+        if (kind == Kind.ARGUMENT_VALUE) {
+            ownerRuntime = PerlRuntime.currentOrNull();
+            ownerRuntimeState = ownerRuntime == null
+                    ? null : ownerRuntime.retainOwnerSlotReferent(target);
+        }
+    }
+
+    synchronized void reclassifyCountedIdentity(Kind nextKind) {
+        if (nativeOwner || !isCountedKind(kind) || !isCountedKind(nextKind)) {
+            throw new IllegalStateException("only counted scalar and element slots can move storage");
+        }
+        if (kind != nextKind && referent != null) {
+            if (nextKind == Kind.ARGUMENT_VALUE) {
+                ownerRuntime = PerlRuntime.currentOrNull();
+                ownerRuntimeState = ownerRuntime == null
+                        ? null : ownerRuntime.retainOwnerSlotReferent(referent);
+            } else if (kind == Kind.ARGUMENT_VALUE) {
+                PerlRuntime.releaseOwnerSlotReferent(ownerRuntimeState, referent);
+                ownerRuntime = null;
+                ownerRuntimeState = null;
+            }
+        }
+        kind = nextKind;
+    }
+
+    private static boolean isCountedKind(Kind kind) {
+        return kind == Kind.SCALAR_CELL || kind == Kind.ARRAY_ELEMENT
+                || kind == Kind.HASH_ELEMENT || kind == Kind.ARGUMENT_VALUE
+                || kind == Kind.RETURN_VALUE || kind == Kind.TIE_HANDLER;
+    }
+
+    /** Retire this edge and carry its identity through one deferred decrement. */
+    public synchronized PendingRelease releaseCountedIdentity() {
+        if (referent == null) return null;
+        if (nativeOwner || legacyCaptureCount != 0) {
+            throw new IllegalStateException("counted release requires a counted identity");
+        }
+        PendingRelease release = new PendingRelease(identity, ++nextReleaseSequence, kind, referent);
+        release();
+        return release;
+    }
+
+    /** Replace this native slot's referent while retaining the slot identity. */
+    public synchronized void replaceNativeOwner(RuntimeBase nextReferent) {
+        if (!nativeOwner || referent == null) {
+            throw new IllegalStateException("cannot replace a slot that is not a native owner");
+        }
+        Objects.requireNonNull(nextReferent, "nextReferent");
+        if (nextReferent.refCount == Integer.MIN_VALUE) {
+            throw new IllegalStateException("cannot own a destroyed referent");
+        }
+        transferTo(nextReferent);
+    }
+
+    /** Read the current referent as a borrow; this does not acquire ownership. */
+    public synchronized RuntimeBase borrowReferent() {
+        return referent;
     }
 
     /** Queue one closure-pad count release and retain its slot provenance. */
@@ -166,11 +316,12 @@ public final class PerlOwnerSlot {
         ownerRuntime = nextRuntime;
         ownerRuntimeState = nextRuntime == null || nextReferent == null
                 ? null : nextRuntime.retainOwnerSlotReferent(nextReferent);
-        if (previous != null) previous.removeOwnerSlot(this);
-        if (previous != null) {
+        if (previous != null && registeredInOwnerLedger) previous.removeOwnerSlot(this);
+        if (previous != null && registeredInOwnerLedger) {
             PerlRuntime.releaseOwnerSlotReferent(previousState, previous);
         }
-        if (nextReferent != null) nextReferent.addOwnerSlot(this);
+        registeredInOwnerLedger = nextReferent != null;
+        if (registeredInOwnerLedger) nextReferent.addOwnerSlot(this);
     }
 
     /** Release this slot. Repeated releases are harmless. */
@@ -180,8 +331,12 @@ public final class PerlOwnerSlot {
         referent = null;
         ownerRuntime = null;
         ownerRuntimeState = null;
-        if (previous != null) previous.removeOwnerSlot(this);
-        if (previous != null) PerlRuntime.releaseOwnerSlotReferent(previousState, previous);
+        if (previous != null && registeredInOwnerLedger) previous.removeOwnerSlot(this);
+        if (previous != null && registeredInOwnerLedger) {
+            PerlRuntime.releaseOwnerSlotReferent(previousState, previous);
+        }
+        registeredInOwnerLedger = false;
     }
+
 
 }

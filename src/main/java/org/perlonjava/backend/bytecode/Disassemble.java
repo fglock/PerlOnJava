@@ -48,6 +48,14 @@ public class Disassemble {
                         sb.append("UNBIND_ACTIVE_LEXICAL r").append(ualReg)
                                 .append(" ").append(interpretedCode.stringPool[ualName]).append("\n");
                         break;
+                    case Opcodes.SNAPSHOT_SCOPE_RESULT:
+                        int ssrDestination = interpretedCode.bytecode[pc++];
+                        int ssrSource = interpretedCode.bytecode[pc++];
+                        int ssrContext = interpretedCode.bytecode[pc++];
+                        sb.append("SNAPSHOT_SCOPE_RESULT r").append(ssrDestination)
+                                .append(" source=r").append(ssrSource)
+                                .append(" context=").append(ssrContext).append("\n");
+                        break;
                     case Opcodes.RETURN_SCOPE_CLEANUP:
                         int rscReg = interpretedCode.bytecode[pc++];
                         int rscReturnReg = interpretedCode.bytecode[pc++];

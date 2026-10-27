@@ -521,6 +521,12 @@ public class EmitControlFlow {
                     false);
         }
 
+        ctx.mv.visitVarInsn(Opcodes.ILOAD, 2);
+        ctx.mv.visitInsn(ctx.javaClassInfo.isLvalueSubroutine ? Opcodes.ICONST_0 : Opcodes.ICONST_1);
+        ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/RuntimeCode", "prepareScopeReturn",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;IZ)Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;",
+                false);
         ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                 "materializeReturnedIoAliases",
@@ -593,6 +599,17 @@ public class EmitControlFlow {
                         false);
             }
             for (int idx : arrayIndices) {
+                ctx.javaClassInfo.loadSpillRef(ctx.mv, spillRef);
+                ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
+                ctx.mv.visitVarInsn(Opcodes.ILOAD, 2);
+                ctx.mv.visitInsn(ctx.javaClassInfo.isLvalueSubroutine
+                        ? Opcodes.ICONST_0 : Opcodes.ICONST_1);
+                ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                        "prepareLocalArrayReturn",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;IZ)Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;",
+                        false);
+                ctx.javaClassInfo.storeSpillRef(ctx.mv, spillRef);
                 ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
                 ctx.javaClassInfo.loadSpillRef(ctx.mv, spillRef);
                 ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,

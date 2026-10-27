@@ -171,6 +171,16 @@ public class RuntimeList extends RuntimeBase {
         return result;
     }
 
+    RuntimeList copyToMortalReturnSlots() {
+        RuntimeList result = new RuntimeList();
+        for (RuntimeBase value : elements) {
+            result.elements.add(value instanceof RuntimeScalar scalar
+                    && !scalar.isMortalReturnSnapshot()
+                    ? RuntimeScalar.copyToMortalReturnSlot(scalar) : value);
+        }
+        return result;
+    }
+
     /**
      * Adds the elements of this list to another RuntimeList.
      *
