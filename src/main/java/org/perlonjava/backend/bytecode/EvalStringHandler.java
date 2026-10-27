@@ -10,6 +10,7 @@ import org.perlonjava.frontend.astnode.OperatorNode;
 import org.perlonjava.frontend.lexer.Lexer;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.parser.Parser;
+import org.perlonjava.frontend.parser.ParserKeywordPlugin;
 import org.perlonjava.frontend.parser.SpecialBlockParser;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.runtime.HintHashRegistry;
@@ -166,7 +167,7 @@ public class EvalStringHandler {
                                              boolean isEvalbytes) {
         return evalStringList(perlCode, RuntimeScalarType.STRING, currentCode, registers,
                 sourceName, sourceLine, callContext, siteRegistry, siteStrictOptions,
-                siteFeatureFlags, isEvalbytes, null, -1, false, null);
+                siteFeatureFlags, isEvalbytes, null, -1, false, null, null);
     }
 
     public static RuntimeList evalStringList(RuntimeScalar codeScalar,
@@ -197,7 +198,7 @@ public class EvalStringHandler {
         RuntimeCode.rejectTaintedEval(codeScalar);
         return evalStringList(codeScalar.toString(), codeScalar.type, currentCode, registers,
                 sourceName, sourceLine, callContext, siteRegistry, siteStrictOptions,
-                siteFeatureFlags, isEvalbytes, null, -1, false, null);
+                siteFeatureFlags, isEvalbytes, null, -1, false, null, null);
     }
 
     public static RuntimeList evalStringList(RuntimeScalar codeScalar,
@@ -266,11 +267,32 @@ public class EvalStringHandler {
                                              int siteRegexDebugFlags,
                                              boolean siteEnhancedXx,
                                              Map<String, OperatorNode> siteLexicalSubroutineBindings) {
+        return evalStringList(codeScalar, currentCode, registers, sourceName, sourceLine,
+                callContext, siteRegistry, siteStrictOptions, siteFeatureFlags, isEvalbytes,
+                siteWarningBits, siteRegexDebugFlags, siteEnhancedXx,
+                siteLexicalSubroutineBindings, null);
+    }
+
+    public static RuntimeList evalStringList(RuntimeScalar codeScalar,
+                                             InterpretedCode currentCode,
+                                             RuntimeBase[] registers,
+                                             String sourceName,
+                                             int sourceLine,
+                                             int callContext,
+                                             Map<String, Integer> siteRegistry,
+                                             int siteStrictOptions,
+                                             int siteFeatureFlags,
+                                             boolean isEvalbytes,
+                                             String siteWarningBits,
+                                             int siteRegexDebugFlags,
+                                             boolean siteEnhancedXx,
+                                             Map<String, OperatorNode> siteLexicalSubroutineBindings,
+                                             Map<String, ParserKeywordPlugin> siteParserKeywordPlugins) {
         RuntimeCode.rejectTaintedEval(codeScalar);
         return evalStringList(codeScalar.toString(), codeScalar.type, currentCode, registers,
                 sourceName, sourceLine, callContext, siteRegistry, siteStrictOptions,
                 siteFeatureFlags, isEvalbytes, siteWarningBits, siteRegexDebugFlags,
-                siteEnhancedXx, siteLexicalSubroutineBindings);
+                siteEnhancedXx, siteLexicalSubroutineBindings, siteParserKeywordPlugins);
     }
 
     private static RuntimeList evalStringList(String perlCode,
@@ -287,7 +309,8 @@ public class EvalStringHandler {
                                              String siteWarningBits,
                                              int siteRegexDebugFlags,
                                              boolean siteEnhancedXx,
-                                             Map<String, OperatorNode> siteLexicalSubroutineBindings) {
+                                             Map<String, OperatorNode> siteLexicalSubroutineBindings,
+                                             Map<String, ParserKeywordPlugin> siteParserKeywordPlugins) {
         try (PerlRuntime.Binding runtimeBinding = PerlRuntime.current().bind()) {
         PerlLanguageProvider.CompilationLockGuard compilationLock =
                 PerlLanguageProvider.acquireCompilationLock();
@@ -515,6 +538,11 @@ public class EvalStringHandler {
             }
             if (siteLexicalSubroutineBindings != null) {
                 symbolTable.copyLexicalSubroutineBindings(siteLexicalSubroutineBindings);
+            }
+            if (siteParserKeywordPlugins != null) {
+                for (Map.Entry<String, ParserKeywordPlugin> entry : siteParserKeywordPlugins.entrySet()) {
+                    symbolTable.registerParserKeywordPlugin(entry.getKey(), entry.getValue());
+                }
             }
 
             // Inherit lexical pragma flags from parent if available

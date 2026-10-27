@@ -288,6 +288,13 @@ public class SubroutineParser {
         if (!subExists && !isNewMethod && !isMethod) {
             subExists = GlobalVariable.existsGlobalCodeRefAsScalar(fullName).getBoolean();
         }
+        // A named function's body is parsed before its final RuntimeCode is
+        // installed. Treat a call back to that same declaration as a direct
+        // subroutine call so an initial scalar argument is not mistaken for
+        // indirect-object syntax (for example, `recur $n - 1, ...`).
+        if (!isMethod && parser.compilingSubroutineBodies.contains(fullName)) {
+            subExists = true;
+        }
         boolean prototypeWasPredeclared = prototype != null;
         if (prototype == null) {
             prototype = parser.declaredSubPrototypes.get(fullName);
@@ -596,7 +603,8 @@ public class SubroutineParser {
             if (!terminator
                     && !infixOp
                     && (nextTok.type != LexerTokenType.IDENTIFIER
-                        || (subName.contains("::")
+                        || (hasFatCommaArgumentStart(parser)
+                            || subName.contains("::")
                             && !nextTok.text.equals("or")
                             && !nextTok.text.equals("and")
                             && !nextTok.text.equals("not")
@@ -920,6 +928,22 @@ public class SubroutineParser {
         return isValidIndirectMethod(subName, null);
     }
 
+    /**
+     * An unresolved call followed by a bareword fat-comma key is an ordinary
+     * unparenthesized subroutine call, as in {@code recursive value => $x}.
+     * The lookahead distinguishes it from indirect-object syntax where the
+     * first bareword is the invocant.
+     */
+    private static boolean hasFatCommaArgumentStart(Parser parser) {
+        int index = parser.tokenIndex + 1;
+        while (index < parser.tokens.size()
+                && (parser.tokens.get(index).type == LexerTokenType.WHITESPACE
+                    || parser.tokens.get(index).type == LexerTokenType.NEWLINE)) {
+            index++;
+        }
+        return index < parser.tokens.size() && parser.tokens.get(index).text.equals("=>");
+    }
+
     private static boolean isValidIndirectMethod(String subName, Parser parser) {
         if (subName.startsWith("CORE::")) return false;
         // `method` is a feature-gated declaration keyword, but it also has
@@ -1082,24 +1106,6 @@ public class SubroutineParser {
             }
         }
 
-        // Ensure attributes.pm is loaded when attribute syntax is used, so that
-        // attributes::get() is available (Perl 5 implicitly loads attributes.pm)
-        if (!attributes.isEmpty()) {
-            org.perlonjava.runtime.operators.ModuleOperators.require(new RuntimeScalar("attributes.pm"));
-        }
-        if (subName != null && attributes.contains("const")) {
-            parser.throwError(":const is not permitted on named subroutines");
-        }
-        if (futureAsyncAwaitSub && attributes.contains("lvalue")) {
-            String location = parser.ctx.errorUtil == null
-                    ? ""
-                    : parser.ctx.errorUtil.warningLocation(currentIndex);
-            org.perlonjava.runtime.operators.WarnDie.warn(
-                    new RuntimeScalar("The :lvalue attribute has no effect on an async sub"
-                            + location + ".\n"),
-                    new RuntimeScalar("misc"));
-        }
-
         ListNode signature = null;
         boolean signatureArgsWarningsEnabled = false;
         boolean previousParsingSignaturedSubroutine = parser.parsingSignaturedSubroutine;
@@ -1118,7 +1124,8 @@ public class SubroutineParser {
             // prototypes in a later do FILE load look like signatures after
             // test.pl's watchdog setup.  The Feature manager records actual
             // lexical imports, so require both sources of evidence here.
-            boolean signaturesEnabled = parser.ctx.symbolTable.isFeatureCategoryEnabled("signatures")
+            boolean signaturesEnabled = parser.parsingFunctionParametersDeclaration
+                    || parser.ctx.symbolTable.isFeatureCategoryEnabled("signatures")
                     && org.perlonjava.runtime.perlmodule.Feature.getFeatureManager()
                     .getEnabledFeatures().contains("signatures");
             if (signaturesEnabled) {
@@ -1133,7 +1140,17 @@ public class SubroutineParser {
                 signature = parseSignature(parser, subName);
                 parser.parsingSignaturedSubroutine = true;
                 if (peek(parser).text.equals(":")) {
-                    parser.throwError("Subroutine attributes must come before the signature");
+                    if (!parser.parsingFunctionParametersDeclaration) {
+                        parser.throwError("Subroutine attributes must come before the signature");
+                    }
+                    while (peek(parser).text.equals(":")) {
+                        String attrPrototype = consumeAttributes(
+                                parser, attributes, prototype, attrSubDisplayName, prevAttrProto);
+                        if (attrPrototype != null) {
+                            prevAttrProto = attrPrototype;
+                            prototype = attrPrototype;
+                        }
+                    }
                 }
                 if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("Signature AST: " + signature);
                 if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("next token " + peek(parser));
@@ -1195,6 +1212,38 @@ public class SubroutineParser {
                     parser.throwError("syntax error");
                 }
             }
+        }
+
+        // Ensure attributes.pm is loaded after parsing both pre-signature and
+        // Function::Parameters post-signature attributes.
+        if (parser.parsingFunctionParametersDeclaration
+                && !parser.functionParametersAttributes.isEmpty()) {
+            for (int i = parser.functionParametersAttributes.size() - 1; i >= 0; i--) {
+                String configuredAttribute = parser.functionParametersAttributes.get(i);
+                if (configuredAttribute.startsWith("prototype(")
+                        && configuredAttribute.endsWith(")")) {
+                    prototype = configuredAttribute.substring(
+                            "prototype(".length(), configuredAttribute.length() - 1);
+                }
+                if (!attributes.contains(configuredAttribute)) {
+                    attributes.add(0, configuredAttribute);
+                }
+            }
+        }
+        if (!attributes.isEmpty()) {
+            org.perlonjava.runtime.operators.ModuleOperators.require(new RuntimeScalar("attributes.pm"));
+        }
+        if (subName != null && attributes.contains("const")) {
+            parser.throwError(":const is not permitted on named subroutines");
+        }
+        if (futureAsyncAwaitSub && attributes.contains("lvalue")) {
+            String location = parser.ctx.errorUtil == null
+                    ? ""
+                    : parser.ctx.errorUtil.warningLocation(currentIndex);
+            org.perlonjava.runtime.operators.WarnDie.warn(
+                    new RuntimeScalar("The :lvalue attribute has no effect on an async sub"
+                            + location + ".\n"),
+                    new RuntimeScalar("misc"));
         }
 
         if (wantName && subName != null && !peek(parser).text.equals("{")) {
@@ -1286,6 +1335,13 @@ public class SubroutineParser {
         }
 
         if (!wantName && !peek(parser).text.equals("{")) {
+            if (parser.parsingFunctionParametersDeclaration) {
+                String keyword = parser.functionParametersKeyword == null
+                        ? "fun" : parser.functionParametersKeyword;
+                parser.throwError("In " + keyword
+                        + " (anon): I was expecting a function body, not \""
+                        + peek(parser).text + "\"");
+            }
             parser.throwCleanError("Illegal declaration of anonymous subroutine");
         }
 
@@ -1407,8 +1463,28 @@ public class SubroutineParser {
                         signature.getAnnotation("signatureRequiredNamedParams"));
                 block.setAnnotation("signaturePositionalCount",
                         signature.getAnnotation("signaturePositionalCount"));
+                block.setAnnotation("signatureInvocants",
+                        signature.getAnnotation("signatureInvocants"));
+                block.setAnnotation("signatureKeyword",
+                        signature.getAnnotation("signatureKeyword"));
+                block.setAnnotation("signaturePositionalRequired",
+                        signature.getAnnotation("signaturePositionalRequired"));
+                block.setAnnotation("signaturePositionalOptional",
+                        signature.getAnnotation("signaturePositionalOptional"));
+                block.setAnnotation("signatureNamedRequired",
+                        signature.getAnnotation("signatureNamedRequired"));
+                block.setAnnotation("signatureNamedOptional",
+                        signature.getAnnotation("signatureNamedOptional"));
+                block.setAnnotation("signatureParameterTypes",
+                        signature.getAnnotation("signatureParameterTypes"));
+                block.setAnnotation("signatureParameterTypeObjects",
+                        signature.getAnnotation("signatureParameterTypeObjects"));
+                block.setAnnotation("signatureParameterTypeObjectVariables",
+                        signature.getAnnotation("signatureParameterTypeObjectVariables"));
                 block.setAnnotation("signatureSlurpySigil",
                         signature.getAnnotation("signatureSlurpySigil"));
+                block.setAnnotation("signatureSlurpyName",
+                        signature.getAnnotation("signatureSlurpyName"));
                 block.elements.addAll(0, signature.elements);
             }
 
@@ -1419,6 +1495,26 @@ public class SubroutineParser {
                     abstractNode.setAnnotation("futureAsyncAwaitSub", true);
                 }
                 return result;
+            } else if (parser.parsingFunctionParametersDeclaration
+                    && (parser.functionParametersRuntime
+                    || parser.functionParametersInstallSub != null)) {
+                String fullName = NameNormalizer.normalizeVariableName(
+                        subName, parser.ctx.symbolTable.getCurrentPackage());
+                SubroutineNode runtimeCode = handleAnonSub(
+                        parser, null, prototype, attributes, block, currentIndex, sourceEndTokenIndex);
+                runtimeCode.setAnnotation("functionParametersRuntimeName", fullName);
+                if (parser.functionParametersInstallSub != null) {
+                    Node installer = new OperatorNode("&",
+                            new IdentifierNode(parser.functionParametersInstallSub, currentIndex),
+                            currentIndex);
+                    ListNode installerArguments = new ListNode(List.of(
+                            new StringNode(subName, currentIndex), runtimeCode), currentIndex);
+                    return new BinaryOperatorNode("(", installer, installerArguments, currentIndex);
+                }
+                OperatorNode glob = new OperatorNode("*",
+                        new IdentifierNode(fullName, currentIndex), currentIndex);
+                glob.setAnnotation("explicitGlobDereference", true);
+                return new BinaryOperatorNode("=", glob, runtimeCode, currentIndex);
             } else {
                 return handleNamedSub(parser, subName, prototype, attributes, block, declaration);
             }
@@ -1615,6 +1711,9 @@ public class SubroutineParser {
                     // (either in this same call or from a previous :prototype() call)
                     String existingAttrProto = prototype != null ? prototype : prevAttrPrototype;
                     if (existingAttrProto != null && subDisplayName != null) {
+                        if (parser.parsingFunctionParametersDeclaration) {
+                            parser.throwCleanError("Can't redefine prototype");
+                        }
                         String msg = "Attribute prototype(" + argString
                                 + ") discards earlier prototype attribute in same sub";
                         String loc = parser.ctx.errorUtil.warningLocation(parser.tokenIndex);
@@ -2037,6 +2136,9 @@ public class SubroutineParser {
 
         // Initialize placeholder metadata (accessed via codeRef.value)
         RuntimeCode placeholder = (RuntimeCode) codeRef.value;
+        if (block != null && block.getAnnotation("signatureMinArgs") instanceof Integer minArgs) {
+            placeholder.applySignatureMetadata(block);
+        }
         if (block == null && placeholder.hasBodyDefinition
                 && attributes != null && attributes.contains("lvalue")) {
             String location = "";
@@ -2274,12 +2376,19 @@ public class SubroutineParser {
                                 ast,
                                 k -> EmitterMethodCreator.classCounter.getAndIncrement());
                     }
+                    String capturedName = entry.name().substring(1);
+                    if (ast != null
+                            && ast.getAnnotation("functionParametersOuterBinding") instanceof String sourceName
+                            && sourceName.length() > 1
+                            && sourceName.charAt(0) == sigil.charAt(0)) {
+                        capturedName = sourceName.substring(1);
+                    }
                     // This is an internal lexical-storage key, not a Perl package
                     // variable lookup. NameNormalizer intentionally forces names such as
                     // STDERR and ARGV into main::, which would make `my $STDERR` captured
                     // by a named sub alias the package glob instead of its lexical cell.
                     variableName = PersistentVariable.beginPackage(beginId)
-                            + "::" + entry.name().substring(1);
+                            + "::" + capturedName;
                 }
                 // Determine the class type based on the sigil
                 classList.add(
@@ -2487,9 +2596,20 @@ public class SubroutineParser {
             // interpreter calls validate named arguments at the boundary.
             placeholder.signatureNamedParams = runtimeCode.signatureNamedParams;
             placeholder.signatureRequiredNamedParams = runtimeCode.signatureRequiredNamedParams;
+            placeholder.signatureInvocants = runtimeCode.signatureInvocants;
+            placeholder.signaturePositionalRequired = runtimeCode.signaturePositionalRequired;
+            placeholder.signaturePositionalOptional = runtimeCode.signaturePositionalOptional;
+            placeholder.signatureNamedRequired = runtimeCode.signatureNamedRequired;
+            placeholder.signatureNamedOptional = runtimeCode.signatureNamedOptional;
+            placeholder.signatureParameterTypes = runtimeCode.signatureParameterTypes;
+            placeholder.signatureParameterTypeObjects = runtimeCode.signatureParameterTypeObjects;
+            placeholder.signatureParameterTypeObjectVariables =
+                    runtimeCode.signatureParameterTypeObjectVariables;
             placeholder.signaturePositionalCount = runtimeCode.signaturePositionalCount;
             placeholder.signatureSlurpySigil = runtimeCode.signatureSlurpySigil;
+            placeholder.signatureSlurpyName = runtimeCode.signatureSlurpyName;
             placeholder.signatureSubName = runtimeCode.signatureSubName;
+            placeholder.signatureKeyword = runtimeCode.signatureKeyword;
 
             Map<String, String> compiledOurRegistry = runtimeCode.ourVariableRegistry;
             if (compiledOurRegistry == null || compiledOurRegistry.isEmpty()) {
@@ -3178,8 +3298,8 @@ public class SubroutineParser {
     }
 
     /**
-     * Validates prototype characters and emits "Illegal character in prototype" warnings.
-     * Valid prototype characters: $ @ % & * ; + \ [ ] _
+     * Validates prototype characters and emits the same diagnostic sequence as
+     * Function::Parameters for malformed escapes, list markers, and character classes.
      *
      * @param parser The parser (for location info)
      * @param proto  The prototype string to validate
@@ -3188,48 +3308,117 @@ public class SubroutineParser {
     static void emitIllegalProtoWarning(Parser parser, String proto, String subDisplayName) {
         if (proto == null || proto.isEmpty()) return;
         String name = subDisplayName != null ? subDisplayName : "?";
-        // Check if any character is illegal
-        boolean hasIllegal = false;
-        for (int i = 0; i < proto.length(); i++) {
-            char c = proto.charAt(i);
-            if ("$@%&*;+\\[]_ ".indexOf(c) < 0) {
-                hasIllegal = true;
-                break;
-            }
-        }
-        // Perl emits diagnostics in addition to the general illegal-character
-        // warning for the malformed prototype shapes below. Whitespace is not
-        // part of a prototype's shape, so check the compacted form. The
-        // after-@ diagnostic is reported before the illegal-character one.
         String shape = proto.replaceAll("\\s+", "");
-        int at = -1;
+        boolean hasIllegalCharacter = !shape.matches("[$@%*;\\[\\]&\\\\_+]*");
+        boolean warnedAfterAt = false;
         for (int i = 0; i < shape.length(); i++) {
+            if (shape.charAt(i) == '\\' && i + 1 < shape.length()) {
+                if (shape.charAt(i + 1) == '[') {
+                    int closingBracket = shape.indexOf(']', i + 2);
+                    if (closingBracket >= 0) i = closingBracket;
+                    else i++;
+                } else {
+                    i++;
+                }
+                continue;
+            }
             if (shape.charAt(i) != '@') continue;
-            int backslashes = 0;
-            for (int j = i - 1; j >= 0 && shape.charAt(j) == '\\'; j--) backslashes++;
-            if (backslashes % 2 == 0) {
-                at = i;
+            if (i + 1 < shape.length()) {
+                warnIllegalProto(parser, "Prototype after '@' for " + name + " : " + proto);
+                warnedAfterAt = true;
                 break;
             }
         }
-        if (at >= 0 && at + 1 < shape.length() && shape.charAt(at + 1) != '%'
-                && shape.charAt(at + 1) != ']' && shape.charAt(at + 1) != ';') {
-            warnIllegalProto(parser, "Prototype after '@' for " + name + " : " + proto);
-        }
-        if (hasIllegal) {
-            warnIllegalProto(parser, "Illegal character in prototype for " + name + " : " + proto);
-        }
-        for (int i = 0; i < shape.length(); i++) {
-            if (shape.charAt(i) == '_' && i + 1 < shape.length()
-                    && shape.charAt(i + 1) != ';') {
+        if (!warnedAfterAt && hasMalformedUnderscoreForWarning(shape)) {
+            if (hasIllegalCharacter) {
                 warnIllegalProto(parser,
-                        "Illegal character after '_' in prototype for " + name + " : " + proto);
-                break;
+                        "Illegal character in prototype for " + name + " : " + proto);
+            }
+            warnMalformedUnderscorePrototype(parser, shape, proto, name);
+            return;
+        }
+        if (hasIllegalCharacter) {
+            warnIllegalProto(parser, "Illegal character in prototype for " + name + " : " + proto);
+            return;
+        }
+        if (warnedAfterAt) return;
+        for (int i = 0; i < shape.length(); i++) {
+            switch (shape.charAt(i)) {
+                case '_':
+                    if (i + 1 < shape.length() && ";@%".indexOf(shape.charAt(i + 1)) < 0) {
+                        warnIllegalProto(parser,
+                                "Illegal character after '_' in prototype for " + name + " : "
+                                        + proto);
+                        return;
+                    }
+                    break;
+                case '@':
+                case '%':
+                    if (i + 1 < shape.length()) {
+                        warnIllegalProto(parser, "Prototype after '" + shape.charAt(i) + "' for "
+                                + name + ": " + shape.substring(i + 1));
+                        return;
+                    }
+                    break;
+                case '\\':
+                    i++;
+                    if (i < shape.length() && "$@%&*".indexOf(shape.charAt(i)) >= 0) break;
+                    if (i < shape.length() && shape.charAt(i) == '[') {
+                        i++;
+                        int firstClassCharacter = i;
+                        while (i < shape.length() && shape.charAt(i) != ']'
+                                && "$@%&*".indexOf(shape.charAt(i)) >= 0) {
+                            i++;
+                        }
+                        if (i < shape.length() && shape.charAt(i) == ']'
+                                && i > firstClassCharacter) break;
+                    }
+                    warnIllegalProto(parser, "Illegal character after '\\' in prototype for "
+                            + name + " : " + shape.substring(Math.min(i, shape.length())));
+                    return;
+                case '$':
+                case '*':
+                case '&':
+                case ';':
+                case '+':
+                    break;
+                default:
+                    warnIllegalProto(parser, "Illegal character in prototype for " + name + " : "
+                            + shape.substring(i));
+                    if (shape.indexOf('[') >= 0
+                            && shape.indexOf(']', shape.indexOf('[') + 1) < 0) {
+                        warnIllegalProto(parser,
+                                "Missing ']' in prototype for " + name + " : " + proto);
+                    }
+                    return;
             }
         }
-        if (shape.indexOf('[') >= 0 && shape.indexOf(']', shape.indexOf('[') + 1) < 0) {
-            warnIllegalProto(parser, "Missing ']' in prototype for " + name + " : " + proto);
+    }
+
+    private static void warnMalformedUnderscorePrototype(
+            Parser parser, String shape, String proto, String name) {
+        if (hasMalformedUnderscoreForWarning(shape)) {
+            warnIllegalProto(parser,
+                    "Illegal character after '_' in prototype for " + name + " : " + proto);
         }
+    }
+
+    private static boolean hasMalformedUnderscoreForWarning(String shape) {
+        for (int i = 0; i + 1 < shape.length(); i++) {
+            if (shape.charAt(i) == '\\') {
+                if (shape.charAt(i + 1) == '[') {
+                    int closingBracket = shape.indexOf(']', i + 2);
+                    i = closingBracket >= 0 ? closingBracket : i + 1;
+                } else {
+                    i++;
+                }
+                continue;
+            }
+            if (shape.charAt(i) == '_' && ";@%".indexOf(shape.charAt(i + 1)) < 0) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

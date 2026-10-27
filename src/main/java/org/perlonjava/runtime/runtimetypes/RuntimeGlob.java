@@ -635,6 +635,9 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 }
                 // Get or create the code ref container
                 RuntimeScalar codeContainer = GlobalVariable.defineGlobalCodeRef(codeSlotName);
+                boolean updateWholeGlobAliasGroup = writesThroughGlobAlias
+                        || (!isLocalizedGlob(this.globName)
+                        && GlobalVariable.isInGlobAliasGroup(this.globName));
 
                 // A non-local typeglob assignment is a redefinition for
                 // prototype purposes too.  Parser-time checks do not see
@@ -759,11 +762,10 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
 
                 codeContainer.set(value);
 
-                // `*Alias = *Base` makes assignments made through Alias
-                // replace Base's CODE slot as well.  The converse is not
-                // true: assigning directly to Base may split its CODE slot
-                // from alias names while the other glob slots stay shared.
-                if (writesThroughGlobAlias) {
+                // Whole-glob aliases share their CODE slot regardless of
+                // which name receives a non-local definition. Localized
+                // writes remain temporary and are handled by the save stack.
+                if (updateWholeGlobAliasGroup) {
                     for (String alias : GlobalVariable.getGlobAliasGroup(this.globName)) {
                         GlobalVariable.globalCodeRefs.put(alias, codeContainer);
                         GlobalVariable.replacePinnedCodeRef(alias, codeContainer);

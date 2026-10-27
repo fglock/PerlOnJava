@@ -19,6 +19,13 @@ Both backends share 100% of the same runtime APIs and can call each other seamle
 
 This document describes the internal architecture and compilation pipeline.
 
+## Parser keyword extensions
+
+Parser plugins can register compile-time keywords in lexical scope and lower
+their declarations into the shared AST used by both execution backends. See
+[Parser keyword plugins](parser-keyword-plugins.md) for the plugin contract
+and module-provider lifecycle.
+
 ## Project Structure
 
 ```

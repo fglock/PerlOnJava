@@ -146,6 +146,7 @@ public class EmitEval {
             // Preserve any special flags from the parse-time symbol table
             newSymbolTable.copyFlagsFrom(evalOperatorNode.getSymbolTable());
             newSymbolTable.copyLexicalSubroutineBindingsFrom(evalOperatorNode.getSymbolTable());
+            newSymbolTable.copyParserKeywordPluginsFrom(evalOperatorNode.getSymbolTable());
         }
 
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("evalStringHelper newSymbolTable: " + newSymbolTable);

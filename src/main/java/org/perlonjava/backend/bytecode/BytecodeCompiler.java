@@ -486,6 +486,7 @@ public class BytecodeCompiler implements Visitor {
     // Used by both eval STRING (for variable capture) and debugger (for lexical access).
     final List<Map<String, Integer>> evalSiteRegistries = new ArrayList<>();
     final List<Map<String, OperatorNode>> evalSiteLexicalSubroutineBindings = new ArrayList<>();
+    final List<Map<String, org.perlonjava.frontend.parser.ParserKeywordPlugin>> evalSiteParserKeywordPlugins = new ArrayList<>();
     final List<int[]> evalSitePragmaFlags = new ArrayList<>();
     // Cache for DEBUG site registry deduplication - reuse index if scope unchanged
     private Map<String, Integer> lastDebugRegistry = null;
@@ -619,6 +620,8 @@ public class BytecodeCompiler implements Visitor {
     // Runtime regex interpolation can synthesize executable source through
     // overload, so the containing CV must expose all of its live lexical cells.
     private boolean tracksRuntimeRegexLexicals;
+    // Deferred format arguments also resolve lexical cells when write() runs.
+    private boolean tracksRuntimeFormatLexicals;
     // True when compiling inside a defer block (control flow out of defer is prohibited)
     private boolean isInDeferBlock;
 
@@ -1632,6 +1635,7 @@ public class BytecodeCompiler implements Visitor {
                 symbolTable.getCurrentPackage(),
                 evalSiteRegistries.isEmpty() ? null : evalSiteRegistries,
                 evalSiteLexicalSubroutineBindings.isEmpty() ? null : evalSiteLexicalSubroutineBindings,
+                evalSiteParserKeywordPlugins.isEmpty() ? null : evalSiteParserKeywordPlugins,
                 evalSitePragmaFlags.isEmpty() ? null : evalSitePragmaFlags,
                 warningBitsString
         );
@@ -6649,6 +6653,10 @@ public class BytecodeCompiler implements Visitor {
         return tracksRuntimeRegexLexicals;
     }
 
+    boolean tracksRuntimeFormatLexicals() {
+        return tracksRuntimeFormatLexicals;
+    }
+
     /**
      * Apply Perl's context conversion to an array value. This is shared by
      * named arrays and dereferenced arrays: scalar {@code @$ref} is the array
@@ -7480,6 +7488,10 @@ public class BytecodeCompiler implements Visitor {
         subCode.attributes = node.attributes;
         subCode.packageName = node.getAnnotation("regexCallbackPackage") instanceof String pkg
                 ? pkg : getCurrentPackage();
+        if (node.getAnnotation("functionParametersRuntimeName") instanceof String runtimeName) {
+            RuntimeCode.configureFunctionParametersRuntime(
+                    new RuntimeScalar(subCode), runtimeName);
+        }
         if (node.getAnnotation("lexicalSubDisplayName") instanceof String lexicalName) {
             subCode.subName = lexicalName;
             subCode.lexicalSubDisplayName = true;
@@ -9247,6 +9259,18 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(FormatNode node) {
+        tracksRuntimeFormatLexicals = true;
+        for (int index = 0; index < node.templateLines.size(); index++) {
+            FormatLine line = node.templateLines.get(index);
+            if (index > 0 && node.templateLines.get(index - 1) instanceof PictureLine
+                    && line instanceof ArgumentLine argumentLine) {
+                List<InterpretedCode> expressions = FormatExpressionCompiler.compile(
+                        argumentLine, sourceName, errorUtil, symbolTable, emitterContext);
+                if (!expressions.isEmpty()) {
+                    argumentLine.setAnnotation("executableFormatExpressions", expressions);
+                }
+            }
+        }
         // Format declarations are compile-time side effects. Keep the parsed
         // RuntimeFormat in the constant pool and register it when this code
         // executes, before a later write() can look it up.
@@ -9295,7 +9319,10 @@ public class BytecodeCompiler implements Visitor {
                 if (entry.getKey() instanceof String name
                         && entry.getValue() instanceof OperatorNode declaration
                         && declaration.getAnnotation("bytecodeLexicalRegister") instanceof Integer reg) {
-                    captures.putIfAbsent(name, reg);
+                    // The frontend symbol-table index is not a bytecode
+                    // register. Prefer the register assigned to the lexical
+                    // declaration when both are present in this capture map.
+                    captures.put(name, reg);
                 }
             }
         }

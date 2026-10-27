@@ -1,6 +1,8 @@
 package org.perlonjava.backend.jvm;
 
 import org.perlonjava.app.cli.CompilerOptions;
+import org.perlonjava.backend.bytecode.FormatExpressionCompiler;
+import org.perlonjava.backend.bytecode.InterpretedCode;
 
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
@@ -33,6 +35,9 @@ public class EmitFormat {
         // Always generate format bytecode, even in VOID context
         // The side effect of storing the format is important
 
+        Map<ArgumentLine, String> executableExpressionFields =
+                registerExecutableExpressions(ctx, node);
+
         // Create ArrayList for template lines first
         mv.visitTypeInsn(Opcodes.NEW, "java/util/ArrayList");
         mv.visitInsn(Opcodes.DUP);
@@ -43,7 +48,9 @@ public class EmitFormat {
             mv.visitInsn(Opcodes.DUP); // Duplicate ArrayList reference
 
             // Create the appropriate FormatLine object based on type
-            emitFormatLine(ctx, node.templateLines.get(i));
+            FormatLine line = node.templateLines.get(i);
+            emitFormatLine(ctx, line, line instanceof ArgumentLine argumentLine
+                    ? executableExpressionFields.get(argumentLine) : null);
 
             // Preserve template-line provenance for runtime warnings emitted
             // while this format is written.
@@ -136,7 +143,10 @@ public class EmitFormat {
                 if (entry.getKey() instanceof String name
                         && entry.getValue() instanceof OperatorNode declaration
                         && declaration.getAnnotation("jvmLexicalSlot") instanceof Integer slot) {
-                    captures.putIfAbsent(name, slot);
+                    // The frontend symbol-table index may not be a JVM local
+                    // slot. The declaration annotation is the backend's
+                    // authoritative location for this lexical cell.
+                    captures.put(name, slot);
                 }
             }
         }
@@ -158,6 +168,26 @@ public class EmitFormat {
         if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("FORMAT end: " + node.formatName);
     }
 
+    private static Map<ArgumentLine, String> registerExecutableExpressions(
+            EmitterContext ctx, FormatNode node) {
+        Map<ArgumentLine, String> fields = new java.util.IdentityHashMap<>();
+        for (int index = 0; index < node.templateLines.size(); index++) {
+            FormatLine formatLine = node.templateLines.get(index);
+            if (index == 0 || !(node.templateLines.get(index - 1) instanceof PictureLine)
+                    || !(formatLine instanceof ArgumentLine argumentLine)) continue;
+            java.util.List<InterpretedCode> expressions = FormatExpressionCompiler.compile(
+                    argumentLine, ctx.compilerOptions == null ? "" : ctx.compilerOptions.fileName,
+                    ctx.errorUtil, ctx.symbolTable, ctx);
+            if (expressions.isEmpty()) continue;
+            String key = ctx.javaClassInfo.javaClassName + "#format#" + argumentLine.tokenIndex;
+            org.perlonjava.runtime.runtimetypes.RuntimeFormatExpressionRegistry
+                    .register(key, expressions);
+            fields.put(argumentLine,
+                    ctx.javaClassInfo.registerFormatExpressionField(key, ctx.cw));
+        }
+        return fields;
+    }
+
     /**
      * Emits bytecode to create a FormatLine object.
      * This method handles the creation of different types of format lines
@@ -166,7 +196,8 @@ public class EmitFormat {
      * @param ctx  The emitter context.
      * @param line The format line to emit.
      */
-    private static void emitFormatLine(EmitterContext ctx, FormatLine line) {
+    private static void emitFormatLine(EmitterContext ctx, FormatLine line,
+                                       String executableExpressionField) {
         MethodVisitor mv = ctx.mv;
 
         if (line instanceof CommentLine commentLine) {
@@ -200,11 +231,25 @@ public class EmitFormat {
             mv.visitLdcInsn(argumentLine.content);
 
             // Create expressions list
-            emitNodeList(ctx, argumentLine.expressions);
+            emitEmptyNodeList(ctx);
 
             mv.visitLdcInsn(argumentLine.tokenIndex);
             mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/frontend/astnode/ArgumentLine",
                     "<init>", "(Ljava/lang/String;Ljava/util/List;I)V", false);
+            if (executableExpressionField != null) {
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitLdcInsn("executableFormatExpressions");
+                mv.visitFieldInsn(Opcodes.GETSTATIC, ctx.javaClassInfo.javaClassName,
+                        executableExpressionField, "Ljava/util/List;");
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/frontend/astnode/ArgumentLine", "setAnnotation",
+                        "(Ljava/lang/String;Ljava/lang/Object;)V", false);
+            }
+            if (argumentLine.getAnnotation("unavailableLexicalVariableNames")
+                    instanceof java.util.List<?> unavailableNames) {
+                emitStringListAnnotation(ctx, "unavailableLexicalVariableNames",
+                        unavailableNames);
+            }
             if (argumentLine.getAnnotation("unavailableLexicalSubWarning") instanceof String warning) {
                 mv.visitLdcInsn(warning);
                 mv.visitLdcInsn((String) argumentLine.getAnnotation("unavailableLexicalSubError"));
@@ -213,6 +258,27 @@ public class EmitFormat {
                         "(Ljava/lang/String;Ljava/lang/String;)Lorg/perlonjava/frontend/astnode/ArgumentLine;", false);
             }
         }
+    }
+
+    private static void emitStringListAnnotation(EmitterContext ctx, String key,
+                                                  java.util.List<?> values) {
+        MethodVisitor mv = ctx.mv;
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitLdcInsn(key);
+        mv.visitTypeInsn(Opcodes.NEW, "java/util/ArrayList");
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/util/ArrayList", "<init>", "()V", false);
+        for (Object value : values) {
+            if (!(value instanceof String text)) continue;
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitLdcInsn(text);
+            mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/List", "add",
+                    "(Ljava/lang/Object;)Z", true);
+            mv.visitInsn(Opcodes.POP);
+        }
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                "org/perlonjava/frontend/astnode/ArgumentLine", "setAnnotation",
+                "(Ljava/lang/String;Ljava/lang/Object;)V", false);
     }
 
     /**
@@ -303,7 +369,7 @@ public class EmitFormat {
      * @param ctx   The emitter context.
      * @param nodes The list of nodes to emit.
      */
-    private static void emitNodeList(EmitterContext ctx, java.util.List<Node> nodes) {
+    private static void emitEmptyNodeList(EmitterContext ctx) {
         MethodVisitor mv = ctx.mv;
 
         // Create ArrayList
@@ -311,32 +377,7 @@ public class EmitFormat {
         mv.visitInsn(Opcodes.DUP);
         mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/util/ArrayList", "<init>", "()V", false);
 
-        // Add each node to the list
-        for (Node node : nodes) {
-            mv.visitInsn(Opcodes.DUP); // Duplicate ArrayList reference
-
-            // For now, create simple StringNode objects
-            // In a full implementation, we would emit the actual node bytecode
-            if (node instanceof StringNode stringNode) {
-                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/frontend/astnode/StringNode");
-                mv.visitInsn(Opcodes.DUP);
-                mv.visitLdcInsn(stringNode.value);
-                mv.visitLdcInsn(stringNode.tokenIndex);
-                mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/frontend/astnode/StringNode",
-                        "<init>", "(Ljava/lang/String;I)V", false);
-            } else {
-                // For other node types, create a placeholder StringNode
-                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/frontend/astnode/StringNode");
-                mv.visitInsn(Opcodes.DUP);
-                mv.visitLdcInsn(node.toString());
-                mv.visitLdcInsn(0);
-                mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/frontend/astnode/StringNode",
-                        "<init>", "(Ljava/lang/String;I)V", false);
-            }
-
-            mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/List", "add",
-                    "(Ljava/lang/Object;)Z", true);
-            mv.visitInsn(Opcodes.POP); // Pop boolean return value
-        }
+        // The executable bytecode templates are attached separately. Do not
+        // stringify AST nodes into fake StringNode instances here.
     }
 }

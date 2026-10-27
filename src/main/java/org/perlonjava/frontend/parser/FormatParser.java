@@ -57,11 +57,6 @@ public class FormatParser {
 
         if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("Parsing format declaration: " + formatName);
 
-        // Parse format template content immediately
-        List<FormatLine> templateLines = parseFormatTemplateContentImmediate(parser);
-
-        // Create a format node with the parsed template content
-        FormatNode formatNode = new FormatNode(formatName, templateLines, tokenIndex);
         // A FORMAT captures lexical cells from its declaration site. Keep the
         // declaration ASTs, not parser-time numeric ids: each backend assigns
         // its own executable local slot while lowering the declaration.
@@ -72,6 +67,21 @@ public class FormatParser {
                 lexicalDeclarations.put(entry.name(), entry.ast());
             }
         }
+
+        // Format argument lines are deferred code. Lexicals declared by an
+        // argument expression (for example, `my $x = ..., $x`) belong to that
+        // expression and must not leak into the declaration's surrounding
+        // scope or become captured by the RuntimeFormat itself.
+        int formatScope = parser.ctx.symbolTable.enterScope();
+        List<FormatLine> templateLines;
+        try {
+            templateLines = parseFormatTemplateContentImmediate(parser);
+        } finally {
+            parser.ctx.symbolTable.exitScope(formatScope);
+        }
+
+        // Create a format node with the parsed template content
+        FormatNode formatNode = new FormatNode(formatName, templateLines, tokenIndex);
         formatNode.setAnnotation("formatLexicalDeclarations", lexicalDeclarations);
 
         // Formats are declarations, not statements delayed until an enclosing
@@ -155,7 +165,8 @@ public class FormatParser {
                 }
 
                 // Parse the line and add to template
-                FormatLine formatLine = parseFormatLine(parser, line, lineIndex);
+                FormatLine formatLine = parseFormatLine(parser, line, lineIndex,
+                        expectsArgumentLine(templateLines));
                 setSourceLocation(parser, formatLine, lineIndex);
                 templateLines.add(formatLine);
                 currentLine.setLength(0);
@@ -180,7 +191,8 @@ public class FormatParser {
             if (line.trim().equals(".")) {
                 foundTerminator = true;
             } else {
-                FormatLine formatLine = parseFormatLine(parser, line, lineIndex);
+                FormatLine formatLine = parseFormatLine(parser, line, lineIndex,
+                        expectsArgumentLine(templateLines));
                 setSourceLocation(parser, formatLine, lineIndex);
                 templateLines.add(formatLine);
             }
@@ -263,7 +275,8 @@ public class FormatParser {
                     }
 
                     // Parse the line and add to template
-                    FormatLine formatLine = parseFormatLine(parser, line, lineIndex);
+                    FormatLine formatLine = parseFormatLine(parser, line, lineIndex,
+                            expectsArgumentLine(templateLines));
                     setSourceLocation(parser, formatLine, lineIndex);
                     templateLines.add(formatLine);
                     currentLine.setLength(0);
@@ -319,7 +332,18 @@ public class FormatParser {
      * @param tokenIndex The token index for this line
      * @return FormatLine representing the parsed line
      */
-    private static FormatLine parseFormatLine(Parser parser, String line, int tokenIndex) {
+    private static boolean expectsArgumentLine(List<FormatLine> templateLines) {
+        for (int index = templateLines.size() - 1; index >= 0; index--) {
+            FormatLine previous = templateLines.get(index);
+            if (previous instanceof CommentLine) continue;
+            return previous instanceof PictureLine pictureLine
+                    && !pictureLine.fields.isEmpty();
+        }
+        return false;
+    }
+
+    private static FormatLine parseFormatLine(Parser parser, String line, int tokenIndex,
+                                              boolean expectsArgumentLine) {
         if (line.trim().equals(".//")) {
             var location = parser.ctx.errorUtil.getSourceLocationAccurate(tokenIndex);
             throw new PerlCompilerException("syntax error at " + location.fileName()
@@ -345,6 +369,15 @@ public class FormatParser {
             return new PictureLine(line, fields, literalText, tokenIndex);
         }
 
+        // Lines in a format are either pictures (including literal-only
+        // pictures) or argument expressions paired with the preceding
+        // picture. Treat an unpaired plain-text line as a literal picture;
+        // attempting to parse words like "body" as expressions both rejects
+        // valid formats under strict subs and executes text as code.
+        if (!expectsArgumentLine && !multilineBracedArgument) {
+            return new PictureLine(line, List.of(), line, tokenIndex);
+        }
+
         // Otherwise, treat as argument line
         // A format argument may not substitute into the @_ aggregate. Perl
         // diagnoses this while compiling the FORMAT and does not install the
@@ -357,11 +390,22 @@ public class FormatParser {
                     "Can't modify array dereference in substitution (s///)", parser.ctx.errorUtil);
         }
         parser.formatArgumentLexicalSubName = null;
-        List<Node> expressions = parseArgumentExpressions(parser, line, tokenIndex);
+        List<Node> expressions = parseArgumentExpressions(
+                parser, line, tokenIndex, multilineBracedArgument);
         ArgumentLine argumentLine = new ArgumentLine(line, expressions, tokenIndex);
+        if (argumentLineExpressionsUseRuntimeFallback(line, expressions)) {
+            argumentLine.setAnnotation("formatExpressionParseFallback", true);
+        }
         annotateUnavailableLexicalSub(parser, argumentLine);
         annotateUnavailableLexicalVariables(parser, argumentLine);
         return argumentLine;
+    }
+
+    private static boolean argumentLineExpressionsUseRuntimeFallback(String line,
+                                                                       List<Node> expressions) {
+        return !line.trim().isEmpty() && expressions.size() == 1
+                && expressions.getFirst() instanceof StringNode stringNode
+                && stringNode.value.equals(line.trim());
     }
 
     /** Preserve deferred closure warnings for lexical scalar/array/hash uses. */
@@ -370,6 +414,7 @@ public class FormatParser {
         Matcher matcher = Pattern.compile("[$@%][A-Za-z_]\\w*").matcher(argumentLine.content);
         while (matcher.find()) {
             String name = matcher.group();
+            if (declaredInArgumentLine(argumentLine.content, name)) continue;
             boolean lexical = parser.ctx.symbolTable.getAllVisibleVariables().values().stream()
                     .anyMatch(entry -> name.equals(entry.name())
                             && ("my".equals(entry.decl()) || "state".equals(entry.decl())));
@@ -379,6 +424,20 @@ public class FormatParser {
         if (!unavailable.isEmpty()) {
             argumentLine.setAnnotation("unavailableLexicalVariableNames", unavailable);
         }
+    }
+
+    /** A lexical declared by the argument expression is local to that line. */
+    private static boolean declaredInArgumentLine(String source, String name) {
+        Pattern declaration = Pattern.compile("\\b(?:my|state)\\b([^;=]*)");
+        Matcher declarations = declaration.matcher(source);
+        Pattern variable = Pattern.compile("[$@%][A-Za-z_]\\w*");
+        while (declarations.find()) {
+            Matcher variables = variable.matcher(declarations.group(1));
+            while (variables.find()) {
+                if (name.equals(variables.group())) return true;
+            }
+        }
+        return false;
     }
 
     private static boolean hasPriorLexicalDeclaration(Parser parser, String name) {
@@ -595,7 +654,8 @@ public class FormatParser {
      * @param tokenIndex The token index
      * @return List of expression nodes
      */
-    private static List<Node> parseArgumentExpressions(Parser parser, String line, int tokenIndex) {
+    private static List<Node> parseArgumentExpressions(Parser parser, String line, int tokenIndex,
+                                                       boolean multilineBracedArgument) {
         List<Node> expressions = new ArrayList<>();
 
         if (line.trim().isEmpty()) {
@@ -604,7 +664,8 @@ public class FormatParser {
 
         try {
             // Create a lexer for the argument line
-            Lexer lexer = new Lexer(line);
+            String expressionSource = multilineBracedArgument ? "do " + line : line;
+            Lexer lexer = new Lexer(expressionSource);
             List<LexerToken> tokens = lexer.tokenize();
 
             // Create a parser for the tokens
@@ -613,14 +674,21 @@ public class FormatParser {
             argParser.parsingFormatArgumentLine = true;
 
             // Parse comma-separated expressions
+            boolean complete = false;
             while (argParser.tokenIndex < tokens.size()) {
                 LexerToken token = tokens.get(argParser.tokenIndex);
                 if (token.type == LexerTokenType.EOF) {
+                    complete = true;
                     break;
                 }
 
                 // Parse the next expression
-                Node expr = argParser.parseExpression(0);
+                // Keep the top-level comma for the argument-list loop below.
+                // Parsing with precedence zero absorbs the entire line into a
+                // ListNode, which can leave the parser positioned before a
+                // trailing token and silently switch valid expressions to the
+                // runtime source-eval fallback.
+                Node expr = argParser.parseExpression(5);
                 if (expr != null) {
                     expressions.add(expr);
                 }
@@ -632,10 +700,17 @@ public class FormatParser {
                         argParser.tokenIndex++; // consume comma
                     } else if (nextToken.type != LexerTokenType.EOF) {
                         // If not comma and not EOF, we might have a syntax error
-                        // For now, just break to avoid infinite loop
+                        // Keep runtime parsing for syntax the format parser
+                        // cannot represent completely.
                         break;
+                    } else {
+                        complete = true;
                     }
                 }
+            }
+            if (!complete) {
+                expressions.clear();
+                expressions.add(new StringNode(line.trim(), tokenIndex));
             }
             parser.formatArgumentLexicalSubName = argParser.formatArgumentLexicalSubName;
         } catch (Exception e) {

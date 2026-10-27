@@ -160,4 +160,3 @@ JVM uses tableswitch (O(1)) for dense opcode ranges. Gaps cause lookupswitch (O(
 
 ### Disassembly cases are mandatory
 Every new opcode MUST have a disassembly case in InterpretedCode.java. Missing cases cause PC misalignment — the disassembler doesn't advance past the opcode's operands, corrupting all subsequent output.
-

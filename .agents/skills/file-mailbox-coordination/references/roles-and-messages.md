@@ -102,4 +102,3 @@ keys for actions that may be retried.
 Do not treat silence as approval. After 10–15 minutes without an expected reply,
 send a liveness reminder and continue only read-only checks or already-owned
 work.
-

@@ -195,6 +195,8 @@ public class Parser {
     private final List<String> specialBlockPrototypeWarnings = new ArrayList<>();
     // Current index in the token list.
     public int tokenIndex = 0;
+    /** Nesting depth of expression parsing, used by parser plugins to reject statements in expressions. */
+    public int expressionParseDepth = 0;
     // Flags to indicate special parsing states.
     public boolean parsingForLoopVariable = false;
     // Nesting depth of runtime loop bodies currently being parsed.  A lexical
@@ -247,6 +249,31 @@ public class Parser {
     // path for signature lexicals; ordinary named subs must retain selective
     // capture to avoid retaining the entire surrounding lexical environment.
     public boolean parsingSignaturedSubroutine = false;
+    /** True while a parser extension delegates a function declaration to core signatures. */
+    public boolean parsingFunctionParametersDeclaration = false;
+    /** True while parsing an explicit-invocant Function::Parameters method. */
+    public boolean parsingFunctionParametersMethod = false;
+    /** True for configurations where a colon may optionally mark invocants. */
+    public boolean parsingFunctionParametersOptionalInvocant = false;
+    /** Number of leading positional parameters used as Function::Parameters invocants. */
+    public int functionParametersInvocantCount = 1;
+    /** Whether configured Function::Parameters signatures enforce exact arity. */
+    public boolean functionParametersStrict = true;
+    /** Whether configured Function::Parameters signatures run type constraints. */
+    public boolean functionParametersCheckArgumentTypes = true;
+    public boolean functionParametersTypes = true;
+    /** Active Function::Parameters keyword, retained for signature metadata. */
+    public String functionParametersKeyword;
+    /** Default attributes supplied by the active Function::Parameters keyword. */
+    public List<String> functionParametersAttributes = List.of();
+    /** Install a named Function::Parameters declaration when its statement runs. */
+    public boolean functionParametersRuntime;
+    /** Whether Function::Parameters signatures accept default arguments. */
+    public boolean functionParametersDefaultArguments = true;
+    public String functionParametersInstallSub;
+    public String functionParametersTypeReifier;
+    /** Optional compile-time callback used by Function::Parameters reify_type. */
+    public org.perlonjava.runtime.runtimetypes.RuntimeScalar functionParametersTypeReifierCallback;
     // Are we parsing the top level script?
     public boolean isTopLevelScript = false;
     // Are we parsing inside a class block?
@@ -334,6 +361,22 @@ public class Parser {
         if (ctx != null && ctx.symbolTable != null) {
             setCurrentScope(ctx.symbolTable);
         }
+    }
+
+    public void registerKeywordPlugin(String keyword, ParserKeywordPlugin plugin) {
+        ctx.symbolTable.registerParserKeywordPlugin(keyword, plugin);
+    }
+
+    public void removeKeywordPlugin(String keyword) {
+        ctx.symbolTable.removeParserKeywordPlugin(keyword);
+    }
+
+    public ParserKeywordPlugin getKeywordPlugin(String keyword) {
+        return ctx.symbolTable.getParserKeywordPlugin(keyword);
+    }
+
+    public java.util.Map<String, ParserKeywordPlugin> getVisibleParserKeywordPlugins() {
+        return ctx.symbolTable.getVisibleParserKeywordPlugins();
     }
 
     private void indexSourceLines() {
@@ -555,6 +598,8 @@ public class Parser {
      * @return The root node of the parsed expression.
      */
     public Node parseExpression(int precedence) {
+        expressionParseDepth++;
+        try {
         // First, parse the primary expression (like a number or a variable).
         Node left = ParsePrimary.parsePrimary(this);
 
@@ -669,6 +714,9 @@ public class Parser {
 
         // Return the root node of the constructed expression tree.
         return left;
+        } finally {
+            expressionParseDepth--;
+        }
     }
 
     /**

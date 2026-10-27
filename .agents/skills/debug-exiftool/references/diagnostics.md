@@ -176,4 +176,3 @@ Perl's scalar `gmtime`/`localtime` returns ctime(3) format: `"Fri Mar  7 20:13:5
 
 ### Regression testing: always compare branch vs master
 Before declaring a fix complete, run the same test on both master and the branch to distinguish real regressions from pre-existing failures. Use `perl5_t/t/` (not `perl5/t/`) for running Perl5 core tests — the `perl5_t` copy has test harness files (`test.pl`, `charset_tools.pl`) that PerlOnJava can load.
-

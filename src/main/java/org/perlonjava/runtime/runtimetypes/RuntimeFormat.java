@@ -715,18 +715,50 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
                     lexicalVariables.put(name, new RuntimeScalar());
                 }
             }
+            String source = hoistNestedFormatDeclarations(argLine.content);
             List<RuntimeScalar> simpleScalarSlots = resolveSimpleGlobalScalarSlots(argLine.content);
             if (simpleScalarSlots != null) {
                 lineArgs.addAll(simpleScalarSlots);
                 return lineArgs;
             }
-            // A format argument line is executable Perl in list context.  The
-            // parsed nodes are retained for format introspection, but cannot
-            // be evaluated piecemeal: doing so loses operators, blocks, list
-            // expansion, and their side effects.  Re-evaluate the complete
-            // source line when write() reaches this picture, just as Perl
-            // evaluates a format's argument line at write time.
-            String source = hoistNestedFormatDeclarations(argLine.content);
+            if (source.trim().matches("^return(?:\\s|;|$).*$")) {
+                lastExecutionReturned = true;
+                return lineArgs;
+            }
+            if (argLine.getAnnotation("executableFormatExpressions") instanceof List<?> expressions
+                    && !expressions.isEmpty()) {
+                for (Object expression : expressions) {
+                    if (!(expression instanceof org.perlonjava.backend.bytecode.InterpretedCode template)) {
+                        throw new IllegalStateException(
+                                "Invalid compiled expression in format " + formatName);
+                    }
+                    int highestRegister = 2;
+                    for (Integer register : template.variableRegistry.values()) {
+                        if (register != null) highestRegister = Math.max(highestRegister, register);
+                    }
+                    RuntimeBase[] captured = new RuntimeBase[highestRegister - 2];
+                    for (Map.Entry<String, Integer> entry : template.variableRegistry.entrySet()) {
+                        int register = entry.getValue();
+                        if (register >= 3 && register - 3 < captured.length) {
+                            captured[register - 3] = lexicalVariables.get(entry.getKey());
+                        }
+                    }
+                    RuntimeList values = template.withCapturedVars(captured)
+                            .apply(new RuntimeArray(), RuntimeContextType.LIST);
+                    for (RuntimeBase value : values.elements) {
+                        RuntimeScalar scalar = value.scalar();
+                        if (scalar.type == RuntimeScalarType.TIED_SCALAR) {
+                            scalar = scalar.tiedFetch();
+                        }
+                        lineArgs.add(scalar);
+                        lastExecutionTainted |= scalar.isTainted();
+                    }
+                }
+                return lineArgs;
+            }
+            // Only syntax explicitly marked as beyond the format parser's
+            // current AST support reaches this source-eval fallback. Parsed
+            // expressions use the shared bytecode pipeline above.
             // A bare return in a format argument line exits the format. It is
             // not an empty list of picture values: write() reports failure to
             // its caller without rendering or writing this picture.
@@ -938,68 +970,6 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
 
     private record PictureExecution(String text, boolean hasRemainingText,
                                     boolean hasNonemptyFieldValue) { }
-
-    /**
-     * Evaluate an expression node to get its runtime value.
-     * This is a simplified implementation that handles basic variable access.
-     */
-    private RuntimeScalar evaluateExpression(Node expression) {
-        if (expression instanceof StringNode stringNode) {
-            // Handle the case where expressions are stored as StringNode with serialized AST data
-            // This is a workaround for the parsing issue in FormatParser.parseArgumentExpressions()
-            String content = stringNode.value;
-
-            // Parse simple variable expressions from the serialized AST data
-            if (content.contains("OperatorNode: $") && content.contains("IdentifierNode:")) {
-                // Extract variable name from serialized AST: "OperatorNode: $  pos:3\nIdentifierNode: 'name'"
-                String[] lines = content.split("\\n");
-                for (String line : lines) {
-                    if (line.trim().startsWith("IdentifierNode:")) {
-                        // Extract variable name: "IdentifierNode: 'name'" -> "name"
-                        String varName = line.substring(line.indexOf("'") + 1, line.lastIndexOf("'"));
-                        String fullName = "main::" + varName;
-                        RuntimeScalar result = getGlobalVariable(fullName).scalar();
-                        return result;
-                    }
-                }
-            }
-
-            // If we can't parse it, return the raw content as a fallback
-            return new RuntimeScalar(content);
-        } else if (expression instanceof OperatorNode opNode) {
-            // Handle variable access operators like $ (scalar dereference)
-            if ("$".equals(opNode.operator) && opNode.operand != null) {
-                if (opNode.operand instanceof IdentifierNode idNode) {
-                    String varName = idNode.name;
-                    String fullName = "main::" + varName;
-                    RuntimeScalar result = getGlobalVariable(fullName).scalar();
-                    return result;
-                }
-            }
-        } else if (expression instanceof IdentifierNode idNode) {
-            // Handle variable access like $name, $version
-            String varName = idNode.name;
-
-            // Variables in Perl start with sigils ($, @, %)
-            // For format expressions, we're typically dealing with scalars ($)
-            if (varName.startsWith("$")) {
-                // Remove the $ sigil and normalize the variable name
-                String cleanName = varName.substring(1);
-                if (!cleanName.contains("::")) {
-                    cleanName = "main::" + cleanName;
-                }
-                RuntimeScalar result = getGlobalVariable(cleanName).scalar();
-                return result;
-            } else {
-                // Handle bare identifiers as scalar variables
-                String fullName = "main::" + varName;
-                return getGlobalVariable(fullName).scalar();
-            }
-        }
-
-        // For unsupported expression types, return a placeholder
-        return new RuntimeScalar("<unsupported_expr>");
-    }
 
     /**
      * Compile the format template into executable format lines.

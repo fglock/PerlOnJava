@@ -76,7 +76,7 @@ gh run view <run-id> --log-failed 2>&1 | grep "Tests run:"
 
 **Symptom**: "Cannot open/create <filename>: open failed"
 
-**Root Cause**: 
+**Root Cause**:
 - Windows uses different path separators (`\` vs `/`)
 - Temp directory permissions may differ
 - File locking behavior differs on Windows

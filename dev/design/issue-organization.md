@@ -60,7 +60,8 @@ optional proposals tied to an actual need.
 | Skill alignment, 2026-10-27 | Implemented; merge pending | Shortened generic debugging, ExifTool, parity, porting and mailbox guidance; retained technical invariants and updated triage links |
 
 Implementation branch: `docs/issue-1895-agent-coordination`, based on
-`a698bb422`. Exact source/PR and validation are recorded in the implementing PR
+`a698bb422` and integrated with master `31e010efd`. Exact source/PR and validation
+are recorded in [PR #1896](https://github.com/fglock/PerlOnJava/pull/1896)
 and the [current claim](https://github.com/fglock/PerlOnJava/issues/1895#issuecomment-6437578415).
 All 15 skills pass frontmatter validation; repository and skill offline links
 pass. At merge, record that merged source reference here.

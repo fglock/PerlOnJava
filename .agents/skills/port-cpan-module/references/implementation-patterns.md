@@ -39,10 +39,10 @@ public class ModuleName extends PerlModuleBase {
     public static RuntimeList xs_function(RuntimeArray args, int ctx) {
         // args.get(0) = first argument ($self for methods)
         // ctx = RuntimeContextType.SCALAR, LIST, or VOID
-        
+
         String param = args.get(0).toString();
         int number = args.get(1).getInt();
-        
+
         // Return value
         return new RuntimeScalar(result).getList();
     }
@@ -282,4 +282,3 @@ public static RuntimeList myMethod(RuntimeArray args, int ctx) {
 - Compare with fixed test values (not current time)
 - Check locale handling
 - Verify edge cases from XS comments
-

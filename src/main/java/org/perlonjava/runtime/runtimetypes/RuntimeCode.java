@@ -625,9 +625,20 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     // accidentally turn an odd list into a hash.
     public List<String> signatureNamedParams = List.of();
     public List<String> signatureRequiredNamedParams = List.of();
+    public List<String> signatureInvocants = List.of();
+    public List<String> signaturePositionalRequired = List.of();
+    public List<String> signaturePositionalOptional = List.of();
+    public List<String> signatureNamedRequired = List.of();
+    public List<String> signatureNamedOptional = List.of();
+    public Map<String, String> signatureParameterTypes = Map.of();
+    public Map<String, RuntimeScalar> signatureParameterTypeObjects = Map.of();
+    public Map<String, String> signatureParameterTypeObjectVariables = Map.of();
+    public String signatureTypeReifier;
     public int signaturePositionalCount = 0;
     public String signatureSlurpySigil;
+    public String signatureSlurpyName;
     public String signatureSubName;
+    public String signatureKeyword;
 
     public void applySignatureMetadata(Node ast) {
         Object names = ast.getAnnotation("signatureNamedParams");
@@ -638,12 +649,133 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (required instanceof List<?> list) {
             signatureRequiredNamedParams = list.stream().map(String::valueOf).toList();
         }
+        Object invocants = ast.getAnnotation("signatureInvocants");
+        if (invocants instanceof List<?> list) {
+            signatureInvocants = list.stream().map(String::valueOf).toList();
+        }
+        Object keyword = ast.getAnnotation("signatureKeyword");
+        if (keyword instanceof String name) signatureKeyword = name;
+        Object positionalRequired = ast.getAnnotation("signaturePositionalRequired");
+        if (positionalRequired instanceof List<?> list) {
+            signaturePositionalRequired = list.stream().map(String::valueOf).toList();
+        }
+        Object positionalOptional = ast.getAnnotation("signaturePositionalOptional");
+        if (positionalOptional instanceof List<?> list) {
+            signaturePositionalOptional = list.stream().map(String::valueOf).toList();
+        }
+        Object namedRequired = ast.getAnnotation("signatureNamedRequired");
+        if (namedRequired instanceof List<?> list) {
+            signatureNamedRequired = list.stream().map(String::valueOf).toList();
+        }
+        Object namedOptional = ast.getAnnotation("signatureNamedOptional");
+        if (namedOptional instanceof List<?> list) {
+            signatureNamedOptional = list.stream().map(String::valueOf).toList();
+        }
+        Object parameterTypes = ast.getAnnotation("signatureParameterTypes");
+        if (parameterTypes instanceof Map<?, ?> types) {
+            Map<String, String> parsed = new LinkedHashMap<>();
+            for (var entry : types.entrySet()) {
+                if (entry.getKey() != null && entry.getValue() != null) {
+                    parsed.put(String.valueOf(entry.getKey()), String.valueOf(entry.getValue()));
+                }
+            }
+            signatureParameterTypes = Map.copyOf(parsed);
+        }
+        Object typeObjects = ast.getAnnotation("signatureParameterTypeObjects");
+        if (typeObjects instanceof Map<?, ?> objectMap) {
+            Map<String, RuntimeScalar> parsed = new LinkedHashMap<>();
+            for (Map.Entry<?, ?> entry : objectMap.entrySet()) {
+                if (entry.getKey() instanceof String name && entry.getValue() instanceof RuntimeScalar type) {
+                    parsed.put(name, type);
+                }
+            }
+            signatureParameterTypeObjects = Map.copyOf(parsed);
+        }
+        Object typeObjectVariables = ast.getAnnotation("signatureParameterTypeObjectVariables");
+        if (typeObjectVariables instanceof Map<?, ?> variableMap) {
+            Map<String, String> parsed = new LinkedHashMap<>();
+            Map<String, RuntimeScalar> resolvedObjects = new LinkedHashMap<>(signatureParameterTypeObjects);
+            for (Map.Entry<?, ?> entry : variableMap.entrySet()) {
+                if (entry.getKey() instanceof String name && entry.getValue() instanceof String variableName) {
+                    parsed.put(name, variableName);
+                    RuntimeScalar typeObject = GlobalVariable.globalVariables.get(variableName);
+                    if (typeObject != null) resolvedObjects.putIfAbsent(name, typeObject);
+                }
+            }
+            signatureParameterTypeObjectVariables = Map.copyOf(parsed);
+            signatureParameterTypeObjects = Map.copyOf(resolvedObjects);
+        }
+        Object typeReifier = ast.getAnnotation("signatureTypeReifier");
+        signatureTypeReifier = typeReifier instanceof String value ? value : null;
         Object positional = ast.getAnnotation("signaturePositionalCount");
         if (positional instanceof Integer count) signaturePositionalCount = count;
         Object slurpy = ast.getAnnotation("signatureSlurpySigil");
         signatureSlurpySigil = slurpy instanceof String value ? value : null;
+        Object slurpyName = ast.getAnnotation("signatureSlurpyName");
+        signatureSlurpyName = slurpyName instanceof String value ? value : null;
         Object subName = ast.getAnnotation("signatureSubName");
         if (subName instanceof String value) signatureSubName = value;
+    }
+
+    /** Attach parser metadata to an anonymous Function::Parameters code object. */
+    public static RuntimeScalar attachFunctionParametersMetadata(
+            RuntimeScalar codeRef, String keyword, String subName,
+            String[] invocants, String[] positionalRequired, String[] positionalOptional,
+            String[] namedRequired, String[] namedOptional, String[] namedParams,
+            String[] requiredNamedParams, int positionalCount,
+            String slurpySigil, String slurpyName, String[] parameterTypes,
+            String[] typeObjectVariables) {
+        if (codeRef != null && codeRef.value instanceof RuntimeCode code) {
+            code.signatureKeyword = keyword;
+            code.signatureSubName = subName;
+            code.signatureInvocants = signatureNames(invocants);
+            code.signaturePositionalRequired = signatureNames(positionalRequired);
+            code.signaturePositionalOptional = signatureNames(positionalOptional);
+            code.signatureNamedRequired = signatureNames(namedRequired);
+            code.signatureNamedOptional = signatureNames(namedOptional);
+            code.signatureNamedParams = signatureNames(namedParams);
+            code.signatureRequiredNamedParams = signatureNames(requiredNamedParams);
+            code.signaturePositionalCount = positionalCount;
+            code.signatureSlurpySigil = slurpySigil;
+            code.signatureSlurpyName = slurpyName;
+            if (parameterTypes != null) {
+                Map<String, String> types = new LinkedHashMap<>();
+                for (int i = 0; i + 1 < parameterTypes.length; i += 2) {
+                    types.put(parameterTypes[i], parameterTypes[i + 1]);
+                }
+                code.signatureParameterTypes = Map.copyOf(types);
+            }
+            if (typeObjectVariables != null) {
+                Map<String, String> variables = new LinkedHashMap<>();
+                Map<String, RuntimeScalar> objects = new LinkedHashMap<>(code.signatureParameterTypeObjects);
+                for (int i = 0; i + 1 < typeObjectVariables.length; i += 2) {
+                    String parameterName = typeObjectVariables[i];
+                    String variableName = typeObjectVariables[i + 1];
+                    variables.put(parameterName, variableName);
+                    RuntimeScalar typeObject = GlobalVariable.globalVariables.get(variableName);
+                    if (typeObject != null) objects.putIfAbsent(parameterName, typeObject);
+                }
+                code.signatureParameterTypeObjectVariables = Map.copyOf(variables);
+                code.signatureParameterTypeObjects = Map.copyOf(objects);
+            }
+        }
+        return codeRef;
+    }
+
+    /** Name a runtime-installed Function::Parameters CV. */
+    public static RuntimeScalar configureFunctionParametersRuntime(
+            RuntimeScalar codeRef, String fullName) {
+        if (codeRef == null || !(codeRef.value instanceof RuntimeCode code)) return codeRef;
+        int separator = fullName.lastIndexOf("::");
+        code.packageName = separator < 0 ? "main" : fullName.substring(0, separator);
+        code.subName = separator < 0 ? fullName : fullName.substring(separator + 2);
+        code.isDeclared = true;
+        code.hasBodyDefinition = true;
+        return codeRef;
+    }
+
+    private static List<String> signatureNames(String[] names) {
+        return names == null ? List.of() : List.of(names.clone());
     }
 
     protected void validateNamedSignatureArguments(RuntimeArray args) {
@@ -651,14 +783,28 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         int start = Math.min(signaturePositionalCount, args.size());
         int namedCount = args.size() - start;
         if ("%".equals(signatureSlurpySigil) && (namedCount & 1) != 0) {
-            WarnDie.die(new RuntimeScalar("Odd name/value argument for subroutine '"
-                    + (signatureSubName == null ? "" : signatureSubName) + "'"),
+            dieTooFewForMissingRequiredNamed(args, start);
+            WarnDie.die(new RuntimeScalar(signatureKeyword != null
+                    ? "Odd number of elements in anonymous hash"
+                    : "Odd name/value argument for subroutine '"
+                            + (signatureSubName == null ? "" : signatureSubName) + "'"),
                     new RuntimeScalar(""));
         }
         if (signatureNamedParams.isEmpty()) return;
-        if (!"@".equals(signatureSlurpySigil) && (namedCount & 1) != 0) {
-            WarnDie.die(new RuntimeScalar("Odd name/value argument for subroutine '"
-                    + (signatureSubName == null ? "" : signatureSubName) + "'"),
+        // A native signature with a trailing @ slurpy accepts an odd final
+        // argument as positional slurpy data. It is not a malformed named
+        // pair, and must not make an otherwise absent named parameter fatal.
+        if (signatureKeyword == null && "@".equals(signatureSlurpySigil)
+                && (namedCount & 1) != 0) {
+            return;
+        }
+        if ((signatureKeyword != null || !"@".equals(signatureSlurpySigil))
+                && (namedCount & 1) != 0) {
+            dieTooFewForMissingRequiredNamed(args, start);
+            WarnDie.die(new RuntimeScalar(signatureKeyword != null
+                    ? "Odd number of elements in anonymous hash"
+                    : "Odd name/value argument for subroutine '"
+                            + (signatureSubName == null ? "" : signatureSubName) + "'"),
                     new RuntimeScalar(""));
         }
 
@@ -685,18 +831,42 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 WarnDie.die(new RuntimeScalar(message), new RuntimeScalar(""));
             }
         }
-        if (!"@".equals(signatureSlurpySigil)) {
-            List<String> missing = new ArrayList<>();
-            for (String required : signatureRequiredNamedParams) {
-                if (!values.containsKey(required)) {
-                    missing.add(required);
+        List<String> missing = new ArrayList<>();
+        for (String required : signatureRequiredNamedParams) {
+            if (!values.containsKey(required)) missing.add(required);
+        }
+        if (!missing.isEmpty()) {
+            int minimumNamedArgumentCount = signatureRequiredNamedParams.size() * 2;
+            if (signatureKeyword != null && namedCount < minimumNamedArgumentCount) {
+                WarnDie.die(new RuntimeScalar("Too few arguments for " + signatureKeyword
+                        + " " + signatureSubName), new RuntimeScalar(""));
+            }
+            if (signatureKeyword != null) {
+                String label = missing.size() == 1 ? "named parameter" : "named parameters";
+                WarnDie.die(new RuntimeScalar("missing " + label + " '"
+                        + String.join("', '", missing) + "' to " + signatureKeyword
+                        + " " + signatureSubName), new RuntimeScalar(""));
+            }
+            String label = missing.size() == 1 ? "parameter" : "parameters";
+            WarnDie.die(new RuntimeScalar("Missing required named " + label + " '"
+                    + String.join("', '", missing) + "' to subroutine '" + signatureSubName + "'"),
+                    new RuntimeScalar(""));
+        }
+    }
+
+    private void dieTooFewForMissingRequiredNamed(RuntimeArray args, int start) {
+        if (signatureKeyword == null || signatureRequiredNamedParams.isEmpty()) return;
+        for (String required : signatureRequiredNamedParams) {
+            boolean present = false;
+            for (int i = start; i + 1 < args.size(); i += 2) {
+                if (required.equals(args.elements.get(i).toString())) {
+                    present = true;
+                    break;
                 }
             }
-            if (!missing.isEmpty()) {
-                String label = missing.size() == 1 ? "parameter" : "parameters";
-                WarnDie.die(new RuntimeScalar("Missing required named " + label + " '"
-                        + String.join("', '", missing) + "' to subroutine '" + signatureSubName + "'"),
-                        new RuntimeScalar(""));
+            if (!present) {
+                WarnDie.die(new RuntimeScalar("Too few arguments for " + signatureKeyword
+                        + " " + signatureSubName), new RuntimeScalar(""));
             }
         }
     }
@@ -3370,6 +3540,22 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 ? null : new java.util.LinkedHashMap<>(this.declaredOurVariables);
         clone.compilerSupplier = this.compilerSupplier;
         clone.stableHashMutationMethodKeys = this.stableHashMutationMethodKeys;
+        clone.signatureNamedParams = this.signatureNamedParams;
+        clone.signatureRequiredNamedParams = this.signatureRequiredNamedParams;
+        clone.signatureInvocants = this.signatureInvocants;
+        clone.signaturePositionalRequired = this.signaturePositionalRequired;
+        clone.signaturePositionalOptional = this.signaturePositionalOptional;
+        clone.signatureNamedRequired = this.signatureNamedRequired;
+        clone.signatureNamedOptional = this.signatureNamedOptional;
+        clone.signatureParameterTypes = this.signatureParameterTypes;
+        clone.signatureParameterTypeObjects = this.signatureParameterTypeObjects;
+        clone.signatureParameterTypeObjectVariables = this.signatureParameterTypeObjectVariables;
+        clone.signatureTypeReifier = this.signatureTypeReifier;
+        clone.signaturePositionalCount = this.signaturePositionalCount;
+        clone.signatureSlurpySigil = this.signatureSlurpySigil;
+        clone.signatureSlurpyName = this.signatureSlurpyName;
+        clone.signatureSubName = this.signatureSubName;
+        clone.signatureKeyword = this.signatureKeyword;
         clone.jvmClosureFrameRequired = this.jvmClosureFrameRequired;
         clone.activeLexicalFrameRequired = this.activeLexicalFrameRequired;
         clone.callDepthTrackingRequired = this.callDepthTrackingRequired;
