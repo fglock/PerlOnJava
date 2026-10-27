@@ -9,6 +9,8 @@ priorities and future plans.
 - Preserve reference lifetime when overloaded `++` and `--` fall back to arithmetic (#1901).
 - Parse forward-declared qualified classes as indirect constructors inside `new` methods (#1899).
 
+- Preserve literal control bytes at the edges of `qw` lists and keep original named CV references when `MODIFY_CODE_ATTRIBUTES` installs wrappers (#1481, #1448).
+
 - Match Perl `Encode` aliases for ANSI X3.4-1968, HZ-GB-2312, and ISO-8859-8-I, and include the BOM when encoding generic UTF-32 (#1897).
 
 - Separate organizational and project issue queues, record temporary agent claims and dependencies, and keep agent checkpoints concise (#1895).

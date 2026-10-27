@@ -2141,6 +2141,12 @@ public class SubroutineParser {
 
         // Initialize placeholder metadata (accessed via codeRef.value)
         RuntimeCode placeholder = (RuntimeCode) codeRef.value;
+        // Attribute handlers may replace the named CV's glob while retaining
+        // the supplied code reference (for example, an audit wrapper captures
+        // the original and installs an anonymous wrapper under the same name).
+        // Keep a stable scalar reference to the definition CV before dispatch;
+        // the live glob slot can be mutated by the handler.
+        RuntimeScalar definitionCodeRef = new RuntimeScalar(placeholder);
         if (block != null && block.getAnnotation("signatureMinArgs") instanceof Integer minArgs) {
             placeholder.applySignatureMetadata(block);
         }
@@ -2219,7 +2225,7 @@ public class SubroutineParser {
             String attrPackage = (placeholder.packageName != null && !placeholder.packageName.isEmpty())
                     ? placeholder.packageName
                     : packageToUse;
-            callModifyCodeAttributes(attrPackage, codeRef, attributes, parser, block.tokenIndex);
+            callModifyCodeAttributes(attrPackage, definitionCodeRef, attributes, parser, block.tokenIndex);
         }
 
         // B::CV->START line must be available before lazy compilation instantiates
@@ -2646,7 +2652,7 @@ public class SubroutineParser {
 
                     // Set the __SUB__ instance field to codeRef
                     Field field = placeholder.codeObject.getClass().getDeclaredField("__SUB__");
-                    field.set(placeholder.codeObject, codeRef);
+                    field.set(placeholder.codeObject, definitionCodeRef);
 
                     installClosureCaptureMetadata(placeholder, paramList);
                     placeholder.cvStartFile = compiledCode.cvStartFile;
@@ -2695,7 +2701,7 @@ public class SubroutineParser {
                     }
 
                     // Set the __SUB__ field for self-reference
-                    interpretedCode.__SUB__ = codeRef;
+                    interpretedCode.__SUB__ = definitionCodeRef;
 
                     // Set PerlSubroutine interface for direct invocation
                     // InterpretedCode implements PerlSubroutine, so we can use it directly
@@ -2751,7 +2757,7 @@ public class SubroutineParser {
                         placeholder.constantValue = interpretedCode.constantValue;
                     }
                 }
-                interpretedCode.__SUB__ = codeRef;
+                interpretedCode.__SUB__ = definitionCodeRef;
                 placeholder.subroutine = interpretedCode;
                 placeholder.codeObject = interpretedCode;
                 installClosureCaptureMetadata(placeholder, materializedCaptures);
@@ -2778,8 +2784,7 @@ public class SubroutineParser {
         };
 
         // Store the supplier in the placeholder
-        RuntimeCode placeholderForSupplier = (RuntimeCode) codeRef.value;
-        placeholderForSupplier.compilerSupplier = subroutineCreationTaskSupplier;
+        placeholder.compilerSupplier = subroutineCreationTaskSupplier;
 
         ListNode result = new ListNode(parser.tokenIndex);
         result.setAnnotation("compileTimeOnly", true);
