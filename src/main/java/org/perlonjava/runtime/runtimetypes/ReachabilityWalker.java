@@ -3386,11 +3386,11 @@ public class ReachabilityWalker {
                     Collections.emptySet(), 0);
         }
 
-        // A registered, live, nonweak scalar with an owned direct reference is
-        // itself a root in walk(). If every released target has such an owner,
-        // no graph traversal is needed to preserve those targets. This is a
-        // deliberately narrow proof: nested container slots, exited captures,
-        // and uncounted references still use the full reachability walk below.
+        // A registered, live, nonweak scalar with an owned direct reference,
+        // or any active explicit owner slot, is a direct Perl strong-owner
+        // proof. If every released target has one, no graph traversal is
+        // needed to preserve those targets. Uncounted references still use
+        // the full reachability walk below.
         Set<RuntimeBase> directlyOwned =
                 Collections.newSetFromMap(new IdentityHashMap<>());
         for (RuntimeScalar owner : ScalarRefRegistry.snapshot()) {
@@ -3401,6 +3401,9 @@ public class ReachabilityWalker {
                 continue;
             }
             if (pending.contains(target)) directlyOwned.add(target);
+        }
+        for (RuntimeBase referent : pending) {
+            if (referent.hasOwnerSlots()) directlyOwned.add(referent);
         }
         if (directlyOwned.containsAll(pending)) {
             return new ReleasedWeakSweepResult(null, Collections.emptySet(),
@@ -3474,8 +3477,8 @@ public class ReachabilityWalker {
             // conservative root walk cannot see the generated closure fields.
             // Match sweepWeakRefs() above: a targeted release of another edge
             // must not destroy an aggregate still captured by a live closure.
-            if (referent.hasSemanticCaptureOwner() || referent.hasCallTransferOwner()
-                    || referent.hasScalarCellOwner()) continue;
+            if (referent.hasOwnerSlots() || referent.hasSemanticCaptureOwner()
+                    || referent.hasCallTransferOwner() || referent.hasScalarCellOwner()) continue;
             // A targeted release only means that one explicit owner went
             // away. Other counted owners can still hold the referent through
             // local aggregate slots that are not represented in the lexical
