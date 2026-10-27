@@ -6,7 +6,7 @@ priorities and future plans.
 
 ## Work in progress
 
-- Disable corrective sweeps by default while migrating to explicit reference ownership; preserve returned values and balance argument, scalar-cell, closure, aggregate, persistent-state, and destructor cleanup (#1649).
+- Disable corrective sweeps by default while migrating to explicit reference ownership; preserve returned values and balance argument, scalar-cell, closure, aggregate, named CODE, persistent state, and destructor cleanup (#1649).
 
 - Bundle `Devel::Size` with JVM-based `size` and `total_size` estimates.
 

@@ -1371,7 +1371,7 @@ public class BytecodeInterpreter {
                                 String name = code.stringPool[nameIdx];
                                 if (name.equals("__SUB__")) {
                                     // __SUB__ returns the current subroutine being executed
-                                    RuntimeScalar selfReference = code.__SUB__;
+                                    RuntimeScalar selfReference = frame.selfReference;
                                     if (code.isQuotedRegexCallback) {
                                         // A qr// callback is compiled once but can be invoked by
                                         // different enclosing CVs.  At execution time the active
@@ -3177,7 +3177,7 @@ public class BytecodeInterpreter {
                                  Opcodes.STATE_RETRIEVE_ARRAY, Opcodes.STATE_IS_INITIALIZED,
                                  Opcodes.STATE_MARK_INITIALIZED, Opcodes.STATE_ALIAS_ARRAY,
                                  Opcodes.STATE_ALIAS_HASH, Opcodes.STATE_RETRIEVE_HASH -> {
-                                pc = executeScopeOps(opcode, bytecode, pc, registers, code);
+                                pc = executeScopeOps(opcode, bytecode, pc, registers, code, frame.selfReference);
                             }
 
                             // Group 6-8: System Calls and IPC (132-150)
@@ -4563,7 +4563,8 @@ public class BytecodeInterpreter {
      * Handles: RETRIEVE_BEGIN_*, LOCAL_SCALAR
      */
     private static int executeScopeOps(int opcode, int[] bytecode, int pc,
-                                       RuntimeBase[] registers, InterpretedCode code) {
+                                       RuntimeBase[] registers, InterpretedCode code,
+                                       RuntimeScalar selfReference) {
         switch (opcode) {
             case Opcodes.RETRIEVE_BEGIN_SCALAR -> {
                 return SlowOpcodeHandler.executeRetrieveBeginScalar(bytecode, pc, registers, code);
@@ -4607,7 +4608,7 @@ public class BytecodeInterpreter {
                 // State belongs to the executing closure, not the interpreter
                 // process.  Falling back to an undefined code ref put every
                 // anonymous-sub clone into the same global state cell.
-                RuntimeScalar codeRef = code.__SUB__ != null ? code.__SUB__ : new RuntimeScalar();
+                RuntimeScalar codeRef = selfReference != null ? selfReference : new RuntimeScalar();
                 // Retrieve without removing (unlike RETRIEVE_BEGIN_SCALAR)
                 RuntimeScalar stateVar = StateVariable.retrieveStateScalar(codeRef, varName, persistId);
                 registers[rd] = stateVar;
@@ -4624,7 +4625,7 @@ public class BytecodeInterpreter {
                 int nameIdx = bytecode[pc++];
                 int persistId = bytecode[pc++];
                 String varName = code.stringPool[nameIdx];
-                RuntimeScalar codeRef = code.__SUB__ != null ? code.__SUB__ : new RuntimeScalar();
+                RuntimeScalar codeRef = selfReference != null ? selfReference : new RuntimeScalar();
                 RuntimeArray stateArr = StateVariable.retrieveStateArray(codeRef, varName, persistId);
                 registers[rd] = stateArr;
                 RuntimeScalar isInit = StateVariable.isInitializedStateVariable(codeRef, varName, persistId);
@@ -4638,7 +4639,7 @@ public class BytecodeInterpreter {
                 int rd = bytecode[pc++];
                 int nameIdx = bytecode[pc++];
                 int persistId = bytecode[pc++];
-                RuntimeScalar codeRef = code.__SUB__ != null ? code.__SUB__ : new RuntimeScalar();
+                RuntimeScalar codeRef = selfReference != null ? selfReference : new RuntimeScalar();
                 registers[rd] = StateVariable.retrieveStateArray(codeRef, code.stringPool[nameIdx], persistId);
                 return pc;
             }
@@ -4646,7 +4647,7 @@ public class BytecodeInterpreter {
                 int rd = bytecode[pc++];
                 int nameIdx = bytecode[pc++];
                 int persistId = bytecode[pc++];
-                RuntimeScalar codeRef = code.__SUB__ != null ? code.__SUB__ : new RuntimeScalar();
+                RuntimeScalar codeRef = selfReference != null ? selfReference : new RuntimeScalar();
                 registers[rd] = StateVariable.retrieveStateHash(codeRef, code.stringPool[nameIdx], persistId);
                 return pc;
             }
@@ -4655,7 +4656,7 @@ public class BytecodeInterpreter {
                 int sourceReg = bytecode[pc++];
                 int nameIdx = bytecode[pc++];
                 int persistId = bytecode[pc++];
-                RuntimeScalar codeRef = code.__SUB__ != null ? code.__SUB__ : new RuntimeScalar();
+                RuntimeScalar codeRef = selfReference != null ? selfReference : new RuntimeScalar();
                 RuntimeBase source = registers[sourceReg];
                 // Whole-array refaliasing may provide the aggregate directly
                 // (for an array literal) or as the scalar array reference
@@ -4672,7 +4673,7 @@ public class BytecodeInterpreter {
                 int sourceReg = bytecode[pc++];
                 int nameIdx = bytecode[pc++];
                 int persistId = bytecode[pc++];
-                RuntimeScalar codeRef = code.__SUB__ != null ? code.__SUB__ : new RuntimeScalar();
+                RuntimeScalar codeRef = selfReference != null ? selfReference : new RuntimeScalar();
                 RuntimeBase source = registers[sourceReg];
                 RuntimeHash hash = source instanceof RuntimeHash direct
                         ? direct : source.scalar().hashDeref();
@@ -4686,7 +4687,7 @@ public class BytecodeInterpreter {
                 int nameIdx = bytecode[pc++];
                 int persistId = bytecode[pc++];
                 String varName = code.stringPool[nameIdx];
-                RuntimeScalar codeRef = code.__SUB__ != null ? code.__SUB__ : new RuntimeScalar();
+                RuntimeScalar codeRef = selfReference != null ? selfReference : new RuntimeScalar();
                 RuntimeHash stateHash = StateVariable.retrieveStateHash(codeRef, varName, persistId);
                 registers[rd] = stateHash;
                 RuntimeScalar isInit = StateVariable.isInitializedStateVariable(codeRef, varName, persistId);
@@ -4701,7 +4702,7 @@ public class BytecodeInterpreter {
                 int nameIdx = bytecode[pc++];
                 int persistId = bytecode[pc++];
                 String varName = code.stringPool[nameIdx];
-                RuntimeScalar codeRef = code.__SUB__ != null ? code.__SUB__ : new RuntimeScalar();
+                RuntimeScalar codeRef = selfReference != null ? selfReference : new RuntimeScalar();
                 registers[rd] = StateVariable.retrieveStateScalar(codeRef, varName, persistId);
                 return pc;
             }
@@ -4710,7 +4711,7 @@ public class BytecodeInterpreter {
                 int nameIdx = bytecode[pc++];
                 int persistId = bytecode[pc++];
                 String varName = code.stringPool[nameIdx];
-                RuntimeScalar codeRef = code.__SUB__ != null ? code.__SUB__ : new RuntimeScalar();
+                RuntimeScalar codeRef = selfReference != null ? selfReference : new RuntimeScalar();
                 registers[rd] = StateVariable.isInitializedStateVariable(codeRef, varName, persistId);
                 return pc;
             }
@@ -4718,7 +4719,7 @@ public class BytecodeInterpreter {
                 int nameIdx = bytecode[pc++];
                 int persistId = bytecode[pc++];
                 String varName = code.stringPool[nameIdx];
-                RuntimeScalar codeRef = code.__SUB__ != null ? code.__SUB__ : new RuntimeScalar();
+                RuntimeScalar codeRef = selfReference != null ? selfReference : new RuntimeScalar();
                 StateVariable.markInitializedStateVariable(codeRef, varName, persistId);
                 return pc;
             }

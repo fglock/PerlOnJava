@@ -701,6 +701,44 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public boolean refCountOwned;
 
     private PerlOwnerSlot countedOwnerSlot;
+    // Names sharing one GP/CODE scalar share one CV edge. A saved localized
+    // slot also keeps this binding alive while its names address a new slot.
+    private int codeSlotBindings;
+
+    boolean hasCodeSlotBinding() {
+        return codeSlotBindings != 0;
+    }
+
+    void retainCodeSlotBinding() {
+        codeSlotBindings++;
+        refreshCodeSlotOwner();
+    }
+
+    void releaseCodeSlotBinding() {
+        if (codeSlotBindings <= 0) throw new IllegalStateException("unbalanced CODE slot binding");
+        if (--codeSlotBindings != 0) return;
+        MortalList.deferDecrementIfTracked(this);
+        MortalList.flushAboveMark();
+    }
+
+    private void prepareCodeSlotValue(RuntimeScalar source) {
+        if (codeSlotBindings == 0 || source.type != RuntimeScalarType.CODE
+                || !(source.value instanceof RuntimeCode code)) return;
+        code.hasCountedCodeSlots = true;
+        code.hadStashRef = true;
+        if (code.refCount == -1) code.refCount = 0;
+    }
+
+    void refreshCodeSlotOwner() {
+        if (codeSlotBindings == 0 || type != RuntimeScalarType.CODE
+                || !(value instanceof RuntimeCode code)) return;
+        MortalList.setActive(true);
+        prepareCodeSlotValue(this);
+        incrementRefCountForContainerStore(this);
+        if (refCountOwned) {
+            countedOwnerSlot.reclassifyCountedIdentity(PerlOwnerSlot.Kind.CODE_SLOT);
+        }
+    }
     private boolean mortalReturnSnapshot;
 
     boolean isMortalReturnSnapshot() {
@@ -730,7 +768,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     private PerlOwnerSlot.Kind countedOwnerKind() {
-        return containerOwner instanceof RuntimeHash ? PerlOwnerSlot.Kind.HASH_ELEMENT
+        return codeSlotBindings != 0 ? PerlOwnerSlot.Kind.CODE_SLOT
+                : containerOwner instanceof RuntimeHash ? PerlOwnerSlot.Kind.HASH_ELEMENT
                 : containerOwner instanceof RuntimeArray array
                     && !array.elementsAliased
                     ? PerlOwnerSlot.Kind.ARRAY_ELEMENT : PerlOwnerSlot.Kind.SCALAR_CELL;
@@ -2749,6 +2788,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      * Separated to keep setLarge() small enough for JIT inlining of set().
      */
     private RuntimeScalar setLargeRefCounted(RuntimeScalar value) {
+        prepareCodeSlotValue(value);
         String packageCodeRefName = isPackageGlobalRoot ? globalCodeRefFqn : null;
         if (isPackageGlobalRoot) {
             MortalList.invalidateExternalRootSnapshot();
@@ -2978,6 +3018,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // owners stored inside nested containers).
         if (value.type == UNDEF
                 && oldBase instanceof RuntimeCode oldCode
+                && !oldCode.hasCountedCodeSlots
                 && oldCode.capturedScalars != null
                 && !oldCode.hasPendingReturnOwner()
                 && !RuntimeCode.isActiveCode(oldCode)
@@ -3038,7 +3079,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (this.globalCodeRefFqn != null && this.value instanceof RuntimeCode code) {
             code.hadStashRef = true;
         }
-        if (packageCodeRefName != null
+        if ((packageCodeRefName != null || hasCodeSlotBinding())
                 && (preAssignType != this.type || preAssignValue != this.value)) {
             GlobalVariable.noteGlobalCodeRefSlotMutation(this);
         }
@@ -5352,6 +5393,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     /** Performs scalar-specific scope cleanup, including owned anonymous IO fds. */
     public static void scopeExitCleanup(RuntimeScalar scalar) {
         if (scalar == null) return;
+        if (scalar.hasCodeSlotBinding()) return;
 
         // ${^LAST_FH} is tied to the lexical handle that performed the last
         // tell/read.  A lexical coercible glob must stop being observable once

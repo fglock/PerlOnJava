@@ -2158,6 +2158,8 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         }
         RuntimeScalar newCode = new RuntimeScalar();
         GlobalVariable.markPackageGlobalRoot(newCode);
+        // The saved GP owns its CV before the last visible name is replaced.
+        GlobalVariable.enterLocalizedCodeRef(this.globName, savedCode);
         // A localized whole-glob alias still addresses one temporary CODE
         // slot.  In particular, `*A = *Base::method; local *A = sub { ... }`
         // must make Base::method visible to MRO until the scope unwinds.
@@ -2178,7 +2180,6 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         for (String alias : codeAliasGroup) {
             GlobalVariable.replacePinnedCodeRef(alias, newCode);
         }
-        GlobalVariable.enterLocalizedCodeRef(this.globName, savedCode);
         GlobalVariable.getGlobalFormatRef(this.globName).dynamicSaveState();
 
         // Create a NEW RuntimeGlob for the local scope and install it in globalIORefs.
@@ -2305,7 +2306,9 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // from firing at the right time.
         RuntimeScalar localCode = GlobalVariable.globalCodeRefs.get(snap.globName);
         RuntimeCode removedLocalCodeForReachabilityCheck = null;
-        if (localCode != null && (localCode.type & REFERENCE_BIT) != 0 && localCode.value instanceof RuntimeBase localBase) {
+        if (localCode != null && (localCode.type & REFERENCE_BIT) != 0
+                && localCode.value instanceof RuntimeBase localBase
+                && !(localBase instanceof RuntimeCode code && code.hasCountedCodeSlots)) {
             boolean removedLastStashRef = false;
             // Decrement stashRefCount on the local scope's CODE ref being removed
             if (localBase instanceof RuntimeCode localCodeObj) {
