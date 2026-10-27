@@ -148,7 +148,8 @@ public class XMLLibXSLT extends PerlModuleBase {
             } catch (Exception ignored) {
                 StringWriter writer = new StringWriter();
                 StylesheetState stylesheet = (StylesheetState) state(args.get(0).scalar(), STATE_KEY);
-                Transformer serializer = stylesheet.templates().newTransformer();
+                Transformer serializer = TransformerFactory.newInstance().newTransformer();
+                serializer.setOutputProperties(stylesheet.templates().getOutputProperties());
                 serializer.transform(new DOMSource(XMLLibXML.getNode(result)), new StreamResult(writer));
                 return new RuntimeScalar(writer.toString()).getList();
             }
