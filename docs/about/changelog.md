@@ -6,6 +6,7 @@ priorities and future plans.
 
 ## Work in progress
 
+- Preserve reference lifetime when overloaded `++` and `--` fall back to arithmetic (#1901).
 - Parse forward-declared qualified classes as indirect constructors inside `new` methods (#1899).
 
 - Match Perl `Encode` aliases for ANSI X3.4-1968, HZ-GB-2312, and ISO-8859-8-I, and include the BOM when encoding generic UTF-32 (#1897).

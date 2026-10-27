@@ -5722,8 +5722,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                         result = ctx.tryOverload("(+", new RuntimeArray(this, scalarOne, scalarUndef));
                         if (result != null) {
                             // For fallback, + should NOT modify operand, so we handle assignment
-                            this.type = result.type;
-                            this.value = copyScalarPayload(result.type, result.value);
+                            set(result);
                             return this;
                         }
 
@@ -6005,8 +6004,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                         result = ctx.tryOverload("(+", new RuntimeArray(this, scalarOne, scalarUndef));
                         if (result != null) {
                             // For fallback, + should NOT modify operand, so we handle assignment
-                            this.type = result.type;
-                            this.value = copyScalarPayload(result.type, result.value);
+                            set(result);
                             return old;
                         }
 
@@ -6157,8 +6155,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                         result = ctx.tryOverload("(-", new RuntimeArray(this, scalarOne, scalarUndef));
                         if (result != null) {
                             // For fallback, - should NOT modify operand, so we handle assignment
-                            this.type = result.type;
-                            this.value = copyScalarPayload(result.type, result.value);
+                            set(result);
                             return this;
                         }
                     }
@@ -6316,8 +6313,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                         result = ctx.tryOverload("(-", new RuntimeArray(this, scalarOne, scalarUndef));
                         if (result != null) {
                             // For fallback, - should NOT modify operand, so we handle assignment
-                            this.type = result.type;
-                            this.value = copyScalarPayload(result.type, result.value);
+                            set(result);
                             return old;
                         }
                     }
