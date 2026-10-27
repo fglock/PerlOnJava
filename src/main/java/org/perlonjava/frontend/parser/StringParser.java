@@ -763,7 +763,10 @@ public class StringParser {
             index++;
         }
 
-        String trimmed = processed.toString().trim();
+        // Java String.trim() removes every leading/trailing character <= U+0020.
+        // Perl qw splits on whitespace, but control bytes such as BEL/ENQ/ACK
+        // are ordinary data and must remain part of their words.
+        String trimmed = processed.toString().replaceAll("^\\s+|\\s+$", "");
         ListNode list = new ListNode(rawStr.index);
         if (trimmed.isEmpty()) {
             return list;
