@@ -262,6 +262,7 @@ public class RuntimeGraphCloner {
             if (target.capturedScalars != null || target.capturedAggregates != null) {
                 target.refCount = 0;
             }
+            target.rebindCaptureOwnerSlots();
         }
         return target;
     }
@@ -523,7 +524,7 @@ public class RuntimeGraphCloner {
                             new PerlOwnerSlot[target.capturedScalars.length];
                     for (int i = 0; i < target.capturedScalars.length; i++) {
                         target.capturedScalarOwnerSlots[i] = target.capturedScalars[i]
-                                .retainThreadCloneClosureCapture();
+                                .retainThreadCloneClosureCapture(target);
                     }
                 }
             }
@@ -534,7 +535,7 @@ public class RuntimeGraphCloner {
                             new PerlOwnerSlot[target.capturedAggregates.length];
                     for (int i = 0; i < target.capturedAggregates.length; i++) {
                         target.capturedAggregateOwnerSlots[i] =
-                                target.capturedAggregates[i].retainClosureCaptureOwner();
+                                target.capturedAggregates[i].retainClosureCaptureOwner(target);
                     }
                 }
             }
@@ -989,9 +990,16 @@ public class RuntimeGraphCloner {
     private void finishWeakReferences() {
         if (weakReferences.isEmpty()) return;
         try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
+            int pendingBeforeWeakEdges = MortalList.pendingSize();
             for (RuntimeScalar weakReference : weakReferences) {
                 WeakRefRegistry.weakenForSnapshot(weakReference, snapshotStrongRoots);
             }
+            // Cloned captures can temporarily contribute a strong bridge until
+            // their weak edges are installed. Retire those releases only after
+            // every snapshot weak edge is registered, so a DESTROY callback
+            // sees the complete weak graph and no stale capture owner survives
+            // into the child thread's first statement.
+            MortalList.drainPendingSince(pendingBeforeWeakEdges);
         }
         weakReferences.clear();
         snapshotStrongRoots.clear();

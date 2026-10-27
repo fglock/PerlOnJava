@@ -252,6 +252,11 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
 
     /** Retain one aggregate pad capture through an explicit owner slot. */
     public PerlOwnerSlot retainClosureCaptureOwner() {
+        return retainClosureCaptureOwner(null);
+    }
+
+    /** Retain one aggregate pad capture and identify its owning CODE object. */
+    public PerlOwnerSlot retainClosureCaptureOwner(RuntimeCode captureOwner) {
         // A closure-pad slot is a semantic Perl owner even though it does not
         // contribute to the legacy selective refcount. A targeted weak sweep
         // can therefore leave an unblessed aggregate's legacy count at the
@@ -263,7 +268,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             refCount = 0;
         }
         PerlOwnerSlot ownerSlot = new PerlOwnerSlot(PerlOwnerSlot.Kind.CLOSURE_PAD);
-        ownerSlot.acquireCapture(this);
+        ownerSlot.acquireCapture(this, captureOwner);
         retainClosureCapture();
         return ownerSlot;
     }
@@ -519,6 +524,30 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                 new java.util.IdentityHashMap<>());
         snapshot.addAll(ownerSlots);
         return snapshot;
+    }
+
+    private synchronized java.util.List<PerlOwnerSlot> closureCaptureOwnerSnapshot() {
+        if (ownerSlots == null || ownerSlots.isEmpty()) return java.util.List.of();
+        java.util.ArrayList<PerlOwnerSlot> snapshot = new java.util.ArrayList<>();
+        for (PerlOwnerSlot slot : ownerSlots) {
+            PerlOwnerSlot.Kind kind = slot.kind();
+            if (kind == PerlOwnerSlot.Kind.SCALAR_CAPTURE
+                    || kind == PerlOwnerSlot.Kind.CLOSURE_PAD) {
+                snapshot.add(slot);
+            }
+        }
+        return snapshot.isEmpty() ? java.util.List.of() : snapshot;
+    }
+
+    /** Release closure pads whose CODE owners have no remaining Perl owner. */
+    void releaseUnownedClosureCaptures() {
+        for (PerlOwnerSlot ownerSlot : closureCaptureOwnerSnapshot()) {
+            if (!ownerSlot.isActive()) continue;
+            RuntimeCode captureOwner = ownerSlot.captureOwner();
+            if (captureOwner != null && !captureOwner.hasPerlOwnerForCapture()) {
+                captureOwner.releaseCaptures();
+            }
+        }
     }
 
     /**

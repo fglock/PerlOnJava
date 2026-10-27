@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.runtimetypes;
 
+import java.lang.ref.WeakReference;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -33,6 +34,10 @@ public final class PerlOwnerSlot {
     private final RuntimeScalar padCell;
     private final long identity = NEXT_ID.incrementAndGet();
     private RuntimeBase referent;
+    /** Weak back-reference to the scalar implementing a counted cell owner. */
+    private WeakReference<RuntimeScalar> countedScalarOwner;
+    /** CODE object that owns a closure-pad identity; weak to avoid a metadata cycle. */
+    private WeakReference<RuntimeCode> captureOwner;
     private PerlRuntime ownerRuntime;
     private LifecycleRuntimeState ownerRuntimeState;
     private boolean registeredInOwnerLedger;
@@ -128,6 +133,18 @@ public final class PerlOwnerSlot {
         return referent;
     }
 
+    /** Scalar cell implementing this counted edge, when it has one. */
+    public synchronized RuntimeScalar countedScalarOwner() {
+        return countedScalarOwner == null ? null : countedScalarOwner.get();
+    }
+
+    synchronized void associateCountedScalarOwner(RuntimeScalar scalar) {
+        if (!isCountedKind(kind)) {
+            throw new IllegalStateException("scalar owner association requires a counted slot");
+        }
+        countedScalarOwner = scalar == null ? null : new WeakReference<>(scalar);
+    }
+
     public synchronized boolean isActive() {
         return referent != null;
     }
@@ -161,10 +178,16 @@ public final class PerlOwnerSlot {
 
     /** Acquire a captured aggregate pad as an explicit owner slot. */
     public synchronized void acquireCapture(RuntimeBase target) {
+        acquireCapture(target, null);
+    }
+
+    /** Acquire an aggregate pad capture and record the CODE owner of this slot. */
+    public synchronized void acquireCapture(RuntimeBase target, RuntimeCode owner) {
         if (kind != Kind.CLOSURE_PAD) {
             throw new IllegalStateException("capture acquisition requires a closure-pad slot");
         }
         acquireNativeOwner(target);
+        captureOwner = owner == null ? null : new WeakReference<>(owner);
     }
 
     /** Acquire this slot as one semantic Perl owner, without touching refCount. */
@@ -187,6 +210,11 @@ public final class PerlOwnerSlot {
      * slot outlive the closure and retain request resources.
      */
     public synchronized void acquireCaptureIdentity(RuntimeBase target) {
+        acquireCaptureIdentity(target, null);
+    }
+
+    /** Record a scalar-pad identity and the CODE object that owns the capture. */
+    public synchronized void acquireCaptureIdentity(RuntimeBase target, RuntimeCode owner) {
         if (kind != Kind.SCALAR_CAPTURE) {
             throw new IllegalStateException("capture identity requires a scalar-capture slot");
         }
@@ -198,8 +226,21 @@ public final class PerlOwnerSlot {
             throw new IllegalStateException("cannot capture a destroyed pad cell");
         }
         referent = target;
+        captureOwner = owner == null ? null : new WeakReference<>(owner);
         registeredInOwnerLedger = true;
         target.addOwnerSlot(this);
+    }
+
+    synchronized RuntimeCode captureOwner() {
+        return captureOwner == null ? null : captureOwner.get();
+    }
+
+    synchronized void rebindCaptureOwner(RuntimeCode owner) {
+        if (kind != Kind.SCALAR_CAPTURE && kind != Kind.CLOSURE_PAD) {
+            throw new IllegalStateException("only closure-pad slots have a CODE owner");
+        }
+        if (referent == null) return;
+        captureOwner = owner == null ? null : new WeakReference<>(owner);
     }
 
     /** The active frame already retains the CV; no second global root is needed. */
@@ -331,6 +372,8 @@ public final class PerlOwnerSlot {
         RuntimeBase previous = referent;
         LifecycleRuntimeState previousState = ownerRuntimeState;
         referent = null;
+        countedScalarOwner = null;
+        captureOwner = null;
         ownerRuntime = null;
         ownerRuntimeState = null;
         if (previous != null && registeredInOwnerLedger) previous.removeOwnerSlot(this);
