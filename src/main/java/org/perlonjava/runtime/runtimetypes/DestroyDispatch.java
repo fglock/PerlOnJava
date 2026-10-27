@@ -326,7 +326,7 @@ public class DestroyDispatch {
         // prematurely would cascade to clear weak references (e.g., in Sub::Defer's
         // %DEFERRED hash), causing infinite recursion in Moo/DBIx::Class.
         if (referent instanceof RuntimeCode code) {
-            if (code.stashRefCount <= 0) {
+            if (code.hasCountedCodeSlots || code.stashRefCount <= 0) {
                 // A queued END block is an owning CV slot even though it is
                 // not installed in a stash. Selective refCount can transiently
                 // reach zero while an assertion or callback releases another

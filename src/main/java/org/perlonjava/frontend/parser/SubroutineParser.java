@@ -2986,7 +2986,8 @@ public class SubroutineParser {
                     capturedAggregateOwnerSlots.toArray(new PerlOwnerSlot[0]);
         }
         GlobalVariable.invalidateGlobalCodeRefGraphRoots();
-        if (!capturedScalars.isEmpty() || !capturedAggregates.isEmpty()) {
+        if ((!capturedScalars.isEmpty() || !capturedAggregates.isEmpty())
+                && code.refCount == -1) {
             code.refCount = 0;
         }
     }

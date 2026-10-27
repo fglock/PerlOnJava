@@ -3566,6 +3566,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * cascade to clear weak references (e.g., in Sub::Defer's %DEFERRED hash).
      */
     public int stashRefCount = 0;
+    /** All GP/CODE edges for this CV use counted slot identities. */
+    boolean hasCountedCodeSlots;
+    // Conservative compatibility-index metadata survives ownership retirement
+    // when embedding code still holds a CV descriptor. It retains no captures.
+    boolean retiredOwnedEdges;
 
     /** Number of queued phaser executions currently invoking this CV. */
     int activeEndBlockExecutions;
@@ -3648,6 +3653,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             return;
         }
         if (capturedScalars != null) {
+            retiredOwnedEdges |= capturedScalars.length != 0;
             RuntimeScalar[] scalars = capturedScalars;
             capturedScalars = null;  // null out first to prevent re-entry
             PerlOwnerSlot[] ownerSlots = capturedScalarOwnerSlots;
@@ -3695,6 +3701,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
         }
         if (capturedAggregates != null) {
+            retiredOwnedEdges |= capturedAggregates.length != 0;
             RuntimeBase[] aggregates = capturedAggregates;
             capturedAggregates = null;
             PerlOwnerSlot[] ownerSlots = capturedAggregateOwnerSlots;

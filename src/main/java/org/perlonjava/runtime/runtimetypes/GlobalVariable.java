@@ -475,6 +475,7 @@ public class GlobalVariable {
             markPackageGlobalRoot(value);
             RuntimeScalar old = delegate().put(key, value);
             if (old != value) {
+                if (value != null) value.retainCodeSlotBinding();
                 noteCodeRefMutation(old, value);
             }
             if (newKey) {
@@ -491,6 +492,7 @@ public class GlobalVariable {
                 }
             }
             maybeInvalidateMethodCacheForCodeRefPut(key, old, value);
+            if (old != null && old != value) old.releaseCodeSlotBinding();
             return old;
         }
 
@@ -516,11 +518,13 @@ public class GlobalVariable {
             if (key instanceof String s) {
                 InheritanceResolver.invalidateMethodLookupCachesForStashSubKey(s);
             }
+            if (prev != null) prev.releaseCodeSlotBinding();
             return prev;
         }
 
         @Override
         public void clear() {
+            java.util.List<RuntimeScalar> previous = new java.util.ArrayList<>(delegate().values());
             if (!isEmpty()) {
                 invalidateCodeRefNames();
                 invalidateStashEnumerationCache();
@@ -534,6 +538,9 @@ public class GlobalVariable {
                 invalidatePackageRootSnapshot();
             }
             delegate().clear();
+            for (RuntimeScalar slot : previous) {
+                if (slot != null) slot.releaseCodeSlotBinding();
+            }
         }
 
         @Override public RuntimeScalar get(Object key) { return delegate().get(key); }
@@ -580,6 +587,7 @@ public class GlobalVariable {
                             invalidateStashEnumerationCache();
                             invalidatePackageRootSnapshot();
                             InheritanceResolver.invalidateMethodLookupCachesForStashSubKey(key);
+                            if (value != null) value.releaseCodeSlotBinding();
                         }
                     };
                 }
@@ -1607,7 +1615,8 @@ public class GlobalVariable {
 
     /** Replace a package CODE slot with the supplied code reference. */
     public static void aliasGlobalCodeRef(String key, RuntimeScalar codeRef) {
-        globalCodeRefs.put(key, codeRef);
+        // CODE refaliasing aliases the CV, not the RHS scalar variable.
+        globalCodeRefs.put(key, new RuntimeScalar(codeRef));
     }
 
     /**
@@ -2263,7 +2272,7 @@ public class GlobalVariable {
                 }
                 RuntimeScalar resolvedVar = globalCodeRefs.get(resolvedKey);
                 if (resolvedVar != null) {
-                    pinnedCodeRefs().put(resolvedKey, resolvedVar);
+                    pinCodeRef(resolvedKey, resolvedVar);
                     return resolvedVar;
                 }
             }
@@ -2287,7 +2296,7 @@ public class GlobalVariable {
         }
 
         // Pin the RuntimeScalar so it survives stash deletion
-        pinnedCodeRefs().put(key, var);
+        pinCodeRef(key, var);
 
         return var;
     }
@@ -2413,7 +2422,7 @@ public class GlobalVariable {
                 RuntimeScalar resolvedVar = globalCodeRefs.get(resolvedKey);
                 if (resolvedVar != null) {
                     if (!deletedCodeRefPins().contains(resolvedKey)) {
-                        pinnedCodeRefs().put(resolvedKey, resolvedVar);
+                        pinCodeRef(resolvedKey, resolvedVar);
                     }
                     return resolvedVar;
                 }
@@ -2430,7 +2439,7 @@ public class GlobalVariable {
             markPackageGlobalRoot(var);
         }
         if (!deletedCodeRefPins().contains(key)) {
-            pinnedCodeRefs().put(key, var);
+            pinCodeRef(key, var);
         }
         return var;
     }
@@ -2469,11 +2478,10 @@ public class GlobalVariable {
                     if (slot == null) {
                         globalCodeRefs.put(alias, shared);
                     } else {
-                        slot.type = RuntimeScalarType.CODE;
-                        slot.value = sharedCode;
+                        slot.set(new RuntimeScalar(sharedCode));
                     }
                     if (!deletedCodeRefPins().contains(alias)) {
-                        pinnedCodeRefs().put(alias, globalCodeRefs.get(alias));
+                        pinCodeRef(alias, globalCodeRefs.get(alias));
                     }
                 }
                 markPackageGlobalRoot(shared);
@@ -2631,7 +2639,7 @@ public class GlobalVariable {
             markPackageGlobalRoot(ref);
         }
         deletedCodeRefPins().remove(resolvedKey);
-        pinnedCodeRefs().put(resolvedKey, ref);
+        pinCodeRef(resolvedKey, ref);
         return ref;
     }
 
@@ -2668,15 +2676,24 @@ public class GlobalVariable {
      * @param key     The glob name key.
      * @param codeRef The new RuntimeScalar to pin (typically a new empty one).
      */
+    private static void pinCodeRef(String key, RuntimeScalar codeRef) {
+        RuntimeScalar previous = pinnedCodeRefs().get(key);
+        if (previous == codeRef) return;
+        if (codeRef != null) codeRef.retainCodeSlotBinding();
+        pinnedCodeRefs().put(key, codeRef);
+        if (previous != null) previous.releaseCodeSlotBinding();
+    }
+
     static void replacePinnedCodeRef(String key, RuntimeScalar codeRef) {
         if (pinnedCodeRefs().containsKey(key)) {
-            pinnedCodeRefs().put(key, codeRef);
+            pinCodeRef(key, codeRef);
         }
     }
 
     static void enterLocalizedCodeRef(String key, RuntimeScalar displacedCodeRef) {
         localizedCodeRefDepth().merge(key, 1, Integer::sum);
         if (displacedCodeRef != null) {
+            displacedCodeRef.retainCodeSlotBinding();
             displacedLocalizedCodeRefs().put(displacedCodeRef, key);
         }
     }
@@ -2684,6 +2701,7 @@ public class GlobalVariable {
     static void exitLocalizedCodeRef(String key, RuntimeScalar displacedCodeRef) {
         if (displacedCodeRef != null) {
             displacedLocalizedCodeRefs().remove(displacedCodeRef);
+            displacedCodeRef.releaseCodeSlotBinding();
         }
         Integer depth = localizedCodeRefDepth().get(key);
         if (depth == null) {
@@ -2867,7 +2885,11 @@ public class GlobalVariable {
      * @param prefix The namespace prefix (e.g., "Foo::") to clear.
      */
     public static void clearPinnedCodeRefsForNamespace(String prefix) {
-        pinnedCodeRefs().keySet().removeIf(k -> k.startsWith(prefix));
+        for (String key : new java.util.ArrayList<>(pinnedCodeRefs().keySet())) {
+            if (!key.startsWith(prefix)) continue;
+            RuntimeScalar removed = pinnedCodeRefs().remove(key);
+            if (removed != null) removed.releaseCodeSlotBinding();
+        }
         deletedCodeRefPins().removeIf(k -> k.startsWith(prefix));
     }
 

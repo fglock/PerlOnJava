@@ -543,6 +543,7 @@ public class MortalList {
      */
     public static void deferDecrementIfTracked(RuntimeScalar scalar) {
         if (!isActive() || scalar == null) return;
+        if (scalar.hasCodeSlotBinding()) return;
         if (!scalar.refCountOwned) return;
         if (((scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
                 || scalar.type == RuntimeScalarType.GLOB)
@@ -2002,8 +2003,9 @@ public class MortalList {
         boolean supportedReferent = base instanceof RuntimeArray || base instanceof RuntimeHash
                 || (base instanceof RuntimeScalar scalar
                     && !(scalar instanceof RuntimeScalarReadOnly) && scalar.captureCount == 0)
-                || (base instanceof RuntimeCode code && !code.hadStashRef
-                    && code.stashRefCount <= 0 && code.activeEndBlockExecutions == 0
+                || (base instanceof RuntimeCode code
+                    && (code.hasCountedCodeSlots || (!code.hadStashRef && code.stashRefCount <= 0))
+                    && code.activeEndBlockExecutions == 0
                     && !SpecialBlock.hasPendingEndBlock(code));
         return supportedReferent && !base.hasOwnerSlots();
     }
@@ -2013,7 +2015,7 @@ public class MortalList {
         if (!canTrustFinalCountedRelease(base)
                 || release == null || release.ownerSlotRelease == null) return false;
         return switch (release.ownerSlotRelease.kind()) {
-            case SCALAR_CELL, ARRAY_ELEMENT, HASH_ELEMENT, ARGUMENT_VALUE, RETURN_VALUE,
+            case SCALAR_CELL, CODE_SLOT, ARRAY_ELEMENT, HASH_ELEMENT, ARGUMENT_VALUE, RETURN_VALUE,
                     TIE_HANDLER -> true;
             default -> false;
         };
