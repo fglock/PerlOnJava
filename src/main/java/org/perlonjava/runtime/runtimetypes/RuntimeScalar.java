@@ -5450,8 +5450,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
 
         if (scalar.referencedByScalarReference
-                && scalar.localBindingExists
-                && scalar.captureCount == 0) {
+                && scalar.captureCount == 0
+                && (scalar.localBindingExists || scalar.refCount > 0
+                    || scalar.hasScalarCellOwner())) {
             cleanupScalarReferenceBinding(scalar);
             // A reference to the lexical escaped its declaring scope.  The
             // RuntimeScalar is now the Perl SV container, so its current value
@@ -5460,7 +5461,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             // scalar self-tie that wrapper owns the remaining counted
             // reference to this same scalar; returning here would leave the
             // cycle intact and suppress the handler's DESTROY.
-            if (scalar.refCount > 0 && scalar.type != RuntimeScalarType.TIED_SCALAR) return;
+            if ((scalar.refCount > 0 || scalar.hasScalarCellOwner())
+                    && scalar.type != RuntimeScalarType.TIED_SCALAR) return;
         }
 
         // A captured lexical or an SV with an escaped scalar reference is still
@@ -6831,7 +6833,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             return;
         }
         scalar.localBindingExists = false;
-        if (scalar.refCount == 0) {
+        if (scalar.refCount == 0 && !scalar.hasScalarCellOwner()) {
             scalar.refCount = Integer.MIN_VALUE;
             DestroyDispatch.callDestroy(scalar);
         }

@@ -351,7 +351,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     boolean hasScalarCellOwner() {
         return this instanceof RuntimeScalar scalar && scalar.referencedByScalarReference
                 && (scalar.localBindingExists
-                    || ownerSlotCount(PerlOwnerSlot.Kind.SCALAR_CAPTURE) != 0);
+                    || hasOwnerSlots() || hasPendingReturnOwner());
     }
 
     private synchronized void retainPendingReturnOwner(PerlOwnerSlot.PendingRelease release) {

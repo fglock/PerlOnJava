@@ -814,10 +814,16 @@ sweeps disabled. Logs: `/tmp/issue1649-current-explicit-return-jvm.log`,
 `/tmp/issue1649-current-html-tree-jvm.log`, and
 `/tmp/issue1649-current-html-tree-interpreter.log`.
 
-The latest filtered build compiled successfully and ran all 628 Java unit
-tests; three sweep-dependent Java cases remain: the two targeted weak-release
-walker checks and the quiet weak-code capture walk. The selected Perl regression
-passed. Log: `/tmp/make-issue1649-explicit-capture-boundary.log`.
+Requalification after the scalar-reference return and lazy thread-snapshot fixes
+passes the full sweep-enabled `make` gate. The full no-sweep gate completed
+1,242 tests with only these three existing sweep-helper cases failing:
+`ReachabilityQueryCostTest`'s two targeted weak-release checks and
+`WeakBackrefCodeCaptureSweepTest`'s quiet weak-code capture walk. No Perl unit
+test failed. The fallback scalar-reference guard, lazy thread-snapshot race,
+and unchanged HTML-Tree 5.07 `t/refloop.t` each pass on both backends with
+sweeps disabled. Evidence: `/tmp/make-issue1649-final-normal.log`,
+`/tmp/make-issue1649-final-no-sweep.log`, and the corresponding
+`/tmp/issue1649-*-no-sweep-verified.log` files.
 
 ### Interpreter temporary closure owners retired
 
