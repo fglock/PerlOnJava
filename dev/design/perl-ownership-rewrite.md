@@ -915,6 +915,17 @@ existing weak-CODE capture test continues to cover the legacy fallback. The
 sweep-enabled full `nice -n 19 make` gate passes, and HTML-Tree 5.07
 `t/refloop.t` passes 8/8 on both backends with sweeps disabled.
 
+### Closure capture release with an explicit scalar owner (2026-10-28)
+
+When undefining one CODE scalar, cleanup now checks whether another active
+owner-slot identity retains the CV before building a root snapshot. It excludes
+the slot being overwritten, so final-owner release still retires captures
+through the existing compatibility path. `CodeOwnerSlotReleaseFastPathTest`
+checks that the first of two scalar owners releases with zero root queries and
+that the final owner still releases the captures. The full sweep-enabled
+`nice -n 19 make` gate passes. Ownerless CODEs without explicit identities
+still use the root-walk fallback.
+
 ### Next steps
 
 1. Continue replacing targeted weak-release and weak-CODE capture walks with

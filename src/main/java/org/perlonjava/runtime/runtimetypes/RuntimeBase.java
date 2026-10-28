@@ -376,6 +376,14 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         return ownerSlots != null && !ownerSlots.isEmpty();
     }
 
+    /** Check whether a live owner identity besides the slot being replaced remains. */
+    boolean hasOwnerSlotsOtherThan(PerlOwnerSlot excluded) {
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (slot != excluded && slot.isActive()) return true;
+        }
+        return false;
+    }
+
     public boolean hasSemanticCaptureOwner() {
         return ownerSlotCount(PerlOwnerSlot.Kind.CLOSURE_PAD) != 0;
     }
