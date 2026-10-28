@@ -1001,6 +1001,17 @@ because `Internals` is unavailable. Evidence: `/tmp/make-issue1649-tailcall-owne
 This avoids reachability walks when counted slots prove a surviving owner.
 Tail-call arguments without counted slots still use the compatibility walker.
 
+### Deferred weak release from counted owner slots (2026-10-28)
+
+Ordinary deferred cleanup now restores the compatibility count from remaining
+counted owner slots before asking the root walker for blessed referents.
+`DeferredReleaseOwnerSlotFastPathTest` checks that one surviving scalar-cell
+slot preserves its weak observer with zero root walks, and that releasing the
+final slot still clears it. The unblessed aggregate snapshot path remains in
+place to distinguish live Perl roots from stale scalar wrappers. The default-off
+full `nice -n 19 make` gate passes. Evidence:
+`/tmp/make-issue1649-deferred-owner-fastpath-corrected.log`.
+
 ### Next steps
 
 1. Complete aliased `@_` cell ownership and shared/tail-call cases whose
