@@ -541,6 +541,12 @@ external workload has drained before changing runtime source.
   now make that decision. Added
   `WeakCodeOwnerSlotNoReachabilityTest`; the full `make` gate passed with
   corrective sweeps disabled.
+- [x] On 2026-10-29, package-rooted untracked aggregates now retire the
+  temporary count rescued at first weaken when their final untracked owner
+  slot leaves. Added Java owner-release coverage and six Perl assertions for
+  package-array clear and package-hash delete; system Perl, both backends,
+  the full no-sweeps `make`, and HTML-Tree 5.07 `t/refloop.t` (8/8 on both
+  backends) passed.
 
 ### Handoff: issue #1132 / PR #1204
 
@@ -559,14 +565,15 @@ pass. Preserve both focused ownership regressions when evolving the ledger.
 ### Next Steps
 
 1. Complete package-nested untracked aggregate ownership end to end: make the
-   containing root's release cascade through child slots, and keep the
-   reachability fallback until that path has direct regression coverage.
+   remaining package-root release paths cascade through child slots, then
+   remove the first-weaken reachability fallback only after those paths have
+   direct regression coverage.
 2. Audit tracked zero-count transitions and temporary evaluation roots; add
    explicit slot identities where ownership is missing.
 3. Remove each fallback only after its owner path has focused regression
    coverage and passes system Perl plus both PerlOnJava backends.
-4. Run HTML::Tree's 8/8 target on both backends, then the full suite with every
-   sweep disabled; remove the remaining compatibility APIs after those gates.
+4. Requalify HTML-Tree's 8/8 and the full suite after remaining owner changes;
+   remove the remaining compatibility APIs after all gates pass.
 5. Keep Cookie2 formatting and content-coding exception handling separate from
    this ownership work.
 

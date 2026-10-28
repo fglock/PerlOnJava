@@ -55,6 +55,7 @@ priorities and future plans.
 
 - Accept YAML-style mapping syntax in `YAML::Syck::LoadJSON`, matching Syck's JSON loader behavior (#1942).
 - Disable corrective sweeps by default while migrating to explicit reference ownership; retain temporary scalar call and mortal return values through their caller boundaries, and balance argument, scalar-cell, closure, aggregate, package scalar/array/hash roots, tied-handler, shared-view, named CODE, persistent state, and destructor lifetimes (#1649).
+- Clear weak observers for package-rooted untracked aggregates when their final scalar owner is released (#1649).
 
 
 

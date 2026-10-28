@@ -2502,11 +2502,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (scalar == null) return;
         if (PerlRuntime.currentOrNull() != null && WeakRefRegistry.isweak(scalar)) return;
         if (scalar.refCountOwned) {
+            scalar.recordContainerCountedOwner();
             if (scalar.untrackedReferenceOwnerSlot != null) {
                 scalar.releaseUntrackedReferenceOwner(
                         scalar.untrackedReferenceOwnerSlot.referent());
             }
-            scalar.recordContainerCountedOwner();
             return;
         }
         if ((scalar.type & REFERENCE_BIT) == 0
@@ -2535,10 +2535,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
             base.refCount = 0;
         }
-        if (scalar.untrackedReferenceOwnerSlot != null) {
-            scalar.releaseUntrackedReferenceOwner(
-                    scalar.untrackedReferenceOwnerSlot.referent());
-        }
         base.traceRefCount(+1, "RuntimeScalar.incrementRefCountForContainerStore");
         base.refCount++;
         base.hadCountedReference = true;
@@ -2546,6 +2542,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         base.recordActiveOwner(scalar);
         scalar.refCountOwned = true;
         scalar.recordContainerCountedOwner();
+        if (scalar.untrackedReferenceOwnerSlot != null) {
+            scalar.releaseUntrackedReferenceOwner(
+                    scalar.untrackedReferenceOwnerSlot.referent());
+        }
         // Phase B1 (refcount_alignment_52leaks_plan.md): track the
         // container element so ReachabilityWalker can see it via
         // ScalarRefRegistry.
@@ -3557,10 +3557,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // Update ownership: this scalar now owns a refCount iff we incremented.
         this.refCountOwned = newOwned;
         if (newOwned && this.value instanceof RuntimeBase ownedReferent) {
+            recordCountedOwner(ownedReferent);
             if (untrackedReferenceOwnerSlot != null) {
                 releaseUntrackedReferenceOwner(untrackedReferenceOwnerSlot.referent());
             }
-            recordCountedOwner(ownedReferent);
         } else {
             updateUntrackedReferenceOwner(this.value instanceof RuntimeBase referent
                     && (this.type & RuntimeScalarType.REFERENCE_BIT) != 0
@@ -5471,6 +5471,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.type = UNDEF;
         this.value = null;
         refreshArgumentAliasOwnerSlots();
+        refreshUntrackedReferenceOwner();
         boolean argumentAliasKeepsOldBase = oldBase != null
                 && oldBase.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_ALIAS) != 0;
         this.tainted = false;
