@@ -107,6 +107,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public static final class CallArguments extends RuntimeScalar {
         private final RuntimeBase[] values;
         private final java.util.ArrayList<RuntimeScalar> listResultOwners = new java.util.ArrayList<>();
+        private final java.util.ArrayList<RuntimeScalar> stagedScalarOwners = new java.util.ArrayList<>();
         private int size;
         private final ExecutionRuntimeState ownerState;
         private final int argumentDepth;
@@ -124,10 +125,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 throw new IllegalStateException("too many call arguments");
             }
             values[size++] = value;
-            // Later argument expressions may drain the return's mortal owner.
-            // Retain each staged strong value through the enclosing call;
-            // scalar argument cells themselves keep their aliasing semantics.
-            if (size < values.length && value instanceof RuntimeList) {
+            // Later argument expressions and callee cleanup may drain a
+            // scalar return's mortal owner. Keep a separate argument owner
+            // through the call; persistent caller cells remain aliased borrows.
+            if (value instanceof RuntimeScalar scalar
+                    && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                    && scalar.value instanceof RuntimeBase
+                    && scalar.isMortalReturnSnapshot()
+                    && !WeakRefRegistry.isweak(scalar)) {
+                stagedScalarOwners.add(RuntimeScalar.retainStagedArgumentValue(scalar));
+            } else if (size < values.length && value instanceof RuntimeList) {
                 retainListResultOwners(value);
             }
         }
@@ -209,6 +216,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 MortalList.deferDecrementIfTracked(owner);
             }
             listResultOwners.clear();
+            for (RuntimeScalar owner : stagedScalarOwners) {
+                MortalList.deferDecrementIfTracked(owner);
+            }
+            stagedScalarOwners.clear();
             MortalList.drainDeferredArgumentOwnerReleases();
         }
 
