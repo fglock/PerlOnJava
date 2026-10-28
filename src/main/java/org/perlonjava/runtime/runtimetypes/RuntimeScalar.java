@@ -3053,6 +3053,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && oldCode.capturedScalars != null
                 && !oldCode.hasPendingReturnOwner()
                 && !RuntimeCode.isActiveCode(oldCode)
+                && !oldCode.hasOwnerSlotsOtherThan(countedOwnerSlot)
                 && !ReachabilityWalker.isReachableFromRoots(oldCode)) {
             oldCode.releaseCaptures();
         }
