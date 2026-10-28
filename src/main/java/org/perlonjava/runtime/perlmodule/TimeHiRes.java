@@ -1,12 +1,21 @@
 package org.perlonjava.runtime.perlmodule;
 
 import org.perlonjava.runtime.operators.MathOperators;
+import org.perlonjava.runtime.operators.Stat;
 import org.perlonjava.runtime.operators.Time;
+import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
+import org.perlonjava.runtime.runtimetypes.RuntimeIO;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.FileTime;
 import java.time.Instant;
 
 public class TimeHiRes extends PerlModuleBase {
@@ -27,6 +36,7 @@ public class TimeHiRes extends PerlModuleBase {
             module.registerMethod("usleep", null);
             module.registerMethod("nanosleep", null);
             module.registerMethod("gettimeofday", null);
+            module.registerMethod("stat", null);
             // getLong() can fetch tied scalars or run numeric overload code.
             // Keep call-depth tracking so those callbacks remain visible.
             module.registerMethodWithReadOnlyArgsWithoutJvmClosureFrame("clock_gettime", null);
@@ -66,6 +76,43 @@ public class TimeHiRes extends PerlModuleBase {
         result.add(new RuntimeScalar(seconds));
         result.add(new RuntimeScalar(micros));
         return result;
+    }
+
+    /** Return Perl stat fields with sub-second timestamps where the filesystem provides them. */
+    public static RuntimeList stat(RuntimeArray args, int ctx) {
+        RuntimeScalar target = args.isEmpty()
+                ? GlobalVariable.getGlobalVariable("main::_")
+                : args.get(0);
+        RuntimeList result = Stat.stat(target, ctx).getList();
+        if (ctx != RuntimeContextType.LIST || result.elements.size() < 11
+                || target.type == RuntimeScalarType.GLOB
+                || target.type == RuntimeScalarType.GLOBREFERENCE) {
+            return result;
+        }
+
+        try {
+            Path path = RuntimeIO.resolvePath(target.toString());
+            if (path == null) return result;
+            BasicFileAttributes attrs = Files.readAttributes(path, BasicFileAttributes.class);
+            result.elements.set(8, new RuntimeScalar(epochSeconds(attrs.lastAccessTime())));
+            result.elements.set(9, new RuntimeScalar(epochSeconds(attrs.lastModifiedTime())));
+            try {
+                Object ctime = Files.getAttribute(path, "unix:ctime");
+                if (ctime instanceof FileTime fileTime) {
+                    result.elements.set(10, new RuntimeScalar(epochSeconds(fileTime)));
+                }
+            } catch (UnsupportedOperationException | IllegalArgumentException ignored) {
+                // Non-Unix filesystems do not expose a distinct status-change time.
+            }
+        } catch (IOException | RuntimeException ignored) {
+            // Keep the ordinary stat result if high-resolution attributes are unavailable.
+        }
+        return result;
+    }
+
+    private static double epochSeconds(FileTime fileTime) {
+        Instant instant = fileTime.toInstant();
+        return instant.getEpochSecond() + instant.getNano() / 1_000_000_000.0;
     }
 
     /** Return a high-resolution clock reading in seconds. */
