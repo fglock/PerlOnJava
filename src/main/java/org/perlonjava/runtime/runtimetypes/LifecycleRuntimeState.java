@@ -34,6 +34,7 @@ final class LifecycleRuntimeState {
             new ArrayList<>();
     final ArrayList<TiedVariableBase> pendingTiedReleases = new ArrayList<>();
     final ArrayList<RuntimeScalar> pendingIoReleases = new ArrayList<>();
+    final ArrayList<RuntimeScalar> pendingUntrackedReturnOwnerReleases = new ArrayList<>();
     final ArrayList<RuntimeScalar> deferredCaptures = new ArrayList<>();
     final IdentityHashMap<RuntimeScalar, Integer> deferredCapturesSet = new IdentityHashMap<>();
     final Set<RuntimeScalar> deferredScopeExitCaptureCandidates =
@@ -48,6 +49,7 @@ final class LifecycleRuntimeState {
     int[] marks = new int[INITIAL_MARK_CAPACITY];
     int[] tiedReleaseMarks = new int[INITIAL_MARK_CAPACITY];
     int[] ioReleaseMarks = new int[INITIAL_MARK_CAPACITY];
+    int[] untrackedReturnOwnerMarks = new int[INITIAL_MARK_CAPACITY];
     int markDepth;
     boolean flushing;
     int reachabilityDrainDepth;
@@ -82,16 +84,19 @@ final class LifecycleRuntimeState {
             weakSweepRootWitnesses = new IdentityHashMap<>();
     ReachabilityQueryStats activeReachabilityQueryStats;
 
-    void pushMortalMark(int pendingSize, int tiedReleaseSize, int ioReleaseSize) {
+    void pushMortalMark(int pendingSize, int tiedReleaseSize, int ioReleaseSize,
+                        int untrackedReturnOwnerReleaseSize) {
         if (markDepth == marks.length) {
             int capacity = marks.length * 2;
             marks = Arrays.copyOf(marks, capacity);
             tiedReleaseMarks = Arrays.copyOf(tiedReleaseMarks, capacity);
             ioReleaseMarks = Arrays.copyOf(ioReleaseMarks, capacity);
+            untrackedReturnOwnerMarks = Arrays.copyOf(untrackedReturnOwnerMarks, capacity);
         }
         marks[markDepth] = pendingSize;
         tiedReleaseMarks[markDepth] = tiedReleaseSize;
         ioReleaseMarks[markDepth] = ioReleaseSize;
+        untrackedReturnOwnerMarks[markDepth] = untrackedReturnOwnerReleaseSize;
         markDepth++;
     }
 
@@ -146,6 +151,10 @@ final class LifecycleRuntimeState {
         pendingTransientOwnerKinds.clear();
         pendingTiedReleases.clear();
         pendingIoReleases.clear();
+        for (RuntimeScalar scalar : pendingUntrackedReturnOwnerReleases) {
+            if (scalar != null) scalar.releaseMortalReturnValueOwner();
+        }
+        pendingUntrackedReturnOwnerReleases.clear();
         deferredCaptures.clear();
         deferredCapturesSet.clear();
         deferredScopeExitCaptureCandidates.clear();

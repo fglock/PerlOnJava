@@ -1124,17 +1124,155 @@ queries. The default-off full `nice -n 19 make` gate passes; with corrective
 sweeps unset, explicit-return cleanup passes 6/6, nested-form lifetime passes
 29/29, and HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends.
 
+### Identities for untracked container referents (2026-10-28)
+
+Array and hash elements that strongly reference an otherwise untracked or
+weakly-tracked referent now receive an `UNTRACKED_REFERENCE` slot identity
+without promoting the compatibility `refCount`. The identity transfers when
+the element is overwritten and retires on container clearing or scalar cleanup;
+weaken/unweaken updates the same ownership record. `UntrackedReferenceOwnerSlotTest`
+covers `-1` and `WEAKLY_TRACKED` referents and verifies their legacy counts stay
+unchanged. The full default-off `nice -n 19 make` gate passes. With corrective
+sweeps disabled, explicit-return cleanup passes 6/6, nested-form lifetime
+passes 29/29, HTML-Tree 5.07 `t/refloop.t` passes 8/8, and representative
+weaken, DESTROY, cycle, and resurrection tests pass on both backends.
+
+### Durable scalar-cell identities for untracked values (2026-10-28)
+
+Durable scalar cells now record one `UNTRACKED_REFERENCE` identity for a strong
+value edge when the referent is still untracked or already weakly tracked.
+This includes lexical cells, package roots, closure captures, CODE slots, and
+array/hash element cells whose referents remain untracked or weakly tracked.
+These identities leave legacy counts unchanged; anonymous nested aggregate
+slots continue through their existing counted path. Assignment transfers the
+same identity; lexical registration, replacement, scope exit, capture release,
+container clearing, weaken, and unweaken refresh or retire it at their
+ownership boundary. `UntrackedReferenceOwnerSlotTest` verifies the
+untracked-to-weakly-tracked transfer and that a captured lexical keeps the
+identity until its final owner exits.
+
+`nice -n 19 make` passes. With corrective sweeps disabled, both backends pass
+explicit-return cleanup 6/6, nested-form lifetime 29/29, HTML-Tree 5.07
+`t/refloop.t` 8/8, `weaken.t` 4/4, `destroy.t` 15/15, blessed self-cycle 4/4,
+and exception resurrection 11/11.
+
+### Weakening repairs counts from surviving owner slots (2026-10-28)
+
+When weakening exposes a transient undercount, `WeakRefRegistry` restores the
+compatibility count from surviving counted owner slots before walking roots.
+`WeakeningCountedOwnerSlotTest` covers the repair with zero root and
+scalar-reachability queries. CODE weak-reference cleanup also needs to
+distinguish live owners from compatibility pins and expired frame cells; the
+next section records that migration. The full
+`nice -n 19 make` gate passes. With corrective sweeps disabled, both backends
+pass explicit-return cleanup 6/6, nested-form lifetime 29/29, weaken 4/4,
+DESTROY 15/15, blessed self-cycle 4/4, exception resurrection 11/11,
+Sub::Quote cleanup 8/8, and HTML-Tree 5.07 `t/refloop.t` 8/8.
+
+### Untracked referent weakening uses slot identities (2026-10-28)
+
+When an untracked referent has a durable `UNTRACKED_REFERENCE` owner slot,
+`weaken()` now avoids the registry-wide corrective sweep and, for aggregates,
+the initial root scan. Releasing its final owner queues targeted weak cleanup.
+`UntrackedReferenceOwnerSlotTest` checks the no-sweep decision and final-slot cleanup
+with corrective sweeps enabled. The focused owner-slot, unblessed-root, and
+weak-CODE capture tests pass. `nice -n 19 make` passes; with corrective sweeps
+disabled, both backends pass explicit-return cleanup 6/6, nested-form lifetime
+29/29, weaken 4/4, DESTROY 15/15, blessed self-cycle 4/4, exception
+resurrection 11/11, Sub::Quote cleanup 8/8, and HTML-Tree 5.07 `t/refloop.t`
+8/8.
+
+### CODE weak-reference owners exclude compatibility pins (2026-10-28)
+
+Before relying on CODE owner slots, `WeakRefRegistry` retires eligible
+frame-temporary scalar cells. It accepts remaining non-`CODE_SLOT` identities
+as direct Perl owners. `CODE_SLOT` can represent a compatibility pin retained
+after a glob is deleted; installed stash refs remain covered by the stash-root
+checks. `WeakCodeOwnerSlotTest` verifies that a live lexical CODE slot skips the
+scalar-root walk. The existing `subquote_defer_weak_cleanup.t` passes 8/8 on
+both backends with sweeps disabled. `nice -n 19 make` passes in 8m14s. With
+corrective sweeps disabled, both backends pass explicit-return cleanup 6/6,
+nested-form lifetime 29/29, `weaken.t` 4/4, `destroy.t` 15/15, blessed
+self-cycle 4/4, exception resurrection 11/11, Sub::Quote cleanup 8/8, and
+HTML-Tree 5.07 `t/refloop.t` 8/8.
+
+### Package scalar roots get per-key owner identities (2026-10-28)
+
+Each package scalar table key now owns a distinct `PACKAGE_SCALAR_SLOT`
+identity for its scalar cell. Replacing, removing, or clearing a key releases
+that identity; aliases therefore keep separate identities. Ithread snapshots
+rebuild the identities for their cloned scalar table. Package-rooted scalar
+cells can now own untracked reference values without promoting the legacy
+count. `UntrackedReferenceOwnerSlotTest` covers aliases, key removal, clone rebuild,
+and cells already at the legacy destroyed sentinel. `nice -n 19 make` passes in
+6m02s. With corrective sweeps disabled, both backends pass explicit-return
+cleanup 6/6, nested-form lifetime 29/29, `weaken.t` 4/4, `destroy.t` 15/15,
+blessed self-cycle 4/4, exception resurrection 11/11, Sub::Quote cleanup 8/8,
+and HTML-Tree 5.07 `t/refloop.t` 8/8.
+
+### Tied handlers and staged values retain untracked referents (2026-10-28)
+
+Tied-handler values and staged call/return values now mark their owning scalar
+cell as a durable strong slot. That lets the existing
+`UNTRACKED_REFERENCE` identity represent their referents without promoting a
+legacy `refCount`; release retires the identity once and defers any counted
+decrement. Added owner-slot tests cover untracked values, weaken without a root
+scan, and idempotent release. Runtime clone setup also tolerates rebuilding
+these identities before the destination runtime is bound. The focused tied
+storage and owner-slot Java tests pass, followed by the full `nice -n 19 make`
+gate (6m30s). With corrective sweeps disabled, all eight lifecycle cases pass
+on both backends, including HTML-Tree 5.07 `t/refloop.t` (8/8).
+
+### Untracked mortal return values release at caller boundaries (2026-10-28)
+
+Mortal return snapshots whose referents remain untracked or weakly tracked now
+receive `UNTRACKED_REFERENCE` identities. Their release follows the existing
+mortal mark stack, so nested frames cannot retire a caller's return value;
+final owner release clears weak observers directly when corrective sweeps are
+disabled. `MortalReturnUntrackedOwnerTest` passes both cases with sweeps
+disabled and records zero root queries, snapshots, and scalar reachability
+queries for final weak cleanup. The full `nice -n 19 make` gate passes in
+6m17s. The sweep-disabled closure, weak/DESTROY, resurrection, cycle,
+Sub::Quote, and HTML-Tree matrix passes on both backends; HTML-Tree
+`t/refloop.t` is 8/8.
+
+### Package array and hash roots get per-key owner identities (2026-10-28)
+
+Each package array or hash key now owns a distinct `PACKAGE_AGGREGATE_SLOT`.
+The global-map facade transfers or releases those identities for replacement,
+key/value/entry removal, entry replacement, clear, and cloned runtime tables.
+Final root release clears weak observers directly when corrective sweeps are
+disabled. `SvREFCNT` keeps Perl's special `%^H` count by excluding its hidden
+package-root identity. `PackageAggregateOwnerSlotTest` covers aliases,
+replacement, clearing, clone reconstruction, and weak cleanup; related tests
+now live in new test classes instead of modifying existing test files.
+The full `nice -n 19 make` gate passes in 7m05s. With sweeps disabled, 16
+closure, weak/DESTROY, resurrection, cycle, Sub::Quote, and HTML-Tree cases
+pass on both backends; HTML-Tree `t/refloop.t` is 8/8.
+
+### Weak CODE release uses direct owner identities (2026-10-28)
+
+Package-rooted array and hash cells now register their value ownership when
+the aggregate is marked as a package root. `shouldKeepCodeWeakRefs` relies on
+active owner slots after checking installed CODE slots, active frames, and
+retiring stale frame temporaries. It no longer consults sweep-local live sets,
+full-root snapshots, or scalar-root scans. `WeakCodeOwnerSlotTest` verifies
+lexical and package-array CODE owners with zero reachability queries. The full
+`nice -n 19 make` gate passes in 6m33s, and the 16-case sweeps-disabled
+JVM/interpreter matrix passes, including HTML-Tree `t/refloop.t` 8/8.
+
 ### Next steps
 
-1. Replace the remaining weak-CODE capture graph decision and weak-release
-   fallbacks for referents without owner slots; preserve the diagnostic helper
-   tests.
-2. Finish CODE template ownership, per-optree compiled-pin retirement, and raw
-   descriptor/embedding borrows. Complete native call buffers, escaping
-   lvalues/refaliases, and targeted try/finally returns.
+1. Replace the reflective weak-backref CODE capture walk with capture-owner
+   identities, then remove the sweep-only `weakBackrefCaptureSnapshot` path.
+   Preserve the captured aggregate lifetime cases and their weak clearing.
+2. In one ownership-family batch, finish CODE template and optree pins, raw
+   descriptor/embedding borrows, native call buffers, escaping lvalues and
+   refaliases, and targeted try/finally returns. Add regressions before running
+   the focused gates and one full `nice -n 19 make`.
 3. Requalify upstream HTML-Tree, weak/DESTROY, resurrection, cycle, and full-suite
-   behavior as each ownership family migrates; resolve the existing interpreter
-   `new_from_lol` lifecycle gap before declaring HTML-Tree qualified.
+   behavior as each family migrates. Resolve the interpreter `new_from_lol`
+   lifecycle gap before declaring the full HTML-Tree suite qualified.
 4. Make semantic owner counts authoritative, then remove the compatibility
    bridge, production corrective scheduling, and reachability fallbacks after
-   the acceptance gates pass.
+   all acceptance gates pass.
