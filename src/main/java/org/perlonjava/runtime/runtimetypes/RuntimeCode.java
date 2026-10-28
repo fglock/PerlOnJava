@@ -108,6 +108,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         private final RuntimeBase[] values;
         private final java.util.ArrayList<RuntimeScalar> listResultOwners = new java.util.ArrayList<>();
         private final java.util.ArrayList<RuntimeScalar> stagedScalarOwners = new java.util.ArrayList<>();
+        private final java.util.ArrayList<RuntimeScalar.ArgumentAliasOwner> argumentAliasOwners =
+                new java.util.ArrayList<>();
         private int size;
         private final ExecutionRuntimeState ownerState;
         private final int argumentDepth;
@@ -128,12 +130,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Later argument expressions and callee cleanup may drain a
             // scalar return's mortal owner. Keep a separate argument owner
             // through the call; persistent caller cells remain aliased borrows.
-            if (value instanceof RuntimeScalar scalar
-                    && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                    && scalar.value instanceof RuntimeBase
-                    && scalar.isMortalReturnSnapshot()
-                    && !WeakRefRegistry.isweak(scalar)) {
-                stagedScalarOwners.add(RuntimeScalar.retainStagedArgumentValue(scalar));
+            if (value instanceof RuntimeScalar scalar) {
+                if (hasPersistentArgumentCell(scalar)) {
+                    argumentAliasOwners.add(scalar.retainArgumentAliasOwner());
+                }
+                if ((scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                        && scalar.value instanceof RuntimeBase
+                        && !WeakRefRegistry.isweak(scalar)
+                        && scalar.isMortalReturnSnapshot()) {
+                    stagedScalarOwners.add(RuntimeScalar.retainStagedArgumentValue(scalar));
+                }
             } else if (size < values.length && value instanceof RuntimeList) {
                 retainListResultOwners(value);
             }
@@ -220,6 +226,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 MortalList.deferDecrementIfTracked(owner);
             }
             stagedScalarOwners.clear();
+            for (RuntimeScalar.ArgumentAliasOwner owner : argumentAliasOwners) {
+                owner.release();
+            }
+            argumentAliasOwners.clear();
             MortalList.drainDeferredArgumentOwnerReleases();
         }
 
@@ -237,6 +247,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     static boolean hasActiveArgumentOwner(RuntimeScalar scalar) {
         if (scalar == null || !(scalar.value instanceof RuntimeBase referent)) return false;
+        if (referent.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_ALIAS) != 0) return true;
         ExecutionRuntimeState state = PerlRuntime.current().executionState();
         for (RuntimeArray args : state.argsStack) {
             for (RuntimeScalar element : args.elements) {
@@ -251,6 +262,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
         }
         return false;
+    }
+
+    private static boolean hasPersistentArgumentCell(RuntimeScalar scalar) {
+        return scalar.hasPersistentArgumentStorageCell() || isCurrentArgumentAlias(scalar);
     }
 
     public static CallArguments newCallArguments(int capacity) {
@@ -1916,6 +1931,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             RuntimeArray args, boolean snapshotRequired,
             ExecutionRuntimeState executionState) {
         executionState.argsStack.push(args);
+        executionState.argumentAliasOwnerFrames.push(retainArgumentAliasOwners(args));
         // Snapshot the args list so @DB::args stays pristine even if the sub
         // later shifts/pops from @_.
         if (args == null || args.elements.isEmpty()) {
@@ -1925,6 +1941,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         } else {
             executionState.pristineArgsStack.push(args.elements);
         }
+    }
+
+    private static List<RuntimeScalar.ArgumentAliasOwner> retainArgumentAliasOwners(
+            RuntimeArray args) {
+        ArrayList<RuntimeScalar.ArgumentAliasOwner> owners = new ArrayList<>();
+        if (args == null) return owners;
+        for (RuntimeScalar scalar : args.elements) {
+            if (scalar == null || !hasPersistentArgumentCell(scalar)) continue;
+            owners.add(scalar.retainArgumentAliasOwner());
+        }
+        return owners;
     }
 
     public static void pushCallContext(int callContext) {
@@ -1957,6 +1984,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         RuntimeArray exitedArgs = null;
         if (!stack.isEmpty()) {
             exitedArgs = stack.pop();
+            if (!executionState.argumentAliasOwnerFrames.isEmpty()) {
+                for (RuntimeScalar.ArgumentAliasOwner owner :
+                        executionState.argumentAliasOwnerFrames.pop()) {
+                    owner.release();
+                }
+            }
         }
         // A return inside an argument expression can bypass the invocation
         // wrapper without throwing. Retire staging frames belonging to this

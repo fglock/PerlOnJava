@@ -1037,10 +1037,38 @@ that releasing the final slot clears it. The default-off full
 `nice -n 19 make` gate passes. Evidence:
 `/tmp/make-issue1649-scalar-owner-repair-final2.log`.
 
+### Non-counted identities for staged and active argument cells (2026-10-28)
+
+`CallArguments` and active `@_` frames now attach `ARGUMENT_ALIAS` identities
+only to durable Perl storage cells and already active argument aliases. These
+identities follow reference assignments and weak/strong transitions without
+changing Perl-visible `refCount`; overwrite and explicit `undef` defer a final
+release while an alias is the only owner. Transient expression wrappers retain
+their staged return ownership without being treated as caller cells. The alias
+identity is recorded in the referent ledger but does not add a separate runtime
+root; the active frame already owns its scalar cell. RuntimeBase keeps
+constant-time counts for alias and counted slots so ordinary deferred cleanup
+does not scan a referent's full owner ledger.
+
+`ArgumentAliasOwnerSlotTest` covers refcount neutrality, identity transfer from
+primitive to reference values, weak-target lifetime through overwrite and
+explicit `undef`, exclusion of transient wrappers, no extra runtime roots, and
+retirement when a stale cell still points at a destroyed referent. The default-off
+full `nice -n 19 make` gate passes. Evidence:
+`/tmp/make-issue1649-argument-alias-frame-roots-final.log`.
+
+This covers durable scalar cells staged for calls and active argument frames.
+Exact release when an element is removed from `@_`, nested list/aggregate
+arguments, and shared/tail-call aliases remain open. The tracked `new_from_lol`
+lifecycle reproducer passes 4/4 on JVM; its interpreter result (1/4) matches the
+committed parent `7ba27d774`, so those three failures predate this change. The
+TreeBuilder lifecycle reproducer passes 4/4 on both backends. Upstream HTML-Tree
+5.07 `t/refloop.t` still needs requalification after this change.
+
 ### Next steps
 
-1. Complete aliased `@_` cell ownership and shared/tail-call cases whose
-   referents still lack counted owner identities, then remove the remaining
+1. Retire frame identities on `@_` element removal; cover nested list/aggregate
+   arguments and shared/tail-call aliases, then remove remaining
    `hasActiveArgumentOwner` compatibility scans.
 2. Replace remaining targeted weak-release and weak-CODE capture decisions with
    explicit owner-slot transitions, preserving the existing diagnostic helper
@@ -1048,8 +1076,9 @@ that releasing the final slot clears it. The default-off full
 3. Finish CODE template ownership, per-optree compiled-pin retirement, and raw
    descriptor/embedding borrows. Complete native call buffers, escaping
    lvalues/refaliases, and targeted try/finally returns.
-4. Requalify HTML-Tree, weak/DESTROY, resurrection, cycle, and full-suite behavior
-   as each ownership family migrates.
+4. Requalify upstream HTML-Tree, weak/DESTROY, resurrection, cycle, and full-suite
+   behavior as each ownership family migrates; resolve the existing interpreter
+   `new_from_lol` lifecycle gap before declaring HTML-Tree qualified.
 5. Make semantic owner counts authoritative, then remove the compatibility
    bridge, production corrective scheduling, and reachability fallbacks after
    the acceptance gates pass.
