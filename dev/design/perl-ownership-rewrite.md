@@ -984,10 +984,27 @@ This qualifies the current default-off behavior; it does not remove direct
 diagnostic walkers, the integer-count compatibility bridge, or the remaining
 reachability fallbacks.
 
+### Tail-call release from counted owner slots (2026-10-28)
+
+`releaseTailCallArgElement` now restores a transiently undercounted referent
+from its remaining counted owner slots before consulting the weak-referent
+root walker. `TailCallArgumentOwnerSlotFastPathTest` models a tail-call
+handoff with one surviving array-element owner and verifies that the weak
+observer stays live with zero root walks. The default-off full
+`nice -n 19 make` gate passes; `goto_tailcall_args_cleanup.t` passes 5/5 and
+`goto_weakself_tailcall_refcount.t` passes 2/2 on both backends with sweeps
+unset. System Perl passes the weak-self test; its tail-call cleanup test skips
+because `Internals` is unavailable. Evidence: `/tmp/make-issue1649-tailcall-owner-fastpath.log`,
+`/tmp/issue1649-tailcall-args-*.log`, and
+`/tmp/issue1649-tailcall-weakself-*.log`.
+
+This avoids reachability walks when counted slots prove a surviving owner.
+Tail-call arguments without counted slots still use the compatibility walker.
+
 ### Next steps
 
-1. Complete aliased `@_` cell ownership and shared/tail-call cleanup so argument
-   release no longer depends on referent scans.
+1. Complete aliased `@_` cell ownership and shared/tail-call cases whose
+   referents still lack counted owner identities.
 2. Replace remaining targeted weak-release and weak-CODE capture decisions with
    explicit owner-slot transitions, preserving the existing diagnostic helper
    tests.
