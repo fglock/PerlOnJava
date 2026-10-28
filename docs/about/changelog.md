@@ -7,6 +7,7 @@ priorities and future plans.
 ## Work in progress
 
 - Export `fieldhash` from `Hash::Util` for compatibility with core Perl.
+- Normalize tied-hash `exists` results to Perl's boolean values.
 
 - Preserve reference lifetime when overloaded `++` and `--` fall back to arithmetic (#1901).
 - Parse forward-declared qualified classes as indirect constructors inside `new` methods (#1899).

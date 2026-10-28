@@ -146,7 +146,9 @@ public class TieHash extends HashMap<String, RuntimeScalar> {
      * Checks if a key exists in a tied hash (delegates to EXISTS).
      */
     public static RuntimeScalar tiedExists(RuntimeHash hash, RuntimeScalar key) {
-        return tieCall(hash, "EXISTS", key);
+        return tieCall(hash, "EXISTS", key).getBoolean()
+                ? RuntimeScalarCache.scalarOne
+                : RuntimeScalarCache.scalarEmptyString;
     }
 
     /**
