@@ -33,6 +33,8 @@ public final class PerlOwnerSlot {
         PACKAGE_SCALAR_SLOT,
         /** Package array or hash table entry owning one aggregate. */
         PACKAGE_AGGREGATE_SLOT,
+        /** Active lexical frame or top-level pad entry owning an aggregate. */
+        ACTIVE_LEXICAL,
         /** Strong container edge whose referent is not on the legacy refcount bridge. */
         UNTRACKED_REFERENCE
     }
@@ -230,6 +232,21 @@ public final class PerlOwnerSlot {
         Objects.requireNonNull(target, "target");
         if (legacyCaptureCount != 0) {
             throw new IllegalStateException("package aggregate slot has pending legacy releases");
+        }
+        transferWithoutRuntimeRoot(target, true);
+    }
+
+    /** Record one active lexical pad entry that owns an aggregate. */
+    synchronized void acquireActiveLexicalIdentity(RuntimeBase target) {
+        if (kind != Kind.ACTIVE_LEXICAL) {
+            throw new IllegalStateException("active lexical acquisition requires an active-lexical slot");
+        }
+        Objects.requireNonNull(target, "target");
+        if (!(target instanceof RuntimeArray || target instanceof RuntimeHash)) {
+            throw new IllegalArgumentException("active lexical owner slots are for aggregate pads");
+        }
+        if (legacyCaptureCount != 0) {
+            throw new IllegalStateException("active lexical slot has pending legacy releases");
         }
         transferWithoutRuntimeRoot(target, true);
     }

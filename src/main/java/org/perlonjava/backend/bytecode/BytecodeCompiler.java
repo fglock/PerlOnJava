@@ -4144,13 +4144,10 @@ public class BytecodeCompiler implements Visitor {
                     }
                     emit(Opcodes.REGISTER_MY_VAR);
                     emitReg(reg);
-                    if (sigil.equals("$")) {
-                        // Keep the active CV pad visible to deferred format
-                        // argument evaluation. Format declarations can occur
-                        // after a write in the source while Perl still binds
-                        // the format to this invocation's lexical cell.
-                        emitActiveLexicalBinding(reg, varName);
-                    }
+                    // Keep the active CV pad visible to runtime lexical lookup.
+                    // Deferred format argument evaluation can also refer to
+                    // scalar cells declared earlier in the invocation.
+                    emitActiveLexicalBinding(reg, varName);
 
                     // Runtime attribute dispatch for my variables with attributes
                     emitVarAttrsIfNeeded(node, reg, sigil);
