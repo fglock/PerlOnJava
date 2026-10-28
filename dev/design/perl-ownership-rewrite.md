@@ -926,6 +926,16 @@ that the final owner still releases the captures. The full sweep-enabled
 `nice -n 19 make` gate passes. Ownerless CODEs without explicit identities
 still use the root-walk fallback.
 
+### Package-root release from counted owner slots (2026-10-28)
+
+When a package-rooted blessed value reaches a transient zero during overwrite,
+remaining counted owner-slot identities now repair the compatibility count
+before the package-root walker runs. `PackageRootOwnerSlotFastPathTest` keeps a
+weak observer alive through an undercounted overwrite, checks that the count
+matches the remaining hash slot, and verifies zero root queries. The full
+sweep-enabled `nice -n 19 make` gate passes. Values without counted owner slots
+retain the existing root-walk fallback.
+
 ### Next steps
 
 1. Continue replacing targeted weak-release and weak-CODE capture walks with
