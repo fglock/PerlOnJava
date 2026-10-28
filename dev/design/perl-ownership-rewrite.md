@@ -1300,25 +1300,37 @@ blessed aggregates run `DESTROY` before weak observers clear. The new
 and package roots, zero root queries, and blessed `DESTROY` ordering. The full
 `nice -n 19 make` gate passes in 8m48s. With sweeps disabled, the UNITCHECK,
 closure, weak/DESTROY/resurrection/cycle, Sub::Quote, and HTML-Tree `t/refloop.t`
-8/8 tests pass on both backends. The existing
-`UnblessedAggregateReachabilitySnapshotTest` still requires a root proof for an
-unblessed aggregate nested in a package array; the recursive `new_from_lol`
-reduction also retains three interpreter failures.
+8/8 tests pass on both backends. The recursive `new_from_lol` gap was caused by
+interpreter scope cleanup emitting releases for captured outer pad registers.
+`BytecodeCompiler` now excludes those registers from normal, explicit-return,
+condition, and tail-call cleanup, matching the JVM backend. The
+`issue_1649_recursive_builder_pad_release.t` regression passes 9/9 on both
+backends with corrective sweeps disabled and on system Perl. The unblessed
+aggregate nested in a package array still requires a root proof. The current
+unfiltered `make` compiles but reports four other JVM lifetime failures:
+`catalyst_request_body_tempfile_lifetime.t`,
+`file_temp_path_wrapper_lifetime.t`,
+`inc_hook_generator_state.t`, and
+`refcount/blessed_scalar_reference_contents_destroy.t`. Its AnyEvent listener
+case also cannot allocate a loopback port in this environment.
 
 ### Next steps
 
-1. Give aggregate edges nested in package arrays and hashes explicit owner
+1. Diagnose the four remaining sweep-disabled JVM lifetime failures listed
+   above, keeping the temporary-file wrapper and generator-state cases separate
+   until evidence connects them.
+2. Give aggregate edges nested in package arrays and hashes explicit owner
    identities, then remove the remaining first-weak-transition root proof.
-2. Replace the reflective weak-backref CODE capture walk with capture-owner
+3. Replace the reflective weak-backref CODE capture walk with capture-owner
    identities and remove `weakBackrefCaptureSnapshot` while preserving captured
    aggregate lifetime and weak clearing.
-3. In one ownership-family batch, finish CODE template and optree pins, raw
+4. In one ownership-family batch, finish CODE template and optree pins, raw
    descriptor/embedding borrows, native call buffers, escaping lvalues and
    refaliases, and targeted try/finally returns. Add regressions before running
    the focused gates and one full `nice -n 19 make`.
-4. Requalify upstream HTML-Tree, weak/DESTROY, resurrection, cycle, and full-suite
+5. Requalify upstream HTML-Tree, weak/DESTROY, resurrection, cycle, and full-suite
    behavior as each family migrates. Resolve the interpreter `new_from_lol`
-   lifecycle gap before declaring the full HTML-Tree suite qualified.
-5. Make semantic owner counts authoritative, then remove the compatibility
+   regression as fixed, then qualify the full HTML-Tree suite.
+6. Make semantic owner counts authoritative, then remove the compatibility
    bridge, production corrective scheduling, and reachability fallbacks after
    all acceptance gates pass.
