@@ -1951,6 +1951,31 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return owners;
     }
 
+    /** Retire the active {@code @_} alias identity for one removed argument slot. */
+    static void argumentArraySlotRemoved(RuntimeArray args, RuntimeScalar scalar) {
+        if (args == null || scalar == null) return;
+        PerlRuntime runtime = PerlRuntime.currentOrNull();
+        if (runtime == null) return;
+        ExecutionRuntimeState state = runtime.executionState();
+        Iterator<RuntimeArray> argumentFrames = state.argsStack.iterator();
+        Iterator<List<RuntimeScalar.ArgumentAliasOwner>> ownerFrames =
+                state.argumentAliasOwnerFrames.iterator();
+        while (argumentFrames.hasNext() && ownerFrames.hasNext()) {
+            RuntimeArray activeArgs = argumentFrames.next();
+            List<RuntimeScalar.ArgumentAliasOwner> owners = ownerFrames.next();
+            if (activeArgs != args) continue;
+            for (Iterator<RuntimeScalar.ArgumentAliasOwner> iterator = owners.iterator();
+                    iterator.hasNext();) {
+                RuntimeScalar.ArgumentAliasOwner owner = iterator.next();
+                if (owner.matches(scalar)) {
+                    iterator.remove();
+                    owner.release();
+                    return;
+                }
+            }
+        }
+    }
+
     public static void pushCallContext(int callContext) {
         pushCallContext(callContext, PerlRuntime.current().executionState());
     }

@@ -766,6 +766,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             this.ownerSlot = ownerSlot;
         }
 
+        boolean matches(RuntimeScalar candidate) {
+            return scalar == candidate;
+        }
+
         void release() {
             scalar.releaseArgumentAliasOwner(ownerSlot);
         }
