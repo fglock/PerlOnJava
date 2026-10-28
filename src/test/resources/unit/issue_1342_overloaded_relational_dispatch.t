@@ -7,24 +7,30 @@ use Test::More;
 
     use overload
         'eq' => sub {
-            my ($left, $right) = map { ref $_ ? $_ : __PACKAGE__->new($_) } @_;
+            @_ = upgrade(@_);
+            my ($left, $right) = @_;
             $$left eq $$right;
         },
-        'lt' => sub {
-            my ($left, $right) = map { ref $_ ? $_ : __PACKAGE__->new($_) } @_;
-            my ($a, $b) = ("$left", "$right");
-            length($a) < length($b) && substr($b, 0, length($a) + 1) eq "$a/";
-        },
+        'lt' => \&less,
         'le' => sub {
-            my ($left, $right) = map { ref $_ ? $_ : __PACKAGE__->new($_) } @_;
+            @_ = upgrade(@_);
+            my ($left, $right) = @_;
             $left lt $right || $left eq $right;
         },
-        'gt' => sub { $_[1] lt $_[0] },
+        'gt' => sub { @_ = upgrade(@_); $_[1] lt $_[0] },
         'ge' => sub {
-            my ($left, $right) = map { ref $_ ? $_ : __PACKAGE__->new($_) } @_;
+            @_ = upgrade(@_);
+            my ($left, $right) = @_;
             $right lt $left || $left eq $right;
         },
         '""' => sub { ${$_[0]} };
+
+    sub less ($$) {
+        @_ = upgrade(@_);
+        my ($left, $right) = @_;
+            my ($a, $b) = ("$left", "$right");
+            length($a) < length($b) && substr($b, 0, length($a) + 1) eq "$a/";
+    }
 
     sub new {
         my ($class, $key) = @_;
@@ -32,6 +38,10 @@ use Test::More;
         $key =~ s{^/*}{/};
         $key =~ s{/+$}{};
         return bless \$key, $class;
+    }
+
+    sub upgrade {
+        map { ref $_ ? $_ : __PACKAGE__->new($_) } @_;
     }
 }
 
