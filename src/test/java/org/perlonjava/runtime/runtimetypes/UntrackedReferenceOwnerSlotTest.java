@@ -23,9 +23,11 @@ class UntrackedReferenceOwnerSlotTest {
             RuntimeScalar hashTarget = new RuntimeScalar("hash target");
             RuntimeScalar hashElement = referenceTo(hashTarget);
             RuntimeHash hash = new RuntimeHash();
-            hash.elements.put("value", hashElement);
-            PerlOwnerSlot hashValueOwner = hashElement.untrackedReferenceOwnerSlot();
+            hash.put("value", hashElement);
+            RuntimeScalar storedHashElement = hash.elements.get("value");
+            PerlOwnerSlot hashValueOwner = storedHashElement.untrackedReferenceOwnerSlot();
             assertNotNull(hashValueOwner);
+            assertSame(hashTarget, hashValueOwner.referent());
 
             try (MortalList.ReachabilityQueryMeasurement measurement =
                          MortalList.measureReachabilityQueries()) {
@@ -37,7 +39,65 @@ class UntrackedReferenceOwnerSlotTest {
                 assertEquals(0, measurement.stats().rootQueries);
                 assertEquals(0, measurement.stats().snapshotsBuilt);
                 assertEquals(0, measurement.stats().scalarReachabilityQueries);
+
+                MortalList.scopeExitCleanupArray(array);
+                MortalList.scopeExitCleanupHash(hash);
+                assertEquals(0, arrayTarget.ownerSlotCount(
+                        PerlOwnerSlot.Kind.UNTRACKED_REFERENCE));
+                assertEquals(0, hashTarget.ownerSlotCount(
+                        PerlOwnerSlot.Kind.UNTRACKED_REFERENCE));
             }
+        }
+    }
+
+    @Test
+    void aggregateCollectionHooksRefreshUntrackedOwnersAfterInsertion() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            MortalList.setActive(true);
+            RuntimeScalar arrayTarget = new RuntimeScalar("raw array target");
+            RuntimeScalar arrayElement = referenceTo(arrayTarget);
+            RuntimeArray array = new RuntimeArray();
+            array.elements.add(arrayElement);
+
+            PerlOwnerSlot arrayValueOwner = arrayElement.untrackedReferenceOwnerSlot();
+            assertNotNull(arrayValueOwner);
+            assertSame(arrayTarget, arrayValueOwner.referent());
+            assertEquals(-1, arrayTarget.refCount);
+
+            RuntimeScalar hashTarget = new RuntimeScalar("raw hash target");
+            RuntimeScalar hashElement = referenceTo(hashTarget);
+            RuntimeHash hash = new RuntimeHash();
+            hash.elements.put("value", hashElement);
+
+            PerlOwnerSlot hashValueOwner = hashElement.untrackedReferenceOwnerSlot();
+            assertNotNull(hashValueOwner);
+            assertSame(hashTarget, hashValueOwner.referent());
+            assertEquals(-1, hashTarget.refCount);
+
+            array.elements.remove(arrayElement);
+            hash.elements.remove("value");
+            MortalList.deferDestroyForContainerClear(
+                    java.util.List.of(arrayElement, hashElement));
+            assertFalse(arrayValueOwner.isActive());
+            assertFalse(hashValueOwner.isActive());
+        }
+    }
+
+    @Test
+    void arrayCopyConstructionRefreshesOwnersAfterInstallingItsElementList() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeScalar target = new RuntimeScalar("copied array target");
+            RuntimeScalar element = referenceTo(target);
+
+            RuntimeArray copy = new RuntimeArray(java.util.List.of(element));
+
+            PerlOwnerSlot owner = element.untrackedReferenceOwnerSlot();
+            assertNotNull(owner);
+            assertSame(target, owner.referent());
+            assertTrue(copy.elements.contains(element));
+            assertEquals(-1, target.refCount);
         }
     }
 
@@ -374,14 +434,14 @@ class UntrackedReferenceOwnerSlotTest {
                 MyVarCleanupStack.unregister(owner);
                 MyVarCleanupStack.popMark(mark);
             }
+        }
+    }
 
     private static RuntimeScalar referenceTo(RuntimeBase referent) {
         RuntimeScalar reference = new RuntimeScalar();
         reference.type = RuntimeScalarType.REFERENCE;
         reference.value = referent;
         return reference;
-    }
-        }
     }
 
 }

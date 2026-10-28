@@ -159,6 +159,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         if (!(token instanceof RegexMutationState state)) return;
         deferValuesAddedSince(state.elements.values());
         elements = newElementMap(state.elements);
+        refreshUntrackedElementOwners();
         byteKeys = state.byteKeys == null ? null : new HashSet<>(state.byteKeys);
         type = state.type;
         blessId = state.blessId;
@@ -182,6 +183,13 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             else retained.put(scalar, count - 1);
         }
         MortalList.deferDestroyForContainerClear(added);
+    }
+
+    private void refreshUntrackedElementOwners() {
+        if (elements == null) return;
+        for (RuntimeScalar value : elements.values()) {
+            if (value != null) value.refreshUntrackedReferenceOwner();
+        }
     }
 
     private record RegexMutationState(Map<String, RuntimeScalar> elements,
@@ -224,6 +232,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             owner.markPackageRootedValue(value);
             RuntimeScalar result = super.put(key, value);
             stableMethodFieldCacheRevision++;
+            refreshStoredUntrackedOwner(value);
             updateReferentHashSlotOwnership(previous, value);
             return result;
         }
@@ -257,6 +266,17 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             }
             super.putAll(m);
             if (!m.isEmpty()) stableMethodFieldCacheRevision++;
+            for (RuntimeScalar value : m.values()) {
+                refreshStoredUntrackedOwner(value);
+            }
+        }
+
+        private void refreshStoredUntrackedOwner(RuntimeScalar value) {
+            // Bulk copy reconstructs a replacement map before assigning it to
+            // owner.elements. Refresh only once this map is installed.
+            if (value != null && owner.elements == this) {
+                value.refreshUntrackedReferenceOwner();
+            }
         }
 
         @Override

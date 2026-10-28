@@ -487,10 +487,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         RuntimeBase owner = containerOwner;
         if (owner == null || !MyVarCleanupStack.isRegistered(owner)) return false;
         if (owner instanceof RuntimeHash hash) {
-            return hash.elements.containsValue(this);
+            return hash.elements != null && hash.elements.containsValue(this);
         }
         if (owner instanceof RuntimeArray array) {
-            return array.elements.contains(this);
+            return array.elements != null && array.elements.contains(this);
         }
         return false;
     }
@@ -511,10 +511,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             return !MyVarCleanupStack.isRegistered(this) && !isPackageGlobalRoot;
         }
         if (owner instanceof RuntimeHash hash) {
-            return !hash.elements.containsValue(this);
+            return hash.elements == null || !hash.elements.containsValue(this);
         }
         if (owner instanceof RuntimeArray array) {
-            return !array.elements.contains(this);
+            return array.elements == null || !array.elements.contains(this);
         }
         return false;
     }
@@ -786,9 +786,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         PerlRuntime runtime = PerlRuntime.currentOrNull();
         boolean registeredLexical = runtime != null && MyVarCleanupStack.isRegistered(this);
         boolean storedInOwningContainer = owner instanceof RuntimeHash hash
-                ? hash.elements.containsValue(this)
+                ? hash.elements != null && hash.elements.containsValue(this)
                 : owner instanceof RuntimeArray array && !array.elementsAliased
-                    && array.elements.contains(this);
+                    && array.elements != null && array.elements.contains(this);
         return storedInOwningContainer
                 || ownerSlotCount(PerlOwnerSlot.Kind.PACKAGE_SCALAR_SLOT) != 0
                 || localBindingExists
@@ -827,6 +827,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         boolean weakValue = runtime != null && WeakRefRegistry.isweak(this);
         boolean untrackedStrongValue = !weakValue
                 && referent != null
+                && !(referent instanceof RuntimeArray)
+                && !(referent instanceof RuntimeHash)
                 && referent.refCount < 0
                 && referent.refCount != Integer.MIN_VALUE;
         if (hasDurableStrongValueSlot() && untrackedStrongValue) {
