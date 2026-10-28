@@ -11,6 +11,7 @@ priorities and future plans.
 - Export `fieldhash` from `Hash::Util` for compatibility with core Perl.
 - Normalize tied-hash `exists` results to Perl's boolean values.
 
+- Preserve lvalue returns through `goto &sub` without validating the empty control-flow marker (#1915).
 - Preserve reference lifetime when overloaded `++` and `--` fall back to arithmetic (#1901).
 - Parse forward-declared qualified classes as indirect constructors inside `new` methods (#1899).
 

@@ -1,6 +1,6 @@
 # Reviewed issue queues
 
-Snapshot: 2026-10-27, from live open issues, PRs and the #1649 phase contract.
+Snapshot: 2026-10-28, from live open issues, PRs and the #1649 phase contract.
 This is a bounded selection aid, not the complete backlog or fresh runtime
 validation. Follow the [triage and claim protocol](../../docs/guides/issue-triage.md)
 and recheck live issue comments/PRs before starting. Unlisted work is unreviewed
@@ -33,6 +33,7 @@ resolved before implementation. No new pass or failure is asserted here.
 | Frontend constants/quoting | [#1376](https://github.com/fglock/PerlOnJava/issues/1376) Constant hash-reference dereference | High / Investigate | Both-backend suite failures are reported. Minimize constant folding/dereference behavior and establish a failing current parent before selecting the fix. |
 | Parser syntax | [#1427](https://github.com/fglock/PerlOnJava/issues/1427) Test::Unit / Error.pm | Normal / Investigate | Separate catch-syntax behavior from example-path normalization; retain the full passing Perl comparison and identify independently fixable causes. |
 | Calls and value operations | [#1448](https://github.com/fglock/PerlOnJava/issues/1448) Audit-wrapper recursion | High / Investigate | Runaway recursion on both backends with a passing Perl suite. Trace captured original coderef identity and wrapper replacement under a timeout; no proven #1649 dependency. |
+| Lvalue return flow | [#1915](https://github.com/fglock/PerlOnJava/issues/1915) Undef aliases through `goto` | Normal / Active | [Current claim](https://github.com/fglock/PerlOnJava/issues/1915#issuecomment-6472368217); parent reproducer passes system Perl and fails both backends. Preserve the invalid empty scalar-return diagnostic; PR pending. |
 | Calls and value operations | [#1342](https://github.com/fglock/PerlOnJava/issues/1342) Relational overload dispatch | Normal / Ready | Report identifies an unwanted `cmp` dispatch. Add direct relational-overload coverage and require Morpheus acceptance on both backends. |
 | Calls and value operations | [#1428](https://github.com/fglock/PerlOnJava/issues/1428) Decimal stringification | Normal / Ready | One DateTime::Format::Epoch mismatch with passing Perl suite. Reduce the numeric conversion and cover large integral results without scientific notation. |
 | Warnings category tables | [#1208](https://github.com/fglock/PerlOnJava/issues/1208), [#1219](https://github.com/fglock/PerlOnJava/issues/1219) Experimental categories | Normal / Ready | Unknown valid categories prevent module load. Check shared registration code, add category-specific focused tests and upstream load acceptance; batch only if one registration mechanism owns both. |

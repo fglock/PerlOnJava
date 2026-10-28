@@ -2171,6 +2171,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     public static RuntimeList returnList(RuntimeBase retVal, int callContext, boolean copyReferenceScalars) {
+        // A control-flow marker has not produced a Perl return value yet. In
+        // particular, goto &sub must reach its replacement subroutine before
+        // lvalue-return validation; the marker itself is intentionally empty.
+        if (retVal instanceof RuntimeControlFlowList) {
+            return (RuntimeList) retVal;
+        }
         requireWritableLvalueReturn(callContext, retVal);
         if (retVal == null) {
             requireNonemptyLvalueReturn(callContext, null);
