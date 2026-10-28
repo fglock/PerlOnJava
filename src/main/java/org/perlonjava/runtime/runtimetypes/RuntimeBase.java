@@ -384,6 +384,15 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         return ownerSlots != null && !ownerSlots.isEmpty();
     }
 
+    /** Whether an untracked referent has a direct slot identity not backed by refCount. */
+    synchronized boolean hasUncountedOwnerSlotIdentity() {
+        if (ownerSlots == null) return false;
+        for (PerlOwnerSlot slot : ownerSlots) {
+            if (!PerlOwnerSlot.isCountedKind(slot.kind())) return true;
+        }
+        return false;
+    }
+
     /** Check whether a live owner identity besides the slot being replaced remains. */
     boolean hasOwnerSlotsOtherThan(PerlOwnerSlot excluded) {
         for (PerlOwnerSlot slot : ownerSlotSnapshot()) {

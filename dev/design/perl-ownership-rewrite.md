@@ -1288,10 +1288,27 @@ HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends. The recursive
 `new_from_lol` reduction still fails three interpreter assertions; this is the
 known interpreter lifecycle gap tracked below.
 
+### Untracked aggregate values use explicit owner identities (2026-10-28)
+
+Durable scalar cells now attach `UNTRACKED_REFERENCE` identities to array and
+hash referents as well as scalar referents, without promoting their legacy
+counts. First weaken trusts direct uncounted slot identities, including active
+lexical and package aggregate roots. Final release of a weakly-tracked aggregate
+owner now performs direct destruction and cascading cleanup with sweeps disabled;
+blessed aggregates run `DESTROY` before weak observers clear. The new
+`UntrackedAggregateOwnerSlotTest` covers two independent scalar owners, lexical
+and package roots, zero root queries, and blessed `DESTROY` ordering. The full
+`nice -n 19 make` gate passes in 8m48s. With sweeps disabled, the UNITCHECK,
+closure, weak/DESTROY/resurrection/cycle, Sub::Quote, and HTML-Tree `t/refloop.t`
+8/8 tests pass on both backends. The existing
+`UnblessedAggregateReachabilitySnapshotTest` still requires a root proof for an
+unblessed aggregate nested in a package array; the recursive `new_from_lol`
+reduction also retains three interpreter failures.
+
 ### Next steps
 
-1. Give untracked array/hash referents explicit owner counts and final-release
-   behavior, then remove their first-weak-transition root proof.
+1. Give aggregate edges nested in package arrays and hashes explicit owner
+   identities, then remove the remaining first-weak-transition root proof.
 2. Replace the reflective weak-backref CODE capture walk with capture-owner
    identities and remove `weakBackrefCaptureSnapshot` while preserving captured
    aggregate lifetime and weak clearing.
