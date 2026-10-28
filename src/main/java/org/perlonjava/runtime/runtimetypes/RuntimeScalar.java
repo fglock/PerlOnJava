@@ -827,8 +827,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         boolean weakValue = runtime != null && WeakRefRegistry.isweak(this);
         boolean untrackedStrongValue = !weakValue
                 && referent != null
-                && !(referent instanceof RuntimeArray)
-                && !(referent instanceof RuntimeHash)
                 && referent.refCount < 0
                 && referent.refCount != Integer.MIN_VALUE;
         if (hasDurableStrongValueSlot() && untrackedStrongValue) {
