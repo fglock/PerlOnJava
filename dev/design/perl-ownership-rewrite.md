@@ -951,7 +951,11 @@ HTML::Tree 5.07 `t/refloop.t` is 8/8 on both backends, and
 Selected weak-capture, END/DESTROY-order, resurrection, and self-capture-cycle
 tests also pass 30/30 under system Perl and 30/30 on each PerlOnJava backend
 with corrective sweeps disabled. The full no-sweep unit suite remains
-unqualified.
+unqualified. The last recorded no-sweep `make` run completed 1,242 tests and
+failed three assertions that directly exercise the sweep helpers: two in
+`ReachabilityQueryCostTest` and one in `WeakBackrefCodeCaptureSweepTest`.
+Preserve those tests while separating helper coverage from production sweep
+acceptance.
 
 ### Next steps
 
