@@ -819,6 +819,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         WeakRefRegistry.onStrongOwnerSlotReleased(expectedReferent);
     }
 
+    void finalizeUntrackedValueAfterScopeExit(RuntimeBase expectedReferent) {
+        if (expectedReferent == null) return;
+        refreshUntrackedReferenceOwner();
+        if (hasDurableStrongValueSlot()) return;
+        releaseUntrackedReferenceOwner(expectedReferent);
+        WeakRefRegistry.finalizeUntrackedAfterOwnerScopeExit(expectedReferent);
+    }
+
     private void updateUntrackedReferenceOwner(RuntimeBase referent) {
         // RuntimeGraphCloner may rebuild a tied handler before it binds the
         // destination runtime. Such a fresh scalar cannot be a registered weak
@@ -5633,6 +5641,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public static void scopeExitCleanup(RuntimeScalar scalar) {
         if (scalar == null) return;
         if (scalar.hasCodeSlotBinding()) return;
+        RuntimeBase untrackedValueAtScopeExit = scalar.untrackedReferenceOwnerSlot == null
+                ? null : scalar.untrackedReferenceOwnerSlot.referent();
         scalar.refreshUntrackedReferenceOwner();
         // ${^LAST_FH} is tied to the lexical handle that performed the last
         // tell/read.  A lexical coercible glob must stop being observable once
@@ -5783,6 +5793,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // (setLarge or RuntimeCode.apply). This prevents premature DESTROY
         // when the same referent is on the JVM stack as a return value.
         MortalList.deferDecrementIfTracked(scalar);
+
+        // The lexical may have owned this cell when the initial refresh ran.
+        // Recheck after scope-exit state changes so its untracked value leaves
+        // with the final scalar-cell owner instead of waiting for a sweep.
+        scalar.finalizeUntrackedValueAfterScopeExit(untrackedValueAtScopeExit);
 
         // WEAKLY_TRACKED objects: do NOT clear weak refs on scope exit.
         // These objects transitioned from untracked (-1) to WEAKLY_TRACKED (-2) in

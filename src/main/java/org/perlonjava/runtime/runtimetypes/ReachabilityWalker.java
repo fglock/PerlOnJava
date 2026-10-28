@@ -3691,4 +3691,9 @@ public class ReachabilityWalker {
                 && todo.isEmpty() && visits < MAX_WEAK_BACKREF_CAPTURE_VISITS;
         return new WeakBackrefCaptureSnapshot(seen, complete);
     }
+
+    /** Record the legacy post-DESTROY capture diagnostic without cleaning objects. */
+    static void inspectWeakBackrefCapturesForDiagnostics() {
+        weakBackrefCaptureSnapshot();
+    }
 }

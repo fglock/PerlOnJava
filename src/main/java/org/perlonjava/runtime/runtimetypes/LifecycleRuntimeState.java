@@ -15,6 +15,16 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Runtime-owned mortal, weak-reference, DESTROY, and reachability sweep state. */
 final class LifecycleRuntimeState {
+    static final class TemporaryRootEntry {
+        final RuntimeBase root;
+        final ArrayList<PerlOwnerSlot> ownerSlots;
+
+        TemporaryRootEntry(RuntimeBase root, ArrayList<PerlOwnerSlot> ownerSlots) {
+            this.root = root;
+            this.ownerSlots = ownerSlots;
+        }
+    }
+
     final AtomicBoolean boundaryWorkRegistered = new AtomicBoolean();
     boolean mortalActive = true;
     final ArrayList<RuntimeBase> pending = new ArrayList<>();
@@ -43,7 +53,9 @@ final class LifecycleRuntimeState {
     // are per referent because several independent pad slots can own one base.
     final IdentityHashMap<RuntimeBase, Integer> positiveOwnerReferents = new IdentityHashMap<>();
     boolean deferredCapturesMayBeReady;
-    final ArrayDeque<RuntimeBase> temporaryRoots = new ArrayDeque<>();
+    final ArrayDeque<TemporaryRootEntry> temporaryRoots = new ArrayDeque<>();
+    final IdentityHashMap<RuntimeBase, Integer> temporaryRootReferentCounts =
+            new IdentityHashMap<>();
     final IdentityHashMap<RuntimeBase, Integer> suspendedRoots = new IdentityHashMap<>();
     private static final int INITIAL_MARK_CAPACITY = 16;
     int[] marks = new int[INITIAL_MARK_CAPACITY];
@@ -54,18 +66,9 @@ final class LifecycleRuntimeState {
     boolean flushing;
     int reachabilityDrainDepth;
     int topLevelFlushDepth;
-    // Start within the configured quiet-sweep throttle window. A zero value
-    // would trigger a full root walk at the first statement boundary, often
-    // between callbacks that are expected to dispatch together.
-    long lastAutoSweepNanos = System.nanoTime();
-    boolean inAutoSweep;
     /** Suppress sweeps while clone hooks and the first child entry build Perl roots. */
     int weakSweepSuppressionDepth;
     boolean immediateWeakSweepRequested;
-    boolean deferCaptureReachabilityToBoundarySweep;
-    final ArrayList<RuntimeBase> deferredCaptureSweepCandidates = new ArrayList<>();
-    long boundaryWeakSweepGeneration;
-    long deferredCaptureSweepGeneration;
     final Set<RuntimeBase> targetedWeakSweepReferents =
             Collections.newSetFromMap(new IdentityHashMap<>());
     Set<RuntimeBase> flushReachableCache;
@@ -162,23 +165,17 @@ final class LifecycleRuntimeState {
             positiveOwnerReferents.clear();
         }
         deferredCapturesMayBeReady = false;
-        temporaryRoots.clear();
+        clearTemporaryRoots();
         suspendedRoots.clear();
         markDepth = 0;
         flushing = false;
         reachabilityDrainDepth = 0;
         topLevelFlushDepth = 0;
-        lastAutoSweepNanos = System.nanoTime();
-        inAutoSweep = false;
         fullRootSnapshot = null;
         unblessedAggregateRootSnapshot = null;
         weakSweepRootWitnesses.clear();
         activeReachabilityQueryStats = null;
         immediateWeakSweepRequested = false;
-        deferCaptureReachabilityToBoundarySweep = false;
-        deferredCaptureSweepCandidates.clear();
-        boundaryWeakSweepGeneration = 0;
-        deferredCaptureSweepGeneration = 0;
         targetedWeakSweepReferents.clear();
         flushReachableCache = null;
         flushTiedReachableCache = null;
@@ -206,5 +203,15 @@ final class LifecycleRuntimeState {
         traceOwners.clear();
         scalarRegistry.clear();
         scalarRegisterStacks.clear();
+    }
+
+    void clearTemporaryRoots() {
+        for (TemporaryRootEntry entry : temporaryRoots) {
+            for (PerlOwnerSlot ownerSlot : entry.ownerSlots) {
+                ownerSlot.release();
+            }
+        }
+        temporaryRoots.clear();
+        temporaryRootReferentCounts.clear();
     }
 }
