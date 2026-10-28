@@ -590,14 +590,9 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     }
 
     /**
-     * D-W6.14: count owners that are reachable from package globals or
-     * live my-vars. This is the strict version used by the production
-     * rescue at MortalList.flush refCount→0: only objects whose owners
-     * can be reached from real roots are kept alive. Phantom owners
-     * (scalars that should be dead but haven't been released yet) are
-     * excluded. Cycles with no external root → all owners unreachable
-     * → 0 → DESTROY fires (matching real Perl's cycle leak behavior
-     * resolved by user weaken()).
+     * Count owners that are reachable from package globals or live my-vars.
+     * This compatibility fallback remains for ownership sources that have not
+     * yet migrated to explicit slot identities.
      */
     public int reachableOwnerCount() {
         if (activeOwners == null) return 0;

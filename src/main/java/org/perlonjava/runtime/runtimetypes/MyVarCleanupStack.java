@@ -243,7 +243,11 @@ public class MyVarCleanupStack {
     }
 
     private static void noteVarLeftScope(Object var) {
-        if (var instanceof RuntimeScalar scalar) scalar.refreshUntrackedReferenceOwner();
+        if (var instanceof RuntimeScalar scalar) {
+            PerlOwnerSlot valueOwner = scalar.untrackedReferenceOwnerSlot();
+            RuntimeBase referent = valueOwner == null ? null : valueOwner.referent();
+            scalar.finalizeUntrackedValueAfterScopeExit(referent);
+        }
         if (var instanceof RuntimeBase base && WeakRefRegistry.hasWeakRefsTo(base)) {
             requestWeakCleanupAfterScopeExit(base);
         } else if (var instanceof RuntimeScalar scalar

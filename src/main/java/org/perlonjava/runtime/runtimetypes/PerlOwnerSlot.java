@@ -36,7 +36,9 @@ public final class PerlOwnerSlot {
         /** Active lexical frame or top-level pad entry owning an aggregate. */
         ACTIVE_LEXICAL,
         /** Strong container edge whose referent is not on the legacy refcount bridge. */
-        UNTRACKED_REFERENCE
+        UNTRACKED_REFERENCE,
+        /** Runtime-owned temporary value retained across a cleanup drain. */
+        TEMPORARY_ROOT
     }
 
     private Kind kind;
@@ -262,6 +264,21 @@ public final class PerlOwnerSlot {
         }
         if (nativeOwner || legacyCaptureCount != 0) {
             throw new IllegalStateException("untracked identity cannot replace native or capture ownership");
+        }
+        transferWithoutRuntimeRoot(target, false);
+    }
+
+    /** Record one direct value retained by a runtime temporary root. */
+    synchronized void acquireTemporaryRootIdentity(RuntimeBase target) {
+        if (kind != Kind.TEMPORARY_ROOT) {
+            throw new IllegalStateException("temporary-root acquisition requires a temporary-root slot");
+        }
+        Objects.requireNonNull(target, "target");
+        if (referent != null || nativeOwner || legacyCaptureCount != 0) {
+            throw new IllegalStateException("temporary-root slot is already active");
+        }
+        if (target.refCount == Integer.MIN_VALUE) {
+            throw new IllegalStateException("cannot retain a destroyed temporary root");
         }
         transferWithoutRuntimeRoot(target, false);
     }
