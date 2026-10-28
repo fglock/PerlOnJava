@@ -293,7 +293,7 @@ public final class PerlOwnerSlot {
         kind = nextKind;
     }
 
-    private static boolean isCountedKind(Kind kind) {
+    static boolean isCountedKind(Kind kind) {
         return kind == Kind.SCALAR_CELL || kind == Kind.CODE_SLOT || kind == Kind.ARRAY_ELEMENT
                 || kind == Kind.HASH_ELEMENT || kind == Kind.ARGUMENT_VALUE
                 || kind == Kind.RETURN_VALUE || kind == Kind.TIE_HANDLER;

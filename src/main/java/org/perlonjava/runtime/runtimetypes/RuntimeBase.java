@@ -398,6 +398,24 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         return count;
     }
 
+    /** Number of active slot identities whose releases balance refCount. */
+    synchronized int countedOwnerSlotCount() {
+        if (ownerSlots == null) return 0;
+        int count = 0;
+        for (PerlOwnerSlot slot : ownerSlots) {
+            if (PerlOwnerSlot.isCountedKind(slot.kind())) count++;
+        }
+        return count;
+    }
+
+    /** Restore the compatibility count from surviving counted owner identities. */
+    synchronized boolean restoreCountedOwnerSlotRefCount() {
+        int count = countedOwnerSlotCount();
+        if (count == 0) return false;
+        refCount = count;
+        return true;
+    }
+
     /** Number of distinct captured pad slots that own this referent. */
     public int semanticCaptureOwnerCount() {
         return ownerSlotCount(PerlOwnerSlot.Kind.CLOSURE_PAD);
