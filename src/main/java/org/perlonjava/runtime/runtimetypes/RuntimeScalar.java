@@ -352,6 +352,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return frame != null && copiedFromArgumentFrame == frame;
     }
 
+    Object copiedFromArgumentFrameToken() {
+        return copiedFromArgumentFrame;
+    }
+
     /** Clears a non-reference array slot after aggregate ownership is queued. */
     void clearForArraySlotRemoval() {
         this.type = UNDEF;

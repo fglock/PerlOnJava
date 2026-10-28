@@ -24,6 +24,9 @@ final class LifecycleRuntimeState {
     // Parallel to pending.  Weak provenance permits a tail-call handoff to
     // drain only the decrement whose owning argument it actually replaces.
     final ArrayList<java.lang.ref.WeakReference<RuntimeScalar>> pendingOwnerScalars = new ArrayList<>();
+    // Parallel to pending. Captured when a scalar decrement is queued so a
+    // tail-call handoff can match its source argument frame by identity.
+    final ArrayList<Object> pendingArgumentFrames = new ArrayList<>();
     // Parallel to pending. A non-scalar transient owner kind is recorded only
     // for trace attribution; it never changes runtime reachability.
     final ArrayList<String> pendingTransientOwnerKinds = new ArrayList<>();
@@ -139,6 +142,7 @@ final class LifecycleRuntimeState {
         pending.clear();
         pendingOwnerReleases.clear();
         pendingOwnerScalars.clear();
+        pendingArgumentFrames.clear();
         pendingTransientOwnerKinds.clear();
         pendingTiedReleases.clear();
         pendingIoReleases.clear();

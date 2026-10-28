@@ -2065,6 +2065,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return null;
     }
 
+    /** Resolve the explicit source frame associated with a queued scalar owner. */
+    static Object argumentAliasFrameForOwner(RuntimeScalar scalar) {
+        if (scalar == null || PerlRuntime.currentOrNull() == null) return null;
+        Object activeFrame = currentArgumentAliasFrame(scalar);
+        return activeFrame != null ? activeFrame : scalar.copiedFromArgumentFrameToken();
+    }
+
     /** True only while the argument frame represented by {@code token} is active. */
     static boolean isArgumentFrameActive(Object token) {
         if (token == null || PerlRuntime.currentOrNull() == null) return false;
