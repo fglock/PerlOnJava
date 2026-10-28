@@ -15,16 +15,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Runtime-owned mortal, weak-reference, DESTROY, and reachability sweep state. */
 final class LifecycleRuntimeState {
-    static final class TemporaryRootEntry {
-        final RuntimeBase root;
-        final ArrayList<PerlOwnerSlot> ownerSlots;
-
-        TemporaryRootEntry(RuntimeBase root, ArrayList<PerlOwnerSlot> ownerSlots) {
-            this.root = root;
-            this.ownerSlots = ownerSlots;
-        }
-    }
-
     final AtomicBoolean boundaryWorkRegistered = new AtomicBoolean();
     boolean mortalActive = true;
     final ArrayList<RuntimeBase> pending = new ArrayList<>();
@@ -53,9 +43,7 @@ final class LifecycleRuntimeState {
     // are per referent because several independent pad slots can own one base.
     final IdentityHashMap<RuntimeBase, Integer> positiveOwnerReferents = new IdentityHashMap<>();
     boolean deferredCapturesMayBeReady;
-    final ArrayDeque<TemporaryRootEntry> temporaryRoots = new ArrayDeque<>();
-    final IdentityHashMap<RuntimeBase, Integer> temporaryRootReferentCounts =
-            new IdentityHashMap<>();
+    final ArrayDeque<RuntimeBase> temporaryRoots = new ArrayDeque<>();
     final IdentityHashMap<RuntimeBase, Integer> suspendedRoots = new IdentityHashMap<>();
     private static final int INITIAL_MARK_CAPACITY = 16;
     int[] marks = new int[INITIAL_MARK_CAPACITY];
@@ -165,7 +153,7 @@ final class LifecycleRuntimeState {
             positiveOwnerReferents.clear();
         }
         deferredCapturesMayBeReady = false;
-        clearTemporaryRoots();
+        temporaryRoots.clear();
         suspendedRoots.clear();
         markDepth = 0;
         flushing = false;
@@ -205,13 +193,4 @@ final class LifecycleRuntimeState {
         scalarRegisterStacks.clear();
     }
 
-    void clearTemporaryRoots() {
-        for (TemporaryRootEntry entry : temporaryRoots) {
-            for (PerlOwnerSlot ownerSlot : entry.ownerSlots) {
-                ownerSlot.release();
-            }
-        }
-        temporaryRoots.clear();
-        temporaryRootReferentCounts.clear();
-    }
 }
