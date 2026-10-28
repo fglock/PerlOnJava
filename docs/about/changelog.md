@@ -6,7 +6,7 @@ priorities and future plans.
 
 ## Work in progress
 
-- Disable corrective sweeps by default while migrating to explicit reference ownership; balance argument, scalar-cell, closure, aggregate, shared-view, named CODE, persistent state, and destructor lifetimes (#1649).
+- Disable corrective sweeps by default while migrating to explicit reference ownership; retain temporary scalar call results through argument evaluation and callee cleanup, and balance argument, scalar-cell, closure, aggregate, shared-view, named CODE, persistent state, and destructor lifetimes (#1649).
 
 - Bundle `Devel::Size` with JVM-based `size` and `total_size` estimates.
 
