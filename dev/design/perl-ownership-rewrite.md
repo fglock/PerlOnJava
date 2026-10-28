@@ -1261,18 +1261,34 @@ lexical and package-array CODE owners with zero reachability queries. The full
 `nice -n 19 make` gate passes in 6m33s, and the 16-case sweeps-disabled
 JVM/interpreter matrix passes, including HTML-Tree `t/refloop.t` 8/8.
 
+### Untracked container values refresh and retire owners (2026-10-28)
+
+Array and hash writes now refresh untracked scalar referent identities after
+the element is installed. Copy construction refreshes only after the new
+storage is assigned, and scope cleanup releases each identity before the
+no-weak-reference fast return. Repeated cleanup leaves no stale identity.
+`UntrackedReferenceOwnerSlotTest` covers raw and normal array/hash writes,
+copy construction, removal, and scope exit without root or scalar-reachability
+queries. Untracked array/hash referents still use the existing root proof on
+their first weak transition; their native release semantics remain to be
+migrated. `nice -n 19 make` passes in 9m55s. With corrective sweeps disabled,
+the 16-case lifecycle matrix passes on both backends, including HTML-Tree
+`t/refloop.t` 8/8.
+
 ### Next steps
 
-1. Replace the reflective weak-backref CODE capture walk with capture-owner
-   identities, then remove the sweep-only `weakBackrefCaptureSnapshot` path.
-   Preserve the captured aggregate lifetime cases and their weak clearing.
-2. In one ownership-family batch, finish CODE template and optree pins, raw
+1. Give untracked array/hash referents explicit owner counts and final-release
+   behavior, then remove their first-weak-transition root proof.
+2. Replace the reflective weak-backref CODE capture walk with capture-owner
+   identities and remove `weakBackrefCaptureSnapshot` while preserving captured
+   aggregate lifetime and weak clearing.
+3. In one ownership-family batch, finish CODE template and optree pins, raw
    descriptor/embedding borrows, native call buffers, escaping lvalues and
    refaliases, and targeted try/finally returns. Add regressions before running
    the focused gates and one full `nice -n 19 make`.
-3. Requalify upstream HTML-Tree, weak/DESTROY, resurrection, cycle, and full-suite
+4. Requalify upstream HTML-Tree, weak/DESTROY, resurrection, cycle, and full-suite
    behavior as each family migrates. Resolve the interpreter `new_from_lol`
    lifecycle gap before declaring the full HTML-Tree suite qualified.
-4. Make semantic owner counts authoritative, then remove the compatibility
+5. Make semantic owner counts authoritative, then remove the compatibility
    bridge, production corrective scheduling, and reachability fallbacks after
    all acceptance gates pass.
