@@ -3,6 +3,7 @@ package Hash::Util;
 use strict;
 use warnings;
 require Exporter;
+use Hash::Util::FieldHash qw(fieldhash);
 
 our @ISA = qw(Exporter);
 our @EXPORT_OK = qw(
@@ -16,6 +17,7 @@ our @EXPORT_OK = qw(
     legal_keys all_keys
     hidden_keys legal_ref_keys
     hash_unlocked
+    fieldhash
 );
 our $VERSION = '0.28';
 
