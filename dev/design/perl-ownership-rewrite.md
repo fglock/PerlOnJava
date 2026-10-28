@@ -867,9 +867,27 @@ disabled. Evidence: `/tmp/issue1649-argument-owner-oracle.log`,
 `/tmp/make-issue1649-argument-owner-materialized-final.log`, and logs with the
 `/tmp/issue1649-argument-owner-materialized-` prefix.
 
-This closes the temporary CODE-cell argument path only. Ordinary argument
-cells, native buffers, escaping aliases, and the remaining return paths still
-need explicit owner-slot accounting.
+This closes the temporary CODE-cell argument path only. Aliased `@_` cells,
+native buffers, escaping aliases, and the remaining return paths still need
+explicit owner-slot accounting.
+
+### Direct scalar arguments staged through later expressions (2026-10-28)
+
+`CallArguments` gives each strong scalar return snapshot its own
+`ARGUMENT_VALUE` slot until `finish()`. This keeps an earlier argument alive if
+a later expression drains its return owner, and keeps a final scalar argument
+alive through callee cleanup. Persistent caller cells remain borrowed so
+assignment through `@_` can release their previous values normally.
+
+`CallArgumentsScalarStagingOwnerTest` covers a non-final mortal result, a final
+mortal result, and a persistent caller cell. The default-off full
+`nice -n 19 make` gate passes. Explicit-return cleanup passes 6/6 and
+HTML::Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective
+sweeps unset. Evidence: `/tmp/make-issue1649-final-argument-owner-verified.log`
+and files with the `/tmp/issue1649-final-argument-` prefix.
+
+This covers scalar return snapshots in direct call arguments. It does not
+complete aliased `@_` cell ownership or shared and tail-call cleanup.
 
 Unresolved acceptance cases:
 
@@ -968,15 +986,16 @@ reachability fallbacks.
 
 ### Next steps
 
-1. Replace remaining targeted weak-release and weak-CODE capture decisions with
+1. Complete aliased `@_` cell ownership and shared/tail-call cleanup so argument
+   release no longer depends on referent scans.
+2. Replace remaining targeted weak-release and weak-CODE capture decisions with
    explicit owner-slot transitions, preserving the existing diagnostic helper
    tests.
-2. Finish CODE template ownership, per-optree compiled-pin retirement, and raw
-   descriptor/embedding borrows. Complete ordinary argument-cell lifetimes,
-   shared/tail call cleanup, native call buffers, escaping lvalues/refaliases,
-   and targeted try/finally returns.
-3. Requalify HTML-Tree, weak/DESTROY, resurrection, cycle, and full-suite behavior
+3. Finish CODE template ownership, per-optree compiled-pin retirement, and raw
+   descriptor/embedding borrows. Complete native call buffers, escaping
+   lvalues/refaliases, and targeted try/finally returns.
+4. Requalify HTML-Tree, weak/DESTROY, resurrection, cycle, and full-suite behavior
    as each ownership family migrates.
-4. Make semantic owner counts authoritative, then remove the compatibility
+5. Make semantic owner counts authoritative, then remove the compatibility
    bridge, production corrective scheduling, and reachability fallbacks after
    the acceptance gates pass.
