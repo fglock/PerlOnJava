@@ -1058,18 +1058,27 @@ full `nice -n 19 make` gate passes. Evidence:
 `/tmp/make-issue1649-argument-alias-frame-roots-final.log`.
 
 This covers durable scalar cells staged for calls and active argument frames.
-Exact release when an element is removed from `@_`, nested list/aggregate
-arguments, and shared/tail-call aliases remain open. The tracked `new_from_lol`
-lifecycle reproducer passes 4/4 on JVM; its interpreter result (1/4) matches the
-committed parent `7ba27d774`, so those three failures predate this change. The
-TreeBuilder lifecycle reproducer passes 4/4 on both backends. Upstream HTML-Tree
-5.07 `t/refloop.t` still needs requalification after this change.
+Nested list/aggregate arguments and shared/tail-call aliases remain open. The
+tracked `new_from_lol` lifecycle reproducer passes 4/4 on JVM; its interpreter
+result (1/4) matches the committed parent `7ba27d774`, so those three failures
+predate this change. The TreeBuilder lifecycle reproducer passes 4/4 on both
+backends.
+
+### Retire active argument identities when `@_` slots are removed (2026-10-28)
+
+Active argument-frame identities now retire when their matching array slot is
+removed, replaced, cleared, or deleted through a subrange operation. The
+element-list hooks cover indexed removal and Java's direct `removeFirst` /
+`removeLast` paths. `ArgumentAliasOwnerSlotTest` checks duplicate aliases,
+replacement, clearing, and exact one-time retirement when the frame later exits.
+`nice -n 19 make` passes. With corrective sweeps unset, explicit-return
+cleanup passes 6/6 on both backends and HTML-Tree 5.07 `t/refloop.t` passes 8/8
+on both backends.
 
 ### Next steps
 
-1. Retire frame identities on `@_` element removal; cover nested list/aggregate
-   arguments and shared/tail-call aliases, then remove remaining
-   `hasActiveArgumentOwner` compatibility scans.
+1. Cover nested list/aggregate arguments and shared/tail-call aliases, then
+   remove remaining `hasActiveArgumentOwner` compatibility scans.
 2. Replace remaining targeted weak-release and weak-CODE capture decisions with
    explicit owner-slot transitions, preserving the existing diagnostic helper
    tests.

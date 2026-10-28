@@ -4,10 +4,82 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("unit")
 class ArgumentAliasOwnerSlotTest {
+    @Test
+    void removingOneDuplicateArgumentSlotRetiresOnlyItsFrameIdentity() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeHash target = new RuntimeHash();
+            RuntimeScalar cell = new RuntimeScalar();
+            cell.isPackageGlobalRoot = true;
+            cell.set(target.createAnonymousReference());
+            RuntimeArray args = new RuntimeArray();
+            args.elements.add(cell);
+            args.elements.add(cell);
+            boolean argsActive = false;
+            try {
+                RuntimeCode.pushArgs(args);
+                argsActive = true;
+
+                assertEquals(2, target.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_ALIAS));
+                assertSame(cell, RuntimeArray.shift(args));
+                assertEquals(1, target.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_ALIAS),
+                        "removing one duplicate @_ slot retires exactly one frame identity");
+
+                assertSame(cell, RuntimeArray.pop(args));
+                assertEquals(0, target.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_ALIAS),
+                        "removing the last duplicate retires its remaining identity");
+
+                RuntimeCode.popArgs();
+                argsActive = false;
+                assertEquals(0, target.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_ALIAS));
+            } finally {
+                if (argsActive) RuntimeCode.popArgs();
+            }
+        }
+    }
+
+    @Test
+    void replacingAndClearingArgumentSlotsRetiresTheirFrameIdentities() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeHash first = new RuntimeHash();
+            RuntimeHash second = new RuntimeHash();
+            RuntimeScalar firstCell = new RuntimeScalar();
+            firstCell.isPackageGlobalRoot = true;
+            firstCell.set(first.createAnonymousReference());
+            RuntimeScalar secondCell = new RuntimeScalar();
+            secondCell.isPackageGlobalRoot = true;
+            secondCell.set(second.createAnonymousReference());
+            RuntimeArray args = new RuntimeArray();
+            args.elements.add(firstCell);
+            args.elements.add(secondCell);
+            boolean argsActive = false;
+            try {
+                RuntimeCode.pushArgs(args);
+                argsActive = true;
+
+                args.elements.set(0, new RuntimeScalar());
+                assertEquals(0, first.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_ALIAS));
+                assertEquals(1, second.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_ALIAS));
+
+                args.elements.clear();
+                assertEquals(0, second.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_ALIAS));
+
+                RuntimeCode.popArgs();
+                argsActive = false;
+                assertEquals(0, first.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_ALIAS));
+                assertEquals(0, second.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_ALIAS));
+            } finally {
+                if (argsActive) RuntimeCode.popArgs();
+            }
+        }
+    }
+
     @Test
     void stagedAndActiveArgumentAliasesTrackCellAssignmentsWithoutChangingRefCount() {
         PerlRuntime runtime = new PerlRuntime();

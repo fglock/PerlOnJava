@@ -521,6 +521,9 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             if (element != null) element.markContainerOwner(owner);
             owner.markPackageRootedValue(element);
             RuntimeScalar result = super.set(index, element);
+            if (previous != element) {
+                RuntimeCode.argumentArraySlotRemoved(owner, previous);
+            }
             owner.validateIsaMutation();
             return result;
         }
@@ -531,6 +534,21 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             owner.noteIsaMutation();
             owner.notePackageRootMutation(previous, null);
             owner.validateIsaMutation();
+            RuntimeCode.argumentArraySlotRemoved(owner, previous);
+            return previous;
+        }
+
+        @Override
+        public RuntimeScalar removeFirst() {
+            RuntimeScalar previous = super.removeFirst();
+            RuntimeCode.argumentArraySlotRemoved(owner, previous);
+            return previous;
+        }
+
+        @Override
+        public RuntimeScalar removeLast() {
+            RuntimeScalar previous = super.removeLast();
+            RuntimeCode.argumentArraySlotRemoved(owner, previous);
             return previous;
         }
 
@@ -541,6 +559,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 owner.noteIsaMutation();
                 owner.notePackageRootMutation(scalar, null);
                 owner.validateIsaMutation();
+                RuntimeCode.argumentArraySlotRemoved(owner, scalar);
             }
             return removed;
         }
@@ -550,9 +569,34 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             if (!isEmpty()) {
                 owner.noteIsaMutation();
                 owner.notePackageRootClear(this);
+                for (RuntimeScalar scalar : toArray(new RuntimeScalar[0])) {
+                    RuntimeCode.argumentArraySlotRemoved(owner, scalar);
+                }
             }
             super.clear();
             owner.validateIsaMutation();
+        }
+
+        @Override
+        protected void removeRange(int fromIndex, int toIndex) {
+            for (int i = fromIndex; i < toIndex; i++) {
+                RuntimeCode.argumentArraySlotRemoved(owner, get(i));
+            }
+            super.removeRange(fromIndex, toIndex);
+        }
+
+        @Override
+        public boolean removeIf(java.util.function.Predicate<? super RuntimeScalar> filter) {
+            Objects.requireNonNull(filter);
+            boolean changed = false;
+            Iterator<RuntimeScalar> iterator = iterator();
+            while (iterator.hasNext()) {
+                if (filter.test(iterator.next())) {
+                    iterator.remove();
+                    changed = true;
+                }
+            }
+            return changed;
         }
     }
 
