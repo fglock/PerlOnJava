@@ -259,7 +259,7 @@ public class WeakRefRegistry {
                 base.refCount = 1;
             } else {
                 base.refCount = WEAKLY_TRACKED;
-                MortalList.requestImmediateWeakSweep();
+                MortalList.requestCorrectiveWeakSweep();
             }
         }
         // A live lexical can be the final Perl-visible strong owner even when
@@ -273,7 +273,7 @@ public class WeakRefRegistry {
                 && base.refCount > 0
                 && base.reachableOwnerCount() == 0
                 && !ModuleInitGuard.inModuleInit()) {
-            MortalList.requestImmediateWeakSweep();
+            MortalList.requestCorrectiveWeakSweep();
         }
         boolean shouldCheckLiveCodeRef = weakenedLiveCodeRef
                 && codeRefHasCountedOwners(base)

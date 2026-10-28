@@ -573,7 +573,7 @@ public class MortalList {
                     base.releaseOwner(scalar, "deferDecrementIfTracked zero-count owner");
                 }
                 base.releaseActiveOwner(scalar);
-                requestImmediateWeakSweep();
+                requestCorrectiveWeakSweep();
             }
             // Note: WEAKLY_TRACKED (-2) objects are NOT scheduled for destruction
             // on scope exit. We can't count strong refs for non-DESTROY objects
@@ -1411,6 +1411,7 @@ public class MortalList {
     // next Perl statement boundary; a full nested-call sweep can invalidate
     // unrelated weak callback graphs whose caller-owned return values have not
     // reached a walker-visible lexical yet.
+    /** Request one caller-driven quiet sweep at the next safe boundary. */
     public static void requestImmediateWeakSweep() {
         if (!ReachabilityWalker.correctiveSweepsEnabled()) return;
         LifecycleRuntimeState state = state();
@@ -1421,6 +1422,12 @@ public class MortalList {
             StackTraceElement caller = stack.length > 2 ? stack[2] : null;
             System.err.println("[WEAK_SWEEP_REQUEST] caller=" + caller);
         }
+    }
+
+    /** Schedule a compatibility sweep from runtime cleanup code when enabled. */
+    static void requestCorrectiveWeakSweep() {
+        if (!ReachabilityWalker.correctiveSweepsEnabled()) return;
+        requestImmediateWeakSweep();
     }
 
     public static void requestTargetedWeakSweep(RuntimeBase referent) {
@@ -1924,7 +1931,7 @@ public class MortalList {
                 // decides whether a live CODE capture still owns it.
                 base.refCount = 1;
                 state().deferredCaptureSweepCandidates.add(base);
-                requestImmediateWeakSweep();
+                requestCorrectiveWeakSweep();
             } else if (base.blessId == 0
                     && hasWeakRefs
                     && RuntimeCode.argsStackDepth() > 1) {
@@ -2079,13 +2086,18 @@ public class MortalList {
             Set<RuntimeBase> releasedTargets,
             ReachabilityWalker.ReleasedWeakSweepResult releasedSweepResult) {
         if (state.weakSweepSuppressionDepth > 0) return;
-        if (AUTO_GC_DISABLED) return;
         if (state.inAutoSweep) return;
         boolean immediateSweep = state.immediateWeakSweepRequested;
+        boolean explicitOuterDestroyRequest = !ReachabilityWalker.correctiveSweepsEnabled()
+                && state.sweepPendingAfterOuterDestroy;
+        boolean oneShotSweepRequested = immediateSweep || explicitOuterDestroyRequest;
+        if (System.getenv("JPERL_NO_AUTO_GC") != null
+                || (AUTO_GC_DISABLED && !oneShotSweepRequested)) return;
+        if (!ReachabilityWalker.correctiveSweepsEnabled() && !oneShotSweepRequested) return;
         // FORCE_SWEEP_EVERY_FLUSH bypasses the weakRefsExist gate AND the
         // 5-s throttle so reproducers can deterministically trigger the
         // walker at every statement boundary.
-        if (!FORCE_SWEEP_EVERY_FLUSH && !state.weakRefsExist && !immediateSweep) return;
+        if (!FORCE_SWEEP_EVERY_FLUSH && !state.weakRefsExist && !oneShotSweepRequested) return;
         // Phase B2a: skip while require/use/BEGIN/eval-STRING is running.
         // Those paths depend on weak-refed intermediate state staying
         // defined until the init completes.
@@ -2095,15 +2107,18 @@ public class MortalList {
         // complete Perl-visible walker roots yet.
         if (RuntimeCode.argsStackDepth() > 1) return;
         if (!state.temporaryRoots.isEmpty()) return;
-        if (!FORCE_SWEEP_EVERY_FLUSH && !immediateSweep) {
+        if (!FORCE_SWEEP_EVERY_FLUSH && !oneShotSweepRequested) {
             long now = System.nanoTime();
             if (now - state.lastAutoSweepNanos < AUTO_SWEEP_MIN_INTERVAL_NS) return;
             state.lastAutoSweepNanos = now;
         }
         state.inAutoSweep = true;
         try {
-            if (immediateSweep) {
+            if (oneShotSweepRequested) {
                 state.immediateWeakSweepRequested = false;
+                if (explicitOuterDestroyRequest) {
+                    state.sweepPendingAfterOuterDestroy = false;
+                }
                 state.lastAutoSweepNanos = System.nanoTime();
             }
             // Quiet auto-sweeps run from normal statement-boundary checks.
@@ -2111,12 +2126,15 @@ public class MortalList {
             // driven by MyVarCleanupStack, and forcing JVM GC at this cadence
             // dominates DBIC-scale runtimes. Keep the old forced behavior only
             // for the diagnostic "sweep every flush" mode.
-            int cleared = ReachabilityWalker.sweepWeakRefs(
-                    true, FORCE_SWEEP_EVERY_FLUSH, releasedTargets, releasedSweepResult);
+            int cleared = !ReachabilityWalker.correctiveSweepsEnabled()
+                    ? ReachabilityWalker.sweepWeakRefsForExplicitImmediateRequest(
+                            FORCE_SWEEP_EVERY_FLUSH)
+                    : ReachabilityWalker.sweepWeakRefs(
+                            true, FORCE_SWEEP_EVERY_FLUSH, releasedTargets, releasedSweepResult);
             state.boundaryWeakSweepGeneration++;
             if (AUTO_GC_DEBUG) {
                 System.err.println("DBG auto-sweep reason="
-                        + (immediateSweep ? "immediate" : "cadence")
+                        + (oneShotSweepRequested ? "immediate" : "cadence")
                         + " cleared=" + cleared);
             }
         } finally {

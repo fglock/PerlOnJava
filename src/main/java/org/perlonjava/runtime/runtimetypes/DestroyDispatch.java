@@ -319,7 +319,7 @@ public class DestroyDispatch {
             }
             if ((referent instanceof RuntimeHash || referent instanceof RuntimeArray)
                     && MortalList.requestWeakSweepsForDestroyedContainer(referent)) {
-                MortalList.requestImmediateWeakSweep();
+                MortalList.requestCorrectiveWeakSweep();
             }
             referent.markPerlDestroyed();
             return;
@@ -438,7 +438,7 @@ public class DestroyDispatch {
             }
             if ((referent instanceof RuntimeHash || referent instanceof RuntimeArray)
                     && MortalList.requestWeakSweepsForDestroyedContainer(referent)) {
-                MortalList.requestImmediateWeakSweep();
+                MortalList.requestCorrectiveWeakSweep();
             }
             referent.markPerlDestroyed();
             return;

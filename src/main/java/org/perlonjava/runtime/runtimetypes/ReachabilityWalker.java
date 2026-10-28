@@ -2810,6 +2810,11 @@ public class ReachabilityWalker {
                 releasedSweepResult).cleared();
     }
 
+    /** Run one quiet pass explicitly requested at a safe statement boundary. */
+    static int sweepWeakRefsForExplicitImmediateRequest(boolean forceJvmGc) {
+        return sweepWeakRefsPass(true, forceJvmGc, Collections.emptySet(), null).cleared();
+    }
+
     private record WeakSweepPass(int cleared, boolean graphChanged) {}
 
     private static final int MAX_WITNESS_SWEEP_TARGETS = 64;
@@ -3361,10 +3366,6 @@ public class ReachabilityWalker {
 
     public static ReleasedWeakSweepResult sweepReleasedWeakReferents(
             Set<RuntimeBase> referents) {
-        if (CORRECTIVE_SWEEPS_DISABLED) {
-            return new ReleasedWeakSweepResult(null, Collections.emptySet(),
-                    Collections.emptySet(), 0);
-        }
         if (referents == null || referents.isEmpty()) {
             return new ReleasedWeakSweepResult(null, Collections.emptySet(),
                     Collections.emptySet(), 0);

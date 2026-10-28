@@ -877,16 +877,16 @@ Unresolved acceptance cases:
   ownership completion; compatibility borrows are not a substitute for strong
   alias owners.
 
-Three Java acceptance cases still exercise legacy sweeps: two targeted-walker
-assertions in `ReachabilityQueryCostTest` and the quiet weak-code capture walk
-in `WeakBackrefCodeCaptureSweepTest`. Keep existing tests intact. The deferred
-capture boundary assertions now pass without sweeps. Default-off focused passes
-do not establish acceptance for removing remaining bridge and fallback code.
+The two targeted-walker assertions in `ReachabilityQueryCostTest` and the quiet
+weak-code capture walk in `WeakBackrefCodeCaptureSweepTest` intentionally call
+the diagnostic sweep helpers. Runtime cleanup requests now use a separate
+corrective-sweep scheduler, which remains gated by the environment policy; the
+default-policy test verifies that disabled runtimes do not queue or run those
+requests. Keep the existing helper tests intact.
 
 Phase 2 remains in progress: the integer count is still the compatibility
-bridge for these new identities, argument ownership and other return paths
-are not fully migrated, and the complete unit suite has not passed with
-sweeps disabled. Passing the focused lifecycle tests does not establish that
+bridge for these new identities, and argument ownership and other return paths
+are not fully migrated. Passing the default-off suite does not establish that
 every producer, alias, or cleanup boundary uses semantic ownership alone.
 
 ### Explicit scalar-capture owner release
@@ -945,27 +945,38 @@ keeps the CV active across restore, and verifies its captures survive with zero
 root queries. The sweep-enabled full `nice -n 19 make` gate passes. CVs without
 owner slots still take the compatibility checks.
 
-Post-build issue acceptance also passes with corrective sweeps disabled:
-HTML::Tree 5.07 `t/refloop.t` is 8/8 on both backends, and
-`closure_capture_explicit_return.t` is 6/6 on both backends.
-Selected weak-capture, END/DESTROY-order, resurrection, and self-capture-cycle
-tests also pass 30/30 under system Perl and 30/30 on each PerlOnJava backend
-with corrective sweeps disabled. The full no-sweep unit suite remains
-unqualified. The last recorded no-sweep `make` run completed 1,242 tests and
-failed three assertions that directly exercise the sweep helpers: two in
-`ReachabilityQueryCostTest` and one in `WeakBackrefCodeCaptureSweepTest`.
-Preserve those tests while separating helper coverage from production sweep
-acceptance.
+### Default-off full-suite acceptance (2026-10-28)
+
+Production cleanup callers now schedule corrective passes through a gated
+runtime method. The direct helper APIs remain available to the existing
+reachability-cost and weak-CODE capture tests, including the test that requests
+one explicit quiet pass at a safe boundary. This keeps diagnostic coverage
+while leaving corrective scheduling disabled by default.
+
+The full `nice -n 19 make` gate passes with both sweep-control variables unset:
+212 test suites report 3,095 tests, zero failures, zero errors, and five
+skips. `CorrectiveSweepDefaultPolicyTest`, `ReachabilityQueryCostTest`, and
+`WeakBackrefCodeCaptureSweepTest` all pass. Against the same build, HTML::Tree
+5.07 `t/refloop.t` passes 8/8 and `closure_capture_explicit_return.t` passes
+6/6 on both backends with corrective sweeps explicitly disabled. Logs:
+`/tmp/make-issue1649-no-sweep-helper-separation-retry.log` and files with the
+`/tmp/issue1649-post-gate-` prefix.
+
+This qualifies the current default-off behavior; it does not remove direct
+diagnostic walkers, the integer-count compatibility bridge, or the remaining
+reachability fallbacks.
 
 ### Next steps
 
-1. Continue replacing targeted weak-release and weak-CODE capture walks with
-   explicit owner-slot transitions; preserve the existing Java acceptance tests.
+1. Replace remaining targeted weak-release and weak-CODE capture decisions with
+   explicit owner-slot transitions, preserving the existing diagnostic helper
+   tests.
 2. Finish CODE template ownership, per-optree compiled-pin retirement, and raw
-   descriptor/embedding borrows. Complete argument-cell lifetimes, shared/tail
-   call argument cleanup, native call buffers, escaping lvalues/refaliases, and
-   targeted try/finally returns.
+   descriptor/embedding borrows. Complete ordinary argument-cell lifetimes,
+   shared/tail call cleanup, native call buffers, escaping lvalues/refaliases,
+   and targeted try/finally returns.
 3. Requalify HTML-Tree, weak/DESTROY, resurrection, cycle, and full-suite behavior
-   without corrective sweeps.
+   as each ownership family migrates.
 4. Make semantic owner counts authoritative, then remove the compatibility
-   bridge, corrective sweeps, and reachability fallbacks after the gates pass.
+   bridge, production corrective scheduling, and reachability fallbacks after
+   the acceptance gates pass.
