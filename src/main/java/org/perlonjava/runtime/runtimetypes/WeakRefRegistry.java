@@ -122,6 +122,7 @@ public class WeakRefRegistry {
                 .computeIfAbsent(base, k -> Collections.newSetFromMap(new IdentityHashMap<>()))
                 .add(ref);
         base.activateOwnerTracking();
+        ref.releaseUntrackedReferenceOwner(base);
         ref.releaseClosureCaptureReferentsForWeaken(base);
         if (System.getenv("PJ_WEAKCLEAR_TRACE") != null) {
             System.err.println("[WEAKEN] ref=" + System.identityHashCode(ref)
@@ -187,6 +188,10 @@ public class WeakRefRegistry {
                     // slot holds a strong reference not counted in refCount.
                     // Don't call callDestroy — the container is still alive.
                     // Cleanup will happen at scope exit (scopeExitCleanupHash/Array).
+                } else if (base.restoreCountedOwnerSlotRefCount()) {
+                    // A surviving counted identity is direct evidence of a Perl
+                    // owner. Repair a transient legacy undercount before asking
+                    // the root walker to rediscover the same scalar/container edge.
                 } else if (!(identifiedOwner && snapshotRoots.isEmpty()
                         && MortalList.canTrustFinalCountedRelease(base))
                         && !(base instanceof RuntimeScalar scalar
@@ -251,7 +256,13 @@ public class WeakRefRegistry {
             // (which use weaken() for back-references) and cascades to break
             // Moo's accessor inlining (51 test failures). See §15.
             ref.refCountOwned = false;
-            if (base.blessId == 0
+            if (base.ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE) != 0) {
+                // Durable scalar/container cells already identify these
+                // otherwise-untracked strong edges. Their final slot release
+                // requests a targeted weak cleanup, so a root scan and a
+                // registry-wide corrective sweep are both unnecessary here.
+                base.refCount = WEAKLY_TRACKED;
+            } else if (base.blessId == 0
                     && (base instanceof RuntimeArray || base instanceof RuntimeHash)
                     && ReachabilityWalker.isReachableFromRoots(base)) {
                 // An untracked aggregate may already be owned by a live tree
@@ -338,6 +349,7 @@ public class WeakRefRegistry {
                 base.recordOwner(ref, "WeakRefRegistry.unweaken");
                 base.recordActiveOwner(ref);
             }
+            RuntimeScalar.incrementRefCountForContainerStore(ref);
             // Note: if MIN_VALUE, object already destroyed — unweaken is a no-op
         }
         ref.refreshArgumentAliasOwnerSlots();
@@ -373,6 +385,20 @@ public class WeakRefRegistry {
     public static boolean hasWeakRefsTo(RuntimeBase referent) {
         Set<RuntimeScalar> weakRefs = state().referentToWeakRefs.get(referent);
         return weakRefs != null && !weakRefs.isEmpty();
+    }
+
+    /** Finish weak cleanup when a migrated strong owner slot leaves its referent. */
+    static void onStrongOwnerSlotReleased(RuntimeBase referent) {
+        if (referent == null
+                || referent.refCount != WEAKLY_TRACKED
+                || referent.hasOwnerSlots()
+                || PerlRuntime.currentOrNull() == null
+                || !hasWeakRefsTo(referent)) return;
+        if (ReachabilityWalker.correctiveSweepsEnabled()) {
+            MortalList.requestTargetedWeakSweep(referent);
+        } else {
+            clearWeakRefsTo(referent);
+        }
     }
 
     /**
@@ -423,18 +449,56 @@ public class WeakRefRegistry {
     }
 
     private static boolean shouldKeepCodeWeakRefs(RuntimeCode code) {
-        if (code.stashRefCount > 0 || isInstalledGlobalCodeRef(code)) return true;
+        boolean installed = isInstalledGlobalCodeRef(code);
+        boolean trace = System.getenv("PJ_WEAKCLEAR_TRACE") != null
+                && code.hadStashRef && code.stashRefCount <= 0 && !installed;
+        if (trace) {
+            System.err.println("[WEAKCODE-CHECK] code=" + System.identityHashCode(code)
+                    + " refCount=" + code.refCount + " stashRefCount=" + code.stashRefCount
+                    + " installed=" + installed + " slots=" + code.ownerSlotSnapshot().size());
+        }
+        if (code.stashRefCount > 0 || installed) return true;
         // The active frame is already a definitive strong owner. Check it
         // before scanning the live scalar registries, which can be large and
         // sits on the callback dispatch path when a quiet sweep runs.
         if (RuntimeCode.isActiveCode(code)) return true;
-        LifecycleRuntimeState lifecycleState = state();
-        Set<RuntimeBase> sweepLiveReferents = lifecycleState.weakSweepLiveReferents;
-        if (sweepLiveReferents != null && sweepLiveReferents.contains(code)) return true;
-        ReachabilityWalker.RootReachabilitySnapshot fullRootSnapshot =
-                lifecycleState.fullRootSnapshot;
-        if (fullRootSnapshot != null && fullRootSnapshot.isReachable(code)) return true;
-        if (ReachabilityWalker.hasLiveStrongScalarReferent(code)) return true;
+        // Stale frame-temporary scalar cells can leave counted identities on
+        // a CODE after their Perl scope exits. Retire those cells before using
+        // the remaining owner ledger as direct liveness evidence.
+        code.releaseTemporaryCodeScalarOwners();
+        if (hasWeakPreservingCodeOwnerSlot(code)) {
+            if (trace) {
+                for (PerlOwnerSlot slot : code.ownerSlotSnapshot()) {
+                    RuntimeScalar owner = slot.countedScalarOwner();
+                    System.err.println("[WEAKCODE-SLOT] kind=" + slot.kind()
+                            + " id=" + slot.identity() + " native=" + slot.isNativeOwner()
+                            + " owner=" + (owner == null ? "null"
+                                : System.identityHashCode(owner))
+                            + " ownerType=" + (owner == null ? "-" : owner.type)
+                            + " valueIsCode=" + (owner != null && owner.value == code)
+                            + " refCountOwned=" + (owner != null && owner.refCountOwned)
+                            + " registered=" + (owner != null && MyVarCleanupStack.isRegistered(owner))
+                            + " scopeExited=" + (owner != null && owner.scopeExited)
+                            + " local=" + (owner != null && owner.localBindingExists)
+                            + " package=" + (owner != null && owner.isPackageGlobalRoot)
+                            + " container=" + (owner != null && owner.containerOwner != null));
+                }
+            }
+            return true;
+        }
+        // A Perl-visible owner must have an active slot identity. Sweep-local
+        // reachability snapshots and scalar registry scans are not ownership.
+        return false;
+    }
+
+    private static boolean hasWeakPreservingCodeOwnerSlot(RuntimeCode code) {
+        for (PerlOwnerSlot slot : code.ownerSlotSnapshot()) {
+            // CODE_SLOT identities also represent compatibility pins retained
+            // for compiled call sites after a glob is deleted. The visible
+            // stash checks above distinguish live Perl CODE owners from those
+            // Java-facing pins.
+            if (slot.isActive() && slot.kind() != PerlOwnerSlot.Kind.CODE_SLOT) return true;
+        }
         return false;
     }
 

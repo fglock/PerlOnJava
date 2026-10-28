@@ -126,6 +126,7 @@ public class MyVarCleanupStack {
             liveCounts().merge(var, 1, Integer::sum);
             MortalList.invalidateLiveRootSnapshot();
         }
+        if (var instanceof RuntimeScalar scalar) scalar.refreshUntrackedReferenceOwner();
     }
 
     /**
@@ -209,6 +210,12 @@ public class MyVarCleanupStack {
                     liveCounts.merge(newVar, 1, Integer::sum);
                     MortalList.invalidateLiveRootSnapshot();
                 }
+                if (oldVar instanceof RuntimeScalar scalar) {
+                    scalar.refreshUntrackedReferenceOwner();
+                }
+                if (newVar instanceof RuntimeScalar scalar) {
+                    scalar.refreshUntrackedReferenceOwner();
+                }
                 return;
             }
         }
@@ -235,6 +242,7 @@ public class MyVarCleanupStack {
     }
 
     private static void noteVarLeftScope(Object var) {
+        if (var instanceof RuntimeScalar scalar) scalar.refreshUntrackedReferenceOwner();
         if (var instanceof RuntimeBase base
                 && (base instanceof RuntimeArray || base instanceof RuntimeHash)
                 && WeakRefRegistry.weakRefsExist()) {

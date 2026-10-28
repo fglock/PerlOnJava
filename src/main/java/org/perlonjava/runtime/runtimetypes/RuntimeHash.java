@@ -488,6 +488,8 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     void markPackageRootedValue(RuntimeScalar value) {
         if (!isPackageRootedHash() || value == null) return;
         value.isPackageGlobalRoot = true;
+        value.markContainerOwner(this);
+        value.refreshUntrackedReferenceOwner();
         if (value.value instanceof RuntimeBase rb) {
             rb.storedInPackageGlobal = true;
         }

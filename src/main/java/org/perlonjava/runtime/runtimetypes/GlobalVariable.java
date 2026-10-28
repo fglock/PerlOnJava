@@ -332,6 +332,94 @@ public class GlobalVariable {
             }
         }
 
+        private boolean ownsPackageScalarSlots(GlobalRuntimeState state) {
+            return (Object) table.apply(state) == state.scalarValues();
+        }
+
+        private Map<String, PerlOwnerSlot> packageAggregateOwnerSlots(
+                GlobalRuntimeState state) {
+            Object values = table.apply(state);
+            if (values == state.arrayValues()) return state.packageArrayOwnerSlots();
+            if (values == state.hashValues()) return state.packageHashOwnerSlots();
+            return null;
+        }
+
+        private void updatePackageScalarOwner(
+                GlobalRuntimeState state, String key, RuntimeScalar nextScalar) {
+            if (!ownsPackageScalarSlots(state)) return;
+            Map<String, PerlOwnerSlot> slots = state.packageScalarOwnerSlots();
+            PerlOwnerSlot slot = slots.get(key);
+            RuntimeScalar previousScalar = slot != null
+                    && slot.referent() instanceof RuntimeScalar previous ? previous : null;
+            if (nextScalar == null) {
+                if (slot != null) {
+                    slots.remove(key, slot);
+                    slot.release();
+                }
+            } else {
+                if (slot == null) {
+                    slot = new PerlOwnerSlot(PerlOwnerSlot.Kind.PACKAGE_SCALAR_SLOT);
+                    slots.put(key, slot);
+                }
+                slot.acquirePackageScalarIdentity(nextScalar);
+            }
+            if (previousScalar != null && previousScalar != nextScalar) {
+                previousScalar.refreshUntrackedReferenceOwner();
+                WeakRefRegistry.onStrongOwnerSlotReleased(previousScalar);
+            }
+            if (nextScalar != null) nextScalar.refreshUntrackedReferenceOwner();
+        }
+
+        private void updatePackageAggregateOwner(
+                GlobalRuntimeState state, String key, RuntimeBase nextAggregate) {
+            Map<String, PerlOwnerSlot> slots = packageAggregateOwnerSlots(state);
+            if (slots == null) return;
+            PerlOwnerSlot slot = slots.get(key);
+            RuntimeBase previousAggregate = slot == null ? null : slot.referent();
+            if (nextAggregate == null) {
+                if (slot != null) {
+                    slots.remove(key, slot);
+                    slot.release();
+                    WeakRefRegistry.onStrongOwnerSlotReleased(previousAggregate);
+                }
+                return;
+            }
+            if (slot == null) {
+                slot = new PerlOwnerSlot(PerlOwnerSlot.Kind.PACKAGE_AGGREGATE_SLOT);
+                slots.put(key, slot);
+            }
+            slot.acquirePackageAggregateIdentity(nextAggregate);
+            if (previousAggregate != null && previousAggregate != nextAggregate) {
+                WeakRefRegistry.onStrongOwnerSlotReleased(previousAggregate);
+            }
+        }
+
+        private void releasePackageScalarOwners(GlobalRuntimeState state) {
+            if (!ownsPackageScalarSlots(state)) return;
+            Map<String, PerlOwnerSlot> slots = state.packageScalarOwnerSlots();
+            for (Map.Entry<String, PerlOwnerSlot> entry : new ArrayList<>(slots.entrySet())) {
+                RuntimeScalar scalar = entry.getValue().referent() instanceof RuntimeScalar value
+                        ? value : null;
+                entry.getValue().release();
+                if (scalar != null) {
+                    scalar.refreshUntrackedReferenceOwner();
+                    WeakRefRegistry.onStrongOwnerSlotReleased(scalar);
+                }
+            }
+            slots.clear();
+        }
+
+        private void releasePackageAggregateOwners(GlobalRuntimeState state) {
+            Map<String, PerlOwnerSlot> slots = packageAggregateOwnerSlots(state);
+            if (slots == null) return;
+            for (PerlOwnerSlot ownerSlot : new ArrayList<>(slots.values())) {
+                RuntimeBase aggregate = ownerSlot.referent();
+                ownerSlot.release();
+                WeakRefRegistry.onStrongOwnerSlotReleased(aggregate);
+            }
+            slots.clear();
+        }
+
         @Override
         public T get(Object key) {
             return delegate().get(key);
@@ -359,10 +447,14 @@ public class GlobalVariable {
 
         @Override
         public T put(String key, T value) {
+            GlobalRuntimeState state = globalState();
             boolean newKey = !delegate().containsKey(key);
             markStashEntryVisible(key);
             markPackageGlobalRoot(value);
             T previous = delegate().put(key, value);
+            updatePackageScalarOwner(state, key,
+                    value instanceof RuntimeScalar scalar ? scalar : null);
+            updatePackageAggregateOwner(state, key, value);
             noteScalarBindingMutation();
             if (newKey) {
                 invalidateStashEnumerationCache();
@@ -376,6 +468,10 @@ public class GlobalVariable {
             T previous = delegate().get(key);
             if (previous != null) {
                 markPackageGlobalRoot(previous);
+                GlobalRuntimeState state = globalState();
+                updatePackageScalarOwner(state, key,
+                        previous instanceof RuntimeScalar scalar ? scalar : null);
+                updatePackageAggregateOwner(state, key, previous);
                 return previous;
             }
             return put(key, value);
@@ -383,8 +479,13 @@ public class GlobalVariable {
 
         @Override
         public T remove(Object key) {
+            GlobalRuntimeState state = globalState();
             T previous = delegate().remove(key);
             if (previous != null) {
+                if (key == null || key instanceof String) {
+                    updatePackageScalarOwner(state, (String) key, null);
+                    updatePackageAggregateOwner(state, (String) key, null);
+                }
                 noteScalarBindingMutation();
                 invalidateStashEnumerationCache();
                 invalidatePackageRootSnapshot();
@@ -394,23 +495,29 @@ public class GlobalVariable {
 
         @Override
         public void clear() {
-            if (!delegate().isEmpty()) {
+            GlobalRuntimeState state = globalState();
+            boolean hadEntries = !delegate().isEmpty();
+            delegate().clear();
+            releasePackageScalarOwners(state);
+            releasePackageAggregateOwners(state);
+            if (hadEntries) {
                 noteScalarBindingMutation();
                 invalidateStashEnumerationCache();
                 invalidatePackageRootSnapshot();
             }
-            delegate().clear();
         }
 
         @Override
         public Set<Entry<String, T>> entrySet() {
-            Map<String, T> entries = delegate();
+            GlobalRuntimeState ownerState = globalState();
+            Map<String, T> entries = table.apply(ownerState);
             return new AbstractSet<>() {
                 @Override
                 public Iterator<Entry<String, T>> iterator() {
                     Iterator<Entry<String, T>> iterator = entries.entrySet().iterator();
                     return new Iterator<>() {
                         private boolean canRemove;
+                        private String lastKey;
 
                         @Override public boolean hasNext() { return iterator.hasNext(); }
 
@@ -419,6 +526,7 @@ public class GlobalVariable {
                             Entry<String, T> current = iterator.next();
                             canRemove = true;
                             String key = current.getKey();
+                            lastKey = key;
                             return new SimpleEntry<>(key, current.getValue()) {
                                 @Override
                                 public T setValue(T value) {
@@ -433,7 +541,10 @@ public class GlobalVariable {
                         public void remove() {
                             if (!canRemove) throw new IllegalStateException("next() has not been called");
                             iterator.remove();
+                            updatePackageScalarOwner(ownerState, lastKey, null);
+                            updatePackageAggregateOwner(ownerState, lastKey, null);
                             canRemove = false;
+                            lastKey = null;
                             noteScalarBindingMutation();
                             invalidateStashEnumerationCache();
                             invalidatePackageRootSnapshot();

@@ -870,6 +870,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     void markPackageRootedValue(RuntimeScalar value) {
         if (isPackageGlobalRoot && value != null) {
             value.isPackageGlobalRoot = true;
+            value.markContainerOwner(this);
+            value.refreshUntrackedReferenceOwner();
         }
     }
 
