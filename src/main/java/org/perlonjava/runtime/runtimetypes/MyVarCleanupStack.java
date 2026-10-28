@@ -181,6 +181,7 @@ public class MyVarCleanupStack {
                     // callers that release a lexical slot directly.
                     base.localBindingExists = false;
                 }
+                releaseActiveAggregateOwnerAfterCleanup(var);
                 noteVarLeftScope(var);
                 return;
             }
@@ -293,8 +294,17 @@ public class MyVarCleanupStack {
                 decRegisteredCount(var);
                 decLiveCount(var);
                 MortalList.evalExceptionScopeCleanup(var);
+                releaseActiveAggregateOwnerAfterCleanup(var);
                 noteVarLeftScope(var);
             }
+        }
+    }
+
+    private static void releaseActiveAggregateOwnerAfterCleanup(Object var) {
+        if (!(var instanceof RuntimeBase base)
+                || (!(base instanceof RuntimeArray) && !(base instanceof RuntimeHash))) return;
+        if (RuntimeCode.releaseActiveLexicalAggregateOwner(base)) {
+            WeakRefRegistry.onActiveLexicalOwnerReleased(base);
         }
     }
 

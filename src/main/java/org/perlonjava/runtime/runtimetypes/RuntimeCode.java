@@ -1112,6 +1112,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         private final PerlOwnerSlot codeOwner = new PerlOwnerSlot(PerlOwnerSlot.Kind.ACTIVE_CODE);
         private RuntimeCode code;
         private Map<String, RuntimeBase> cells;
+        private Map<String, PerlOwnerSlot> aggregateOwnerSlots;
         private String previousCallerPackage;
         private String callSitePackage;
 
@@ -1142,6 +1143,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
         private void clearForReuse() {
             codeOwner.release();
+            if (aggregateOwnerSlots != null) {
+                for (PerlOwnerSlot ownerSlot : aggregateOwnerSlots.values()) {
+                    if (ownerSlot != null) ownerSlot.release();
+                }
+                aggregateOwnerSlots.clear();
+                aggregateOwnerSlots = null;
+            }
             code = null;
             cells = null;
             previousCallerPackage = null;
@@ -1154,11 +1162,40 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
         private void put(String name, RuntimeBase cell) {
             if (cells == null) cells = new HashMap<>();
-            cells.put(name, cell);
+            RuntimeBase previous = cells.put(name, cell);
+            if (previous == cell) return;
+            releaseAggregateOwner(name);
+            if ((cell instanceof RuntimeArray || cell instanceof RuntimeHash)
+                    && MyVarCleanupStack.isRegistered(cell)) {
+                if (aggregateOwnerSlots == null) aggregateOwnerSlots = new HashMap<>();
+                PerlOwnerSlot ownerSlot = new PerlOwnerSlot(PerlOwnerSlot.Kind.ACTIVE_LEXICAL);
+                ownerSlot.acquireActiveLexicalIdentity(cell);
+                aggregateOwnerSlots.put(name, ownerSlot);
+            }
         }
 
         private void remove(String name) {
             if (cells != null) cells.remove(name);
+            releaseAggregateOwner(name);
+        }
+
+        private void releaseAggregateOwner(String name) {
+            if (aggregateOwnerSlots == null) return;
+            PerlOwnerSlot ownerSlot = aggregateOwnerSlots.remove(name);
+            if (ownerSlot != null) ownerSlot.release();
+            if (aggregateOwnerSlots.isEmpty()) aggregateOwnerSlots = null;
+        }
+
+        private int removeAggregateCell(RuntimeBase aggregate) {
+            if (cells == null || aggregateOwnerSlots == null) return 0;
+            for (Map.Entry<String, RuntimeBase> entry : new ArrayList<>(cells.entrySet())) {
+                if (entry.getValue() == aggregate
+                        && aggregateOwnerSlots.containsKey(entry.getKey())) {
+                    remove(entry.getKey());
+                    return 1;
+                }
+            }
+            return 0;
         }
     }
     @SuppressWarnings("unchecked")
@@ -1816,8 +1853,44 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (!frames.isEmpty() && variableName != null && cell != null) {
             frames.peek().put(variableName, cell);
         } else if (variableName != null && cell != null) {
-            state.topLevelLexicals.put(variableName, cell);
+            putTopLevelLexical(state, variableName, cell);
         }
+    }
+
+    private static void putTopLevelLexical(
+            ExecutionRuntimeState state, String variableName, RuntimeBase cell) {
+        RuntimeBase previous = state.topLevelLexicals.put(variableName, cell);
+        if (previous == cell) return;
+        PerlOwnerSlot previousSlot = state.topLevelLexicalOwnerSlots.remove(variableName);
+        if (previousSlot != null) previousSlot.release();
+        if ((cell instanceof RuntimeArray || cell instanceof RuntimeHash)
+                && MyVarCleanupStack.isRegistered(cell)) {
+            PerlOwnerSlot ownerSlot = new PerlOwnerSlot(PerlOwnerSlot.Kind.ACTIVE_LEXICAL);
+            ownerSlot.acquireActiveLexicalIdentity(cell);
+            state.topLevelLexicalOwnerSlots.put(variableName, ownerSlot);
+        }
+    }
+
+    /** Release pad-map owner identities when an aggregate lexical leaves scope. */
+    static boolean releaseActiveLexicalAggregateOwner(RuntimeBase aggregate) {
+        if (!(aggregate instanceof RuntimeArray || aggregate instanceof RuntimeHash)
+                || PerlRuntime.currentOrNull() == null) return false;
+        ExecutionRuntimeState state = PerlRuntime.current().executionState();
+        Deque<ActiveLexicalFrame> frames = activeLexicalFrames(state);
+        ActiveLexicalFrame currentFrame = frames.peek();
+        if (currentFrame != null) return currentFrame.removeAggregateCell(aggregate) != 0;
+        for (Map.Entry<String, RuntimeBase> entry
+                : new ArrayList<>(state.topLevelLexicals.entrySet())) {
+            if (entry.getValue() != aggregate) continue;
+            state.topLevelLexicals.remove(entry.getKey());
+            PerlOwnerSlot ownerSlot = state.topLevelLexicalOwnerSlots.remove(entry.getKey());
+            if (ownerSlot != null) {
+                ownerSlot.release();
+                return true;
+            }
+            return false;
+        }
+        return false;
     }
 
     /**
@@ -3602,6 +3675,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         if (runtime.executionState().topLevelLexicals.get(variableName) == cell) {
             runtime.executionState().topLevelLexicals.remove(variableName);
+            PerlOwnerSlot ownerSlot = runtime.executionState().topLevelLexicalOwnerSlots
+                    .remove(variableName);
+            if (ownerSlot != null) ownerSlot.release();
         }
     }
 

@@ -690,6 +690,10 @@ public class MortalList {
         // makes Internals::SvREFCNT under-report the caller's reference and
         // lets Const::Fast freeze the original instead of its clone.
         if (!finalRelease && RuntimeCode.deferCleanupForActiveArgumentAggregate(hash)) return;
+        scopeExitCleanupHashBody(hash, finalRelease);
+    }
+
+    private static void scopeExitCleanupHashBody(RuntimeHash hash, boolean finalRelease) {
         // Clear localBindingExists: the named variable's scope is ending.
         // This allows subsequent refCount==0 events (from setLargeRefCounted
         // or flush) to correctly trigger callDestroy, since the local
@@ -796,6 +800,11 @@ public class MortalList {
         // caller's lexical lifetime.  In particular, Const::Fast uses
         // SvREFCNT to decide whether it must clone a referenced aggregate.
         if (!finalRelease && RuntimeCode.deferCleanupForActiveArgumentAggregate(arr)) return;
+        scopeExitCleanupArrayBody(arr, returned, finalRelease);
+    }
+
+    private static void scopeExitCleanupArrayBody(
+            RuntimeArray arr, RuntimeBase returned, boolean finalRelease) {
         // Clear localBindingExists: the named variable's scope is ending.
         // This allows subsequent refCount==0 events (from setLargeRefCounted
         // or flush) to correctly trigger callDestroy, since the local
