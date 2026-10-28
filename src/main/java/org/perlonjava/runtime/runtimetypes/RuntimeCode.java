@@ -197,11 +197,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
             }
             for (RuntimeScalar owner : listResultOwners) {
-                MortalList.deferDecrementIfTracked(owner);
+                RuntimeScalar.releaseStagedArgumentValue(owner);
             }
             listResultOwners.clear();
             for (RuntimeScalar owner : stagedScalarOwners) {
-                MortalList.deferDecrementIfTracked(owner);
+                RuntimeScalar.releaseStagedArgumentValue(owner);
             }
             stagedScalarOwners.clear();
             for (RuntimeScalar.ArgumentAliasOwner owner : argumentAliasOwners) {
@@ -2686,7 +2686,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             return coerceScalarCallResult(value == null ? new RuntimeList() : value.getList(),
                     context, context, true);
         } finally {
-            for (RuntimeScalar owner : owners) MortalList.deferDecrementIfTracked(owner);
+            for (RuntimeScalar owner : owners) {
+                RuntimeScalar.releaseStagedArgumentValue(owner);
+            }
         }
     }
 

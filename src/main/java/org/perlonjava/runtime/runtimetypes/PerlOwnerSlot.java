@@ -28,7 +28,13 @@ public final class PerlOwnerSlot {
         ARGUMENT_ALIAS,
         RETURN_VALUE,
         ACTIVE_CODE,
-        TIE_HANDLER
+        TIE_HANDLER,
+        /** Package scalar table entry owning one scalar cell. */
+        PACKAGE_SCALAR_SLOT,
+        /** Package array or hash table entry owning one aggregate. */
+        PACKAGE_AGGREGATE_SLOT,
+        /** Strong container edge whose referent is not on the legacy refcount bridge. */
+        UNTRACKED_REFERENCE
     }
 
     private Kind kind;
@@ -202,6 +208,69 @@ public final class PerlOwnerSlot {
         }
         nativeOwner = true;
         transferTo(target);
+    }
+
+    /** Record one package scalar table entry as an identity-owned scalar cell. */
+    synchronized void acquirePackageScalarIdentity(RuntimeScalar target) {
+        if (kind != Kind.PACKAGE_SCALAR_SLOT) {
+            throw new IllegalStateException("package scalar acquisition requires a package-slot identity");
+        }
+        Objects.requireNonNull(target, "target");
+        if (legacyCaptureCount != 0) {
+            throw new IllegalStateException("package scalar slot has pending legacy releases");
+        }
+        transferWithoutRuntimeRoot(target, true);
+    }
+
+    /** Record one package array/hash table entry as an identity-owned aggregate root. */
+    synchronized void acquirePackageAggregateIdentity(RuntimeBase target) {
+        if (kind != Kind.PACKAGE_AGGREGATE_SLOT) {
+            throw new IllegalStateException("package aggregate acquisition requires an aggregate-slot identity");
+        }
+        Objects.requireNonNull(target, "target");
+        if (legacyCaptureCount != 0) {
+            throw new IllegalStateException("package aggregate slot has pending legacy releases");
+        }
+        transferWithoutRuntimeRoot(target, true);
+    }
+
+    /** Record a strong edge without promoting an untracked referent's legacy count. */
+    synchronized void acquireUntrackedIdentity(RuntimeBase target) {
+        if (kind != Kind.UNTRACKED_REFERENCE) {
+            throw new IllegalStateException("untracked acquisition requires an untracked-reference slot");
+        }
+        Objects.requireNonNull(target, "target");
+        if (target.refCount == Integer.MIN_VALUE) {
+            throw new IllegalStateException("cannot own a destroyed referent");
+        }
+        if (nativeOwner || legacyCaptureCount != 0) {
+            throw new IllegalStateException("untracked identity cannot replace native or capture ownership");
+        }
+        transferWithoutRuntimeRoot(target, false);
+    }
+
+    private void transferWithoutRuntimeRoot(RuntimeBase target, boolean nextNativeOwner) {
+        if (referent == target) {
+            if (ownerRuntimeState != null) {
+                PerlRuntime.releaseOwnerSlotReferent(ownerRuntimeState, referent);
+            }
+            ownerRuntime = null;
+            ownerRuntimeState = null;
+            nativeOwner = nextNativeOwner;
+            return;
+        }
+        RuntimeBase previous = referent;
+        LifecycleRuntimeState previousState = ownerRuntimeState;
+        referent = target;
+        ownerRuntime = null;
+        ownerRuntimeState = null;
+        nativeOwner = nextNativeOwner;
+        if (previous != null && registeredInOwnerLedger) previous.removeOwnerSlot(this);
+        if (previous != null && registeredInOwnerLedger) {
+            PerlRuntime.releaseOwnerSlotReferent(previousState, previous);
+        }
+        registeredInOwnerLedger = true;
+        target.addOwnerSlot(this);
     }
 
     /**

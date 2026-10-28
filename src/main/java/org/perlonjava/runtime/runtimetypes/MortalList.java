@@ -96,6 +96,7 @@ public class MortalList {
             boolean needed = !state.pending.isEmpty()
                     || !state.pendingTiedReleases.isEmpty()
                     || !state.pendingIoReleases.isEmpty()
+                    || !state.pendingUntrackedReturnOwnerReleases.isEmpty()
                     || state.deferredCapturesMayBeReady
                     || state.immediateWeakSweepRequested
                     || !state.targetedWeakSweepReferents.isEmpty()
@@ -304,6 +305,14 @@ public class MortalList {
         if (!state.mortalActive || scalar == null || !scalar.ioOwner) return;
         markBoundaryWork(state);
         state.pendingIoReleases.add(scalar);
+    }
+
+    /** Queue an untracked mortal return slot for its caller's normal boundary. */
+    static void deferUntrackedReturnValueOwnerRelease(RuntimeScalar scalar) {
+        if (scalar == null || scalar.untrackedReferenceOwnerSlot() == null) return;
+        LifecycleRuntimeState state = state();
+        markBoundaryWork(state);
+        state.pendingUntrackedReturnOwnerReleases.add(scalar);
     }
 
     /**
@@ -620,8 +629,13 @@ public class MortalList {
      * Never-stored blessed objects (refCount == 0) are bumped to ensure DESTROY fires.
      */
     public static void deferDestroyForContainerClear(Iterable<RuntimeScalar> elements) {
-        if (!isActive()) return;
+        if (elements == null) return;
+        boolean active = isActive();
         for (RuntimeScalar scalar : elements) {
+            if (scalar != null && scalar.untrackedReferenceOwnerSlot() != null) {
+                scalar.refreshUntrackedReferenceOwner();
+            }
+            if (!active) continue;
             // Use the recursive path so a discarded wrapper/container also
             // releases references stored in its fields.  Test::Deep's
             // temporary comparator is a blessed hash whose `val` field can
@@ -688,9 +702,11 @@ public class MortalList {
             return;
         }
         // A live reference keeps the container and its IO element slots alive.
-        if (!finalRelease && (hash.refCount > 0 || temporaryRootDirectlyReferences(hash))) return;
+        if (!finalRelease && (hash.refCount > 0 || hash.hasOwnerSlots()
+                || temporaryRootDirectlyReferences(hash))) return;
         for (RuntimeScalar val : hash.elements.values()) {
             RuntimeScalar.releaseIoOwner(val);
+            if (val != null) val.releaseContainerOwner(hash);
         }
         // Skip container walks only when there are NO blessed objects AND NO
         // weak refs anywhere in the JVM. If weak refs exist (even to unblessed
@@ -791,8 +807,8 @@ public class MortalList {
             return;
         }
         // Alias arrays such as @_ do not own their original element slots.
-        if (!finalRelease && (arr.refCount > 0 || temporaryRootDirectlyReferences(arr)
-                || directlyReferences(returned, arr))) return;
+        if (!finalRelease && (arr.refCount > 0 || arr.hasOwnerSlots()
+                || temporaryRootDirectlyReferences(arr) || directlyReferences(returned, arr))) return;
         // \$#array creates a scalar proxy, not an array reference.  Once the
         // lexical AV exits, that proxy becomes an orphaned undef lvalue; it
         // must not retain this Java RuntimeArray merely through its backing
@@ -802,11 +818,13 @@ public class MortalList {
             for (RuntimeScalar elem : arr.elements) {
                 if (returned == null) RuntimeScalar.releaseIoOwner(elem);
                 else RuntimeScalar.releaseIoOwnerPreservingReturned(elem, returned);
+                if (elem != null) elem.releaseContainerOwner(arr);
             }
         } else if (arr.ownedAliasElements != null) {
             for (RuntimeScalar elem : arr.ownedAliasElements) {
                 if (returned == null) RuntimeScalar.releaseIoOwner(elem);
                 else RuntimeScalar.releaseIoOwnerPreservingReturned(elem, returned);
+                if (elem != null) elem.releaseContainerOwner(arr);
             }
         }
         // Skip container walks only when there are NO blessed objects AND NO
@@ -1259,7 +1277,8 @@ public class MortalList {
     // Each mark records the pending list size at scope entry, so that
     // popAndFlush() only processes entries added within that scope.
     private static void processDeferredEntriesFrom(
-            int pendingStartIdx, int tiedReleaseStartIdx, int ioReleaseStartIdx) {
+            int pendingStartIdx, int tiedReleaseStartIdx, int ioReleaseStartIdx,
+            int untrackedReturnOwnerStartIdx) {
         LifecycleRuntimeState state = state();
         boolean previousCaptureSweepDeferral =
                 state.deferCaptureReachabilityToBoundarySweep;
@@ -1270,9 +1289,12 @@ public class MortalList {
             int pendingIdx = pendingStartIdx;
             int tiedReleaseIdx = tiedReleaseStartIdx;
             int ioReleaseIdx = ioReleaseStartIdx;
+            int untrackedReturnOwnerIdx = untrackedReturnOwnerStartIdx;
             while (pendingIdx < state.pending.size()
                     || tiedReleaseIdx < state.pendingTiedReleases.size()
-                    || ioReleaseIdx < state.pendingIoReleases.size()) {
+                    || ioReleaseIdx < state.pendingIoReleases.size()
+                    || untrackedReturnOwnerIdx
+                        < state.pendingUntrackedReturnOwnerReleases.size()) {
                 while (tiedReleaseIdx < state.pendingTiedReleases.size()) {
                     // Releasing a tie handler changes the graph represented by
                     // the per-drain tied-reachability snapshot.
@@ -1299,6 +1321,12 @@ public class MortalList {
                 }
                 while (ioReleaseIdx < state.pendingIoReleases.size()) {
                     RuntimeScalar.releaseIoOwner(state.pendingIoReleases.get(ioReleaseIdx++));
+                }
+                while (untrackedReturnOwnerIdx
+                        < state.pendingUntrackedReturnOwnerReleases.size()) {
+                    RuntimeScalar scalar =
+                            state.pendingUntrackedReturnOwnerReleases.get(untrackedReturnOwnerIdx++);
+                    if (scalar != null) scalar.releaseMortalReturnValueOwner();
                 }
             }
         } finally {
@@ -2058,7 +2086,8 @@ public class MortalList {
         if (state.flushing) return;
         boolean topLevel = !state.hasMortalMarks();
         if (state.pending.isEmpty() && state.pendingTiedReleases.isEmpty()
-                && state.pendingIoReleases.isEmpty()) {
+                && state.pendingIoReleases.isEmpty()
+                && state.pendingUntrackedReturnOwnerReleases.isEmpty()) {
             processReadyDeferredCaptures(state);
             maybeAutoSweep(state);
             finalizeDeferredCaptureSweepCandidates(state);
@@ -2069,7 +2098,7 @@ public class MortalList {
         state.flushing = true;
         if (topLevel) state.topLevelFlushDepth++;
         try {
-            processDeferredEntriesFrom(0, 0, 0);
+            processDeferredEntriesFrom(0, 0, 0, 0);
             state.pending.clear();
             state.pendingOwnerReleases.clear();
             state.pendingOwnerScalars.clear();
@@ -2077,6 +2106,7 @@ public class MortalList {
             state.pendingTransientOwnerKinds.clear();
             state.pendingTiedReleases.clear();
             state.pendingIoReleases.clear();
+            state.pendingUntrackedReturnOwnerReleases.clear();
             state.markDepth = 0; // All entries drained; marks are meaningless now
         } finally {
             if (topLevel) state.topLevelFlushDepth--;
@@ -2320,7 +2350,8 @@ public class MortalList {
     static void pushMark(LifecycleRuntimeState state) {
         if (!state.mortalActive) return;
         state.pushMortalMark(state.pending.size(), state.pendingTiedReleases.size(),
-                state.pendingIoReleases.size());
+                state.pendingIoReleases.size(),
+                state.pendingUntrackedReturnOwnerReleases.size());
     }
 
     /**
@@ -2357,7 +2388,8 @@ public class MortalList {
         if (state.flushing) return;
         boolean topLevel = !state.hasMortalMarks();
         if (state.pending.isEmpty() && state.pendingTiedReleases.isEmpty()
-                && state.pendingIoReleases.isEmpty()) {
+                && state.pendingIoReleases.isEmpty()
+                && state.pendingUntrackedReturnOwnerReleases.isEmpty()) {
             processReadyDeferredCaptures(state);
             processUnreachableScopeExitCaptureCandidates(state);
             maybeAutoSweepAtStatementBoundary(state, topLevel);
@@ -2369,8 +2401,11 @@ public class MortalList {
                 ? state.tiedReleaseMarks[state.markDepth - 1] : 0;
         int ioMark = state.hasMortalMarks()
                 ? state.ioReleaseMarks[state.markDepth - 1] : 0;
+        int untrackedReturnOwnerMark = state.hasMortalMarks()
+                ? state.untrackedReturnOwnerMarks[state.markDepth - 1] : 0;
         if (state.pending.size() <= mark && state.pendingTiedReleases.size() <= tiedMark
-                && state.pendingIoReleases.size() <= ioMark) {
+                && state.pendingIoReleases.size() <= ioMark
+                && state.pendingUntrackedReturnOwnerReleases.size() <= untrackedReturnOwnerMark) {
             processReadyDeferredCaptures(state);
             processUnreachableScopeExitCaptureCandidates(state);
             maybeAutoSweepAtStatementBoundary(state, topLevel);
@@ -2381,7 +2416,7 @@ public class MortalList {
         state.flushing = true;
         if (topLevel) state.topLevelFlushDepth++;
         try {
-            processDeferredEntriesFrom(mark, tiedMark, ioMark);
+            processDeferredEntriesFrom(mark, tiedMark, ioMark, untrackedReturnOwnerMark);
             // Remove only entries above the mark
             while (state.pending.size() > mark) {
                 state.pending.removeLast();
@@ -2395,6 +2430,9 @@ public class MortalList {
             }
             while (state.pendingIoReleases.size() > ioMark) {
                 state.pendingIoReleases.removeLast();
+            }
+            while (state.pendingUntrackedReturnOwnerReleases.size() > untrackedReturnOwnerMark) {
+                state.pendingUntrackedReturnOwnerReleases.removeLast();
             }
         } finally {
             if (topLevel) state.topLevelFlushDepth--;
@@ -2430,8 +2468,10 @@ public class MortalList {
         int mark = state.marks[markIndex];
         int tiedMark = state.tiedReleaseMarks[markIndex];
         int ioMark = state.ioReleaseMarks[markIndex];
+        int untrackedReturnOwnerMark = state.untrackedReturnOwnerMarks[markIndex];
         if (state.pending.size() <= mark && state.pendingTiedReleases.size() <= tiedMark
-                && state.pendingIoReleases.size() <= ioMark) {
+                && state.pendingIoReleases.size() <= ioMark
+                && state.pendingUntrackedReturnOwnerReleases.size() <= untrackedReturnOwnerMark) {
             // Even if no mortal entries to process, check deferred captures
             // that may have become ready (captureCount reached 0) during
             // scope cleanup.
@@ -2444,7 +2484,7 @@ public class MortalList {
         }
         invalidateDrainReachabilityCaches();
         // Process entries from mark onwards (DESTROY may add new entries)
-        processDeferredEntriesFrom(mark, tiedMark, ioMark);
+        processDeferredEntriesFrom(mark, tiedMark, ioMark, untrackedReturnOwnerMark);
         // Remove only the entries we processed (keep entries before mark)
         while (state.pending.size() > mark) {
             state.pending.removeLast();
@@ -2458,6 +2498,9 @@ public class MortalList {
         }
         while (state.pendingIoReleases.size() > ioMark) {
             state.pendingIoReleases.removeLast();
+        }
+        while (state.pendingUntrackedReturnOwnerReleases.size() > untrackedReturnOwnerMark) {
+            state.pendingUntrackedReturnOwnerReleases.removeLast();
         }
         invalidateDrainReachabilityCaches();
         // After processing mortals (which may have triggered releaseCaptures

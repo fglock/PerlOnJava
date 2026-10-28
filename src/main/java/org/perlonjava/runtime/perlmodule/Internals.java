@@ -565,7 +565,15 @@ public class Internals extends PerlModuleBase {
         if (base != null) {
             int rc = base.refCount;
             if (rc == Integer.MIN_VALUE) return new RuntimeScalar(0).getList();
+            boolean compileHintsHash = base == GlobalVariable.getGlobalHash(
+                    GlobalContext.encodeSpecialVar("H"));
             int nativeOwners = base.nativeOwnerSlotCount();
+            if (compileHintsHash) {
+                // The package-root identity records the strong table edge for
+                // lifecycle cleanup, but Perl's SvREFCNT helper deliberately
+                // hides this special global slot from the reported count.
+                nativeOwners -= base.ownerSlotCount(PerlOwnerSlot.Kind.PACKAGE_AGGREGATE_SLOT);
+            }
             if (rc < 0) {
                 if (nativeOwners == 0) return new RuntimeScalar(1).getList(); // untracked
                 rc = nativeOwners;
@@ -614,8 +622,6 @@ public class Internals extends PerlModuleBase {
             // runtime, but Perl's core refcount helper does not expose that
             // bookkeeping slot as a lexical pad owner. Its helper also
             // compensates for the ampersand-call argument alias below.
-            boolean compileHintsHash = base == GlobalVariable.getGlobalHash(
-                    GlobalContext.encodeSpecialVar("H"));
             int extra = (base.localBindingExists && !compileHintsHash ? 1 : 0)
                     + base.foreachAliasCount;
             if (rc == 2
