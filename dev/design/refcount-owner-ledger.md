@@ -535,6 +535,12 @@ external workload has drained before changing runtime source.
   final scalar-cell owner exits, and kept reachability fallbacks where slot
   coverage is incomplete. `nice -n 19 make` passed with
   `JPERL_DISABLE_CORRECTIVE_SWEEPS=1` and Gradle limited to two workers.
+- [x] On 2026-10-28, CODE weak-reference registration stopped walking scalar
+  roots to decide whether an anonymous CODE value still has an owner. The
+  existing stash, active-frame, and owner-slot checks in `clearWeakRefsTo()`
+  now make that decision. Added
+  `WeakCodeOwnerSlotNoReachabilityTest`; the full `make` gate passed with
+  corrective sweeps disabled.
 
 ### Handoff: issue #1132 / PR #1204
 
@@ -552,14 +558,16 @@ pass. Preserve both focused ownership regressions when evolving the ledger.
 
 ### Next Steps
 
-1. Audit each remaining root-walk fallback, starting with untracked aggregate
-   package owners and tracked zero-count transitions; add explicit slot
-   identities where ownership is missing.
-2. Remove each fallback only after its owner path has focused regression
+1. Complete package-nested untracked aggregate ownership end to end: make the
+   containing root's release cascade through child slots, and keep the
+   reachability fallback until that path has direct regression coverage.
+2. Audit tracked zero-count transitions and temporary evaluation roots; add
+   explicit slot identities where ownership is missing.
+3. Remove each fallback only after its owner path has focused regression
    coverage and passes system Perl plus both PerlOnJava backends.
-3. Run HTML::Tree's 8/8 target on both backends, then the full suite with every
+4. Run HTML::Tree's 8/8 target on both backends, then the full suite with every
    sweep disabled; remove the remaining compatibility APIs after those gates.
-4. Keep Cookie2 formatting and content-coding exception handling separate from
+5. Keep Cookie2 formatting and content-coding exception handling separate from
    this ownership work.
 
 ### Open Questions

@@ -297,8 +297,11 @@ public class WeakRefRegistry {
             // their weak registry entries immediately.
             if (hasWeakRefsTo(code)
                     && code.stashRefCount <= 0
-                    && !isInstalledGlobalCodeRef(code)
-                    && (code.hadStashRef || code.reachableOwnerCount() == 0)) {
+                    && !isInstalledGlobalCodeRef(code)) {
+                // clearWeakRefsTo() makes the final decision from stash state,
+                // active frames, and explicit owner-slot identities. A scalar
+                // root walk here duplicates that proof and misses the purpose
+                // of the owner ledger.
                 clearWeakRefsTo(code);
             }
         }
