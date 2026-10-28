@@ -1115,10 +1115,19 @@ identity. `nice -n 19 make` passes; `goto_tailcall_args_cleanup.t`,
 `goto_weakself_tailcall_refcount.t`, and `threads_shared_nested_proxies.t` pass
 on both backends with corrective sweeps unset.
 
+### Weakening with a surviving explicit owner (2026-10-28)
+
+`WeakRefRegistry.weaken()` now skips `reachableOwnerCount()` when another
+explicit owner slot remains. `PerlFinalWeakOwnerTest` verifies that weakening a
+live lexical owner preserves the weak observer with zero scalar reachability
+queries. The default-off full `nice -n 19 make` gate passes; with corrective
+sweeps unset, explicit-return cleanup passes 6/6, nested-form lifetime passes
+29/29, and HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends.
+
 ### Next steps
 
-1. Replace remaining targeted weak-release and weak-CODE capture decisions with
-   explicit owner-slot transitions, preserving the existing diagnostic helper
+1. Replace the remaining weak-CODE capture graph decision and weak-release
+   fallbacks for referents without owner slots; preserve the diagnostic helper
    tests.
 2. Finish CODE template ownership, per-optree compiled-pin retirement, and raw
    descriptor/embedding borrows. Complete native call buffers, escaping

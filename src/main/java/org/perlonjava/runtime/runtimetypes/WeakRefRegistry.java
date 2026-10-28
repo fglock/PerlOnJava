@@ -273,6 +273,7 @@ public class WeakRefRegistry {
         // weak backrefs use their targeted cleanup paths below.
         if (weakenedLiveBlessedRef
                 && base.refCount > 0
+                && !base.hasOwnerSlots()
                 && base.reachableOwnerCount() == 0
                 && !ModuleInitGuard.inModuleInit()) {
             MortalList.requestCorrectiveWeakSweep();

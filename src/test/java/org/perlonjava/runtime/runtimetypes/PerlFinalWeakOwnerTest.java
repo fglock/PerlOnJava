@@ -92,6 +92,50 @@ class PerlFinalWeakOwnerTest {
     }
 
     @Test
+    void weakeningOneLexicalOwnerTrustsAnotherExplicitOwnerSlot() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeHash referent = new RuntimeHash();
+            referent.blessId = NameNormalizer.getBlessId("FinalWeakOwner::Shared");
+            RuntimeScalar observer = referent.createAnonymousReference();
+            WeakRefRegistry.weaken(observer);
+
+            RuntimeScalar weakenedOwner = new RuntimeScalar();
+            RuntimeScalar survivingOwner = new RuntimeScalar();
+            MyVarCleanupStack.register(weakenedOwner);
+            MyVarCleanupStack.register(survivingOwner);
+            weakenedOwner.set(referent.createAnonymousReference());
+            survivingOwner.set(referent.createAnonymousReference());
+
+            try {
+                assertEquals(2, referent.countedOwnerSlotCount());
+                try (MortalList.ReachabilityQueryMeasurement measurement =
+                             MortalList.measureReachabilityQueries()) {
+                    WeakRefRegistry.weaken(weakenedOwner);
+
+                    assertTrue(WeakRefRegistry.isweak(observer));
+                    assertTrue(WeakRefRegistry.isweak(weakenedOwner));
+                    assertEquals(1, referent.countedOwnerSlotCount());
+                    assertEquals(0, measurement.stats().scalarReachabilityQueries,
+                            "the surviving owner slot is direct liveness evidence");
+                    assertEquals(0, measurement.stats().rootQueries);
+                    assertEquals(0, measurement.stats().snapshotsBuilt);
+                }
+            } finally {
+                if (WeakRefRegistry.isweak(weakenedOwner)) {
+                    WeakRefRegistry.unweaken(weakenedOwner);
+                }
+                if (WeakRefRegistry.isweak(observer)) WeakRefRegistry.unweaken(observer);
+                MyVarCleanupStack.unregister(weakenedOwner);
+                MyVarCleanupStack.unregister(survivingOwner);
+                weakenedOwner.set(new RuntimeScalar());
+                survivingOwner.set(new RuntimeScalar());
+                observer.set(new RuntimeScalar());
+            }
+        }
+    }
+
+    @Test
     void scalarCellsReleaseTheirWeakObserversWhenTheLexicalOwnerExits() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
