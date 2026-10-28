@@ -6,6 +6,8 @@ priorities and future plans.
 
 ## Work in progress
 
+- Implement `Time::HiRes::stat` with high-resolution file timestamps (#1912).
+
 - Export `fieldhash` from `Hash::Util` for compatibility with core Perl.
 - Normalize tied-hash `exists` results to Perl's boolean values.
 

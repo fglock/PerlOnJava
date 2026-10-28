@@ -26,6 +26,7 @@ resolved before implementation. No new pass or failure is asserted here.
 
 | Code/test boundary | Issue | Priority / state | Evidence, next action and blocker |
 |---|---|---|---|
+| File metadata | [#1912](https://github.com/fglock/PerlOnJava/issues/1912) `Time::HiRes::stat` | Normal / Active | Daiku 1.004 passes on system Perl and exposed the missing runtime function; the implementation and both-backend regression are in [PR #1913](https://github.com/fglock/PerlOnJava/pull/1913). |
 | XML provider APIs | [#1892](https://github.com/fglock/PerlOnJava/issues/1892) XSLT output | High / Active | [PR #1894](https://github.com/fglock/PerlOnJava/pull/1894) is open; verify its serialization fix against HTML::ToDocBook. Coordinate through that work rather than start a duplicate. |
 | XML provider APIs | [#1323](https://github.com/fglock/PerlOnJava/issues/1323) `indexElements` | Normal / Ready | Missing Document method is identified. Add standard-Perl-validated focused coverage and Cindy acceptance; check XML provider overlap with #1894. No established ownership prerequisite. |
 | Frontend constants/quoting | [#1481](https://github.com/fglock/PerlOnJava/issues/1481) Literal control characters | Normal / Ready | One upstream failure on both backends, Perl passes. Reduce literal `qw` operands before choosing frontend versus regex code; require focused and upstream acceptance. |

@@ -21,7 +21,7 @@ use Exporter 'import';
 
 our $VERSION = '1.9764';
 our @EXPORT_OK = qw(usleep nanosleep ualarm gettimeofday tv_interval time sleep alarm
-                    clock_gettime CLOCK_REALTIME CLOCK_MONOTONIC);
+                    stat clock_gettime CLOCK_REALTIME CLOCK_MONOTONIC);
 
 require XSLoader;
 XSLoader::load('Time::HiRes');
