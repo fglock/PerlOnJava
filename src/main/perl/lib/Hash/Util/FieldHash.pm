@@ -89,6 +89,7 @@ sub TIEHASH {
     my $self = bless {
         values => {},
         refs   => {},
+        plain  => {},
         order  => [],
         iter   => [],
     }, $class;
@@ -102,18 +103,27 @@ sub TIEHASH {
 sub CLONE {
     my @live;
     for my $tie (grep { defined } @TIES) {
-        my (%values, %refs);
-        for my $old_id (keys %{ $tie->{refs} }) {
+        my (%values, %refs, %plain);
+        my @order;
+        for my $old_id (@{ $tie->{order} }) {
+            next unless exists $tie->{values}{$old_id};
+            if (exists $tie->{plain}{$old_id}) {
+                $values{$old_id} = $tie->{values}{$old_id};
+                $plain{$old_id} = $tie->{plain}{$old_id};
+                push @order, $old_id;
+                next;
+            }
             my $key = $tie->{refs}{$old_id};
             next unless defined $key;
-            my $new_id = Scalar::Util::refaddr($key);
+            my $new_id = _id_for_key($key);
             $refs{$new_id} = $key;
-            $values{$new_id} = $tie->{values}{$old_id}
-                if exists $tie->{values}{$old_id};
+            $values{$new_id} = $tie->{values}{$old_id};
+            push @order, $new_id;
         }
         $tie->{refs} = \%refs;
+        $tie->{plain} = \%plain;
         $tie->{values} = \%values;
-        @{ $tie->{order} } = keys %refs;
+        @{ $tie->{order} } = @order;
         @{ $tie->{iter} } = ();
         push @live, $tie;
     }
@@ -123,22 +133,26 @@ sub CLONE {
 
 sub _id_for_key {
     my ($key) = @_;
-    die "Hash::Util::FieldHash keys must be references\n" unless ref $key;
-
-    my $id = Scalar::Util::refaddr($key);
-    die "Hash::Util::FieldHash keys must be references\n" unless defined $id;
-
-    return $id;
+    if (ref $key) {
+        my $id = Scalar::Util::refaddr($key);
+        return 'R:' . $id if defined $id;
+    }
+    my $string_key = defined($key) ? "$key" : '';
+    return 'S:' . length($string_key) . ':' . $string_key;
 }
 
 sub _remember_key {
     my ($self, $id, $key) = @_;
 
-    if (!exists $self->{refs}{$id}) {
+    if (!exists $self->{values}{$id}) {
         push @{ $self->{order} }, $id;
     }
-    $self->{refs}{$id} = $key;
-    eval { Scalar::Util::weaken($self->{refs}{$id}) };
+    if (ref $key) {
+        $self->{refs}{$id} = $key;
+        eval { Scalar::Util::weaken($self->{refs}{$id}) };
+    } else {
+        $self->{plain}{$id} = defined($key) ? "$key" : '';
+    }
     return;
 }
 
@@ -151,7 +165,7 @@ sub _prune {
         delete $self->{values}{$id};
     }
 
-    @{ $self->{order} } = grep { exists $self->{refs}{$_} } @{ $self->{order} };
+    @{ $self->{order} } = grep { exists $self->{values}{$_} } @{ $self->{order} };
     return;
 }
 
@@ -160,7 +174,13 @@ sub STORE {
     my $id = _id_for_key($key);
 
     $self->_prune;
-    $self->_remember_key($id, $key);
+    $self->_remember_key($id, $key) unless exists $self->{values}{$id};
+    if (!ref $key) {
+        $self->{plain}{$id} = defined($key) ? "$key" : '';
+    } elsif (!exists $self->{refs}{$id}) {
+        $self->{refs}{$id} = $key;
+        eval { Scalar::Util::weaken($self->{refs}{$id}) };
+    }
     $self->{values}{$id} = $value;
     return $value;
 }
@@ -187,6 +207,7 @@ sub DELETE {
 
     $self->_prune;
     delete $self->{refs}{$id};
+    delete $self->{plain}{$id};
     return delete $self->{values}{$id};
 }
 
@@ -195,6 +216,7 @@ sub CLEAR {
 
     %{ $self->{values} } = ();
     %{ $self->{refs} } = ();
+    %{ $self->{plain} } = ();
     @{ $self->{order} } = ();
     @{ $self->{iter} } = ();
     return;
@@ -204,7 +226,7 @@ sub FIRSTKEY {
     my ($self) = @_;
 
     $self->_prune;
-    @{ $self->{iter} } = grep { exists $self->{refs}{$_} } @{ $self->{order} };
+    @{ $self->{iter} } = grep { exists $self->{values}{$_} } @{ $self->{order} };
     return $self->NEXTKEY;
 }
 
@@ -214,8 +236,9 @@ sub NEXTKEY {
     $self->_prune;
     while (@{ $self->{iter} }) {
         my $id = shift @{ $self->{iter} };
-        next unless exists $self->{refs}{$id};
-        return $self->{refs}{$id};
+        next unless exists $self->{values}{$id};
+        return $self->{refs}{$id} if exists $self->{refs}{$id};
+        return $self->{plain}{$id} if exists $self->{plain}{$id};
     }
     return undef;
 }
