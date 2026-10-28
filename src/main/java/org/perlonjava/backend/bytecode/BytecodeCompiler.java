@@ -1059,10 +1059,10 @@ public class BytecodeCompiler implements Visitor {
 
     private void emitScopeCleanup(int scopeIdx, boolean flush) {
         // Gather variable indices to determine if cleanup is needed.
-        java.util.List<Integer> scalarIndices = symbolTable.getMyScalarIndicesInScope(scopeIdx);
+        java.util.List<Integer> scalarIndices = myScalarCleanupIndicesInScope(scopeIdx);
         java.util.Map<Integer, String> scalarNames = symbolTable.getMyScalarNamesInScope(scopeIdx);
-        java.util.List<Integer> hashIndices = symbolTable.getMyHashIndicesInScope(scopeIdx);
-        java.util.List<Integer> arrayIndices = symbolTable.getMyArrayIndicesInScope(scopeIdx);
+        java.util.List<Integer> hashIndices = myHashCleanupIndicesInScope(scopeIdx);
+        java.util.List<Integer> arrayIndices = myArrayCleanupIndicesInScope(scopeIdx);
 
         // Only emit pushMark/popAndFlush when there are variables that need cleanup.
         // Scopes with no my-variables skip this entirely.
@@ -1128,6 +1128,39 @@ public class BytecodeCompiler implements Visitor {
         }
     }
 
+    private boolean isCapturedVariableIndex(int index) {
+        return capturedVarIndices != null && capturedVarIndices.containsValue(index);
+    }
+
+    private List<Integer> withoutCapturedVariables(List<Integer> indices) {
+        if (indices.isEmpty() || capturedVarIndices == null || capturedVarIndices.isEmpty()) {
+            return indices;
+        }
+        List<Integer> filtered = new ArrayList<>(indices.size());
+        for (int index : indices) {
+            if (!isCapturedVariableIndex(index)) {
+                filtered.add(index);
+            }
+        }
+        return filtered;
+    }
+
+    List<Integer> myScalarCleanupIndicesInScope(int scopeIdx) {
+        return withoutCapturedVariables(symbolTable.getMyScalarIndicesInScope(scopeIdx));
+    }
+
+    List<Integer> myHashCleanupIndicesInScope(int scopeIdx) {
+        return withoutCapturedVariables(symbolTable.getMyHashIndicesInScope(scopeIdx));
+    }
+
+    List<Integer> myArrayCleanupIndicesInScope(int scopeIdx) {
+        return withoutCapturedVariables(symbolTable.getMyArrayIndicesInScope(scopeIdx));
+    }
+
+    List<Integer> myVariableCleanupIndicesInScope(int scopeIdx) {
+        return withoutCapturedVariables(symbolTable.getMyVariableIndicesInScope(scopeIdx));
+    }
+
     private void emitLoopControlScopeCleanup(LoopInfo loopInfo) {
         if (loopInfo.dynamicLocalLevelReg >= 0) {
             emit(Opcodes.POP_LOCAL_LEVEL);
@@ -1164,10 +1197,10 @@ public class BytecodeCompiler implements Visitor {
 
     private MyVarCleanupRegisters myVariablesAddedSince(Set<Integer> before) {
         return new MyVarCleanupRegisters(
-                indicesAddedSince(symbolTable.getMyScalarIndicesInScope(0), before),
-                indicesAddedSince(symbolTable.getMyHashIndicesInScope(0), before),
-                indicesAddedSince(symbolTable.getMyArrayIndicesInScope(0), before),
-                indicesAddedSince(symbolTable.getMyVariableIndicesInScope(0), before));
+                indicesAddedSince(myScalarCleanupIndicesInScope(0), before),
+                indicesAddedSince(myHashCleanupIndicesInScope(0), before),
+                indicesAddedSince(myArrayCleanupIndicesInScope(0), before),
+                indicesAddedSince(myVariableCleanupIndicesInScope(0), before));
     }
 
     private void emitMyVarCleanup(MyVarCleanupRegisters cleanup, boolean flush) {
@@ -8984,9 +9017,9 @@ public class BytecodeCompiler implements Visitor {
             patchIntOffset(gotoEndPos + 1, endPos);
             lastResultReg = resultReg;
         }
-        boolean conditionOwnsLocals = !symbolTable.getMyScalarIndicesInScope(ifScopeIndex).isEmpty()
-                || !symbolTable.getMyHashIndicesInScope(ifScopeIndex).isEmpty()
-                || !symbolTable.getMyArrayIndicesInScope(ifScopeIndex).isEmpty();
+        boolean conditionOwnsLocals = !myScalarCleanupIndicesInScope(ifScopeIndex).isEmpty()
+                || !myHashCleanupIndicesInScope(ifScopeIndex).isEmpty()
+                || !myArrayCleanupIndicesInScope(ifScopeIndex).isEmpty();
         if (conditionOwnsLocals) {
             if (lastResultReg >= 0 && currentCallContext != RuntimeContextType.VOID) {
                 // A conditional can yield its declaring lexical, including a
