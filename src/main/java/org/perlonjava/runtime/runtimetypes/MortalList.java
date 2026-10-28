@@ -1292,6 +1292,7 @@ public class MortalList {
                             && WeakRefRegistry.hasWeakRefsTo(base)
                             && (ownerRelease == null || ownerRelease.ownerSlotRelease == null
                                 || ownerRelease.ownerSlotRelease.kind() != PerlOwnerSlot.Kind.RETURN_VALUE)
+                            && base.countedOwnerSlotCount() == 0
                             && RuntimeCode.hasActiveArgumentOwner(ownerScalar)) {
                         state.deferredArgumentOwnerReleases.add(
                                 new DeferredArgumentOwnerRelease(base, ownerRelease,
@@ -1319,7 +1320,11 @@ public class MortalList {
         state.deferredArgumentOwnerReleases.clear();
         for (DeferredArgumentOwnerRelease deferred : pending) {
             RuntimeScalar ownerScalar = deferred.ownerScalar.get();
-            if (RuntimeCode.hasActiveArgumentOwner(ownerScalar)) {
+            if (deferred.base.blessId != 0
+                    && deferred.base.countedOwnerSlotCount() != 0) {
+                processDeferredBase(deferred.base, false, deferred.ownerRelease,
+                        deferred.transientOwnerKind);
+            } else if (RuntimeCode.hasActiveArgumentOwner(ownerScalar)) {
                 state.deferredArgumentOwnerReleases.add(deferred);
             } else {
                 processDeferredBase(deferred.base, false, deferred.ownerRelease,
