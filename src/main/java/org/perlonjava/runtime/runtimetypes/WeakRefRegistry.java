@@ -401,6 +401,43 @@ public class WeakRefRegistry {
         }
     }
 
+    /** Finish an aggregate's cleanup after its active lexical pad owner left. */
+    static void onActiveLexicalOwnerReleased(RuntimeBase referent) {
+        if (referent == null || PerlRuntime.currentOrNull() == null
+                || referent.hasOwnerSlots() || referent.captureCount > 0
+                || referent.hasPendingReturnOwner()
+                || referent.countedOwnerSlotCount() != 0
+                || referent.localBindingExists || referent.refCount > 0
+                || referent.refCount == Integer.MIN_VALUE) return;
+
+        boolean untrackedAggregate = referent.blessId == 0
+                && (referent instanceof RuntimeArray || referent instanceof RuntimeHash);
+        if (untrackedAggregate && referent.refCount == 1) {
+            referent.refCount = WEAKLY_TRACKED;
+        }
+
+        // Keep the compatibility path's targeted scheduling when explicitly
+        // enabled. The default-off path below finalizes directly from slot
+        // identity and does not need a later reachability pass.
+        if (ReachabilityWalker.correctiveSweepsEnabled()) {
+            if (referent.refCount == WEAKLY_TRACKED && hasWeakRefsTo(referent)) {
+                MortalList.requestTargetedWeakSweep(referent);
+            }
+            return;
+        }
+
+        if (referent.blessId != 0) {
+            referent.refCount = Integer.MIN_VALUE;
+            DestroyDispatch.callDestroy(referent);
+            return;
+        }
+
+        if ((referent.refCount == WEAKLY_TRACKED || referent.refCount == 0)
+                && hasWeakRefsTo(referent)) {
+            clearWeakRefsTo(referent);
+        }
+    }
+
     /**
      * Clear all weak references to a referent. Called when refCount reaches 0,
      * before DESTROY. Sets all weak scalars pointing to this referent to undef.

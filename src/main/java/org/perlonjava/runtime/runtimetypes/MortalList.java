@@ -692,6 +692,10 @@ public class MortalList {
         // An aggregate borrowed through @_ belongs to its caller. Its current
         // frame can end while the caller's lexical is still live.
         if (!finalRelease && RuntimeCode.deferCleanupForActiveArgumentAggregate(hash)) return;
+        scopeExitCleanupHashBody(hash, finalRelease);
+    }
+
+    private static void scopeExitCleanupHashBody(RuntimeHash hash, boolean finalRelease) {
         // Clear localBindingExists: the named variable's scope is ending.
         boolean hadLocalBinding = hash.localBindingExists;
         hash.localBindingExists = false;
@@ -796,6 +800,11 @@ public class MortalList {
         // caller's lexical lifetime.  In particular, Const::Fast uses
         // SvREFCNT to decide whether it must clone a referenced aggregate.
         if (!finalRelease && RuntimeCode.deferCleanupForActiveArgumentAggregate(arr)) return;
+        scopeExitCleanupArrayBody(arr, returned, finalRelease);
+    }
+
+    private static void scopeExitCleanupArrayBody(
+            RuntimeArray arr, RuntimeBase returned, boolean finalRelease) {
         // Clear localBindingExists: the named variable's scope is ending.
         // This allows subsequent refCount==0 events (from setLargeRefCounted
         // or flush) to correctly trigger callDestroy, since the local

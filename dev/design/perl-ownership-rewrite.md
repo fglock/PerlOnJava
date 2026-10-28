@@ -1275,6 +1275,19 @@ migrated. `nice -n 19 make` passes in 9m55s. With corrective sweeps disabled,
 the 16-case lifecycle matrix passes on both backends, including HTML-Tree
 `t/refloop.t` 8/8.
 
+### Active lexical pads own aggregate cells (2026-10-28)
+
+Active lexical frames and top-level pads now keep owner identities for registered
+array and hash cells. Lexical scope cleanup releases each pad identity after
+aggregate cleanup, allowing weak observers to clear directly when corrective
+sweeps are disabled. `ActiveLexicalAggregateOwnerSlotTest` covers both pad
+types, and the UNITCHECK capture regression guards against releasing captured
+children too early. The full `nice -n 19 make` gate passes in 8m02s. With sweeps
+disabled, the UNITCHECK and lifecycle matrix passes on both backends, and
+HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends. The recursive
+`new_from_lol` reduction still fails three interpreter assertions; this is the
+known interpreter lifecycle gap tracked below.
+
 ### Next steps
 
 1. Give untracked array/hash referents explicit owner counts and final-release
