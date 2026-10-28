@@ -4180,20 +4180,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 yield newScalar;
             }
             case REFERENCE -> {
-                RuntimeScalar referent = (RuntimeScalar) value;
-                // A blessed qr// is represented as a reference to a REGEX
-                // scalar. Dereferencing it must expose the mutable PV view,
-                // retaining the blessing that lives on the reference cell.
-                if (referent.type == REGEX && referent.value instanceof RuntimeRegex regex) {
-                    int regexBlessId = referent.blessId != 0 ? referent.blessId
-                            : this.blessId != 0 ? this.blessId
-                            : blessedId(this) != 0 ? blessedId(this) : regex.blessId;
-                    if (regexBlessId != 0) {
-                        regex.setBlessId(regexBlessId);
-                        yield new RegexScalarLvalue(regex, regexBlessId).propagateTaint(referent);
-                    }
-                }
-                yield referent;
+                yield (RuntimeScalar) value;
             }
             case REGEX -> dereferencedRegexScalar();
             case GLOB -> {
@@ -4308,15 +4295,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
         return switch (type) {
             case REFERENCE -> {
-                RuntimeScalar referent = (RuntimeScalar) value;
-                if (referent.type == REGEX && referent.value instanceof RuntimeRegex regex) {
-                    int regexBlessId = referent.blessId != 0 ? referent.blessId
-                            : this.blessId != 0 ? this.blessId
-                            : blessedId(this) != 0 ? blessedId(this) : regex.blessId;
-                    if (regexBlessId != 0) regex.setBlessId(regexBlessId);
-                    yield new RegexScalarLvalue(regex, regexBlessId).propagateTaint(referent);
-                }
-                yield referent;
+                yield (RuntimeScalar) value;
             }
             case REGEX -> dereferencedRegexScalar();
             case GLOB -> {

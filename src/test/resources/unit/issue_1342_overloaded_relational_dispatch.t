@@ -28,8 +28,8 @@ use Test::More;
     sub less ($$) {
         @_ = upgrade(@_);
         my ($left, $right) = @_;
-            my ($a, $b) = ("$left", "$right");
-            length($a) < length($b) && substr($b, 0, length($a) + 1) eq "$a/";
+        my ($a, $b) = ("$left", "$right");
+        length($a) < length($b) && substr($b, 0, length($a) + 1) eq "$a/";
     }
 
     sub new {
