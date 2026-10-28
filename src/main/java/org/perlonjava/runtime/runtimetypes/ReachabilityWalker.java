@@ -40,10 +40,8 @@ import java.lang.ref.WeakReference;
  * </ul>
  */
 public class ReachabilityWalker {
-    /** Legacy corrective sweeps are opt-in while ownership migration continues. */
-    private static final boolean CORRECTIVE_SWEEPS_DISABLED =
-            System.getenv().getOrDefault("JPERL_ENABLE_CORRECTIVE_SWEEPS", "").isEmpty()
-                    || !System.getenv().getOrDefault("JPERL_DISABLE_CORRECTIVE_SWEEPS", "").isEmpty();
+    /** Runtime cleanup must use owner releases; retain walker diagnostics only. */
+    private static final boolean CORRECTIVE_SWEEPS_DISABLED = true;
 
     static boolean correctiveSweepsEnabled() {
         return !CORRECTIVE_SWEEPS_DISABLED;
@@ -2812,6 +2810,7 @@ public class ReachabilityWalker {
 
     /** Run one quiet pass explicitly requested at a safe statement boundary. */
     static int sweepWeakRefsForExplicitImmediateRequest(boolean forceJvmGc) {
+        if (CORRECTIVE_SWEEPS_DISABLED) return 0;
         return sweepWeakRefsPass(true, forceJvmGc, Collections.emptySet(), null).cleared();
     }
 
@@ -3553,6 +3552,7 @@ public class ReachabilityWalker {
      * DBI statement-polling paths without forcing a JVM GC.
      */
     public static int sweepDestroyableObjects(boolean forceJvmGc) {
+        if (CORRECTIVE_SWEEPS_DISABLED) return 0;
         if (!DestroyDispatch.hasDestroyableObjects()) return 0;
         if (forceJvmGc) {
             ScalarRefRegistry.forceGcAndSnapshot();

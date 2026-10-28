@@ -244,11 +244,6 @@ public class MyVarCleanupStack {
 
     private static void noteVarLeftScope(Object var) {
         if (var instanceof RuntimeScalar scalar) scalar.refreshUntrackedReferenceOwner();
-        if (var instanceof RuntimeBase base
-                && (base instanceof RuntimeArray || base instanceof RuntimeHash)
-                && WeakRefRegistry.weakRefsExist()) {
-            MortalList.requestWeakSweepsForDestroyedContainer(base);
-        }
         if (var instanceof RuntimeBase base && WeakRefRegistry.hasWeakRefsTo(base)) {
             requestWeakCleanupAfterScopeExit(base);
         } else if (var instanceof RuntimeScalar scalar
