@@ -3223,6 +3223,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 } else if (oldBase.blessId != 0
                         && oldBase.storedInPackageGlobal
                         && WeakRefRegistry.hasWeakRefsTo(oldBase)
+                        && oldBase.restoreCountedOwnerSlotRefCount()) {
+                    // Counted slots are the owners that balance this bridge
+                    // count. If any remain after the overwritten slot was
+                    // retired, repair a transient zero from those identities
+                    // before building the package-root reachability graph.
+                } else if (oldBase.blessId != 0
+                        && oldBase.storedInPackageGlobal
+                        && WeakRefRegistry.hasWeakRefsTo(oldBase)
                         && ReachabilityWalker.isReachableFromRoots(oldBase)) {
                     // D-W6.18: property-based walker gate (mirror of
                     // MortalList.flush). Replaces classNeedsWalkerGate
