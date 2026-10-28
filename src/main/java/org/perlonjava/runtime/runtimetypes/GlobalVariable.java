@@ -2531,6 +2531,18 @@ public class GlobalVariable {
         if (current == null && !resolvedKey.equals(key)) {
             current = globalCodeRefs.get(key);
         }
+        // Hash-reference constants used by a compiled body retain their CV
+        // after `undef *NAME`; the cached value is an independent constant-CV
+        // snapshot, while the visible glob slot becomes undef. Ordinary direct
+        // calls continue to prefer the currently visible CODE slot below.
+        if (cached != null && cached.type == RuntimeScalarType.CODE
+                && cached.value instanceof RuntimeCode cachedCode
+                && cachedCode.constantValue != null
+                && (current == null || current.type != RuntimeScalarType.CODE
+                    || !(current.value instanceof RuntimeCode currentCode)
+                    || currentCode.constantValue == null)) {
+            return cached;
+        }
         if (current != null) {
             cached.type = current.type;
             cached.value = current.value;

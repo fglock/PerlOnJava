@@ -131,16 +131,6 @@ public class ReferenceOperators {
             if (referent instanceof RuntimeRegex regex) {
                 regex.setBlessId(newBlessId);
             }
-            // qr// values can reach bless as a reference whose referent is a
-            // scalar wrapper around the actual RuntimeRegex.  Keep the regex
-            // payload's class in sync so its mutable scalar view stringifies
-            // as the blessed object after $$qr assignment.
-            if (referent instanceof RuntimeScalar scalar
-                    && scalar.type == REGEX
-                    && scalar.value instanceof RuntimeRegex regex) {
-                regex.setBlessId(newBlessId);
-            }
-            propagateNestedRegexBlessing(runtimeScalar, newBlessId);
             // Blessing into a package materializes its stash in Perl.  Method
             // lookup uses stash existence to decide whether to show the
             // "perhaps you forgot to load" hint.
@@ -284,19 +274,6 @@ public class ReferenceOperators {
             throw new PerlCompilerException("Can't bless non-reference value");
         }
         return runtimeScalar;
-    }
-
-    private static void propagateNestedRegexBlessing(RuntimeScalar scalar, int blessId) {
-        RuntimeScalar current = scalar;
-        for (int depth = 0; depth < 8; depth++) {
-            if (current.type == REGEX && current.value instanceof RuntimeRegex regex) {
-                current.setBlessId(blessId);
-                regex.setBlessId(blessId);
-                return;
-            }
-            if (current.type != REFERENCE || !(current.value instanceof RuntimeScalar next)) return;
-            current = next;
-        }
     }
 
     /**

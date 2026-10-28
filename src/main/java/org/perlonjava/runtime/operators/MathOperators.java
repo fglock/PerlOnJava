@@ -1829,8 +1829,15 @@ public class MathOperators {
             return new RuntimeScalar(value);  // Return infinity or NaN as-is
         }
 
-        // Use truncate to get integer part (truncates towards zero)
-        return new RuntimeScalar(truncate(value));
+        // Use truncate to get integer part (truncates towards zero). Perl's
+        // int() produces an IV when the result fits, even when the input was
+        // an NV. Keeping that integer flag matters for later arithmetic and
+        // stringification (for example, epoch microseconds).
+        double truncated = truncate(value);
+        if (truncated >= -0x1.0p63 && truncated < 0x1.0p63) {
+            return getScalarInt((long) truncated);
+        }
+        return new RuntimeScalar(truncated);
     }
 
 
