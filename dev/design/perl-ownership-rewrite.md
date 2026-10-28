@@ -1075,10 +1075,20 @@ replacement, clearing, and exact one-time retirement when the frame later exits.
 cleanup passes 6/6 on both backends and HTML-Tree 5.07 `t/refloop.t` passes 8/8
 on both backends.
 
+### Argument cleanup decisions use owner identities (2026-10-28)
+
+`hasActiveArgumentOwner` now checks only the `ARGUMENT_ALIAS` owner-slot count.
+The fallback walks through active `@_` arrays and staged argument values were
+removed, along with their recursive `CallArguments` referent scan. The
+default-off full `nice -n 19 make` gate passes. Against that build,
+`weak_nested_form_argument_lifetime.t` passes 29/29 and
+`closure_capture_explicit_return.t` passes 6/6 on both backends; HTML-Tree
+5.07 `t/refloop.t` passes 8/8 on both backends with sweeps unset.
+
 ### Next steps
 
-1. Cover nested list/aggregate arguments and shared/tail-call aliases, then
-   remove remaining `hasActiveArgumentOwner` compatibility scans.
+1. Add direct owner-slot coverage for nested list/aggregate arguments and
+   shared/tail-call aliases.
 2. Replace remaining targeted weak-release and weak-CODE capture decisions with
    explicit owner-slot transitions, preserving the existing diagnostic helper
    tests.
