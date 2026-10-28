@@ -1857,6 +1857,10 @@ public class MortalList {
                 // a cached root snapshot must not invent a replacement owner.
                 base.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroyFromCountedOwner(base);
+            } else if (base.blessId != 0 && base.restoreCountedOwnerSlotRefCount()) {
+                // For blessed referents, remaining counted slots prove that
+                // the transient zero was an undercount. Unblessed aggregates
+                // still need a root snapshot to reject stale scalar wrappers.
             } else if (base instanceof RuntimeCode code
                     && hasWeakRefs
                     && (RuntimeCode.isActiveCode(code)
