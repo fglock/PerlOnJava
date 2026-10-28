@@ -243,6 +243,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     && regexFlags != null
                     && !regexFlags.isGlobalMatch()
                     && !regexFlags.isMatchExactlyOnce()
+                    && !regexFlags.taintResults()
                     && recursivePattern != null) {
                 literalFastPathString = recursivePattern.getFixedLiteral();
             }
@@ -263,8 +264,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         if (found) {
             PerlRuntime runtime = PerlRuntime.current();
             RuntimeRegexState regexState = runtime.regexState;
-            regexState.lastMatchResultsTainted = runtime.executionState.taintMode
-                    && string.isTainted();
+            regexState.lastMatchResultsTainted = false;
             regexState.lastMatchWasByteString =
                     inputValue.type == RuntimeScalarType.BYTE_STRING;
             int end = idx + literal.length();
