@@ -287,6 +287,8 @@ public class MortalList {
         state.pendingOwnerReleases.add(ownerRelease);
         state.pendingOwnerScalars.add(ownerScalar == null ? null
                 : new java.lang.ref.WeakReference<>(ownerScalar));
+        state.pendingArgumentFrames.add(
+                RuntimeCode.argumentAliasFrameForOwner(ownerScalar));
         state.pendingTransientOwnerKinds.add(transientOwnerKind);
     }
 
@@ -2071,6 +2073,7 @@ public class MortalList {
             state.pending.clear();
             state.pendingOwnerReleases.clear();
             state.pendingOwnerScalars.clear();
+            state.pendingArgumentFrames.clear();
             state.pendingTransientOwnerKinds.clear();
             state.pendingTiedReleases.clear();
             state.pendingIoReleases.clear();
@@ -2235,6 +2238,7 @@ public class MortalList {
             state.pending.remove(state.pending.size() - 1);
             state.pendingOwnerReleases.remove(state.pendingOwnerReleases.size() - 1);
             state.pendingOwnerScalars.remove(state.pendingOwnerScalars.size() - 1);
+            state.pendingArgumentFrames.remove(state.pendingArgumentFrames.size() - 1);
             state.pendingTransientOwnerKinds.remove(state.pendingTransientOwnerKinds.size() - 1);
         }
     }
@@ -2265,7 +2269,8 @@ public class MortalList {
                 RuntimeScalar owner = ownerRef == null ? null : ownerRef.get();
                 RuntimeBase pending = state.pending.get(i);
                 boolean directOwner = owner != null && owners.contains(owner);
-                boolean frameCopy = owner != null && owner.copiedFromArgumentFrame(argumentFrame);
+                boolean frameOwner = argumentFrame != null
+                        && state.pendingArgumentFrames.get(i) == argumentFrame;
                 boolean abandonedBirthTemporary = owner == null
                         && "bless mortal temporary".equals(state.pendingTransientOwnerKinds.get(i))
                         && args.elements.stream().anyMatch(argument -> argument != null
@@ -2278,7 +2283,7 @@ public class MortalList {
                 if (abandonedBirthTemporary && directlyReferences(returnedResult, pending)) {
                     continue;
                 }
-                if ((!directOwner && !frameCopy && !abandonedBirthTemporary)
+                if ((!directOwner && !frameOwner && !abandonedBirthTemporary)
                         || (owner == null && !abandonedBirthTemporary)) continue;
                 RuntimeBase.PendingOwnerRelease ownerRelease =
                         state.pendingOwnerReleases.get(i);
@@ -2286,6 +2291,7 @@ public class MortalList {
                 state.pending.remove(i);
                 state.pendingOwnerReleases.remove(i);
                 state.pendingOwnerScalars.remove(i);
+                state.pendingArgumentFrames.remove(i);
                 state.pendingTransientOwnerKinds.remove(i);
                 processDeferredBase(pending, true, ownerRelease, transientOwnerKind);
             }
@@ -2381,6 +2387,7 @@ public class MortalList {
                 state.pending.removeLast();
                 state.pendingOwnerReleases.removeLast();
                 state.pendingOwnerScalars.removeLast();
+                state.pendingArgumentFrames.removeLast();
                 state.pendingTransientOwnerKinds.removeLast();
             }
             while (state.pendingTiedReleases.size() > tiedMark) {
@@ -2443,6 +2450,7 @@ public class MortalList {
             state.pending.removeLast();
             state.pendingOwnerReleases.removeLast();
             state.pendingOwnerScalars.removeLast();
+            state.pendingArgumentFrames.removeLast();
             state.pendingTransientOwnerKinds.removeLast();
         }
         while (state.pendingTiedReleases.size() > tiedMark) {
