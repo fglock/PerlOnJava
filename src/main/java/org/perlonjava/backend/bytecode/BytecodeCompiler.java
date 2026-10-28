@@ -622,6 +622,10 @@ public class BytecodeCompiler implements Visitor {
     // Track current calling context for subroutine calls
     int currentCallContext = RuntimeContextType.LIST; // Default to LIST
     Map<String, Integer> capturedVarIndices;  // Name → register index
+    // Register identities for actual captured pad cells. capturedVarIndices also
+    // includes synthetic reservations for referenced names, so it cannot decide
+    // which lexical slots scope cleanup must leave alone.
+    private final Set<Integer> capturedPadRegisterIndices = new HashSet<>();
     // Declaration metadata for captured package variables.  Keep this
     // separately from the register table because closure analysis may first
     // materialize a reference as a lexical before the body reaches `local`.
@@ -804,6 +808,7 @@ public class BytecodeCompiler implements Visitor {
                 int regIndex = entry.getValue();
                 if (regIndex >= 3) {
                     capturedVarIndices.put(varName, regIndex);
+                    capturedPadRegisterIndices.add(regIndex);
                 }
             }
 
@@ -1246,7 +1251,7 @@ public class BytecodeCompiler implements Visitor {
     }
 
     private boolean isCapturedVariableIndex(int index) {
-        return capturedVarIndices != null && capturedVarIndices.containsValue(index);
+        return capturedPadRegisterIndices.contains(index);
     }
 
     private List<Integer> withoutCapturedVariables(List<Integer> indices) {
@@ -1957,6 +1962,7 @@ public class BytecodeCompiler implements Visitor {
             // by the closure body.
             if (usedVars != null && !usedVars.contains(name)) continue;
             capturedVarIndices.put(name, reg);
+            capturedPadRegisterIndices.add(reg);
             outerVarNames.add(name);
             outerVarDecls.add(entry.decl());
             outerVarPackages.add(entry.perlPackage());
@@ -6239,13 +6245,13 @@ public class BytecodeCompiler implements Visitor {
                 int rd = allocateOutputRegister();
                 if (isStrictRefsEnabled()) {
                     // strict refs: scalarDeref() — throws for non-refs
-                    emitWithToken(Opcodes.DEREF_SCALAR_STRICT, node.getIndex());
+                    emitWithToken(Opcodes.DEREF_SCALAR_STRICT_TEMP, node.getIndex());
                     emitReg(rd);
                     emitReg(blockResultReg);
                 } else {
                     // no strict refs: scalarDerefNonStrict(pkg) — allows symrefs
                     int pkgIdx = addToStringPool(getCurrentPackage());
-                    emitWithToken(Opcodes.DEREF_SCALAR_NONSTRICT, node.getIndex());
+                    emitWithToken(Opcodes.DEREF_SCALAR_NONSTRICT_TEMP, node.getIndex());
                     emitReg(rd);
                     emitReg(blockResultReg);
                     emit(pkgIdx);

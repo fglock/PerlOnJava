@@ -797,7 +797,8 @@ public class RuntimeList extends RuntimeBase {
                     // leak +1 refCount per call on the discarded first arg — visible
                     // in op/inccode.t "no leaks" tests #61, #63 (bug perl #92252).
                     if (rhsValue != null && rhsValue.refCountOwned
-                            && (rhsValue.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                            && ((rhsValue.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                                || rhsValue.type == RuntimeScalarType.GLOB)
                             && rhsValue.value instanceof RuntimeBase base && base.refCount > 0) {
                         base.releaseOwner(rhsValue, "RuntimeList materialized-copy undo (undef-target)");
                         base.releaseActiveOwner(rhsValue);
@@ -821,7 +822,8 @@ public class RuntimeList extends RuntimeBase {
                 // Array/hash targets take direct ownership of materialized copies, so only
                 // scalar targets need this correction.
                 if (assigned != null && assigned.refCountOwned
-                        && (assigned.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                        && ((assigned.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                            || assigned.type == RuntimeScalarType.GLOB)
                         && assigned.value instanceof RuntimeBase base && base.refCount > 0) {
                     base.releaseOwner(assigned, "RuntimeList materialized-copy undo (scalar-target)");
                     base.releaseActiveOwner(assigned);
@@ -847,7 +849,9 @@ public class RuntimeList extends RuntimeBase {
                     // setFromList creates new copies via incrementRefCountForContainerStore;
                     // the materialized rhs elements' increments are now redundant.
                     for (RuntimeScalar r : remaining) {
-                        if (r.refCountOwned && (r.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                        if (r.refCountOwned
+                                && ((r.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                                    || r.type == RuntimeScalarType.GLOB)
                                 && r.value instanceof RuntimeBase base && base.refCount > 0) {
                             base.releaseOwner(r, "RuntimeList materialized-copy undo (array-target)");
                             base.releaseActiveOwner(r);
@@ -886,7 +890,9 @@ public class RuntimeList extends RuntimeBase {
                 // via addToArray -> setLarge) are now redundant and would leak since
                 // nobody decrements them.
                 for (RuntimeScalar r : remainingArr.elements) {
-                    if (r.refCountOwned && (r.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                    if (r.refCountOwned
+                            && ((r.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                                || r.type == RuntimeScalarType.GLOB)
                             && r.value instanceof RuntimeBase base && base.refCount > 0) {
                         base.releaseOwner(r, "RuntimeList materialized-copy undo (hash-target)");
                         base.releaseActiveOwner(r);

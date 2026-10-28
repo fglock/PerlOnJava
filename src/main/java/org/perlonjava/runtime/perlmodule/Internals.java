@@ -774,29 +774,14 @@ public class Internals extends PerlModuleBase {
         return new RuntimeScalar("NOT_REF").getList();
     }
 
-    /**
-     * Phase 4 (refcount_alignment_plan.md): Run a reachability sweep from
-     * Perl roots (globals, rescued objects) and clear weak refs for
-     * unreachable objects. Returns the number of weak refs cleared. This
-     * is jperl-only; under native Perl it should be treated as a no-op.
-     */
+    /** Compatibility stub: PerlOnJava uses owner release, not a reachability sweep. */
     public static RuntimeList jperl_gc(RuntimeArray args, int ctx) {
-        // Two passes: the first pass fires DESTROY on unreachable
-        // objects, which may break circular refs and make more objects
-        // unreachable. The second pass catches those cascades.
-        int cleared = ReachabilityWalker.sweepWeakRefs();
-        int secondPass = ReachabilityWalker.sweepWeakRefs();
-        return new RuntimeScalar(cleared + secondPass).getList();
+        return new RuntimeScalar(0).getList();
     }
 
-    /**
-     * Quiet statement-boundary sweep. Unlike jperl_gc(), this does not drain
-     * rescued DBIC-style objects before END-time cleanup.
-     */
+    /** Compatibility stub for the removed quiet reachability sweep. */
     public static RuntimeList jperl_gc_quiet(RuntimeArray args, int ctx) {
-        int cleared = ReachabilityWalker.sweepWeakRefs(true);
-        int secondPass = ReachabilityWalker.sweepWeakRefs(true);
-        return new RuntimeScalar(cleared + secondPass).getList();
+        return new RuntimeScalar(0).getList();
     }
 
     /**
@@ -808,18 +793,9 @@ public class Internals extends PerlModuleBase {
         return new RuntimeScalar(0).getList();
     }
 
-    /**
-     * Reconcile destroyable objects that require deterministic DESTROY side
-     * effects but are not weak-ref referents, without clearing arbitrary weak
-     * refs and without forcing HotSpot GC. Used by DBI statement polling to
-     * match Perl's cursor DESTROY/finish timing.
-     */
+    /** Compatibility stub: destroyable objects are released through their owners. */
     public static RuntimeList jperl_sweep_destroyables_no_jvm_gc(RuntimeArray args, int ctx) {
-        int destroyed = ReachabilityWalker.sweepDestroyableObjects(false);
-        if (destroyed > 0) {
-            destroyed += ReachabilityWalker.sweepDestroyableObjects(false);
-        }
-        return new RuntimeScalar(destroyed).getList();
+        return new RuntimeScalar(0).getList();
     }
 
     /**

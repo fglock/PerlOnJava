@@ -3185,7 +3185,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         boolean oldOwnedScalarReferenceContents = this.ownsScalarReferenceContents;
         RuntimeScalar oldScalarReferenceContents = scalarReferenceContentsReferent(this);
         boolean shouldReleaseUnrootedRescuedGraph = false;
-        boolean requestedDiscardedAggregateSweep = false;
 
         // If this scalar was a weak ref, remove from weak tracking before overwriting.
         // Weak refs don't count toward refCount, so skip refCount decrement later.
@@ -3547,19 +3546,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             MortalList.requestTargetedWeakSweep(oldBase);
         }
 
-        // An explicitly discarded aggregate can own a tree of blessed values
-        // whose selective counts have drifted above zero. Schedule only its
-        // weakly observed descendants; a complete root walk is unnecessary.
-        if (value.type == UNDEF
-                && WeakRefRegistry.weakRefsExist()
-                && oldBase != null
-                && oldBase.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_ALIAS) == 0
-                && (oldBase instanceof RuntimeHash || oldBase instanceof RuntimeArray)) {
-            if (MortalList.requestWeakSweepsForDestroyedContainer(oldBase)) {
-                requestedDiscardedAggregateSweep = true;
-            }
-        }
-
         // Update ownership: this scalar now owns a refCount iff we incremented.
         this.refCountOwned = newOwned;
         if (newOwned && this.value instanceof RuntimeBase ownedReferent) {
@@ -3586,10 +3572,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             MortalList.popTemporaryRoot(value);
             MortalList.popTemporaryRoot(this);
         }
-        if (requestedDiscardedAggregateSweep) {
-            MortalList.flushReleasedWeakSweepsIfSafe();
-        }
-
         // An explicit undef can run DESTROY and let the object self-rescue.
         // Preserve real Perl resurrection when another package/closure root
         // still reaches that graph.  If the only remaining pin is the runtime's
@@ -5429,7 +5411,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             return RuntimeCode.undefineCodeReference(this);
         }
         if (type == RuntimeScalarType.CODE && value instanceof RuntimeCode code && globalCodeRefFqn != null) {
-            boolean releasedCode = false;
             releaseAllClosureCaptureReferents(code);
             if (this.refCountOwned && code.refCount > 0) {
                 this.refCountOwned = false;
@@ -5437,7 +5418,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 if (--code.refCount == 0) {
                     code.refCount = Integer.MIN_VALUE;
                     DestroyDispatch.callDestroy(code);
-                    releasedCode = true;
                 }
             }
             // Clear the body but keep a declared CODE slot. Perl preserves the
@@ -5462,9 +5442,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             this.formatPictureTainted = false;
             // Invalidate the method resolution cache
             InheritanceResolver.invalidateCache();
-            if (releasedCode && WeakRefRegistry.weakRefsExist() && !ModuleInitGuard.inModuleInit()) {
-                ReachabilityWalker.sweepWeakRefs(true);
-            }
             return this;
         }
 
@@ -5600,15 +5577,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 System.err.println("DBG Phase D undef-of-blessed trigger for " +
                         (oldBase != null ? org.perlonjava.runtime.runtimetypes.NameNormalizer.getBlessStr(oldBase.blessId) : "?") +
                         " refCount=" + (oldBase != null ? oldBase.refCount : -1));
-            }
-            // The DESTROY path historically needs an immediate global pass so
-            // callbacks after explicit undef observe the released object as
-            // gone. A weak-observed wrapper without DESTROY only needs the
-            // targeted statement-boundary pass: sweeping globally while a
-            // nested call frame is still assembling objects can clear unrelated
-            // weak owner links (for example SQL::Translator index -> table).
-            if (undefOnBlessedWithDestroy) {
-                ReachabilityWalker.sweepWeakRefs(false);
             }
         }
 
