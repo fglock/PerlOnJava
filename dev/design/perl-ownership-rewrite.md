@@ -1314,13 +1314,26 @@ unfiltered `make` compiles but reports four other JVM lifetime failures:
 `refcount/blessed_scalar_reference_contents_destroy.t`. Its AnyEvent listener
 case also cannot allocate a loopback port in this environment.
 
+### Package-rooted untracked aggregate release (2026-10-29)
+
+When first weaken uses a package-root proof to preserve an untracked aggregate,
+the temporary compatibility count now retires after its final untracked owner
+slot leaves. `RuntimeScalar.undefine()` refreshes the scalar's owner identity,
+and counted-slot promotion records the new owner before releasing the old one.
+The new Java two-owner regression and Perl package-array/hash regression pass;
+the six Perl assertions pass on system Perl and both PerlOnJava backends with
+corrective sweeps disabled. The full no-sweeps `nice -n 19 make` passes in
+10m34s. HTML-Tree 5.07 `t/refloop.t` also passes 8/8 on JVM and interpreter
+with sweeps disabled. The first-weaken root proof remains and is the next
+aggregate-ownership step.
+
 ### Next steps
 
 1. Diagnose the four remaining sweep-disabled JVM lifetime failures listed
    above, keeping the temporary-file wrapper and generator-state cases separate
    until evidence connects them.
-2. Give aggregate edges nested in package arrays and hashes explicit owner
-   identities, then remove the remaining first-weak-transition root proof.
+2. Cover remaining package-root release paths for aggregate edges, then remove
+   the first-weak-transition root proof.
 3. Replace the reflective weak-backref CODE capture walk with capture-owner
    identities and remove `weakBackrefCaptureSnapshot` while preserving captured
    aggregate lifetime and weak clearing.
