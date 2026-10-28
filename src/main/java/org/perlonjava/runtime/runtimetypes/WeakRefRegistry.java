@@ -123,6 +123,10 @@ public class WeakRefRegistry {
                 .add(ref);
         base.activateOwnerTracking();
         ref.releaseUntrackedReferenceOwner(base);
+        // Releasing the final strong slot can synchronously run DESTROY and
+        // clear this newly registered weak observer, as Perl does when the
+        // weakened variable was the last owner.
+        if (!state.weakScalars.contains(ref) || ref.value != base) return;
         ref.releaseClosureCaptureReferentsForWeaken(base);
         if (System.getenv("PJ_WEAKCLEAR_TRACE") != null) {
             System.err.println("[WEAKEN] ref=" + System.identityHashCode(ref)
@@ -150,10 +154,6 @@ public class WeakRefRegistry {
 
         boolean weakenedLiveLexical = MyVarCleanupStack.isLive(ref);
         boolean weakenedLiveCodeRef = base instanceof RuntimeCode && weakenedLiveLexical;
-        boolean weakenedLiveBlessedRef = base.blessId != 0
-                && !(base instanceof RuntimeCode)
-                && weakenedLiveLexical;
-
         if (base.refCount > 0 && ref.refCountOwned) {
             PerlOwnerSlot releasedSlot = ref.countedOwnerSlot();
             boolean identifiedOwner = releasedSlot != null && releasedSlot.isActive()
@@ -276,22 +276,7 @@ public class WeakRefRegistry {
                 base.refCount = 1;
             } else {
                 base.refCount = WEAKLY_TRACKED;
-                MortalList.requestCorrectiveWeakSweep();
             }
-        }
-        // A live lexical can be the final Perl-visible strong owner even when
-        // selective refCount remains inflated by earlier argument/temporary
-        // copies. Request one root-based sweep at the next safe statement
-        // boundary so weaken($lexical) has Perl's immediate observable
-        // semantics. Keep this limited to blessed non-CODE referents: DBIC
-        // schema/parser flows need it, while CODE refs and container-internal
-        // weak backrefs use their targeted cleanup paths below.
-        if (weakenedLiveBlessedRef
-                && base.refCount > 0
-                && !base.hasOwnerSlots()
-                && base.reachableOwnerCount() == 0
-                && !ModuleInitGuard.inModuleInit()) {
-            MortalList.requestCorrectiveWeakSweep();
         }
         boolean shouldCheckLiveCodeRef = weakenedLiveCodeRef
                 && codeRefHasCountedOwners(base)
@@ -391,7 +376,7 @@ public class WeakRefRegistry {
         return weakRefs != null && !weakRefs.isEmpty();
     }
 
-    /** Finish weakly-tracked cleanup when its final owner slot leaves. */
+    /** Finish tracked cleanup when its final owner slot leaves. */
     static void onStrongOwnerSlotReleased(RuntimeBase referent) {
         if (referent == null
                 || referent.refCount != WEAKLY_TRACKED
@@ -418,6 +403,21 @@ public class WeakRefRegistry {
         } else {
             clearWeakRefsTo(referent);
         }
+    }
+
+    /** Finalize an untracked value after its scalar owner has left scope. */
+    static void finalizeUntrackedAfterOwnerScopeExit(RuntimeBase referent) {
+        if (referent == null || referent.refCount != -1
+                || PerlRuntime.currentOrNull() == null
+                || referent.hasOwnerSlots() || referent.localBindingExists
+                || referent.captureCount > 0 || referent.hasPendingReturnOwner()
+                || referent.countedOwnerSlotCount() != 0
+                || MortalList.temporaryRootDirectlyReferences(referent)
+                || (referent instanceof RuntimeCode code && RuntimeCode.isActiveCode(code))) {
+            return;
+        }
+        referent.refCount = Integer.MIN_VALUE;
+        DestroyDispatch.callDestroy(referent);
     }
 
     /** Finish an aggregate's cleanup after its active lexical pad owner left. */

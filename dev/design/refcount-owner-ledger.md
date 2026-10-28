@@ -371,7 +371,7 @@ Run on JVM and interpreter backends with `timeout` and complete output logs:
 
 ## Progress Tracking
 
-### Current Status: Net::Async::HTTP captured-owner, hash-slice, and eval-capture finalization fixes complete
+### Current Status: sweep scheduling removed; owner-source migration continues
 
 The designated issue branch, `fix/issue-1132-closure-lifetime`, includes the
 handoff commits below. On 2026-09-01, the required pre-change `make` rebuilt
@@ -529,6 +529,12 @@ external workload has drained before changing runtime source.
   in `perl5_t/t/run/fresh_perl.t` test 75 now passes, restoring the baseline
   73/91 result; the other 18 historical failures are unchanged. Full `make`
   passed in the isolated PR worktree on 2026-09-02.
+- [x] On 2026-10-28, removed automatic, targeted, and statement-boundary weak
+  cleanup scheduling from `MortalList`; legacy request methods remain no-op
+  compatibility hooks. Added direct cleanup for an untracked value when its
+  final scalar-cell owner exits, and kept reachability fallbacks where slot
+  coverage is incomplete. `nice -n 19 make` passed with
+  `JPERL_DISABLE_CORRECTIVE_SWEEPS=1` and Gradle limited to two workers.
 
 ### Handoff: issue #1132 / PR #1204
 
@@ -546,9 +552,14 @@ pass. Preserve both focused ownership regressions when evolving the ledger.
 
 ### Next Steps
 
-1. Continue the owner-source migration inventory and remove only diagnosed
-   ownership heuristics with permanent system-Perl-validated regressions.
-2. Keep Cookie2 formatting and content-coding exception handling separate from
+1. Audit each remaining root-walk fallback, starting with untracked aggregate
+   package owners and tracked zero-count transitions; add explicit slot
+   identities where ownership is missing.
+2. Remove each fallback only after its owner path has focused regression
+   coverage and passes system Perl plus both PerlOnJava backends.
+3. Run HTML::Tree's 8/8 target on both backends, then the full suite with every
+   sweep disabled; remove the remaining compatibility APIs after those gates.
+4. Keep Cookie2 formatting and content-coding exception handling separate from
    this ownership work.
 
 ### Open Questions
