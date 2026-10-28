@@ -6,7 +6,7 @@ priorities and future plans.
 
 ## Work in progress
 
-- Preserve hash-reference constant calls after typeglob undefinition, parse Error.pm's dynamic `catch $class with { ... }` form on both backends, and retain integer scalar identity through `int()` for decimal stringification; preserve regex referent types through blessed scalar references and cover Morpheus relational overload dispatch and caller filename normalization (#1342, #1376, #1427, #1428).
+- Preserve hash-reference constant calls after typeglob undefinition, dereference glob-backed hash values during Morpheus configuration traversal, parse Error.pm's dynamic `catch $class with { ... }` form on both backends, and retain integer scalar identity through `int()` for decimal stringification; preserve regex referent types through blessed scalar references and cover Morpheus relational overload dispatch and caller filename normalization (#1342, #1376, #1427, #1428).
 - Implement `Time::HiRes::stat` with high-resolution file timestamps (#1912).
 
 - Export `fieldhash` from `Hash::Util` for compatibility with core Perl.

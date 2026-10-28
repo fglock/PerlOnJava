@@ -4126,7 +4126,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 if (value instanceof RuntimeIO) {
                     throw new PerlCompilerException("Not a HASH reference");
                 }
-                RuntimeGlob glob = (RuntimeGlob) value;
+                // A glob's scalar slot can itself carry the hash payload while
+                // Perl code traverses a glob reference with ${*{$glob}}{key}.
+                // In that representation the value is already the hash; it is
+                // not a RuntimeGlob wrapper.
+                if (value instanceof RuntimeHash hash) {
+                    yield hash;
+                }
+                if (!(value instanceof RuntimeGlob glob)) {
+                    throw new PerlCompilerException("Not a HASH reference");
+                }
                 // For anonymous globs, use the getGlobHash method which handles local slots
                 yield glob.getGlobHash();
             }
