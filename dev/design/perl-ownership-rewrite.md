@@ -1012,10 +1012,25 @@ place to distinguish live Perl roots from stale scalar wrappers. The default-off
 full `nice -n 19 make` gate passes. Evidence:
 `/tmp/make-issue1649-deferred-owner-fastpath-corrected.log`.
 
+### Argument-owner ledger bypass for active-frame scans (2026-10-28)
+
+Deferred weak releases now consult counted owner slots before scanning active
+`@_` arrays and staged argument frames for a matching referent. If a blessed
+referent has another counted owner, ordinary deferred cleanup repairs the
+compatibility count directly. `ActiveArgumentOwnerLedgerFastPathTest` verifies
+that a persistent caller cell remains a borrowed alias, avoids the frame scan,
+and still clears its weak observer when the final slot is overwritten. The
+default-off full `nice -n 19 make` gate passes. Evidence:
+`/tmp/make-issue1649-argument-scan-fastpath.log`.
+
+Uncounted compatibility aliases still use the referent scan; explicit alias
+slot ownership remains unfinished.
+
 ### Next steps
 
 1. Complete aliased `@_` cell ownership and shared/tail-call cases whose
-   referents still lack counted owner identities.
+   referents still lack counted owner identities, then remove the remaining
+   `hasActiveArgumentOwner` compatibility scans.
 2. Replace remaining targeted weak-release and weak-CODE capture decisions with
    explicit owner-slot transitions, preserving the existing diagnostic helper
    tests.
