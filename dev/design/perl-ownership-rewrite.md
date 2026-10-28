@@ -1095,9 +1095,22 @@ later argument cleanup and release at call completion. The default-off full
 lifetime is 29/29, and HTML-Tree 5.07 `t/refloop.t` is 8/8 on both backends
 with sweeps unset.
 
+### Shared and tail-call argument frame identities (2026-10-28)
+
+`ArgumentAliasHandoffOwnerSlotTest` verifies that a tail-call target frame gets
+its own alias identity and releases it in LIFO order, and that overwriting a
+shared scalar cell retires its identity exactly once. The default-off full
+`nice -n 19 make` gate passes. With sweeps unset, `goto_tailcall_args_cleanup.t`
+passes 5/5, `goto_weakself_tailcall_refcount.t` passes 2/2, and
+`threads_shared_nested_proxies.t` passes 10/10 on both backends.
+
+Tail-call pending-release selection still scans pending scalar owners and uses
+`copiedFromArgumentFrame`; replace this with explicit handoff owner identities.
+
 ### Next steps
 
-1. Add direct owner-slot coverage for shared and tail-call argument aliases.
+1. Replace tail-call pending-release frame scans with explicit handoff owner
+   identities and verify cross-thread argument cloning.
 2. Replace remaining targeted weak-release and weak-CODE capture decisions with
    explicit owner-slot transitions, preserving the existing diagnostic helper
    tests.
