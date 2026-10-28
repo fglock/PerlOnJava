@@ -111,11 +111,13 @@ public class WeakRefRegistry {
             } else {
                 ref.type = RuntimeScalarType.UNDEF;
                 ref.value = null;
+                ref.refreshArgumentAliasOwnerSlots();
                 return;
             }
         }
 
         state.weakScalars.add(ref);
+        ref.refreshArgumentAliasOwnerSlots();
         state.referentToWeakRefs
                 .computeIfAbsent(base, k -> Collections.newSetFromMap(new IdentityHashMap<>()))
                 .add(ref);
@@ -337,6 +339,7 @@ public class WeakRefRegistry {
             }
             // Note: if MIN_VALUE, object already destroyed — unweaken is a no-op
         }
+        ref.refreshArgumentAliasOwnerSlots();
     }
 
     /**

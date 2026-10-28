@@ -706,6 +706,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public boolean refCountOwned;
 
     private PerlOwnerSlot countedOwnerSlot;
+    private ArrayList<PerlOwnerSlot> argumentAliasOwnerSlots;
     // Names sharing one GP/CODE scalar share one CV edge. A saved localized
     // slot also keeps this binding alive while its names address a new slot.
     private int codeSlotBindings;
@@ -756,6 +757,50 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return countedOwnerSlot;
     }
 
+    static final class ArgumentAliasOwner {
+        private final RuntimeScalar scalar;
+        private final PerlOwnerSlot ownerSlot;
+
+        private ArgumentAliasOwner(RuntimeScalar scalar, PerlOwnerSlot ownerSlot) {
+            this.scalar = scalar;
+            this.ownerSlot = ownerSlot;
+        }
+
+        void release() {
+            scalar.releaseArgumentAliasOwner(ownerSlot);
+        }
+    }
+
+    synchronized ArgumentAliasOwner retainArgumentAliasOwner() {
+        PerlOwnerSlot ownerSlot = new PerlOwnerSlot(PerlOwnerSlot.Kind.ARGUMENT_ALIAS);
+        if (argumentAliasOwnerSlots == null) argumentAliasOwnerSlots = new ArrayList<>();
+        argumentAliasOwnerSlots.add(ownerSlot);
+        refreshArgumentAliasOwnerSlots();
+        return new ArgumentAliasOwner(this, ownerSlot);
+    }
+
+    private synchronized void releaseArgumentAliasOwner(PerlOwnerSlot ownerSlot) {
+        if (argumentAliasOwnerSlots != null) {
+            argumentAliasOwnerSlots.remove(ownerSlot);
+            if (argumentAliasOwnerSlots.isEmpty()) argumentAliasOwnerSlots = null;
+        }
+        ownerSlot.release();
+    }
+
+    synchronized void refreshArgumentAliasOwnerSlots() {
+        if (argumentAliasOwnerSlots == null) return;
+        RuntimeBase referent = null;
+        if (((type & RuntimeScalarType.REFERENCE_BIT) != 0 || type == RuntimeScalarType.GLOB)
+                && value instanceof RuntimeBase base
+                && !WeakRefRegistry.isweak(this)) {
+            referent = base;
+        }
+        for (PerlOwnerSlot ownerSlot : argumentAliasOwnerSlots) {
+            if (referent == null) ownerSlot.release();
+            else ownerSlot.acquireArgumentAliasIdentity(referent);
+        }
+    }
+
     boolean hasStorageOwnerForVoidDiscard() {
         if (captureCount > 0 || isPackageGlobalRoot || MyVarCleanupStack.isRegistered(this)) {
             return true;
@@ -763,6 +808,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return countedOwnerSlot != null && countedOwnerSlot.isActive()
                 && (countedOwnerSlot.kind() == PerlOwnerSlot.Kind.ARRAY_ELEMENT
                     || countedOwnerSlot.kind() == PerlOwnerSlot.Kind.HASH_ELEMENT);
+    }
+
+    /** Whether this scalar is a durable Perl cell that can be aliased by a call. */
+    boolean hasPersistentArgumentStorageCell() {
+        if (captureCount > 0 || isPackageGlobalRoot || localBindingExists
+                || MyVarCleanupStack.isRegistered(this)) {
+            return true;
+        }
+        if (containerOwner instanceof RuntimeHash) return true;
+        return containerOwner instanceof RuntimeArray array && !array.elementsAliased;
     }
 
     void recordCountedOwner(RuntimeBase referent) {
@@ -2494,6 +2549,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         growingString = null;
         type = value.type;
         this.value = copyScalarPayload(value.type, value.value);
+        refreshArgumentAliasOwnerSlots();
         utf8UncheckedOctets = value.utf8UncheckedOctets;
         utf8MalformedWarning = value.utf8MalformedWarning;
         tainted = value.tainted;
@@ -2538,6 +2594,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             value = new MutableIntegerValue(result);
         }
         type = RuntimeScalarType.INTEGER;
+        refreshArgumentAliasOwnerSlots();
         utf8UncheckedOctets = false;
         utf8MalformedWarning = null;
         tainted = resultTainted;
@@ -2564,6 +2621,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 hash.preallocateCapacity(value.getInt());
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = hash.keys(RuntimeContextType.SCALAR).scalar().getInt();
+                refreshArgumentAliasOwnerSlots();
                 return this;
             }
             throw new PerlCompilerException("Can't modify keys on array in list assignment");
@@ -2641,6 +2699,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.formatPictureTainted = value.formatPictureTainted;
                 this.globalCodeRefFqn = value.globalCodeRefFqn;
             }
+            refreshArgumentAliasOwnerSlots();
             refreshSubstrLvalues();
             notifyModifiedWatchers();
             return this;
@@ -2733,6 +2792,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             closeIOOnDrop();
             this.type = RuntimeScalarType.UNDEF;
             this.value = null;
+            refreshArgumentAliasOwnerSlots();
             this.tainted = false;
             this.numericLiteralText = null;
             this.numericContextSeen = false;
@@ -2785,6 +2845,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // so no refCount was incremented/decremented, and no mortal entries were added.
         this.type = value.type;
         this.value = copyScalarPayload(value.type, value.value);
+        refreshArgumentAliasOwnerSlots();
         this.utf8UncheckedOctets = value.utf8UncheckedOctets;
         this.utf8MalformedWarning = value.utf8MalformedWarning;
         this.tainted = value.tainted;
@@ -2851,6 +2912,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 } else {
                     this.type = value.type;
                     this.value = copyScalarPayload(value.type, value.value);
+                    refreshArgumentAliasOwnerSlots();
                     this.utf8UncheckedOctets = value.utf8UncheckedOctets;
                     this.utf8MalformedWarning = value.utf8MalformedWarning;
                     this.tainted = value.tainted;
@@ -3028,6 +3090,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // Do the assignment
         this.type = value.type;
         this.value = copyScalarPayload(value.type, value.value);
+        refreshArgumentAliasOwnerSlots();
         // An explicitly discarded closure can have an inflated CODE refcount,
         // so waiting for callDestroy() leaves its captures alive indefinitely.
         // Release them only after this slot is gone, the code is inactive, and
@@ -3174,12 +3237,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // and for scalars that didn't own a refCount increment).
         if (oldBase != null && !thisWasWeak
                 && (this.refCountOwned || oldOwnedByScalarReference)) {
-            if (oldBase.refCount > 0) {
+            boolean deferredOldBaseRelease = false;
+            if (oldBase.refCount > 0
+                    && oldBase.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_ALIAS) != 0) {
+                MortalList.deferDecrementFromArraySlot(
+                        oldBase, this, "RuntimeScalar.setLargeRefCounted overwrite");
+                deferredOldBaseRelease = true;
+            } else if (oldBase.refCount > 0) {
                 oldBase.traceRefCount(-1, "RuntimeScalar.setLargeRefCounted (decrement on overwrite)");
                 oldBase.releaseOwner(this, "setLargeRefCounted overwrite");
                 oldBase.releaseActiveOwner(this);
             }
-            if (oldBase.refCount > 0 && --oldBase.refCount == 0) {
+            if (!deferredOldBaseRelease && oldBase.refCount > 0 && --oldBase.refCount == 0) {
                 boolean liveScalarReferentBinding = oldBase.localBindingExists
                         && (!(oldBase instanceof RuntimeScalar scalarReferent)
                             || !scalarReferent.referencedByScalarReference
@@ -3307,7 +3376,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 MortalList.suppressFlush(flushWasSuppressed);
             }
         }
-        if (undefAssignmentOfDestroyableRef && !DestroyDispatch.isInsideDestroy()) {
+        if (undefAssignmentOfDestroyableRef
+                && oldBase.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_ALIAS) == 0
+                && !DestroyDispatch.isInsideDestroy()) {
             shouldReleaseUnrootedRescuedGraph = true;
         }
 
@@ -3325,7 +3396,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && value.type == UNDEF) {
             MortalList.requestTargetedWeakSweep(oldBase);
         }
-        if (undefAssignmentOfDestroyableRef && !ModuleInitGuard.inModuleInit()) {
+        if (undefAssignmentOfDestroyableRef
+                && oldBase.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_ALIAS) == 0
+                && !ModuleInitGuard.inModuleInit()) {
             MortalList.requestTargetedWeakSweep(oldBase);
         }
 
@@ -3334,6 +3407,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // weakly observed descendants; a complete root walk is unnecessary.
         if (value.type == UNDEF
                 && WeakRefRegistry.weakRefsExist()
+                && oldBase != null
+                && oldBase.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_ALIAS) == 0
                 && (oldBase instanceof RuntimeHash || oldBase instanceof RuntimeArray)) {
             if (MortalList.requestWeakSweepsForDestroyedContainer(oldBase)) {
                 requestedDiscardedAggregateSweep = true;
@@ -3428,6 +3503,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
         this.type = RuntimeScalarType.INTEGER;
         this.value = value;
+        refreshArgumentAliasOwnerSlots();
         this.tainted = false;
         this.numericLiteralText = null;
         this.numericContextSeen = false;
@@ -3445,6 +3521,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             throw new PerlCompilerException("Modification of a read-only value attempted");
         }
         this.initializeWithLong(value);
+        refreshArgumentAliasOwnerSlots();
         this.tainted = false;
         this.numericLiteralText = null;
         this.numericContextSeen = false;
@@ -3487,6 +3564,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             this.type = RuntimeScalarType.STRING;
             this.value = value.toString();
         }
+        refreshArgumentAliasOwnerSlots();
         this.tainted = false;
         this.numericLiteralText = null;
         this.numericContextSeen = false;
@@ -3505,6 +3583,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
         this.type = RuntimeScalarType.BOOLEAN;
         this.value = value;
+        refreshArgumentAliasOwnerSlots();
         this.tainted = false;
         this.numericLiteralText = null;
         this.numericContextSeen = false;
@@ -3532,6 +3611,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             this.type = RuntimeScalarType.STRING;
         }
         this.value = value;
+        refreshArgumentAliasOwnerSlots();
         this.utf8UncheckedOctets = false;
         this.utf8MalformedWarning = null;
         this.tainted = false;
@@ -3551,6 +3631,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         growingString = null;
         type = value == null ? UNDEF : RuntimeScalarType.STRING;
         this.value = value;
+        refreshArgumentAliasOwnerSlots();
         utf8UncheckedOctets = false;
         utf8MalformedWarning = null;
         tainted = false;
@@ -4410,6 +4491,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 RuntimeScalar newScalar = new RuntimeScalar();
                 this.value = newScalar;
                 this.type = RuntimeScalarType.REFERENCE;
+                refreshArgumentAliasOwnerSlots();
                 this.numericLiteralText = null;
                 this.numericContextSeen = false;
                 this.firstClassRegexScalar = false;
@@ -5251,6 +5333,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // For all other types, set to undef
         this.type = UNDEF;
         this.value = null;
+        refreshArgumentAliasOwnerSlots();
+        boolean argumentAliasKeepsOldBase = oldBase != null
+                && oldBase.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_ALIAS) != 0;
         this.tainted = false;
         this.numericLiteralText = null;
         this.numericContextSeen = false;
@@ -5261,7 +5346,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         boolean undefOnBlessedWithDestroy = false;
         boolean undefOnWeakObservedBlessedWrapper = false;
         if (oldBase != null) {
-            if (oldBase.refCount == WeakRefRegistry.WEAKLY_TRACKED) {
+            if (argumentAliasKeepsOldBase) {
+                if (oldBase.refCount == WeakRefRegistry.WEAKLY_TRACKED) {
+                    oldBase.refCount = 1;
+                    MortalList.deferDecrement(oldBase);
+                } else if (this.refCountOwned && oldBase.refCount > 0) {
+                    this.refCountOwned = false;
+                    MortalList.deferDecrementFromArraySlot(
+                            oldBase, this, "RuntimeScalar.undefine");
+                }
+            } else if (oldBase.refCount == WeakRefRegistry.WEAKLY_TRACKED) {
                 // Weakly-tracked object (unblessed, birth-tracked, with weak refs):
                 // clear weak refs on explicit undef. These objects transitioned to
                 // WEAKLY_TRACKED in weaken() because their refCount was unreliable
@@ -5325,7 +5419,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // Hash::AutoHash's wraptie constructor has exactly this shape.
         if (oldBase != null
                 && oldBase.blessId != 0
-                && WeakRefRegistry.hasWeakRefsTo(oldBase)) {
+                && WeakRefRegistry.hasWeakRefsTo(oldBase)
+                && !argumentAliasKeepsOldBase) {
             undefOnWeakObservedBlessedWrapper = true;
         }
 
@@ -5810,6 +5905,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             result = preAutoIncrementWithoutWatcherNotification();
         } finally {
             watcherMutationDepth--;
+            refreshArgumentAliasOwnerSlots();
         }
         notifyModifiedWatchers();
         return result;
@@ -5971,6 +6067,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             result = postAutoIncrementWithoutWatcherNotification();
         } finally {
             watcherMutationDepth--;
+            refreshArgumentAliasOwnerSlots();
         }
         notifyModifiedWatchers();
         return result;
@@ -5993,6 +6090,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             postAutoIncrementWithoutWatcherNotification();
         } finally {
             watcherMutationDepth--;
+            refreshArgumentAliasOwnerSlots();
             notifyModifiedWatchers();
         }
     }
@@ -6005,6 +6103,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             result = integerAutoIncrement(false, 1);
         } finally {
             watcherMutationDepth--;
+            refreshArgumentAliasOwnerSlots();
         }
         notifyModifiedWatchers();
         return result;
@@ -6018,6 +6117,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             result = integerAutoIncrement(true, 1);
         } finally {
             watcherMutationDepth--;
+            refreshArgumentAliasOwnerSlots();
         }
         notifyModifiedWatchers();
         return result;
@@ -6031,6 +6131,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             result = integerAutoIncrement(false, -1);
         } finally {
             watcherMutationDepth--;
+            refreshArgumentAliasOwnerSlots();
         }
         notifyModifiedWatchers();
         return result;
@@ -6044,6 +6145,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             result = integerAutoIncrement(true, -1);
         } finally {
             watcherMutationDepth--;
+            refreshArgumentAliasOwnerSlots();
         }
         notifyModifiedWatchers();
         return result;
@@ -6253,6 +6355,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             result = preAutoDecrementWithoutWatcherNotification();
         } finally {
             watcherMutationDepth--;
+            refreshArgumentAliasOwnerSlots();
         }
         notifyModifiedWatchers();
         return result;
@@ -6407,6 +6510,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             result = postAutoDecrementWithoutWatcherNotification();
         } finally {
             watcherMutationDepth--;
+            refreshArgumentAliasOwnerSlots();
         }
         notifyModifiedWatchers();
         return result;
