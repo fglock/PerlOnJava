@@ -148,6 +148,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 for (RuntimeBase element : list.elements) {
                     retainListResultOwners(element);
                 }
+            } else if (value instanceof RuntimeArray array) {
+                for (RuntimeScalar element : array.elements) {
+                    retainListResultOwners(element);
+                }
+            } else if (value instanceof RuntimeHash hash) {
+                for (RuntimeScalar element : hash.elements.values()) {
+                    retainListResultOwners(element);
+                }
             } else if (value instanceof RuntimeScalar scalar
                     && scalar.value instanceof RuntimeBase
                     && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
