@@ -23,6 +23,7 @@ import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -320,9 +321,15 @@ public class EvalStringHandler {
         boolean savedCurrentScopeUtf8 = savedCurrentScope.isStrictOptionEnabled(Strict.HINT_UTF8);
         boolean savedMutationScopeUtf8 = compileTimeMutationScope.isStrictOptionEnabled(Strict.HINT_UTF8);
         RuntimeHash activeHintHash = GlobalVariable.getGlobalHash(GlobalContext.encodeSpecialVar("H"));
-        Map<String, RuntimeScalar> savedHintHash = new HashMap<>();
-        for (Map.Entry<String, RuntimeScalar> entry : activeHintHash.elements.entrySet()) {
-            savedHintHash.put(entry.getKey(), new RuntimeScalar(entry.getValue()));
+        boolean hintHashEmpty = activeHintHash.elements.isEmpty();
+        Map<String, RuntimeScalar> savedHintHash;
+        if (hintHashEmpty) {
+            savedHintHash = Collections.emptyMap();
+        } else {
+            savedHintHash = new HashMap<>(activeHintHash.elements.size());
+            for (Map.Entry<String, RuntimeScalar> entry : activeHintHash.elements.entrySet()) {
+                savedHintHash.put(entry.getKey(), new RuntimeScalar(entry.getValue()));
+            }
         }
         int savedCallSiteHintHashId = HintHashRegistry.getCallSiteHintHashId();
         Map<String, RuntimeScalar> lexicalHintHash =
