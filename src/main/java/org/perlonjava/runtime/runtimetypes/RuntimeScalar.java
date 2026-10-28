@@ -3195,6 +3195,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     // cached root walks cannot supply a replacement owner.
                     oldBase.refCount = Integer.MIN_VALUE;
                     DestroyDispatch.callDestroyFromCountedOwner(oldBase);
+                } else if (oldBase.blessId != 0
+                        && WeakRefRegistry.hasWeakRefsTo(oldBase)
+                        && oldBase.restoreCountedOwnerSlotRefCount()) {
+                    // A surviving counted slot is explicit evidence of a Perl
+                    // owner, including during nested calls. Repair the bridge
+                    // count before consulting frame or root reachability.
                 } else if (oldBase.blessId == 0
                         && (oldBase instanceof RuntimeArray || oldBase instanceof RuntimeHash)
                         && WeakRefRegistry.hasWeakRefsTo(oldBase)
@@ -3220,14 +3226,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     // statement boundary, where all method-local temporaries
                     // have gone away and the walker can see real Perl roots.
                     MortalList.requestTargetedWeakSweep(oldBase);
-                } else if (oldBase.blessId != 0
-                        && oldBase.storedInPackageGlobal
-                        && WeakRefRegistry.hasWeakRefsTo(oldBase)
-                        && oldBase.restoreCountedOwnerSlotRefCount()) {
-                    // Counted slots are the owners that balance this bridge
-                    // count. If any remain after the overwritten slot was
-                    // retired, repair a transient zero from those identities
-                    // before building the package-root reachability graph.
                 } else if (oldBase.blessId != 0
                         && oldBase.storedInPackageGlobal
                         && WeakRefRegistry.hasWeakRefsTo(oldBase)
