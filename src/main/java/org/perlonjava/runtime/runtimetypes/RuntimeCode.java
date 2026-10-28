@@ -5173,9 +5173,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // warning/feature flags than the caller, and we must not leak the eval's scope.
         ScopedSymbolTable savedCurrentScope = getCurrentScope();
         RuntimeHash activeHintHash = GlobalVariable.getGlobalHash(GlobalContext.encodeSpecialVar("H"));
-        Map<String, RuntimeScalar> savedHintHash = new HashMap<>();
-        for (Map.Entry<String, RuntimeScalar> entry : activeHintHash.elements.entrySet()) {
-            savedHintHash.put(entry.getKey(), new RuntimeScalar(entry.getValue()));
+        boolean hintHashEmpty = activeHintHash.elements.isEmpty();
+        Map<String, RuntimeScalar> savedHintHash;
+        if (hintHashEmpty) {
+            savedHintHash = Collections.emptyMap();
+        } else {
+            savedHintHash = new HashMap<>(activeHintHash.elements.size());
+            for (Map.Entry<String, RuntimeScalar> entry : activeHintHash.elements.entrySet()) {
+                savedHintHash.put(entry.getKey(), new RuntimeScalar(entry.getValue()));
+            }
         }
         int savedCallSiteHintHashId = HintHashRegistry.getCallSiteHintHashId();
         Map<String, RuntimeScalar> lexicalHintHash =
