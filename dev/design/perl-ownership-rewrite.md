@@ -945,6 +945,14 @@ keeps the CV active across restore, and verifies its captures survive with zero
 root queries. The sweep-enabled full `nice -n 19 make` gate passes. CVs without
 owner slots still take the compatibility checks.
 
+Post-build issue acceptance also passes with corrective sweeps disabled:
+HTML::Tree 5.07 `t/refloop.t` is 8/8 on both backends, and
+`closure_capture_explicit_return.t` is 6/6 on both backends.
+Selected weak-capture, END/DESTROY-order, resurrection, and self-capture-cycle
+tests also pass 30/30 under system Perl and 30/30 on each PerlOnJava backend
+with corrective sweeps disabled. The full no-sweep unit suite remains
+unqualified.
+
 ### Next steps
 
 1. Continue replacing targeted weak-release and weak-CODE capture walks with
