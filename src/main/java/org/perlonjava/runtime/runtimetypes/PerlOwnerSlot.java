@@ -25,6 +25,7 @@ public final class PerlOwnerSlot {
         ARRAY_ELEMENT,
         HASH_ELEMENT,
         ARGUMENT_VALUE,
+        ARGUMENT_ALIAS,
         RETURN_VALUE,
         ACTIVE_CODE,
         TIE_HANDLER
@@ -273,6 +274,40 @@ public final class PerlOwnerSlot {
             ownerRuntimeState = ownerRuntime == null
                     ? null : ownerRuntime.retainOwnerSlotReferent(target);
         }
+    }
+
+    /**
+     * Record an active {@code @_} alias to a scalar cell without adding a
+     * second Perl-visible reference count for the aliased value.
+     */
+    synchronized void acquireArgumentAliasIdentity(RuntimeBase target) {
+        if (kind != Kind.ARGUMENT_ALIAS) {
+            throw new IllegalStateException("argument-alias acquisition requires an alias slot");
+        }
+        Objects.requireNonNull(target, "target");
+        if (target.refCount == Integer.MIN_VALUE) {
+            release();
+            return;
+        }
+        if (nativeOwner || legacyCaptureCount != 0) {
+            throw new IllegalStateException("argument alias cannot replace native ownership");
+        }
+        if (referent == target) return;
+
+        // The call frame already strongly owns the scalar cell, which in turn
+        // owns its current value. Record the slot identity on the referent for
+        // cleanup decisions without adding a second runtime root.
+        RuntimeBase previous = referent;
+        LifecycleRuntimeState previousState = ownerRuntimeState;
+        referent = target;
+        ownerRuntime = null;
+        ownerRuntimeState = null;
+        if (previous != null && registeredInOwnerLedger) {
+            previous.removeOwnerSlot(this);
+            PerlRuntime.releaseOwnerSlotReferent(previousState, previous);
+        }
+        registeredInOwnerLedger = true;
+        target.addOwnerSlot(this);
     }
 
     synchronized void reclassifyCountedIdentity(Kind nextKind) {

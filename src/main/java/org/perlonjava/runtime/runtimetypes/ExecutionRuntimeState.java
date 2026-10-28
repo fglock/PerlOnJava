@@ -73,6 +73,8 @@ public final class ExecutionRuntimeState {
     public final Deque<RuntimeCode.EvalSourceFrame> activeEvalSources = new ArrayDeque<>();
     public final ArrayDeque<ArrayList<String>> syntheticCallerFrames = new ArrayDeque<>();
     public final Deque<RuntimeArray> argsStack = new ArrayDeque<>();
+    final Deque<List<RuntimeScalar.ArgumentAliasOwner>> argumentAliasOwnerFrames =
+            new ArrayDeque<>();
     /** Explicit owners for staged arguments, retired by call completion or frame exit. */
     final ArrayList<RuntimeCode.CallArguments> callArgumentFrames =
             new ArrayList<>();

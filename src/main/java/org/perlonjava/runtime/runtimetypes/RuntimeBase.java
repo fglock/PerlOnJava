@@ -335,6 +335,8 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     /** Identity ledger for migrated slots; selective refCount remains the
      * lifecycle bridge while owner families move to this API. */
     private java.util.Set<PerlOwnerSlot> ownerSlots = null;
+    private int argumentAliasOwnerSlots;
+    private int countedOwnerSlots;
     private int pendingReturnOwners;
 
     synchronized boolean hasPendingReturnOwner() {
@@ -365,11 +367,17 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             ownerSlots = java.util.Collections.newSetFromMap(
                     new java.util.IdentityHashMap<>());
         }
-        ownerSlots.add(slot);
+        if (ownerSlots.add(slot)) {
+            if (slot.kind() == PerlOwnerSlot.Kind.ARGUMENT_ALIAS) argumentAliasOwnerSlots++;
+            if (PerlOwnerSlot.isCountedKind(slot.kind())) countedOwnerSlots++;
+        }
     }
 
     synchronized void removeOwnerSlot(PerlOwnerSlot slot) {
-        if (ownerSlots != null) ownerSlots.remove(slot);
+        if (ownerSlots != null && ownerSlots.remove(slot)) {
+            if (slot.kind() == PerlOwnerSlot.Kind.ARGUMENT_ALIAS) argumentAliasOwnerSlots--;
+            if (PerlOwnerSlot.isCountedKind(slot.kind())) countedOwnerSlots--;
+        }
     }
 
     synchronized boolean hasOwnerSlots() {
@@ -390,6 +398,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
 
     /** Number of active slots of the requested kind that own this referent. */
     public synchronized int ownerSlotCount(PerlOwnerSlot.Kind kind) {
+        if (kind == PerlOwnerSlot.Kind.ARGUMENT_ALIAS) return argumentAliasOwnerSlots;
         if (ownerSlots == null) return 0;
         int count = 0;
         for (PerlOwnerSlot slot : ownerSlots) {
@@ -400,12 +409,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
 
     /** Number of active slot identities whose releases balance refCount. */
     synchronized int countedOwnerSlotCount() {
-        if (ownerSlots == null) return 0;
-        int count = 0;
-        for (PerlOwnerSlot slot : ownerSlots) {
-            if (PerlOwnerSlot.isCountedKind(slot.kind())) count++;
-        }
-        return count;
+        return countedOwnerSlots;
     }
 
     /** Restore the compatibility count from surviving counted owner identities. */
