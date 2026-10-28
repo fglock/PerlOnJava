@@ -1104,22 +1104,28 @@ shared scalar cell retires its identity exactly once. The default-off full
 passes 5/5, `goto_weakself_tailcall_refcount.t` passes 2/2, and
 `threads_shared_nested_proxies.t` passes 10/10 on both backends.
 
-Tail-call pending-release selection still scans pending scalar owners and uses
-`copiedFromArgumentFrame`; replace this with explicit handoff owner identities.
+### Tail-call frame identities and thread cloning (2026-10-28)
+
+Queued scalar decrements now capture their source argument-frame identity at
+enqueue time. Tail-call cleanup matches that identity directly, while retaining
+the existing direct-argument and bless-temporary cases. The new
+`ArgumentAliasHandoffOwnerSlotTest` verifies copied arguments retain the source
+identity in the pending queue and that thread cloning drops this execution-local
+identity. `nice -n 19 make` passes; `goto_tailcall_args_cleanup.t`,
+`goto_weakself_tailcall_refcount.t`, and `threads_shared_nested_proxies.t` pass
+on both backends with corrective sweeps unset.
 
 ### Next steps
 
-1. Replace tail-call pending-release frame scans with explicit handoff owner
-   identities and verify cross-thread argument cloning.
-2. Replace remaining targeted weak-release and weak-CODE capture decisions with
+1. Replace remaining targeted weak-release and weak-CODE capture decisions with
    explicit owner-slot transitions, preserving the existing diagnostic helper
    tests.
-3. Finish CODE template ownership, per-optree compiled-pin retirement, and raw
+2. Finish CODE template ownership, per-optree compiled-pin retirement, and raw
    descriptor/embedding borrows. Complete native call buffers, escaping
    lvalues/refaliases, and targeted try/finally returns.
-4. Requalify upstream HTML-Tree, weak/DESTROY, resurrection, cycle, and full-suite
+3. Requalify upstream HTML-Tree, weak/DESTROY, resurrection, cycle, and full-suite
    behavior as each ownership family migrates; resolve the existing interpreter
    `new_from_lol` lifecycle gap before declaring HTML-Tree qualified.
-5. Make semantic owner counts authoritative, then remove the compatibility
+4. Make semantic owner counts authoritative, then remove the compatibility
    bridge, production corrective scheduling, and reachability fallbacks after
    the acceptance gates pass.

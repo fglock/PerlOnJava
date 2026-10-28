@@ -4,9 +4,57 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 
 @Tag("unit")
 class ArgumentAliasHandoffOwnerSlotTest {
+    @Test
+    void queuedArgumentReleaseKeepsExplicitFrameIdentityAcrossCopyButNotThreadClone() {
+        PerlRuntime sourceRuntime = new PerlRuntime();
+        PerlRuntime childRuntime = new PerlRuntime();
+        RuntimeScalar sourceArgument = new RuntimeScalar(7);
+        RuntimeHash pendingBase = new RuntimeHash();
+        RuntimeScalar copiedArgument;
+        Object sourceFrame;
+        boolean frameActive = false;
+
+        try (PerlRuntime.Binding ignored = sourceRuntime.bind()) {
+            RuntimeArray arguments = new RuntimeArray();
+            arguments.elements.add(sourceArgument);
+            RuntimeCode.pushArgs(arguments);
+            frameActive = true;
+            sourceFrame = RuntimeCode.currentArgumentAliasFrame(sourceArgument);
+
+            copiedArgument = new RuntimeScalar(sourceArgument);
+            assertSame(sourceFrame,
+                    RuntimeCode.argumentAliasFrameForOwner(copiedArgument));
+
+            MortalList.deferDecrementFromArraySlot(
+                    pendingBase, copiedArgument, "argument-frame identity test");
+            assertSame(sourceFrame, sourceRuntime.lifecycleState.pendingArgumentFrames.get(0),
+                    "the queue records the originating frame identity at enqueue time");
+
+            RuntimeCode.popArgs();
+            frameActive = false;
+
+            RuntimeScalar clonedArgument = (RuntimeScalar) new RuntimeGraphCloner(
+                    sourceRuntime, childRuntime).cloneGraph(copiedArgument);
+            try (PerlRuntime.Binding childBinding = childRuntime.bind()) {
+                assertNull(RuntimeCode.argumentAliasFrameForOwner(clonedArgument),
+                        "a cloned scalar cannot retain a parent thread's argument frame");
+            }
+            MortalList.clearCurrentRuntimeState();
+        } finally {
+            if (frameActive) {
+                try (PerlRuntime.Binding ignored = sourceRuntime.bind()) {
+                    RuntimeCode.popArgs();
+                    MortalList.clearCurrentRuntimeState();
+                }
+            }
+        }
+    }
+
     @Test
     void tailCallTargetFrameGetsAndReleasesItsOwnAliasIdentity() {
         PerlRuntime runtime = new PerlRuntime();
