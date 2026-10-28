@@ -962,6 +962,11 @@ public class MortalList {
 
         if (--base.refCount > 0) return;
 
+        // Counted owner slots are authoritative even when the compatibility
+        // refcount transiently undercounts them during a tail-call handoff.
+        // Restore from those identities before asking the root walker.
+        if (base.restoreCountedOwnerSlotRefCount()) return;
+
         if (base.localBindingExists || reachableTailCallArgReferent(base)) {
             base.refCount = 1;
             return;
