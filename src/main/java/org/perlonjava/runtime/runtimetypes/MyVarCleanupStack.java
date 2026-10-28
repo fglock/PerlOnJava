@@ -256,7 +256,7 @@ public class MyVarCleanupStack {
         // them when a closure graph is being torn down. Recheck weak refs at
         // the scope boundary so the reachability walker can reconcile those
         // records with the remaining Perl-visible roots.
-        MortalList.requestImmediateWeakSweep();
+        MortalList.requestCorrectiveWeakSweep();
     }
 
     /**
