@@ -271,9 +271,10 @@ public class WeakRefRegistry {
                     && ReachabilityWalker.isReachableFromRoots(base)) {
                 // An untracked aggregate may already be owned by a live tree
                 // before its first weak parent edge is installed. Keep it
-                // through this transition; a later full sweep can clear the
-                // observer after that Perl root actually leaves scope.
+                // through this transition, then retire the compatibility pin
+                // when its recorded strong owner slots are all released.
                 base.refCount = 1;
+                base.packageRootRescuedUntrackedAggregate = legacyPackageNestedAggregate;
             } else {
                 base.refCount = WEAKLY_TRACKED;
             }
@@ -381,6 +382,23 @@ public class WeakRefRegistry {
 
     /** Finish tracked cleanup when its final owner slot leaves. */
     static void onStrongOwnerSlotReleased(RuntimeBase referent) {
+        if (referent != null
+                && referent.packageRootRescuedUntrackedAggregate
+                && referent.refCount == 1
+                && !referent.hasOwnerSlots()
+                && PerlRuntime.currentOrNull() != null
+                && hasWeakRefsTo(referent)
+                && !referent.localBindingExists
+                && referent.captureCount == 0
+                && !referent.hasPendingReturnOwner()
+                && referent.countedOwnerSlotCount() == 0
+                && !(referent instanceof RuntimeScalarReadOnly
+                    && RuntimeCode.isInstalledPadConstant(referent))) {
+            referent.packageRootRescuedUntrackedAggregate = false;
+            referent.refCount = Integer.MIN_VALUE;
+            DestroyDispatch.callDestroy(referent);
+            return;
+        }
         if (referent == null
                 || referent.refCount != WEAKLY_TRACKED
                 || referent.hasOwnerSlots()

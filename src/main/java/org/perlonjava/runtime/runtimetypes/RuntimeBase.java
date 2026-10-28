@@ -207,6 +207,14 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     public boolean storedInPackageGlobal = false;
 
     /**
+     * Marks an untracked aggregate whose compatibility count was rescued by
+     * proving it reachable from a package root when its first weak observer
+     * was installed. The count is only a temporary pin; its untracked owner
+     * slots remain the authoritative lifetime evidence.
+     */
+    boolean packageRootRescuedUntrackedAggregate = false;
+
+    /**
      * Number of live hash-element slots that directly own this referent.
      * This is separate from selective refCount because a returned method
      * value can be detached from its slot while the hash remains an owner.
