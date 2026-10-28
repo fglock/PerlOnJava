@@ -6360,7 +6360,10 @@ public class BytecodeCompiler implements Visitor {
                 if (node.getBooleanAnnotation("directNamedCall")) {
                     int rd = allocateOutputRegister();
                     int nameIdx = addToStringPool(subName);
-                    int cacheIdx = addToConstantPool(new RuntimeScalar());
+                    RuntimeScalar cachedCallRef = node.getBooleanAnnotation("preserveHashConstantCall")
+                            && node.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar codeRef
+                                    ? codeRef : new RuntimeScalar();
+                    int cacheIdx = addToConstantPool(cachedCallRef);
                     Object classMethod = node.getAnnotation("directClassMethod");
                     int classNameIdx = classMethod instanceof String className
                             ? addToStringPool(className) : -1;

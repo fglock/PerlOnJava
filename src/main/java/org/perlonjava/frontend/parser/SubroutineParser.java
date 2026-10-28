@@ -213,6 +213,7 @@ public class SubroutineParser {
         String prototype = null;
         List<String> attributes = null;
         RuntimeScalar parseTimeCodeRef = null;
+        boolean preserveHashConstantCall = false;
         String prototypeErrorName = fullName;
         if (!isNewMethod && !isMethod) {
             RuntimeScalar codeRef = null;
@@ -521,7 +522,12 @@ public class SubroutineParser {
         // Handle indirect object syntax with variable class: new $type $arg -> $type->new($arg)
         // This is similar to the IDENTIFIER case above, but for variable class names
         // Only applies when the subroutine doesn't exist (otherwise it's a function call)
-        if (!subExists && peek(parser).text.equals("$") && isValidIndirectMethod(subName) && !prototypeHasGlob) {
+        // The legacy Error.pm form `catch $class with { ... }` remains an
+        // indirect method call even when the core `try` feature is enabled;
+        // the core catch grammar requires a parenthesized exception variable.
+        boolean dynamicCatchClass = subName.equals("catch");
+        if ((!subExists || dynamicCatchClass) && peek(parser).text.equals("$")
+                && (dynamicCatchClass || isValidIndirectMethod(subName)) && !prototypeHasGlob) {
             int currentIndex2 = parser.tokenIndex;
             // Parse the variable that holds the class name
             // Set flag so Variable.parseVariable allows ( after the variable
@@ -881,6 +887,19 @@ public class SubroutineParser {
             }
             if (parseTimeCodeRef != null) {
                 Object target = parseTimeCodeRef.value;
+                if (target instanceof RuntimeCode constantCode
+                        && isHashReferenceConstant(constantCode)
+                        && parser.ctx.symbolTable.getCurrentSubroutine() != null
+                        && !parser.ctx.symbolTable.getCurrentSubroutine().isEmpty()) {
+                    // A named body may be emitted only when first called,
+                    // after runtime has executed `undef *CONSTANT`. Keep the
+                    // constant CV captured by this body independent from the
+                    // mutable CODE slot so hash-reference constants retain
+                    // their compile-time value on both backends.
+                    parseTimeCodeRef = new RuntimeScalar(constantCode.cloneForClosure());
+                    target = parseTimeCodeRef.value;
+                    preserveHashConstantCall = true;
+                }
                 boolean knownAtParseTime = target instanceof RuntimeCode runtimeCode
                         && (runtimeCode.defined() || runtimeCode.isDeclared);
                 codeRefNode.setAnnotation("subroutineKnownAtParseTime", knownAtParseTime);
@@ -902,6 +921,9 @@ public class SubroutineParser {
                         && RuntimeCode.isLvalueCode(code)) {
                     codeRefNode.setAnnotation("directLvalueCall", true);
                 }
+            }
+            if (preserveHashConstantCall) {
+                codeRefNode.setAnnotation("preserveHashConstantCall", true);
             }
             BinaryOperatorNode call = new BinaryOperatorNode("(",
                     codeRefNode,
@@ -927,6 +949,19 @@ public class SubroutineParser {
         throw new PerlParserException(
                 "Number found where operator expected (Do you need to predeclare \""
                         + subName + "\"?)" + at + "syntax error" + at);
+    }
+
+    private static boolean isHashReferenceConstant(RuntimeCode code) {
+        if (code.constantValue == null || code.constantValue.elements.size() != 1
+                || !(code.constantValue.elements.getFirst() instanceof RuntimeScalar value)) {
+            return false;
+        }
+        while (value.type == RuntimeScalarType.READONLY_SCALAR
+                && value.value instanceof RuntimeScalar inner) {
+            value = inner;
+        }
+        return value.type == RuntimeScalarType.HASHREFERENCE
+                && value.value instanceof RuntimeHash;
     }
 
     private static boolean isValidIndirectMethod(String subName) {
