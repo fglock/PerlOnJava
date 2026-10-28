@@ -1026,6 +1026,17 @@ default-off full `nice -n 19 make` gate passes. Evidence:
 Uncounted compatibility aliases still use the referent scan; explicit alias
 slot ownership remains unfinished.
 
+### Scalar overwrite recovery from counted owner slots (2026-10-28)
+
+When a blessed weakly observed referent reaches a transient zero during scalar
+overwrite, `RuntimeScalar` now restores the compatibility count from surviving
+counted owner slots before invoking nested-call or package-root reachability
+fallbacks. `RuntimeScalarCountedOwnerRepairTest` verifies that a remaining
+array-element slot preserves the weak observer with zero root queries, and
+that releasing the final slot clears it. The default-off full
+`nice -n 19 make` gate passes. Evidence:
+`/tmp/make-issue1649-scalar-owner-repair-final2.log`.
+
 ### Next steps
 
 1. Complete aliased `@_` cell ownership and shared/tail-call cases whose
