@@ -157,34 +157,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
         }
 
-        private boolean containsReferent(RuntimeBase referent) {
-            for (int i = 0; i < size; i++) {
-                RuntimeBase value = values[i];
-                if (argumentValueOwnsReferent(value, referent)) return true;
-            }
-            return false;
-        }
-
-        private boolean argumentValueOwnsReferent(RuntimeBase value, RuntimeBase referent) {
-            if (value instanceof RuntimeScalar scalar) {
-                return scalar.value == referent && !WeakRefRegistry.isweak(scalar);
-            }
-            if (value instanceof RuntimeList list) {
-                for (RuntimeBase element : list.elements) {
-                    if (argumentValueOwnsReferent(element, referent)) return true;
-                }
-            } else if (value instanceof RuntimeArray array) {
-                for (RuntimeScalar element : array.elements) {
-                    if (argumentValueOwnsReferent(element, referent)) return true;
-                }
-            } else if (value instanceof RuntimeHash hash) {
-                for (RuntimeScalar element : hash.elements.values()) {
-                    if (argumentValueOwnsReferent(element, referent)) return true;
-                }
-            }
-            return false;
-        }
-
         private RuntimeBase[] argumentValues() {
             return Arrays.copyOf(values, size);
         }
@@ -241,25 +213,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
             return failure;
         }
-    }
-
-    static boolean hasActiveArgumentOwner(RuntimeScalar scalar) {
-        if (scalar == null || !(scalar.value instanceof RuntimeBase referent)) return false;
-        if (referent.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_ALIAS) != 0) return true;
-        ExecutionRuntimeState state = PerlRuntime.current().executionState();
-        for (RuntimeArray args : state.argsStack) {
-            for (RuntimeScalar element : args.elements) {
-                if (element != null && element.value == referent
-                        && !WeakRefRegistry.isweak(element)) return true;
-            }
-        }
-        for (int i = state.callArgumentFrames.size() - 1; i >= 0; i--) {
-            CallArguments frame = state.callArgumentFrames.get(i);
-            if (frame.containsReferent(referent)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private static boolean hasPersistentArgumentCell(RuntimeScalar scalar) {
