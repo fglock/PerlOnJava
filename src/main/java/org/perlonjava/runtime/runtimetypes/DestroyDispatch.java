@@ -317,10 +317,6 @@ public class DestroyDispatch {
                 code.releaseStateStorage();
                 MortalList.flush();
             }
-            if ((referent instanceof RuntimeHash || referent instanceof RuntimeArray)
-                    && MortalList.requestWeakSweepsForDestroyedContainer(referent)) {
-                MortalList.requestCorrectiveWeakSweep();
-            }
             referent.markPerlDestroyed();
             return;
         }
@@ -385,7 +381,6 @@ public class DestroyDispatch {
             } else if (referent instanceof RuntimeCode code) {
                 code.releaseStateStorage();
             }
-            MortalList.requestWeakSweepsForDestroyedContainer(referent);
             referent.markPerlDestroyed();
             return;
         }
@@ -435,10 +430,6 @@ public class DestroyDispatch {
             } else if (referent instanceof RuntimeCode code) {
                 code.releaseStateStorage();
                 MortalList.flush();
-            }
-            if ((referent instanceof RuntimeHash || referent instanceof RuntimeArray)
-                    && MortalList.requestWeakSweepsForDestroyedContainer(referent)) {
-                MortalList.requestCorrectiveWeakSweep();
             }
             referent.markPerlDestroyed();
             return;
@@ -622,17 +613,6 @@ public class DestroyDispatch {
             // Without this, die inside DESTROY would clobber the caller's $@.
             dollarAt.type = savedDollarAt.type;
             dollarAt.value = savedDollarAt.value;
-            // Phase D: outermost DESTROY is finishing. If any nested set()
-            // released a cyclic blessed-with-DESTROY ref, fire one walker
-            // sweep to clear any now-orphaned weak refs. This amortizes
-            // the sweep cost to at most one per top-level DESTROY instead
-            // of per-set(). Gated by ModuleInitGuard to avoid tripping
-            // during require/use load.
-            if (savedTarget == null && state.sweepPendingAfterOuterDestroy
-                    && !ModuleInitGuard.inModuleInit()) {
-                state.sweepPendingAfterOuterDestroy = false;
-                ReachabilityWalker.sweepWeakRefs(false, false);
-            }
         }
     }
 

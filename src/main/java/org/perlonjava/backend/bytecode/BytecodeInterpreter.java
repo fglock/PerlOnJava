@@ -112,7 +112,15 @@ public class BytecodeInterpreter {
                 || scalar.type == RuntimeScalarType.READONLY_SCALAR;
     }
 
-    private static void releaseConsumedTemp(RuntimeBase temp, RuntimeBase target) {
+    private static boolean releaseConsumedTemp(RuntimeBase temp, RuntimeBase target) {
+        if (temp instanceof RuntimeList list) {
+            if (list.elements.size() != 1 || !(list.elements.getFirst() instanceof RuntimeScalar scalar)) {
+                return false;
+            }
+            boolean released = scalar == target || releaseConsumedTemp(scalar, target);
+            if (released) list.elements.clear();
+            return released;
+        }
         if (!(temp instanceof RuntimeScalar tempScalar)
                 || !(target instanceof RuntimeScalar targetScalar)
                 || tempScalar == targetScalar
@@ -122,7 +130,7 @@ public class BytecodeInterpreter {
                 || tempScalar.value != targetScalar.value
                 || !(tempScalar.value instanceof RuntimeBase base)
                 || base.refCount <= 0) {
-            return;
+            return false;
         }
 
         tempScalar.refCountOwned = false;
@@ -132,6 +140,7 @@ public class BytecodeInterpreter {
         }
         base.releaseActiveOwner(tempScalar);
         base.refCount--;
+        return true;
     }
 
     private static java.util.Set<RuntimeCode> collectReturnedClosures(RuntimeBase value) {
@@ -3237,7 +3246,9 @@ public class BytecodeInterpreter {
                             case Opcodes.EVAL_STRING, Opcodes.SELECT_OP, Opcodes.LOAD_GLOB, Opcodes.LOAD_GLOB_CANONICAL, Opcodes.SLEEP_OP,
                                  Opcodes.ALARM_OP, Opcodes.DEREF_GLOB, Opcodes.DEREF_GLOB_NONSTRICT,
                                  Opcodes.LOAD_GLOB_DYNAMIC, Opcodes.DEREF_SCALAR_STRICT,
-                                 Opcodes.DEREF_SCALAR_NONSTRICT, Opcodes.CODE_DEREF_NONSTRICT,
+                                 Opcodes.DEREF_SCALAR_STRICT_TEMP,
+                                 Opcodes.DEREF_SCALAR_NONSTRICT, Opcodes.DEREF_SCALAR_NONSTRICT_TEMP,
+                                 Opcodes.CODE_DEREF_NONSTRICT,
                                  Opcodes.CODE_DEREF_STRICT, Opcodes.REFALIAS_CODE_REFERENCE,
                                  Opcodes.REFALIAS_SCALAR_REFERENCE,
                                  Opcodes.NAMED_CODE_REFERENCE, Opcodes.DIRECT_NAMED_CODE_CALL,
@@ -4985,6 +4996,9 @@ public class BytecodeInterpreter {
             case Opcodes.DEREF_SCALAR_STRICT -> {
                 return SlowOpcodeHandler.executeDerefScalarStrict(bytecode, pc, registers);
             }
+            case Opcodes.DEREF_SCALAR_STRICT_TEMP -> {
+                return SlowOpcodeHandler.executeDerefScalarStrictTemp(bytecode, pc, registers);
+            }
             case Opcodes.REJECT_LOCALIZE_REFERENCE -> {
                 return SlowOpcodeHandler.executeRejectLocalizeReference(bytecode, pc, registers);
             }
@@ -5005,6 +5019,9 @@ public class BytecodeInterpreter {
             }
             case Opcodes.DEREF_SCALAR_NONSTRICT -> {
                 return SlowOpcodeHandler.executeDerefScalarNonStrict(bytecode, pc, registers, code);
+            }
+            case Opcodes.DEREF_SCALAR_NONSTRICT_TEMP -> {
+                return SlowOpcodeHandler.executeDerefScalarNonStrictTemp(bytecode, pc, registers, code);
             }
             case Opcodes.CODE_DEREF_NONSTRICT -> {
                 return SlowOpcodeHandler.executeCodeDerefNonStrict(bytecode, pc, registers, code);

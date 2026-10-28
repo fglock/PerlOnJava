@@ -330,81 +330,13 @@ public class MortalList {
         markBoundaryWork(state);
         state.deferredCaptures.add(scalar);
         state.deferredCapturesSet.merge(scalar, 1, Integer::sum);
-        noteDeferredScopeExitCaptureCandidate(state, scalar);
         if (scalar.captureCount == 0 && scalar.scopeExited) {
             state.deferredCapturesMayBeReady = true;
         }
     }
 
+    /** Compatibility hook; capture ownership no longer needs a reachability candidate. */
     public static void noteDeferredScopeExitCaptureCandidate(RuntimeScalar scalar) {
-        if (!ReachabilityWalker.correctiveSweepsEnabled()) return;
-        if (scalar == null || !scalar.scopeExited
-                || (scalar.type & RuntimeScalarType.REFERENCE_BIT) == 0
-                || !(scalar.value instanceof RuntimeBase base)
-                || !isDeferredScopeExitCandidate(base)) return;
-        noteDeferredScopeExitCaptureCandidate(state(), scalar);
-    }
-
-    private static void noteDeferredScopeExitCaptureCandidate(
-            LifecycleRuntimeState state, RuntimeScalar scalar) {
-        if (!ReachabilityWalker.correctiveSweepsEnabled()
-                || scalar.ownerSlotCount(PerlOwnerSlot.Kind.SCALAR_CAPTURE) != 0) return;
-        if (scalar.value instanceof RuntimeBase base && isDeferredScopeExitCandidate(base)) {
-            state.deferredScopeExitCaptureCandidates.add(scalar);
-        }
-    }
-
-    private static boolean isDeferredScopeExitCandidate(RuntimeBase base) {
-        if (base == null || base.blessId == 0) return false;
-        if (WeakRefRegistry.hasWeakRefsTo(base)) return true;
-        String className = NameNormalizer.getBlessStr(base.blessId);
-        return className != null && DestroyDispatch.classHasDestroy(base.blessId, className);
-    }
-
-    /**
-     * Release eval STRING over-captures whose declaring scope just exited and
-     * which cannot be reached by live code or an END block. Reachability sweeps
-     * also perform this check, but waiting for their cadence can keep request
-     * objects alive across unrelated calls (and defer their cleanup until
-     * global destruction).
-     */
-    private static void processUnreachableScopeExitCaptureCandidates(
-            LifecycleRuntimeState state) {
-        if (!ReachabilityWalker.correctiveSweepsEnabled()
-                || state.deferredScopeExitCaptureCandidates.isEmpty()) return;
-
-        Set<RuntimeBase> endReachable = ReachabilityWalker.walkEndBlockRoots();
-        Set<RuntimeBase> cycleProtected = ReachabilityWalker.strongCycleProtectedReferents();
-        boolean found = false;
-        for (RuntimeScalar scalar : new ArrayList<>(state.deferredScopeExitCaptureCandidates)) {
-            if (!scalar.scopeExited
-                    || scalar.ownerSlotCount(PerlOwnerSlot.Kind.SCALAR_CAPTURE) != 0
-                    || RuntimeCode.activeCodeOwnsCapture(scalar)) continue;
-            RuntimeBase base = scalar.value instanceof RuntimeBase value ? value : null;
-            boolean scalarReachable = ReachabilityWalker.isScalarReachable(scalar)
-                    || ReachabilityWalker.isReachableFromRoots(scalar);
-            boolean retained = endReachable.contains(scalar)
-                    || (base != null && endReachable.contains(base))
-                    || (base != null && cycleProtected.contains(base))
-                    || scalarReachable;
-            if (retained) continue;
-
-            scalar.releaseUnreachableSemanticCaptureOwner();
-            Integer deferredCount = state.deferredCapturesSet.get(scalar);
-            if (deferredCount != null) {
-                for (int i = state.deferredCaptures.size() - 1; i >= 0; i--) {
-                    if (state.deferredCaptures.get(i) != scalar) continue;
-                    deferDecrementIfTracked(scalar);
-                    state.deferredCaptures.remove(i);
-                    removeFromDeferredSet(scalar);
-                }
-            } else if (base != null) {
-                requestTargetedWeakSweep(base);
-            }
-            found = true;
-        }
-        state.deferredScopeExitCaptureCandidates.clear();
-        if (found) flushAboveMark();
     }
 
     static void noteDeferredCaptureMayBeReady() {
@@ -489,58 +421,10 @@ public class MortalList {
         // decrements have been processed and before global destruction.
         DestroyDispatch.clearRescuedWeakRefs();
 
-        // Final sweep: clear weak refs for ALL remaining blessed objects.
-        // At this point the main script has returned and all lexical scopes
-        // have exited. Some objects may still have inflated selective
-        // refCounts (due to JVM temporaries, method-call copies, interpreter
-        // captures) that prevent DESTROY from firing. Their weak refs would
-        // remain defined forever, causing DBIC's leak tracer to report false
-        // leaks. Clearing weak refs here is safe because:
-        // 1. Only weak refs are cleared — the Java objects remain alive
-        // 2. CODE refs are excluded (they may still be called from stashes)
-        // 3. END blocks have completed, so real closure captures are no longer needed
-        WeakRefRegistry.clearAllBlessedWeakRefs();
     }
 
-    /**
-     * Release scope-exited captures that cannot be reached by an END block or
-     * a package CODE slot, while retaining genuine END-visible captures for
-     * the unconditional post-END drain in {@link #flushDeferredCaptures()}.
-     *
-     * This preserves Perl's ordering: unrelated file lexicals are destroyed
-     * before END, but values captured by code that END can invoke stay alive
-     * until END has completed.
-     */
+    /** Compatibility hook; captured owners now leave through explicit slots. */
     public static void flushDeferredCapturesBeforeEnd() {
-        if (!ReachabilityWalker.correctiveSweepsEnabled()) return;
-        LifecycleRuntimeState state = state();
-        Set<RuntimeBase> endReachable = ReachabilityWalker.walkEndBlockRoots();
-        ReachabilityWalker.releaseUnreachableScopeExitedCaptureOwners(
-                WeakRefRegistry.snapshotWeakRefReferents(), endReachable);
-        boolean found = false;
-        for (int i = state.deferredCaptures.size() - 1; i >= 0; i--) {
-            RuntimeScalar scalar = state.deferredCaptures.get(i);
-            boolean retained = endReachable.contains(scalar)
-                    || (scalar.value instanceof RuntimeBase base && endReachable.contains(base));
-            if (retained) continue;
-
-            // This scope-exited pad was captured by eval STRING, but no END
-            // block can reach it. Its semantic capture edge must not keep a
-            // blessed referent alive through global destruction merely because
-            // the compiled eval object is still Java-reachable.
-            scalar.releaseUnreachableSemanticCaptureOwner();
-            deferDecrementIfTracked(scalar);
-            state.deferredCaptures.remove(i);
-            removeFromDeferredSet(scalar);
-            found = true;
-        }
-        if (found) flush();
-
-        // Weak-reference leak tracers commonly run from END. Selective
-        // refcounts can remain inflated by JVM temporaries even after all Perl
-        // owners have gone away, so clear only referents outside the semantic
-        // END graph now. Retained captures are cleared by the post-END drain.
-        WeakRefRegistry.clearBlessedWeakRefsExcept(endReachable);
     }
 
     /**
@@ -1289,10 +1173,6 @@ public class MortalList {
             int pendingStartIdx, int tiedReleaseStartIdx, int ioReleaseStartIdx,
             int untrackedReturnOwnerStartIdx) {
         LifecycleRuntimeState state = state();
-        boolean previousCaptureSweepDeferral =
-                state.deferCaptureReachabilityToBoundarySweep;
-        state.deferCaptureReachabilityToBoundarySweep =
-                previousCaptureSweepDeferral || canDeferCapturedTargetCheckToBoundarySweep(state);
         state.reachabilityDrainDepth++;
         try {
             int pendingIdx = pendingStartIdx;
@@ -1340,7 +1220,6 @@ public class MortalList {
             }
         } finally {
             state.reachabilityDrainDepth--;
-            state.deferCaptureReachabilityToBoundarySweep = previousCaptureSweepDeferral;
         }
         drainDeferredArgumentOwnerReleases();
     }
@@ -1362,22 +1241,6 @@ public class MortalList {
                         deferred.transientOwnerKind);
             }
         }
-    }
-
-    private static void finalizeDeferredCaptureSweepCandidates(
-            LifecycleRuntimeState state) {
-        if (state.deferredCaptureSweepCandidates.isEmpty()) return;
-        if (state.boundaryWeakSweepGeneration > state.deferredCaptureSweepGeneration) {
-            state.deferredCaptureSweepCandidates.clear();
-            state.deferredCaptureSweepGeneration = state.boundaryWeakSweepGeneration;
-        }
-    }
-
-    private static boolean canDeferCapturedTargetCheckToBoundarySweep(
-            LifecycleRuntimeState state) {
-        return !AUTO_GC_DISABLED
-                && !state.inAutoSweep
-                && !ModuleInitGuard.inModuleInit();
     }
 
     /**
@@ -1480,102 +1343,9 @@ public class MortalList {
         }
     }
 
-    /**
-     * Finish targeted releases queued by an explicit aggregate discard after
-     * the assignment's temporary scalar roots have been removed. Unlike the
-     * global quiet sweep, this walk is safe at nested statement boundaries
-     * because it considers only referents reached from the discarded graph.
-     */
-    public static void flushReleasedWeakSweepsIfSafe() {
-        LifecycleRuntimeState state = state();
-        if (state.targetedWeakSweepReferents.isEmpty()) return;
-        Set<RuntimeBase> releasedTargets = Collections.newSetFromMap(new IdentityHashMap<>());
-        releasedTargets.addAll(state.targetedWeakSweepReferents);
-        state.targetedWeakSweepReferents.clear();
-        ReachabilityWalker.ReleasedWeakSweepResult releasedSweepResult =
-                ReachabilityWalker.sweepReleasedWeakReferents(releasedTargets);
-
-        // A complete quiet sweep may already be required at this safe boundary.
-        // Reuse the targeted pass's root set for that registry-wide cleanup,
-        // avoiding a second traversal when releasing these referents caused no
-        // DESTROY cascade that would have changed the graph.
-        if (releasedSweepResult.live() == null
-                || !state.immediateWeakSweepRequested
-                || AUTO_GC_DISABLED
-                || FORCE_SWEEP_EVERY_FLUSH
-                || state.inAutoSweep
-                || ModuleInitGuard.inModuleInit()
-                || RuntimeCode.argsStackDepth() > 1
-                || !state.temporaryRoots.isEmpty()) {
-            return;
-        }
-        state.immediateWeakSweepRequested = false;
-        state.lastAutoSweepNanos = System.nanoTime();
-        state.inAutoSweep = true;
-        try {
-            ReachabilityWalker.sweepWeakRefs(
-                    true, false, releasedTargets, releasedSweepResult);
-            state.boundaryWeakSweepGeneration++;
-            finalizeDeferredCaptureSweepCandidates(state);
-        } finally {
-            state.inAutoSweep = false;
-        }
-    }
-
-    /**
-     * Register weakly tracked referents whose last strong edge may disappear
-     * with a container temporary.  References to ordinary scalar referents
-     * cannot participate in the selective refCount scheme, so a discarded
-     * anonymous array/hash must explicitly ask the statement-boundary walker
-     * to reconsider them.  This is the aggregate equivalent of assigning
-     * {@code undef} to a scalar that contains a WEAKLY_TRACKED reference.
-     */
+    /** Compatibility hook retained for callers compiled against the old sweep API. */
     public static boolean requestWeakSweepsForDestroyedContainer(RuntimeBase container) {
-        if (!ReachabilityWalker.correctiveSweepsEnabled()) return false;
-        if (!(container instanceof RuntimeArray) && !(container instanceof RuntimeHash)) return false;
-
-        ArrayDeque<RuntimeBase> work = new ArrayDeque<>();
-        Set<RuntimeBase> visited = Collections.newSetFromMap(new IdentityHashMap<>());
-        work.add(container);
-        boolean requested = WeakRefRegistry.hasWeakRefsTo(container);
-        if (requested) requestTargetedWeakSweep(container);
-
-        while (!work.isEmpty()) {
-            RuntimeBase current = work.removeFirst();
-            if (!visited.add(current)) continue;
-
-            // A stash is a symbol-table view, not an owned aggregate. Walking
-            // its dynamic HashSpecialVariable map enumerates package globals
-            // on every scope exit (Catalyst creates many short-lived
-            // containers), repeatedly traversing the whole program graph.
-            // Its values are roots already handled by the normal weak sweep.
-            if (current instanceof RuntimeStash) continue;
-
-            Iterable<RuntimeScalar> values;
-            if (current instanceof RuntimeArray array) {
-                values = array.elements;
-            } else if (current instanceof RuntimeHash hash) {
-                values = hash.elements.values();
-            } else {
-                continue;
-            }
-
-            for (RuntimeScalar value : values) {
-                if (value == null
-                        || (value.type & RuntimeScalarType.REFERENCE_BIT) == 0
-                        || !(value.value instanceof RuntimeBase referent)) {
-                    continue;
-                }
-                if (WeakRefRegistry.hasWeakRefsTo(referent)) {
-                    requestTargetedWeakSweep(referent);
-                    requested = true;
-                }
-                if (referent instanceof RuntimeArray || referent instanceof RuntimeHash) {
-                    work.add(referent);
-                }
-            }
-        }
-        return requested;
+        return false;
     }
 
     static void finalizeClearedAggregateOwnerAfterScopeExit(RuntimeBase base) {
@@ -1968,22 +1738,6 @@ public class MortalList {
                 // target. Keep it alive without requesting a registry-wide
                 // sweep; unknown targets still use the complete-boundary path.
                 base.refCount = 1;
-            } else if (base.blessId == 0
-                    && hasWeakRefs
-                    && canDeferCapturedTargetCheckToBoundarySweep(state())) {
-                // Carry released unblessed targets to the next safe complete
-                // sweep. This avoids scanning live and installed CODE captures
-                // repeatedly after an inconclusive query while keeping their
-                // weak observers valid until the sweep decides reachability.
-                if (state().deferredCaptureSweepCandidates.isEmpty()) {
-                    state().deferredCaptureSweepGeneration =
-                            state().boundaryWeakSweepGeneration;
-                }
-                // Keep the target alive until the next safe complete sweep
-                // decides whether a live CODE capture still owns it.
-                base.refCount = 1;
-                state().deferredCaptureSweepCandidates.add(base);
-                requestCorrectiveWeakSweep();
             } else if (base.blessId == 0
                     && hasWeakRefs
                     && RuntimeCode.argsStackDepth() > 1) {
@@ -2485,6 +2239,7 @@ public class MortalList {
             // that may have become ready (captureCount reached 0) during
             // scope cleanup.
             processReadyDeferredCaptures(state);
+            DestroyDispatch.processRescuedObjects();
             processUnreachableScopeExitCaptureCandidates(state);
             maybeSweepStatementBoundaryDestroyables();
             maybeAutoSweepIfRequested(state);
@@ -2515,6 +2270,7 @@ public class MortalList {
         // After processing mortals (which may have triggered releaseCaptures
         // via callDestroy), check if any deferred captures are now ready.
         processReadyDeferredCaptures(state);
+        DestroyDispatch.processRescuedObjects();
         processUnreachableScopeExitCaptureCandidates(state);
         maybeSweepStatementBoundaryDestroyables();
         maybeAutoSweepIfRequested(state);
