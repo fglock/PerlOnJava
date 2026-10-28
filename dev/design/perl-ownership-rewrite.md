@@ -1058,11 +1058,10 @@ full `nice -n 19 make` gate passes. Evidence:
 `/tmp/make-issue1649-argument-alias-frame-roots-final.log`.
 
 This covers durable scalar cells staged for calls and active argument frames.
-Nested list/aggregate arguments and shared/tail-call aliases remain open. The
-tracked `new_from_lol` lifecycle reproducer passes 4/4 on JVM; its interpreter
-result (1/4) matches the committed parent `7ba27d774`, so those three failures
-predate this change. The TreeBuilder lifecycle reproducer passes 4/4 on both
-backends.
+The tracked `new_from_lol` lifecycle reproducer passes 4/4 on JVM; its
+interpreter result (1/4) matches the committed parent `7ba27d774`, so those
+three failures predate this change. The TreeBuilder lifecycle reproducer passes
+4/4 on both backends.
 
 ### Retire active argument identities when `@_` slots are removed (2026-10-28)
 
@@ -1085,10 +1084,20 @@ default-off full `nice -n 19 make` gate passes. Against that build,
 `closure_capture_explicit_return.t` passes 6/6 on both backends; HTML-Tree
 5.07 `t/refloop.t` passes 8/8 on both backends with sweeps unset.
 
+### Staged owners for nested list aggregates (2026-10-28)
+
+`CallArguments` now walks nested `RuntimeList`, `RuntimeArray`, and
+`RuntimeHash` values and creates one `ARGUMENT_VALUE` owner for each strong
+reference element. `CallArgumentsNestedAggregateOwnerSlotTest` verifies that
+array and hash elements nested in lists each retain their own slot through
+later argument cleanup and release at call completion. The default-off full
+`nice -n 19 make` gate passes. Explicit-return cleanup is 6/6, nested-form
+lifetime is 29/29, and HTML-Tree 5.07 `t/refloop.t` is 8/8 on both backends
+with sweeps unset.
+
 ### Next steps
 
-1. Add direct owner-slot coverage for nested list/aggregate arguments and
-   shared/tail-call aliases.
+1. Add direct owner-slot coverage for shared and tail-call argument aliases.
 2. Replace remaining targeted weak-release and weak-CODE capture decisions with
    explicit owner-slot transitions, preserving the existing diagnostic helper
    tests.
