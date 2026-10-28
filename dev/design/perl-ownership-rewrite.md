@@ -936,6 +936,15 @@ matches the remaining hash slot, and verifies zero root queries. The full
 sweep-enabled `nice -n 19 make` gate passes. Values without counted owner slots
 retain the existing root-walk fallback.
 
+### Localized CODE restore with an active owner slot (2026-10-28)
+
+Whole-glob restore now skips the scalar registry, live capture, and Perl-root
+walks when a non-stash owner slot still retains the localized CV. The regression
+`LocalizedGlobCodeOwnerSlotFastPathTest` models the legacy direct stash write,
+keeps the CV active across restore, and verifies its captures survive with zero
+root queries. The sweep-enabled full `nice -n 19 make` gate passes. CVs without
+owner slots still take the compatibility checks.
+
 ### Next steps
 
 1. Continue replacing targeted weak-release and weak-CODE capture walks with
