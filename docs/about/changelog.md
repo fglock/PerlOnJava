@@ -60,7 +60,7 @@ priorities and future plans.
 - Preserve non-CODE weak referents directly from surviving uncounted owner slots when a scalar releases its last counted slot (#1649).
 - Release displaced localized CODE captures from active-frame and owner-slot identities, without scalar-registry or root-graph scans (#1649).
 - Defer zero-count cleanup for aggregates with surviving owner slots across scalar, deferred, and tail-call releases (#1649).
-- Remove the live-scalar-registry reachability fallback from first-weaken zero-count decisions.
+- Remove the live-scalar-registry reachability fallback from first-weaken and tail-call zero-count decisions.
 - Release weakly tracked referents from their final uncounted owner slot without a root walk.
 
 
