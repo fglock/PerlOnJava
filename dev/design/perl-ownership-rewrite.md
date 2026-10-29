@@ -1513,11 +1513,18 @@ A regression checks that an independent counted owner survives until its own
 release. The full no-sweeps `nice -n 19 make` gate passes in 10m35s, and
 HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with sweeps disabled.
 
+Live lexical array and hash cells with no counted owner slot also record an
+`UNTRACKED_REFERENCE` identity for their current referent. The slot keeps a
+tracked referent alive across another owner's release and clears weak observers
+when the aggregate cell releases its final value owner. The new regression and
+full no-sweeps `nice -n 19 make` gate pass (12m51s); HTML-Tree 5.07
+`t/refloop.t` passes 8/8 on both backends with sweeps disabled.
+
 ### Next steps
 
 1. Continue auditing `RuntimeScalar` and `MortalList` reachability fallbacks;
-   aliased storage and cross-container owners still need direct provenance
-   before their root-snapshot fallbacks can be removed.
+   package-rooted aggregate slots and cross-container aliases still need direct
+   provenance before their root-snapshot fallbacks can be removed.
 2. Migrate remaining weak-backref capture cases to explicit owner identities,
    then remove `weakBackrefCaptureSnapshot` and preserve aggregate lifetime and
    weak clearing without the compatibility graph walk.
