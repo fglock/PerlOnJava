@@ -1392,8 +1392,8 @@ surviving uncounted aggregate owner slot before reaching root fallbacks. Final
 slot release dispatches cleanup even when no weak observer exists. A separate
 pending-release marker keeps this path distinct from legacy `WEAKLY_TRACKED`
 values. `UncountedOwnerSlotZeroCountReleaseTest` covers all three paths and
-verifies exactly one final cleanup with no root query. Scalar and IO referents
-remain on the prior path until their owner-slot releases are covered.
+verifies exactly one final cleanup with no root query. The scalar-overwrite
+path still needs direct owner-slot coverage for scalar and IO referents.
 
 ### Counted slots repair unblessed scalar overwrites (2026-10-29)
 
@@ -1411,6 +1411,14 @@ The full no-sweeps `nice -n 19 make` gate passes in 11m03s. Six lifecycle tests
 pass 83/83 on both backends, and HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both
 backends with sweeps disabled. The existing scalar-wrapper snapshot tests also
 pass in the full gate.
+
+### Tail-call cleanup trusts direct uncounted owner slots (2026-10-29)
+
+Tail-call release now defers final cleanup when a non-counted Perl owner slot
+remains, including package scalar slots. Temporary runtime roots do not count as
+Perl owners. `TailCallUncountedOwnerSlotFastPathTest` checks zero root queries
+and cleanup after the package slot leaves. The no-sweeps `nice -n 19 make` gate
+passed in 10m58s; the regression passed with no skips or failures.
 
 ### Next steps
 
