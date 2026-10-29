@@ -515,6 +515,21 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         return true;
     }
 
+    /** Restore from scalar cells whose live closure owner is explicit. */
+    boolean restoreCapturedScalarCellOwnerSlotRefCount() {
+        int count = 0;
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (slot.kind() != PerlOwnerSlot.Kind.SCALAR_CELL || !slot.isActive()) continue;
+            RuntimeScalar owner = slot.countedScalarOwner();
+            if (owner != null && owner.isCurrentCapturedScalarCellOwner(this, slot)) {
+                count++;
+            }
+        }
+        if (count == 0) return false;
+        refCount = count;
+        return true;
+    }
+
     /** Number of distinct captured pad slots that own this referent. */
     public int semanticCaptureOwnerCount() {
         return ownerSlotCount(PerlOwnerSlot.Kind.CLOSURE_PAD);
