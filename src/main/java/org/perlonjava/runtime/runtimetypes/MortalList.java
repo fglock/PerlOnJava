@@ -1139,8 +1139,7 @@ public class MortalList {
                         || base instanceof RuntimeArray
                         || base instanceof RuntimeCode);
                 boolean reachableCodeRef = base instanceof RuntimeCode
-                        && scalar.isStoredInRegisteredContainerOwner()
-                        && ReachabilityWalker.isScalarReachable(scalar);
+                        && scalar.isStoredInRegisteredContainerOwner();
                 if (scalar.refCountOwned && base.refCount > 0 && unblessedDiscardableContainer
                         && !reachableCodeRef) {
                     scalar.refCountOwned = false;

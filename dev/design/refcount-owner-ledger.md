@@ -596,6 +596,11 @@ external workload has drained before changing runtime source.
   `PerlStrongOwnerProofTest`, the full no-sweeps `make`, the closure/weak/
   DESTROY/resurrection/cycle matrix, and HTML-Tree `t/refloop.t` (8/8 on both
   backends) pass.
+- [x] On 2026-10-29, void-discard cleanup now uses registered container
+  membership directly as proof that a CODE scalar slot is live, avoiding a
+  duplicate scalar reachability query. `MortalizeRegisteredCodeOwnerFastPathTest`
+  verifies zero scalar queries and root walks; the no-sweeps full `make` passed
+  in 21m18s.
 
 ### Handoff: issue #1132 / PR #1204
 

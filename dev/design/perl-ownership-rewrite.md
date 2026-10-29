@@ -1432,6 +1432,14 @@ covers package ownership and temporary-container cleanup. The no-sweeps full
 tempfile lifetime, closure cleanup, weak/DESTROY, exception resurrection,
 weak-closure, and HTML-Tree `t/refloop.t` (8/8) passed on both backends.
 
+### Registered CODE owners skip a duplicate scalar query (2026-10-29)
+
+Void-discard cleanup now accepts registered container membership as direct
+proof that a CODE scalar slot is live, without repeating the same check through
+`ReachabilityWalker.isScalarReachable()`. `MortalizeRegisteredCodeOwnerFastPathTest`
+asserts that cleanup performs zero scalar reachability queries and root walks.
+The full `nice -n 19 make` gate passed in 21m18s with corrective sweeps disabled.
+
 ### Next steps
 
 1. Continue auditing `RuntimeScalar` and `MortalList` reachability fallbacks;
