@@ -1395,10 +1395,22 @@ values. `UncountedOwnerSlotZeroCountReleaseTest` covers all three paths and
 verifies exactly one final cleanup with no root query. Scalar and IO referents
 remain on the prior path until their owner-slot releases are covered.
 
+### Counted slots repair unblessed scalar overwrites (2026-10-29)
+
+`RuntimeScalar.setLargeRefCounted()` now restores a transient zero from
+surviving counted owner slots for blessed and unblessed referents. The new
+`CountedOwnerSlotRepairsUnblessedReferentTest` verifies that an unblessed hash
+with a remaining array-element owner keeps its weak observer alive, performs no
+root query or snapshot, and clears the observer when its final slot is released.
+The no-sweeps `nice -n 19 make` gate passes in 11m03s on `c1e5182a7`.
+Deferred unblessed cleanup retains its measured root-snapshot path for now; its
+existing tests require that behavior while owner identities remain incomplete.
+
 ### Next steps
 
-1. Audit remaining `RuntimeScalar` and `MortalList` reachability fallbacks;
-   add missing owner identities before removing each fallback.
+1. Continue auditing `RuntimeScalar` and `MortalList` reachability fallbacks;
+   scalar overwrite now uses counted slots, while deferred unblessed cleanup
+   still needs owner identities before its measured root-snapshot path can go.
 2. Replace the reflective weak-backref CODE capture walk with capture-owner
    identities and remove `weakBackrefCaptureSnapshot` while preserving captured
    aggregate lifetime and weak clearing.
