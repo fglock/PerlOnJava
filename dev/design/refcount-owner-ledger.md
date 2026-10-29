@@ -560,6 +560,10 @@ external workload has drained before changing runtime source.
   `UntrackedAggregateFirstWeakenFastPathTest`, the no-sweeps full `make`, and
   HTML-Tree 5.07 `t/refloop.t` (8/8 on both backends) pass. The package-root
   rescue proof remains for the legacy nested-aggregate case.
+- [x] On 2026-10-29, a surviving uncounted owner slot now preserves weak
+  observers when `RuntimeScalar` releases the last counted slot. The final
+  owner release performs direct cleanup without a root query; permanent
+  regression coverage is in `RuntimeScalarUncountedOwnerRepairTest`.
 
 ### Handoff: issue #1132 / PR #1204
 
@@ -577,14 +581,13 @@ pass. Preserve both focused ownership regressions when evolving the ledger.
 
 ### Next Steps
 
-1. Remove the remaining legacy package-root rescue proof and compatibility pin
-   only after every final-slot release path has direct coverage.
-2. Replace the reflective weak-backref CODE capture walk with capture-owner
-   identities and remove `weakBackrefCaptureSnapshot` while preserving weak
-   clearing and captured aggregate lifetime.
-3. Audit tracked zero-count transitions and temporary evaluation roots; add
+1. Audit remaining `RuntimeScalar` and `MortalList` reachability fallbacks; add
    explicit slot identities where ownership is missing, then remove each
    fallback only after system Perl and both backends pass.
+2. Remove the legacy package-root rescue pin after every final-slot release
+   path has direct coverage.
+3. Migrate real weak CODE captures to capture-owner identities while retaining
+   compatibility behavior for unrecorded legacy captures.
 4. Requalify HTML-Tree's 8/8 and the full suite after remaining owner changes;
    remove compatibility APIs after all gates pass.
 5. Keep Cookie2 formatting and content-coding exception handling separate from
