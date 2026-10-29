@@ -1440,11 +1440,21 @@ proof that a CODE scalar slot is live, without repeating the same check through
 asserts that cleanup performs zero scalar reachability queries and root walks.
 The full `nice -n 19 make` gate passed in 21m18s with corrective sweeps disabled.
 
+### Captured scalar-cell owners repair transient undercounts (2026-10-29)
+
+Immediate scalar overwrite and deferred cleanup now restore an unblessed
+referent count from its exact current scalar-cell owner when that cell has an
+active capture slot whose CODE owner is still live. This avoids root walks for
+captured scalar-cell ownership without treating conservative captures as Perl
+owners. `CapturedScalarCellOwnerFastPathTest` covers both cleanup paths, checks
+that root-query counters stay at zero, and verifies weak cleanup after the last
+capture is released. The full no-sweeps `nice -n 19 make` gate passes in 14m02s.
+
 ### Next steps
 
 1. Continue auditing `RuntimeScalar` and `MortalList` reachability fallbacks;
-   scalar-cell-only unblessed owners still rely on root snapshots until their
-   storage provenance is represented directly.
+   non-captured scalar-cell roots and aliased storage still need direct owner
+   provenance before their root-snapshot fallbacks can be removed.
 2. Replace the reflective weak-backref CODE capture walk with capture-owner
    identities and remove `weakBackrefCaptureSnapshot` while preserving captured
    aggregate lifetime and weak clearing.

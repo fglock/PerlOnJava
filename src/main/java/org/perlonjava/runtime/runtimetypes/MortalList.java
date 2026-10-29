@@ -1638,6 +1638,10 @@ public class MortalList {
                 // A current array/hash element is direct evidence for this
                 // unblessed referent; scalar-cell-only owners still use the
                 // root snapshot to distinguish Perl roots from stale wrappers.
+            } else if (base.restoreCapturedScalarCellOwnerSlotRefCount()) {
+                // An active closure's explicit capture identity proves that
+                // its scalar cell still owns this referent, even when the
+                // cell is no longer a package or active-lexical root.
             } else if (base instanceof RuntimeCode code
                     && hasWeakRefs
                     && (RuntimeCode.isActiveCode(code)

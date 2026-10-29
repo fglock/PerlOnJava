@@ -16,6 +16,7 @@ priorities and future plans.
 - Avoid duplicate scalar reachability queries when a registered container proves a live CODE owner (#1649).
 - Use direct non-counted Perl owner slots to defer tail-call cleanup without a root walk; ignore temporary runtime roots (#1649).
 - Repair transient unblessed referent undercounts from verified array/hash element slots during overwrite and deferred cleanup, avoiding root walks (#1649).
+- Repair unblessed referent undercounts from captured scalar-cell owners only while a live closure owns the cell, in overwrite and deferred cleanup (#1649).
 - Remove live-scalar-registry reachability from first-weaken, tail-call, and async-Future owner decisions.
 - Release weakly tracked referents from their final uncounted owner slot without a root walk.
 
