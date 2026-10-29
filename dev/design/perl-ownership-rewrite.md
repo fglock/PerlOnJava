@@ -1322,18 +1322,21 @@ slot leaves. `RuntimeScalar.undefine()` refreshes the scalar's owner identity,
 and counted-slot promotion records the new owner before releasing the old one.
 The new Java two-owner regression and Perl package-array/hash regression pass;
 the six Perl assertions pass on system Perl and both PerlOnJava backends with
-corrective sweeps disabled. The full no-sweeps `nice -n 19 make` passes in
-10m34s. HTML-Tree 5.07 `t/refloop.t` also passes 8/8 on JVM and interpreter
-with sweeps disabled. The first-weaken root proof remains and is the next
-aggregate-ownership step.
+corrective sweeps disabled. The first-weaken root query now returns from the
+owner-slot ledger before inspecting package edges; its regression records one
+query and zero edges or nodes visited. The full no-sweeps `nice -n 19 make`
+passes in 11m. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends, and
+closure, weak, DESTROY, resurrection, and cycle regressions pass on both
+backends with sweeps disabled. The root-walk fallback remains for targets
+without direct owner identities.
 
 ### Next steps
 
 1. Diagnose the four remaining sweep-disabled JVM lifetime failures listed
    above, keeping the temporary-file wrapper and generator-state cases separate
    until evidence connects them.
-2. Cover remaining package-root release paths for aggregate edges, then remove
-   the first-weak-transition root proof.
+2. Add direct owner identities to remaining targets that need the first-weaken
+   root-walk fallback, then remove that fallback.
 3. Replace the reflective weak-backref CODE capture walk with capture-owner
    identities and remove `weakBackrefCaptureSnapshot` while preserving captured
    aggregate lifetime and weak clearing.
