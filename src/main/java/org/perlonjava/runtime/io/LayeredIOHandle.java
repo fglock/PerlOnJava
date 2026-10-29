@@ -830,6 +830,11 @@ public class LayeredIOHandle implements IOHandle {
         return delegate.eof();
     }
 
+    @Override
+    public RuntimeScalar clearerr() {
+        return delegate.clearerr();
+    }
+
     /**
      * Returns the current position in the file.
      *

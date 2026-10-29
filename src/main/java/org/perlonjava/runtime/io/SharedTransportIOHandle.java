@@ -56,6 +56,7 @@ public final class SharedTransportIOHandle implements IOHandle {
     @Override public RuntimeScalar fileno() { return open() ? delegate.fileno() : closed("fileno"); }
     @Override public boolean isReadReady() { return !open() || delegate.isReadReady(); }
     @Override public RuntimeScalar eof() { return open() ? delegate.eof() : scalarTrue; }
+    @Override public RuntimeScalar clearerr() { return open() ? delegate.clearerr() : closed("clearerr"); }
     @Override public RuntimeScalar tell() { return open() ? delegate.tell() : closed("tell"); }
     @Override public RuntimeScalar seek(long pos, int whence) { return open() ? delegate.seek(pos, whence) : closed("seek"); }
     @Override public RuntimeScalar truncate(long length) { return open() ? delegate.truncate(length) : closed("truncate"); }

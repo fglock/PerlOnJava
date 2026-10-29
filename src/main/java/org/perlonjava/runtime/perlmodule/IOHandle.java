@@ -106,9 +106,10 @@ public class IOHandle extends PerlModuleBase {
             return new RuntimeList(new RuntimeScalar(-1));
         }
 
-        // Clear $!
+        RuntimeScalar result = fh.ioHandle.clearerr();
+        // Clear $! after the underlying handle has reset its EOF/error state.
         GlobalVariable.getGlobalVariable("main::!").set("");
-        return new RuntimeList(new RuntimeScalar(0));
+        return result.getList();
     }
 
     /**
