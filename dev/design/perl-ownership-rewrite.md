@@ -1504,6 +1504,15 @@ cause a root query. The test passes in the full no-sweeps `nice -n 19 make`
 gate (13m06s); HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with
 sweeps disabled.
 
+### Package scalar value slots for tracked referents (2026-10-29)
+
+A package scalar cell now records an `UNTRACKED_REFERENCE` identity for a
+strong referent value when the cell has no counted owner slot. The identity
+does not inflate the legacy count and is released with the package scalar slot.
+A regression checks that an independent counted owner survives until its own
+release. The full no-sweeps `nice -n 19 make` gate passes in 10m35s, and
+HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with sweeps disabled.
+
 ### Next steps
 
 1. Continue auditing `RuntimeScalar` and `MortalList` reachability fallbacks;
