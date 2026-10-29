@@ -554,6 +554,12 @@ external workload has drained before changing runtime source.
   clears weak observers without a root walk or compatibility pin.
   `WeakUncountedOwnerSlotFastPathTest`, the no-sweeps full `make`, and the weak,
   DESTROY, resurrection, closure, cycle, and HTML-Tree 8/8 matrix pass.
+- [x] On 2026-10-29, first weaken of an untracked aggregate now keeps a
+  transitional `WEAKLY_TRACKED` sentinel without the generic root-graph
+  fallback; its durable slot release clears the weak observer directly.
+  `UntrackedAggregateFirstWeakenFastPathTest`, the no-sweeps full `make`, and
+  HTML-Tree 5.07 `t/refloop.t` (8/8 on both backends) pass. The package-root
+  rescue proof remains for the legacy nested-aggregate case.
 
 ### Handoff: issue #1132 / PR #1204
 
@@ -571,9 +577,8 @@ pass. Preserve both focused ownership regressions when evolving the ledger.
 
 ### Next Steps
 
-1. Finish the untracked aggregate first-weaken path by removing its remaining
-   compatibility pin/root proof only after each final-slot release path has
-   direct coverage.
+1. Remove the remaining legacy package-root rescue proof and compatibility pin
+   only after every final-slot release path has direct coverage.
 2. Replace the reflective weak-backref CODE capture walk with capture-owner
    identities and remove `weakBackrefCaptureSnapshot` while preserving weak
    clearing and captured aggregate lifetime.
