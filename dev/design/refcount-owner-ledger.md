@@ -549,6 +549,11 @@ external workload has drained before changing runtime source.
   backends) passed. The first-weaken root-query entry now returns from the
   owner-slot ledger before inspecting package edges; its regression sees zero
   edges and nodes visited.
+- [x] On 2026-10-29, tracked zero-count weakening now trusts surviving
+  uncounted owner slots directly and enters `WEAKLY_TRACKED`; final slot release
+  clears weak observers without a root walk or compatibility pin.
+  `WeakUncountedOwnerSlotFastPathTest`, the no-sweeps full `make`, and the weak,
+  DESTROY, resurrection, closure, cycle, and HTML-Tree 8/8 matrix pass.
 
 ### Handoff: issue #1132 / PR #1204
 
@@ -566,8 +571,9 @@ pass. Preserve both focused ownership regressions when evolving the ledger.
 
 ### Next Steps
 
-1. Identify first-weaken targets that still need graph reachability; add direct
-   owner identities and focused coverage before removing that fallback.
+1. Finish the untracked aggregate first-weaken path by removing its remaining
+   compatibility pin/root proof only after each final-slot release path has
+   direct coverage.
 2. Replace the reflective weak-backref CODE capture walk with capture-owner
    identities and remove `weakBackrefCaptureSnapshot` while preserving weak
    clearing and captured aggregate lifetime.

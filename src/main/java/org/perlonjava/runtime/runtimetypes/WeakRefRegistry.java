@@ -197,8 +197,18 @@ public class WeakRefRegistry {
                         && !(base instanceof RuntimeScalar scalar
                         && scalar.ephemeralScalarReferenceReferent)
                         && hasWeakRefsTo(base)
-                        && (ReachabilityWalker.isReachableFromRoots(base)
-                        || ReachabilityWalker.isReachableFromLiveCodeCaptures(base)
+                        && base.hasOwnerSlots()) {
+                    // Uncounted owner identities are sufficient evidence too.
+                    // Enter WEAKLY_TRACKED so their final release can clear the
+                    // weak refs directly, without rebuilding the owner graph or
+                    // leaving a compatibility count behind.
+                    base.refCount = WEAKLY_TRACKED;
+                } else if (!(identifiedOwner && snapshotRoots.isEmpty()
+                        && MortalList.canTrustFinalCountedRelease(base))
+                        && !(base instanceof RuntimeScalar scalar
+                        && scalar.ephemeralScalarReferenceReferent)
+                        && hasWeakRefsTo(base)
+                        && (ReachabilityWalker.isReachableFromLiveCodeCaptures(base)
                         || ReachabilityWalker.isReachableFromStrongRoots(base, snapshotRoots)
                         || RuntimeCode.isInstalledPadConstant(base))) {
                     // A temporary probe can be weakened without owning the last
