@@ -1362,10 +1362,20 @@ for aggregates already nested in a package global. Added
 direct final-slot cleanup. The no-sweeps full `nice -n 19 make` gate passes in
 10m34s; HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends.
 
+### Counted scalar release trusts surviving uncounted slots (2026-10-29)
+
+When overwriting the last counted scalar reference leaves an uncounted owner
+slot, `RuntimeScalar` now transitions a non-CODE referent to `WEAKLY_TRACKED`
+directly. The final slot release then clears weak observers without a
+package-root query. `RuntimeScalarUncountedOwnerRepairTest` covers the
+undercount repair and final release with corrective sweeps disabled. CODE keeps
+its native active-frame zero-count protocol; remaining root checks protect
+owners that do not yet have slot identities.
+
 ### Next steps
 
-1. Remove the remaining legacy package-root rescue proof and compatibility pin
-   after direct owner-slot coverage proves each release path.
+1. Audit remaining `RuntimeScalar` and `MortalList` reachability fallbacks;
+   add missing owner identities before removing each fallback.
 2. Replace the reflective weak-backref CODE capture walk with capture-owner
    identities and remove `weakBackrefCaptureSnapshot` while preserving captured
    aggregate lifetime and weak clearing.
