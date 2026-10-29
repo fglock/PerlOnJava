@@ -1332,14 +1332,14 @@ backends with sweeps disabled.
 ### JVM-live scalar registry is not Perl ownership (2026-10-29)
 
 The zero-count branch in `WeakRefRegistry.weaken` no longer uses
-`isReachableFromLiveScalarRegistry` to rescue a referent. A Java-live wrapper
-in the weak-key registry is not a Perl owner; durable scalar owners must be
-represented by owner slots or another explicit Perl root. The new
-`ScalarRegistryIsNotPerlOwnerTest` covers a registry-only wrapper with no owner
-slot. The full no-sweeps `nice -n 19 make` gate passes in 10m31s, and eight
-weak, DESTROY, resurrection, closure, and cycle tests pass on both backends.
-Other reachability callers still use scalar-registry snapshots and remain to
-be migrated.
+`isReachableFromLiveScalarRegistry` to rescue a referent. Tail-call cleanup
+also stopped using that forced-GC registry scan. A Java-live wrapper in the
+weak-key registry is not a Perl owner; durable scalar owners must be
+represented by owner slots or another explicit Perl root.
+`ScalarRegistryIsNotPerlOwnerTest` covers first-weaken cleanup, and
+`TailCallScalarRegistryOwnershipTest` covers the released tail-call owner.
+The no-sweeps full `nice -n 19 make` gate passes; other reachability callers
+still use scalar-registry snapshots and remain to be migrated.
 
 ### Uncounted owner slots release without a root walk (2026-10-29)
 

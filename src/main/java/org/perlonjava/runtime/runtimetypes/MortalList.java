@@ -891,9 +891,10 @@ public class MortalList {
     }
 
     private static boolean reachableTailCallArgReferent(RuntimeBase base) {
+        // A JVM-live scalar-registry entry is not a Perl owner. The root walk
+        // filters stale wrappers, while explicit captures are checked separately.
         return WeakRefRegistry.hasWeakRefsTo(base)
                 && (ReachabilityWalker.isReachableFromRoots(base)
-                || ReachabilityWalker.isReachableFromLiveScalarRegistry(base)
                 || ReachabilityWalker.isReachableFromLiveCodeCaptures(base));
     }
 

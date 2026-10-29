@@ -576,6 +576,10 @@ external workload has drained before changing runtime source.
   verifies each path and final destruction after the sole owner slot leaves.
   Scalar and IO referents still need owner-slot release coverage before this
   rule can safely apply to them.
+- [x] On 2026-10-29, tail-call zero-count release no longer treats a
+  Java-live scalar-registry wrapper as a Perl owner or forces GC to inspect it.
+  `TailCallScalarRegistryOwnershipTest` verifies that a released tail-call
+  referent is destroyed while its scalar wrapper remains Java-live.
 
 ### Handoff: issue #1132 / PR #1204
 
