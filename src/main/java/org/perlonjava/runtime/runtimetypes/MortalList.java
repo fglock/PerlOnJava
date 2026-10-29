@@ -1635,6 +1635,10 @@ public class MortalList {
                 // For blessed referents, remaining counted slots prove that
                 // the transient zero was an undercount. Unblessed aggregates
                 // still need a root snapshot to reject stale scalar wrappers.
+            } else if (base.restoreAggregateElementOwnerSlotRefCount()) {
+                // A current array/hash element is direct evidence for this
+                // unblessed referent; scalar-cell-only owners still use the
+                // root snapshot to distinguish Perl roots from stale wrappers.
             } else if (base instanceof RuntimeCode code
                     && hasWeakRefs
                     && (RuntimeCode.isActiveCode(code)

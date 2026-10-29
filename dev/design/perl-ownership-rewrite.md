@@ -1397,20 +1397,26 @@ remain on the prior path until their owner-slot releases are covered.
 
 ### Counted slots repair unblessed scalar overwrites (2026-10-29)
 
-`RuntimeScalar.setLargeRefCounted()` now restores a transient zero from
-surviving counted owner slots for blessed and unblessed referents. The new
-`CountedOwnerSlotRepairsUnblessedReferentTest` verifies that an unblessed hash
-with a remaining array-element owner keeps its weak observer alive, performs no
-root query or snapshot, and clears the observer when its final slot is released.
-The no-sweeps `nice -n 19 make` gate passes in 11m03s on `c1e5182a7`.
-Deferred unblessed cleanup retains its measured root-snapshot path for now; its
-existing tests require that behavior while owner identities remain incomplete.
+`RuntimeScalar.setLargeRefCounted()` and `MortalList.processDeferredBase()` now
+restore transient zeros from verified, current array/hash element slots for
+unblessed referents; blessed referents keep the counted-slot path. The check
+requires that the owner scalar still points at the referent and remains in its
+recorded container. `CountedOwnerSlotRepairsUnblessedReferentTest` covers scalar
+overwrite, and `DeferredUnblessedAggregateOwnerSlotRepairTest` covers deferred
+release. Both verify no root query or snapshot and weak clearing after the final
+slot leaves. Scalar-cell-only owners without container provenance still use the
+root snapshot, so stale wrappers are not mistaken for live Perl roots.
+
+The full no-sweeps `nice -n 19 make` gate passes in 11m03s. Six lifecycle tests
+pass 83/83 on both backends, and HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both
+backends with sweeps disabled. The existing scalar-wrapper snapshot tests also
+pass in the full gate.
 
 ### Next steps
 
 1. Continue auditing `RuntimeScalar` and `MortalList` reachability fallbacks;
-   scalar overwrite now uses counted slots, while deferred unblessed cleanup
-   still needs owner identities before its measured root-snapshot path can go.
+   scalar-cell-only unblessed owners still rely on root snapshots until their
+   storage provenance is represented directly.
 2. Replace the reflective weak-backref CODE capture walk with capture-owner
    identities and remove `weakBackrefCaptureSnapshot` while preserving captured
    aggregate lifetime and weak clearing.
