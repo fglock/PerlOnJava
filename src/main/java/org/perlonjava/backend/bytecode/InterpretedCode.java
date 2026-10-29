@@ -320,7 +320,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         if (sourceName == null || sourceName.isEmpty()) {
             return true;
         }
-        if ("-e".equals(sourceName)) {
+        if ("-e".equals(sourceName) || sourceName.charAt(0) == '(') {
             return true;
         }
         return !new java.io.File(sourceName).isFile();
