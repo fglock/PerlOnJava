@@ -1885,6 +1885,11 @@ public class ReachabilityWalker {
         if (target == null) return false;
         ReachabilityQueryStats stats = MortalList.activeReachabilityQueryStats();
         if (stats != null) stats.rootQueries++;
+        // An active owner slot is already a direct Perl-ownership proof for
+        // ordinary root checks. Use it before scanning package containers;
+        // global-only callers still need to distinguish package roots from
+        // lexical and runtime-owned slots.
+        if (!globalOnly && target.hasOwnerSlots()) return true;
         // Node and edge caps bound both graph traversal and root seeding. An
         // incomplete proof conservatively retains an unresolved target.
         final int MAX_VISITS = MAX_ROOT_SNAPSHOT_VISITS;
