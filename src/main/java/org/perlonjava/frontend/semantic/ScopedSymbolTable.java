@@ -1171,8 +1171,11 @@ public class ScopedSymbolTable {
     }
 
     public Set<String> getDisabledWarningCategories() {
-        Set<String> categories = new HashSet<>();
         BitSet disabled = warningDisabledStack.peek();
+        if (disabled.isEmpty()) {
+            return Collections.emptySet();
+        }
+        Set<String> categories = new HashSet<>();
         for (Map.Entry<String, Integer> entry : warningBitPositions().entrySet()) {
             int bitPosition = entry.getValue();
             if (bitPosition >= 0 && disabled.get(bitPosition)) {
