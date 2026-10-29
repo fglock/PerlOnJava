@@ -68,6 +68,14 @@ is(length(pack('D', 0)), $Config::Config{longdblsize},
    'Config reports the implemented long-double pack width');
 is(unpack('%54Q', pack('Q', 18014398509481983)), 18014398509481983,
    'wide Q checksum retains integer precision modulo 2**54');
+is(unpack('%63Q*', pack('Q*', 0, 1, 9223372036854775807,
+                       9223372036854775808, 18446744073709551615)),
+   '9223372036854775807', 'wide Q checksum preserves the exact 63-bit masked sum');
+for my $bits (54, 63) {
+    my $expected = $bits == 54 ? '18014398509481983' : '9223372036854775807';
+    is(unpack("%${bits}c*", pack('c*', -128, -1, 0, 1, 127)), $expected,
+       "wide c checksum retains integer precision modulo 2**$bits");
+}
 is(unpack('w', pack('w', '18014398509481982')), '18014398509481982',
    'BER preserves a large exact integer string');
 {

@@ -6,6 +6,10 @@ import org.perlonjava.runtime.runtimetypes.*;
 import org.perlonjava.runtime.regex.RuntimeRegex;
 import org.sqlite.Function;
 
+import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.sql.*;
 import java.util.Enumeration;
@@ -599,17 +603,9 @@ public class DBI extends PerlModuleBase {
                 ResultSetMetaData metaData = rs.getMetaData();
                 int colCount = metaData.getColumnCount();
                 boolean sqliteUnicode = usesSqliteUnicodeStrings(dbh);
-                // Convert each column value to string and add to row array.
-                // Perl 5's DBD::SQLite (without sqlite_unicode) returns byte strings
-                // (no UTF-8 flag). JDBC returns Java Strings which are decoded Unicode.
-                // To match Perl 5 behavior, we must UTF-8 encode the JDBC string and
-                // return it as BYTE_STRING. This is equivalent to sqlite_unicode=0.
-                //
-                // Why: In Perl 5, DBD::SQLite works at the byte level — strings go in
-                // as raw bytes (UTF-8 encoded for STRING, raw for BYTE_STRING) and come
-                // back as raw bytes without the UTF-8 flag. JDBC works at the character
-                // level — it always decodes UTF-8 on fetch. Re-encoding to UTF-8 bytes
-                // here restores the byte-level behavior that Perl code expects.
+                // DBD::SQLite normally returns byte strings. SQLite TEXT can also
+                // contain arbitrary bytes, so sqliteTextScalar reads the raw bytes
+                // before JDBC's String conversion can replace invalid UTF-8 sequences.
                 for (int i = 1; i <= colCount; i++) {
                     Object obj = rs.getObject(i);
                     RuntimeScalar val;
@@ -618,6 +614,8 @@ public class DBI extends PerlModuleBase {
                         // a Java String via ISO-8859-1 and tagging as BYTE_STRING.
                         val = new RuntimeScalar(new String(bytes, StandardCharsets.ISO_8859_1));
                         val.type = RuntimeScalarType.BYTE_STRING;
+                    } else if (obj instanceof String && isSqliteConnection(dbh)) {
+                        val = sqliteTextScalar(rs, i, sqliteUnicode);
                     } else {
                         val = RuntimeScalar.newScalarOrString(obj);
                         if (!sqliteUnicode && val.type == RuntimeScalarType.STRING && val.value instanceof String s) {
@@ -672,6 +670,33 @@ public class DBI extends PerlModuleBase {
             return true;
         }
         return stringMode != null && stringMode.getInt() == 5;
+    }
+
+    private static boolean isSqliteConnection(RuntimeHash dbh) {
+        RuntimeScalar name = dbh.get("Name");
+        return name != null && name.toString().toLowerCase().startsWith("jdbc:sqlite:");
+    }
+
+    /**
+     * SQLite TEXT can contain arbitrary bytes despite its storage class. JDBC's
+     * getObject() decodes those bytes as UTF-8 and replaces invalid sequences;
+     * fetch the raw column bytes so DBD::SQLite's byte-string behavior is kept.
+     */
+    private static RuntimeScalar sqliteTextScalar(ResultSet rs, int column, boolean sqliteUnicode)
+            throws SQLException {
+        byte[] bytes = rs.getBytes(column);
+        if (!sqliteUnicode) {
+            return new RuntimeScalar(bytes);
+        }
+        try {
+            CharBuffer decoded = StandardCharsets.UTF_8.newDecoder()
+                    .onMalformedInput(CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(CodingErrorAction.REPORT)
+                    .decode(ByteBuffer.wrap(bytes));
+            return new RuntimeScalar(decoded.toString());
+        } catch (CharacterCodingException invalidUtf8) {
+            return new RuntimeScalar(bytes);
+        }
     }
 
     private static RuntimeArray columnNamesAttribute(RuntimeHash sth, String key) {
@@ -758,7 +783,7 @@ public class DBI extends PerlModuleBase {
                 }
 
                 // For each column, add column name -> value pair to hash.
-                // See fetchrow_arrayref for rationale on UTF-8 encode to BYTE_STRING.
+                // Use the same raw-byte handling as fetchrow_arrayref for SQLite TEXT.
                 for (int i = 1; i <= colCount; i++) {
                     String columnName = columnNames.get(i - 1).toString();
                     Object value = rs.getObject(i);
@@ -766,6 +791,8 @@ public class DBI extends PerlModuleBase {
                     if (value instanceof byte[] bytes) {
                         val = new RuntimeScalar(new String(bytes, StandardCharsets.ISO_8859_1));
                         val.type = RuntimeScalarType.BYTE_STRING;
+                    } else if (value instanceof String && isSqliteConnection(dbh)) {
+                        val = sqliteTextScalar(rs, i, sqliteUnicode);
                     } else {
                         val = RuntimeScalar.newScalarOrString(value);
                         if (!sqliteUnicode && val.type == RuntimeScalarType.STRING && val.value instanceof String s) {

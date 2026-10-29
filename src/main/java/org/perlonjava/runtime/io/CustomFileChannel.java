@@ -526,6 +526,18 @@ public class CustomFileChannel implements IOHandle {
     }
 
     /**
+     * Clear EOF state so a regular file can be read again after it grows.
+     * Keep any unread bytes in the read-ahead buffer; only discard the physical
+     * EOF observation so the next read can probe the channel again.
+     */
+    @Override
+    public RuntimeScalar clearerr() {
+        isEOF = false;
+        physicalEof = false;
+        return new RuntimeScalar(0);
+    }
+
+    /**
      * Gets the current position in the file.
      *
      * @return RuntimeScalar containing the current byte position, or -1 on error

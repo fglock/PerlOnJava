@@ -241,6 +241,15 @@ public interface IOHandle {
         return RuntimeIO.handleIOError("eof operation is not supported.");
     }
 
+    /**
+     * Clears the handle's EOF indicator. The Perl-level IO::Handle method also
+     * clears the process error variable; handles with buffered EOF state must
+     * reset that state here so reads can resume after the underlying source grows.
+     */
+    default RuntimeScalar clearerr() {
+        return new RuntimeScalar(0);
+    }
+
     default RuntimeScalar tell() {
         return RuntimeIO.handleIOError("tell operation is not supported.");
     }

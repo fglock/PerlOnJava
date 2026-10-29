@@ -215,6 +215,12 @@ public class DupIOHandle implements IOHandle {
     }
 
     @Override
+    public RuntimeScalar clearerr() {
+        if (closed) return handleClosed("clearerr");
+        return delegate.clearerr();
+    }
+
+    @Override
     public RuntimeScalar tell() {
         if (closed) return handleClosed("tell");
         return delegate.tell();
