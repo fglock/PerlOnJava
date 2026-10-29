@@ -483,22 +483,10 @@ public class Unpack {
                                 BigInteger mask = BigInteger.ONE.shiftLeft(checksumBits).subtract(BigInteger.ONE);
                                 bigChecksum = bigChecksum.and(mask);
 
-                                // Now check if the masked value would lose precision as a double.
-                                double maskedAsDouble = bigChecksum.doubleValue();
-                                if ((format != 'Q' && format != 'J')
-                                        && maskedAsDouble > 0 && maskedAsDouble == maskedAsDouble - 1.0) {
-                                    values.add(new RuntimeScalar(0));
-                                } else {
-                                    // Perl's unsigned-native checksum promotion at
-                                    // 63 bits retains the carry that crosses the
-                                    // signed-long boundary.
-                                    if ((format == 'Q' || format == 'J') && checksumBits == 63
-                                            && bigChecksum.equals(BigInteger.ONE.shiftLeft(63).subtract(BigInteger.ONE))) {
-                                        values.add(new RuntimeScalar(bigChecksum.add(BigInteger.TWO)));
-                                    } else {
-                                        values.add(new RuntimeScalar(bigChecksum.longValue()));
-                                    }
-                                }
+                                // Keep integer checksums exact. Converting to double
+                                // here incorrectly turns values such as 2**54 - 1
+                                // into zero when the double rounds up to 2**54.
+                                values.add(new RuntimeScalar(bigChecksum.longValue()));
                             } else if (checksumBits == 64) {
                                 // 64-bit mask: 2^64 - 1 = 0xFFFFFFFFFFFFFFFF
                                 BigInteger mask = BigInteger.ONE.shiftLeft(64).subtract(BigInteger.ONE);

@@ -139,6 +139,12 @@ public class NativeFdIOHandle implements IOHandle {
     }
 
     @Override
+    public RuntimeScalar clearerr() {
+        eofReached = false;
+        return new RuntimeScalar(0);
+    }
+
+    @Override
     public boolean isReadReady() {
         return !closed;
     }
