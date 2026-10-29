@@ -1459,14 +1459,29 @@ walk the root graph. `FinalCodeOwnerCaptureReleaseFastPathTest` verifies the
 final pad capture is released with zero root queries and snapshots. The full
 no-sweeps `nice -n 19 make` gate passes in 13m16s.
 
+### Aggregate captures release from CODE owner identities (2026-10-29)
+
+Scope-exit cleanup now decides whether a captured aggregate's CODE owner is
+live from owner-slot identities, ignoring a stale positive compatibility
+count. Compiled regex callbacks now keep their CODE object through a typed
+owner slot, so their captured pads survive until the regex releases that
+callback. `ClosureAggregateOwnerIdentityReleaseTest` covers stale-count
+release and retention by a scalar owner; the existing callback DESTROY test
+covers callback lifetime. The legacy weak-backref graph walk remains for
+captures that have no recorded owner identity. The no-sweeps full `make` gate
+passed in 15m56s. The callback DESTROY test passed 3/3 on standard Perl and
+both PerlOnJava backends; HTML-Tree `t/refloop.t` passed 8/8 on both backends.
+The owner-slot regressions cover stale positive CODE counts and preservation by
+live scalar and callback owners.
+
 ### Next steps
 
 1. Continue auditing `RuntimeScalar` and `MortalList` reachability fallbacks;
    non-captured scalar-cell roots and aliased storage still need direct owner
    provenance before their root-snapshot fallbacks can be removed.
-2. Replace the reflective weak-backref CODE capture walk with capture-owner
-   identities and remove `weakBackrefCaptureSnapshot` while preserving captured
-   aggregate lifetime and weak clearing.
+2. Migrate remaining weak-backref capture cases to explicit owner identities,
+   then remove `weakBackrefCaptureSnapshot` and preserve aggregate lifetime and
+   weak clearing without the compatibility graph walk.
 3. In one ownership-family batch, finish CODE template and optree pins, raw
    descriptor/embedding borrows, native call buffers, escaping lvalues and
    refaliases, and targeted try/finally returns. Add regressions before running

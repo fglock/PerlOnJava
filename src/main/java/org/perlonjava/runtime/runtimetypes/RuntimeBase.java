@@ -679,12 +679,13 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         return snapshot.isEmpty() ? java.util.List.of() : snapshot;
     }
 
-    /** Release closure pads whose CODE owners have no remaining Perl owner. */
+    /** Release closure pads whose CODE owners have no surviving owner identity. */
     void releaseUnownedClosureCaptures() {
         for (PerlOwnerSlot ownerSlot : closureCaptureOwnerSnapshot()) {
             if (!ownerSlot.isActive()) continue;
             RuntimeCode captureOwner = ownerSlot.captureOwner();
-            if (captureOwner != null && !captureOwner.hasPerlOwnerForCapture()) {
+            if (captureOwner != null
+                    && !captureOwner.hasPerlOwnerForCaptureOtherThan(null)) {
                 captureOwner.releaseCaptures();
             }
         }

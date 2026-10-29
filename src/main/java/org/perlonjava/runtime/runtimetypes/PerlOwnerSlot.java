@@ -22,6 +22,8 @@ public final class PerlOwnerSlot {
         SCALAR_CAPTURE,
         SCALAR_CELL,
         CODE_SLOT,
+        /** Executable regex callback retaining its closure CODE object. */
+        REGEX_CALLBACK,
         ARRAY_ELEMENT,
         HASH_ELEMENT,
         ARGUMENT_VALUE,
