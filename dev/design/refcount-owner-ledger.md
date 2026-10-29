@@ -546,7 +546,9 @@ external workload has drained before changing runtime source.
   slot leaves. Added Java owner-release coverage and six Perl assertions for
   package-array clear and package-hash delete; system Perl, both backends,
   the full no-sweeps `make`, and HTML-Tree 5.07 `t/refloop.t` (8/8 on both
-  backends) passed.
+  backends) passed. The first-weaken root-query entry now returns from the
+  owner-slot ledger before inspecting package edges; its regression sees zero
+  edges and nodes visited.
 
 ### Handoff: issue #1132 / PR #1204
 
