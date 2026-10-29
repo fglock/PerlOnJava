@@ -548,11 +548,24 @@ sub _install_pure_perl {
             }
         }
     }
+
+    # ExtUtils::MakeMaker subclasses use post_initialize to extend the
+    # initialized MakeMaker object, including its PM mapping.  Older pure-Perl
+    # distributions use this to add generated data files to the normal
+    # pm_to_blib staging pass (for example, Lingua::ZH::Romanize::Pinyin).
+    # Run the hook after discovering the default mapping and before deciding
+    # whether the distribution has installable files.
+    my $mm = PerlOnJava::MM::Installed->new($args);
+    $mm->{PM} = { %pm };
+    $mm->{clean} = {};
+    if (defined &MY::post_initialize) {
+        $mm->{post_initialize} = MY::post_initialize($mm) // '';
+        %pm = %{$mm->{PM}} if ref $mm->{PM} eq 'HASH';
+    }
     
     if (!%pm) {
         print "Warning: No installable files found (no .pm, .pl, .dat, etc.).\n";
         print "Expected structure: lib/Your/Module.pm\n\n";
-        my $mm = PerlOnJava::MM::Installed->new($args);
         _create_mymeta($name, $version, $args);
         _create_install_makefile($name, $version, $args, {}, {}, $mm);
         _create_build_script_proxy() if -f 'Build.PL';
@@ -635,8 +648,6 @@ sub _install_pure_perl {
     print "\n";
     
     # Create MM object first (needed by postamble)
-    my $mm = PerlOnJava::MM::Installed->new($args);
-    
     # Create MYMETA.yml for CPAN.pm dependency resolution
     _create_mymeta($name, $version, $args);
     
@@ -1091,6 +1102,9 @@ sub _create_install_makefile {
     my $depend_rules_str = _make_depend_rules($args->{depend});
     
     my $makefile_comments = _make_makefile_comments($args, $distname, $version);
+    my $post_initialize = $mm->{post_initialize} || '';
+    $post_initialize .= "\n" if length($post_initialize)
+        && $post_initialize !~ /\n\z/;
 
     # Honor user-supplied `macro => { ... }` from WriteMakefile by emitting
     # extra Makefile macro definitions.  LaTeXML and others stuff custom
@@ -1113,6 +1127,7 @@ sub _create_install_makefile {
 # This matches standard ExtUtils::MakeMaker semantics so that 'cpan -t'
 # (test only) does not install, while 'cpan -i' (install) does.
 $makefile_comments
+$post_initialize
 NAME = $name
 DISTNAME = $distname
 VERSION = $version

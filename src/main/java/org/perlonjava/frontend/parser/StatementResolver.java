@@ -1693,7 +1693,8 @@ public class StatementResolver {
                         // If we've already seen a fat-comma hash indicator at depth 1,
                         // keep preferring hash interpretation. This avoids false block
                         // classification when keyword-like words leak from quoted payload.
-                        if (!hasHashIndicator && !nextToken.text.equals("=>") && !nextToken.text.equals(",")) {
+                        if ((!hasHashIndicator || nextToken.text.equals("("))
+                                && !nextToken.text.equals("=>") && !nextToken.text.equals(",")) {
                             // Statement modifier - definitive block indicator
                             if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral found statement modifier (block indicator)");
                             hasBlockIndicator = true;

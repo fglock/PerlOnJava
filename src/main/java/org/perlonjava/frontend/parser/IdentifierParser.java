@@ -287,7 +287,7 @@ public class IdentifierParser {
 
         // Special case for special variables like `$|`, `$'`, `$(`, `$)`, etc.
         char firstChar = token.text.charAt(0);
-        if (token.type == LexerTokenType.OPERATOR && "!|/*+-<>&~.=%'?()".indexOf(firstChar) >= 0) {
+        if (token.type == LexerTokenType.OPERATOR && "!|/*+-<>&~.=%'?()]".indexOf(firstChar) >= 0) {
             // Special case: * followed by { is glob dereference when inside braces
             // @{*{expr}} should be parsed as @{ *{expr} }, not @*{expr} (hash slice on @*)
             // But @*{key} outside braces IS a hash slice on @*, so only apply when insideBraces
