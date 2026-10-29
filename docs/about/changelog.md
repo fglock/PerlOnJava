@@ -6,6 +6,8 @@ priorities and future plans.
 
 ## Work in progress
 
+- Reduce repeated eval STRING overhead with lazy state and caching for context-free integer-literal evals (#1911).
+
 - Preserve arbitrary bytes in SQLite text columns across DBI fetches (#1923).
 
 - Run MakeMaker `MY::post_initialize` hooks so generated files join `pm_to_blib`, and parse Perl's `$]` version variable.

@@ -986,6 +986,50 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     private static Map<String, Class<?>> evalCache() {
         return PerlRuntime.current().runtimeCodeState().evalCache;
     }
+
+    private static Map<String, InterpretedCode> interpreterEvalCache() {
+        return PerlRuntime.current().runtimeCodeState().interpreterEvalCache;
+    }
+
+    /**
+     * Eval parsing can execute compile-time code and resolve names against
+     * mutable lexical and package state. The interpreter cache currently has
+     * no complete fingerprint for that state, so admit only decimal integer
+     * literals, whose compiled form is independent of those side effects.
+     */
+    private static boolean isCacheableInterpreterEvalSource(String source) {
+        if (source == null || source.length() > 32) {
+            return false;
+        }
+        int index = 0;
+        while (index < source.length() && isEvalAsciiWhitespace(source.charAt(index))) {
+            index++;
+        }
+        if (index < source.length() && (source.charAt(index) == '+' || source.charAt(index) == '-')) {
+            index++;
+        }
+        int digitCount = 0;
+        while (index < source.length()) {
+            char current = source.charAt(index);
+            if (current < '0' || current > '9') {
+                break;
+            }
+            digitCount++;
+            index++;
+        }
+        if (digitCount == 0 || digitCount > 9) {
+            return false;
+        }
+        while (index < source.length() && isEvalAsciiWhitespace(source.charAt(index))) {
+            index++;
+        }
+        return index == source.length();
+    }
+
+    private static boolean isEvalAsciiWhitespace(char value) {
+        return value == ' ' || value == '\t' || value == '\n' || value == '\r' || value == '\f';
+    }
+
     /**
      * Flag to enable disassembly of eval STRING bytecode.
      * When set, prints the interpreter bytecode for each eval STRING compilation.
@@ -5173,9 +5217,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // warning/feature flags than the caller, and we must not leak the eval's scope.
         ScopedSymbolTable savedCurrentScope = getCurrentScope();
         RuntimeHash activeHintHash = GlobalVariable.getGlobalHash(GlobalContext.encodeSpecialVar("H"));
-        Map<String, RuntimeScalar> savedHintHash = new HashMap<>();
-        for (Map.Entry<String, RuntimeScalar> entry : activeHintHash.elements.entrySet()) {
-            savedHintHash.put(entry.getKey(), new RuntimeScalar(entry.getValue()));
+        boolean hintHashEmpty = activeHintHash.elements.isEmpty();
+        Map<String, RuntimeScalar> savedHintHash;
+        if (hintHashEmpty) {
+            savedHintHash = Collections.emptyMap();
+        } else {
+            savedHintHash = new HashMap<>(activeHintHash.elements.size());
+            for (Map.Entry<String, RuntimeScalar> entry : activeHintHash.elements.entrySet()) {
+                savedHintHash.put(entry.getKey(), new RuntimeScalar(entry.getValue()));
+            }
         }
         int savedCallSiteHintHashId = HintHashRegistry.getCallSiteHintHashId();
         Map<String, RuntimeScalar> lexicalHintHash =
@@ -5328,20 +5378,40 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
             }
 
+            // Compute evalCurrentPackage early (needed for cache key)
+            String runtimePackage = InterpreterState.currentPackage.get().toString();
+            String callsiteSub = capturedSymbolTable.getCurrentSubroutine();
+            boolean topLevelMain = callsiteSub == null || callsiteSub.isEmpty()
+                    || "main".equals(callsiteSub);
+            String evalCurrentPackage = ClassRegistry.isClass(runtimePackage)
+                    ? runtimePackage
+                    : topLevelMain ? runtimePackage : capturedSymbolTable.getCurrentPackage();
+
             try {
+                // Check interpreter eval cache (skip when debugger is active)
+                boolean isDebugging = debuggerFlagsAtEntry != 0;
+                String interpreterCacheKey = null;
+                if (!isDebugging && isCacheableInterpreterEvalSource(evalString)) {
+                    int featureFlags = capturedSymbolTable.featureFlagsStack.peek();
+                    interpreterCacheKey = evalString + '\0' + evalTag + '\0' + hasUnicode
+                            + '\0' + ctx.isEvalbytes + '\0' + featureFlags + '\0' + evalCurrentPackage;
+                    Map<String, InterpretedCode> cache = interpreterEvalCache();
+                    synchronized (cache) {
+                        interpretedCode = cache.get(interpreterCacheKey);
+                    }
+                    if (interpretedCode != null) {
+                        compiledSuccessfully = true;
+                    }
+                }
+
+                if (interpretedCode == null) {
+                WarnDie.clearCompileTimeWarningFlag();
                 // Parse the eval string
                 Lexer lexer = new Lexer(evalString);
                 tokens = lexer.tokenize();
 
                 // Create parser context
                 ScopedSymbolTable parseSymbolTable = capturedSymbolTable.snapShot();
-                String runtimePackage = InterpreterState.currentPackage.get().toString();
-                String callsiteSub = capturedSymbolTable.getCurrentSubroutine();
-                boolean topLevelMain = callsiteSub == null || callsiteSub.isEmpty()
-                        || "main".equals(callsiteSub);
-                String evalCurrentPackage = ClassRegistry.isClass(runtimePackage)
-                        ? runtimePackage
-                        : topLevelMain ? runtimePackage : capturedSymbolTable.getCurrentPackage();
                 parseSymbolTable.setCurrentPackage(
                         evalCurrentPackage, ClassRegistry.isClass(evalCurrentPackage));
                 String lexicalEvalWarningBits = parseSymbolTable.getWarningBitsString();
@@ -5471,13 +5541,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     System.out.println(Disassemble.disassemble(interpretedCode));
                 }
 
-                // Set captured variables
-                if (runtimeValues.length > 0) {
-                    RuntimeBase[] capturedVars2 = new RuntimeBase[runtimeValues.length];
-                    for (int i = 0; i < runtimeValues.length; i++) {
-                        capturedVars2[i] = (RuntimeBase) runtimeValues[i];
+                // Store in interpreter eval cache (before withCapturedVars)
+                if (interpreterCacheKey != null && interpretedCode != null
+                        && !WarnDie.wasCompileTimeWarningEmitted()) {
+                    Map<String, InterpretedCode> cache = interpreterEvalCache();
+                    synchronized (cache) {
+                        cache.put(interpreterCacheKey, interpretedCode);
                     }
-                    interpretedCode = interpretedCode.withCapturedVars(capturedVars2);
                 }
 
                 // Retention is decided at eval compilation time.  In
@@ -5485,6 +5555,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // turn an 0x800-only failed eval into a retained source.
                 storeSourceLines(evalString, evalFilename, ast, tokens, true, debuggerFlagsAtEntry);
                 sourceLinesStored = true;
+                } // end if (interpretedCode == null)
+
+                // Set captured variables (both cached and compiled paths)
+                if (runtimeValues.length > 0) {
+                    RuntimeBase[] capturedVars2 = new RuntimeBase[runtimeValues.length];
+                    for (int i = 0; i < runtimeValues.length; i++) {
+                        capturedVars2[i] = (RuntimeBase) runtimeValues[i];
+                    }
+                    interpretedCode = interpretedCode.withCapturedVars(capturedVars2);
+                }
 
             } catch (Throwable e) {
                 // Dynamic `use Test::More skip_all => ...` executes its

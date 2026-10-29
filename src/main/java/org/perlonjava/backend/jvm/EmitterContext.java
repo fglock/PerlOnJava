@@ -24,7 +24,7 @@ public class EmitterContext {
     /**
      * Cache for contexts with different ContextTypes
      */
-    private final Map<Integer, EmitterContext> contextCache = new HashMap<>();
+    private Map<Integer, EmitterContext> contextCache;
 
     /**
      * CompilerOptions is a configuration class that holds various settings and flags
@@ -162,11 +162,12 @@ public class EmitterContext {
      * @return a new EmitterContext with the updated context type
      */
     public EmitterContext with(int contextType) {
-        // Check if the context is already cached
-        if (contextCache.containsKey(contextType)) {
-            return contextCache.get(contextType);
+        if (contextCache != null) {
+            EmitterContext cached = contextCache.get(contextType);
+            if (cached != null) return cached;
+        } else {
+            contextCache = new HashMap<>();
         }
-        // Create a new context and cache it
         EmitterContext newContext = new EmitterContext(
                 this.javaClassInfo, this.symbolTable,
                 this.mv, this.cw, contextType, this.isBoxed, this.errorUtil, this.compilerOptions,
@@ -184,7 +185,7 @@ public class EmitterContext {
     }
 
     public void clearContextCache() {
-        contextCache.clear();
+        if (contextCache != null) contextCache.clear();
     }
 
     @Override

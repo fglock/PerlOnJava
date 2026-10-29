@@ -325,7 +325,8 @@ public class Parser {
     // to rescan every preceding token for every quote-like operator, which made
     // large generated Perl data files (notably CPAN CHECKSUMS) quadratic to parse.
     // Identity keys remain valid when parsing rewrites or removes nearby tokens.
-    private final IdentityHashMap<LexerToken, Integer> sourceLineOffsets = new IdentityHashMap<>();
+    private int[] sourceLineOffsets;
+    private int sourceLineOffsetsTokenCount;
     /**
      * When {@code true} (qq and normal strings), {@link Variable#parseBracedVariable} may rewrite
      * {@code \"} before {@code "} inside {@code ${...}} so patterns like {@code "${\"name\"}"}
@@ -380,10 +381,13 @@ public class Parser {
     }
 
     private void indexSourceLines() {
+        int size = tokens.size();
+        sourceLineOffsetsTokenCount = size;
+        sourceLineOffsets = new int[size];
         int lineOffset = 0;
-        for (LexerToken token : tokens) {
-            sourceLineOffsets.put(token, lineOffset);
-            if (token.type == LexerTokenType.NEWLINE) {
+        for (int i = 0; i < size; i++) {
+            sourceLineOffsets[i] = lineOffset;
+            if (tokens.get(i).type == LexerTokenType.NEWLINE) {
                 lineOffset++;
             }
         }
@@ -392,11 +396,9 @@ public class Parser {
     /** Return the source line at a token without repeatedly scanning the token list. */
     public int sourceLineAt(int tokenIndex) {
         int baseLine = baseLineNumber > 0 ? baseLineNumber : 1;
-        if (tokenIndex >= 0 && tokenIndex < tokens.size()) {
-            Integer offset = sourceLineOffsets.get(tokens.get(tokenIndex));
-            if (offset != null) {
-                return baseLine + offset;
-            }
+        if (tokenIndex >= 0 && tokenIndex < sourceLineOffsetsTokenCount
+                && tokens.size() == sourceLineOffsetsTokenCount) {
+            return baseLine + sourceLineOffsets[tokenIndex];
         }
 
         // Synthetic tokens are rare; retain a correctness fallback for them.

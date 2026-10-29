@@ -64,10 +64,10 @@ public class JavaClassInfo {
     public String javaClassName;
 
     /** Static fields holding this class's package-scalar pins, keyed by the pinned name. */
-    private final Map<String, String> scalarPinFields = new LinkedHashMap<>();
-    private final Map<String, String> formatExpressionFields = new LinkedHashMap<>();
-    private final IdentityHashMap<StringNode, String> stringLiteralFields = new IdentityHashMap<>();
-    private final IdentityHashMap<NumberNode, String> integerLiteralFields = new IdentityHashMap<>();
+    private Map<String, String> scalarPinFields;
+    private Map<String, String> formatExpressionFields;
+    private IdentityHashMap<StringNode, String> stringLiteralFields;
+    private IdentityHashMap<NumberNode, String> integerLiteralFields;
 
     /** Optional proven read-only {@code my (...) = @_} fast path for this generated CV. */
     public ReadOnlyArgumentUnpackAnalysis.Candidate readOnlyArgumentCandidate;
@@ -87,11 +87,12 @@ public class JavaClassInfo {
 
     /** The pin field already declared for {@code name} in this class, or null. */
     public String scalarPinField(String name) {
-        return scalarPinFields.get(name);
+        return scalarPinFields != null ? scalarPinFields.get(name) : null;
     }
 
     /** Reserve a pin field for {@code name} in this class and return its name. */
     public String registerScalarPinField(String name) {
+        if (scalarPinFields == null) scalarPinFields = new LinkedHashMap<>();
         String field = "scalarPin$" + scalarPinFields.size();
         scalarPinFields.put(name, field);
         return field;
@@ -99,9 +100,13 @@ public class JavaClassInfo {
 
     /** Reserve a static field initialized from a compiled format-expression template. */
     public String registerFormatExpressionField(String registryKey, ClassWriter cw) {
-        String field = formatExpressionFields.get(registryKey);
-        if (field != null) return field;
-        field = "formatExpressions$" + formatExpressionFields.size();
+        if (formatExpressionFields != null) {
+            String field = formatExpressionFields.get(registryKey);
+            if (field != null) return field;
+        } else {
+            formatExpressionFields = new LinkedHashMap<>();
+        }
+        String field = "formatExpressions$" + formatExpressionFields.size();
         cw.visitField(Opcodes.ACC_PRIVATE | Opcodes.ACC_STATIC | Opcodes.ACC_FINAL,
                 field, "Ljava/util/List;", null, null).visitEnd();
         formatExpressionFields.put(registryKey, field);
@@ -109,14 +114,20 @@ public class JavaClassInfo {
     }
 
     public Map<String, String> getFormatExpressionFields() {
-        return Collections.unmodifiableMap(formatExpressionFields);
+        return formatExpressionFields != null
+                ? Collections.unmodifiableMap(formatExpressionFields)
+                : Collections.emptyMap();
     }
 
     /** Register an instance field for one compiled string literal occurrence. */
     public String stringLiteralField(StringNode node, ClassWriter cw) {
-        String field = stringLiteralFields.get(node);
-        if (field != null) return field;
-        field = "stringLiteral$" + stringLiteralFields.size();
+        if (stringLiteralFields != null) {
+            String field = stringLiteralFields.get(node);
+            if (field != null) return field;
+        } else {
+            stringLiteralFields = new IdentityHashMap<>();
+        }
+        String field = "stringLiteral$" + stringLiteralFields.size();
         stringLiteralFields.put(node, field);
         cw.visitField(Opcodes.ACC_PRIVATE, field,
                 "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalarReadOnly;", null, null).visitEnd();
@@ -125,9 +136,13 @@ public class JavaClassInfo {
 
     /** Register an instance field for one boxed integer literal outside the shared cache. */
     public String integerLiteralField(NumberNode node, ClassWriter cw) {
-        String field = integerLiteralFields.get(node);
-        if (field != null) return field;
-        field = "integerLiteral$" + integerLiteralFields.size();
+        if (integerLiteralFields != null) {
+            String field = integerLiteralFields.get(node);
+            if (field != null) return field;
+        } else {
+            integerLiteralFields = new IdentityHashMap<>();
+        }
+        String field = "integerLiteral$" + integerLiteralFields.size();
         integerLiteralFields.put(node, field);
         cw.visitField(Opcodes.ACC_PRIVATE | Opcodes.ACC_VOLATILE, field,
                 "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalarReadOnly;", null, null).visitEnd();
