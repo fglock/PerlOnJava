@@ -1341,11 +1341,22 @@ weak, DESTROY, resurrection, closure, and cycle tests pass on both backends.
 Other reachability callers still use scalar-registry snapshots and remain to
 be migrated.
 
+### Uncounted owner slots release without a root walk (2026-10-29)
+
+When weakening the final counted probe leaves an uncounted strong slot,
+`WeakRefRegistry.weaken` now trusts that slot directly and transitions the
+referent to `WEAKLY_TRACKED`. Releasing the final slot then clears weak
+observers immediately, without a graph query or compatibility count. The new
+`WeakUncountedOwnerSlotFastPathTest` checks the transition, zero root queries,
+and final cleanup. The no-sweeps full `nice -n 19 make` gate passes in 10m30s.
+The weak, DESTROY, resurrection, closure, and cycle matrix passes on both
+backends; HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both.
+
 ### Next steps
 
-1. Identify first-weaken targets that still need graph reachability; add direct
-   owner identities and focused lifecycle regressions before removing that
-   fallback.
+1. Finish the untracked aggregate first-weaken path: remove its remaining
+   compatibility pin/root proof after direct slot coverage proves each release
+   path, preserving package-rooted aggregate behavior.
 2. Replace the reflective weak-backref CODE capture walk with capture-owner
    identities and remove `weakBackrefCaptureSnapshot` while preserving captured
    aggregate lifetime and weak clearing.
