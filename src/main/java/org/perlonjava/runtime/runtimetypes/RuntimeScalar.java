@@ -3284,17 +3284,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         refreshArgumentAliasOwnerSlots();
         // An explicitly discarded closure can have an inflated CODE refcount,
         // so waiting for callDestroy() leaves its captures alive indefinitely.
-        // Release them only after this slot is gone, the code is inactive, and
-        // a complete Perl root walk finds no other strong owner (including
-        // owners stored inside nested containers).
+        // Release them only when the owner ledger shows no other Perl owner
+        // besides the scalar slot currently being overwritten.
         if (value.type == UNDEF
                 && oldBase instanceof RuntimeCode oldCode
                 && !oldCode.hasCountedCodeSlots
                 && oldCode.capturedScalars != null
                 && !oldCode.hasPendingReturnOwner()
-                && !RuntimeCode.isActiveCode(oldCode)
-                && !oldCode.hasOwnerSlotsOtherThan(countedOwnerSlot)
-                && !ReachabilityWalker.isReachableFromRoots(oldCode)) {
+                && !oldCode.hasPerlOwnerForCaptureOtherThan(countedOwnerSlot)) {
             oldCode.releaseCaptures();
         }
         // Hash-element slots remain durable owners when their existing

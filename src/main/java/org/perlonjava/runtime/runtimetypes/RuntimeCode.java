@@ -1515,6 +1515,22 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 || GlobalVariable.installedGlobalCodeRefsView().contains(this);
     }
 
+    /** Whether a Perl owner other than one scalar slot still needs this CV's captures. */
+    boolean hasPerlOwnerForCaptureOtherThan(PerlOwnerSlot excludedOwner) {
+        // Do not use refCount here: this release path handles CODE objects
+        // whose compatibility count can remain positive after their last
+        // real scalar owner has gone away.
+        return stashRefCount > 0
+                || localBindingExists
+                || hasActiveCodeOwner()
+                || hasCallTransferOwner()
+                || hasOwnerSlotsOtherThan(excludedOwner)
+                || isActiveCode(this)
+                || isConstantCv
+                || constantValue != null
+                || GlobalVariable.installedGlobalCodeRefsView().contains(this);
+    }
+
     /**
      * Retire frame-temporary scalar cells that are the only direct holders of
      * this generated CV. The owner-slot back-reference is weak so ownership
