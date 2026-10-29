@@ -1495,6 +1495,15 @@ part of the no-sweeps `nice -n 19 make` gate (11m53s), including the proof-only
 query with zero graph edges and the final-owner weak-observer release.
 HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with sweeps disabled.
 
+### Tail-call argument owner release without a root walk (2026-10-29)
+
+Tail-call argument release now finalizes from counted and uncounted owner
+identities. The root-graph fallback is removed; a new regression confirms that
+a Java-live scalar-registry entry cannot preserve the released Perl referent or
+cause a root query. The test passes in the full no-sweeps `nice -n 19 make`
+gate (13m06s); HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with
+sweeps disabled.
+
 ### Next steps
 
 1. Continue auditing `RuntimeScalar` and `MortalList` reachability fallbacks;
