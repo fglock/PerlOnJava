@@ -782,6 +782,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     private boolean hasDurableStrongValueSlot() {
+        return hasDurableStrongValueSlot(false);
+    }
+
+    /** Whether a slot is attached to a container that itself still has a Perl owner. */
+    boolean hasLiveDurableStrongValueSlot() {
+        return hasDurableStrongValueSlot(true);
+    }
+
+    private boolean hasDurableStrongValueSlot(boolean requireLiveContainer) {
         RuntimeBase owner = containerOwner;
         PerlRuntime runtime = PerlRuntime.currentOrNull();
         boolean registeredLexical = runtime != null && MyVarCleanupStack.isRegistered(this);
@@ -789,7 +798,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 ? hash.elements != null && hash.elements.containsValue(this)
                 : owner instanceof RuntimeArray array && !array.elementsAliased
                     && array.elements != null && array.elements.contains(this);
-        return storedInOwningContainer
+        boolean liveOwningContainer = storedInOwningContainer
+                && (!requireLiveContainer || owner.hasPerlStrongOwner()
+                    || MyVarCleanupStack.isRegistered(owner));
+        return liveOwningContainer
                 || ownerSlotCount(PerlOwnerSlot.Kind.PACKAGE_SCALAR_SLOT) != 0
                 || localBindingExists
                 || hasCodeSlotBinding()
@@ -806,6 +818,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (untrackedReferenceOwnerSlot == null) {
             untrackedReferenceOwnerSlot = new PerlOwnerSlot(
                     PerlOwnerSlot.Kind.UNTRACKED_REFERENCE);
+            untrackedReferenceOwnerSlot.associateUntrackedScalarOwner(this);
         } else if (untrackedReferenceOwnerSlot.referent() != referent) {
             releaseUntrackedReferenceOwner(untrackedReferenceOwnerSlot.referent());
         }
@@ -833,10 +846,19 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // observer yet, and its owner identity still belongs on the clone.
         PerlRuntime runtime = PerlRuntime.currentOrNull();
         boolean weakValue = runtime != null && WeakRefRegistry.isweak(this);
+        boolean existingOwnerForReferent = untrackedReferenceOwnerSlot != null
+                && untrackedReferenceOwnerSlot.isActive()
+                && untrackedReferenceOwnerSlot.referent() == referent;
+        boolean countedOwnerActive = refCountOwned
+                && countedOwnerSlot != null
+                && countedOwnerSlot.isActive()
+                && countedOwnerSlot.referent() == referent;
         boolean untrackedStrongValue = !weakValue
                 && referent != null
-                && referent.refCount < 0
-                && referent.refCount != Integer.MIN_VALUE;
+                && referent.refCount != Integer.MIN_VALUE
+                && (referent.refCount < 0
+                    || existingOwnerForReferent)
+                && !countedOwnerActive;
         if (hasDurableStrongValueSlot() && untrackedStrongValue) {
             retainUntrackedReferenceOwner(referent);
         } else if (untrackedReferenceOwnerSlot != null) {
@@ -3423,10 +3445,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     // A surviving counted slot is explicit evidence of a Perl
                     // owner. For unblessed referents, require a current
                     // aggregate element cell before repairing without a root walk.
-                } else if (oldBase.hasUncountedAggregateOwnerSlotIdentity()) {
+                } else if (oldBase.hasUncountedAggregateOwnerSlotIdentity()
+                        || oldBase.hasUntrackedReferenceOwnerSlotIdentity()) {
                     // Counted slots have already been repaired above. Any
-                    // remaining aggregate owner slot is direct evidence of a
-                    // Perl owner; defer cleanup until that slot is released.
+                    // remaining aggregate or untracked scalar slot is direct
+                    // evidence of a strong value; defer cleanup until it leaves.
                     oldBase.deferFinalReleaseToUncountedOwnerSlots();
                 } else if (oldBase.blessId == 0
                         && (oldBase instanceof RuntimeArray || oldBase instanceof RuntimeHash)
