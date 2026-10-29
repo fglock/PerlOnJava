@@ -1520,11 +1520,21 @@ when the aggregate cell releases its final value owner. The new regression and
 full no-sweeps `nice -n 19 make` gate pass (12m51s); HTML-Tree 5.07
 `t/refloop.t` passes 8/8 on both backends with sweeps disabled.
 
+### Package aggregate scalar-cell values (2026-10-29)
+
+Prepopulated package arrays and hashes now record an `UNTRACKED_REFERENCE`
+identity when a value slot points to a scalar cell with no counted owner. The
+new regression checks final weak clearing without root queries or snapshots on
+both aggregate types. The full no-sweeps `nice -n 19 make` gate passes in 6m53s.
+Package aggregate edges to array/hash referents and cross-container aliases
+remain on the root-snapshot path.
+
 ### Next steps
 
-1. Continue auditing `RuntimeScalar` and `MortalList` reachability fallbacks;
-   package-rooted aggregate slots and cross-container aliases still need direct
-   provenance before their root-snapshot fallbacks can be removed.
+1. Continue the `RuntimeScalar` and `MortalList` fallback audit. Package-rooted
+   aggregate values that point to array/hash referents and cross-container
+   aliases still need direct provenance before their root-snapshot fallbacks can
+   be removed.
 2. Migrate remaining weak-backref capture cases to explicit owner identities,
    then remove `weakBackrefCaptureSnapshot` and preserve aggregate lifetime and
    weak clearing without the compatibility graph walk.
