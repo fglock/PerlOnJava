@@ -986,6 +986,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     private static Map<String, Class<?>> evalCache() {
         return PerlRuntime.current().runtimeCodeState().evalCache;
     }
+
+    private static Map<String, InterpretedCode> interpreterEvalCache() {
+        return PerlRuntime.current().runtimeCodeState().interpreterEvalCache;
+    }
     /**
      * Flag to enable disassembly of eval STRING bytecode.
      * When set, prints the interpreter bytecode for each eval STRING compilation.
@@ -5334,20 +5338,40 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
             }
 
+            // Compute evalCurrentPackage early (needed for cache key)
+            String runtimePackage = InterpreterState.currentPackage.get().toString();
+            String callsiteSub = capturedSymbolTable.getCurrentSubroutine();
+            boolean topLevelMain = callsiteSub == null || callsiteSub.isEmpty()
+                    || "main".equals(callsiteSub);
+            String evalCurrentPackage = ClassRegistry.isClass(runtimePackage)
+                    ? runtimePackage
+                    : topLevelMain ? runtimePackage : capturedSymbolTable.getCurrentPackage();
+
             try {
+                // Check interpreter eval cache (skip when debugger is active)
+                boolean isDebugging = debuggerFlagsAtEntry != 0;
+                String interpreterCacheKey = null;
+                if (!isDebugging) {
+                    int featureFlags = capturedSymbolTable.featureFlagsStack.peek();
+                    interpreterCacheKey = evalString + '\0' + evalTag + '\0' + hasUnicode
+                            + '\0' + ctx.isEvalbytes + '\0' + featureFlags + '\0' + evalCurrentPackage;
+                    Map<String, InterpretedCode> cache = interpreterEvalCache();
+                    synchronized (cache) {
+                        interpretedCode = cache.get(interpreterCacheKey);
+                    }
+                    if (interpretedCode != null) {
+                        compiledSuccessfully = true;
+                    }
+                }
+
+                if (interpretedCode == null) {
+                WarnDie.clearCompileTimeWarningFlag();
                 // Parse the eval string
                 Lexer lexer = new Lexer(evalString);
                 tokens = lexer.tokenize();
 
                 // Create parser context
                 ScopedSymbolTable parseSymbolTable = capturedSymbolTable.snapShot();
-                String runtimePackage = InterpreterState.currentPackage.get().toString();
-                String callsiteSub = capturedSymbolTable.getCurrentSubroutine();
-                boolean topLevelMain = callsiteSub == null || callsiteSub.isEmpty()
-                        || "main".equals(callsiteSub);
-                String evalCurrentPackage = ClassRegistry.isClass(runtimePackage)
-                        ? runtimePackage
-                        : topLevelMain ? runtimePackage : capturedSymbolTable.getCurrentPackage();
                 parseSymbolTable.setCurrentPackage(
                         evalCurrentPackage, ClassRegistry.isClass(evalCurrentPackage));
                 String lexicalEvalWarningBits = parseSymbolTable.getWarningBitsString();
@@ -5477,13 +5501,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     System.out.println(Disassemble.disassemble(interpretedCode));
                 }
 
-                // Set captured variables
-                if (runtimeValues.length > 0) {
-                    RuntimeBase[] capturedVars2 = new RuntimeBase[runtimeValues.length];
-                    for (int i = 0; i < runtimeValues.length; i++) {
-                        capturedVars2[i] = (RuntimeBase) runtimeValues[i];
+                // Store in interpreter eval cache (before withCapturedVars)
+                if (interpreterCacheKey != null && interpretedCode != null
+                        && !WarnDie.wasCompileTimeWarningEmitted()) {
+                    Map<String, InterpretedCode> cache = interpreterEvalCache();
+                    synchronized (cache) {
+                        cache.put(interpreterCacheKey, interpretedCode);
                     }
-                    interpretedCode = interpretedCode.withCapturedVars(capturedVars2);
                 }
 
                 // Retention is decided at eval compilation time.  In
@@ -5491,6 +5515,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // turn an 0x800-only failed eval into a retained source.
                 storeSourceLines(evalString, evalFilename, ast, tokens, true, debuggerFlagsAtEntry);
                 sourceLinesStored = true;
+                } // end if (interpretedCode == null)
+
+                // Set captured variables (both cached and compiled paths)
+                if (runtimeValues.length > 0) {
+                    RuntimeBase[] capturedVars2 = new RuntimeBase[runtimeValues.length];
+                    for (int i = 0; i < runtimeValues.length; i++) {
+                        capturedVars2[i] = (RuntimeBase) runtimeValues[i];
+                    }
+                    interpretedCode = interpretedCode.withCapturedVars(capturedVars2);
+                }
 
             } catch (Throwable e) {
                 // Dynamic `use Test::More skip_all => ...` executes its
