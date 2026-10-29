@@ -6,6 +6,8 @@ priorities and future plans.
 
 ## Work in progress
 
+- Preserve named typeglob stringification when copying package stash entries (#1927).
+
 - Reduce repeated eval STRING overhead with lazy state and caching for context-free integer-literal evals (#1911).
 
 - Preserve arbitrary bytes in SQLite text columns across DBI fetches (#1923).
