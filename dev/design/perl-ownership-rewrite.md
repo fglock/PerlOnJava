@@ -1352,11 +1352,20 @@ and final cleanup. The no-sweeps full `nice -n 19 make` gate passes in 10m30s.
 The weak, DESTROY, resurrection, closure, and cycle matrix passes on both
 backends; HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both.
 
+### Untracked first-weaken avoids generic root fallback (2026-10-29)
+
+First weaken of an otherwise untracked aggregate now keeps the transitional
+`WEAKLY_TRACKED` sentinel until a durable owner slot is installed, without
+walking the general root graph. The narrow legacy package-root rescue remains
+for aggregates already nested in a package global. Added
+`UntrackedAggregateFirstWeakenFastPathTest` for the zero-query transition and
+direct final-slot cleanup. The no-sweeps full `nice -n 19 make` gate passes in
+10m34s; HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends.
+
 ### Next steps
 
-1. Finish the untracked aggregate first-weaken path: remove its remaining
-   compatibility pin/root proof after direct slot coverage proves each release
-   path, preserving package-rooted aggregate behavior.
+1. Remove the remaining legacy package-root rescue proof and compatibility pin
+   after direct owner-slot coverage proves each release path.
 2. Replace the reflective weak-backref CODE capture walk with capture-owner
    identities and remove `weakBackrefCaptureSnapshot` while preserving captured
    aggregate lifetime and weak clearing.
