@@ -814,6 +814,39 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 || this instanceof RuntimeBaseProxy;
     }
 
+    private boolean hasScalarCellOwnerOtherThanClosureCapture() {
+        if (!referencedByScalarReference) return false;
+        if (localBindingExists || hasPendingReturnOwner()) return true;
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (slot.isActive()
+                    && slot.kind() != PerlOwnerSlot.Kind.SCALAR_CAPTURE
+                    && slot.kind() != PerlOwnerSlot.Kind.TEMPORARY_ROOT) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean hasDirectScalarCellStorageOwner() {
+        if (localBindingExists || MyVarCleanupStack.isRegistered(this)
+                || ownerSlotCount(PerlOwnerSlot.Kind.PACKAGE_SCALAR_SLOT) != 0
+                || hasCodeSlotBinding() || this instanceof RuntimeBaseProxy
+                || isStoredInRegisteredContainerOwner()) {
+            return true;
+        }
+        RuntimeBase owner = containerOwner;
+        if (owner instanceof RuntimeHash hash && hash.isPackageRootedHash()
+                && hash.elements != null && hash.elements.containsValue(this)) {
+            return true;
+        }
+        if (owner instanceof RuntimeArray array && array.isPackageGlobalRoot
+                && array.elements != null && array.elements.contains(this)) {
+            return true;
+        }
+        return referencedByScalarReference && (refCount > 0
+                || hasScalarCellOwnerOtherThanClosureCapture());
+    }
+
     private void retainUntrackedReferenceOwner(RuntimeBase referent) {
         if (untrackedReferenceOwnerSlot == null) {
             untrackedReferenceOwnerSlot = new PerlOwnerSlot(
@@ -960,10 +993,34 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && hash.elements.containsValue(this);
     }
 
+    boolean isCurrentCountedScalarOwner(RuntimeBase referent, PerlOwnerSlot slot) {
+        PerlOwnerSlot.Kind kind = slot.kind();
+        if ((kind != PerlOwnerSlot.Kind.SCALAR_CELL
+                && kind != PerlOwnerSlot.Kind.CODE_SLOT
+                && kind != PerlOwnerSlot.Kind.ARGUMENT_VALUE
+                && kind != PerlOwnerSlot.Kind.RETURN_VALUE
+                && kind != PerlOwnerSlot.Kind.TIE_HANDLER)
+                || countedOwnerSlot != slot || !refCountOwned || value != referent
+                || ((type & RuntimeScalarType.REFERENCE_BIT) == 0
+                    && type != RuntimeScalarType.GLOB
+                    && type != RuntimeScalarType.CODE)
+                || WeakRefRegistry.isweak(this) || !slot.isActive()
+                || slot.referent() != referent) {
+            return false;
+        }
+        if (kind != PerlOwnerSlot.Kind.SCALAR_CELL
+                || hasDirectScalarCellStorageOwner()) {
+            return true;
+        }
+        return isCurrentCapturedScalarCellOwner(referent, slot);
+    }
+
     boolean isCurrentCapturedScalarCellOwner(RuntimeBase referent, PerlOwnerSlot slot) {
         if (slot.kind() != PerlOwnerSlot.Kind.SCALAR_CELL
                 || countedOwnerSlot != slot || !refCountOwned || value != referent
-                || (type & RuntimeScalarType.REFERENCE_BIT) == 0
+                || ((type & RuntimeScalarType.REFERENCE_BIT) == 0
+                    && type != RuntimeScalarType.GLOB
+                    && type != RuntimeScalarType.CODE)
                 || WeakRefRegistry.isweak(this) || !slot.isActive()
                 || slot.referent() != referent || captureCount == 0) {
             return false;
@@ -3455,12 +3512,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 } else if ((oldBase.blessId != 0
                         && WeakRefRegistry.hasWeakRefsTo(oldBase)
                         && oldBase.restoreCountedOwnerSlotRefCount())
-                        || oldBase.restoreAggregateElementOwnerSlotRefCount()
-                        || oldBase.restoreCapturedScalarCellOwnerSlotRefCount()) {
-                    // A surviving counted slot, current aggregate element, or
-                    // captured scalar cell with a live CODE owner is explicit
-                    // evidence of a Perl owner. These identities can repair
-                    // transient undercounts without a root walk.
+                        || oldBase.restoreVerifiedCurrentCountedOwnerSlotRefCount()) {
+                    // Verified current scalar cells and aggregate elements
+                    // jointly repair transient undercounts without a root walk.
                 } else if (oldBase.hasUncountedAggregateOwnerSlotIdentity()
                         || oldBase.hasUntrackedReferenceOwnerSlotIdentity()) {
                     // Counted slots have already been repaired above. Any
