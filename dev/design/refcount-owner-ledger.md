@@ -580,6 +580,10 @@ external workload has drained before changing runtime source.
   Java-live scalar-registry wrapper as a Perl owner or forces GC to inspect it.
   `TailCallScalarRegistryOwnershipTest` verifies that a released tail-call
   referent is destroyed while its scalar wrapper remains Java-live.
+- [x] On 2026-10-29, tail-call release now trusts any direct non-counted Perl
+  owner slot, excluding temporary runtime roots. Added
+  `TailCallUncountedOwnerSlotFastPathTest` for package scalar ownership; it
+  passes in the full no-sweeps `make` gate (10m58s).
 - [x] On 2026-10-29, async Future resume now checks counted and direct owner
   slots instead of rebuilding root graphs or forcing GC for a scalar-registry
   lookup. Temporary evaluation roots do not count as Perl owners.

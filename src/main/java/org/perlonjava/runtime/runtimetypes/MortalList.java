@@ -877,7 +877,7 @@ public class MortalList {
             base.refCount = 1;
             return;
         }
-        if (base.hasUncountedAggregateOwnerSlotIdentity()) {
+        if (base.hasUncountedPerlOwnerSlotIdentity()) {
             base.deferFinalReleaseToUncountedOwnerSlots();
             return;
         }
