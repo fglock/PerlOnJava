@@ -924,6 +924,20 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         countedOwnerSlot.associateCountedScalarOwner(this);
     }
 
+    boolean isCurrentAggregateElementOwner(RuntimeBase referent, PerlOwnerSlot slot) {
+        if (countedOwnerSlot != slot || !refCountOwned || value != referent
+                || !slot.isActive() || slot.referent() != referent) {
+            return false;
+        }
+        if (slot.kind() == PerlOwnerSlot.Kind.ARRAY_ELEMENT) {
+            return containerOwner instanceof RuntimeArray array
+                    && !array.elementsAliased && array.elements.contains(this);
+        }
+        return slot.kind() == PerlOwnerSlot.Kind.HASH_ELEMENT
+                && containerOwner instanceof RuntimeHash hash
+                && hash.elements.containsValue(this);
+    }
+
     private PerlOwnerSlot.Kind countedOwnerKind() {
         return codeSlotBindings != 0 ? PerlOwnerSlot.Kind.CODE_SLOT
                 : containerOwner instanceof RuntimeHash ? PerlOwnerSlot.Kind.HASH_ELEMENT
@@ -3402,10 +3416,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     // cached root walks cannot supply a replacement owner.
                     oldBase.refCount = Integer.MIN_VALUE;
                     DestroyDispatch.callDestroyFromCountedOwner(oldBase);
-                } else if (oldBase.restoreCountedOwnerSlotRefCount()) {
+                } else if ((oldBase.blessId != 0
+                        && WeakRefRegistry.hasWeakRefsTo(oldBase)
+                        && oldBase.restoreCountedOwnerSlotRefCount())
+                        || oldBase.restoreAggregateElementOwnerSlotRefCount()) {
                     // A surviving counted slot is explicit evidence of a Perl
-                    // owner for blessed and unblessed referents alike. Repair
-                    // the bridge count before consulting frame or root reachability.
+                    // owner. For unblessed referents, require a current
+                    // aggregate element cell before repairing without a root walk.
                 } else if (oldBase.hasUncountedAggregateOwnerSlotIdentity()) {
                     // Counted slots have already been repaired above. Any
                     // remaining aggregate owner slot is direct evidence of a
