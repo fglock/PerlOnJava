@@ -890,6 +890,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && countedOwnerSlot.referent() == referent;
         boolean packageScalarValueOwner =
                 ownerSlotCount(PerlOwnerSlot.Kind.PACKAGE_SCALAR_SLOT) != 0;
+        boolean packageAggregateScalarValueOwner = referent instanceof RuntimeScalar
+                && ((containerOwner instanceof RuntimeHash hash
+                    && hash.isPackageRootedHash()
+                    && hash.elements != null && hash.elements.containsValue(this))
+                || (containerOwner instanceof RuntimeArray array
+                    && array.isPackageGlobalRoot
+                    && array.elements != null && array.elements.contains(this)));
         boolean localAggregateValueOwner =
                 (containerOwner instanceof RuntimeHash hash && !hash.isPackageRootedHash())
                 || (containerOwner instanceof RuntimeArray array
@@ -902,6 +909,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && (referent.refCount < 0
                     || existingOwnerForReferent
                     || packageScalarValueOwner
+                    || packageAggregateScalarValueOwner
                     || liveAggregateValueOwner)
                 && !countedOwnerActive;
         if (hasDurableStrongValueSlot() && untrackedStrongValue) {
