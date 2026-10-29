@@ -1474,11 +1474,22 @@ both PerlOnJava backends; HTML-Tree `t/refloop.t` passed 8/8 on both backends.
 The owner-slot regressions cover stale positive CODE counts and preservation by
 live scalar and callback owners.
 
+### Non-captured scalar-cell owners repair transient undercounts (2026-10-29)
+
+Immediate overwrite and deferred cleanup now restore an unblessed referent
+from verified current scalar-cell identities, including return, argument, and
+CODE slots. The repair counts current scalar and aggregate owners together;
+unrooted wrappers and capture counts without a live CODE owner do not prove
+liveness. Focused regressions cover both cleanup paths, mixed owner families,
+weak clearing, and zero root snapshots. The no-sweeps `nice -n 19 make` gate
+passed in 10m41s. HTML-Tree 5.07 `t/refloop.t` passed 8/8 on both backends;
+`make check-links` passed.
+
 ### Next steps
 
 1. Continue auditing `RuntimeScalar` and `MortalList` reachability fallbacks;
-   non-captured scalar-cell roots and aliased storage still need direct owner
-   provenance before their root-snapshot fallbacks can be removed.
+   aliased storage and cross-container owners still need direct provenance
+   before their root-snapshot fallbacks can be removed.
 2. Migrate remaining weak-backref capture cases to explicit owner identities,
    then remove `weakBackrefCaptureSnapshot` and preserve aggregate lifetime and
    weak clearing without the compatibility graph walk.

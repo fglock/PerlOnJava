@@ -1632,16 +1632,11 @@ public class MortalList {
                 DestroyDispatch.callDestroyFromCountedOwner(base);
             } else if (base.blessId != 0 && base.restoreCountedOwnerSlotRefCount()) {
                 // For blessed referents, remaining counted slots prove that
-                // the transient zero was an undercount. Unblessed aggregates
-                // still need a root snapshot to reject stale scalar wrappers.
-            } else if (base.restoreAggregateElementOwnerSlotRefCount()) {
-                // A current array/hash element is direct evidence for this
-                // unblessed referent; scalar-cell-only owners still use the
-                // root snapshot to distinguish Perl roots from stale wrappers.
-            } else if (base.restoreCapturedScalarCellOwnerSlotRefCount()) {
-                // An active closure's explicit capture identity proves that
-                // its scalar cell still owns this referent, even when the
-                // cell is no longer a package or active-lexical root.
+                // the transient zero was an undercount. Unblessed referents
+                // use stricter current-storage checks below.
+            } else if (base.restoreVerifiedCurrentCountedOwnerSlotRefCount()) {
+                // Verified current scalar cells and array/hash elements jointly
+                // restore the surviving owner count without a root walk.
             } else if (base instanceof RuntimeCode code
                     && hasWeakRefs
                     && (RuntimeCode.isActiveCode(code)
