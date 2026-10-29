@@ -798,9 +798,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 ? hash.elements != null && hash.elements.containsValue(this)
                 : owner instanceof RuntimeArray array && !array.elementsAliased
                     && array.elements != null && array.elements.contains(this);
+        boolean liveContainerOwner = owner != null
+                && (owner.hasPerlStrongOwner()
+                    || (runtime != null && MyVarCleanupStack.isRegistered(owner)));
         boolean liveOwningContainer = storedInOwningContainer
-                && (!requireLiveContainer || owner.hasPerlStrongOwner()
-                    || MyVarCleanupStack.isRegistered(owner));
+                && (!requireLiveContainer || liveContainerOwner);
         return liveOwningContainer
                 || ownerSlotCount(PerlOwnerSlot.Kind.PACKAGE_SCALAR_SLOT) != 0
                 || localBindingExists
@@ -888,12 +890,19 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && countedOwnerSlot.referent() == referent;
         boolean packageScalarValueOwner =
                 ownerSlotCount(PerlOwnerSlot.Kind.PACKAGE_SCALAR_SLOT) != 0;
+        boolean localAggregateValueOwner =
+                (containerOwner instanceof RuntimeHash hash && !hash.isPackageRootedHash())
+                || (containerOwner instanceof RuntimeArray array
+                    && !array.isPackageGlobalRoot);
+        boolean liveAggregateValueOwner = localAggregateValueOwner
+                && hasLiveDurableStrongValueSlot();
         boolean untrackedStrongValue = !weakValue
                 && referent != null
                 && referent.refCount != Integer.MIN_VALUE
                 && (referent.refCount < 0
                     || existingOwnerForReferent
-                    || packageScalarValueOwner)
+                    || packageScalarValueOwner
+                    || liveAggregateValueOwner)
                 && !countedOwnerActive;
         if (hasDurableStrongValueSlot() && untrackedStrongValue) {
             retainUntrackedReferenceOwner(referent);

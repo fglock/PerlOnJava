@@ -10,6 +10,7 @@ priorities and future plans.
 - Use live scalar-owner slots to preserve nested untracked aggregates on first weaken, avoid package-root walks, and clear weak observers at final release (#1649).
 - Release tail-call arguments from explicit owner slots without a root-graph fallback (#1649).
 - Record uncounted value ownership for tracked referents held in package scalar cells (#1649).
+- Give borrowed scalar cells in live lexical aggregates owner identities for their strong values (#1649).
 - Preserve non-CODE weak referents directly from surviving uncounted owner slots when a scalar releases its last counted slot (#1649).
 - Release displaced localized CODE captures from active-frame and owner-slot identities, without scalar-registry or root-graph scans (#1649).
 - Defer zero-count cleanup for aggregates with surviving owner slots across scalar, deferred, and tail-call releases (#1649).
