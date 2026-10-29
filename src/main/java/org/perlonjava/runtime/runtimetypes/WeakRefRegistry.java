@@ -269,22 +269,20 @@ public class WeakRefRegistry {
                     && (base instanceof RuntimeArray || base instanceof RuntimeHash)
                     && base.storedInPackageGlobal
                     && base.ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE) != 0;
-            if (base.hasUncountedOwnerSlotIdentity() && !legacyPackageNestedAggregate) {
-                // Every surviving identity is a strong Perl owner, including
-                // scalar-cell edges, lexical pads, package roots, and captures.
-                // Its release path finalizes the referent, so first weaken does
-                // not need to rediscover the same owner by walking roots.
-                base.refCount = WEAKLY_TRACKED;
-            } else if (base.blessId == 0
-                    && (base instanceof RuntimeArray || base instanceof RuntimeHash)
+            if (legacyPackageNestedAggregate
                     && ReachabilityWalker.isReachableFromRoots(base)) {
                 // An untracked aggregate may already be owned by a live tree
                 // before its first weak parent edge is installed. Keep it
                 // through this transition, then retire the compatibility pin
-                // when its recorded strong owner slots are all released.
+                // when its recorded strong owner slots are all released. The
+                // owner-slot fast path proves this case without traversing roots.
                 base.refCount = 1;
-                base.packageRootRescuedUntrackedAggregate = legacyPackageNestedAggregate;
+                base.packageRootRescuedUntrackedAggregate = true;
             } else {
+                // Keep the compatibility sentinel while an untracked value is
+                // between expression evaluation and installation in a durable
+                // slot. Owner release hooks finish weak cleanup; do not infer
+                // Perl ownership from a general root-graph walk here.
                 base.refCount = WEAKLY_TRACKED;
             }
         }
