@@ -6,6 +6,8 @@ priorities and future plans.
 
 ## Work in progress
 
+- Preserve arbitrary bytes in SQLite text columns across DBI fetches (#1923).
+
 - Run MakeMaker `MY::post_initialize` hooks so generated files join `pm_to_blib`, and parse Perl's `$]` version variable.
 
 - Preserve hash-reference constant calls after typeglob undefinition, dereference glob-backed hash values during Morpheus configuration traversal, parse Error.pm's dynamic `catch $class with { ... }` form on both backends, and retain integer scalar identity through `int()` for decimal stringification; preserve regex referent types through blessed scalar references and cover Morpheus relational overload dispatch and caller filename normalization (#1342, #1376, #1427, #1428).
