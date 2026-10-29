@@ -1450,6 +1450,15 @@ owners. `CapturedScalarCellOwnerFastPathTest` covers both cleanup paths, checks
 that root-query counters stay at zero, and verifies weak cleanup after the last
 capture is released. The full no-sweeps `nice -n 19 make` gate passes in 14m02s.
 
+### Final scalar CODE owner releases captures from the owner ledger (2026-10-29)
+
+Overwriting the final scalar CODE owner now releases closure captures after
+checking other scalar, stash, active-frame, transfer, and installed-global
+owners directly. It does not trust a possibly inflated compatibility count or
+walk the root graph. `FinalCodeOwnerCaptureReleaseFastPathTest` verifies the
+final pad capture is released with zero root queries and snapshots. The full
+no-sweeps `nice -n 19 make` gate passes in 13m16s.
+
 ### Next steps
 
 1. Continue auditing `RuntimeScalar` and `MortalList` reachability fallbacks;
