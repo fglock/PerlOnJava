@@ -413,11 +413,14 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         return false;
     }
 
-    /** Whether an untracked referent has a direct slot identity not backed by refCount. */
-    synchronized boolean hasUncountedOwnerSlotIdentity() {
-        if (ownerSlots == null) return false;
-        for (PerlOwnerSlot slot : ownerSlots) {
-            if (!PerlOwnerSlot.isCountedKind(slot.kind())) return true;
+    /** Whether a non-counted owner slot proves Perl ownership of this value. */
+    boolean hasUncountedPerlOwnerSlotIdentity() {
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (slot.isActive()
+                    && !PerlOwnerSlot.isCountedKind(slot.kind())
+                    && slot.kind() != PerlOwnerSlot.Kind.TEMPORARY_ROOT) {
+                return true;
+            }
         }
         return false;
     }
@@ -425,11 +428,11 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     /** Whether an aggregate has a surviving owner outside the legacy count. */
     boolean hasUncountedAggregateOwnerSlotIdentity() {
         return (this instanceof RuntimeArray || this instanceof RuntimeHash)
-                && hasUncountedOwnerSlotIdentity();
+                && hasUncountedPerlOwnerSlotIdentity();
     }
 
     void deferFinalReleaseToUncountedOwnerSlots() {
-        if (!hasUncountedOwnerSlotIdentity()) return;
+        if (!hasUncountedPerlOwnerSlotIdentity()) return;
         refCount = WeakRefRegistry.WEAKLY_TRACKED;
         deferredFinalReleaseForUncountedOwners = true;
     }
