@@ -886,11 +886,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && countedOwnerSlot != null
                 && countedOwnerSlot.isActive()
                 && countedOwnerSlot.referent() == referent;
+        boolean packageScalarValueOwner =
+                ownerSlotCount(PerlOwnerSlot.Kind.PACKAGE_SCALAR_SLOT) != 0;
         boolean untrackedStrongValue = !weakValue
                 && referent != null
                 && referent.refCount != Integer.MIN_VALUE
                 && (referent.refCount < 0
-                    || existingOwnerForReferent)
+                    || existingOwnerForReferent
+                    || packageScalarValueOwner)
                 && !countedOwnerActive;
         if (hasDurableStrongValueSlot() && untrackedStrongValue) {
             retainUntrackedReferenceOwner(referent);
