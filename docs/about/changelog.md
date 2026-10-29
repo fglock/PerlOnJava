@@ -18,6 +18,8 @@ priorities and future plans.
 - Repair transient unblessed referent undercounts from verified array/hash element slots during overwrite and deferred cleanup, avoiding root walks (#1649).
 - Repair unblessed referent undercounts from captured scalar-cell owners only while a live closure owns the cell, in overwrite and deferred cleanup (#1649).
 - Release captures from a final scalar CODE owner using explicit owner identities instead of a root walk (#1649).
+- Release aggregate closure captures at scope exit from CODE owner identities, ignoring stale compatibility counts (#1649).
+- Track compiled regex callback CODE references with owner slots and release captures after the final callback owner leaves (#1649).
 - Remove live-scalar-registry reachability from first-weaken, tail-call, and async-Future owner decisions.
 - Release weakly tracked referents from their final uncounted owner slot without a root walk.
 

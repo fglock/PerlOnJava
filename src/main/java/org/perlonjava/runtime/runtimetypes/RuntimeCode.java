@@ -1516,7 +1516,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     /** Whether a Perl owner other than one scalar slot still needs this CV's captures. */
-    boolean hasPerlOwnerForCaptureOtherThan(PerlOwnerSlot excludedOwner) {
+    public boolean hasPerlOwnerForCaptureOtherThan(PerlOwnerSlot excludedOwner) {
         // Do not use refCount here: this release path handles CODE objects
         // whose compatibility count can remain positive after their last
         // real scalar owner has gone away.
