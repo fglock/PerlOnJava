@@ -1372,6 +1372,16 @@ undercount repair and final release with corrective sweeps disabled. CODE keeps
 its native active-frame zero-count protocol; remaining root checks protect
 owners that do not yet have slot identities.
 
+### Localized CODE release uses owner slots (2026-10-29)
+
+Restoring a localized glob now releases the displaced CODE and its captured
+pads when no active frame or owner slot remains. The release path no longer
+scans scalar registries or root graphs; the existing active-frame owner test
+still protects executing CODE. `LocalizedGlobCodeOwnerReleaseTest` verifies
+capture cleanup and zero root queries. The no-sweeps full `nice -n 19 make`
+passes in 10m45s. The closure, weak-reference, DESTROY, resurrection, cycle,
+localized-glob, and HTML-Tree `t/refloop.t` (8/8) matrix passes on both backends.
+
 ### Next steps
 
 1. Audit remaining `RuntimeScalar` and `MortalList` reachability fallbacks;

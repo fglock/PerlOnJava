@@ -58,6 +58,7 @@ priorities and future plans.
 - Use owner-slot proofs to skip package-root walks for rooted untracked aggregates, and clear weak observers when their final owner is released (#1649).
 - Keep untracked aggregates weakly tracked until a durable owner slot is installed, without the generic first-weaken root-graph fallback (#1649).
 - Preserve non-CODE weak referents directly from surviving uncounted owner slots when a scalar releases its last counted slot (#1649).
+- Release displaced localized CODE captures from active-frame and owner-slot identities, without scalar-registry or root-graph scans (#1649).
 - Remove the live-scalar-registry reachability fallback from first-weaken zero-count decisions.
 - Release weakly tracked referents from their final uncounted owner slot without a root walk.
 
