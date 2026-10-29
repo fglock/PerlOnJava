@@ -6,7 +6,7 @@ priorities and future plans.
 
 ## Work in progress
 
-- Reduce repeated eval STRING overhead with lazy per-eval state and compiled interpreter-code caching (#1911).
+- Reduce repeated eval STRING overhead with lazy state and caching for context-free integer-literal evals (#1911).
 
 - Run MakeMaker `MY::post_initialize` hooks so generated files join `pm_to_blib`, and parse Perl's `$]` version variable.
 
