@@ -496,32 +496,24 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         return true;
     }
 
-    /** Restore from current array/hash element slots with verified cell identity. */
-    boolean restoreAggregateElementOwnerSlotRefCount() {
+    /** Restore from every surviving counted slot after verifying its current storage cell. */
+    boolean restoreVerifiedCurrentCountedOwnerSlotRefCount() {
         int count = 0;
         for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (!slot.isActive()) continue;
+            RuntimeScalar owner = slot.countedScalarOwner();
+            if (owner == null) continue;
             PerlOwnerSlot.Kind kind = slot.kind();
             if ((kind == PerlOwnerSlot.Kind.ARRAY_ELEMENT
                     || kind == PerlOwnerSlot.Kind.HASH_ELEMENT)
-                    && slot.isActive()) {
-                RuntimeScalar owner = slot.countedScalarOwner();
-                if (owner != null && owner.isCurrentAggregateElementOwner(this, slot)) {
-                    count++;
-                }
-            }
-        }
-        if (count == 0) return false;
-        refCount = count;
-        return true;
-    }
-
-    /** Restore from scalar cells whose live closure owner is explicit. */
-    boolean restoreCapturedScalarCellOwnerSlotRefCount() {
-        int count = 0;
-        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
-            if (slot.kind() != PerlOwnerSlot.Kind.SCALAR_CELL || !slot.isActive()) continue;
-            RuntimeScalar owner = slot.countedScalarOwner();
-            if (owner != null && owner.isCurrentCapturedScalarCellOwner(this, slot)) {
+                    && owner.isCurrentAggregateElementOwner(this, slot)) {
+                count++;
+            } else if ((kind == PerlOwnerSlot.Kind.SCALAR_CELL
+                    || kind == PerlOwnerSlot.Kind.CODE_SLOT
+                    || kind == PerlOwnerSlot.Kind.ARGUMENT_VALUE
+                    || kind == PerlOwnerSlot.Kind.RETURN_VALUE
+                    || kind == PerlOwnerSlot.Kind.TIE_HANDLER)
+                    && owner.isCurrentCountedScalarOwner(this, slot)) {
                 count++;
             }
         }
