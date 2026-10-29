@@ -3416,12 +3416,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     // cached root walks cannot supply a replacement owner.
                     oldBase.refCount = Integer.MIN_VALUE;
                     DestroyDispatch.callDestroyFromCountedOwner(oldBase);
-                } else if (oldBase.blessId != 0
-                        && WeakRefRegistry.hasWeakRefsTo(oldBase)
-                        && oldBase.restoreCountedOwnerSlotRefCount()) {
+                } else if (oldBase.restoreCountedOwnerSlotRefCount()) {
                     // A surviving counted slot is explicit evidence of a Perl
-                    // owner, including during nested calls. Repair the bridge
-                    // count before consulting frame or root reachability.
+                    // owner for blessed and unblessed referents alike. Repair
+                    // the bridge count before consulting frame or root reachability.
                 } else if (oldBase.hasUncountedAggregateOwnerSlotIdentity()) {
                     // Counted slots have already been repaired above. Any
                     // remaining aggregate owner slot is direct evidence of a
