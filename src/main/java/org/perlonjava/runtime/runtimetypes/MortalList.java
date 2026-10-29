@@ -873,7 +873,15 @@ public class MortalList {
         // Restore from those identities before asking the root walker.
         if (base.restoreCountedOwnerSlotRefCount()) return;
 
-        if (base.localBindingExists || reachableTailCallArgReferent(base)) {
+        if (base.localBindingExists) {
+            base.refCount = 1;
+            return;
+        }
+        if (base.hasUncountedAggregateOwnerSlotIdentity()) {
+            base.deferFinalReleaseToUncountedOwnerSlots();
+            return;
+        }
+        if (reachableTailCallArgReferent(base)) {
             base.refCount = 1;
             return;
         }
@@ -1646,6 +1654,11 @@ public class MortalList {
                 // RuntimeCode.clearPadConstantWeakRefs() clears it when the
                 // sub's glob is replaced, matching Perl optree reaping.
                 base.refCount = 1;
+            } else if (base.hasUncountedAggregateOwnerSlotIdentity()) {
+                // Counted owner recovery is complete above. A surviving
+                // aggregate slot is enough to defer cleanup until its release,
+                // even when no weak observer currently exists.
+                base.deferFinalReleaseToUncountedOwnerSlots();
             } else if (hasWeakRefs && restoreReachableOwnerCount(base)) {
                 // A counted owner that is still reachable through a real
                 // Perl root is authoritative, including for classes with

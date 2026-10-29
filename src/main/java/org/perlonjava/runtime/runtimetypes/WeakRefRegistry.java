@@ -390,6 +390,22 @@ public class WeakRefRegistry {
     /** Finish tracked cleanup when its final owner slot leaves. */
     static void onStrongOwnerSlotReleased(RuntimeBase referent) {
         if (referent != null
+                && referent.deferredFinalReleaseForUncountedOwners
+                && referent.refCount == WEAKLY_TRACKED
+                && !referent.hasOwnerSlots()
+                && PerlRuntime.currentOrNull() != null
+                && !referent.localBindingExists
+                && referent.captureCount == 0
+                && !referent.hasPendingReturnOwner()
+                && referent.countedOwnerSlotCount() == 0
+                && !(referent instanceof RuntimeScalarReadOnly
+                    && RuntimeCode.isInstalledPadConstant(referent))) {
+            referent.deferredFinalReleaseForUncountedOwners = false;
+            referent.refCount = Integer.MIN_VALUE;
+            DestroyDispatch.callDestroy(referent);
+            return;
+        }
+        if (referent != null
                 && referent.packageRootRescuedUntrackedAggregate
                 && referent.refCount == 1
                 && !referent.hasOwnerSlots()
