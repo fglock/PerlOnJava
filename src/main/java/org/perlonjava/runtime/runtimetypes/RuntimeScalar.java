@@ -960,6 +960,23 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && hash.elements.containsValue(this);
     }
 
+    boolean isCurrentCapturedScalarCellOwner(RuntimeBase referent, PerlOwnerSlot slot) {
+        if (slot.kind() != PerlOwnerSlot.Kind.SCALAR_CELL
+                || countedOwnerSlot != slot || !refCountOwned || value != referent
+                || (type & RuntimeScalarType.REFERENCE_BIT) == 0
+                || WeakRefRegistry.isweak(this) || !slot.isActive()
+                || slot.referent() != referent || captureCount == 0) {
+            return false;
+        }
+        for (PerlOwnerSlot captureSlot : ownerSlotSnapshot()) {
+            if (captureSlot.kind() != PerlOwnerSlot.Kind.SCALAR_CAPTURE
+                    || !captureSlot.isActive() || captureSlot.referent() != this) continue;
+            RuntimeCode captureOwner = captureSlot.captureOwner();
+            if (captureOwner != null && captureOwner.hasPerlOwnerForCapture()) return true;
+        }
+        return false;
+    }
+
     private PerlOwnerSlot.Kind countedOwnerKind() {
         return codeSlotBindings != 0 ? PerlOwnerSlot.Kind.CODE_SLOT
                 : containerOwner instanceof RuntimeHash ? PerlOwnerSlot.Kind.HASH_ELEMENT
@@ -3455,10 +3472,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 } else if ((oldBase.blessId != 0
                         && WeakRefRegistry.hasWeakRefsTo(oldBase)
                         && oldBase.restoreCountedOwnerSlotRefCount())
-                        || oldBase.restoreAggregateElementOwnerSlotRefCount()) {
-                    // A surviving counted slot is explicit evidence of a Perl
-                    // owner. For unblessed referents, require a current
-                    // aggregate element cell before repairing without a root walk.
+                        || oldBase.restoreAggregateElementOwnerSlotRefCount()
+                        || oldBase.restoreCapturedScalarCellOwnerSlotRefCount()) {
+                    // A surviving counted slot, current aggregate element, or
+                    // captured scalar cell with a live CODE owner is explicit
+                    // evidence of a Perl owner. These identities can repair
+                    // transient undercounts without a root walk.
                 } else if (oldBase.hasUncountedAggregateOwnerSlotIdentity()
                         || oldBase.hasUntrackedReferenceOwnerSlotIdentity()) {
                     // Counted slots have already been repaired above. Any
