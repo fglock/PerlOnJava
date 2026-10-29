@@ -584,6 +584,12 @@ external workload has drained before changing runtime source.
   owner slot, excluding temporary runtime roots. Added
   `TailCallUncountedOwnerSlotFastPathTest` for package scalar ownership; it
   passes in the full no-sweeps `make` gate (10m58s).
+- [x] On 2026-10-29, preserve live uncounted scalar owner slots through
+  referent promotion, while pruning slots in temporary containers without a
+  Perl owner at final release. `PromotedUntrackedOwnerSlotTest` covers both
+  cases. The no-sweeps full `make` gate passed in 14m59s; tempfile, closure,
+  weak/DESTROY, resurrection, weak-cycle, and HTML-Tree 8/8 checks passed on
+  both backends.
 - [x] On 2026-10-29, async Future resume now checks counted and direct owner
   slots instead of rebuilding root graphs or forcing GC for a scalar-registry
   lookup. Temporary evaluation roots do not count as Perl owners.

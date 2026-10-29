@@ -425,6 +425,29 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         return false;
     }
 
+    /**
+     * Whether a durable scalar value owns this referent outside its count.
+     * Refresh each exact owner first so a stale scalar cell cannot pin a
+     * referent after that cell has lost its Perl-visible slot.
+     */
+    boolean hasUntrackedReferenceOwnerSlotIdentity() {
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (slot.kind() != PerlOwnerSlot.Kind.UNTRACKED_REFERENCE || !slot.isActive()) continue;
+            RuntimeScalar owner = slot.untrackedScalarOwner();
+            if (owner != null) {
+                if (owner.hasLiveDurableStrongValueSlot()) {
+                    owner.refreshUntrackedReferenceOwner();
+                } else {
+                    owner.releaseUntrackedReferenceOwner(this);
+                }
+            } else {
+                slot.release();
+                WeakRefRegistry.onStrongOwnerSlotReleased(this);
+            }
+        }
+        return ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE) != 0;
+    }
+
     /** Whether an aggregate has a surviving owner outside the legacy count. */
     boolean hasUncountedAggregateOwnerSlotIdentity() {
         return (this instanceof RuntimeArray || this instanceof RuntimeHash)

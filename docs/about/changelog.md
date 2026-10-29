@@ -60,6 +60,7 @@ priorities and future plans.
 - Preserve non-CODE weak referents directly from surviving uncounted owner slots when a scalar releases its last counted slot (#1649).
 - Release displaced localized CODE captures from active-frame and owner-slot identities, without scalar-registry or root-graph scans (#1649).
 - Defer zero-count cleanup for aggregates with surviving owner slots across scalar, deferred, and tail-call releases (#1649).
+- Preserve live uncounted scalar owner slots through referent promotion, and prune temporary-container slots at final release (#1649).
 - Use direct non-counted Perl owner slots to defer tail-call cleanup without a root walk; ignore temporary runtime roots (#1649).
 - Repair transient unblessed referent undercounts from verified array/hash element slots during overwrite and deferred cleanup, avoiding root walks (#1649).
 - Remove live-scalar-registry reachability from first-weaken, tail-call, and async-Future owner decisions.

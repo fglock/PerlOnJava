@@ -45,6 +45,8 @@ public final class PerlOwnerSlot {
     private final RuntimeScalar padCell;
     private final long identity = NEXT_ID.incrementAndGet();
     private RuntimeBase referent;
+    /** Scalar cell that owns an untracked value edge; weak to avoid retaining its source. */
+    private WeakReference<RuntimeScalar> untrackedScalarOwner;
     /** Weak back-reference to the scalar implementing a counted cell owner. */
     private WeakReference<RuntimeScalar> countedScalarOwner;
     /** CODE object that owns a closure-pad identity; weak to avoid a metadata cycle. */
@@ -124,6 +126,17 @@ public final class PerlOwnerSlot {
 
     RuntimeScalar padCell() {
         return padCell;
+    }
+
+    synchronized void associateUntrackedScalarOwner(RuntimeScalar scalar) {
+        if (kind != Kind.UNTRACKED_REFERENCE) {
+            throw new IllegalStateException("scalar owner association requires an untracked-reference slot");
+        }
+        untrackedScalarOwner = scalar == null ? null : new WeakReference<>(scalar);
+    }
+
+    synchronized RuntimeScalar untrackedScalarOwner() {
+        return untrackedScalarOwner == null ? null : untrackedScalarOwner.get();
     }
 
     boolean isNativeCaptureOwner() {

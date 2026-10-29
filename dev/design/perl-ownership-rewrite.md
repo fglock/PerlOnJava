@@ -1420,6 +1420,18 @@ Perl owners. `TailCallUncountedOwnerSlotFastPathTest` checks zero root queries
 and cleanup after the package slot leaves. The no-sweeps `nice -n 19 make` gate
 passed in 10m58s; the regression passed with no skips or failures.
 
+### Durable uncounted slots survive referent promotion (2026-10-29)
+
+An existing durable uncounted scalar slot now remains in the ledger when its
+referent becomes tracked. Scalar overwrite and deferred release defer cleanup to
+that slot instead of trusting a transient zero. Final release checks the exact
+owning scalar and its container's Perl ownership, so a temporary argument array
+cannot pin the referent after its frame ends. `PromotedUntrackedOwnerSlotTest`
+covers package ownership and temporary-container cleanup. The no-sweeps full
+`nice -n 19 make` gate passed in 14m59s. Blessed scalar contents, Catalyst
+tempfile lifetime, closure cleanup, weak/DESTROY, exception resurrection,
+weak-closure, and HTML-Tree `t/refloop.t` (8/8) passed on both backends.
+
 ### Next steps
 
 1. Continue auditing `RuntimeScalar` and `MortalList` reachability fallbacks;
