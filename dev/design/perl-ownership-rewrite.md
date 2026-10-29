@@ -1305,14 +1305,14 @@ interpreter scope cleanup emitting releases for captured outer pad registers.
 `BytecodeCompiler` now excludes those registers from normal, explicit-return,
 condition, and tail-call cleanup, matching the JVM backend. The
 `issue_1649_recursive_builder_pad_release.t` regression passes 9/9 on both
-backends with corrective sweeps disabled and on system Perl. The unblessed
-aggregate nested in a package array still requires a root proof. The current
-unfiltered `make` compiles but reports four other JVM lifetime failures:
+backends with corrective sweeps disabled and on system Perl. An earlier
+unfiltered `make` reported four JVM lifetime failures:
 `catalyst_request_body_tempfile_lifetime.t`,
 `file_temp_path_wrapper_lifetime.t`,
 `inc_hook_generator_state.t`, and
-`refcount/blessed_scalar_reference_contents_destroy.t`. Its AnyEvent listener
-case also cannot allocate a loopback port in this environment.
+`refcount/blessed_scalar_reference_contents_destroy.t`. The full no-sweeps
+2026-10-29 `make` gate now passes; the AnyEvent listener test remains
+environment-dependent because this host cannot allocate its loopback port.
 
 ### Package-rooted untracked aggregate release (2026-10-29)
 
@@ -1327,26 +1327,34 @@ owner-slot ledger before inspecting package edges; its regression records one
 query and zero edges or nodes visited. The full no-sweeps `nice -n 19 make`
 passes in 11m. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends, and
 closure, weak, DESTROY, resurrection, and cycle regressions pass on both
-backends with sweeps disabled. The root-walk fallback remains for targets
-without direct owner identities.
+backends with sweeps disabled.
+
+### JVM-live scalar registry is not Perl ownership (2026-10-29)
+
+The zero-count branch in `WeakRefRegistry.weaken` no longer uses
+`isReachableFromLiveScalarRegistry` to rescue a referent. A Java-live wrapper
+in the weak-key registry is not a Perl owner; durable scalar owners must be
+represented by owner slots or another explicit Perl root. The new
+`ScalarRegistryIsNotPerlOwnerTest` covers a registry-only wrapper with no owner
+slot. The full no-sweeps `nice -n 19 make` gate passes in 10m31s, and eight
+weak, DESTROY, resurrection, closure, and cycle tests pass on both backends.
+Other reachability callers still use scalar-registry snapshots and remain to
+be migrated.
 
 ### Next steps
 
-1. Diagnose the four remaining sweep-disabled JVM lifetime failures listed
-   above, keeping the temporary-file wrapper and generator-state cases separate
-   until evidence connects them.
-2. Add direct owner identities to remaining targets that need the first-weaken
-   root-walk fallback, then remove that fallback.
-3. Replace the reflective weak-backref CODE capture walk with capture-owner
+1. Identify first-weaken targets that still need graph reachability; add direct
+   owner identities and focused lifecycle regressions before removing that
+   fallback.
+2. Replace the reflective weak-backref CODE capture walk with capture-owner
    identities and remove `weakBackrefCaptureSnapshot` while preserving captured
    aggregate lifetime and weak clearing.
-4. In one ownership-family batch, finish CODE template and optree pins, raw
+3. In one ownership-family batch, finish CODE template and optree pins, raw
    descriptor/embedding borrows, native call buffers, escaping lvalues and
    refaliases, and targeted try/finally returns. Add regressions before running
    the focused gates and one full `nice -n 19 make`.
-5. Requalify upstream HTML-Tree, weak/DESTROY, resurrection, cycle, and full-suite
-   behavior as each family migrates. Resolve the interpreter `new_from_lol`
-   regression as fixed, then qualify the full HTML-Tree suite.
-6. Make semantic owner counts authoritative, then remove the compatibility
+4. Requalify upstream HTML-Tree, weak/DESTROY, resurrection, cycle, and full-suite
+   behavior as each family migrates; then qualify the full HTML-Tree suite.
+5. Make semantic owner counts authoritative, then remove the compatibility
    bridge, production corrective scheduling, and reachability fallbacks after
    all acceptance gates pass.

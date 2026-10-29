@@ -198,7 +198,6 @@ public class WeakRefRegistry {
                         && scalar.ephemeralScalarReferenceReferent)
                         && hasWeakRefsTo(base)
                         && (ReachabilityWalker.isReachableFromRoots(base)
-                        || ReachabilityWalker.isReachableFromLiveScalarRegistry(base)
                         || ReachabilityWalker.isReachableFromLiveCodeCaptures(base)
                         || ReachabilityWalker.isReachableFromStrongRoots(base, snapshotRoots)
                         || RuntimeCode.isInstalledPadConstant(base))) {
