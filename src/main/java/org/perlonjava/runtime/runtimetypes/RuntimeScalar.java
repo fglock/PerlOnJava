@@ -3408,13 +3408,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     // A surviving counted slot is explicit evidence of a Perl
                     // owner, including during nested calls. Repair the bridge
                     // count before consulting frame or root reachability.
-                } else if (!(oldBase instanceof RuntimeCode)
-                        && WeakRefRegistry.hasWeakRefsTo(oldBase)
-                        && oldBase.hasUncountedOwnerSlotIdentity()) {
+                } else if (oldBase.hasUncountedAggregateOwnerSlotIdentity()) {
                     // Counted slots have already been repaired above. Any
-                    // remaining uncounted slot is direct evidence of a Perl
-                    // owner; keep weak observers until that slot is released.
-                    oldBase.refCount = WeakRefRegistry.WEAKLY_TRACKED;
+                    // remaining aggregate owner slot is direct evidence of a
+                    // Perl owner; defer cleanup until that slot is released.
+                    oldBase.deferFinalReleaseToUncountedOwnerSlots();
                 } else if (oldBase.blessId == 0
                         && (oldBase instanceof RuntimeArray || oldBase instanceof RuntimeHash)
                         && WeakRefRegistry.hasWeakRefsTo(oldBase)

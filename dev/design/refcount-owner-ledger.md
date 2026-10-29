@@ -570,6 +570,12 @@ external workload has drained before changing runtime source.
   cleanup; `LocalizedGlobCodeOwnerSlotFastPathTest` covers a live active call.
   The no-sweeps full `make`, closure/weak/DESTROY/resurrection/cycle matrix, and
   HTML-Tree 5.07 `t/refloop.t` (8/8) pass on both backends.
+- [x] On 2026-10-29, scalar overwrite, deferred decrement, and tail-call release
+  now defer zero-count cleanup for aggregates with a surviving uncounted owner
+  slot, even with no weak observer. `UncountedOwnerSlotZeroCountReleaseTest`
+  verifies each path and final destruction after the sole owner slot leaves.
+  Scalar and IO referents still need owner-slot release coverage before this
+  rule can safely apply to them.
 
 ### Handoff: issue #1132 / PR #1204
 
