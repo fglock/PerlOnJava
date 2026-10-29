@@ -564,6 +564,12 @@ external workload has drained before changing runtime source.
   observers when `RuntimeScalar` releases the last counted slot. The final
   owner release performs direct cleanup without a root query; permanent
   regression coverage is in `RuntimeScalarUncountedOwnerRepairTest`.
+- [x] On 2026-10-29, localized CODE restoration now releases displaced CODE
+  captures from active-frame and owner-slot identities, without scalar-registry
+  or root-graph scans. `LocalizedGlobCodeOwnerReleaseTest` covers final capture
+  cleanup; `LocalizedGlobCodeOwnerSlotFastPathTest` covers a live active call.
+  The no-sweeps full `make`, closure/weak/DESTROY/resurrection/cycle matrix, and
+  HTML-Tree 5.07 `t/refloop.t` (8/8) pass on both backends.
 
 ### Handoff: issue #1132 / PR #1204
 
