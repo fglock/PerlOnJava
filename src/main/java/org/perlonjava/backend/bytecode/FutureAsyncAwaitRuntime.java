@@ -321,9 +321,7 @@ public final class FutureAsyncAwaitRuntime {
                 return null;
             }
             if (outerWeak.value instanceof RuntimeBase referent
-                    && !ReachabilityWalker.isReachableFromRoots(referent)
-                    && !ReachabilityWalker.isReachableFromLiveScalarRegistry(referent)
-                    && !ReachabilityWalker.isReachableFromLiveCodeCaptures(referent)) {
+                    && !referent.hasPerlStrongOwner()) {
                 WeakRefRegistry.clearWeakRefsTo(referent);
                 return null;
             }

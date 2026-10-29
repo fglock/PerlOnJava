@@ -1338,8 +1338,11 @@ weak-key registry is not a Perl owner; durable scalar owners must be
 represented by owner slots or another explicit Perl root.
 `ScalarRegistryIsNotPerlOwnerTest` covers first-weaken cleanup, and
 `TailCallScalarRegistryOwnershipTest` covers the released tail-call owner.
-The no-sweeps full `nice -n 19 make` gate passes; other reachability callers
-still use scalar-registry snapshots and remain to be migrated.
+Async Future resume now checks the referent's counted or direct owner-slot
+state, excluding temporary evaluation roots. Other sweep and reachability
+callers still need to be migrated. `PerlStrongOwnerProofTest` covers counted,
+untracked, and temporary owner slots; `FutureAsyncAwaitRuntimeTest` passes in
+the full no-sweeps `make` gate.
 
 ### Uncounted owner slots release without a root walk (2026-10-29)
 

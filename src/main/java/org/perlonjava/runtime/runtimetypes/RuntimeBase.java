@@ -395,6 +395,24 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         return ownerSlots != null && !ownerSlots.isEmpty();
     }
 
+    /**
+     * Whether the legacy count or a direct Perl owner slot proves this value
+     * is still owned. Runtime temporary roots are evaluation scaffolding, not
+     * Perl references, and are deliberately excluded.
+     */
+    public boolean hasPerlStrongOwner() {
+        if (refCount > 0 || localBindingExists || captureCount > 0
+                || hasPendingReturnOwner()) {
+            return true;
+        }
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (slot.isActive() && slot.kind() != PerlOwnerSlot.Kind.TEMPORARY_ROOT) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** Whether an untracked referent has a direct slot identity not backed by refCount. */
     synchronized boolean hasUncountedOwnerSlotIdentity() {
         if (ownerSlots == null) return false;
