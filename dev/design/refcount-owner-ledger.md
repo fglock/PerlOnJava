@@ -566,16 +566,16 @@ pass. Preserve both focused ownership regressions when evolving the ledger.
 
 ### Next Steps
 
-1. Complete package-nested untracked aggregate ownership end to end: make the
-   remaining package-root release paths cascade through child slots, then
-   remove the first-weaken reachability fallback only after those paths have
-   direct regression coverage.
-2. Audit tracked zero-count transitions and temporary evaluation roots; add
-   explicit slot identities where ownership is missing.
-3. Remove each fallback only after its owner path has focused regression
-   coverage and passes system Perl plus both PerlOnJava backends.
+1. Identify first-weaken targets that still need graph reachability; add direct
+   owner identities and focused coverage before removing that fallback.
+2. Replace the reflective weak-backref CODE capture walk with capture-owner
+   identities and remove `weakBackrefCaptureSnapshot` while preserving weak
+   clearing and captured aggregate lifetime.
+3. Audit tracked zero-count transitions and temporary evaluation roots; add
+   explicit slot identities where ownership is missing, then remove each
+   fallback only after system Perl and both backends pass.
 4. Requalify HTML-Tree's 8/8 and the full suite after remaining owner changes;
-   remove the remaining compatibility APIs after all gates pass.
+   remove compatibility APIs after all gates pass.
 5. Keep Cookie2 formatting and content-coding exception handling separate from
    this ownership work.
 

@@ -8,6 +8,7 @@ priorities and future plans.
 
 - Disable corrective sweeps by default while migrating to explicit reference ownership; retain temporary scalar call and mortal return values through their caller boundaries, and balance argument, scalar-cell, closure, aggregate, package scalar/array/hash roots, tied-handler, shared-view, named CODE, persistent state, and destructor lifetimes (#1649).
 - Use owner-slot proofs to skip package-root walks for rooted untracked aggregates, and clear weak observers when their final owner is released (#1649).
+- Remove the live-scalar-registry reachability fallback from first-weaken zero-count decisions.
 
 - Bundle `Devel::Size` with JVM-based `size` and `total_size` estimates.
 
