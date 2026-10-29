@@ -1485,6 +1485,16 @@ weak clearing, and zero root snapshots. The no-sweeps `nice -n 19 make` gate
 passed in 10m41s. HTML-Tree 5.07 `t/refloop.t` passed 8/8 on both backends;
 `make check-links` passed.
 
+### First-weaken package aggregate proof (2026-10-29)
+
+First weakening of an untracked package aggregate now validates its active
+`UNTRACKED_REFERENCE` scalar owners directly, including whether each owner
+still occupies a durable strong slot. This removes the root-reachability call
+from that transition. The existing package-nested owner-slot tests pass as
+part of the no-sweeps `nice -n 19 make` gate (11m53s), including the proof-only
+query with zero graph edges and the final-owner weak-observer release.
+HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with sweeps disabled.
+
 ### Next steps
 
 1. Continue auditing `RuntimeScalar` and `MortalList` reachability fallbacks;

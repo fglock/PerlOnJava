@@ -270,12 +270,12 @@ public class WeakRefRegistry {
                     && base.storedInPackageGlobal
                     && base.ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE) != 0;
             if (legacyPackageNestedAggregate
-                    && ReachabilityWalker.isReachableFromRoots(base)) {
+                    && ReachabilityWalker.hasLiveUntrackedOwnerSlot(base)) {
                 // An untracked aggregate may already be owned by a live tree
                 // before its first weak parent edge is installed. Keep it
                 // through this transition, then retire the compatibility pin
-                // when its recorded strong owner slots are all released. The
-                // owner-slot fast path proves this case without traversing roots.
+                // when its recorded strong owner slots are all released. Exact
+                // scalar-owner identities prove this without a root-graph walk.
                 base.refCount = 1;
                 base.packageRootRescuedUntrackedAggregate = true;
             } else {
