@@ -1382,6 +1382,16 @@ capture cleanup and zero root queries. The no-sweeps full `nice -n 19 make`
 passes in 10m45s. The closure, weak-reference, DESTROY, resurrection, cycle,
 localized-glob, and HTML-Tree `t/refloop.t` (8/8) matrix passes on both backends.
 
+### Uncounted owners defer zero-count cleanup without weak observers (2026-10-29)
+
+Scalar overwrite, deferred decrement, and tail-call release now recognize a
+surviving uncounted aggregate owner slot before reaching root fallbacks. Final
+slot release dispatches cleanup even when no weak observer exists. A separate
+pending-release marker keeps this path distinct from legacy `WEAKLY_TRACKED`
+values. `UncountedOwnerSlotZeroCountReleaseTest` covers all three paths and
+verifies exactly one final cleanup with no root query. Scalar and IO referents
+remain on the prior path until their owner-slot releases are covered.
+
 ### Next steps
 
 1. Audit remaining `RuntimeScalar` and `MortalList` reachability fallbacks;

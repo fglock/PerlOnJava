@@ -214,6 +214,9 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
      */
     boolean packageRootRescuedUntrackedAggregate = false;
 
+    /** Marks a counted referent kept alive only until its uncounted owner slots leave. */
+    boolean deferredFinalReleaseForUncountedOwners = false;
+
     /**
      * Number of live hash-element slots that directly own this referent.
      * This is separate from selective refCount because a returned method
@@ -399,6 +402,18 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             if (!PerlOwnerSlot.isCountedKind(slot.kind())) return true;
         }
         return false;
+    }
+
+    /** Whether an aggregate has a surviving owner outside the legacy count. */
+    boolean hasUncountedAggregateOwnerSlotIdentity() {
+        return (this instanceof RuntimeArray || this instanceof RuntimeHash)
+                && hasUncountedOwnerSlotIdentity();
+    }
+
+    void deferFinalReleaseToUncountedOwnerSlots() {
+        if (!hasUncountedOwnerSlotIdentity()) return;
+        refCount = WeakRefRegistry.WEAKLY_TRACKED;
+        deferredFinalReleaseForUncountedOwners = true;
     }
 
     /** Check whether a live owner identity besides the slot being replaced remains. */
