@@ -470,6 +470,25 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         return true;
     }
 
+    /** Restore from current array/hash element slots with verified cell identity. */
+    boolean restoreAggregateElementOwnerSlotRefCount() {
+        int count = 0;
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            PerlOwnerSlot.Kind kind = slot.kind();
+            if ((kind == PerlOwnerSlot.Kind.ARRAY_ELEMENT
+                    || kind == PerlOwnerSlot.Kind.HASH_ELEMENT)
+                    && slot.isActive()) {
+                RuntimeScalar owner = slot.countedScalarOwner();
+                if (owner != null && owner.isCurrentAggregateElementOwner(this, slot)) {
+                    count++;
+                }
+            }
+        }
+        if (count == 0) return false;
+        refCount = count;
+        return true;
+    }
+
     /** Number of distinct captured pad slots that own this referent. */
     public int semanticCaptureOwnerCount() {
         return ownerSlotCount(PerlOwnerSlot.Kind.CLOSURE_PAD);
