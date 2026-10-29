@@ -275,8 +275,24 @@ public class WarningFlags {
      * @param categoryToInternalBit Map from category name to internal bit position
      * @return The Perl 5 compatible warning bits string
      */
+    private static BitSet cachedEnabled;
+    private static BitSet cachedFatal;
+    private static int cachedMapSize;
+    private static int cachedUserOffsetsSize;
+    private static String cachedResult;
+
     public static String toWarningBitsString(BitSet enabled, BitSet fatal,
                                               Map<String, Integer> categoryToInternalBit) {
+        int mapSize = categoryToInternalBit != null ? categoryToInternalBit.size() : 0;
+        int userSize = state().userWarningCategoryOffsets.size();
+        if (cachedResult != null
+                && mapSize == cachedMapSize
+                && userSize == cachedUserOffsetsSize
+                && enabled.equals(cachedEnabled)
+                && (fatal == null ? cachedFatal == null : fatal.equals(cachedFatal))) {
+            return cachedResult;
+        }
+
         // Calculate required size
         int maxOffset = WARN_SIZE * 4; // Default Perl 5 size in categories
         for (String category : state().userWarningCategoryOffsets.keySet()) {
@@ -330,7 +346,13 @@ public class WarningFlags {
             }
         }
         
-        return new String(bytes, StandardCharsets.ISO_8859_1);
+        String result = new String(bytes, StandardCharsets.ISO_8859_1);
+        cachedEnabled = (BitSet) enabled.clone();
+        cachedFatal = fatal != null ? (BitSet) fatal.clone() : null;
+        cachedMapSize = mapSize;
+        cachedUserOffsetsSize = userSize;
+        cachedResult = result;
+        return result;
     }
 
     /**
