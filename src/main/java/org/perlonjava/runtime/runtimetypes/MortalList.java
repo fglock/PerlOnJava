@@ -870,7 +870,7 @@ public class MortalList {
 
         // Counted owner slots are authoritative even when the compatibility
         // refcount transiently undercounts them during a tail-call handoff.
-        // Restore from those identities before asking the root walker.
+        // Restore from those identities before allowing final release.
         if (base.restoreCountedOwnerSlotRefCount()) return;
 
         if (base.localBindingExists) {
@@ -881,21 +881,8 @@ public class MortalList {
             base.deferFinalReleaseToUncountedOwnerSlots();
             return;
         }
-        if (reachableTailCallArgReferent(base)) {
-            base.refCount = 1;
-            return;
-        }
-
         base.refCount = Integer.MIN_VALUE;
         DestroyDispatch.callDestroy(base);
-    }
-
-    private static boolean reachableTailCallArgReferent(RuntimeBase base) {
-        // A JVM-live scalar-registry entry is not a Perl owner. The root walk
-        // filters stale wrappers, while explicit captures are checked separately.
-        return WeakRefRegistry.hasWeakRefsTo(base)
-                && (ReachabilityWalker.isReachableFromRoots(base)
-                || ReachabilityWalker.isReachableFromLiveCodeCaptures(base));
     }
 
     /**
