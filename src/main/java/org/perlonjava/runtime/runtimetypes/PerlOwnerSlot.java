@@ -6,7 +6,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Identity for one Perl strong-owner slot.
+ * Identity for one Perl strong-owner slot or explicitly tracked runtime
+ * compatibility hold.
  *
  * <p>The current runtime still uses selective {@link RuntimeBase#refCount}
  * transitions as its lifecycle bridge. This object records the slot identity
@@ -39,6 +40,8 @@ public final class PerlOwnerSlot {
         ACTIVE_LEXICAL,
         /** Strong container edge whose referent is not on the legacy refcount bridge. */
         UNTRACKED_REFERENCE,
+        /** Temporary legacy count pin for a package-rooted weak aggregate. */
+        WEAKLY_TRACKED_COMPATIBILITY_PIN,
         /** Runtime-owned temporary value retained across a cleanup drain. */
         TEMPORARY_ROOT
     }
@@ -279,6 +282,21 @@ public final class PerlOwnerSlot {
         }
         if (nativeOwner || legacyCaptureCount != 0) {
             throw new IllegalStateException("untracked identity cannot replace native or capture ownership");
+        }
+        transferWithoutRuntimeRoot(target, false);
+    }
+
+    /** Identify one temporary compatibility count installed for weak tracking. */
+    synchronized void acquireWeaklyTrackedCompatibilityPin(RuntimeBase target) {
+        if (kind != Kind.WEAKLY_TRACKED_COMPATIBILITY_PIN) {
+            throw new IllegalStateException("compatibility pin requires its dedicated owner-slot kind");
+        }
+        Objects.requireNonNull(target, "target");
+        if (target.refCount == Integer.MIN_VALUE) {
+            throw new IllegalStateException("cannot pin a destroyed referent");
+        }
+        if (referent != null || nativeOwner || legacyCaptureCount != 0) {
+            throw new IllegalStateException("compatibility pin is already active");
         }
         transferWithoutRuntimeRoot(target, false);
     }

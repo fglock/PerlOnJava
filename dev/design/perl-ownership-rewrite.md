@@ -1565,24 +1565,32 @@ instead of relying on a positive legacy count to hide that path.
 `weakly_tracked_undef_preserves_other_owner.t` records the standard Perl
 behavior. Both backend runs pass with corrective sweeps disabled. The no-sweeps
 full `nice -n 19 make` gate passes in 11m55s, and HTML-Tree 5.07 `t/refloop.t`
-passes 8/8 on both backends. The package-root compatibility pin remains for a
-separate migration step.
+passes 8/8 on both backends.
+
+### Package-nested aggregate cleanup uses owner identities (2026-10-30)
+
+The package-root compatibility count remains required by the existing
+root-proof contract, but it now has a dedicated owner-slot identity. The
+package element scalar slots remain the Perl ownership evidence; when their final slot
+leaves, cleanup retires the compatibility identity and count before clearing
+the weak observer. This makes the transitional pin explicit and exactly-once
+instead of leaving it as an untracked positive count. A focused Java regression
+checks pin identity, final-slot release, idempotence, and unweakened count
+preservation; a Perl-level test records the package array lifetime oracle. The
+root proof validates direct scalar-owner identities without traversing package
+edges.
 
 ### Next steps
 
-1. Finish package-rooted aggregate cleanup. Late inserts and cross-container
-   scalar aliases now retain direct cell provenance; remove the remaining
-   package-root compatibility pin and replace its root-snapshot cleanup paths
-   with the owner ledger.
-2. Migrate remaining weak-backref capture cases to explicit owner identities,
+1. Migrate remaining weak-backref capture cases to explicit owner identities,
    then remove `weakBackrefCaptureSnapshot` and preserve aggregate lifetime and
    weak clearing without the compatibility graph walk.
-3. In one ownership-family batch, finish CODE template and optree pins, raw
+2. In one ownership-family batch, finish CODE template and optree pins, raw
    descriptor/embedding borrows, native call buffers, escaping lvalues and
    refaliases, and targeted try/finally returns. Add regressions before running
    the focused gates and one full `nice -n 19 make`.
-4. Requalify upstream HTML-Tree, weak/DESTROY, resurrection, cycle, and full-suite
+3. Requalify upstream HTML-Tree, weak/DESTROY, resurrection, cycle, and full-suite
    behavior as each family migrates; then qualify the full HTML-Tree suite.
-5. Make semantic owner counts authoritative, then remove the compatibility
+4. Make semantic owner counts authoritative, then remove the compatibility
    bridge, production corrective scheduling, and reachability fallbacks after
    all acceptance gates pass.
