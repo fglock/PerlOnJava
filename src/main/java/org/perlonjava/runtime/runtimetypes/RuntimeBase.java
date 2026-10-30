@@ -425,6 +425,25 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         return false;
     }
 
+    boolean hasDirectOwnerSlotProofForReleasedWeakReferent() {
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (!slot.isActive()) continue;
+            if (slot.kind() == PerlOwnerSlot.Kind.ARRAY_ELEMENT
+                    || slot.kind() == PerlOwnerSlot.Kind.HASH_ELEMENT) {
+                RuntimeScalar scalar = slot.countedScalarOwner();
+                if (scalar != null && scalar.getContainerOwner() == null) continue;
+            }
+            if (slot.kind() == PerlOwnerSlot.Kind.UNTRACKED_REFERENCE) {
+                RuntimeScalar scalar = slot.untrackedScalarOwner();
+                if (scalar != null && scalar.hasPackageAggregateUntrackedReferenceOwner()) {
+                    continue;
+                }
+            }
+            return true;
+        }
+        return false;
+    }
+
     /**
      * Whether a durable scalar value owns this referent outside its count.
      * Refresh each exact owner first so a stale scalar cell cannot pin a
@@ -448,10 +467,41 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         return ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE) != 0;
     }
 
+    boolean hasUntrackedReferenceOwnerSlotIdentity(int scalarType) {
+        if (!hasUntrackedReferenceOwnerSlotIdentity()) return false;
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (slot.kind() != PerlOwnerSlot.Kind.UNTRACKED_REFERENCE || !slot.isActive()) continue;
+            RuntimeScalar owner = slot.untrackedScalarOwner();
+            if (owner != null && owner.type == scalarType
+                    && owner.hasLiveDurableStrongValueSlot()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** Whether an aggregate has a surviving owner outside the legacy count. */
     boolean hasUncountedAggregateOwnerSlotIdentity() {
         return (this instanceof RuntimeArray || this instanceof RuntimeHash)
                 && hasUncountedPerlOwnerSlotIdentity();
+    }
+
+    boolean hasNonPackageAggregateUncountedOwnerSlotIdentity() {
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (!slot.isActive()
+                    || PerlOwnerSlot.isCountedKind(slot.kind())
+                    || slot.kind() == PerlOwnerSlot.Kind.TEMPORARY_ROOT) {
+                continue;
+            }
+            if (slot.kind() == PerlOwnerSlot.Kind.UNTRACKED_REFERENCE) {
+                RuntimeScalar scalar = slot.untrackedScalarOwner();
+                if (scalar != null && scalar.isPackageAggregateUntrackedReferenceOwner()) {
+                    continue;
+                }
+            }
+            return true;
+        }
+        return false;
     }
 
     void deferFinalReleaseToUncountedOwnerSlots() {

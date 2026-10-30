@@ -3410,7 +3410,9 @@ public class ReachabilityWalker {
         Set<RuntimeBase> directlyOwned =
                 Collections.newSetFromMap(new IdentityHashMap<>());
         for (RuntimeBase referent : pending) {
-            if (referent.hasOwnerSlots()) directlyOwned.add(referent);
+            if (referent.hasDirectOwnerSlotProofForReleasedWeakReferent()) {
+                directlyOwned.add(referent);
+            }
         }
         if (directlyOwned.containsAll(pending)) {
             return new ReleasedWeakSweepResult(null, Collections.emptySet(),
