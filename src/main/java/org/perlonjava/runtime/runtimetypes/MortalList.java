@@ -1575,6 +1575,13 @@ public class MortalList {
             base.traceRefCount(-1, "MortalList.flush (deferred decrement)");
         }
         if (base.refCount > 0 && --base.refCount == 0) {
+            boolean aggregateReferent = base instanceof RuntimeArray || base instanceof RuntimeHash;
+            // Aggregate owner slots have their own deferred-release rule below.
+            // Refresh scalar-cell owners here for other referents before the
+            // final counted release checks whether any owner slot remains.
+            boolean hasUntrackedReferenceOwner = !aggregateReferent
+                    && base.ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE) != 0
+                    && base.hasUntrackedReferenceOwnerSlotIdentity();
             if (base instanceof RuntimeCode code && code.hasActiveCodeOwner()) {
                 code.deferFinalReleaseToActiveCode();
             } else if (base.hasSemanticCaptureOwner()) {
@@ -1645,8 +1652,10 @@ public class MortalList {
                 // sub's glob is replaced, matching Perl optree reaping.
                 base.refCount = 1;
             } else if (base.hasNonPackageAggregateUncountedOwnerSlotIdentity()
-                    || base.hasUntrackedReferenceOwnerSlotIdentity(
-                            RuntimeScalarType.REFERENCE)) {
+                    || (aggregateReferent
+                        ? base.hasUntrackedReferenceOwnerSlotIdentity(
+                                RuntimeScalarType.REFERENCE)
+                        : hasUntrackedReferenceOwner)) {
                 // Counted owner recovery is complete above. A surviving
                 // aggregate or untracked scalar slot is enough to defer cleanup
                 // until its release, even when no weak observer currently exists.
@@ -1736,18 +1745,6 @@ public class MortalList {
                 // path.
                 base.refCount = 1;
             } else if (base.blessId != 0
-                    && hasWeakRefs
-                    && !blessedClassHasDestroy(base)
-                    && RuntimeCode.argsStackDepth() > 1
-                    && !base.clearedOwnedAggregateElement) {
-                // Nested calls can retain expression temporaries which are not
-                // selective refcount owners.  Leave the count at zero and let
-                // the next outer statement boundary decide from Perl-visible
-                // reachability.  Retaining a synthetic count here leaks weak
-                // observers after a method-local alias releases the final real
-                // owner (Algorithm::SlidingWindow).
-                requestTargetedWeakSweep(base);
-            } else if (base.blessId != 0
                     && base.storedInPackageGlobal
                     && hasWeakRefs
                     && isReachableCached(base)) {
@@ -1756,9 +1753,30 @@ public class MortalList {
                 // If the walker can still reach the object from Perl-visible
                 // roots, keep weak links to it intact.
             } else {
+                // Call depth is not ownership. If every counted and direct
+                // owner check above is empty, a weak referent is final here;
+                // leaving it for a later sweep would strand the weak scalars.
                 base.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroy(base);
             }
+        }
+        // A prior compatibility branch may preserve refCount at zero while a
+        // nested scope is unwinding. The exact owner release is still pending
+        // in this call, so recheck its ledger after that branch: once this was
+        // the final trusted slot and no other Perl binding remains, finish the
+        // release here instead of relying on a later reachability sweep.
+        if (base.refCount == 0
+                && isFinalCountedReferentRelease(base, ownerRelease)
+                && !base.localBindingExists
+                && base.captureCount == 0
+                && !base.hasPendingReturnOwner()
+                && !GlobalVariable.isPackageRootedAggregate(base)
+                && !(base instanceof RuntimeCode code
+                    && (code.hasActiveCodeOwner()
+                        || code.stashRefCount > 0
+                        || GlobalVariable.installedGlobalCodeRefsView().contains(code)))) {
+            base.refCount = Integer.MIN_VALUE;
+            DestroyDispatch.callDestroyFromCountedOwner(base);
         }
         if (base instanceof RuntimeCode code) code.finishActiveCodeOwnerRelease();
         if (base instanceof RuntimeScalar scalar) {

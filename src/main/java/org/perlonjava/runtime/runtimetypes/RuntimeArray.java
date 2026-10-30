@@ -961,7 +961,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     }
 
     void markPackageRootedValue(RuntimeScalar value) {
-        if (isPackageGlobalRoot && value != null) {
+        if (isPackageGlobalRoot && !elementsAliased && value != null) {
             value.isPackageGlobalRoot = true;
             value.markContainerOwner(this);
             if (value.value instanceof RuntimeBase referent) {
@@ -2134,7 +2134,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      * Behavior:
      * <ol>
      *   <li>Defer-decrement any existing counted elements (like normal {@code setFromList}).</li>
-     *   <li>Copy new elements in without incrementing their referents' refCounts.</li>
+     *   <li>Store the source scalar cells directly, without creating new ref owners.</li>
      *   <li>Mark {@code elementsOwned=false} so {@link #shift(RuntimeArray)}
      *       and other removal paths don't defer a spurious decrement.</li>
      * </ol>
@@ -2149,17 +2149,21 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         notePackageRootMutation();
         this.deferOwnedElementReleases();
         this.elements.clear();
-        list.addToArray(this);
-        // Elements are aliases: mark as non-owning. setLarge in later
-        // overwrites will still work correctly because setLarge checks
-        // refCountOwned before decrementing.
-        for (RuntimeScalar elem : this.elements) {
-            if (elem != null) elem.refCountOwned = false;
-            markPackageRootedValue(elem);
-        }
-        this.elementsOwned = false;
+        // This array is a view of existing SV cells. Preserve their identity
+        // so updates and source-cell cleanup are visible through the alias;
+        // copying each scalar here creates an extra untracked reference owner
+        // whose lifetime can outlast the source argument slot.
         this.elementsAliased = true;
+        this.elementsOwned = false;
         this.ownedAliasElements = null;
+        for (RuntimeBase value : list.elements) {
+            if (value instanceof RuntimeScalar scalar) {
+                this.elements.add(scalar);
+            } else if (value != null) {
+                value.addToArray(this);
+            }
+        }
+        list.elements.clear();
         return this;
     }
 
