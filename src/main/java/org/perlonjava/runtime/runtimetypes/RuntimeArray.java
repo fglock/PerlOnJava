@@ -536,6 +536,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             RuntimeScalar result = super.set(index, element);
             refreshStoredUntrackedOwner(element);
             if (previous != element) {
+                if (previous != null) previous.refreshUntrackedReferenceOwner();
                 RuntimeCode.argumentArraySlotRemoved(owner, previous);
             }
             owner.validateIsaMutation();
@@ -553,6 +554,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         @Override
         public RuntimeScalar remove(int index) {
             RuntimeScalar previous = super.remove(index);
+            if (previous != null) previous.refreshUntrackedReferenceOwner();
             owner.noteIsaMutation();
             owner.notePackageRootMutation(previous, null);
             owner.validateIsaMutation();
@@ -563,6 +565,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         @Override
         public RuntimeScalar removeFirst() {
             RuntimeScalar previous = super.removeFirst();
+            if (previous != null) previous.refreshUntrackedReferenceOwner();
             RuntimeCode.argumentArraySlotRemoved(owner, previous);
             return previous;
         }
@@ -570,6 +573,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         @Override
         public RuntimeScalar removeLast() {
             RuntimeScalar previous = super.removeLast();
+            if (previous != null) previous.refreshUntrackedReferenceOwner();
             RuntimeCode.argumentArraySlotRemoved(owner, previous);
             return previous;
         }
@@ -578,6 +582,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         public boolean remove(Object o) {
             boolean removed = super.remove(o);
             if (removed && o instanceof RuntimeScalar scalar) {
+                scalar.refreshUntrackedReferenceOwner();
                 owner.noteIsaMutation();
                 owner.notePackageRootMutation(scalar, null);
                 owner.validateIsaMutation();
@@ -589,11 +594,18 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         @Override
         public void clear() {
             if (!isEmpty()) {
+                RuntimeScalar[] removed = toArray(new RuntimeScalar[0]);
                 owner.noteIsaMutation();
                 owner.notePackageRootClear(this);
-                for (RuntimeScalar scalar : toArray(new RuntimeScalar[0])) {
+                for (RuntimeScalar scalar : removed) {
                     RuntimeCode.argumentArraySlotRemoved(owner, scalar);
                 }
+                super.clear();
+                for (RuntimeScalar scalar : removed) {
+                    if (scalar != null) scalar.refreshUntrackedReferenceOwner();
+                }
+                owner.validateIsaMutation();
+                return;
             }
             super.clear();
             owner.validateIsaMutation();
@@ -601,10 +613,14 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
 
         @Override
         protected void removeRange(int fromIndex, int toIndex) {
+            List<RuntimeScalar> removed = new ArrayList<>(subList(fromIndex, toIndex));
             for (int i = fromIndex; i < toIndex; i++) {
                 RuntimeCode.argumentArraySlotRemoved(owner, get(i));
             }
             super.removeRange(fromIndex, toIndex);
+            for (RuntimeScalar scalar : removed) {
+                if (scalar != null) scalar.refreshUntrackedReferenceOwner();
+            }
         }
 
         @Override
@@ -613,8 +629,10 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             boolean changed = false;
             Iterator<RuntimeScalar> iterator = iterator();
             while (iterator.hasNext()) {
-                if (filter.test(iterator.next())) {
+                RuntimeScalar removed = iterator.next();
+                if (filter.test(removed)) {
                     iterator.remove();
+                    if (removed != null) removed.refreshUntrackedReferenceOwner();
                     changed = true;
                 }
             }
