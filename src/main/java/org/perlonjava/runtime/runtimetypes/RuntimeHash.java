@@ -209,6 +209,9 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         private long stableMethodFieldCacheRevision;
         private boolean stableMethodFieldCacheable = true;
         private transient Collection<RuntimeScalar> trackedValuesView;
+        private Set<Map.Entry<String, RuntimeScalar>> entrySetView;
+        private Set<String> keySetView;
+        private Collection<RuntimeScalar> valuesView;
 
         private RuntimeHashElementMap(RuntimeHash owner) {
             this.owner = owner;
@@ -246,6 +249,319 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             }
             updateReferentHashSlotOwnership(previous, value);
             return result;
+        }
+
+        @Override
+        public RuntimeScalar putIfAbsent(String key, RuntimeScalar value) {
+            RuntimeScalar current = get(key);
+            return current == null ? put(key, value) : current;
+        }
+
+        @Override
+        public boolean remove(Object key, Object value) {
+            if (!containsKey(key) || !Objects.equals(get(key), value)) return false;
+            remove(key);
+            return true;
+        }
+
+        @Override
+        public boolean replace(String key, RuntimeScalar oldValue, RuntimeScalar newValue) {
+            if (!containsKey(key) || !Objects.equals(get(key), oldValue)) return false;
+            put(key, newValue);
+            return true;
+        }
+
+        @Override
+        public RuntimeScalar replace(String key, RuntimeScalar value) {
+            if (!containsKey(key)) return null;
+            return put(key, value);
+        }
+
+        @Override
+        public void replaceAll(java.util.function.BiFunction<? super String,
+                ? super RuntimeScalar, ? extends RuntimeScalar> function) {
+            Objects.requireNonNull(function);
+            for (String key : new ArrayList<>(super.keySet())) {
+                put(key, function.apply(key, get(key)));
+            }
+        }
+
+        @Override
+        public RuntimeScalar computeIfAbsent(String key,
+                java.util.function.Function<? super String, ? extends RuntimeScalar> function) {
+            Objects.requireNonNull(function);
+            RuntimeScalar current = get(key);
+            if (current != null) return current;
+            RuntimeScalar computed = function.apply(key);
+            if (computed != null) put(key, computed);
+            return computed;
+        }
+
+        @Override
+        public RuntimeScalar computeIfPresent(String key,
+                java.util.function.BiFunction<? super String, ? super RuntimeScalar,
+                        ? extends RuntimeScalar> function) {
+            Objects.requireNonNull(function);
+            RuntimeScalar current = get(key);
+            if (current == null) return null;
+            RuntimeScalar computed = function.apply(key, current);
+            if (computed == null) remove(key);
+            else put(key, computed);
+            return computed;
+        }
+
+        @Override
+        public RuntimeScalar compute(String key,
+                java.util.function.BiFunction<? super String, ? super RuntimeScalar,
+                        ? extends RuntimeScalar> function) {
+            Objects.requireNonNull(function);
+            RuntimeScalar current = get(key);
+            boolean present = current != null || containsKey(key);
+            RuntimeScalar computed = function.apply(key, current);
+            if (computed == null) {
+                if (present) remove(key);
+            } else {
+                put(key, computed);
+            }
+            return computed;
+        }
+
+        @Override
+        public RuntimeScalar merge(String key, RuntimeScalar value,
+                java.util.function.BiFunction<? super RuntimeScalar, ? super RuntimeScalar,
+                        ? extends RuntimeScalar> function) {
+            Objects.requireNonNull(value);
+            Objects.requireNonNull(function);
+            RuntimeScalar current = get(key);
+            RuntimeScalar merged = current == null ? value : function.apply(current, value);
+            if (merged == null) remove(key);
+            else put(key, merged);
+            return merged;
+        }
+
+        @Override
+        public Set<Map.Entry<String, RuntimeScalar>> entrySet() {
+            if (entrySetView == null) {
+                entrySetView = new AbstractSet<>() {
+                    @Override
+                    public int size() {
+                        return RuntimeHashElementMap.this.size();
+                    }
+
+                    @Override
+                    public void clear() {
+                        RuntimeHashElementMap.this.clear();
+                    }
+
+                    @Override
+                    public boolean contains(Object candidate) {
+                        if (!(candidate instanceof Map.Entry<?, ?> entry)) return false;
+                        Object key = entry.getKey();
+                        return RuntimeHashElementMap.this.containsKey(key)
+                                && Objects.equals(RuntimeHashElementMap.this.get(key), entry.getValue());
+                    }
+
+                    @Override
+                    public boolean remove(Object candidate) {
+                        return candidate instanceof Map.Entry<?, ?> entry
+                                && RuntimeHashElementMap.this.remove(entry.getKey(), entry.getValue());
+                    }
+
+                    @Override
+                    public Iterator<Map.Entry<String, RuntimeScalar>> iterator() {
+                        return ownerAwareEntryIterator();
+                    }
+                };
+            }
+            return entrySetView;
+        }
+
+        @Override
+        public Set<String> keySet() {
+            if (keySetView == null) {
+                keySetView = new AbstractSet<>() {
+                    @Override
+                    public int size() {
+                        return RuntimeHashElementMap.this.size();
+                    }
+
+                    @Override
+                    public boolean contains(Object key) {
+                        return RuntimeHashElementMap.this.containsKey(key);
+                    }
+
+                    @Override
+                    public boolean remove(Object key) {
+                        if (!RuntimeHashElementMap.this.containsKey(key)) return false;
+                        RuntimeHashElementMap.this.remove(key);
+                        return true;
+                    }
+
+                    @Override
+                    public void clear() {
+                        RuntimeHashElementMap.this.clear();
+                    }
+
+                    @Override
+                    public Iterator<String> iterator() {
+                        Iterator<Map.Entry<String, RuntimeScalar>> delegate =
+                                RuntimeHashElementMap.super.entrySet().iterator();
+                        return new Iterator<>() {
+                            private Map.Entry<String, RuntimeScalar> currentEntry;
+                            private boolean canRemove;
+
+                            @Override
+                            public boolean hasNext() {
+                                return delegate.hasNext();
+                            }
+
+                            @Override
+                            public String next() {
+                                currentEntry = delegate.next();
+                                canRemove = true;
+                                return currentEntry.getKey();
+                            }
+
+                            @Override
+                            public void remove() {
+                                if (!canRemove) throw new IllegalStateException();
+                                RuntimeScalar removedValue = currentEntry.getValue();
+                                delegate.remove();
+                                retireRemovedValue(removedValue);
+                                currentEntry = null;
+                                canRemove = false;
+                            }
+                        };
+                    }
+                };
+            }
+            return keySetView;
+        }
+
+        @Override
+        public Collection<RuntimeScalar> values() {
+            if (valuesView == null) {
+                valuesView = new AbstractCollection<>() {
+                    @Override
+                    public int size() {
+                        return RuntimeHashElementMap.this.size();
+                    }
+
+                    @Override
+                    public void clear() {
+                        RuntimeHashElementMap.this.clear();
+                    }
+
+                    @Override
+                    public Iterator<RuntimeScalar> iterator() {
+                        Iterator<Map.Entry<String, RuntimeScalar>> delegate =
+                                RuntimeHashElementMap.super.entrySet().iterator();
+                        return new Iterator<>() {
+                            private Map.Entry<String, RuntimeScalar> currentEntry;
+                            private RuntimeScalar currentValue;
+                            private boolean canRemove;
+
+                            @Override
+                            public boolean hasNext() {
+                                return delegate.hasNext();
+                            }
+
+                            @Override
+                            public RuntimeScalar next() {
+                                currentEntry = delegate.next();
+                                currentValue = currentEntry.getValue();
+                                canRemove = true;
+                                return currentValue;
+                            }
+
+                            @Override
+                            public void remove() {
+                                if (!canRemove) throw new IllegalStateException();
+                                RuntimeScalar removedValue = currentEntry.getValue();
+                                delegate.remove();
+                                retireRemovedValue(removedValue);
+                                currentEntry = null;
+                                currentValue = null;
+                                canRemove = false;
+                            }
+                        };
+                    }
+                };
+            }
+            return valuesView;
+        }
+
+        private Iterator<Map.Entry<String, RuntimeScalar>> ownerAwareEntryIterator() {
+            Iterator<Map.Entry<String, RuntimeScalar>> delegate =
+                    RuntimeHashElementMap.super.entrySet().iterator();
+            return new Iterator<>() {
+                private Map.Entry<String, RuntimeScalar> currentEntry;
+                private String currentKey;
+                private boolean canRemove;
+
+                @Override
+                public boolean hasNext() {
+                    return delegate.hasNext();
+                }
+
+                @Override
+                public Map.Entry<String, RuntimeScalar> next() {
+                    Map.Entry<String, RuntimeScalar> entry = delegate.next();
+                    currentEntry = entry;
+                    currentKey = entry.getKey();
+                    canRemove = true;
+                    String key = currentKey;
+                    return new Map.Entry<>() {
+                        @Override
+                        public String getKey() {
+                            return key;
+                        }
+
+                        @Override
+                        public RuntimeScalar getValue() {
+                            return RuntimeHashElementMap.this.get(key);
+                        }
+
+                        @Override
+                        public RuntimeScalar setValue(RuntimeScalar value) {
+                            return RuntimeHashElementMap.this.put(key, value);
+                        }
+
+                        @Override
+                        public boolean equals(Object other) {
+                            if (!(other instanceof Map.Entry<?, ?> entry)) return false;
+                            return Objects.equals(key, entry.getKey())
+                                    && Objects.equals(getValue(), entry.getValue());
+                        }
+
+                        @Override
+                        public int hashCode() {
+                            return Objects.hashCode(key) ^ Objects.hashCode(getValue());
+                        }
+                    };
+                }
+
+                @Override
+                public void remove() {
+                    if (!canRemove) throw new IllegalStateException();
+                    RuntimeScalar removedValue = currentEntry.getValue();
+                    delegate.remove();
+                    retireRemovedValue(removedValue);
+                    currentEntry = null;
+                    currentKey = null;
+                    canRemove = false;
+                }
+            };
+        }
+
+        private void retireRemovedValue(RuntimeScalar previous) {
+            if (previous == null) return;
+            stableMethodFieldCacheRevision++;
+            if (owner.isHintHash && !owner.suppressHintHashLifecycleCleanup) {
+                MortalList.deferDestroyForContainerClear(java.util.Collections.singletonList(previous));
+            }
+            owner.notePackageRootMutation(previous, null);
+            previous.reconcileContainerOwnerAfterMutation(owner);
         }
 
         @Override
@@ -302,14 +618,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         @Override
         public RuntimeScalar remove(Object key) {
             RuntimeScalar previous = super.remove(key);
-            if (previous != null) {
-                stableMethodFieldCacheRevision++;
-                if (owner.isHintHash && !owner.suppressHintHashLifecycleCleanup) {
-                    MortalList.deferDestroyForContainerClear(java.util.Collections.singletonList(previous));
-                }
-                owner.notePackageRootMutation(previous, null);
-                previous.reconcileContainerOwnerAfterMutation(owner);
-            }
+            retireRemovedValue(previous);
             return previous;
         }
 

@@ -311,7 +311,7 @@ public class DestroyDispatch {
                 MortalList.scopeExitCleanupDestroyedArray(arr);
                 MortalList.flush();
             } else if (referent instanceof RuntimeScalar scalar) {
-                RuntimeScalar.scopeExitCleanup(scalar);
+                RuntimeScalar.scopeExitCleanupDestroyed(scalar);
                 MortalList.flush();
             } else if (referent instanceof RuntimeCode code) {
                 code.releaseStateStorage();
@@ -377,7 +377,7 @@ public class DestroyDispatch {
             } else if (referent instanceof RuntimeArray arr) {
                 MortalList.scopeExitCleanupDestroyedArray(arr);
             } else if (referent instanceof RuntimeScalar scalar) {
-                RuntimeScalar.scopeExitCleanup(scalar);
+                RuntimeScalar.scopeExitCleanupDestroyed(scalar);
             } else if (referent instanceof RuntimeCode code) {
                 code.releaseStateStorage();
             }
@@ -425,7 +425,7 @@ public class DestroyDispatch {
                 MortalList.scopeExitCleanupDestroyedArray(arr);
                 MortalList.flush();
             } else if (referent instanceof RuntimeScalar scalar) {
-                RuntimeScalar.scopeExitCleanup(scalar);
+                RuntimeScalar.scopeExitCleanupDestroyed(scalar);
                 MortalList.flush();
             } else if (referent instanceof RuntimeCode code) {
                 code.releaseStateStorage();
@@ -667,7 +667,7 @@ public class DestroyDispatch {
         } else if (referent instanceof RuntimeArray array) {
             MortalList.scopeExitCleanupDestroyedArray(array);
         } else if (referent instanceof RuntimeScalar scalar) {
-            RuntimeScalar.scopeExitCleanup(scalar);
+            RuntimeScalar.scopeExitCleanupDestroyed(scalar);
         } else if (referent instanceof RuntimeCode code) {
             // Blessed CVs may resurrect in DESTROY. Their state pad remains
             // intact through the callback and the resurrection decision.

@@ -321,6 +321,8 @@ public final class PerlOwnerSlot {
         registeredInOwnerLedger = true;
         target.addOwnerSlot(this);
         finishDeferredCodeRelease(previous);
+        finishDeferredScalarCellRelease(previous);
+        WeakRefRegistry.onStrongOwnerSlotReleased(previous);
     }
 
     /**
@@ -427,6 +429,8 @@ public final class PerlOwnerSlot {
         }
         registeredInOwnerLedger = true;
         target.addOwnerSlot(this);
+        finishDeferredScalarCellRelease(previous);
+        WeakRefRegistry.onStrongOwnerSlotReleased(previous);
     }
 
     synchronized void reclassifyCountedIdentity(Kind nextKind) {
@@ -520,6 +524,8 @@ public final class PerlOwnerSlot {
         registeredInOwnerLedger = nextReferent != null;
         if (registeredInOwnerLedger) nextReferent.addOwnerSlot(this);
         finishDeferredCodeRelease(previous);
+        finishDeferredScalarCellRelease(previous);
+        WeakRefRegistry.onStrongOwnerSlotReleased(previous);
     }
 
     /** Release this slot. Repeated releases are harmless. */
@@ -537,12 +543,30 @@ public final class PerlOwnerSlot {
         }
         registeredInOwnerLedger = false;
         finishDeferredCodeRelease(previous);
+        finishDeferredScalarCellRelease(previous);
+        WeakRefRegistry.onStrongOwnerSlotReleased(previous);
     }
 
     private static void finishDeferredCodeRelease(RuntimeBase previous) {
         if (previous instanceof RuntimeCode code) {
             code.finishActiveCodeOwnerRelease();
         }
+    }
+
+    /** Retry escaped scalar-cell cleanup after its final Perl owner leaves. */
+    static void finishDeferredScalarCellRelease(RuntimeBase previous) {
+        if (!(previous instanceof RuntimeScalar scalar)
+                || !scalar.referencedByScalarReference
+                || scalar.perlLifecycleState() == RuntimeBase.PerlLifecycleState.DESTROYED
+                || scalar.refCount > 0
+                || scalar.captureCount != 0
+                || scalar.localBindingExists
+                || MyVarCleanupStack.isRegistered(scalar)
+                || scalar.hasScalarCellOwner()
+                || PerlRuntime.currentOrNull() == null) {
+            return;
+        }
+        RuntimeScalar.scopeExitCleanup(scalar);
     }
 
 

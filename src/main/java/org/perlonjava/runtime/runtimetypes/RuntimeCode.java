@@ -11331,6 +11331,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
                 popActiveCode(this, executionState);
                 popArgs(executionState); // also pops hasArgsStack — see popArgs() implementation
+                finishActiveCodeOwnerRelease();
                 if (DebugState.isDebugMode()) {
                     DebugHooks.exitSubroutine();
                     DebugState.popArgs();
@@ -11507,6 +11508,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
                 popActiveCode(this);
                 popArgs(); // also pops hasArgsStack — see popArgs() implementation
+                finishActiveCodeOwnerRelease();
                 if (DebugState.isDebugMode()) {
                     DebugHooks.exitSubroutine();
                     DebugState.popArgs();
