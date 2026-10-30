@@ -389,9 +389,15 @@ public class WeakRefRegistry {
 
     /** Finish tracked cleanup when its final owner slot leaves. */
     static void onStrongOwnerSlotReleased(RuntimeBase referent) {
+        boolean zeroCountOwnerSlotsExhausted = referent != null
+                && referent.refCount == 0
+                && !(referent instanceof RuntimeCode)
+                && !GlobalVariable.isPackageRootedAggregate(referent)
+                && MortalList.canTrustFinalCountedRelease(referent);
         if (referent != null
-                && referent.deferredFinalReleaseForUncountedOwners
-                && referent.refCount == WEAKLY_TRACKED
+                && ((referent.deferredFinalReleaseForUncountedOwners
+                        && referent.refCount == WEAKLY_TRACKED)
+                    || zeroCountOwnerSlotsExhausted)
                 && !referent.hasOwnerSlots()
                 && PerlRuntime.currentOrNull() != null
                 && !referent.localBindingExists

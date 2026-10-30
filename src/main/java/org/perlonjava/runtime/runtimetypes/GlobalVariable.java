@@ -2829,6 +2829,14 @@ public class GlobalVariable {
         }
     }
 
+    static boolean hasLocalizedCodeRef(RuntimeCode code) {
+        if (code == null) return false;
+        for (RuntimeScalar displacedCodeRef : displacedLocalizedCodeRefs().keySet()) {
+            if (displacedCodeRef != null && displacedCodeRef.value == code) return true;
+        }
+        return false;
+    }
+
     static void exitLocalizedCodeRef(String key, RuntimeScalar displacedCodeRef) {
         if (displacedCodeRef != null) {
             displacedLocalizedCodeRefs().remove(displacedCodeRef);
@@ -2980,6 +2988,7 @@ public class GlobalVariable {
             if (removedCode.stashRefCount > 0) {
                 removedCode.stashRefCount--;
             }
+            removedCode.noteStashOwnerReleased();
         }
         return deleted;
     }

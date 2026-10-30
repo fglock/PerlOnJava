@@ -488,6 +488,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     }
 
     boolean hasNonPackageAggregateUncountedOwnerSlotIdentity() {
+        if (!(this instanceof RuntimeArray || this instanceof RuntimeHash)) return false;
         for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
             if (!slot.isActive()
                     || PerlOwnerSlot.isCountedKind(slot.kind())
