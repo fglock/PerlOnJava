@@ -320,6 +320,7 @@ public final class PerlOwnerSlot {
         }
         registeredInOwnerLedger = true;
         target.addOwnerSlot(this);
+        finishDeferredCodeRelease(previous);
     }
 
     /**
@@ -518,6 +519,7 @@ public final class PerlOwnerSlot {
         }
         registeredInOwnerLedger = nextReferent != null;
         if (registeredInOwnerLedger) nextReferent.addOwnerSlot(this);
+        finishDeferredCodeRelease(previous);
     }
 
     /** Release this slot. Repeated releases are harmless. */
@@ -534,6 +536,13 @@ public final class PerlOwnerSlot {
             PerlRuntime.releaseOwnerSlotReferent(previousState, previous);
         }
         registeredInOwnerLedger = false;
+        finishDeferredCodeRelease(previous);
+    }
+
+    private static void finishDeferredCodeRelease(RuntimeBase previous) {
+        if (previous instanceof RuntimeCode code) {
+            code.finishActiveCodeOwnerRelease();
+        }
     }
 
 

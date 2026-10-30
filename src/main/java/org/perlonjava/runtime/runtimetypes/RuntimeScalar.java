@@ -462,42 +462,65 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // transient argument or container alive as long as the cache entry.
         // Reference and proxy-backed scalars retain this edge for lifetime
         // tracking.
+        if (isSharedImmutableLiteralWithoutOwnerTracking()) return;
         synchronized (this) {
-            if (getClass() == RuntimeScalarReadOnly.class
-                    && type != RuntimeScalarType.READONLY_SCALAR
-                    && (type & RuntimeScalarType.REFERENCE_BIT) == 0
-                    && !(value instanceof RuntimeBase)
-                    && !firstClassRegexScalar) {
-                return;
-            }
             if (owner != null) containerOwners.add(owner);
             this.containerOwner = owner;
         }
         propagateTiedHandlerMarkerToReferent();
     }
 
+    private boolean isSharedImmutableLiteralWithoutOwnerTracking() {
+        return getClass() == RuntimeScalarReadOnly.class
+                && type != RuntimeScalarType.READONLY_SCALAR
+                && (type & RuntimeScalarType.REFERENCE_BIT) == 0
+                && !(value instanceof RuntimeBase)
+                && !firstClassRegexScalar;
+    }
+
     void markPrepopulatedPackageAggregateOwner(RuntimeBase owner) {
+        boolean tracked;
         synchronized (this) {
-            if (containerOwner == owner) {
-                prepopulatedPackageAggregateOwners.add(owner);
-            }
+            tracked = containerOwners.contains(owner);
+        }
+        if (!tracked || !isStoredInContainer(owner)) return;
+        synchronized (this) {
+            if (containerOwners.contains(owner)) prepopulatedPackageAggregateOwners.add(owner);
         }
     }
 
     /** Retire this cell's container edge when the container loses its last Perl owner. */
     void releaseContainerOwner(RuntimeBase expectedOwner) {
-        List<RuntimeBase> remainingOwners;
+        removeContainerOwnerTracking(expectedOwner);
+        refreshUntrackedReferenceOwner();
+    }
+
+    /** Retire this aggregate edge after a slot mutation removed its last copy. */
+    void reconcileContainerOwnerAfterMutation(RuntimeBase owner) {
+        if (owner == null) return;
+        if (isSharedImmutableLiteralWithoutOwnerTracking()) return;
+        if (isStoredInContainer(owner)) {
+            synchronized (this) {
+                containerOwners.add(owner);
+                containerOwner = owner;
+            }
+            propagateTiedHandlerMarkerToReferent();
+        } else {
+            removeContainerOwnerTracking(owner);
+        }
+        refreshUntrackedReferenceOwner();
+    }
+
+    private void removeContainerOwnerTracking(RuntimeBase expectedOwner) {
         boolean replaceCurrentOwner;
         synchronized (this) {
             containerOwners.remove(expectedOwner);
             prepopulatedPackageAggregateOwners.remove(expectedOwner);
             replaceCurrentOwner = containerOwner == expectedOwner;
             if (replaceCurrentOwner) containerOwner = null;
-            remainingOwners = replaceCurrentOwner
-                    ? new ArrayList<>(containerOwners) : List.of();
         }
         if (replaceCurrentOwner) {
-            RuntimeBase replacement = remainingOwners.stream()
+            RuntimeBase replacement = containerOwnerSnapshot().stream()
                     .filter(this::isStoredInContainer)
                     .findFirst().orElse(null);
             synchronized (this) {
@@ -505,7 +528,28 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 if (containerOwner == null) containerOwner = replacement;
             }
         }
-        refreshUntrackedReferenceOwner();
+    }
+
+    /** Reconcile the fast owner hint with all currently stored container edges. */
+    void reconcileContainerOwners() {
+        for (RuntimeBase owner : containerOwnerSnapshot()) {
+            if (!isStoredInContainer(owner)) removeContainerOwnerTracking(owner);
+        }
+        List<RuntimeBase> owners = containerOwnerSnapshot();
+        RuntimeBase current = containerOwner;
+        if (current != null && (!owners.contains(current) || !isStoredInContainer(current))) {
+            synchronized (this) {
+                if (containerOwner == current) containerOwner = null;
+            }
+        }
+        if (containerOwner == null) {
+            RuntimeBase replacement = owners.stream()
+                    .filter(this::isStoredInContainer)
+                    .findFirst().orElse(null);
+            synchronized (this) {
+                if (containerOwner == null) containerOwner = replacement;
+            }
+        }
     }
 
     private void propagateTiedHandlerMarkerToReferent() {
@@ -823,19 +867,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         boolean liveOwningContainer = false;
         for (RuntimeBase owner : containerOwnerSnapshot()) {
             if (!isStoredInContainer(owner)) {
-                synchronized (this) {
-                    containerOwners.remove(owner);
-                    prepopulatedPackageAggregateOwners.remove(owner);
-                    if (containerOwner == owner) containerOwner = null;
-                }
+                removeContainerOwnerTracking(owner);
                 continue;
             }
             boolean liveContainerOwner = owner.hasPerlStrongOwner()
                     || (runtime != null && MyVarCleanupStack.isRegistered(owner));
-            if (!requireLiveContainer || liveContainerOwner) {
-                liveOwningContainer = true;
-                break;
-            }
+            if (!requireLiveContainer || liveContainerOwner) liveOwningContainer = true;
         }
         return liveOwningContainer
                 || ownerSlotCount(PerlOwnerSlot.Kind.PACKAGE_SCALAR_SLOT) != 0
@@ -864,6 +901,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     && array.elements != null && array.elements.contains(this);
     }
 
+    private boolean hasStoredContainerOwnerWithoutCurrentOwnerMarker() {
+        if (containerOwner != null) return false;
+        for (RuntimeBase owner : containerOwnerSnapshot()) {
+            if (isStoredInAnyContainer(owner)) return true;
+        }
+        return false;
+    }
+
     private synchronized List<RuntimeBase> containerOwnerSnapshot() {
         return new ArrayList<>(containerOwners);
     }
@@ -888,8 +933,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     private boolean hasPackageAggregateOwner() {
         for (RuntimeBase owner : containerOwnerSnapshot()) {
             if (isStoredInContainer(owner)
-                    && (owner instanceof RuntimeHash hash && hash.isPackageRootedHash()
-                        || owner instanceof RuntimeArray array && array.isPackageGlobalRoot)) {
+                    && GlobalVariable.isPackageRootedAggregate(owner)) {
                 return true;
             }
         }
@@ -974,11 +1018,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         boolean packageAggregateValueOwner = referent != null
                 && prepopulatedPackageAggregateOwnerSnapshot().stream().anyMatch(owner ->
                     isStoredInContainer(owner)
-                    && ((owner instanceof RuntimeHash hash && hash.isPackageRootedHash())
-                        || (owner instanceof RuntimeArray array && array.isPackageGlobalRoot)));
+                    && GlobalVariable.isPackageRootedAggregate(owner));
         boolean localAggregateValueOwner = containerOwnerSnapshot().stream().anyMatch(owner ->
-                (owner instanceof RuntimeHash hash && !hash.isPackageRootedHash())
-                    || (owner instanceof RuntimeArray array && !array.isPackageGlobalRoot));
+                (owner instanceof RuntimeHash || owner instanceof RuntimeArray)
+                    && !GlobalVariable.isPackageRootedAggregate(owner));
         boolean liveAggregateValueOwner = localAggregateValueOwner
                 && hasLiveDurableStrongValueSlot();
         boolean untrackedStrongValue = !weakValue
@@ -1028,10 +1071,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return new ArgumentAliasOwner(this, ownerSlot);
     }
 
-    private synchronized void releaseArgumentAliasOwner(PerlOwnerSlot ownerSlot) {
-        if (argumentAliasOwnerSlots != null) {
-            argumentAliasOwnerSlots.remove(ownerSlot);
-            if (argumentAliasOwnerSlots.isEmpty()) argumentAliasOwnerSlots = null;
+    private void releaseArgumentAliasOwner(PerlOwnerSlot ownerSlot) {
+        synchronized (this) {
+            if (argumentAliasOwnerSlots != null) {
+                argumentAliasOwnerSlots.remove(ownerSlot);
+                if (argumentAliasOwnerSlots.isEmpty()) argumentAliasOwnerSlots = null;
+            }
         }
         ownerSlot.release();
     }
@@ -1104,6 +1149,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     && type != RuntimeScalarType.CODE)
                 || WeakRefRegistry.isweak(this) || !slot.isActive()
                 || slot.referent() != referent) {
+            return false;
+        }
+        if (kind == PerlOwnerSlot.Kind.SCALAR_CELL
+                && hasStoredContainerOwnerWithoutCurrentOwnerMarker()
+                && !localBindingExists
+                && !MyVarCleanupStack.isRegistered(this)
+                && ownerSlotCount(PerlOwnerSlot.Kind.PACKAGE_SCALAR_SLOT) == 0
+                && !hasCodeSlotBinding()
+                && !(this instanceof RuntimeBaseProxy)) {
             return false;
         }
         if (kind != PerlOwnerSlot.Kind.SCALAR_CELL
@@ -2788,7 +2842,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             source.ioOwner = true;
         }
         copy.copiedFromArgumentFrame = null;
-        copy.containerOwner = null;
+        copy.reconcileContainerOwners();
         return copy;
     }
 
@@ -6073,7 +6127,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         RuntimeScalar recipient = returnedSocketScalar(returned, glob);
         if (recipient == owner) {
             owner.copiedFromArgumentFrame = null;
-            owner.containerOwner = null;
+            owner.reconcileContainerOwners();
             return;
         }
         if (recipient != null && !recipient.ioOwner) {
@@ -6083,7 +6137,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             // RuntimeCode.returnList wraps scalar returns in a temporary list.
             // The returned scalar is a movable value, not a durable element of
             // that temporary container; let the caller assignment take over.
-            recipient.containerOwner = null;
+            recipient.reconcileContainerOwners();
             return;
         }
         releaseIoOwner(owner);
@@ -6133,7 +6187,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         source.ioOwner = false;
         returnedCopy.ioOwner = true;
         returnedCopy.copiedFromArgumentFrame = null;
-        returnedCopy.containerOwner = null;
+        returnedCopy.reconcileContainerOwners();
     }
 
     private static java.util.List<RuntimeScalar> returnedIoAliases(

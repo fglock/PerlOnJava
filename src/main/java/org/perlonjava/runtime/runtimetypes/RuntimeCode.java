@@ -1587,11 +1587,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (refCount == Integer.MIN_VALUE) refCount = 0;
     }
 
-    private void finishActiveCodeOwnerRelease() {
-        if (!finalReleaseDeferredToActiveCode || hasActiveCodeOwner()) return;
+    void finishActiveCodeOwnerRelease() {
+        if (!finalReleaseDeferredToActiveCode || hasActiveCodeOwner() || isActiveCode(this)) return;
+        // CODE can reach refCount zero while a transient call-frame, argument,
+        // or END-block owner still protects it. Recheck at each such owner
+        // release boundary; otherwise the count can stay at zero after its
+        // last real owner leaves and the closure captures never get released.
+        if (refCount != 0 || hasPerlOwnerForCaptureOtherThan(null)
+                || activeEndBlockExecutions > 0 || SpecialBlock.hasPendingEndBlock(this)) return;
         finalReleaseDeferredToActiveCode = false;
-        if (refCount != 0 || localBindingExists
-                || !MortalList.canTrustFinalCountedRelease(this)) return;
         refCount = Integer.MIN_VALUE;
         DestroyDispatch.callDestroyFromCountedOwner(this);
     }
@@ -3789,9 +3793,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     void endEndBlockExecution() {
         if (activeEndBlockExecutions > 0) activeEndBlockExecutions--;
-        if (activeEndBlockExecutions == 0 && rescuedActiveEndBlockOwner) {
-            rescuedActiveEndBlockOwner = false;
-            MortalList.deferDecrement(this);
+        if (activeEndBlockExecutions == 0) {
+            if (rescuedActiveEndBlockOwner) {
+                rescuedActiveEndBlockOwner = false;
+                MortalList.deferDecrement(this);
+            }
+            finishActiveCodeOwnerRelease();
         }
     }
 
