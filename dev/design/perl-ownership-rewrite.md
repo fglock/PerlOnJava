@@ -1529,12 +1529,21 @@ both aggregate types. The full no-sweeps `nice -n 19 make` gate passes in 6m53s.
 Package aggregate edges to array/hash referents and cross-container aliases
 remain on the root-snapshot path.
 
+### Prepopulated package aggregate values that reference aggregates (2026-10-29)
+
+When a package array or hash becomes rooted with existing values, its scalar
+cells now record an `UNTRACKED_REFERENCE` identity for array/hash referents.
+Final value replacement clears weak observers without root queries or
+snapshots. The identity is limited to cells present when the package aggregate
+becomes a root; values inserted later and cross-container aliases retain the
+root-snapshot fallback until their storage provenance is explicit. The new
+array/hash regressions and full no-sweeps `nice -n 19 make` gate pass (9m30s).
+
 ### Next steps
 
 1. Continue the `RuntimeScalar` and `MortalList` fallback audit. Package-rooted
-   aggregate values that point to array/hash referents and cross-container
-   aliases still need direct provenance before their root-snapshot fallbacks can
-   be removed.
+   aggregate values inserted after rooting and cross-container aliases still
+   need direct provenance before their root-snapshot fallbacks can be removed.
 2. Migrate remaining weak-backref capture cases to explicit owner identities,
    then remove `weakBackrefCaptureSnapshot` and preserve aggregate lifetime and
    weak clearing without the compatibility graph walk.

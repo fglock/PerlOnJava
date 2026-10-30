@@ -867,6 +867,7 @@ public class GlobalVariable {
             }
             for (RuntimeScalar value : hash.elements.values()) {
                 hash.markPackageRootedValue(value);
+                if (value != null) value.markPrepopulatedPackageAggregateOwner(hash);
             }
         } else if (root instanceof RuntimeArray array) {
             // Package-root marking may race with another thread mutating a
@@ -875,6 +876,7 @@ public class GlobalVariable {
             // fail-fast ConcurrentModificationException into Perl code.
             for (RuntimeScalar value : array.elements.toArray(RuntimeScalar[]::new)) {
                 array.markPackageRootedValue(value);
+                if (value != null) value.markPrepopulatedPackageAggregateOwner(array);
             }
         }
         return root;

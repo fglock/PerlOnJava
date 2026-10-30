@@ -445,6 +445,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // Last hash/array container that stored this scalar slot. Used only as a
     // narrow guard for live CODE refs whose captures must survive void discard.
     RuntimeBase containerOwner;
+    /** Package aggregate that contained this value before it became a root. */
+    private RuntimeBase prepopulatedPackageAggregateOwner;
 
     /** Return the aggregate slot that directly owns this scalar, if any. */
     public RuntimeBase getContainerOwner() {
@@ -464,14 +466,23 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && !firstClassRegexScalar) {
             return;
         }
+        if (this.containerOwner != owner) prepopulatedPackageAggregateOwner = null;
         this.containerOwner = owner;
         propagateTiedHandlerMarkerToReferent();
+    }
+
+    void markPrepopulatedPackageAggregateOwner(RuntimeBase owner) {
+        if (containerOwner == owner) {
+            prepopulatedPackageAggregateOwner = owner;
+            refreshUntrackedReferenceOwner();
+        }
     }
 
     /** Retire this cell's container edge when the container loses its last Perl owner. */
     void releaseContainerOwner(RuntimeBase expectedOwner) {
         if (containerOwner != expectedOwner) return;
         containerOwner = null;
+        prepopulatedPackageAggregateOwner = null;
         refreshUntrackedReferenceOwner();
     }
 
@@ -890,7 +901,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && countedOwnerSlot.referent() == referent;
         boolean packageScalarValueOwner =
                 ownerSlotCount(PerlOwnerSlot.Kind.PACKAGE_SCALAR_SLOT) != 0;
-        boolean packageAggregateScalarValueOwner = referent instanceof RuntimeScalar
+        boolean packageAggregateValueOwner = referent != null
+                && prepopulatedPackageAggregateOwner == containerOwner
                 && ((containerOwner instanceof RuntimeHash hash
                     && hash.isPackageRootedHash()
                     && hash.elements != null && hash.elements.containsValue(this))
@@ -909,7 +921,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && (referent.refCount < 0
                     || existingOwnerForReferent
                     || packageScalarValueOwner
-                    || packageAggregateScalarValueOwner
+                    || packageAggregateValueOwner
                     || liveAggregateValueOwner)
                 && !countedOwnerActive;
         if (hasDurableStrongValueSlot() && untrackedStrongValue) {

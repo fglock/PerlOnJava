@@ -123,6 +123,67 @@ class PackageAggregateValueOwnerSlotTest {
         }
     }
 
+    @Test
+    void packageAggregateValuesOwnArrayAndHashReferentsWithoutSweeps() {
+        Assumptions.assumeFalse(ReachabilityWalker.correctiveSweepsEnabled(),
+                "package aggregate value ownership must not depend on corrective sweeps");
+
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            assertPackageAggregateValueKeepsReferentAlive(
+                    new RuntimeArray(), new RuntimeArray(), true,
+                    "PackageAggregateValueOwnerSlotTest::array_referent");
+            assertPackageAggregateValueKeepsReferentAlive(
+                    new RuntimeHash(), new RuntimeHash(), false,
+                    "PackageAggregateValueOwnerSlotTest::hash_referent");
+        }
+    }
+
+    private static void assertPackageAggregateValueKeepsReferentAlive(
+            RuntimeBase referent, RuntimeBase packageAggregate, boolean packageArray,
+            String key) {
+        RuntimeScalar aggregateValue = referenceTo(referent);
+        if (packageArray) {
+            ((RuntimeArray) packageAggregate).elements.add(aggregateValue);
+            GlobalVariable.globalArrays.put(key, (RuntimeArray) packageAggregate);
+        } else {
+            ((RuntimeHash) packageAggregate).elements.put("child", aggregateValue);
+            GlobalVariable.globalHashes.put(key, (RuntimeHash) packageAggregate);
+        }
+        RuntimeScalar weakObserver = referenceTo(referent);
+        PerlOwnerSlot valueOwner = aggregateValue.untrackedReferenceOwnerSlot();
+
+        try {
+            assertNotNull(valueOwner,
+                    "a package aggregate slot records its direct aggregate referent edge");
+            assertEquals(1,
+                    referent.ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE));
+
+            WeakRefRegistry.weaken(weakObserver);
+            try (MortalList.ReachabilityQueryMeasurement measurement =
+                         MortalList.measureReachabilityQueries()) {
+                assertTrue(WeakRefRegistry.isweak(weakObserver));
+
+                aggregateValue.set(new RuntimeScalar());
+
+                assertFalse(valueOwner.isActive());
+                assertEquals(0,
+                        referent.ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE));
+                assertFalse(WeakRefRegistry.isweak(weakObserver));
+                assertEquals(RuntimeScalarType.UNDEF, weakObserver.type);
+                assertEquals(0, measurement.stats().rootQueries);
+                assertEquals(0, measurement.stats().snapshotsBuilt);
+            }
+        } finally {
+            if (valueOwner != null && valueOwner.isActive()) {
+                aggregateValue.set(new RuntimeScalar());
+            }
+            if (packageArray) GlobalVariable.globalArrays.remove(key);
+            else GlobalVariable.globalHashes.remove(key);
+            if (WeakRefRegistry.isweak(weakObserver)) WeakRefRegistry.unweaken(weakObserver);
+        }
+    }
+
     private static RuntimeScalar referenceTo(RuntimeBase referent) {
         RuntimeScalar reference = new RuntimeScalar();
         reference.type = RuntimeScalarType.REFERENCE;
