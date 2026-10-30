@@ -622,6 +622,9 @@ public class RuntimeStash extends RuntimeHash {
         RuntimeGlob io = GlobalVariable.peekGlobalIO(sourceName);
         RuntimeScalar code = GlobalVariable.globalCodeRefs.get(sourceName);
         RuntimeGlob snapshot = RuntimeGlob.createDetachedWithSlots(scalar, array, hash, io, code);
+        // A detached glob has no live stash name for slot access, but a Perl
+        // typeglob copied out of a stash still stringifies with its source name.
+        snapshot.setStringificationName(sourceName);
         return new RuntimeScalar(snapshot);
     }
 
