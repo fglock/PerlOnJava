@@ -6,6 +6,8 @@ priorities and future plans.
 
 ## Work in progress
 
+- Bundle `Devel::Size` with JVM-based `size` and `total_size` estimates.
+
 - Accept `experimental::for_list` as Perl 5.44's no-op warning category, align bundled warning masks including `experimental::builtin`, and expose B start-op package identity for Sub::Import compatibility (#1208, #1219, #1206).
 
 - Preserve the input line number when a borrowed anonymous filehandle alias leaves a JVM subroutine scope (#1933).

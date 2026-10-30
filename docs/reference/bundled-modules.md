@@ -23,6 +23,7 @@ Recent CPAN compatibility additions include:
 | `PadWalker` | Perl facade over Java runtime metadata | `peek_sub`, `closed_over`, and `set_closed_over`; caller-pad APIs remain unsupported |
 | `Devel::Caller` | Perl facade over Java call frames | `caller_cv` and caller argument compatibility used by lexical tooling |
 | `Devel::LexAlias` | Perl facade over Java lexical cells | Rebinds local and captured scalar, array, and hash lexicals |
+| `Devel::Size` | Perl wrapper plus JOL | Estimates shallow JVM object size and reachable object graph size; totals include PerlOnJava runtime objects, and `$warn`/`$dangle` are compatibility variables only |
 | `Encode::Locale` | Pure Perl facade over bundled locale support | Provides LWP and XML::Parser with locale encoding aliases; includes `Encode::Alias` |
 | `Crypt::Twofish2` | Java XS bridge | BouncyCastle Twofish engine with ECB, CBC, and CFB1 compatibility |
 | `Crypt::Blowfish` | Java XS bridge | BouncyCastle Blowfish engine used by `Crypt::CBC` and `Git::Crypt` |
