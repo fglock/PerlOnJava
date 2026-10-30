@@ -5760,6 +5760,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     MortalList.deferDecrementFromArraySlot(
                             oldBase, this, "RuntimeScalar.undefine");
                 }
+            } else if (oldBase.refCount == WeakRefRegistry.WEAKLY_TRACKED
+                    && oldBase.hasPerlStrongOwner()) {
+                // WEAKLY_TRACKED means the legacy count cannot identify which
+                // scalar cell is the final owner. The current cell's untracked
+                // identity was retired above; keep the weak observers while the
+                // ledger still names another Perl owner. Its final release will
+                // perform cleanup through onStrongOwnerSlotReleased().
             } else if (oldBase.refCount == WeakRefRegistry.WEAKLY_TRACKED) {
                 // Weakly-tracked object (unblessed, birth-tracked, with weak refs):
                 // clear weak refs on explicit undef. These objects transitioned to

@@ -122,6 +122,7 @@ priorities and future plans.
 - Include operating-system CA bundles and the Windows root store in verified `HTTP::Tiny` HTTPS connections while retaining JVM trust roots.
 - Keep nested Rose::HTML::Objects form results alive with counted argument owners so weak parent links and qualified field names survive argument evaluation (#1851).
 - Preserve caller argument identity in @DB::args so borrowed debugger slots share source-cell cleanup instead of creating detached untracked references (#1649).
+- Keep weakly tracked referents alive while an explicit Perl owner slot remains; undef now retires only the released cell's identity (#1649).
 - Preserve multiline regex searches when positive lookaheads constrain a lazy any-character prefix, restoring Text::YAWikiFormater formatting (#1596).
 - Compile executable format argument expressions at write time on both backends, scope line-local lexicals correctly, preserve literal-only pictures, and refresh deferred lexical bindings (#1234).
 - Diagnose malformed and out-of-class Object::Pad `BUILD` declarations during parsing (#1808).
