@@ -987,6 +987,48 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return PerlRuntime.current().runtimeCodeState().evalCache;
     }
 
+    private static Map<String, InterpretedCode> interpreterEvalCache() {
+        return PerlRuntime.current().runtimeCodeState().interpreterEvalCache;
+    }
+
+    /**
+     * Eval parsing can execute compile-time code and resolve names against
+     * mutable lexical and package state. The interpreter cache currently has
+     * no complete fingerprint for that state, so admit only decimal integer
+     * literals, whose compiled form is independent of those side effects.
+     */
+    private static boolean isCacheableInterpreterEvalSource(String source) {
+        if (source == null || source.length() > 32) {
+            return false;
+        }
+        int index = 0;
+        while (index < source.length() && isEvalAsciiWhitespace(source.charAt(index))) {
+            index++;
+        }
+        if (index < source.length() && (source.charAt(index) == '+' || source.charAt(index) == '-')) {
+            index++;
+        }
+        int digitCount = 0;
+        while (index < source.length()) {
+            char current = source.charAt(index);
+            if (current < '0' || current > '9') {
+                break;
+            }
+            digitCount++;
+            index++;
+        }
+        if (digitCount == 0 || digitCount > 9) {
+            return false;
+        }
+        while (index < source.length() && isEvalAsciiWhitespace(source.charAt(index))) {
+            index++;
+        }
+        return index == source.length();
+    }
+
+    private static boolean isEvalAsciiWhitespace(char value) {
+        return value == ' ' || value == '\t' || value == '\n' || value == '\r' || value == '\f';
+    }
 
     /**
      * Flag to enable disassembly of eval STRING bytecode.
@@ -4895,7 +4937,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 return null;
             } finally {
                 // Restore caller lexical flags (do not leak eval pragmas).
-                capturedSymbolTable.invalidateWarningBitsCache();
                 capturedSymbolTable.warningFlagsStack.pop();
                 capturedSymbolTable.warningFlagsStack.push((BitSet) savedWarningFlags.clone());
 
@@ -5274,7 +5315,25 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     : topLevelMain ? runtimePackage : capturedSymbolTable.getCurrentPackage();
 
             try {
+                // Check interpreter eval cache before expensive BEGIN alias setup
+                boolean isDebugging = debuggerFlagsAtEntry != 0;
+                String interpreterCacheKey = null;
+                if (!isDebugging && isCacheableInterpreterEvalSource(evalString)) {
+                    int featureFlags = capturedSymbolTable.featureFlagsStack.peek();
+                    interpreterCacheKey = evalString + '\0' + evalTag + '\0' + hasUnicode
+                            + '\0' + ctx.isEvalbytes + '\0' + featureFlags + '\0' + evalCurrentPackage;
+                    Map<String, InterpretedCode> cache = interpreterEvalCache();
+                    synchronized (cache) {
+                        interpretedCode = cache.get(interpreterCacheKey);
+                    }
+                    if (interpretedCode != null) {
+                        compiledSuccessfully = true;
+                    }
+                }
+
+                if (interpretedCode == null) {
                 // Setup for BEGIN block support - create aliases for captured variables.
+                // Only needed during compilation, not on cache hits.
                 Map<Integer, SymbolTable.SymbolEntry> capturedVars = capturedSymbolTable.getAllVisibleVariables();
                 for (SymbolTable.SymbolEntry entry : capturedVars.values()) {
                     if (!entry.name().equals("@_") && !entry.decl().isEmpty() && !entry.name().startsWith("&")) {
@@ -5329,6 +5388,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
                 evalCompilerOptions.fileName = evalFilename;
                 warnSignatureArgsInEval(evalString, evalFilename);
+                WarnDie.clearCompileTimeWarningFlag();
                 // Parse the eval string
                 Lexer lexer = new Lexer(evalString);
                 tokens = lexer.tokenize();
@@ -5464,13 +5524,23 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     System.out.println(Disassemble.disassemble(interpretedCode));
                 }
 
+                // Store in interpreter eval cache (before withCapturedVars)
+                if (interpreterCacheKey != null && interpretedCode != null
+                        && !WarnDie.wasCompileTimeWarningEmitted()) {
+                    Map<String, InterpretedCode> cache = interpreterEvalCache();
+                    synchronized (cache) {
+                        cache.put(interpreterCacheKey, interpretedCode);
+                    }
+                }
+
                 // Retention is decided at eval compilation time.  In
                 // particular, a later cleanup of a localized $^P must not
                 // turn an 0x800-only failed eval into a retained source.
                 storeSourceLines(evalString, evalFilename, ast, tokens, true, debuggerFlagsAtEntry);
                 sourceLinesStored = true;
+                } // end if (interpretedCode == null)
 
-                // Set captured variables
+                // Set captured variables (both cached and compiled paths)
                 if (runtimeValues.length > 0) {
                     RuntimeBase[] capturedVars2 = new RuntimeBase[runtimeValues.length];
                     for (int i = 0; i < runtimeValues.length; i++) {
@@ -7180,8 +7250,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 //   - apply(String, RuntimeArray, int) pushes true  (fresh args / func())
                 // Fall back to the name-based heuristic for frames outside our tracking
                 // (e.g., top-level code, eval frames).
-                boolean evalCallerFrame = subName != null
-                        && (subName.equals("(eval)") || subName.endsWith("::(eval)"));
                 Boolean hasArgsFromStack = getHasArgsAt(trackedOriginalFrame);
                 if (calledFromDB && (hasArgsFromStack == null || !hasArgsFromStack)
                         && previousFrameSubName != null
@@ -7203,13 +7271,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     hasArgsFromStack = getHasArgsAt(trackedActiveCodeFrame);
                 }
                 if (hasArgsFromStack != null) {
-                    res.add(hasArgsFromStack ? RuntimeScalarCache.scalarTrue
-                            : evalCallerFrame ? RuntimeScalarCache.scalarZero : RuntimeScalarCache.scalarUndef);
+                    res.add(hasArgsFromStack ? RuntimeScalarCache.scalarTrue : RuntimeScalarCache.scalarUndef);
                 } else {
                     // Fallback: assume hasargs=true for named subs, false for eval
-                    boolean hasArgs = subName != null && !subName.isEmpty() && !evalCallerFrame;
-                    res.add(hasArgs ? RuntimeScalarCache.scalarTrue
-                            : evalCallerFrame ? RuntimeScalarCache.scalarZero : RuntimeScalarCache.scalarUndef);
+                    boolean hasArgs = subName != null && !subName.isEmpty() && 
+                                      !subName.equals("(eval)") && !subName.endsWith("::(eval)");
+                    res.add(hasArgs ? RuntimeScalarCache.scalarTrue : RuntimeScalarCache.scalarUndef);
                 }
 
                 // Add wantarray (element 5): undef for void, 0 for scalar, 1 for list.
