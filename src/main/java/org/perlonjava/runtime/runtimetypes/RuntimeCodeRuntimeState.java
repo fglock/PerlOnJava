@@ -1,6 +1,5 @@
 package org.perlonjava.runtime.runtimetypes;
 
-import org.perlonjava.backend.bytecode.InterpretedCode;
 import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.frontend.astnode.OperatorNode;
 
@@ -21,7 +20,6 @@ public final class RuntimeCodeRuntimeState {
 
     final IdentityHashMap<OperatorNode, Integer> evalBeginIds = new IdentityHashMap<>();
     final Map<String, Class<?>> evalCache = lruMap(EVAL_CACHE_SIZE);
-    final Map<String, InterpretedCode> interpreterEvalCache = lruMap(EVAL_CACHE_SIZE);
     final Map<Class<?>, MethodHandle> methodHandleCache = lruMap(METHOD_HANDLE_CACHE_SIZE);
     final HashMap<String, Class<?>> anonymousSubs = new HashMap<>();
     final HashMap<String, String> deparseSourceTextsByClassName = new HashMap<>();
@@ -140,7 +138,6 @@ public final class RuntimeCodeRuntimeState {
     void clearCaches() {
         evalBeginIds.clear();
         evalCache.clear();
-        interpreterEvalCache.clear();
         methodHandleCache.clear();
         anonymousSubs.clear();
         deparseSourceTextsByClassName.clear();

@@ -560,6 +560,7 @@ public class EvalStringHandler {
                 symbolTable.strictOptionsStack.push(strictOpts);
                 symbolTable.featureFlagsStack.pop();
                 symbolTable.featureFlagsStack.push(featFlags);
+                symbolTable.invalidateWarningBitsCache();
                 symbolTable.warningFlagsStack.pop();
                 symbolTable.warningFlagsStack.push((java.util.BitSet) currentCode.warningFlags.clone());
                 WarningFlags.setWarningBitsFromString(symbolTable, siteWarningBits);

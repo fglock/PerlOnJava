@@ -11,6 +11,7 @@ public class EmitCompilerFlag {
         ScopedSymbolTable currentScope = ctx.symbolTable;
 
         // Set the warning flags
+        currentScope.invalidateWarningBitsCache();
         currentScope.warningFlagsStack.pop();
         currentScope.warningFlagsStack.push((java.util.BitSet) node.getWarningFlags().clone());
 

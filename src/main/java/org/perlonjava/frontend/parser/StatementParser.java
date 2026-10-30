@@ -173,21 +173,21 @@ public class StatementParser {
         if (node instanceof IfNode conditional) { markInsideGiven(conditional.condition); markInsideGiven(conditional.thenBranch); markInsideGiven(conditional.elseBranch); return; }
         if (node instanceof TernaryOperatorNode ternary) { markInsideGiven(ternary.condition); markInsideGiven(ternary.trueExpr); markInsideGiven(ternary.falseExpr); }
     }
-    private static Stack<BitSet> cloneBitSetStack(Stack<BitSet> source) {
-        Stack<BitSet> copy = new Stack<>();
+    private static ScopedSymbolTable.FastStack<BitSet> cloneBitSetStack(ScopedSymbolTable.FastStack<BitSet> source) {
+        ScopedSymbolTable.FastStack<BitSet> copy = new ScopedSymbolTable.FastStack<>();
         for (BitSet flags : source) {
             copy.push((BitSet) flags.clone());
         }
         return copy;
     }
 
-    private static Stack<Integer> cloneIntegerStack(Stack<Integer> source) {
-        Stack<Integer> copy = new Stack<>();
+    private static ScopedSymbolTable.FastStack<Integer> cloneIntegerStack(ScopedSymbolTable.FastStack<Integer> source) {
+        ScopedSymbolTable.FastStack<Integer> copy = new ScopedSymbolTable.FastStack<>();
         copy.addAll(source);
         return copy;
     }
 
-    private static <T> void restoreStack(Stack<T> target, Stack<T> source) {
+    private static <T> void restoreStack(ScopedSymbolTable.FastStack<T> target, ScopedSymbolTable.FastStack<T> source) {
         target.clear();
         target.addAll(source);
     }
@@ -1383,6 +1383,7 @@ public class StatementParser {
                             for (int i = 0; i < parser.ctx.symbolTable.warningFlagsStack.size(); i++) {
                                 parser.ctx.symbolTable.warningFlagsStack.set(i, (java.util.BitSet) currentWarnings.clone());
                             }
+                            parser.ctx.symbolTable.invalidateWarningBitsCache();
                         }
                     }
                 }
@@ -1544,11 +1545,11 @@ public class StatementParser {
                 // context. Its final lexical pragma state must not be copied back over the
                 // surrounding file scope; the actual pragma effect of a `use` statement happens
                 // below when import()/unimport() is invoked against parser.ctx.symbolTable.
-                Stack<BitSet> savedWarningFlagsStack = cloneBitSetStack(ctx.symbolTable.warningFlagsStack);
-                Stack<BitSet> savedWarningFatalStack = cloneBitSetStack(ctx.symbolTable.warningFatalStack);
-                Stack<BitSet> savedWarningDisabledStack = cloneBitSetStack(ctx.symbolTable.warningDisabledStack);
-                Stack<Integer> savedFeatureFlagsStack = cloneIntegerStack(ctx.symbolTable.featureFlagsStack);
-                Stack<Integer> savedStrictOptionsStack = cloneIntegerStack(ctx.symbolTable.strictOptionsStack);
+                ScopedSymbolTable.FastStack<BitSet> savedWarningFlagsStack = cloneBitSetStack(ctx.symbolTable.warningFlagsStack);
+                ScopedSymbolTable.FastStack<BitSet> savedWarningFatalStack = cloneBitSetStack(ctx.symbolTable.warningFatalStack);
+                ScopedSymbolTable.FastStack<BitSet> savedWarningDisabledStack = cloneBitSetStack(ctx.symbolTable.warningDisabledStack);
+                ScopedSymbolTable.FastStack<Integer> savedFeatureFlagsStack = cloneIntegerStack(ctx.symbolTable.featureFlagsStack);
+                ScopedSymbolTable.FastStack<Integer> savedStrictOptionsStack = cloneIntegerStack(ctx.symbolTable.strictOptionsStack);
                 RuntimeList args;
                 try {
                     // The implicit BEGIN wrapper that evaluates a use/no
