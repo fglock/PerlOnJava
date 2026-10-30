@@ -3043,7 +3043,6 @@ public class ReachabilityWalker {
         Set<RuntimeBase> countedStrongOwners = releasedSweepResult == null
                 ? Collections.emptySet()
                 : releasedSweepResult.countedStrongOwners();
-        WeakBackrefCaptureSnapshot weakBackrefCaptures = null;
         for (RuntimeBase referent : WeakRefRegistry.snapshotWeakRefReferents()) {
             boolean liveReferent = live.contains(referent);
             traceWeakReferent(referent, liveReferent, strongCycleProtected.contains(referent));
@@ -3101,21 +3100,6 @@ public class ReachabilityWalker {
                             && s.value instanceof RuntimeCode) {
                         continue;
                     }
-                }
-                // Quiet auto-sweeps can run while a deferred CODE ref is being
-                // returned to its caller. Sub::Quote stores weak registry
-                // entries in hashes/arrays that are strongly captured by that
-                // CODE, but the caller's lexical may not be visible as a root
-                // yet. Keep this exception limited to unblessed metadata
-                // containers and only for quiet statement-boundary sweeps;
-                // explicit jperl_gc() keeps the stricter root-based behavior.
-                if (quiet
-                        && referent.blessId == 0
-                        && (referent instanceof RuntimeHash || referent instanceof RuntimeArray)) {
-                    if (weakBackrefCaptures == null) {
-                        weakBackrefCaptures = weakBackrefCaptureSnapshot();
-                    }
-                    if (weakBackrefCaptures.protects(referent)) continue;
                 }
                 // Quiet auto-sweeps run at statement boundaries. Do not clear
                 // weak refs into, or strongly reachable from, a strong cycle:
