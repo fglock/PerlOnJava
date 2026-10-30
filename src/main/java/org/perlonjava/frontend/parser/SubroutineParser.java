@@ -2571,13 +2571,14 @@ public class SubroutineParser {
         compilationBlock.setAnnotation("compiledSubroutineName", fullName);
 
         // Clone warning flags (critical for 'no warnings' pragmas)
+        filteredSnapshot.invalidateWarningBitsCache();
         filteredSnapshot.warningFlagsStack.pop(); // Remove the initial value pushed by enterScope
         filteredSnapshot.warningFlagsStack.push(definitionWarningFlags);
-        
+
         // Clone fatal warning flags (critical for 'use warnings FATAL' pragmas)
         filteredSnapshot.warningFatalStack.pop();
         filteredSnapshot.warningFatalStack.push(definitionWarningFatalFlags);
-        
+
         // Clone disabled warning flags (critical for 'no warnings' pragmas)
         filteredSnapshot.warningDisabledStack.pop();
         filteredSnapshot.warningDisabledStack.push(definitionWarningDisabledFlags);

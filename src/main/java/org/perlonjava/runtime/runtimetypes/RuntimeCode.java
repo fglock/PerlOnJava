@@ -987,48 +987,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return PerlRuntime.current().runtimeCodeState().evalCache;
     }
 
-    private static Map<String, InterpretedCode> interpreterEvalCache() {
-        return PerlRuntime.current().runtimeCodeState().interpreterEvalCache;
-    }
-
-    /**
-     * Eval parsing can execute compile-time code and resolve names against
-     * mutable lexical and package state. The interpreter cache currently has
-     * no complete fingerprint for that state, so admit only decimal integer
-     * literals, whose compiled form is independent of those side effects.
-     */
-    private static boolean isCacheableInterpreterEvalSource(String source) {
-        if (source == null || source.length() > 32) {
-            return false;
-        }
-        int index = 0;
-        while (index < source.length() && isEvalAsciiWhitespace(source.charAt(index))) {
-            index++;
-        }
-        if (index < source.length() && (source.charAt(index) == '+' || source.charAt(index) == '-')) {
-            index++;
-        }
-        int digitCount = 0;
-        while (index < source.length()) {
-            char current = source.charAt(index);
-            if (current < '0' || current > '9') {
-                break;
-            }
-            digitCount++;
-            index++;
-        }
-        if (digitCount == 0 || digitCount > 9) {
-            return false;
-        }
-        while (index < source.length() && isEvalAsciiWhitespace(source.charAt(index))) {
-            index++;
-        }
-        return index == source.length();
-    }
-
-    private static boolean isEvalAsciiWhitespace(char value) {
-        return value == ' ' || value == '\t' || value == '\n' || value == '\r' || value == '\f';
-    }
 
     /**
      * Flag to enable disassembly of eval STRING bytecode.
@@ -4937,6 +4895,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 return null;
             } finally {
                 // Restore caller lexical flags (do not leak eval pragmas).
+                capturedSymbolTable.invalidateWarningBitsCache();
                 capturedSymbolTable.warningFlagsStack.pop();
                 capturedSymbolTable.warningFlagsStack.push((BitSet) savedWarningFlags.clone());
 
@@ -5298,85 +5257,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
             }
 
-            // Clone compiler options and set isUnicodeSource if needed
-            // Always clone to avoid modifying the original and to set a unique filename
-            CompilerOptions evalCompilerOptions = ctx.compilerOptions.clone();
-            boolean isByteStringSource = !ctx.isEvalbytes
-                    && code.type == RuntimeScalarType.BYTE_STRING
-                    && !byteStringUtf8Source;
-            if (hasUnicode) {
-                evalCompilerOptions.isUnicodeSource = true;
-            }
-            if (byteStringUtf8Source) {
-                // The byte-backed eval source has been decoded above. Do not
-                // let the caller's byte-source mode reinterpret it as octets.
-                evalCompilerOptions.isByteStringSource = false;
-            }
-            if (ctx.isEvalbytes && !evalbytesUtf8Source) {
-                evalCompilerOptions.isEvalbytes = true;
-            }
-            if (isByteStringSource) {
-                evalCompilerOptions.isUnicodeSource = false;
-                evalCompilerOptions.isByteStringSource = true;
-            }
-            // EmitEval gives each call site a synthetic compilerOptions name,
-            // but retains the enclosing source in errorUtil. Allocate within
-            // that enclosing source so distinct sites share its `(eval N)`
-            // sequence without perturbing unrelated source files.
-            evalCompilerOptions.fileName = getNextEvalFilenameForDebugger(ctx.errorUtil.getFileName());
-            evalFilename = evalCompilerOptions.fileName;
-            warnSignatureArgsInEval(evalString, evalCompilerOptions.fileName);
+            // Allocate eval filename early (needed for both cached and compiled paths).
+            // Defer CompilerOptions clone to compilation path to avoid allocation on cache hits.
+            evalFilename = getNextEvalFilenameForDebugger(ctx.errorUtil.getFileName());
+            CompilerOptions evalCompilerOptions = null;
 
-            // Setup for BEGIN block support - create aliases for captured variables.
-            // IMPORTANT: Do NOT mutate AST nodes (e.g. operatorAst.id) here.
-            // The AST is shared with the JVM compiler; mutating it would change how
-            // `my` declarations are compiled (NEW vs RETRIEVE_BEGIN), causing variables
-            // inside loops to stop being reinitialized between iterations.
             ScopedSymbolTable capturedSymbolTable = ctx.symbolTable;
-            Map<Integer, SymbolTable.SymbolEntry> capturedVars = capturedSymbolTable.getAllVisibleVariables();
-            for (SymbolTable.SymbolEntry entry : capturedVars.values()) {
-                if (!entry.name().equals("@_") && !entry.decl().isEmpty() && !entry.name().startsWith("&")) {
-                    if (!entry.decl().equals("our")) {
-                        Object runtimeValue = runtimeCtx.getRuntimeValue(entry.name());
-                        if (runtimeValue != null) {
-                            {
-                                int beginId = evalBeginId(entry);
-                                String packageName = PersistentVariable.beginPackage(beginId);
-                                String varNameWithoutSigil = entry.name().substring(1);
-                                String fullName = packageName + "::" + varNameWithoutSigil;
-
-                                // Only install the alias (and schedule cleanup) if no other
-                                // alias is already in place for this key. An alias may already
-                                // exist because SubroutineParser.handleNamedSub registered one
-                                // at compile time for a named sub that closes over the same
-                                // outer `my`. That alias must stay alive until the owning
-                                // `my %name = (...)` runs and calls retrieveBeginHash, which
-                                // takes ownership. If we unconditionally put+remove here, we
-                                // delete SubroutineParser's alias in the finally block, and the
-                                // later `my` creates a fresh, unshared object — breaking the
-                                // named sub's closure over that variable.
-                                boolean installed = false;
-                                if (runtimeValue instanceof RuntimeArray) {
-                                    if (GlobalVariable.globalArrays.putIfAbsent(fullName, (RuntimeArray) runtimeValue) == null) {
-                                        installed = true;
-                                    }
-                                } else if (runtimeValue instanceof RuntimeHash) {
-                                    if (GlobalVariable.globalHashes.putIfAbsent(fullName, (RuntimeHash) runtimeValue) == null) {
-                                        installed = true;
-                                    }
-                                } else if (runtimeValue instanceof RuntimeScalar) {
-                                    if (GlobalVariable.scalarSlots().putIfAbsent(fullName, (RuntimeScalar) runtimeValue) == null) {
-                                        installed = true;
-                                    }
-                                }
-                                if (installed) {
-                                    registerEvalRuntimeAlias(runtimeCtx, entry.name().charAt(0), fullName, (RuntimeBase) runtimeValue);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
 
             // Compute evalCurrentPackage early (needed for cache key)
             String runtimePackage = InterpreterState.currentPackage.get().toString();
@@ -5388,24 +5274,61 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     : topLevelMain ? runtimePackage : capturedSymbolTable.getCurrentPackage();
 
             try {
-                // Check interpreter eval cache (skip when debugger is active)
-                boolean isDebugging = debuggerFlagsAtEntry != 0;
-                String interpreterCacheKey = null;
-                if (!isDebugging && isCacheableInterpreterEvalSource(evalString)) {
-                    int featureFlags = capturedSymbolTable.featureFlagsStack.peek();
-                    interpreterCacheKey = evalString + '\0' + evalTag + '\0' + hasUnicode
-                            + '\0' + ctx.isEvalbytes + '\0' + featureFlags + '\0' + evalCurrentPackage;
-                    Map<String, InterpretedCode> cache = interpreterEvalCache();
-                    synchronized (cache) {
-                        interpretedCode = cache.get(interpreterCacheKey);
-                    }
-                    if (interpretedCode != null) {
-                        compiledSuccessfully = true;
+                // Setup for BEGIN block support - create aliases for captured variables.
+                Map<Integer, SymbolTable.SymbolEntry> capturedVars = capturedSymbolTable.getAllVisibleVariables();
+                for (SymbolTable.SymbolEntry entry : capturedVars.values()) {
+                    if (!entry.name().equals("@_") && !entry.decl().isEmpty() && !entry.name().startsWith("&")) {
+                        if (!entry.decl().equals("our")) {
+                            Object runtimeValue = runtimeCtx.getRuntimeValue(entry.name());
+                            if (runtimeValue != null) {
+                                {
+                                    int beginId = evalBeginId(entry);
+                                    String packageName = PersistentVariable.beginPackage(beginId);
+                                    String varNameWithoutSigil = entry.name().substring(1);
+                                    String fullName = packageName + "::" + varNameWithoutSigil;
+
+                                    boolean installed = false;
+                                    if (runtimeValue instanceof RuntimeArray) {
+                                        if (GlobalVariable.globalArrays.putIfAbsent(fullName, (RuntimeArray) runtimeValue) == null) {
+                                            installed = true;
+                                        }
+                                    } else if (runtimeValue instanceof RuntimeHash) {
+                                        if (GlobalVariable.globalHashes.putIfAbsent(fullName, (RuntimeHash) runtimeValue) == null) {
+                                            installed = true;
+                                        }
+                                    } else if (runtimeValue instanceof RuntimeScalar) {
+                                        if (GlobalVariable.scalarSlots().putIfAbsent(fullName, (RuntimeScalar) runtimeValue) == null) {
+                                            installed = true;
+                                        }
+                                    }
+                                    if (installed) {
+                                        registerEvalRuntimeAlias(runtimeCtx, entry.name().charAt(0), fullName, (RuntimeBase) runtimeValue);
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
-
-                if (interpretedCode == null) {
-                WarnDie.clearCompileTimeWarningFlag();
+                // Clone compiler options for compilation (deferred from cache-hit fast path)
+                evalCompilerOptions = ctx.compilerOptions.clone();
+                boolean isByteStringSource = !ctx.isEvalbytes
+                        && code.type == RuntimeScalarType.BYTE_STRING
+                        && !byteStringUtf8Source;
+                if (hasUnicode) {
+                    evalCompilerOptions.isUnicodeSource = true;
+                }
+                if (byteStringUtf8Source) {
+                    evalCompilerOptions.isByteStringSource = false;
+                }
+                if (ctx.isEvalbytes && !evalbytesUtf8Source) {
+                    evalCompilerOptions.isEvalbytes = true;
+                }
+                if (isByteStringSource) {
+                    evalCompilerOptions.isUnicodeSource = false;
+                    evalCompilerOptions.isByteStringSource = true;
+                }
+                evalCompilerOptions.fileName = evalFilename;
+                warnSignatureArgsInEval(evalString, evalFilename);
                 // Parse the eval string
                 Lexer lexer = new Lexer(evalString);
                 tokens = lexer.tokenize();
@@ -5541,23 +5464,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     System.out.println(Disassemble.disassemble(interpretedCode));
                 }
 
-                // Store in interpreter eval cache (before withCapturedVars)
-                if (interpreterCacheKey != null && interpretedCode != null
-                        && !WarnDie.wasCompileTimeWarningEmitted()) {
-                    Map<String, InterpretedCode> cache = interpreterEvalCache();
-                    synchronized (cache) {
-                        cache.put(interpreterCacheKey, interpretedCode);
-                    }
-                }
-
                 // Retention is decided at eval compilation time.  In
                 // particular, a later cleanup of a localized $^P must not
                 // turn an 0x800-only failed eval into a retained source.
                 storeSourceLines(evalString, evalFilename, ast, tokens, true, debuggerFlagsAtEntry);
                 sourceLinesStored = true;
-                } // end if (interpretedCode == null)
 
-                // Set captured variables (both cached and compiled paths)
+                // Set captured variables
                 if (runtimeValues.length > 0) {
                     RuntimeBase[] capturedVars2 = new RuntimeBase[runtimeValues.length];
                     for (int i = 0; i < runtimeValues.length; i++) {
@@ -5730,7 +5643,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Execute the interpreted code
             // Track eval depth for $^S support
             incrementEvalDepth();
-            pushActiveEvalSource(evalCompilerOptions.fileName, evalString);
+            pushActiveEvalSource(evalFilename, evalString);
             try {
                 // Eval STRING is an execution boundary: resolve a goto &sub
                 // marker here so its eval-string restriction is caught and

@@ -496,6 +496,7 @@ public class WarningFlags {
         }
         
         // Clear all warning flags first
+        symbolTable.invalidateWarningBitsCache();
         symbolTable.warningFlagsStack.peek().clear();
         symbolTable.warningFatalStack.peek().clear();
         

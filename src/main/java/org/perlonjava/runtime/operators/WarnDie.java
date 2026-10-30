@@ -23,17 +23,6 @@ public class WarnDie {
     private static final ThreadLocal<Boolean> WRITING_WARNING =
             ThreadLocal.withInitial(() -> Boolean.FALSE);
 
-    private static final ThreadLocal<Boolean> COMPILE_TIME_WARNING_EMITTED =
-            ThreadLocal.withInitial(() -> Boolean.FALSE);
-
-    public static void clearCompileTimeWarningFlag() {
-        COMPILE_TIME_WARNING_EMITTED.set(Boolean.FALSE);
-    }
-
-    public static boolean wasCompileTimeWarningEmitted() {
-        return COMPILE_TIME_WARNING_EMITTED.get();
-    }
-
     public static boolean isInsideUnhandledDieHandler() {
         return PerlRuntime.current().executionState().insideUnhandledDieHandler;
     }
@@ -360,7 +349,6 @@ public class WarnDie {
     }
 
     public static RuntimeBase warn(RuntimeBase message, RuntimeScalar where, String fileName, int lineNumber) {
-        COMPILE_TIME_WARNING_EMITTED.set(Boolean.TRUE);
         // PERL5DB is debugger bootstrap code; Perl emits its implicit warning
         // without the eval-string source suffix in this special context.
         if (org.perlonjava.runtime.debugger.DebugHooks.isExecutingPerl5db()) {
@@ -607,7 +595,6 @@ public class WarnDie {
 
     private static RuntimeBase warnWithCategory(RuntimeBase message, RuntimeScalar where, String category,
             String fileName, int lineNumber, boolean enabledByDefault, String warningBitsOverride) {
-        COMPILE_TIME_WARNING_EMITTED.set(Boolean.TRUE);
         if (WarningFlags.areWarningsForcedOff()) {
             return new RuntimeScalar();
         }

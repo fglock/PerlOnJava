@@ -78,6 +78,7 @@ public class ScopedSymbolTable {
         if (categoryBit == null || allBit == null) {
             return;
         }
+        boolean changed = false;
         for (int i = 0; i < warningFlagsStack.size(); i++) {
             BitSet disabled = warningDisabledStack.get(i);
             if (warningFlagsStack.get(i).get(allBit)
@@ -87,54 +88,67 @@ public class ScopedSymbolTable {
                 if (warningFatalStack.get(i).get(allBit)) {
                     warningFatalStack.get(i).set(categoryBit);
                 }
+                changed = true;
             }
+        }
+        if (changed) {
+            cachedWarningBitsString = null;
         }
     }
 
+    /** Unsynchronized stack backed by ArrayList. Replaces java.util.Stack (Vector-based) to eliminate per-operation monitor overhead in single-threaded compilation paths. */
+    public static final class FastStack<T> extends ArrayList<T> {
+        public void push(T item) { add(item); }
+        public T pop() { return remove(size() - 1); }
+        public T peek() { return get(size() - 1); }
+    }
+
     // Stack to manage warning categories for each scope
-    public final Stack<BitSet> warningFlagsStack = new Stack<>();
+    public final FastStack<BitSet> warningFlagsStack = new FastStack<>();
     // Stack to track explicitly disabled warning categories (for proper $^W interaction)
-    public final Stack<BitSet> warningDisabledStack = new Stack<>();
+    public final FastStack<BitSet> warningDisabledStack = new FastStack<>();
     // Stack to track FATAL warning categories for each scope
-    public final Stack<BitSet> warningFatalStack = new Stack<>();
+    public final FastStack<BitSet> warningFatalStack = new FastStack<>();
     // Stack to manage feature categories for each scope
-    public final Stack<Integer> featureFlagsStack = new Stack<>();
+    public final FastStack<Integer> featureFlagsStack = new FastStack<>();
     // Exact state for postderef_qq. The legacy int mask has more than 32
     // categories and can alias high bit positions modulo 32.
-    private final Stack<Boolean> postderefQqStack = new Stack<>();
+    private final FastStack<Boolean> postderefQqStack = new FastStack<>();
     // Exact lexical state for experimental enhanced /xx class parsing. This
     // cannot safely use the legacy 32-bit feature mask.
-    private final Stack<Boolean> enhancedXxStack = new Stack<>();
+    private final FastStack<Boolean> enhancedXxStack = new FastStack<>();
     // Stack to manage strict options for each scope
-    public final Stack<Integer> strictOptionsStack = new Stack<>();
+    public final FastStack<Integer> strictOptionsStack = new FastStack<>();
     // Strict categories explicitly set by use/no strict. `use VERSION` enables
     // strict only where the source has not explicitly chosen otherwise.
-    private final Stack<Integer> explicitStrictOptionsStack = new Stack<>();
+    private final FastStack<Integer> explicitStrictOptionsStack = new FastStack<>();
     // Lexical default regex modifiers installed by `use re '/flags'`.
     // These do not fit in PerlOnJava's legacy 32-bit strict-options mask and
     // must follow the same lexical enter/exit/snapshot rules independently.
-    private final Stack<String> regexModifierStack = new Stack<>();
+    private final FastStack<String> regexModifierStack = new FastStack<>();
     // Coarse stable re-debug categories captured lexically. Perl exposes many
     // engine-specific named flags; the frontend preserves their compile versus
     // execute ownership without baking a particular engine's bit layout into
     // the AST.
-    private final Stack<Integer> regexDebugFlagsStack = new Stack<>();
+    private final FastStack<Integer> regexDebugFlagsStack = new FastStack<>();
     /** True when this compilation unit explicitly invoked re->import/unimport. */
     private boolean lexicalRegexPragmaChanged;
     // `use VERSION` is lexical: declaration and warning state resets for an
     // inner block and is restored when that block exits.
-    private final Stack<String> useVersionStack = new Stack<>();
+    private final FastStack<String> useVersionStack = new FastStack<>();
     /** Lexically scoped parser keywords installed by compile-time modules. */
-    private final Stack<Map<String, ParserKeywordPlugin>> parserKeywordPluginsStack = new Stack<>();
+    private final FastStack<Map<String, ParserKeywordPlugin>> parserKeywordPluginsStack = new FastStack<>();
     // A stack to manage nested scopes of symbol tables.
-    private final Stack<SymbolTable> symbolTableStack = new Stack<>();
-    private final Stack<PackageInfo> packageStack = new Stack<>();
+    private final FastStack<SymbolTable> symbolTableStack = new FastStack<>();
+    private final FastStack<PackageInfo> packageStack = new FastStack<>();
     // Stack to manage nested subroutine names for error messages
-    private final Stack<String> subroutineStack = new Stack<>();
+    private final FastStack<String> subroutineStack = new FastStack<>();
     // Stack to track whether we are inside a subroutine body (named or anonymous)
-    private final Stack<Boolean> inSubroutineBodyStack = new Stack<>();
+    private final FastStack<Boolean> inSubroutineBodyStack = new FastStack<>();
     // Cache for the getAllVisibleVariables method
     private Map<Integer, SymbolTable.SymbolEntry> visibleVariablesCache;
+    // Cache for getWarningBitsString(); null means stale
+    private String cachedWarningBitsString;
 
     /**
      * Constructs a ScopedSymbolTable.
@@ -234,6 +248,7 @@ public class ScopedSymbolTable {
      */
     public int enterScope() {
         clearVisibleVariablesCache();
+        cachedWarningBitsString = null;
 
         // Push a new SymbolTable onto the stack and set its index
         symbolTableStack.push(new SymbolTable(symbolTableStack.peek().index));
@@ -243,12 +258,14 @@ public class ScopedSymbolTable {
         subroutineStack.push(subroutineStack.peek());
         // Push a copy of the current subroutine-body flag onto the stack
         inSubroutineBodyStack.push(inSubroutineBodyStack.peek());
-        // Push a copy of the current warning categories map onto the stack
-        warningFlagsStack.push((BitSet) warningFlagsStack.peek().clone());
-        // Push a copy of the current disabled warnings map onto the stack
-        warningDisabledStack.push((BitSet) warningDisabledStack.peek().clone());
-        // Push a copy of the current fatal warnings map onto the stack
-        warningFatalStack.push((BitSet) warningFatalStack.peek().clone());
+        // Push a copy of the current warning categories map onto the stack.
+        // Empty BitSets are common (code without `use warnings`); avoid clone overhead.
+        BitSet curWarnings = warningFlagsStack.peek();
+        warningFlagsStack.push(curWarnings.isEmpty() ? new BitSet() : (BitSet) curWarnings.clone());
+        BitSet curDisabled = warningDisabledStack.peek();
+        warningDisabledStack.push(curDisabled.isEmpty() ? new BitSet() : (BitSet) curDisabled.clone());
+        BitSet curFatal = warningFatalStack.peek();
+        warningFatalStack.push(curFatal.isEmpty() ? new BitSet() : (BitSet) curFatal.clone());
         // Push a copy of the current feature categories map onto the stack
         featureFlagsStack.push(featureFlagsStack.peek());
         postderefQqStack.push(postderefQqStack.peek());
@@ -259,7 +276,8 @@ public class ScopedSymbolTable {
         regexModifierStack.push(regexModifierStack.peek());
         regexDebugFlagsStack.push(regexDebugFlagsStack.peek());
         useVersionStack.push(null);
-        parserKeywordPluginsStack.push(new LinkedHashMap<>(parserKeywordPluginsStack.peek()));
+        Map<String, ParserKeywordPlugin> curPlugins = parserKeywordPluginsStack.peek();
+        parserKeywordPluginsStack.push(curPlugins.isEmpty() ? new LinkedHashMap<>() : new LinkedHashMap<>(curPlugins));
 
         // Return the current size of the symbol table stack as the scope index
         return symbolTableStack.size() - 1;
@@ -297,6 +315,7 @@ public class ScopedSymbolTable {
      */
     public void exitScope(int scopeIndex) {
         clearVisibleVariablesCache();
+        cachedWarningBitsString = null;
         // Capture the child scope's max local variable index before popping
         int childIndex = symbolTableStack.peek().index;
         // Pop entries from the stacks until reaching the specified scope index
@@ -1030,8 +1049,8 @@ public class ScopedSymbolTable {
         st.regexDebugFlagsStack.pop();
         st.regexDebugFlagsStack.push(this.regexDebugFlagsStack.peek());
         st.parserKeywordPluginsStack.pop();
-        st.parserKeywordPluginsStack.push(new LinkedHashMap<>(
-                this.parserKeywordPluginsStack.peek()));
+        Map<String, ParserKeywordPlugin> srcPlugins = this.parserKeywordPluginsStack.peek();
+        st.parserKeywordPluginsStack.push(srcPlugins.isEmpty() ? new LinkedHashMap<>() : new LinkedHashMap<>(srcPlugins));
         st.lexicalRegexPragmaChanged = this.lexicalRegexPragmaChanged;
 
         return st;
@@ -1128,6 +1147,7 @@ public class ScopedSymbolTable {
     public void enableWarningCategory(String category) {
         Integer bitPosition = warningBitPositions().get(category);
         if (bitPosition != null) {
+            cachedWarningBitsString = null;
             warningFlagsStack.peek().set(bitPosition);
             // A normal "use warnings 'category'" downgrades any inherited
             // FATAL bit for that category back to a regular warning.
@@ -1140,6 +1160,7 @@ public class ScopedSymbolTable {
     public void disableWarningCategory(String category) {
         Integer bitPosition = warningBitPositions().get(category);
         if (bitPosition != null) {
+            cachedWarningBitsString = null;
             warningFlagsStack.peek().clear(bitPosition);
             // A disabled category cannot remain fatal.  Keeping the fatal bit
             // made warning-mask serialization re-enable the category when an
@@ -1192,6 +1213,7 @@ public class ScopedSymbolTable {
     public void enableFatalWarningCategory(String category) {
         Integer bitPosition = warningBitPositions().get(category);
         if (bitPosition != null) {
+            cachedWarningBitsString = null;
             warningFatalStack.peek().set(bitPosition);
             // FATAL implies enabled
             warningFlagsStack.peek().set(bitPosition);
@@ -1205,6 +1227,7 @@ public class ScopedSymbolTable {
     public void disableFatalWarningCategory(String category) {
         Integer bitPosition = warningBitPositions().get(category);
         if (bitPosition != null) {
+            cachedWarningBitsString = null;
             warningFatalStack.peek().clear(bitPosition);
         }
     }
@@ -1224,7 +1247,15 @@ public class ScopedSymbolTable {
      *
      * @return A string of bytes representing the warning bits in Perl 5 format.
      */
+    /** Invalidate the warningBitsString cache. Call after direct mutation of warning stacks. */
+    public void invalidateWarningBitsCache() {
+        cachedWarningBitsString = null;
+    }
+
     public String getWarningBitsString() {
+        if (cachedWarningBitsString != null) {
+            return cachedWarningBitsString;
+        }
         Map<String, Integer> positions = warningBitPositions();
         BitSet enabled = (BitSet) warningFlagsStack.peek().clone();
         BitSet fatal = (BitSet) warningFatalStack.peek().clone();
@@ -1242,7 +1273,8 @@ public class ScopedSymbolTable {
                 }
             }
         }
-        return WarningFlags.toWarningBitsString(enabled, fatal, positions);
+        cachedWarningBitsString = WarningFlags.toWarningBitsString(enabled, fatal, positions);
+        return cachedWarningBitsString;
     }
 
     // Methods for managing features using bit positions
@@ -1278,6 +1310,7 @@ public class ScopedSymbolTable {
         String experimentalWarning = "experimental::" + feature;
         Integer warnBitPos = warningBitPositions().get(experimentalWarning);
         if (warnBitPos != null && !warningDisabledStack.peek().get(warnBitPos)) {
+            cachedWarningBitsString = null;
             warningFlagsStack.peek().set(warnBitPos);
         }
     }
@@ -1366,6 +1399,7 @@ public class ScopedSymbolTable {
         int index = Math.max(0, Math.min(sourceScopeIndex, source.warningFlagsStack.size() - 1));
 
         // Copy warning flags
+        cachedWarningBitsString = null;
         this.warningFlagsStack.pop();
         this.warningFlagsStack.push((BitSet) source.warningFlagsStack.get(index).clone());
 

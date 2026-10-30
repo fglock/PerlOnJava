@@ -46,21 +46,21 @@ public class SpecialBlockParser {
     private static final ThreadLocal<Deque<ScopedSymbolTable>> compileTimePragmaMutationScopes =
             ThreadLocal.withInitial(ArrayDeque::new);
 
-    private static Stack<BitSet> cloneBitSetStack(Stack<BitSet> source) {
-        Stack<BitSet> copy = new Stack<>();
+    private static ScopedSymbolTable.FastStack<BitSet> cloneBitSetStack(ScopedSymbolTable.FastStack<BitSet> source) {
+        ScopedSymbolTable.FastStack<BitSet> copy = new ScopedSymbolTable.FastStack<>();
         for (BitSet flags : source) {
             copy.push((BitSet) flags.clone());
         }
         return copy;
     }
 
-    private static Stack<Integer> cloneIntegerStack(Stack<Integer> source) {
-        Stack<Integer> copy = new Stack<>();
+    private static ScopedSymbolTable.FastStack<Integer> cloneIntegerStack(ScopedSymbolTable.FastStack<Integer> source) {
+        ScopedSymbolTable.FastStack<Integer> copy = new ScopedSymbolTable.FastStack<>();
         copy.addAll(source);
         return copy;
     }
 
-    private static <T> void restoreStack(Stack<T> target, Stack<T> source) {
+    private static <T> void restoreStack(ScopedSymbolTable.FastStack<T> target, ScopedSymbolTable.FastStack<T> source) {
         target.clear();
         target.addAll(source);
     }
@@ -507,11 +507,11 @@ public class SpecialBlockParser {
         if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("Special block captures " + parser.ctx.symbolTable.getAllVisibleVariables());
         RuntimeList result;
         boolean preserveCallerPragmas = !blockPhase.equals("BEGIN");
-        Stack<BitSet> savedWarningFlagsStack = null;
-        Stack<BitSet> savedWarningFatalStack = null;
-        Stack<BitSet> savedWarningDisabledStack = null;
-        Stack<Integer> savedFeatureFlagsStack = null;
-        Stack<Integer> savedStrictOptionsStack = null;
+        ScopedSymbolTable.FastStack<BitSet> savedWarningFlagsStack = null;
+        ScopedSymbolTable.FastStack<BitSet> savedWarningFatalStack = null;
+        ScopedSymbolTable.FastStack<BitSet> savedWarningDisabledStack = null;
+        ScopedSymbolTable.FastStack<Integer> savedFeatureFlagsStack = null;
+        ScopedSymbolTable.FastStack<Integer> savedStrictOptionsStack = null;
         if (preserveCallerPragmas) {
             savedWarningFlagsStack = cloneBitSetStack(parser.ctx.symbolTable.warningFlagsStack);
             savedWarningFatalStack = cloneBitSetStack(parser.ctx.symbolTable.warningFatalStack);

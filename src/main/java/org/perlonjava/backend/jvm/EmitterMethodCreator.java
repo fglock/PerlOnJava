@@ -2466,6 +2466,7 @@ public class EmitterMethodCreator implements Opcodes {
                     // Apply disabled warning flags
                     currentScope.warningDisabledStack.pop();
                     currentScope.warningDisabledStack.push((java.util.BitSet) node.getWarningDisabledFlags().clone());
+                    currentScope.invalidateWarningBitsCache();
                 }
             }
         }

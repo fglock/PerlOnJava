@@ -236,6 +236,7 @@ public class EmitSubroutine {
                         ? value
                         : ctx.symbolTable.strictOptionsStack.peek();
 
+        newSymbolTable.invalidateWarningBitsCache();
         newSymbolTable.warningFlagsStack.pop();
         newSymbolTable.warningFlagsStack.push(definitionWarningFlags);
         newSymbolTable.warningFatalStack.pop();

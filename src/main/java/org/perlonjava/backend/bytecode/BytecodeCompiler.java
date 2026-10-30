@@ -1007,6 +1007,7 @@ public class BytecodeCompiler implements Visitor {
             st.warningFlagsStack.push((java.util.BitSet) st.warningFlagsStack.peek().clone());
             st.warningFatalStack.push((java.util.BitSet) st.warningFatalStack.peek().clone());
             st.warningDisabledStack.push((java.util.BitSet) st.warningDisabledStack.peek().clone());
+            st.invalidateWarningBitsCache();
         }
     }
 
@@ -1043,6 +1044,7 @@ public class BytecodeCompiler implements Visitor {
                 st.warningFlagsStack.pop();
                 st.warningFatalStack.pop();
                 st.warningDisabledStack.pop();
+                st.invalidateWarningBitsCache();
             }
         }
     }
@@ -1273,6 +1275,7 @@ public class BytecodeCompiler implements Visitor {
         subCompiler.symbolTable.warningFatalStack.push((java.util.BitSet) parentST.warningFatalStack.peek().clone());
         subCompiler.symbolTable.warningDisabledStack.pop();
         subCompiler.symbolTable.warningDisabledStack.push((java.util.BitSet) parentST.warningDisabledStack.peek().clone());
+        subCompiler.symbolTable.invalidateWarningBitsCache();
     }
 
     /**
@@ -1533,6 +1536,7 @@ public class BytecodeCompiler implements Visitor {
                 symbolTable.strictOptionsStack.push(ctx.symbolTable.strictOptionsStack.peek());
                 symbolTable.featureFlagsStack.pop();
                 symbolTable.featureFlagsStack.push(ctx.symbolTable.featureFlagsStack.peek());
+                symbolTable.invalidateWarningBitsCache();
                 symbolTable.warningFlagsStack.pop();
                 symbolTable.warningFlagsStack.push((java.util.BitSet) ctx.symbolTable.warningFlagsStack.peek().clone());
                 symbolTable.warningFatalStack.pop();
@@ -9226,6 +9230,7 @@ public class BytecodeCompiler implements Visitor {
     public void visit(CompilerFlagNode node) {
         if (emitterContext != null && emitterContext.symbolTable != null) {
             ScopedSymbolTable st = emitterContext.symbolTable;
+            st.invalidateWarningBitsCache();
             st.warningFlagsStack.pop();
             st.warningFlagsStack.push((java.util.BitSet) node.getWarningFlags().clone());
             st.warningFatalStack.pop();
@@ -9247,6 +9252,7 @@ public class BytecodeCompiler implements Visitor {
         symbolTable.warningFatalStack.push((java.util.BitSet) node.getWarningFatalFlags().clone());
         symbolTable.warningDisabledStack.pop();
         symbolTable.warningDisabledStack.push((java.util.BitSet) node.getWarningDisabledFlags().clone());
+        symbolTable.invalidateWarningBitsCache();
 
         int warningBitsIdx = addToStringPool(symbolTable.getWarningBitsString());
         emit(Opcodes.APPLY_COMPILER_FLAGS);
