@@ -5201,8 +5201,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             RuntimeIO last = RuntimeIO.getLastAccessedHandle();
             if ((glob.globName != null && glob.globName.equals(last.globName))
                     || (glob.IO != null && glob.IO.value == last)) {
-                RuntimeIO.setLastAccessedHandle(null);
-                RuntimeIO.setLastReadlineHandleName(null);
+                // A borrowed anonymous handle alias can leave scope while the
+                // caller still owns the same IO glob. Keep its $. context until
+                // that durable owner leaves; clearing on the borrow breaks
+                // getline/input_line_number calls inside wrapper subroutines.
+                boolean borrowedLiveIo = isUnstashedIoGlob(glob)
+                        && !scalar.ioOwner && glob.ioHolderCount > 0;
+                if (!borrowedLiveIo) {
+                    RuntimeIO.setLastAccessedHandle(null);
+                    RuntimeIO.setLastReadlineHandleName(null);
+                }
             }
         }
 
