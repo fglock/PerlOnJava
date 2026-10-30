@@ -577,7 +577,10 @@ public class POSIX extends PerlModuleBase {
         RuntimeScalar arg = args.get(0);
         // Accept either a fd number or a filehandle (RuntimeIO)
         if (arg.type == RuntimeScalarType.GLOB) {
-            RuntimeIO io = (RuntimeIO) arg.value;
+            RuntimeIO io = arg.getRuntimeIO();
+            if (io == null) {
+                return new RuntimeScalar(0).getList();
+            }
             fd = io.fileno().getInt();
         } else {
             fd = arg.getInt();

@@ -6,6 +6,8 @@ priorities and future plans.
 
 ## Work in progress
 
+- Resolve glob-backed filehandles in `POSIX::isatty` without assuming the glob value is a `RuntimeIO` (#1932).
+
 - Add an initial CryptX Java XS bridge for binary/base64url helpers, functional digests, and HMAC using the existing JCA and Bouncy Castle providers (#1220).
 
 - Preserve named typeglob stringification when copying package stash entries (#1927).
