@@ -1554,11 +1554,26 @@ zombie-reference, and failed-constructor weak-cache tests pass on system Perl
 and both backends. The full no-sweeps `nice -n 19 make` gate passes, and
 HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends.
 
+### Undef releases one weakly tracked owner at a time (2026-10-30)
+
+`RuntimeScalar.undefine()` now checks the remaining Perl owner identities after
+retiring the current cell's untracked owner. A weakly tracked referent stays live
+while another owner slot remains; the final slot release clears weak observers
+and performs cleanup. This fixes the unconditional cleanup in `undefine()`
+instead of relying on a positive legacy count to hide that path.
+`WeaklyTrackedUndefOwnerSlotTest` covers two independent lexical cells, and
+`weakly_tracked_undef_preserves_other_owner.t` records the standard Perl
+behavior. Both backend runs pass with corrective sweeps disabled. The no-sweeps
+full `nice -n 19 make` gate passes in 11m55s, and HTML-Tree 5.07 `t/refloop.t`
+passes 8/8 on both backends. The package-root compatibility pin remains for a
+separate migration step.
+
 ### Next steps
 
-1. Continue the `RuntimeScalar` and `MortalList` fallback audit. Package-rooted
-   aggregate values inserted after rooting and cross-container aliases still
-   need direct provenance before their root-snapshot fallbacks can be removed.
+1. Finish package-rooted aggregate cleanup. Late inserts and cross-container
+   scalar aliases now retain direct cell provenance; remove the remaining
+   package-root compatibility pin and replace its root-snapshot cleanup paths
+   with the owner ledger.
 2. Migrate remaining weak-backref capture cases to explicit owner identities,
    then remove `weakBackrefCaptureSnapshot` and preserve aggregate lifetime and
    weak clearing without the compatibility graph walk.
