@@ -296,6 +296,7 @@ dependencies {
     implementation libs.asm                           // ByteCode manipulation
     implementation libs.asm.util                      // ASM utilities
     implementation libs.icu4j                         // Unicode support
+    implementation libs.jol.core                      // JVM object layout and graph footprint estimates
     implementation libs.jsoup                        // HTML5 parsing for HTML::Content::Extractor
     implementation libs.jing                         // RELAX NG validation for XML::LibXML
     implementation libs.snakeyaml.engine              // YAML processing
@@ -473,6 +474,8 @@ shadowJar {
     destinationDirectory = file("$buildDir/../target")
     manifest {
         attributes 'Main-Class': 'org.perlonjava.app.cli.Main'
+        attributes 'Premain-Class': 'org.openjdk.jol.vm.InstrumentationSupport'
+        attributes 'Launcher-Agent': 'org.openjdk.jol.vm.InstrumentationSupport'
     }
     exclude 'module-info.class'
     exclude 'META-INF/MANIFEST.MF'
