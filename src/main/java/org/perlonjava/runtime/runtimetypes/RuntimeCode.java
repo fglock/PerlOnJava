@@ -4895,6 +4895,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 return null;
             } finally {
                 // Restore caller lexical flags (do not leak eval pragmas).
+                capturedSymbolTable.invalidateWarningBitsCache();
                 capturedSymbolTable.warningFlagsStack.pop();
                 capturedSymbolTable.warningFlagsStack.push((BitSet) savedWarningFlags.clone());
 

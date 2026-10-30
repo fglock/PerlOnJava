@@ -103,13 +103,6 @@ public class ScopedSymbolTable {
         public T peek() { return get(size() - 1); }
     }
 
-    /** Unsynchronized stack backed by ArrayList. Replaces java.util.Stack (Vector-based) to eliminate per-operation monitor overhead in single-threaded compilation paths. */
-    public static final class FastStack<T> extends ArrayList<T> {
-        public void push(T item) { add(item); }
-        public T pop() { return remove(size() - 1); }
-        public T peek() { return get(size() - 1); }
-    }
-
     // Stack to manage warning categories for each scope
     public final FastStack<BitSet> warningFlagsStack = new FastStack<>();
     // Stack to track explicitly disabled warning categories (for proper $^W interaction)
