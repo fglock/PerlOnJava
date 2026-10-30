@@ -6,6 +6,8 @@ priorities and future plans.
 
 ## Work in progress
 
+- Preserve the input line number when a borrowed anonymous filehandle alias leaves a JVM subroutine scope (#1933).
+
 - Resolve glob-backed filehandles in `POSIX::isatty` without assuming the glob value is a `RuntimeIO` (#1932).
 
 - Add an initial CryptX Java XS bridge for binary/base64url helpers, functional digests, and HMAC using the existing JCA and Bouncy Castle providers (#1220).
