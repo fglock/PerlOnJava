@@ -1558,13 +1558,11 @@ public class MortalList {
     private static void processDeferredBase(RuntimeBase base, boolean clearWeakRefsForLocalBinding,
                                             RuntimeBase.PendingOwnerRelease ownerRelease,
                                             String transientOwnerKind) {
-        traceCodeRelease("enter", base, ownerRelease);
         if (base.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_ALIAS) != 0
                 && base.countedOwnerSlotCount() == 0) {
             state().deferredArgumentOwnerReleases.add(
                     new DeferredArgumentOwnerRelease(base, ownerRelease,
                             transientOwnerKind));
-            traceCodeRelease("defer-argument-alias", base, ownerRelease);
             return;
         }
         ReachabilityQueryStats queryStats = activeReachabilityQueryStats();
@@ -1578,7 +1576,6 @@ public class MortalList {
         }
         if (base.refCount > 0 && --base.refCount == 0) {
             if (base instanceof RuntimeCode code && code.hasActiveCodeOwner()) {
-                traceCodeRelease("defer-active", base, ownerRelease);
                 code.deferFinalReleaseToActiveCode();
             } else if (base.hasSemanticCaptureOwner()) {
                 // Captured aggregate pads use native owner slots. Keep the
@@ -1763,24 +1760,6 @@ public class MortalList {
                 DestroyDispatch.callDestroy(base);
             }
         }
-        traceCodeRelease("exit", base, ownerRelease);
-    }
-
-    private static void traceCodeRelease(String stage, RuntimeBase base,
-            RuntimeBase.PendingOwnerRelease ownerRelease) {
-        if (System.getenv("PJ_CODE_RELEASE_TRACE") == null
-                || !(base instanceof RuntimeCode code) || code.capturedScalars == null) return;
-        StringBuilder owners = new StringBuilder();
-        for (PerlOwnerSlot slot : code.ownerSlotSnapshot()) {
-            if (owners.length() != 0) owners.append(',');
-            owners.append(slot.kind());
-        }
-        System.err.println("[CODE-PROCESS] " + stage + " id=" + System.identityHashCode(code)
-                + " name=" + code.packageName + "::" + code.subName + " ref=" + code.refCount
-                + " active=" + RuntimeCode.isActiveCode(code)
-                + " activeOwner=" + code.hasActiveCodeOwner() + " local=" + code.localBindingExists
-                + " slots=[" + owners + "] captureCount=" + code.capturedScalars.length
-                + " pendingRelease=" + (ownerRelease != null));
     }
 
     private static boolean blessedClassHasDestroy(RuntimeBase base) {
