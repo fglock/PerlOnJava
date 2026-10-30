@@ -610,13 +610,17 @@ public class BytecodeInterpreter {
                                         registers[source], resultContext);
                             }
 
+                            case Opcodes.PREPARE_SCOPE_RETURN -> {
+                                int returnReg = bytecode[pc++];
+                                registers[returnReg] = RuntimeCode.prepareScopeReturn(
+                                        registers[returnReg], callContext,
+                                        !RuntimeCode.isLvalueCode(code));
+                            }
+
                             case Opcodes.RETURN_SCOPE_CLEANUP -> {
                                 int reg = bytecode[pc++];
                                 int returnReg = bytecode[pc++];
                                 RuntimeBase slot = registers[reg];
-                                registers[returnReg] = RuntimeCode.prepareScopeReturn(
-                                        registers[returnReg], callContext,
-                                        !RuntimeCode.isLvalueCode(code));
                                 if (slot instanceof RuntimeScalar rs) {
                                     RuntimeScalar.releaseOrTransferSocketIoOwnerOnReturn(
                                             rs, registers[returnReg]);

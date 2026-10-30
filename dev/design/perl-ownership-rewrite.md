@@ -1580,6 +1580,20 @@ preservation; a Perl-level test records the package array lifetime oracle. The
 root proof validates direct scalar-owner identities without traversing package
 edges.
 
+### Interpreter return ownership precedes aggregate cleanup (2026-10-30)
+
+The interpreter previously prepared an explicit return value from scalar
+cleanup opcodes. A subroutine with only an array or hash lexical skipped those
+opcodes, so aggregate cleanup could release a returned closure's captures
+before the closure acquired its return owner. The bytecode now prepares the
+return owner once before any scalar, array, or hash cleanup, matching the JVM
+backend's ordering. The existing `closure_capture_explicit_return.t` test
+reproduces the interpreter failure and passes 6/6 on standard Perl, the JVM,
+and the interpreter after the change, with corrective sweeps disabled. The
+full no-sweeps `nice -n 19 make` gate passes in 12m47s. The related closure,
+weak-reference, DESTROY, resurrection, and cycle matrix passes on both
+backends; HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both.
+
 ### Next steps
 
 1. Migrate remaining weak-backref capture cases to explicit owner identities,
