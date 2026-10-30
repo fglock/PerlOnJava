@@ -139,6 +139,57 @@ class PackageAggregateValueOwnerSlotTest {
         }
     }
 
+    @Test
+    void crossContainerAliasKeepsOneValueOwnerUntilItsFinalPackageSlotLeaves() {
+        Assumptions.assumeFalse(ReachabilityWalker.correctiveSweepsEnabled(),
+                "cross-container alias ownership must not depend on corrective sweeps");
+
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeArray packageArray = new RuntimeArray();
+            RuntimeHash packageHash = new RuntimeHash();
+            RuntimeArray referent = new RuntimeArray();
+            RuntimeScalar sharedValue = referenceTo(referent);
+            RuntimeScalar weakObserver = referenceTo(referent);
+            String arrayKey = "PackageAggregateValueOwnerSlotTest::alias_array";
+            String hashKey = "PackageAggregateValueOwnerSlotTest::alias_hash";
+
+            try {
+                GlobalVariable.globalArrays.put(arrayKey, packageArray);
+                GlobalVariable.globalHashes.put(hashKey, packageHash);
+                packageArray.elements.add(sharedValue);
+                packageHash.elements.put("shared", sharedValue);
+
+                PerlOwnerSlot owner = sharedValue.untrackedReferenceOwnerSlot();
+                assertNotNull(owner);
+                assertEquals(1,
+                        referent.ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE));
+                WeakRefRegistry.weaken(weakObserver);
+
+                try (MortalList.ReachabilityQueryMeasurement measurement =
+                             MortalList.measureReachabilityQueries()) {
+                    packageArray.elements.remove(sharedValue);
+
+                    assertTrue(WeakRefRegistry.isweak(weakObserver),
+                            "the hash alias remains a strong owner after the array slot leaves");
+                    assertTrue(owner.isActive());
+
+                    packageHash.elements.remove("shared");
+
+                    assertFalse(owner.isActive(), "the shared value owner releases once");
+                    assertFalse(WeakRefRegistry.isweak(weakObserver));
+                    assertEquals(RuntimeScalarType.UNDEF, weakObserver.type);
+                    assertEquals(0, measurement.stats().rootQueries);
+                    assertEquals(0, measurement.stats().snapshotsBuilt);
+                }
+            } finally {
+                GlobalVariable.globalArrays.remove(arrayKey);
+                GlobalVariable.globalHashes.remove(hashKey);
+                if (WeakRefRegistry.isweak(weakObserver)) WeakRefRegistry.unweaken(weakObserver);
+            }
+        }
+    }
+
     private static void assertPackageAggregateValueKeepsReferentAlive(
             RuntimeBase referent, RuntimeBase packageAggregate, boolean packageArray,
             String key) {

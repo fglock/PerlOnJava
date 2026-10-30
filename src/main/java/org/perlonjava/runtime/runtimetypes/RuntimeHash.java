@@ -233,6 +233,9 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             RuntimeScalar result = super.put(key, value);
             stableMethodFieldCacheRevision++;
             refreshStoredUntrackedOwner(value);
+            if (previous != null && previous != value) {
+                previous.refreshUntrackedReferenceOwner();
+            }
             updateReferentHashSlotOwnership(previous, value);
             return result;
         }
@@ -247,10 +250,13 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 return;
             }
             boolean hasReferenceEdge = false;
+            Set<RuntimeScalar> replacedValues = Collections.newSetFromMap(
+                    new IdentityHashMap<>());
             for (Map.Entry<? extends String, ? extends RuntimeScalar> e : m.entrySet()) {
-                if (rootEdge(super.get(e.getKey())) || rootEdge(e.getValue())) {
+                RuntimeScalar previous = super.get(e.getKey());
+                if (previous != null && previous != e.getValue()) replacedValues.add(previous);
+                if (rootEdge(previous) || rootEdge(e.getValue())) {
                     hasReferenceEdge = true;
-                    break;
                 }
             }
             owner.notePackageRootMutationIf(hasReferenceEdge);
@@ -269,6 +275,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             for (RuntimeScalar value : m.values()) {
                 refreshStoredUntrackedOwner(value);
             }
+            for (RuntimeScalar value : replacedValues) value.refreshUntrackedReferenceOwner();
         }
 
         private void refreshStoredUntrackedOwner(RuntimeScalar value) {
@@ -288,6 +295,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                     MortalList.deferDestroyForContainerClear(java.util.Collections.singletonList(previous));
                 }
                 owner.notePackageRootMutation(previous, null);
+                previous.refreshUntrackedReferenceOwner();
             }
             return previous;
         }
@@ -296,10 +304,16 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         public void clear() {
             if (!isEmpty()) {
                 stableMethodFieldCacheRevision++;
+                List<RuntimeScalar> removed = new ArrayList<>(values());
                 if (owner.isHintHash && !owner.suppressHintHashLifecycleCleanup) {
-                    MortalList.deferDestroyForContainerClear(super.values());
+                    MortalList.deferDestroyForContainerClear(removed);
                 }
-                owner.notePackageRootClear(super.values());
+                owner.notePackageRootClear(removed);
+                super.clear();
+                for (RuntimeScalar scalar : removed) {
+                    if (scalar != null) scalar.refreshUntrackedReferenceOwner();
+                }
+                return;
             }
             super.clear();
         }
