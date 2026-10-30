@@ -6,6 +6,8 @@ priorities and future plans.
 
 ## Work in progress
 
+- Add an initial CryptX Java XS bridge for binary/base64url helpers, functional digests, and HMAC using the existing JCA and Bouncy Castle providers (#1220).
+
 - Preserve named typeglob stringification when copying package stash entries (#1927).
 
 - Reduce repeated eval STRING overhead with lazy state and caching for context-free integer-literal evals (#1911).
