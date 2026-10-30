@@ -206,12 +206,8 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
      */
     public boolean storedInPackageGlobal = false;
 
-    /**
-     * Marks an untracked aggregate whose compatibility count was rescued by
-     * proving it reachable from a package root when its first weak observer
-     * was installed. The count is only a temporary pin; its untracked owner
-     * slots remain the authoritative lifetime evidence.
-     */
+    /** Compatibility count pin installed for an untracked package-rooted aggregate. */
+    PerlOwnerSlot packageRootRescueOwnerSlot;
     boolean packageRootRescuedUntrackedAggregate = false;
 
     /** Marks a counted referent kept alive only until its uncounted owner slots leave. */
@@ -406,7 +402,9 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             return true;
         }
         for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
-            if (slot.isActive() && slot.kind() != PerlOwnerSlot.Kind.TEMPORARY_ROOT) {
+            if (slot.isActive()
+                    && slot.kind() != PerlOwnerSlot.Kind.TEMPORARY_ROOT
+                    && slot.kind() != PerlOwnerSlot.Kind.WEAKLY_TRACKED_COMPATIBILITY_PIN) {
                 return true;
             }
         }
@@ -418,7 +416,8 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
             if (slot.isActive()
                     && !PerlOwnerSlot.isCountedKind(slot.kind())
-                    && slot.kind() != PerlOwnerSlot.Kind.TEMPORARY_ROOT) {
+                    && slot.kind() != PerlOwnerSlot.Kind.TEMPORARY_ROOT
+                    && slot.kind() != PerlOwnerSlot.Kind.WEAKLY_TRACKED_COMPATIBILITY_PIN) {
                 return true;
             }
         }
@@ -428,6 +427,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     boolean hasDirectOwnerSlotProofForReleasedWeakReferent() {
         for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
             if (!slot.isActive()) continue;
+            if (slot.kind() == PerlOwnerSlot.Kind.WEAKLY_TRACKED_COMPATIBILITY_PIN) continue;
             if (slot.kind() == PerlOwnerSlot.Kind.ARRAY_ELEMENT
                     || slot.kind() == PerlOwnerSlot.Kind.HASH_ELEMENT) {
                 RuntimeScalar scalar = slot.countedScalarOwner();
@@ -492,7 +492,8 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
             if (!slot.isActive()
                     || PerlOwnerSlot.isCountedKind(slot.kind())
-                    || slot.kind() == PerlOwnerSlot.Kind.TEMPORARY_ROOT) {
+                    || slot.kind() == PerlOwnerSlot.Kind.TEMPORARY_ROOT
+                    || slot.kind() == PerlOwnerSlot.Kind.WEAKLY_TRACKED_COMPATIBILITY_PIN) {
                 continue;
             }
             if (slot.kind() == PerlOwnerSlot.Kind.UNTRACKED_REFERENCE) {
