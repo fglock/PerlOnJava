@@ -1594,6 +1594,20 @@ full no-sweeps `nice -n 19 make` gate passes in 12m47s. The related closure,
 weak-reference, DESTROY, resurrection, and cycle matrix passes on both
 backends; HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both.
 
+### Growing recursive output avoids repeated live-root scans (2026-10-30)
+
+Added `issue_1860_growing_lexical_output.t`, a project-owned reproduction of
+Data::Tumbler's recursive path/value/payload results accumulating in a lexical
+output array. It passes 4/4 on system Perl and both PerlOnJava backends with
+corrective sweeps disabled. `GrowingLexicalOutputOwnerSlotCostTest` grows a
+256-row nested output graph while running the corresponding temporary-array
+cleanup; its measured work is zero root queries, live/external snapshots, and
+edges inspected, while weak observers stay live until the final output owner
+is removed. The full no-sweeps `nice -n 19 make` gate passes in 12m39s.
+Unchanged Data-Tumbler 0.010 `t/90-stress.t` generates all 65,536 results in
+7.38s on the JVM backend and 11.20s on the interpreter; system Perl completes
+it in 0.15s.
+
 ### Next steps
 
 1. Migrate remaining weak-backref capture cases to explicit owner identities,
