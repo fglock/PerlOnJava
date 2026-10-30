@@ -547,6 +547,9 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             // Copy construction populates a replacement list before assigning
             // it to owner.elements. Defer refresh until this list is installed.
             if (value != null && owner.elements == this) {
+                if (owner.isPackageGlobalRoot) {
+                    value.markPrepopulatedPackageAggregateOwner(owner);
+                }
                 value.refreshUntrackedReferenceOwner();
             }
         }
@@ -911,7 +914,6 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         if (isPackageGlobalRoot && value != null) {
             value.isPackageGlobalRoot = true;
             value.markContainerOwner(this);
-            value.refreshUntrackedReferenceOwner();
             if (value.value instanceof RuntimeBase referent) {
                 referent.storedInPackageGlobal = true;
             }
@@ -921,7 +923,12 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     private void markPackageRootedValues(int fromIndex) {
         if (!isPackageGlobalRoot) return;
         for (int i = Math.max(0, fromIndex); i < elements.size(); i++) {
-            markPackageRootedValue(elements.get(i));
+            RuntimeScalar value = elements.get(i);
+            markPackageRootedValue(value);
+            if (value != null) {
+                value.markPrepopulatedPackageAggregateOwner(this);
+                value.refreshUntrackedReferenceOwner();
+            }
         }
     }
 
