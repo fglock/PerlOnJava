@@ -1760,6 +1760,10 @@ public class MortalList {
                 DestroyDispatch.callDestroy(base);
             }
         }
+        if (base instanceof RuntimeCode code) code.finishActiveCodeOwnerRelease();
+        if (base instanceof RuntimeScalar scalar) {
+            PerlOwnerSlot.finishDeferredScalarCellRelease(scalar);
+        }
     }
 
     private static boolean blessedClassHasDestroy(RuntimeBase base) {

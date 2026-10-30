@@ -645,6 +645,39 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             }
             return changed;
         }
+
+        @Override
+        public boolean removeAll(java.util.Collection<?> values) {
+            Objects.requireNonNull(values);
+            return removeMatching(values, false);
+        }
+
+        @Override
+        public boolean retainAll(java.util.Collection<?> values) {
+            Objects.requireNonNull(values);
+            return removeMatching(values, true);
+        }
+
+        private boolean removeMatching(java.util.Collection<?> values, boolean retainMatches) {
+            java.util.List<?> membership = new ArrayList<>(values);
+            boolean changed = false;
+            for (int index = size() - 1; index >= 0; index--) {
+                RuntimeScalar value = get(index);
+                if (membership.contains(value) != retainMatches) {
+                    remove(index);
+                    changed = true;
+                }
+            }
+            return changed;
+        }
+
+        @Override
+        public void replaceAll(java.util.function.UnaryOperator<RuntimeScalar> operator) {
+            Objects.requireNonNull(operator);
+            for (int i = 0; i < size(); i++) {
+                set(i, operator.apply(get(i)));
+            }
+        }
     }
 
     /** Compact backing for the common one-argument method call plus invocant. */

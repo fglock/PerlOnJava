@@ -86,4 +86,128 @@ class RuntimeScalarContainerOwnerConsistencyTest {
             assertSame(hash, hashValue.getContainerOwner());
         }
     }
+
+    @Test
+    void arrayIteratorRemovalRetiresTheContainerOwner() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeScalar value = new RuntimeHash().createAnonymousReference();
+            RuntimeArray array = new RuntimeArray();
+            array.elements.add(value);
+
+            var iterator = array.elements.iterator();
+            assertSame(value, iterator.next());
+            iterator.remove();
+
+            assertNull(value.getContainerOwner());
+        }
+    }
+
+    @Test
+    void arrayBulkRemovalRetiresTheContainerOwner() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeScalar value = new RuntimeHash().createAnonymousReference();
+            RuntimeArray array = new RuntimeArray();
+            array.elements.add(value);
+
+            array.elements.removeAll(java.util.List.of(value));
+
+            assertNull(value.getContainerOwner());
+        }
+    }
+
+    @Test
+    void arrayBulkReplacementUpdatesContainerOwners() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeScalar oldValue = new RuntimeHash().createAnonymousReference();
+            RuntimeScalar newValue = new RuntimeHash().createAnonymousReference();
+            RuntimeArray array = new RuntimeArray();
+            array.elements.add(oldValue);
+
+            array.elements.replaceAll(ignoredValue -> newValue);
+
+            assertNull(oldValue.getContainerOwner());
+            assertSame(array, newValue.getContainerOwner());
+        }
+    }
+
+    @Test
+    void hashEntryViewRemovalRetiresTheContainerOwner() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeScalar value = new RuntimeHash().createAnonymousReference();
+            RuntimeHash hash = new RuntimeHash();
+            hash.elements.put("value", value);
+
+            var iterator = hash.elements.entrySet().iterator();
+            assertSame(value, iterator.next().getValue());
+            iterator.remove();
+
+            assertNull(value.getContainerOwner());
+        }
+    }
+
+    @Test
+    void hashEntryReplacementUpdatesBothContainerOwners() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeScalar oldValue = new RuntimeHash().createAnonymousReference();
+            RuntimeScalar newValue = new RuntimeHash().createAnonymousReference();
+            RuntimeHash hash = new RuntimeHash();
+            hash.elements.put("value", oldValue);
+
+            hash.elements.entrySet().iterator().next().setValue(newValue);
+
+            assertNull(oldValue.getContainerOwner());
+            assertSame(hash, newValue.getContainerOwner());
+        }
+    }
+
+    @Test
+    void hashValuesViewRemovalRetiresTheContainerOwner() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeScalar value = new RuntimeHash().createAnonymousReference();
+            RuntimeHash hash = new RuntimeHash();
+            hash.elements.put("value", value);
+
+            hash.elements.values().remove(value);
+
+            assertNull(value.getContainerOwner());
+        }
+    }
+
+    @Test
+    void hashKeyViewRemovalRetiresTheContainerOwner() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeScalar value = new RuntimeHash().createAnonymousReference();
+            RuntimeHash hash = new RuntimeHash();
+            hash.elements.put("value", value);
+
+            var iterator = hash.elements.keySet().iterator();
+            assertSame("value", iterator.next());
+            iterator.remove();
+
+            assertNull(value.getContainerOwner());
+        }
+    }
+
+    @Test
+    void hashComputeReplacementUpdatesContainerOwners() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeScalar oldValue = new RuntimeHash().createAnonymousReference();
+            RuntimeScalar newValue = new RuntimeHash().createAnonymousReference();
+            RuntimeHash hash = new RuntimeHash();
+            hash.elements.put("value", oldValue);
+
+            hash.elements.computeIfPresent("value", (key, value) -> newValue);
+
+            assertNull(oldValue.getContainerOwner());
+            assertSame(hash, newValue.getContainerOwner());
+        }
+    }
 }

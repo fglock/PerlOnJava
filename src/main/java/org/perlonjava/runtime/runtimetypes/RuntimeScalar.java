@@ -883,7 +883,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 || mortalReturnValueOwner
                 || tiedHandlerValueOwner
                 || stagedValueOwner
-                || (referencedByScalarReference && (refCount > 0 || hasScalarCellOwner()))
+                || (referencedByScalarReference
+                    && (hasScalarCellOwner() || (!requireLiveContainer && refCount > 0)))
                 || this instanceof RuntimeBaseProxy;
     }
 
@@ -5892,11 +5893,21 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     /** Performs scalar-specific scope cleanup, including owned anonymous IO fds. */
     public static void scopeExitCleanup(RuntimeScalar scalar) {
+        scopeExitCleanup(scalar, false);
+    }
+
+    /** Performs final cleanup for a scalar referent that has reached DESTROY. */
+    static void scopeExitCleanupDestroyed(RuntimeScalar scalar) {
+        scopeExitCleanup(scalar, true);
+    }
+
+    private static void scopeExitCleanup(RuntimeScalar scalar, boolean finalRelease) {
         if (scalar == null) return;
         if (scalar.hasCodeSlotBinding()) return;
         RuntimeBase untrackedValueAtScopeExit = scalar.untrackedReferenceOwnerSlot == null
                 ? null : scalar.untrackedReferenceOwnerSlot.referent();
         scalar.refreshUntrackedReferenceOwner();
+        if (finalRelease) scalar.localBindingExists = false;
         // ${^LAST_FH} is tied to the lexical handle that performed the last
         // tell/read.  A lexical coercible glob must stop being observable once
         // that lexical leaves scope, even though the named STDOUT glob remains
@@ -5921,7 +5932,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
         }
 
-        if (scalar.referencedByScalarReference
+        if (!finalRelease && scalar.referencedByScalarReference
                 && scalar.captureCount == 0
                 && (scalar.localBindingExists || scalar.refCount > 0
                     || scalar.hasScalarCellOwner())) {

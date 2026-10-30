@@ -43,6 +43,58 @@ class UncountedOwnerSlotZeroCountReleaseTest {
         }
     }
 
+    @Test
+    void finalRawOwnerSlotReleaseFinishesDeferredDestruction() {
+        try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
+            String className = "UncountedOwnerSlotZeroCountReleaseTest::RawTarget";
+            String destroyFqn = className + "::DESTROY";
+            RuntimeHash target = new RuntimeHash();
+            target.blessId = NameNormalizer.getBlessId(className);
+            target.refCount = -1;
+
+            AtomicInteger destroyCalls = new AtomicInteger();
+            RuntimeCode destroy = new RuntimeCode((args, context) -> {
+                destroyCalls.incrementAndGet();
+                return new RuntimeList();
+            }, null);
+            destroy.packageName = "UncountedOwnerSlotZeroCountReleaseTest";
+            destroy.subName = "DESTROY";
+            GlobalVariable.getGlobalCodeRef(destroyFqn).set(new RuntimeScalar(destroy));
+            DestroyDispatch.registerIfDestroyable(target, target.blessId);
+
+            RuntimeScalar countedOwner = new RuntimeScalar();
+            countedOwner.set(target.createAnonymousReference());
+            target.refCount = 1;
+            PerlOwnerSlot rawOwner = new PerlOwnerSlot(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE);
+            rawOwner.acquireUntrackedIdentity(target);
+            try {
+                target.deferFinalReleaseToUncountedOwnerSlots();
+                assertEquals(WeakRefRegistry.WEAKLY_TRACKED, target.refCount);
+
+                target.releaseActiveOwner(countedOwner);
+                countedOwner.refCountOwned = false;
+                assertEquals(0, destroyCalls.get(),
+                        "the remaining raw owner slot keeps the referent alive");
+
+                rawOwner.release();
+
+                assertEquals(Integer.MIN_VALUE, target.refCount);
+                assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED,
+                        target.perlLifecycleState());
+                assertEquals(1, destroyCalls.get(),
+                        "the last owner identity dispatches destruction exactly once");
+            } finally {
+                if (rawOwner.isActive()) rawOwner.release();
+                if (countedOwner.countedOwnerSlot() != null
+                        && countedOwner.countedOwnerSlot().isActive()) {
+                    target.releaseActiveOwner(countedOwner);
+                }
+                GlobalVariable.globalCodeRefs.remove(destroyFqn);
+                DestroyDispatch.unregisterDestroyable(target);
+            }
+        }
+    }
+
     private static Fixture fixture() {
         String className = "UncountedOwnerSlotZeroCountReleaseTest::Target";
         RuntimeHash target = new RuntimeHash();
