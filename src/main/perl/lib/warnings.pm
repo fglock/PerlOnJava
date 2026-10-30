@@ -71,42 +71,43 @@ our %Offsets = (
     'non_unicode'			=> 100,
     'nonchar'				=> 102,
     'surrogate'				=> 104,
-    'experimental'			=> 106,
+    'experimental'	=> 104,
     # Retired experimental categories share the parent bit so old source can
     # continue to query and suppress them after the features became stable.
-    'experimental::alpha_assertions'	=> 106,
-    'experimental::isa'			=> 106,
+    'experimental::alpha_assertions'	=> 104,
+    'experimental::isa'	=> 104,
     # Compatibility alias used by code targeting Perl 5.20-5.24. Postfix
     # dereferencing is stable now, but old sources still disable its warning.
-    'experimental::postderef'		=> 106,
-    'experimental::regex_sets'		=> 108,
-    'syscalls'				=> 110,
-    'experimental::re_strict'		=> 112,
-    'experimental::refaliasing'		=> 114,
-    'locale'				=> 116,
-    'missing'				=> 118,
-    'redundant'				=> 120,
-    'experimental::declared_refs'	=> 122,
-    'deprecated::dot_in_inc'		=> 124,
-    'shadow'				=> 126,
-    'experimental::private_use'		=> 128,
-    'experimental::uniprop_wildcards'	=> 130,
-    'experimental::vlb'			=> 132,
-    'experimental::try'			=> 134,
-    'experimental::args_array_with_signatures'=> 136,
-    'experimental::builtin'		=> 138,
-    'experimental::defer'		=> 140,
-    'experimental::extra_paired_delimiters'=> 142,
-    'scalar'				=> 144,
-    'deprecated::version_downgrade'	=> 146,
-    'deprecated::delimiter_will_be_paired'=> 148,
-    'experimental::class'		=> 150,
-    'deprecated::missing_import_called_with_args'=> 152,
-    'deprecated::subsequent_use_version'=> 154,
-    'experimental::keyword_all'		=> 156,
-    'experimental::keyword_any'		=> 158,
-    'experimental::bitwise'		=> 160,
+    'experimental::postderef'	=> 104,
+    'experimental::regex_sets'	=> 106,
+    'syscalls'	=> 108,
+    'experimental::re_strict'	=> 110,
+    'experimental::refaliasing'	=> 112,
+    'locale'	=> 114,
+    'missing'	=> 116,
+    'redundant'	=> 118,
+    'experimental::declared_refs'	=> 120,
+    'deprecated::dot_in_inc'	=> 122,
+    'shadow'	=> 124,
+    'experimental::private_use'	=> 126,
+    'experimental::uniprop_wildcards'	=> 128,
+    'experimental::vlb'	=> 130,
+    'experimental::try'	=> 132,
+    'experimental::args_array_with_signatures'	=> 134,
+    'experimental::builtin'	=> 136,
+    'experimental::defer'	=> 138,
+    'experimental::extra_paired_delimiters'	=> 140,
+    'scalar'	=> 142,
+    'deprecated::version_downgrade'	=> 144,
+    'deprecated::delimiter_will_be_paired'	=> 146,
+    'experimental::class'	=> 148,
+    'deprecated::subsequent_use_version'	=> 150,
+    'experimental::keyword_all'	=> 152,
+    'experimental::keyword_any'	=> 154,
     'experimental::equ'			=> 162,
+    'experimental::enhanced_xx'	=> 156,
+    'experimental::signature_named_parameters'	=> 158,
+    'missing_import'	=> 160,
 );
 
 # Warning category masks - public compatibility data used by modules such as
@@ -164,7 +165,13 @@ our %Bits     = map { $_ => _mk_warning_mask(0, $_) } keys %Offsets;
 our %DeadBits = map { $_ => _mk_warning_mask(1, $_) } keys %Offsets;
 
 # NoOp warnings - warnings that have been removed but kept for compatibility
-our %NoOp = ();
+our %NoOp = map { $_ => 1 } qw(
+    deprecated::goto_construct deprecated::missing_import_called_with_args
+    deprecated::smartmatch experimental::alpha_assertions experimental::bitwise
+    experimental::const_attr experimental::for_list experimental::isa
+    experimental::lexical_subs experimental::postderef experimental::script_run
+    experimental::signatures experimental::smartmatch
+);
 
 sub register_categories (;@) {
     # placeholder

@@ -247,7 +247,8 @@ package B::CV {
                 $file ||= "-e";
                 $line ||= 0;
                 if ($line > 0) {
-                    return B::COP->new($file, $line);
+                    $self->_introspect;
+                    return B::COP->new($file, $line, $self->{_pkg_name});
                 }
             }
         }
@@ -472,8 +473,12 @@ package B::COP {
     our @ISA = ('B::OP');
 
     sub new {
-        my ($class, $file, $line) = @_;
-        return bless { file => $file // "-e", line => $line // 0 }, $class;
+        my ($class, $file, $line, $stash) = @_;
+        return bless {
+            file => $file // "-e",
+            line => $line // 0,
+            stash => $stash // 'main',
+        }, $class;
     }
 
     sub file {
@@ -484,6 +489,11 @@ package B::COP {
     sub line {
         my $self = shift;
         return $self->{line};
+    }
+
+    sub stashpv {
+        my $self = shift;
+        return $self->{stash};
     }
 
     sub next {
