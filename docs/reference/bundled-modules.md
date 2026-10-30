@@ -11,6 +11,7 @@ Recent CPAN compatibility additions include:
 
 | Module | Implementation | Notes |
 |--------|----------------|-------|
+| `CryptX` | Perl bootstrap + Java XS bridge | Functional base64, digest, and HMAC entry points; broader CryptX APIs remain incomplete |
 | `Future::AsyncAwait` | Bundled pure Perl module plus PerlOnJava async runtime | Native `async`/`await` syntax and upstream-compatible Future integration |
 | `JSON::DWIW` | Pure Perl over bundled `JSON::PP` | Relaxed legacy JSON API, file conversion, booleans, and compatibility helpers |
 | `Taint::Runtime` | Perl + Java XS bridge | Runtime taint toggling and scalar taint inspection |
@@ -305,6 +306,7 @@ These are loaded automatically or via `use`:
 | `Digest::MD5` | Java | `java.security.MessageDigest` |
 | `Digest::SHA` | Java | `java.security.MessageDigest` |
 | `Digest` | Perl | |
+| `CryptX` | Perl + Java | Functional `Crypt::Misc` binary/base64url helpers, `Crypt::Digest` functional calls, and `Crypt::Mac::HMAC`; OO APIs and other crypto families are not yet covered |
 | `Crypt::Twofish2` | Java + Perl | Uses the bundled BouncyCastle provider; passes all 83 upstream vectors |
 | `Crypt::Rijndael` | Java + Perl | Uses the JCA AES provider; supports the upstream ECB, CBC, CFB128, OFB, and CTR API |
 | `MIME::Base64` | Java | |

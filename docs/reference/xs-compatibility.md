@@ -21,6 +21,7 @@ These modules have optimized Java implementations built into PerlOnJava:
 | DateTime | DateTime.java | 1.65 | Uses java.time APIs, JulianFields.RATA_DIE |
 | Digest::MD5 | DigestMD5.java | - | Uses Java MessageDigest |
 | Digest::SHA | DigestSHA.java | - | Uses Java MessageDigest |
+| CryptX | CryptX.java | 0.091 | Functional binary/base64url helpers, selected digests, and HMAC; OO and other XS APIs remain incomplete |
 | Time::HiRes | TimeHiRes.java | - | Uses System.nanoTime() |
 | DBI | Dbi.java | - | JDBC backend |
 | Exporter::Lexical | ExporterLexical.java | 0.02 | Installs lexical subs into the enclosing compile-time scope |
