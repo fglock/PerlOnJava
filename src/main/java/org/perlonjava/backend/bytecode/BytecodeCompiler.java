@@ -1209,6 +1209,8 @@ public class BytecodeCompiler implements Visitor {
             // snapshot. Keep it separate from every lexical register, since
             // an earlier local's cleanup can prepare a later local's value.
             lastResultReg = separateReturnRegister(lastResultReg);
+            emit(Opcodes.PREPARE_SCOPE_RETURN);
+            emitReg(lastResultReg);
         }
 
         // Emit SCOPE_EXIT_CLEANUP for each my-scalar register in the exiting scope.
