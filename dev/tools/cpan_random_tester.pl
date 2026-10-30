@@ -92,6 +92,9 @@ $SIG{INT} = sub { $interrupt_count++ };
 my %MODULE_TIMEOUT_SECONDS = (
     'Catalyst'           => 7200,
     'DBIx::Class'        => 3600,
+    # Template-Toolkit has a large test suite; the 300s run cap stopped it
+    # while tests were still passing (at t/leak.t in the 2026-10-27 run).
+    'Template::Toolkit'  => 1200,
     # t/01-Kamelon.t enumerates 291 syntaxes and takes 136s on the JVM / 182s
     # in the interpreter. The complete distribution suite also runs 225
     # benchmark parses; it passed in 3481s on the JVM.
