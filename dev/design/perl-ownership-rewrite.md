@@ -1,6 +1,6 @@
 # Perl-compatible ownership rewrite
 
-**Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, and async cleanup regressions pass on both backends. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
+**Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, and async cleanup regressions pass on both backends. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Sweep policy (2026-10-27):** Corrective sweeps are disabled by default, as
 requested. `JPERL_ENABLE_CORRECTIVE_SWEEPS=1` temporarily enables legacy
@@ -1538,6 +1538,21 @@ snapshots. The identity is limited to cells present when the package aggregate
 becomes a root; values inserted later and cross-container aliases retain the
 root-snapshot fallback until their storage provenance is explicit. The new
 array/hash regressions and full no-sweeps `nice -n 19 make` gate pass (9m30s).
+
+### Caller arguments preserve source scalar identity (2026-10-30)
+
+`caller()` now populates `@DB::args` with the selected frame's existing scalar
+cells instead of copied wrappers. Writes through the debugger array therefore
+reach the caller's variable, and source-cell cleanup releases the same owner
+slot rather than leaving a detached untracked reference behind. Aliased package
+arrays no longer promote their borrowed cells to package roots.
+
+The new `caller_db_args_alias_slot.t` regression passes under system Perl and
+both PerlOnJava backends; it fails on the preceding JAR by leaving the caller's
+value unchanged. The existing tied-args, freed-argument, DESTROY-capture,
+zombie-reference, and failed-constructor weak-cache tests pass on system Perl
+and both backends. The full no-sweeps `nice -n 19 make` gate passes, and
+HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends.
 
 ### Next steps
 
