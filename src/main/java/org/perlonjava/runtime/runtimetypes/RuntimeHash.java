@@ -165,7 +165,11 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         blessId = state.blessId;
         taintEnvironmentAliasDescription = state.taintEnvironmentAliasDescription;
         if (isPackageRootedHash()) {
-            for (RuntimeScalar value : elements.values()) markPackageRootedValue(value);
+            for (RuntimeScalar value : elements.values()) {
+                markPackageRootedValue(value);
+                value.markPrepopulatedPackageAggregateOwner(this);
+                value.refreshUntrackedReferenceOwner();
+            }
         }
     }
 
@@ -282,6 +286,9 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             // Bulk copy reconstructs a replacement map before assigning it to
             // owner.elements. Refresh only once this map is installed.
             if (value != null && owner.elements == this) {
+                if (owner.isPackageRootedHash()) {
+                    value.markPrepopulatedPackageAggregateOwner(owner);
+                }
                 value.refreshUntrackedReferenceOwner();
             }
         }
@@ -523,7 +530,6 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         if (!isPackageRootedHash() || value == null) return;
         value.isPackageGlobalRoot = true;
         value.markContainerOwner(this);
-        value.refreshUntrackedReferenceOwner();
         if (value.value instanceof RuntimeBase rb) {
             rb.storedInPackageGlobal = true;
         }

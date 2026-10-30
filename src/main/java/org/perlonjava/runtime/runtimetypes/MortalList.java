@@ -1644,8 +1644,9 @@ public class MortalList {
                 // RuntimeCode.clearPadConstantWeakRefs() clears it when the
                 // sub's glob is replaced, matching Perl optree reaping.
                 base.refCount = 1;
-            } else if (base.hasUncountedAggregateOwnerSlotIdentity()
-                    || base.hasUntrackedReferenceOwnerSlotIdentity()) {
+            } else if (base.hasNonPackageAggregateUncountedOwnerSlotIdentity()
+                    || base.hasUntrackedReferenceOwnerSlotIdentity(
+                            RuntimeScalarType.REFERENCE)) {
                 // Counted owner recovery is complete above. A surviving
                 // aggregate or untracked scalar slot is enough to defer cleanup
                 // until its release, even when no weak observer currently exists.
