@@ -1608,6 +1608,24 @@ Unchanged Data-Tumbler 0.010 `t/90-stress.t` generates all 65,536 results in
 7.38s on the JVM backend and 11.20s on the interpreter; system Perl completes
 it in 0.15s.
 
+### Mojolicious controller teardown follows callback owners (2026-10-30)
+
+Added focused #1794 coverage for controller destruction after a long-poll
+response finishes, controller retention while a WebSocket is open, and release
+of a controller captured by transaction callbacks. The three project tests pass
+14/14 on system Perl and both PerlOnJava backends with corrective sweeps
+disabled. `NestedUntrackedOwnerFinalCellCleanupTest` also passes 1/1: retiring
+the nested cell slot preserves an independently counted owner and its weak
+observer, which clears when that counted owner leaves. The no-sweeps
+`nice -n 19 make test-unit` gate passes in 12m24s. Mojolicious 9.53
+`t/mojolicious/app.t` passes 459/459 and
+`t/mojolicious/websocket_lite_app.t` passes 35/35 on all three runtimes. The
+pre-fix baseline reproduces the controller teardown failure in both backends;
+the WebSocket server-push suite also passes on that baseline, so the added
+WebSocket case remains acceptance coverage rather than a reproduced failure.
+The full `nice -n 19 make` gate still needs to run after this ownership batch is
+complete.
+
 ### Next steps
 
 1. Migrate remaining weak-backref capture cases to explicit owner identities,
