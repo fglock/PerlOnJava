@@ -118,7 +118,6 @@ public final class FutureAsyncAwaitRuntime {
                         state.callbackActive.set(false);
                     }
                     if (callbackWarningHandler != null) {
-                        callbackWarningHandler.releaseClosureCapture();
                         RuntimeScalar.scopeExitCleanup(callbackWarningHandler);
                     }
                 }
@@ -322,9 +321,7 @@ public final class FutureAsyncAwaitRuntime {
                 return null;
             }
             if (outerWeak.value instanceof RuntimeBase referent
-                    && !ReachabilityWalker.isReachableFromRoots(referent)
-                    && !ReachabilityWalker.isReachableFromLiveScalarRegistry(referent)
-                    && !ReachabilityWalker.isReachableFromLiveCodeCaptures(referent)) {
+                    && !referent.hasPerlStrongOwner()) {
                 WeakRefRegistry.clearWeakRefsTo(referent);
                 return null;
             }
@@ -446,7 +443,6 @@ public final class FutureAsyncAwaitRuntime {
         // anonymous handler and its lexical captures before it emits the
         // self-abandonment warning. Keep the closure graph alive until the
         // queued resume has completed.
-        retained.retainClosureCapture();
         return retained;
     }
 

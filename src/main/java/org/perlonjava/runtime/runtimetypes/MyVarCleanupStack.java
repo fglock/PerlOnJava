@@ -126,6 +126,7 @@ public class MyVarCleanupStack {
             liveCounts().merge(var, 1, Integer::sum);
             MortalList.invalidateLiveRootSnapshot();
         }
+        if (var instanceof RuntimeScalar scalar) scalar.refreshUntrackedReferenceOwner();
     }
 
     /**
@@ -180,6 +181,7 @@ public class MyVarCleanupStack {
                     // callers that release a lexical slot directly.
                     base.localBindingExists = false;
                 }
+                releaseActiveAggregateOwnerAfterCleanup(var);
                 noteVarLeftScope(var);
                 return;
             }
@@ -209,6 +211,12 @@ public class MyVarCleanupStack {
                     liveCounts.merge(newVar, 1, Integer::sum);
                     MortalList.invalidateLiveRootSnapshot();
                 }
+                if (oldVar instanceof RuntimeScalar scalar) {
+                    scalar.refreshUntrackedReferenceOwner();
+                }
+                if (newVar instanceof RuntimeScalar scalar) {
+                    scalar.refreshUntrackedReferenceOwner();
+                }
                 return;
             }
         }
@@ -235,10 +243,10 @@ public class MyVarCleanupStack {
     }
 
     private static void noteVarLeftScope(Object var) {
-        if (var instanceof RuntimeBase base
-                && (base instanceof RuntimeArray || base instanceof RuntimeHash)
-                && WeakRefRegistry.weakRefsExist()) {
-            MortalList.requestWeakSweepsForDestroyedContainer(base);
+        if (var instanceof RuntimeScalar scalar) {
+            PerlOwnerSlot valueOwner = scalar.untrackedReferenceOwnerSlot();
+            RuntimeBase referent = valueOwner == null ? null : valueOwner.referent();
+            scalar.finalizeUntrackedValueAfterScopeExit(referent);
         }
         if (var instanceof RuntimeBase base && WeakRefRegistry.hasWeakRefsTo(base)) {
             requestWeakCleanupAfterScopeExit(base);
@@ -256,7 +264,7 @@ public class MyVarCleanupStack {
         // them when a closure graph is being torn down. Recheck weak refs at
         // the scope boundary so the reachability walker can reconcile those
         // records with the remaining Perl-visible roots.
-        MortalList.requestImmediateWeakSweep();
+        MortalList.requestCorrectiveWeakSweep();
     }
 
     /**
@@ -285,8 +293,17 @@ public class MyVarCleanupStack {
                 decRegisteredCount(var);
                 decLiveCount(var);
                 MortalList.evalExceptionScopeCleanup(var);
+                releaseActiveAggregateOwnerAfterCleanup(var);
                 noteVarLeftScope(var);
             }
+        }
+    }
+
+    private static void releaseActiveAggregateOwnerAfterCleanup(Object var) {
+        if (!(var instanceof RuntimeBase base)
+                || (!(base instanceof RuntimeArray) && !(base instanceof RuntimeHash))) return;
+        if (RuntimeCode.releaseActiveLexicalAggregateOwner(base)) {
+            WeakRefRegistry.onActiveLexicalOwnerReleased(base);
         }
     }
 

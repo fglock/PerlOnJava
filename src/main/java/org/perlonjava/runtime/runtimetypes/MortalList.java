@@ -26,16 +26,13 @@ public class MortalList {
         final RuntimeBase base;
         final RuntimeBase.PendingOwnerRelease ownerRelease;
         final String transientOwnerKind;
-        final java.lang.ref.WeakReference<RuntimeScalar> ownerScalar;
 
         DeferredArgumentOwnerRelease(RuntimeBase base,
                                      RuntimeBase.PendingOwnerRelease ownerRelease,
-                                     String transientOwnerKind,
-                                     RuntimeScalar ownerScalar) {
+                                     String transientOwnerKind) {
             this.base = base;
             this.ownerRelease = ownerRelease;
             this.transientOwnerKind = transientOwnerKind;
-            this.ownerScalar = new java.lang.ref.WeakReference<>(ownerScalar);
         }
     }
 
@@ -99,11 +96,8 @@ public class MortalList {
             boolean needed = !state.pending.isEmpty()
                     || !state.pendingTiedReleases.isEmpty()
                     || !state.pendingIoReleases.isEmpty()
-                    || state.deferredCapturesMayBeReady
-                    || state.immediateWeakSweepRequested
-                    || !state.targetedWeakSweepReferents.isEmpty()
-                    || !state.statementBoundaryDestroyableObjects.isEmpty()
-                    || state.weakRefsExist;
+                    || !state.pendingUntrackedReturnOwnerReleases.isEmpty()
+                    || state.deferredCapturesMayBeReady;
             if (!needed && state.boundaryWorkRegistered.compareAndSet(true, false)) {
                 runtimesWithBoundaryWork.decrementAndGet();
             }
@@ -172,7 +166,11 @@ public class MortalList {
                 && !WeakRefRegistry.isweak(scalar)
                 && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
                 && scalar.value instanceof RuntimeBase referent) {
-            return directlyReferences(referent, target, visited);
+            // The reference owns its referent through the slot ledger. Its
+            // descendants are owned by their own element slots; searching
+            // through that graph here duplicates reference counting and can
+            // traverse all Moose metadata on every lexical scope exit.
+            return referent == target;
         }
         if (value instanceof RuntimeList list) {
             for (RuntimeBase element : list.elements) {
@@ -180,10 +178,6 @@ public class MortalList {
             }
         } else if (value instanceof RuntimeArray array) {
             for (RuntimeScalar element : array.elements) {
-                if (directlyReferences(element, target, visited)) return true;
-            }
-        } else if (value instanceof RuntimeHash hash) {
-            for (RuntimeScalar element : hash.elements.values()) {
                 if (directlyReferences(element, target, visited)) return true;
             }
         }
@@ -256,6 +250,7 @@ public class MortalList {
         markBoundaryWork(state);
         RuntimeBase.PendingOwnerRelease ownerRelease =
                 base.queueOwnerRelease(ownerScalar, releaseSite);
+        base.releaseActiveOwner(ownerScalar);
         queueDeferredBase(state, base, ownerRelease, null, ownerScalar);
     }
 
@@ -289,6 +284,8 @@ public class MortalList {
         state.pendingOwnerReleases.add(ownerRelease);
         state.pendingOwnerScalars.add(ownerScalar == null ? null
                 : new java.lang.ref.WeakReference<>(ownerScalar));
+        state.pendingArgumentFrames.add(
+                RuntimeCode.argumentAliasFrameForOwner(ownerScalar));
         state.pendingTransientOwnerKinds.add(transientOwnerKind);
     }
 
@@ -306,6 +303,14 @@ public class MortalList {
         state.pendingIoReleases.add(scalar);
     }
 
+    /** Queue an untracked mortal return slot for its caller's normal boundary. */
+    static void deferUntrackedReturnValueOwnerRelease(RuntimeScalar scalar) {
+        if (scalar == null || scalar.untrackedReferenceOwnerSlot() == null) return;
+        LifecycleRuntimeState state = state();
+        markBoundaryWork(state);
+        state.pendingUntrackedReturnOwnerReleases.add(scalar);
+    }
+
     /**
      * Record a captured scalar whose scope has exited but whose refCount
      * could not be decremented because {@code captureCount > 0}.
@@ -321,75 +326,13 @@ public class MortalList {
         markBoundaryWork(state);
         state.deferredCaptures.add(scalar);
         state.deferredCapturesSet.merge(scalar, 1, Integer::sum);
-        noteDeferredScopeExitCaptureCandidate(state, scalar);
         if (scalar.captureCount == 0 && scalar.scopeExited) {
             state.deferredCapturesMayBeReady = true;
         }
     }
 
+    /** Compatibility hook; capture ownership no longer needs a reachability candidate. */
     public static void noteDeferredScopeExitCaptureCandidate(RuntimeScalar scalar) {
-        if (scalar == null || !scalar.scopeExited
-                || (scalar.type & RuntimeScalarType.REFERENCE_BIT) == 0
-                || !(scalar.value instanceof RuntimeBase base)
-                || !isDeferredScopeExitCandidate(base)) return;
-        noteDeferredScopeExitCaptureCandidate(state(), scalar);
-    }
-
-    private static void noteDeferredScopeExitCaptureCandidate(
-            LifecycleRuntimeState state, RuntimeScalar scalar) {
-        if (scalar.value instanceof RuntimeBase base && isDeferredScopeExitCandidate(base)) {
-            state.deferredScopeExitCaptureCandidates.add(scalar);
-        }
-    }
-
-    private static boolean isDeferredScopeExitCandidate(RuntimeBase base) {
-        if (base == null || base.blessId == 0) return false;
-        if (WeakRefRegistry.hasWeakRefsTo(base)) return true;
-        String className = NameNormalizer.getBlessStr(base.blessId);
-        return className != null && DestroyDispatch.classHasDestroy(base.blessId, className);
-    }
-
-    /**
-     * Release eval STRING over-captures whose declaring scope just exited and
-     * which cannot be reached by live code or an END block. Reachability sweeps
-     * also perform this check, but waiting for their cadence can keep request
-     * objects alive across unrelated calls (and defer their cleanup until
-     * global destruction).
-     */
-    private static void processUnreachableScopeExitCaptureCandidates(
-            LifecycleRuntimeState state) {
-        if (state.deferredScopeExitCaptureCandidates.isEmpty()) return;
-
-        Set<RuntimeBase> endReachable = ReachabilityWalker.walkEndBlockRoots();
-        Set<RuntimeBase> cycleProtected = ReachabilityWalker.strongCycleProtectedReferents();
-        boolean found = false;
-        for (RuntimeScalar scalar : new ArrayList<>(state.deferredScopeExitCaptureCandidates)) {
-            if (!scalar.scopeExited) continue;
-            RuntimeBase base = scalar.value instanceof RuntimeBase value ? value : null;
-            boolean scalarReachable = ReachabilityWalker.isScalarReachable(scalar)
-                    || ReachabilityWalker.isReachableFromRoots(scalar);
-            boolean retained = endReachable.contains(scalar)
-                    || (base != null && endReachable.contains(base))
-                    || (base != null && cycleProtected.contains(base))
-                    || scalarReachable;
-            if (retained) continue;
-
-            scalar.releaseUnreachableSemanticCaptureOwner();
-            Integer deferredCount = state.deferredCapturesSet.get(scalar);
-            if (deferredCount != null) {
-                for (int i = state.deferredCaptures.size() - 1; i >= 0; i--) {
-                    if (state.deferredCaptures.get(i) != scalar) continue;
-                    deferDecrementIfTracked(scalar);
-                    state.deferredCaptures.remove(i);
-                    removeFromDeferredSet(scalar);
-                }
-            } else if (base != null) {
-                requestTargetedWeakSweep(base);
-            }
-            found = true;
-        }
-        state.deferredScopeExitCaptureCandidates.clear();
-        if (found) flushAboveMark();
     }
 
     static void noteDeferredCaptureMayBeReady() {
@@ -474,57 +417,10 @@ public class MortalList {
         // decrements have been processed and before global destruction.
         DestroyDispatch.clearRescuedWeakRefs();
 
-        // Final sweep: clear weak refs for ALL remaining blessed objects.
-        // At this point the main script has returned and all lexical scopes
-        // have exited. Some objects may still have inflated selective
-        // refCounts (due to JVM temporaries, method-call copies, interpreter
-        // captures) that prevent DESTROY from firing. Their weak refs would
-        // remain defined forever, causing DBIC's leak tracer to report false
-        // leaks. Clearing weak refs here is safe because:
-        // 1. Only weak refs are cleared — the Java objects remain alive
-        // 2. CODE refs are excluded (they may still be called from stashes)
-        // 3. END blocks have completed, so real closure captures are no longer needed
-        WeakRefRegistry.clearAllBlessedWeakRefs();
     }
 
-    /**
-     * Release scope-exited captures that cannot be reached by an END block or
-     * a package CODE slot, while retaining genuine END-visible captures for
-     * the unconditional post-END drain in {@link #flushDeferredCaptures()}.
-     *
-     * This preserves Perl's ordering: unrelated file lexicals are destroyed
-     * before END, but values captured by code that END can invoke stay alive
-     * until END has completed.
-     */
+    /** Compatibility hook; captured owners now leave through explicit slots. */
     public static void flushDeferredCapturesBeforeEnd() {
-        LifecycleRuntimeState state = state();
-        Set<RuntimeBase> endReachable = ReachabilityWalker.walkEndBlockRoots();
-        ReachabilityWalker.releaseUnreachableScopeExitedCaptureOwners(
-                WeakRefRegistry.snapshotWeakRefReferents(), endReachable);
-        boolean found = false;
-        for (int i = state.deferredCaptures.size() - 1; i >= 0; i--) {
-            RuntimeScalar scalar = state.deferredCaptures.get(i);
-            boolean retained = endReachable.contains(scalar)
-                    || (scalar.value instanceof RuntimeBase base && endReachable.contains(base));
-            if (retained) continue;
-
-            // This scope-exited pad was captured by eval STRING, but no END
-            // block can reach it. Its semantic capture edge must not keep a
-            // blessed referent alive through global destruction merely because
-            // the compiled eval object is still Java-reachable.
-            scalar.releaseUnreachableSemanticCaptureOwner();
-            deferDecrementIfTracked(scalar);
-            state.deferredCaptures.remove(i);
-            removeFromDeferredSet(scalar);
-            found = true;
-        }
-        if (found) flush();
-
-        // Weak-reference leak tracers commonly run from END. Selective
-        // refcounts can remain inflated by JVM temporaries even after all Perl
-        // owners have gone away, so clear only referents outside the semantic
-        // END graph now. Retained captures are cleared by the post-END drain.
-        WeakRefRegistry.clearBlessedWeakRefsExcept(endReachable);
     }
 
     /**
@@ -535,6 +431,7 @@ public class MortalList {
      */
     public static void deferDecrementIfTracked(RuntimeScalar scalar) {
         if (!isActive() || scalar == null) return;
+        if (scalar.hasCodeSlotBinding()) return;
         if (!scalar.refCountOwned) return;
         if (((scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
                 || scalar.type == RuntimeScalarType.GLOB)
@@ -544,11 +441,11 @@ public class MortalList {
                 if (base.refCountTrace) {
                     base.traceRefCount(0, "MortalList.deferDecrementIfTracked (queued, scalar.refCountOwned->false)");
                 }
-                base.releaseActiveOwner(scalar);
                 LifecycleRuntimeState state = state();
                 markBoundaryWork(state);
                 RuntimeBase.PendingOwnerRelease ownerRelease = base.queueOwnerRelease(
                         scalar, "MortalList.deferDecrementIfTracked");
+                base.releaseActiveOwner(scalar);
                 queueDeferredBase(state, base, ownerRelease, null, scalar);
             } else if (base.refCount == 0
                     && base.clearedOwnedAggregateElement
@@ -564,7 +461,7 @@ public class MortalList {
                     base.releaseOwner(scalar, "deferDecrementIfTracked zero-count owner");
                 }
                 base.releaseActiveOwner(scalar);
-                requestImmediateWeakSweep();
+                requestCorrectiveWeakSweep();
             }
             // Note: WEAKLY_TRACKED (-2) objects are NOT scheduled for destruction
             // on scope exit. We can't count strong refs for non-DESTROY objects
@@ -591,7 +488,8 @@ public class MortalList {
      */
     public static void deferDecrementIfNotCaptured(RuntimeScalar scalar) {
         if (!isActive() || scalar == null) return;
-        if (scalar.captureCount > 0) {
+        if (scalar.captureCount > 0
+                || (scalar.referencedByScalarReference && scalar.localBindingExists)) {
             // Delegate to scopeExitCleanup which handles:
             // - Self-referential cycle detection (eval STRING closures)
             // - Setting scopeExited flag for deferred cleanup via releaseCaptures
@@ -611,8 +509,13 @@ public class MortalList {
      * Never-stored blessed objects (refCount == 0) are bumped to ensure DESTROY fires.
      */
     public static void deferDestroyForContainerClear(Iterable<RuntimeScalar> elements) {
-        if (!isActive()) return;
+        if (elements == null) return;
+        boolean active = isActive();
         for (RuntimeScalar scalar : elements) {
+            if (scalar != null && scalar.untrackedReferenceOwnerSlot() != null) {
+                scalar.refreshUntrackedReferenceOwner();
+            }
+            if (!active) continue;
             // Use the recursive path so a discarded wrapper/container also
             // releases references stored in its fields.  Test::Deep's
             // temporary comparator is a blessed hash whose `val` field can
@@ -651,6 +554,14 @@ public class MortalList {
      * arrays/hashes). Called at scope exit for {@code my %hash} variables.
      */
     public static void scopeExitCleanupHash(RuntimeHash hash) {
+        scopeExitCleanupHash(hash, false);
+    }
+
+    static void scopeExitCleanupDestroyedHash(RuntimeHash hash) {
+        scopeExitCleanupHash(hash, true);
+    }
+
+    private static void scopeExitCleanupHash(RuntimeHash hash, boolean finalRelease) {
         if (!isActive() || hash == null) return;
         // An aggregate borrowed through @_ belongs to its caller.  Its
         // current frame can end while the caller's lexical is still live;
@@ -658,21 +569,28 @@ public class MortalList {
         // Clearing it here
         // makes Internals::SvREFCNT under-report the caller's reference and
         // lets Const::Fast freeze the original instead of its clone.
-        if (RuntimeCode.deferCleanupForActiveArgumentAggregate(hash)) return;
+        if (!finalRelease && RuntimeCode.deferCleanupForActiveArgumentAggregate(hash)) return;
+        scopeExitCleanupHashBody(hash, finalRelease);
+    }
+
+    private static void scopeExitCleanupHashBody(RuntimeHash hash, boolean finalRelease) {
         // Clear localBindingExists: the named variable's scope is ending.
         // This allows subsequent refCount==0 events (from setLargeRefCounted
         // or flush) to correctly trigger callDestroy, since the local
         // variable no longer holds a strong reference.
         boolean hadLocalBinding = hash.localBindingExists;
         hash.localBindingExists = false;
-        if (hash.captureCount > 0) {
+        hash.releaseUnownedClosureCaptures();
+        if (!finalRelease && hash.captureCount > 0) {
             hash.scopeExited = true;
             return;
         }
         // A live reference keeps the container and its IO element slots alive.
-        if (hash.refCount > 0 || temporaryRootDirectlyReferences(hash)) return;
+        if (!finalRelease && (hash.refCount > 0 || hash.hasOwnerSlots()
+                || temporaryRootDirectlyReferences(hash))) return;
         for (RuntimeScalar val : hash.elements.values()) {
             RuntimeScalar.releaseIoOwner(val);
+            if (val != null) val.releaseContainerOwner(hash);
         }
         // Skip container walks only when there are NO blessed objects AND NO
         // weak refs anywhere in the JVM. If weak refs exist (even to unblessed
@@ -723,7 +641,7 @@ public class MortalList {
         // source_registrations hash is assigned into the live schema while the
         // original hash later exits; walking it here would destroy ResultSources
         // still reachable through the schema.
-        if (hadLocalBinding
+        if (!finalRelease && hadLocalBinding
                 && hash.refCount >= 0
                 && hash.hadCountedReference
                 && isReachableFromExternalRootCached(hash)) return;
@@ -745,6 +663,14 @@ public class MortalList {
 
     /** Scope-exit cleanup with a returned aggregate whose IO aliases must survive. */
     public static void scopeExitCleanupArray(RuntimeArray arr, RuntimeBase returned) {
+        scopeExitCleanupArray(arr, returned, false);
+    }
+
+    static void scopeExitCleanupDestroyedArray(RuntimeArray arr) {
+        scopeExitCleanupArray(arr, null, true);
+    }
+
+    private static void scopeExitCleanupArray(RuntimeArray arr, RuntimeBase returned, boolean finalRelease) {
         if (!isActive() || arr == null) return;
         // A threads::shared array has canonical storage that outlives each
         // runtime-local wrapper.  Its elements are released by mutations of
@@ -753,19 +679,25 @@ public class MortalList {
         // See scopeExitCleanupHash: an active @_ alias does not end the
         // caller's lexical lifetime.  In particular, Const::Fast uses
         // SvREFCNT to decide whether it must clone a referenced aggregate.
-        if (RuntimeCode.deferCleanupForActiveArgumentAggregate(arr)) return;
+        if (!finalRelease && RuntimeCode.deferCleanupForActiveArgumentAggregate(arr)) return;
+        scopeExitCleanupArrayBody(arr, returned, finalRelease);
+    }
+
+    private static void scopeExitCleanupArrayBody(
+            RuntimeArray arr, RuntimeBase returned, boolean finalRelease) {
         // Clear localBindingExists: the named variable's scope is ending.
         // This allows subsequent refCount==0 events (from setLargeRefCounted
         // or flush) to correctly trigger callDestroy, since the local
         // variable no longer holds a strong reference.
         arr.localBindingExists = false;
-        if (arr.captureCount > 0) {
+        arr.releaseUnownedClosureCaptures();
+        if (!finalRelease && arr.captureCount > 0) {
             arr.scopeExited = true;
             return;
         }
         // Alias arrays such as @_ do not own their original element slots.
-        if (arr.refCount > 0 || temporaryRootDirectlyReferences(arr)
-                || directlyReferences(returned, arr)) return;
+        if (!finalRelease && (arr.refCount > 0 || arr.hasOwnerSlots()
+                || temporaryRootDirectlyReferences(arr) || directlyReferences(returned, arr))) return;
         // \$#array creates a scalar proxy, not an array reference.  Once the
         // lexical AV exits, that proxy becomes an orphaned undef lvalue; it
         // must not retain this Java RuntimeArray merely through its backing
@@ -775,11 +707,13 @@ public class MortalList {
             for (RuntimeScalar elem : arr.elements) {
                 if (returned == null) RuntimeScalar.releaseIoOwner(elem);
                 else RuntimeScalar.releaseIoOwnerPreservingReturned(elem, returned);
+                if (elem != null) elem.releaseContainerOwner(arr);
             }
         } else if (arr.ownedAliasElements != null) {
             for (RuntimeScalar elem : arr.ownedAliasElements) {
                 if (returned == null) RuntimeScalar.releaseIoOwner(elem);
                 else RuntimeScalar.releaseIoOwnerPreservingReturned(elem, returned);
+                if (elem != null) elem.releaseContainerOwner(arr);
             }
         }
         // Skip container walks only when there are NO blessed objects AND NO
@@ -934,20 +868,21 @@ public class MortalList {
 
         if (--base.refCount > 0) return;
 
-        if (base.localBindingExists || reachableTailCallArgReferent(base)) {
+        // Counted owner slots are authoritative even when the compatibility
+        // refcount transiently undercounts them during a tail-call handoff.
+        // Restore from those identities before allowing final release.
+        if (base.restoreCountedOwnerSlotRefCount()) return;
+
+        if (base.localBindingExists) {
             base.refCount = 1;
             return;
         }
-
+        if (base.hasUncountedPerlOwnerSlotIdentity()) {
+            base.deferFinalReleaseToUncountedOwnerSlots();
+            return;
+        }
         base.refCount = Integer.MIN_VALUE;
         DestroyDispatch.callDestroy(base);
-    }
-
-    private static boolean reachableTailCallArgReferent(RuntimeBase base) {
-        return WeakRefRegistry.hasWeakRefsTo(base)
-                && (ReachabilityWalker.isReachableFromRoots(base)
-                || ReachabilityWalker.isReachableFromLiveScalarRegistry(base)
-                || ReachabilityWalker.isReachableFromLiveCodeCaptures(base));
     }
 
     /**
@@ -959,6 +894,7 @@ public class MortalList {
      */
     private static void deferDecrementRecursive(RuntimeScalar scalar) {
         if (scalar == null || (scalar.type & RuntimeScalarType.REFERENCE_BIT) == 0) return;
+        if (WeakRefRegistry.isweak(scalar)) return;
         if (!(scalar.value instanceof RuntimeBase topBase)) return;
 
         // Fast path for leaf references (the overwhelmingly common case):
@@ -1003,6 +939,7 @@ public class MortalList {
         while (!work.isEmpty()) {
             RuntimeScalar s = work.poll();
             if (s == null || (s.type & RuntimeScalarType.REFERENCE_BIT) == 0) continue;
+            if (WeakRefRegistry.isweak(s)) continue;
             if (!(s.value instanceof RuntimeBase base)) continue;
             if (!visited.add(base)) continue;  // already visited — cycle
 
@@ -1014,6 +951,8 @@ public class MortalList {
                         base.traceRefCount(0, "MortalList.deferDecrementRecursive (blessed, queued)");
                         base.releaseOwner(s, "deferDecrementRecursive blessed");
                     }
+                    RuntimeBase.PendingOwnerRelease ownerRelease = base.queueOwnerRelease(
+                            s, "MortalList.deferDecrementRecursive blessed");
                     base.releaseActiveOwner(s);
                     // refCount is the authoritative ownership count here.
                     // activeOwners is diagnostic and can retain a stale
@@ -1021,7 +960,7 @@ public class MortalList {
                     releasingLastOwner = base.refCount == 1;
                     LifecycleRuntimeState state = state();
                     markBoundaryWork(state);
-                    queueDeferredBase(state, base, null, null, s);
+                    queueDeferredBase(state, base, ownerRelease, null, s);
                 } else if (base.refCount == 0) {
                     if (base.refCountTrace) {
                         base.traceRefCount(+1, "MortalList.deferDecrementRecursive (blessed never-stored bump+queue)");
@@ -1061,10 +1000,12 @@ public class MortalList {
                     if (base.refCountTrace) {
                         base.traceRefCount(0, "MortalList.deferDecrementRecursive (unblessed container, queued)");
                     }
+                    RuntimeBase.PendingOwnerRelease ownerRelease = base.queueOwnerRelease(
+                            s, "MortalList.deferDecrementRecursive unblessed");
                     base.releaseActiveOwner(s);
                     LifecycleRuntimeState state = state();
                     markBoundaryWork(state);
-                    queueDeferredBase(state, base, null, null, s);
+                    queueDeferredBase(state, base, ownerRelease, null, s);
                     if (!WeakRefRegistry.weakRefsExist() && base.refCount > 1) {
                         continue;
                     }
@@ -1092,6 +1033,11 @@ public class MortalList {
                     // release the original owner's children.
                     continue;
                 }
+                // A registered lexical aggregate owns its element slots even
+                // when another scalar reference to the aggregate is released.
+                // Decrement this scalar's aggregate edge above, then leave the
+                // elements for the lexical aggregate's own scope cleanup.
+                if (base.localBindingExists && MyVarCleanupStack.isRegistered(base)) continue;
                 // Walk into unblessed containers to find nested blessed refs
                 if (base instanceof RuntimeArray arr) {
                     for (RuntimeScalar elem : arr.elements) {
@@ -1174,13 +1120,13 @@ public class MortalList {
             if (elem instanceof RuntimeScalar scalar
                     && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
                     && scalar.value instanceof RuntimeBase base) {
+                if (scalar.hasStorageOwnerForVoidDiscard()) continue;
                 boolean unblessedDiscardableContainer = base.blessId == 0
                         && (base instanceof RuntimeHash
                         || base instanceof RuntimeArray
                         || base instanceof RuntimeCode);
                 boolean reachableCodeRef = base instanceof RuntimeCode
-                        && scalar.isStoredInRegisteredContainerOwner()
-                        && ReachabilityWalker.isScalarReachable(scalar);
+                        && scalar.isStoredInRegisteredContainerOwner();
                 if (scalar.refCountOwned && base.refCount > 0 && unblessedDiscardableContainer
                         && !reachableCodeRef) {
                     scalar.refCountOwned = false;
@@ -1188,10 +1134,12 @@ public class MortalList {
                         base.traceRefCount(0, "MortalList.mortalizeForVoidDiscard (queued owned container discard)");
                         base.releaseOwner(scalar, "mortalizeForVoidDiscard container");
                     }
+                    RuntimeBase.PendingOwnerRelease ownerRelease = base.queueOwnerRelease(
+                            scalar, "MortalList.mortalizeForVoidDiscard");
                     base.releaseActiveOwner(scalar);
                     LifecycleRuntimeState state = state();
                     markBoundaryWork(state);
-                    queueDeferredBase(state, base, null);
+                    queueDeferredBase(state, base, ownerRelease, null, scalar);
                 } else if (base.refCount == 0
                         && (base.blessId != 0
                         || base instanceof RuntimeHash
@@ -1213,20 +1161,20 @@ public class MortalList {
     // Each mark records the pending list size at scope entry, so that
     // popAndFlush() only processes entries added within that scope.
     private static void processDeferredEntriesFrom(
-            int pendingStartIdx, int tiedReleaseStartIdx, int ioReleaseStartIdx) {
+            int pendingStartIdx, int tiedReleaseStartIdx, int ioReleaseStartIdx,
+            int untrackedReturnOwnerStartIdx) {
         LifecycleRuntimeState state = state();
-        boolean previousCaptureSweepDeferral =
-                state.deferCaptureReachabilityToBoundarySweep;
-        state.deferCaptureReachabilityToBoundarySweep =
-                previousCaptureSweepDeferral || canDeferCapturedTargetCheckToBoundarySweep(state);
         state.reachabilityDrainDepth++;
         try {
             int pendingIdx = pendingStartIdx;
             int tiedReleaseIdx = tiedReleaseStartIdx;
             int ioReleaseIdx = ioReleaseStartIdx;
+            int untrackedReturnOwnerIdx = untrackedReturnOwnerStartIdx;
             while (pendingIdx < state.pending.size()
                     || tiedReleaseIdx < state.pendingTiedReleases.size()
-                    || ioReleaseIdx < state.pendingIoReleases.size()) {
+                    || ioReleaseIdx < state.pendingIoReleases.size()
+                    || untrackedReturnOwnerIdx
+                        < state.pendingUntrackedReturnOwnerReleases.size()) {
                 while (tiedReleaseIdx < state.pendingTiedReleases.size()) {
                     // Releasing a tie handler changes the graph represented by
                     // the per-drain tied-reachability snapshot.
@@ -1234,19 +1182,19 @@ public class MortalList {
                     state.pendingTiedReleases.get(tiedReleaseIdx++).releaseTiedObject();
                 }
                 while (pendingIdx < state.pending.size()) {
+                    int currentIndex = pendingIdx++;
                     RuntimeBase.PendingOwnerRelease ownerRelease =
-                            state.pendingOwnerReleases.get(pendingIdx);
-                    String transientOwnerKind = state.pendingTransientOwnerKinds.get(pendingIdx);
-                    RuntimeBase base = state.pending.get(pendingIdx);
-                    java.lang.ref.WeakReference<RuntimeScalar> ownerRef =
-                            state.pendingOwnerScalars.get(pendingIdx++);
-                    RuntimeScalar ownerScalar = ownerRef == null ? null : ownerRef.get();
-                    if (base.blessId != 0
-                            && WeakRefRegistry.hasWeakRefsTo(base)
-                            && RuntimeCode.hasActiveArgumentOwner(ownerScalar)) {
+                            state.pendingOwnerReleases.get(currentIndex);
+                    String transientOwnerKind =
+                            state.pendingTransientOwnerKinds.get(currentIndex);
+                    RuntimeBase base = state.pending.get(currentIndex);
+                    boolean argumentAliasOwnsBase =
+                            base.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_ALIAS) != 0
+                                && base.countedOwnerSlotCount() == 0;
+                    if (argumentAliasOwnsBase) {
                         state.deferredArgumentOwnerReleases.add(
                                 new DeferredArgumentOwnerRelease(base, ownerRelease,
-                                        transientOwnerKind, ownerScalar));
+                                        transientOwnerKind));
                     } else {
                         processDeferredBase(base, false, ownerRelease, transientOwnerKind);
                     }
@@ -1254,10 +1202,15 @@ public class MortalList {
                 while (ioReleaseIdx < state.pendingIoReleases.size()) {
                     RuntimeScalar.releaseIoOwner(state.pendingIoReleases.get(ioReleaseIdx++));
                 }
+                while (untrackedReturnOwnerIdx
+                        < state.pendingUntrackedReturnOwnerReleases.size()) {
+                    RuntimeScalar scalar =
+                            state.pendingUntrackedReturnOwnerReleases.get(untrackedReturnOwnerIdx++);
+                    if (scalar != null) scalar.releaseMortalReturnValueOwner();
+                }
             }
         } finally {
             state.reachabilityDrainDepth--;
-            state.deferCaptureReachabilityToBoundarySweep = previousCaptureSweepDeferral;
         }
         drainDeferredArgumentOwnerReleases();
     }
@@ -1269,30 +1222,16 @@ public class MortalList {
                 new ArrayList<>(state.deferredArgumentOwnerReleases);
         state.deferredArgumentOwnerReleases.clear();
         for (DeferredArgumentOwnerRelease deferred : pending) {
-            RuntimeScalar ownerScalar = deferred.ownerScalar.get();
-            if (RuntimeCode.hasActiveArgumentOwner(ownerScalar)) {
+            if (deferred.base.countedOwnerSlotCount() != 0) {
+                processDeferredBase(deferred.base, false, deferred.ownerRelease,
+                        deferred.transientOwnerKind);
+            } else if (deferred.base.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_ALIAS) != 0) {
                 state.deferredArgumentOwnerReleases.add(deferred);
             } else {
                 processDeferredBase(deferred.base, false, deferred.ownerRelease,
                         deferred.transientOwnerKind);
             }
         }
-    }
-
-    private static void finalizeDeferredCaptureSweepCandidates(
-            LifecycleRuntimeState state) {
-        if (state.deferredCaptureSweepCandidates.isEmpty()) return;
-        if (state.boundaryWeakSweepGeneration > state.deferredCaptureSweepGeneration) {
-            state.deferredCaptureSweepCandidates.clear();
-            state.deferredCaptureSweepGeneration = state.boundaryWeakSweepGeneration;
-        }
-    }
-
-    private static boolean canDeferCapturedTargetCheckToBoundarySweep(
-            LifecycleRuntimeState state) {
-        return !AUTO_GC_DISABLED
-                && !state.inAutoSweep
-                && !ModuleInitGuard.inModuleInit();
     }
 
     /**
@@ -1339,147 +1278,21 @@ public class MortalList {
     // (100ms, 500ms) fire too frequently — 52leaks.t creates thousands
     // of weaken'd refs and each sweep's System.gc() + weak-ref cascade
     // can run for tens of seconds. 5s gives the walker time to amortize.
-    //
-    // Trade-off: tests that rely on deterministic DESTROY after `undef`
-    // of a blessed ref (e.g. t/storage/error.t test 49) need explicit
-    // Internals::jperl_gc() to fire the walker within their short
-    // wall-clock.
-    private static final long AUTO_SWEEP_MIN_INTERVAL_NS = 5_000_000_000L;
-    private static final boolean AUTO_GC_DISABLED =
-            System.getenv("JPERL_NO_AUTO_GC") != null;
-    private static final boolean AUTO_GC_DEBUG =
-            System.getenv("JPERL_GC_DEBUG") != null;
-    private static final boolean WEAK_SWEEP_REQUEST_DEBUG =
-            System.getenv("JPERL_WEAK_SWEEP_REQUEST_DEBUG") != null;
-    // Phase D-W6.20 (debug knob): force the auto-sweep on EVERY flush()
-    // call, bypassing the 5-s throttle and the `weakRefsExist` gate.
-    // Used to reproduce timing-dependent walker bugs (e.g. the
-    // ScalarRefRegistry-vs-forceGc race that surfaces as DBIC's
-    // "detached result source" mid-test crash). Off by default; when on,
-    // every Perl statement boundary triggers a full sweepWeakRefs walk —
-    // very slow, only for diagnostics.
-    private static final boolean FORCE_SWEEP_EVERY_FLUSH =
-            System.getenv("JPERL_FORCE_SWEEP_EVERY_FLUSH") != null;
-
-    // Objects explicitly released by undef while JVM statement temporaries may
-    // still make them appear reachable. Recheck only these referents at the
-    // next Perl statement boundary; a full nested-call sweep can invalidate
-    // unrelated weak callback graphs whose caller-owned return values have not
-    // reached a walker-visible lexical yet.
+    /** Compatibility hook; weak-reference cleanup is driven by owner release. */
     public static void requestImmediateWeakSweep() {
-        LifecycleRuntimeState state = state();
-        markBoundaryWork(state);
-        state.immediateWeakSweepRequested = true;
-        if (WEAK_SWEEP_REQUEST_DEBUG) {
-            StackTraceElement[] stack = Thread.currentThread().getStackTrace();
-            StackTraceElement caller = stack.length > 2 ? stack[2] : null;
-            System.err.println("[WEAK_SWEEP_REQUEST] caller=" + caller);
-        }
     }
 
+    /** Compatibility hook; weak-reference cleanup is driven by owner release. */
+    static void requestCorrectiveWeakSweep() {
+    }
+
+    /** Compatibility hook; weak-reference cleanup is driven by owner release. */
     public static void requestTargetedWeakSweep(RuntimeBase referent) {
-        if (referent != null) {
-            LifecycleRuntimeState state = state();
-            markBoundaryWork(state);
-            state.targetedWeakSweepReferents.add(referent);
-        }
     }
 
-    /**
-     * Finish targeted releases queued by an explicit aggregate discard after
-     * the assignment's temporary scalar roots have been removed. Unlike the
-     * global quiet sweep, this walk is safe at nested statement boundaries
-     * because it considers only referents reached from the discarded graph.
-     */
-    public static void flushReleasedWeakSweepsIfSafe() {
-        LifecycleRuntimeState state = state();
-        if (state.targetedWeakSweepReferents.isEmpty()) return;
-        Set<RuntimeBase> releasedTargets = Collections.newSetFromMap(new IdentityHashMap<>());
-        releasedTargets.addAll(state.targetedWeakSweepReferents);
-        state.targetedWeakSweepReferents.clear();
-        ReachabilityWalker.ReleasedWeakSweepResult releasedSweepResult =
-                ReachabilityWalker.sweepReleasedWeakReferents(releasedTargets);
-
-        // A complete quiet sweep may already be required at this safe boundary.
-        // Reuse the targeted pass's root set for that registry-wide cleanup,
-        // avoiding a second traversal when releasing these referents caused no
-        // DESTROY cascade that would have changed the graph.
-        if (releasedSweepResult.live() == null
-                || !state.immediateWeakSweepRequested
-                || AUTO_GC_DISABLED
-                || FORCE_SWEEP_EVERY_FLUSH
-                || state.inAutoSweep
-                || ModuleInitGuard.inModuleInit()
-                || RuntimeCode.argsStackDepth() > 1
-                || !state.temporaryRoots.isEmpty()) {
-            return;
-        }
-        state.immediateWeakSweepRequested = false;
-        state.lastAutoSweepNanos = System.nanoTime();
-        state.inAutoSweep = true;
-        try {
-            ReachabilityWalker.sweepWeakRefs(
-                    true, false, releasedTargets, releasedSweepResult);
-            state.boundaryWeakSweepGeneration++;
-            finalizeDeferredCaptureSweepCandidates(state);
-        } finally {
-            state.inAutoSweep = false;
-        }
-    }
-
-    /**
-     * Register weakly tracked referents whose last strong edge may disappear
-     * with a container temporary.  References to ordinary scalar referents
-     * cannot participate in the selective refCount scheme, so a discarded
-     * anonymous array/hash must explicitly ask the statement-boundary walker
-     * to reconsider them.  This is the aggregate equivalent of assigning
-     * {@code undef} to a scalar that contains a WEAKLY_TRACKED reference.
-     */
+    /** Compatibility hook retained for callers compiled against the old sweep API. */
     public static boolean requestWeakSweepsForDestroyedContainer(RuntimeBase container) {
-        if (!(container instanceof RuntimeArray) && !(container instanceof RuntimeHash)) return false;
-
-        ArrayDeque<RuntimeBase> work = new ArrayDeque<>();
-        Set<RuntimeBase> visited = Collections.newSetFromMap(new IdentityHashMap<>());
-        work.add(container);
-        boolean requested = WeakRefRegistry.hasWeakRefsTo(container);
-        if (requested) requestTargetedWeakSweep(container);
-
-        while (!work.isEmpty()) {
-            RuntimeBase current = work.removeFirst();
-            if (!visited.add(current)) continue;
-
-            // A stash is a symbol-table view, not an owned aggregate. Walking
-            // its dynamic HashSpecialVariable map enumerates package globals
-            // on every scope exit (Catalyst creates many short-lived
-            // containers), repeatedly traversing the whole program graph.
-            // Its values are roots already handled by the normal weak sweep.
-            if (current instanceof RuntimeStash) continue;
-
-            Iterable<RuntimeScalar> values;
-            if (current instanceof RuntimeArray array) {
-                values = array.elements;
-            } else if (current instanceof RuntimeHash hash) {
-                values = hash.elements.values();
-            } else {
-                continue;
-            }
-
-            for (RuntimeScalar value : values) {
-                if (value == null
-                        || (value.type & RuntimeScalarType.REFERENCE_BIT) == 0
-                        || !(value.value instanceof RuntimeBase referent)) {
-                    continue;
-                }
-                if (WeakRefRegistry.hasWeakRefsTo(referent)) {
-                    requestTargetedWeakSweep(referent);
-                    requested = true;
-                }
-                if (referent instanceof RuntimeArray || referent instanceof RuntimeHash) {
-                    work.add(referent);
-                }
-            }
-        }
-        return requested;
+        return false;
     }
 
     static void finalizeClearedAggregateOwnerAfterScopeExit(RuntimeBase base) {
@@ -1745,6 +1558,13 @@ public class MortalList {
     private static void processDeferredBase(RuntimeBase base, boolean clearWeakRefsForLocalBinding,
                                             RuntimeBase.PendingOwnerRelease ownerRelease,
                                             String transientOwnerKind) {
+        if (base.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_ALIAS) != 0
+                && base.countedOwnerSlotCount() == 0) {
+            state().deferredArgumentOwnerReleases.add(
+                    new DeferredArgumentOwnerRelease(base, ownerRelease,
+                            transientOwnerKind));
+            return;
+        }
         ReachabilityQueryStats queryStats = activeReachabilityQueryStats();
         if (queryStats != null) queryStats.deferredBasesProcessed++;
         base.completeQueuedOwnerRelease(ownerRelease, "MortalList.processDeferredBase");
@@ -1755,7 +1575,16 @@ public class MortalList {
             base.traceRefCount(-1, "MortalList.flush (deferred decrement)");
         }
         if (base.refCount > 0 && --base.refCount == 0) {
-            if (base.hasSemanticCaptureOwner()) {
+            boolean aggregateReferent = base instanceof RuntimeArray || base instanceof RuntimeHash;
+            // Aggregate owner slots have their own deferred-release rule below.
+            // Refresh scalar-cell owners here for other referents before the
+            // final counted release checks whether any owner slot remains.
+            boolean hasUntrackedReferenceOwner = !aggregateReferent
+                    && base.ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE) != 0
+                    && base.hasUntrackedReferenceOwnerSlotIdentity();
+            if (base instanceof RuntimeCode code && code.hasActiveCodeOwner()) {
+                code.deferFinalReleaseToActiveCode();
+            } else if (base.hasSemanticCaptureOwner()) {
                 // Captured aggregate pads use native owner slots. Keep the
                 // legacy count at zero while one is active; its final release
                 // will perform the lifecycle transition. Scalar captures still
@@ -1789,6 +1618,19 @@ public class MortalList {
                 if (clearWeakRefsForLocalBinding) {
                     WeakRefRegistry.clearWeakRefsTo(base);
                 }
+            } else if (isFinalCountedReferentRelease(base, ownerRelease)) {
+                // This decrement retired an identified scalar/element edge.
+                // Every other migrated edge is already absent from the ledger;
+                // a cached root snapshot must not invent a replacement owner.
+                base.refCount = Integer.MIN_VALUE;
+                DestroyDispatch.callDestroyFromCountedOwner(base);
+            } else if (base.blessId != 0 && base.restoreCountedOwnerSlotRefCount()) {
+                // For blessed referents, remaining counted slots prove that
+                // the transient zero was an undercount. Unblessed referents
+                // use stricter current-storage checks below.
+            } else if (base.restoreVerifiedCurrentCountedOwnerSlotRefCount()) {
+                // Verified current scalar cells and array/hash elements jointly
+                // restore the surviving owner count without a root walk.
             } else if (base instanceof RuntimeCode code
                     && hasWeakRefs
                     && (RuntimeCode.isActiveCode(code)
@@ -1809,15 +1651,20 @@ public class MortalList {
                 // RuntimeCode.clearPadConstantWeakRefs() clears it when the
                 // sub's glob is replaced, matching Perl optree reaping.
                 base.refCount = 1;
+            } else if (base.hasNonPackageAggregateUncountedOwnerSlotIdentity()
+                    || (aggregateReferent
+                        ? base.hasUntrackedReferenceOwnerSlotIdentity(
+                                RuntimeScalarType.REFERENCE)
+                        : hasUntrackedReferenceOwner)) {
+                // Counted owner recovery is complete above. A surviving
+                // aggregate or untracked scalar slot is enough to defer cleanup
+                // until its release, even when no weak observer currently exists.
+                base.deferFinalReleaseToUncountedOwnerSlots();
             } else if (hasWeakRefs && restoreReachableOwnerCount(base)) {
                 // A counted owner that is still reachable through a real
                 // Perl root is authoritative, including for classes with
-                // DESTROY.  Pure-Perl tied containers expose this shape:
-                // Test::Spec stores a context in Tie::IxHash and weakens the
-                // child's parent link. Method/argument temporaries can make
-                // the selective count dip to zero, but the tied handler's
-                // array slot remains a strong owner.  Destroying here clears
-                // that weak parent and corrupts the context tree.
+                // DESTROY. Unmigrated slots still need this compatibility
+                // fallback until their owner identities are complete.
             } else if (base.blessId == 0
                     && (base instanceof RuntimeArray || base instanceof RuntimeHash)
                     && isUnblessedAggregateReachableDuringDrain(base)) {
@@ -1853,22 +1700,6 @@ public class MortalList {
                 // target. Keep it alive without requesting a registry-wide
                 // sweep; unknown targets still use the complete-boundary path.
                 base.refCount = 1;
-            } else if (base.blessId == 0
-                    && hasWeakRefs
-                    && canDeferCapturedTargetCheckToBoundarySweep(state())) {
-                // Carry released unblessed targets to the next safe complete
-                // sweep. This avoids scanning live and installed CODE captures
-                // repeatedly after an inconclusive query while keeping their
-                // weak observers valid until the sweep decides reachability.
-                if (state().deferredCaptureSweepCandidates.isEmpty()) {
-                    state().deferredCaptureSweepGeneration =
-                            state().boundaryWeakSweepGeneration;
-                }
-                // Keep the target alive until the next safe complete sweep
-                // decides whether a live CODE capture still owns it.
-                base.refCount = 1;
-                state().deferredCaptureSweepCandidates.add(base);
-                requestImmediateWeakSweep();
             } else if (base.blessId == 0
                     && hasWeakRefs
                     && RuntimeCode.argsStackDepth() > 1) {
@@ -1914,18 +1745,6 @@ public class MortalList {
                 // path.
                 base.refCount = 1;
             } else if (base.blessId != 0
-                    && hasWeakRefs
-                    && !blessedClassHasDestroy(base)
-                    && RuntimeCode.argsStackDepth() > 1
-                    && !base.clearedOwnedAggregateElement) {
-                // Nested calls can retain expression temporaries which are not
-                // selective refcount owners.  Leave the count at zero and let
-                // the next outer statement boundary decide from Perl-visible
-                // reachability.  Retaining a synthetic count here leaks weak
-                // observers after a method-local alias releases the final real
-                // owner (Algorithm::SlidingWindow).
-                requestTargetedWeakSweep(base);
-            } else if (base.blessId != 0
                     && base.storedInPackageGlobal
                     && hasWeakRefs
                     && isReachableCached(base)) {
@@ -1934,15 +1753,62 @@ public class MortalList {
                 // If the walker can still reach the object from Perl-visible
                 // roots, keep weak links to it intact.
             } else {
+                // Call depth is not ownership. If every counted and direct
+                // owner check above is empty, a weak referent is final here;
+                // leaving it for a later sweep would strand the weak scalars.
                 base.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroy(base);
             }
+        }
+        // A prior compatibility branch may preserve refCount at zero while a
+        // nested scope is unwinding. The exact owner release is still pending
+        // in this call, so recheck its ledger after that branch: once this was
+        // the final trusted slot and no other Perl binding remains, finish the
+        // release here instead of relying on a later reachability sweep.
+        if (base.refCount == 0
+                && isFinalCountedReferentRelease(base, ownerRelease)
+                && !base.localBindingExists
+                && base.captureCount == 0
+                && !base.hasPendingReturnOwner()
+                && !GlobalVariable.isPackageRootedAggregate(base)
+                && !(base instanceof RuntimeCode code
+                    && (code.hasActiveCodeOwner()
+                        || code.stashRefCount > 0
+                        || GlobalVariable.installedGlobalCodeRefsView().contains(code)))) {
+            base.refCount = Integer.MIN_VALUE;
+            DestroyDispatch.callDestroyFromCountedOwner(base);
+        }
+        if (base instanceof RuntimeCode code) code.finishActiveCodeOwnerRelease();
+        if (base instanceof RuntimeScalar scalar) {
+            PerlOwnerSlot.finishDeferredScalarCellRelease(scalar);
         }
     }
 
     private static boolean blessedClassHasDestroy(RuntimeBase base) {
         String className = NameNormalizer.getBlessStr(base.blessId);
         return className != null && DestroyDispatch.classHasDestroy(base.blessId, className);
+    }
+
+    static boolean canTrustFinalCountedRelease(RuntimeBase base) {
+        boolean supportedReferent = base instanceof RuntimeArray || base instanceof RuntimeHash
+                || (base instanceof RuntimeScalar scalar
+                    && !(scalar instanceof RuntimeScalarReadOnly) && scalar.captureCount == 0)
+                || (base instanceof RuntimeCode code
+                    && (code.hasCountedCodeSlots || (!code.hadStashRef && code.stashRefCount <= 0))
+                    && code.activeEndBlockExecutions == 0
+                    && !SpecialBlock.hasPendingEndBlock(code));
+        return supportedReferent && !base.hasOwnerSlots();
+    }
+
+    private static boolean isFinalCountedReferentRelease(
+            RuntimeBase base, RuntimeBase.PendingOwnerRelease release) {
+        if (!canTrustFinalCountedRelease(base)
+                || release == null || release.ownerSlotRelease == null) return false;
+        return switch (release.ownerSlotRelease.kind()) {
+            case SCALAR_CELL, CODE_SLOT, ARRAY_ELEMENT, HASH_ELEMENT, ARGUMENT_VALUE, RETURN_VALUE,
+                    TIE_HANDLER -> true;
+            default -> false;
+        };
     }
 
     private static boolean restoreReachableOwnerCount(RuntimeBase base) {
@@ -1956,12 +1822,18 @@ public class MortalList {
         LifecycleRuntimeState state = state();
         if (!state.mortalActive) return;
         if (state.flushing) return;
+        if (state.sweepPendingAfterOuterDestroy) {
+            // Preserve the old diagnostic counters for explicit post-DESTROY
+            // requests. This snapshots CODE captures only; it never clears
+            // weak refs, dispatches DESTROY, or changes owner state.
+            state.sweepPendingAfterOuterDestroy = false;
+            ReachabilityWalker.inspectWeakBackrefCapturesForDiagnostics();
+        }
         boolean topLevel = !state.hasMortalMarks();
         if (state.pending.isEmpty() && state.pendingTiedReleases.isEmpty()
-                && state.pendingIoReleases.isEmpty()) {
+                && state.pendingIoReleases.isEmpty()
+                && state.pendingUntrackedReturnOwnerReleases.isEmpty()) {
             processReadyDeferredCaptures(state);
-            maybeAutoSweep(state);
-            finalizeDeferredCaptureSweepCandidates(state);
             refreshBoundaryWork(state);
             return;
         }
@@ -1969,13 +1841,15 @@ public class MortalList {
         state.flushing = true;
         if (topLevel) state.topLevelFlushDepth++;
         try {
-            processDeferredEntriesFrom(0, 0, 0);
+            processDeferredEntriesFrom(0, 0, 0, 0);
             state.pending.clear();
             state.pendingOwnerReleases.clear();
             state.pendingOwnerScalars.clear();
+            state.pendingArgumentFrames.clear();
             state.pendingTransientOwnerKinds.clear();
             state.pendingTiedReleases.clear();
             state.pendingIoReleases.clear();
+            state.pendingUntrackedReturnOwnerReleases.clear();
             state.markDepth = 0; // All entries drained; marks are meaningless now
         } finally {
             if (topLevel) state.topLevelFlushDepth--;
@@ -1983,99 +1857,6 @@ public class MortalList {
             invalidateDrainReachabilityCaches();
         }
         processReadyDeferredCaptures(state);
-        maybeAutoSweep(state);
-        finalizeDeferredCaptureSweepCandidates(state);
-        refreshBoundaryWork(state);
-    }
-
-    private static void maybeAutoSweep() {
-        maybeAutoSweep(state());
-    }
-
-    private static void maybeAutoSweep(LifecycleRuntimeState state) {
-        maybeAutoSweep(state, Collections.emptySet(), null);
-    }
-
-    private static void maybeAutoSweep(
-            LifecycleRuntimeState state,
-            Set<RuntimeBase> releasedTargets,
-            ReachabilityWalker.ReleasedWeakSweepResult releasedSweepResult) {
-        if (state.weakSweepSuppressionDepth > 0) return;
-        if (AUTO_GC_DISABLED) return;
-        if (state.inAutoSweep) return;
-        boolean immediateSweep = state.immediateWeakSweepRequested;
-        // FORCE_SWEEP_EVERY_FLUSH bypasses the weakRefsExist gate AND the
-        // 5-s throttle so reproducers can deterministically trigger the
-        // walker at every statement boundary.
-        if (!FORCE_SWEEP_EVERY_FLUSH && !state.weakRefsExist && !immediateSweep) return;
-        // Phase B2a: skip while require/use/BEGIN/eval-STRING is running.
-        // Those paths depend on weak-refed intermediate state staying
-        // defined until the init completes.
-        if (ModuleInitGuard.inModuleInit()) return;
-        // Sweeps must stay out of nested calls. Active call frames can hold
-        // temporaries and closure metadata through JVM locals that are not
-        // complete Perl-visible walker roots yet.
-        if (RuntimeCode.argsStackDepth() > 1) return;
-        if (!state.temporaryRoots.isEmpty()) return;
-        if (!FORCE_SWEEP_EVERY_FLUSH && !immediateSweep) {
-            long now = System.nanoTime();
-            if (now - state.lastAutoSweepNanos < AUTO_SWEEP_MIN_INTERVAL_NS) return;
-            state.lastAutoSweepNanos = now;
-        }
-        state.inAutoSweep = true;
-        try {
-            if (immediateSweep) {
-                state.immediateWeakSweepRequested = false;
-                state.lastAutoSweepNanos = System.nanoTime();
-            }
-            // Quiet auto-sweeps run from normal statement-boundary checks.
-            // Do not force HotSpot GC here: current live-lexical tracking is
-            // driven by MyVarCleanupStack, and forcing JVM GC at this cadence
-            // dominates DBIC-scale runtimes. Keep the old forced behavior only
-            // for the diagnostic "sweep every flush" mode.
-            int cleared = ReachabilityWalker.sweepWeakRefs(
-                    true, FORCE_SWEEP_EVERY_FLUSH, releasedTargets, releasedSweepResult);
-            state.boundaryWeakSweepGeneration++;
-            if (AUTO_GC_DEBUG) {
-                System.err.println("DBG auto-sweep reason="
-                        + (immediateSweep ? "immediate" : "cadence")
-                        + " cleared=" + cleared);
-            }
-        } finally {
-            state.inAutoSweep = false;
-        }
-    }
-
-    private static void maybeAutoSweepIfRequested(LifecycleRuntimeState state) {
-        if (state.immediateWeakSweepRequested) {
-            maybeAutoSweep(state);
-        }
-    }
-
-    private static void maybeAutoSweepAtStatementBoundary(
-            LifecycleRuntimeState state, boolean topLevel) {
-        if (state.weakSweepSuppressionDepth > 0) return;
-        Set<RuntimeBase> releasedTargets = Collections.emptySet();
-        ReachabilityWalker.ReleasedWeakSweepResult releasedSweepResult = null;
-        if (!state.targetedWeakSweepReferents.isEmpty() && state.temporaryRoots.isEmpty()) {
-            releasedTargets = Collections.newSetFromMap(new IdentityHashMap<>());
-            releasedTargets.addAll(state.targetedWeakSweepReferents);
-            state.targetedWeakSweepReferents.clear();
-            releasedSweepResult =
-                    ReachabilityWalker.sweepReleasedWeakReferents(releasedTargets);
-        }
-        if (topLevel) {
-            maybeAutoSweep(state, releasedTargets, releasedSweepResult);
-            finalizeDeferredCaptureSweepCandidates(state);
-        }
-    }
-
-    private static void maybeSweepStatementBoundaryDestroyables() {
-        LifecycleRuntimeState state = state();
-        if (!ModuleInitGuard.inModuleInit()
-                && DestroyDispatch.hasStatementBoundaryDestroyableObjects()) {
-            ReachabilityWalker.sweepStatementBoundaryDestroyableObjects();
-        }
         refreshBoundaryWork(state);
     }
 
@@ -2126,6 +1907,7 @@ public class MortalList {
             state.pending.remove(state.pending.size() - 1);
             state.pendingOwnerReleases.remove(state.pendingOwnerReleases.size() - 1);
             state.pendingOwnerScalars.remove(state.pendingOwnerScalars.size() - 1);
+            state.pendingArgumentFrames.remove(state.pendingArgumentFrames.size() - 1);
             state.pendingTransientOwnerKinds.remove(state.pendingTransientOwnerKinds.size() - 1);
         }
     }
@@ -2156,7 +1938,8 @@ public class MortalList {
                 RuntimeScalar owner = ownerRef == null ? null : ownerRef.get();
                 RuntimeBase pending = state.pending.get(i);
                 boolean directOwner = owner != null && owners.contains(owner);
-                boolean frameCopy = owner != null && owner.copiedFromArgumentFrame(argumentFrame);
+                boolean frameOwner = argumentFrame != null
+                        && state.pendingArgumentFrames.get(i) == argumentFrame;
                 boolean abandonedBirthTemporary = owner == null
                         && "bless mortal temporary".equals(state.pendingTransientOwnerKinds.get(i))
                         && args.elements.stream().anyMatch(argument -> argument != null
@@ -2169,7 +1952,7 @@ public class MortalList {
                 if (abandonedBirthTemporary && directlyReferences(returnedResult, pending)) {
                     continue;
                 }
-                if ((!directOwner && !frameCopy && !abandonedBirthTemporary)
+                if ((!directOwner && !frameOwner && !abandonedBirthTemporary)
                         || (owner == null && !abandonedBirthTemporary)) continue;
                 RuntimeBase.PendingOwnerRelease ownerRelease =
                         state.pendingOwnerReleases.get(i);
@@ -2177,6 +1960,7 @@ public class MortalList {
                 state.pending.remove(i);
                 state.pendingOwnerReleases.remove(i);
                 state.pendingOwnerScalars.remove(i);
+                state.pendingArgumentFrames.remove(i);
                 state.pendingTransientOwnerKinds.remove(i);
                 processDeferredBase(pending, true, ownerRelease, transientOwnerKind);
             }
@@ -2205,7 +1989,8 @@ public class MortalList {
     static void pushMark(LifecycleRuntimeState state) {
         if (!state.mortalActive) return;
         state.pushMortalMark(state.pending.size(), state.pendingTiedReleases.size(),
-                state.pendingIoReleases.size());
+                state.pendingIoReleases.size(),
+                state.pendingUntrackedReturnOwnerReleases.size());
     }
 
     /**
@@ -2242,10 +2027,9 @@ public class MortalList {
         if (state.flushing) return;
         boolean topLevel = !state.hasMortalMarks();
         if (state.pending.isEmpty() && state.pendingTiedReleases.isEmpty()
-                && state.pendingIoReleases.isEmpty()) {
+                && state.pendingIoReleases.isEmpty()
+                && state.pendingUntrackedReturnOwnerReleases.isEmpty()) {
             processReadyDeferredCaptures(state);
-            processUnreachableScopeExitCaptureCandidates(state);
-            maybeAutoSweepAtStatementBoundary(state, topLevel);
             refreshBoundaryWork(state);
             return;
         }
@@ -2254,11 +2038,12 @@ public class MortalList {
                 ? state.tiedReleaseMarks[state.markDepth - 1] : 0;
         int ioMark = state.hasMortalMarks()
                 ? state.ioReleaseMarks[state.markDepth - 1] : 0;
+        int untrackedReturnOwnerMark = state.hasMortalMarks()
+                ? state.untrackedReturnOwnerMarks[state.markDepth - 1] : 0;
         if (state.pending.size() <= mark && state.pendingTiedReleases.size() <= tiedMark
-                && state.pendingIoReleases.size() <= ioMark) {
+                && state.pendingIoReleases.size() <= ioMark
+                && state.pendingUntrackedReturnOwnerReleases.size() <= untrackedReturnOwnerMark) {
             processReadyDeferredCaptures(state);
-            processUnreachableScopeExitCaptureCandidates(state);
-            maybeAutoSweepAtStatementBoundary(state, topLevel);
             refreshBoundaryWork(state);
             return;
         }
@@ -2266,12 +2051,13 @@ public class MortalList {
         state.flushing = true;
         if (topLevel) state.topLevelFlushDepth++;
         try {
-            processDeferredEntriesFrom(mark, tiedMark, ioMark);
+            processDeferredEntriesFrom(mark, tiedMark, ioMark, untrackedReturnOwnerMark);
             // Remove only entries above the mark
             while (state.pending.size() > mark) {
                 state.pending.removeLast();
                 state.pendingOwnerReleases.removeLast();
                 state.pendingOwnerScalars.removeLast();
+                state.pendingArgumentFrames.removeLast();
                 state.pendingTransientOwnerKinds.removeLast();
             }
             while (state.pendingTiedReleases.size() > tiedMark) {
@@ -2280,14 +2066,15 @@ public class MortalList {
             while (state.pendingIoReleases.size() > ioMark) {
                 state.pendingIoReleases.removeLast();
             }
+            while (state.pendingUntrackedReturnOwnerReleases.size() > untrackedReturnOwnerMark) {
+                state.pendingUntrackedReturnOwnerReleases.removeLast();
+            }
         } finally {
             if (topLevel) state.topLevelFlushDepth--;
             state.flushing = false;
             invalidateDrainReachabilityCaches();
         }
         processReadyDeferredCaptures(state);
-        processUnreachableScopeExitCaptureCandidates(state);
-        maybeAutoSweepAtStatementBoundary(state, topLevel);
         refreshBoundaryWork(state);
     }
 
@@ -2314,26 +2101,26 @@ public class MortalList {
         int mark = state.marks[markIndex];
         int tiedMark = state.tiedReleaseMarks[markIndex];
         int ioMark = state.ioReleaseMarks[markIndex];
+        int untrackedReturnOwnerMark = state.untrackedReturnOwnerMarks[markIndex];
         if (state.pending.size() <= mark && state.pendingTiedReleases.size() <= tiedMark
-                && state.pendingIoReleases.size() <= ioMark) {
+                && state.pendingIoReleases.size() <= ioMark
+                && state.pendingUntrackedReturnOwnerReleases.size() <= untrackedReturnOwnerMark) {
             // Even if no mortal entries to process, check deferred captures
             // that may have become ready (captureCount reached 0) during
             // scope cleanup.
             processReadyDeferredCaptures(state);
-            processUnreachableScopeExitCaptureCandidates(state);
-            maybeSweepStatementBoundaryDestroyables();
-            maybeAutoSweepIfRequested(state);
-            finalizeDeferredCaptureSweepCandidates(state);
+            DestroyDispatch.processRescuedObjects();
             return;
         }
         invalidateDrainReachabilityCaches();
         // Process entries from mark onwards (DESTROY may add new entries)
-        processDeferredEntriesFrom(mark, tiedMark, ioMark);
+        processDeferredEntriesFrom(mark, tiedMark, ioMark, untrackedReturnOwnerMark);
         // Remove only the entries we processed (keep entries before mark)
         while (state.pending.size() > mark) {
             state.pending.removeLast();
             state.pendingOwnerReleases.removeLast();
             state.pendingOwnerScalars.removeLast();
+            state.pendingArgumentFrames.removeLast();
             state.pendingTransientOwnerKinds.removeLast();
         }
         while (state.pendingTiedReleases.size() > tiedMark) {
@@ -2342,13 +2129,13 @@ public class MortalList {
         while (state.pendingIoReleases.size() > ioMark) {
             state.pendingIoReleases.removeLast();
         }
+        while (state.pendingUntrackedReturnOwnerReleases.size() > untrackedReturnOwnerMark) {
+            state.pendingUntrackedReturnOwnerReleases.removeLast();
+        }
         invalidateDrainReachabilityCaches();
         // After processing mortals (which may have triggered releaseCaptures
         // via callDestroy), check if any deferred captures are now ready.
         processReadyDeferredCaptures(state);
-        processUnreachableScopeExitCaptureCandidates(state);
-        maybeSweepStatementBoundaryDestroyables();
-        maybeAutoSweepIfRequested(state);
-        finalizeDeferredCaptureSweepCandidates(state);
+        DestroyDispatch.processRescuedObjects();
     }
 }

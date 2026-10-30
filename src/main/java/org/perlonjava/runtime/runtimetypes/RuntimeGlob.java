@@ -635,6 +635,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 }
                 // Get or create the code ref container
                 RuntimeScalar codeContainer = GlobalVariable.defineGlobalCodeRef(codeSlotName);
+                RuntimeCode replacedStashCode = null;
 
                 // A non-local typeglob assignment is a redefinition for
                 // prototype purposes too.  Parser-time checks do not see
@@ -748,6 +749,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                     if (oldCode.stashRefCount > 0) {
                         oldCode.stashRefCount--;
                     }
+                    replacedStashCode = oldCode;
                 }
 
                 // A BEGIN-installed `sub () { $lexical }` becomes a constant
@@ -779,6 +781,9 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                     RuntimeGlob.attachCoderefToNamedGlob(newCode, this.globName);
                     newCode.hadStashRef = true;
                     newCode.stashRefCount++;
+                }
+                if (replacedStashCode != null) {
+                    replacedStashCode.noteStashOwnerReleased();
                 }
 
                 // Invalidate the method resolution cache
@@ -1952,23 +1957,17 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         }
         // Undefine CODE
         RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(this.globName);
-        RuntimeCode displacedCode = codeRef.value instanceof RuntimeCode code ? code : null;
-        boolean displacedCodeHadWalkableEdges = displacedCode != null
-                && ReachabilityWalker.hasWalkableCodeEdges(displacedCode, true);
+        RuntimeCode removedStashCode = codeRef.value instanceof RuntimeCode code
+                ? code : null;
         codeRef.set(new RuntimeScalar());
+        if (removedStashCode != null && removedStashCode.stashRefCount > 0) {
+            removedStashCode.stashRefCount--;
+            removedStashCode.noteStashOwnerReleased();
+        }
         // The CODE scalar can be pinned separately from the stash-map entry.
         // Undefining a whole glob must invalidate root indexes even when that
         // scalar was not marked as a package-global root itself.
         GlobalVariable.noteGlobalCodeRefSlotMutation(codeRef);
-        // A CODE-owned state variable can be the only strong Perl owner of an
-        // unblessed object with weak observers. Removing the glob drops that
-        // owner immediately in Perl, so clear weak observers before returning
-        // instead of waiting for a later statement-boundary sweep.
-        if (displacedCodeHadWalkableEdges
-                && WeakRefRegistry.weakRefsExist()
-                && !ModuleInitGuard.inModuleInit()) {
-            ReachabilityWalker.sweepWeakRefs(true);
-        }
 
         // Invalidate the method resolution cache
         InheritanceResolver.invalidateCache();
@@ -2156,6 +2155,8 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         }
         RuntimeScalar newCode = new RuntimeScalar();
         GlobalVariable.markPackageGlobalRoot(newCode);
+        // The saved GP owns its CV before the last visible name is replaced.
+        GlobalVariable.enterLocalizedCodeRef(this.globName, savedCode);
         // A localized whole-glob alias still addresses one temporary CODE
         // slot.  In particular, `*A = *Base::method; local *A = sub { ... }`
         // must make Base::method visible to MRO until the scope unwinds.
@@ -2168,6 +2169,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             if (savedCodeObj.stashRefCount > 0) {
                 savedCodeObj.stashRefCount--;
             }
+            savedCodeObj.noteStashOwnerReleased();
         }
         // Also redirect pinnedCodeRefs to the new empty code for the local scope.
         // Without this, getGlobalCodeRef() returns the saved (pinned) object, and
@@ -2176,7 +2178,6 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         for (String alias : codeAliasGroup) {
             GlobalVariable.replacePinnedCodeRef(alias, newCode);
         }
-        GlobalVariable.enterLocalizedCodeRef(this.globName, savedCode);
         GlobalVariable.getGlobalFormatRef(this.globName).dynamicSaveState();
 
         // Create a NEW RuntimeGlob for the local scope and install it in globalIORefs.
@@ -2302,11 +2303,14 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // have permanently overcounted refCount, preventing releaseCaptures
         // from firing at the right time.
         RuntimeScalar localCode = GlobalVariable.globalCodeRefs.get(snap.globName);
-        RuntimeCode removedLocalCodeForReachabilityCheck = null;
-        if (localCode != null && (localCode.type & REFERENCE_BIT) != 0 && localCode.value instanceof RuntimeBase localBase) {
+        RuntimeCode removedLocalCodeForStashRelease = null;
+        if (localCode != null && (localCode.type & REFERENCE_BIT) != 0
+                && localCode.value instanceof RuntimeBase localBase
+                && !(localBase instanceof RuntimeCode code && code.hasCountedCodeSlots)) {
             boolean removedLastStashRef = false;
             // Decrement stashRefCount on the local scope's CODE ref being removed
             if (localBase instanceof RuntimeCode localCodeObj) {
+                removedLocalCodeForStashRelease = localCodeObj;
                 if (localCodeObj.stashRefCount > 0) {
                     localCodeObj.stashRefCount--;
                     removedLastStashRef = localCodeObj.stashRefCount == 0;
@@ -2321,7 +2325,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             } else if (localBase instanceof RuntimeCode localCodeObj
                     && removedLastStashRef
                     && (localCodeObj.capturedScalars != null || localCodeObj.capturedAggregates != null)) {
-                removedLocalCodeForReachabilityCheck = localCodeObj;
+                removedLocalCodeForStashRelease = localCodeObj;
             }
         }
         for (var entry : snap.aliasedCodes.entrySet()) {
@@ -2333,18 +2337,13 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             }
         }
         GlobalVariable.invalidatePackageRootSnapshot();
-        if (removedLocalCodeForReachabilityCheck != null
-                && removedLocalCodeForReachabilityCheck.activeOwnerCount() == 0
-                && !ReachabilityWalker.isReachableFromLiveScalarRegistry(removedLocalCodeForReachabilityCheck)
-                && !ReachabilityWalker.isReachableFromLiveCodeCaptures(removedLocalCodeForReachabilityCheck)
-                && !ReachabilityWalker.isReachableFromRoots(removedLocalCodeForReachabilityCheck)) {
-            removedLocalCodeForReachabilityCheck.refCount = Integer.MIN_VALUE;
-            DestroyDispatch.callDestroy(removedLocalCodeForReachabilityCheck);
-        }
         // Increment stashRefCount on the restored CODE ref being put back in the stash
         if (snap.code != null && snap.code.value instanceof RuntimeCode restoredCode) {
             restoredCode.hadStashRef = true;
             restoredCode.stashRefCount++;
+        }
+        if (removedLocalCodeForStashRelease != null) {
+            removedLocalCodeForStashRelease.noteStashOwnerReleased();
         }
         // Also restore the pinned code ref so getGlobalCodeRef() returns the
         // original code object again.

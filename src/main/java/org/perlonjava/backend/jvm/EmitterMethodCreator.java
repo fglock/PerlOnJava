@@ -1114,7 +1114,39 @@ public class EmitterMethodCreator implements Opcodes {
                         "org/perlonjava/runtime/runtimetypes/PerlNonLocalReturnException");
                 Label notNonLocalReturn = new Label();
                 mv.visitJumpInsn(Opcodes.IFEQ, notNonLocalReturn);
-                mv.visitInsn(Opcodes.ATHROW);  // Re-throw PerlNonLocalReturnException
+                // Untargeted map/grep return belongs to this eval boundary.
+                // A targeted try/finally return continues to its containing CV.
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitTypeInsn(Opcodes.CHECKCAST,
+                        "org/perlonjava/runtime/runtimetypes/PerlNonLocalReturnException");
+                mv.visitFieldInsn(Opcodes.GETFIELD,
+                        "org/perlonjava/runtime/runtimetypes/PerlNonLocalReturnException",
+                        "targetCode", "Lorg/perlonjava/runtime/runtimetypes/RuntimeCode;");
+                Label targetedReturn = new Label();
+                mv.visitJumpInsn(Opcodes.IFNONNULL, targetedReturn);
+                mv.visitTypeInsn(Opcodes.CHECKCAST,
+                        "org/perlonjava/runtime/runtimetypes/PerlNonLocalReturnException");
+                java.util.List<Integer> returnCleanupLocals = evalCleanupLocals == null
+                        ? java.util.List.of() : new java.util.ArrayList<>(
+                                new java.util.LinkedHashSet<>(evalCleanupLocals));
+                mv.visitLdcInsn(returnCleanupLocals.size());
+                mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object");
+                for (int i = 0; i < returnCleanupLocals.size(); i++) {
+                    mv.visitInsn(Opcodes.DUP);
+                    mv.visitLdcInsn(i);
+                    mv.visitVarInsn(Opcodes.ALOAD, returnCleanupLocals.get(i));
+                    mv.visitInsn(Opcodes.AASTORE);
+                }
+                mv.visitVarInsn(Opcodes.ILOAD, 2);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                        "finishEvalCallbackReturn",
+                        "(Lorg/perlonjava/runtime/runtimetypes/PerlNonLocalReturnException;[Ljava/lang/Object;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;", false);
+                mv.visitVarInsn(Opcodes.ASTORE, returnListSlot);
+                emitEvalDepthDecrement(mv);
+                mv.visitJumpInsn(Opcodes.GOTO, endCatch);
+                mv.visitLabel(targetedReturn);
+                mv.visitInsn(Opcodes.ATHROW);
                 mv.visitLabel(notNonLocalReturn);
 
                 // Track eval depth for $^S: RuntimeCode.evalDepth--

@@ -6,7 +6,28 @@ priorities and future plans.
 
 ## Work in progress
 
+- Disable corrective sweeps by default while migrating to explicit reference ownership; retain temporary scalar call and mortal return values through their caller boundaries, and balance argument, scalar-cell, closure, aggregate, package scalar/array/hash roots, tied-handler, shared-view, named CODE, persistent state, and destructor lifetimes (#1649).
+- Use live scalar-owner slots to preserve nested untracked aggregates on first weaken, avoid package-root walks, and clear weak observers at final release (#1649).
+- Release tail-call arguments from explicit owner slots without a root-graph fallback (#1649).
+- Record uncounted value ownership for tracked referents held in package scalar cells (#1649).
+- Give borrowed scalar cells in live lexical aggregates owner identities for their strong values (#1649).
+- Preserve non-CODE weak referents directly from surviving uncounted owner slots when a scalar releases its last counted slot (#1649).
+- Release displaced localized CODE captures from active-frame and owner-slot identities, without scalar-registry or root-graph scans (#1649).
+- Defer zero-count cleanup for aggregates with surviving owner slots across scalar, deferred, and tail-call releases (#1649).
+- Preserve live uncounted scalar owner slots through referent promotion, and prune temporary-container slots at final release (#1649).
+- Avoid duplicate scalar reachability queries when a registered container proves a live CODE owner (#1649).
+- Use direct non-counted Perl owner slots to defer tail-call cleanup without a root walk; ignore temporary runtime roots (#1649).
+- Repair transient unblessed referent undercounts from verified array/hash element slots during overwrite and deferred cleanup, avoiding root walks (#1649).
+- Repair unblessed referent undercounts from captured scalar-cell owners only while a live closure owns the cell, in overwrite and deferred cleanup (#1649).
+- Release captures from a final scalar CODE owner using explicit owner identities instead of a root walk (#1649).
+- Release aggregate closure captures at scope exit from CODE owner identities, ignoring stale compatibility counts (#1649).
+- Track compiled regex callback CODE references with owner slots and release captures after the final callback owner leaves (#1649).
+- Repair unblessed referent undercounts from verified scalar and aggregate owner slots in immediate and deferred cleanup, without root snapshots (#1649).
+- Remove live-scalar-registry reachability from first-weaken, tail-call, and async-Future owner decisions.
+- Release weakly tracked referents from their final uncounted owner slot without a root walk.
 - Keep nested Rose::HTML::Objects form results alive with counted argument owners so weak parent links and qualified field names survive argument evaluation (#1851).
+- Preserve caller argument identity in @DB::args so borrowed debugger slots share source-cell cleanup instead of creating detached untracked references (#1649).
+- Keep weakly tracked referents alive while an explicit Perl owner slot remains; undef now retires only the released cell's identity (#1649).
 - Warn for undefined right operands of `.=` while keeping an undefined left operand quiet (#1382).
 - Fix bundled IO, nested launcher, locale, and core user/group database module compatibility.
 - Snapshot mutable array entries while marking package roots and during reachability walks so concurrent thread teardown cannot fail with `ConcurrentModificationException`.

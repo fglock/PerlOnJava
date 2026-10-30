@@ -386,9 +386,18 @@ public class Internals extends PerlModuleBase {
                 && code.capturedScalars != null) {
             for (int i = 0; i < code.capturedScalars.length; i++) {
                 if (code.capturedScalars[i] == previous) {
-                    scalar.retainClosureCapture();
-                    previous.releaseClosureCapture();
+                    PerlOwnerSlot replacementOwner = scalar.retainClosureCaptureSlot(code);
+                    PerlOwnerSlot[] ownerSlots = code.capturedScalarOwnerSlots;
+                    PerlOwnerSlot previousOwner = ownerSlots != null
+                                    && i < ownerSlots.length
+                            ? ownerSlots[i] : null;
+                    ((RuntimeScalar) previous).releaseClosureCaptureSlot(previousOwner);
                     code.capturedScalars[i] = scalar;
+                    if (ownerSlots == null || ownerSlots.length != code.capturedScalars.length) {
+                        ownerSlots = new PerlOwnerSlot[code.capturedScalars.length];
+                        code.capturedScalarOwnerSlots = ownerSlots;
+                    }
+                    ownerSlots[i] = replacementOwner;
                     return;
                 }
             }
@@ -399,7 +408,7 @@ public class Internals extends PerlModuleBase {
             for (int i = 0; i < code.capturedAggregates.length; i++) {
                 if (code.capturedAggregates[i] == previous) {
                     PerlOwnerSlot replacementOwner =
-                            replacement.retainClosureCaptureOwner();
+                            replacement.retainClosureCaptureOwner(code);
                     PerlOwnerSlot[] ownerSlots = code.capturedAggregateOwnerSlots;
                     PerlOwnerSlot previousOwner = ownerSlots != null
                                     && i < ownerSlots.length
@@ -416,8 +425,72 @@ public class Internals extends PerlModuleBase {
             }
         }
 
-        if (previous != null) previous.releaseClosureCapture();
-        replacement.retainClosureCapture();
+        if (previous instanceof RuntimeScalar previousScalar
+                && replacement instanceof RuntimeScalar replacementScalar) {
+            previousScalar.releaseClosureCapture();
+            appendScalarCapture(code, replacementScalar);
+            return;
+        }
+        if (previous != null && replacement != null) {
+            previous.releaseClosureCapture();
+            appendAggregateCapture(code, replacement);
+        }
+    }
+
+    private static void appendScalarCapture(RuntimeCode code, RuntimeScalar replacement) {
+        RuntimeScalar[] existing = code.capturedScalars == null
+                ? new RuntimeScalar[0] : code.capturedScalars;
+        PerlOwnerSlot[] existingSlots = code.capturedScalarOwnerSlots;
+        java.util.ArrayList<RuntimeScalar> captures = new java.util.ArrayList<>(
+                java.util.Arrays.asList(existing));
+        java.util.ArrayList<PerlOwnerSlot> slots = new java.util.ArrayList<>(existing.length);
+        for (int i = 0; i < existing.length; i++) {
+            PerlOwnerSlot slot = existingSlots != null && i < existingSlots.length
+                    ? existingSlots[i] : null;
+            if (slot == null || !slot.isActive()) {
+                RuntimeScalar captured = existing[i];
+                if (captured.captureCount > captured.ownerSlotCount(
+                        PerlOwnerSlot.Kind.SCALAR_CAPTURE)) {
+                    captured.releaseClosureCapture();
+                }
+                slot = captured.retainClosureCaptureSlot(code);
+            }
+            slots.add(slot);
+        }
+        if (!captures.contains(replacement)) {
+            captures.add(replacement);
+            slots.add(replacement.retainClosureCaptureSlot(code));
+        }
+        code.capturedScalars = captures.toArray(new RuntimeScalar[0]);
+        code.capturedScalarOwnerSlots = slots.toArray(new PerlOwnerSlot[0]);
+    }
+
+    private static void appendAggregateCapture(RuntimeCode code, RuntimeBase replacement) {
+        RuntimeBase[] existing = code.capturedAggregates == null
+                ? new RuntimeBase[0] : code.capturedAggregates;
+        PerlOwnerSlot[] existingSlots = code.capturedAggregateOwnerSlots;
+        java.util.ArrayList<RuntimeBase> captures = new java.util.ArrayList<>(
+                java.util.Arrays.asList(existing));
+        java.util.ArrayList<PerlOwnerSlot> slots = new java.util.ArrayList<>(existing.length);
+        for (int i = 0; i < existing.length; i++) {
+            PerlOwnerSlot slot = existingSlots != null && i < existingSlots.length
+                    ? existingSlots[i] : null;
+            if (slot == null || !slot.isActive()) {
+                RuntimeBase captured = existing[i];
+                if (captured.captureCount > captured.ownerSlotCount(
+                        PerlOwnerSlot.Kind.CLOSURE_PAD)) {
+                    captured.releaseClosureCapture();
+                }
+                slot = captured.retainClosureCaptureOwner(code);
+            }
+            slots.add(slot);
+        }
+        if (!captures.contains(replacement)) {
+            captures.add(replacement);
+            slots.add(replacement.retainClosureCaptureOwner(code));
+        }
+        code.capturedAggregates = captures.toArray(new RuntimeBase[0]);
+        code.capturedAggregateOwnerSlots = slots.toArray(new PerlOwnerSlot[0]);
     }
 
     /**
@@ -492,12 +565,20 @@ public class Internals extends PerlModuleBase {
         if (base != null) {
             int rc = base.refCount;
             if (rc == Integer.MIN_VALUE) return new RuntimeScalar(0).getList();
-            int nativeCaptureOwners = base.nativeCaptureOwnerCount();
+            boolean compileHintsHash = base == GlobalVariable.getGlobalHash(
+                    GlobalContext.encodeSpecialVar("H"));
+            int nativeOwners = base.nativeOwnerSlotCount();
+            if (compileHintsHash) {
+                // The package-root identity records the strong table edge for
+                // lifecycle cleanup, but Perl's SvREFCNT helper deliberately
+                // hides this special global slot from the reported count.
+                nativeOwners -= base.ownerSlotCount(PerlOwnerSlot.Kind.PACKAGE_AGGREGATE_SLOT);
+            }
             if (rc < 0) {
-                if (nativeCaptureOwners == 0) return new RuntimeScalar(1).getList(); // untracked
-                rc = nativeCaptureOwners;
+                if (nativeOwners == 0) return new RuntimeScalar(1).getList(); // untracked
+                rc = nativeOwners;
             } else {
-                rc += nativeCaptureOwners;
+                rc += nativeOwners;
             }
             // An ampersand-style call may pass a weak qr// scalar directly
             // (qr-72922's refcount_is helper does this).  The call-frame alias
@@ -541,8 +622,6 @@ public class Internals extends PerlModuleBase {
             // runtime, but Perl's core refcount helper does not expose that
             // bookkeeping slot as a lexical pad owner. Its helper also
             // compensates for the ampersand-call argument alias below.
-            boolean compileHintsHash = base == GlobalVariable.getGlobalHash(
-                    GlobalContext.encodeSpecialVar("H"));
             int extra = (base.localBindingExists && !compileHintsHash ? 1 : 0)
                     + base.foreachAliasCount;
             if (rc == 2
@@ -695,29 +774,14 @@ public class Internals extends PerlModuleBase {
         return new RuntimeScalar("NOT_REF").getList();
     }
 
-    /**
-     * Phase 4 (refcount_alignment_plan.md): Run a reachability sweep from
-     * Perl roots (globals, rescued objects) and clear weak refs for
-     * unreachable objects. Returns the number of weak refs cleared. This
-     * is jperl-only; under native Perl it should be treated as a no-op.
-     */
+    /** Compatibility stub: PerlOnJava uses owner release, not a reachability sweep. */
     public static RuntimeList jperl_gc(RuntimeArray args, int ctx) {
-        // Two passes: the first pass fires DESTROY on unreachable
-        // objects, which may break circular refs and make more objects
-        // unreachable. The second pass catches those cascades.
-        int cleared = ReachabilityWalker.sweepWeakRefs();
-        int secondPass = ReachabilityWalker.sweepWeakRefs();
-        return new RuntimeScalar(cleared + secondPass).getList();
+        return new RuntimeScalar(0).getList();
     }
 
-    /**
-     * Quiet statement-boundary sweep. Unlike jperl_gc(), this does not drain
-     * rescued DBIC-style objects before END-time cleanup.
-     */
+    /** Compatibility stub for the removed quiet reachability sweep. */
     public static RuntimeList jperl_gc_quiet(RuntimeArray args, int ctx) {
-        int cleared = ReachabilityWalker.sweepWeakRefs(true);
-        int secondPass = ReachabilityWalker.sweepWeakRefs(true);
-        return new RuntimeScalar(cleared + secondPass).getList();
+        return new RuntimeScalar(0).getList();
     }
 
     /**
@@ -729,18 +793,9 @@ public class Internals extends PerlModuleBase {
         return new RuntimeScalar(0).getList();
     }
 
-    /**
-     * Reconcile destroyable objects that require deterministic DESTROY side
-     * effects but are not weak-ref referents, without clearing arbitrary weak
-     * refs and without forcing HotSpot GC. Used by DBI statement polling to
-     * match Perl's cursor DESTROY/finish timing.
-     */
+    /** Compatibility stub: destroyable objects are released through their owners. */
     public static RuntimeList jperl_sweep_destroyables_no_jvm_gc(RuntimeArray args, int ctx) {
-        int destroyed = ReachabilityWalker.sweepDestroyableObjects(false);
-        if (destroyed > 0) {
-            destroyed += ReachabilityWalker.sweepDestroyableObjects(false);
-        }
-        return new RuntimeScalar(destroyed).getList();
+        return new RuntimeScalar(0).getList();
     }
 
     /**

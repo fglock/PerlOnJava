@@ -225,6 +225,7 @@ public class ReferenceOperators {
                     referent.refCount = 1;
                     referent.recordOwner(runtimeScalar, "rebless from untracked");
                     runtimeScalar.refCountOwned = true;
+                    referent.recordActiveOwner(runtimeScalar);
                 } else {
                     // First bless: start at refCount=1 and add to MortalList.
                     // The mortal entry will decrement back to 0 at the next
@@ -258,6 +259,7 @@ public class ReferenceOperators {
                     if (existingScalarOwner) {
                         referent.recordOwner(runtimeScalar, "first bless of existing scalar ref");
                         runtimeScalar.refCountOwned = true;
+                        referent.recordActiveOwner(runtimeScalar);
                     }
                     referent.acquireTransientTraceOwner("bless mortal temporary",
                             "ReferenceOperators.first bless");

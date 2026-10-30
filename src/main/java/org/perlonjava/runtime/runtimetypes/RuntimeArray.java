@@ -190,7 +190,12 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     void restoreRegexMutationState(Object token) {
         if (!(token instanceof RegexMutationState state)) return;
         deferElementsAddedSince(state.elements);
+        List<RuntimeScalar> replaced = new ArrayList<>(elements);
         elements = newElementList(state.elements);
+        for (RuntimeScalar value : replaced) {
+            if (value != null) value.reconcileContainerOwnerAfterMutation(this);
+        }
+        refreshUntrackedElementOwners();
         type = state.type;
         strictAutovivify = state.strictAutovivify;
         scalarContextSize = state.scalarContextSize;
@@ -245,9 +250,12 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             }
             owner.noteIsaMutation();
             owner.notePackageRootMutation(null, value);
-            if (value != null) value.markContainerOwner(owner);
-            owner.markPackageRootedValue(value);
             boolean changed = super.add(value);
+            if (changed) {
+                if (value != null) value.markContainerOwner(owner);
+                owner.markPackageRootedValue(value);
+                refreshStoredUntrackedOwner(value);
+            }
             owner.validateIsaMutation();
             return changed;
         }
@@ -260,9 +268,10 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             }
             owner.noteIsaMutation();
             owner.notePackageRootMutation(null, element);
+            super.add(index, element);
             if (element != null) element.markContainerOwner(owner);
             owner.markPackageRootedValue(element);
-            super.add(index, element);
+            refreshStoredUntrackedOwner(element);
             owner.validateIsaMutation();
         }
 
@@ -271,11 +280,14 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             if (!owner.threadShared) {
                 if (!c.isEmpty()) owner.noteIsaMutation();
                 owner.notePackageRootMutationIf(owner.hasRootEdge(c));
-                for (RuntimeScalar value : c) {
-                    if (value != null) value.markContainerOwner(owner);
-                    owner.markPackageRootedValue(value);
-                }
                 boolean changed = super.addAll(c);
+                if (changed) {
+                    for (RuntimeScalar value : c) {
+                        if (value != null) value.markContainerOwner(owner);
+                        owner.markPackageRootedValue(value);
+                        refreshStoredUntrackedOwner(value);
+                    }
+                }
                 if (changed) owner.validateIsaMutation();
                 return changed;
             }
@@ -292,11 +304,14 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             if (!owner.threadShared) {
                 if (!c.isEmpty()) owner.noteIsaMutation();
                 owner.notePackageRootMutationIf(owner.hasRootEdge(c));
-                for (RuntimeScalar value : c) {
-                    if (value != null) value.markContainerOwner(owner);
-                    owner.markPackageRootedValue(value);
-                }
                 boolean changed = super.addAll(index, c);
+                if (changed) {
+                    for (RuntimeScalar value : c) {
+                        if (value != null) value.markContainerOwner(owner);
+                        owner.markPackageRootedValue(value);
+                        refreshStoredUntrackedOwner(value);
+                    }
+                }
                 if (changed) owner.validateIsaMutation();
                 return changed;
             }
@@ -318,19 +333,55 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             }
             owner.noteIsaMutation();
             owner.notePackageRootMutation(previous, element);
+            RuntimeScalar result = super.set(index, element);
             if (element != null) element.markContainerOwner(owner);
             owner.markPackageRootedValue(element);
-            RuntimeScalar result = super.set(index, element);
+            refreshStoredUntrackedOwner(element);
+            if (previous != element) {
+                if (previous != null) {
+                    previous.reconcileContainerOwnerAfterMutation(owner);
+                }
+                RuntimeCode.argumentArraySlotRemoved(owner, previous);
+            }
             owner.validateIsaMutation();
             return result;
+        }
+
+        private void refreshStoredUntrackedOwner(RuntimeScalar value) {
+            // Copy construction populates a replacement list before assigning
+            // it to owner.elements. Defer refresh until this list is installed.
+            if (value != null && owner.elements == this) {
+                if (owner.isPackageGlobalRoot) {
+                    value.markPrepopulatedPackageAggregateOwner(owner);
+                }
+                value.refreshUntrackedReferenceOwner();
+            }
         }
 
         @Override
         public RuntimeScalar remove(int index) {
             RuntimeScalar previous = super.remove(index);
+            if (previous != null) previous.reconcileContainerOwnerAfterMutation(owner);
             owner.noteIsaMutation();
             owner.notePackageRootMutation(previous, null);
             owner.validateIsaMutation();
+            RuntimeCode.argumentArraySlotRemoved(owner, previous);
+            return previous;
+        }
+
+        @Override
+        public RuntimeScalar removeFirst() {
+            RuntimeScalar previous = super.removeFirst();
+            if (previous != null) previous.reconcileContainerOwnerAfterMutation(owner);
+            RuntimeCode.argumentArraySlotRemoved(owner, previous);
+            return previous;
+        }
+
+        @Override
+        public RuntimeScalar removeLast() {
+            RuntimeScalar previous = super.removeLast();
+            if (previous != null) previous.reconcileContainerOwnerAfterMutation(owner);
+            RuntimeCode.argumentArraySlotRemoved(owner, previous);
             return previous;
         }
 
@@ -338,9 +389,11 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         public boolean remove(Object o) {
             boolean removed = super.remove(o);
             if (removed && o instanceof RuntimeScalar scalar) {
+                scalar.reconcileContainerOwnerAfterMutation(owner);
                 owner.noteIsaMutation();
                 owner.notePackageRootMutation(scalar, null);
                 owner.validateIsaMutation();
+                RuntimeCode.argumentArraySlotRemoved(owner, scalar);
             }
             return removed;
         }
@@ -348,11 +401,82 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         @Override
         public void clear() {
             if (!isEmpty()) {
+                RuntimeScalar[] removed = toArray(new RuntimeScalar[0]);
                 owner.noteIsaMutation();
                 owner.notePackageRootClear(this);
+                for (RuntimeScalar scalar : removed) {
+                    RuntimeCode.argumentArraySlotRemoved(owner, scalar);
+                }
+                super.clear();
+                for (RuntimeScalar scalar : removed) {
+                    if (scalar != null) scalar.reconcileContainerOwnerAfterMutation(owner);
+                }
+                owner.validateIsaMutation();
+                return;
             }
             super.clear();
             owner.validateIsaMutation();
+        }
+
+        @Override
+        protected void removeRange(int fromIndex, int toIndex) {
+            List<RuntimeScalar> removed = new ArrayList<>(subList(fromIndex, toIndex));
+            for (int i = fromIndex; i < toIndex; i++) {
+                RuntimeCode.argumentArraySlotRemoved(owner, get(i));
+            }
+            super.removeRange(fromIndex, toIndex);
+            for (RuntimeScalar scalar : removed) {
+                if (scalar != null) scalar.reconcileContainerOwnerAfterMutation(owner);
+            }
+        }
+
+        @Override
+        public boolean removeIf(java.util.function.Predicate<? super RuntimeScalar> filter) {
+            Objects.requireNonNull(filter);
+            boolean changed = false;
+            Iterator<RuntimeScalar> iterator = iterator();
+            while (iterator.hasNext()) {
+                RuntimeScalar removed = iterator.next();
+                if (filter.test(removed)) {
+                    iterator.remove();
+                    if (removed != null) removed.reconcileContainerOwnerAfterMutation(owner);
+                    changed = true;
+                }
+            }
+            return changed;
+        }
+
+        @Override
+        public boolean removeAll(java.util.Collection<?> values) {
+            Objects.requireNonNull(values);
+            return removeMatching(values, false);
+        }
+
+        @Override
+        public boolean retainAll(java.util.Collection<?> values) {
+            Objects.requireNonNull(values);
+            return removeMatching(values, true);
+        }
+
+        private boolean removeMatching(java.util.Collection<?> values, boolean retainMatches) {
+            java.util.List<?> membership = new ArrayList<>(values);
+            boolean changed = false;
+            for (int index = size() - 1; index >= 0; index--) {
+                RuntimeScalar value = get(index);
+                if (membership.contains(value) != retainMatches) {
+                    remove(index);
+                    changed = true;
+                }
+            }
+            return changed;
+        }
+
+        @Override
+        public void replaceAll(java.util.function.UnaryOperator<RuntimeScalar> operator) {
+            Objects.requireNonNull(operator);
+            for (int i = 0; i < size(); i++) {
+                set(i, operator.apply(get(i)));
+            }
         }
     }
 
@@ -395,6 +519,11 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 second = element;
                 result = previous;
             }
+            if (element != null) element.markContainerOwner(owner);
+            owner.markPackageRootedValue(element);
+            if (previous != element && previous != null) {
+                previous.reconcileContainerOwnerAfterMutation(owner);
+            }
             owner.validateIsaMutation();
             return result;
         }
@@ -424,6 +553,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 first = null;
                 second = null;
             }
+            if (element != null) element.markContainerOwner(owner);
+            owner.markPackageRootedValue(element);
             modCount++;
             owner.validateIsaMutation();
         }
@@ -447,12 +578,12 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             }
             owner.noteIsaMutation();
             owner.notePackageRootMutationIf(owner.hasRootEdge(source));
+            int insertionIndex = index;
+            for (RuntimeScalar value : source) addRaw(insertionIndex++, value);
             for (RuntimeScalar value : source) {
                 if (value != null) value.markContainerOwner(owner);
                 owner.markPackageRootedValue(value);
             }
-            int insertionIndex = index;
-            for (RuntimeScalar value : source) addRaw(insertionIndex++, value);
             modCount++;
             owner.validateIsaMutation();
             return true;
@@ -496,6 +627,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 inlineSize--;
             }
             modCount++;
+            if (previous != null) previous.reconcileContainerOwnerAfterMutation(owner);
             owner.noteIsaMutation();
             owner.notePackageRootMutation(previous, null);
             owner.validateIsaMutation();
@@ -505,6 +637,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         @Override
         public void clear() {
             if (isEmpty()) return;
+            List<RuntimeScalar> removed = new ArrayList<>();
+            for (int i = 0; i < size(); i++) removed.add(get(i));
             owner.noteIsaMutation();
             owner.notePackageRootClear(this);
             if (expanded != null) expanded.clear();
@@ -512,6 +646,9 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             second = null;
             inlineSize = 0;
             modCount++;
+            for (RuntimeScalar scalar : removed) {
+                if (scalar != null) scalar.reconcileContainerOwnerAfterMutation(owner);
+            }
             owner.validateIsaMutation();
         }
 
@@ -522,8 +659,6 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             }
             owner.noteIsaMutation();
             owner.notePackageRootMutation(previous, element);
-            if (element != null) element.markContainerOwner(owner);
-            owner.markPackageRootedValue(element);
         }
     }
 
@@ -590,15 +725,31 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     }
 
     void markPackageRootedValue(RuntimeScalar value) {
-        if (isPackageGlobalRoot && value != null) {
+        if (isPackageGlobalRoot && !elementsAliased && value != null) {
             value.isPackageGlobalRoot = true;
+            value.markContainerOwner(this);
+            if (value.value instanceof RuntimeBase referent) {
+                referent.storedInPackageGlobal = true;
+            }
         }
     }
 
     private void markPackageRootedValues(int fromIndex) {
         if (!isPackageGlobalRoot) return;
         for (int i = Math.max(0, fromIndex); i < elements.size(); i++) {
-            markPackageRootedValue(elements.get(i));
+            RuntimeScalar value = elements.get(i);
+            markPackageRootedValue(value);
+            if (value != null) {
+                value.markPrepopulatedPackageAggregateOwner(this);
+                value.refreshUntrackedReferenceOwner();
+            }
+        }
+    }
+
+    private void refreshUntrackedElementOwners() {
+        if (elements == null) return;
+        for (RuntimeScalar value : elements) {
+            if (value != null) value.reconcileContainerOwnerAfterMutation(this);
         }
     }
 
@@ -615,6 +766,17 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         if (!elementsOwned || scalar == null) return false;
         if (!elementsAliased) return true;
         return ownedAliasElements != null && ownedAliasElements.contains(scalar);
+    }
+
+    /** Whole-array replacement releases owned SVs, preserving borrowed caller cells. */
+    private void deferOwnedElementReleases() {
+        if (!elementsAliased) {
+            MortalList.deferDestroyForContainerClear(elements);
+        } else if (ownedAliasElements != null) {
+            MortalList.deferDestroyForContainerClear(new ArrayList<>(ownedAliasElements));
+            ownedAliasElements = null;
+            elementsOwned = false;
+        }
     }
 
     public void forgetOwnedAliasElement(RuntimeScalar scalar) {
@@ -638,6 +800,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      */
     public RuntimeArray(List<RuntimeScalar> list) {
         this.elements = newElementList(list);
+        refreshUntrackedElementOwners();
     }
 
     public RuntimeArray(RuntimeBase... values) {
@@ -695,13 +858,12 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                     // so its elements must NOT be mortal-ized on shift/pop — doing so
                     // would corrupt the caller's refCount tracking.
                     if (runtimeArray.ownsElement(result) && result.refCountOwned
-                            && (result.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                            && ((result.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                                || result.type == RuntimeScalarType.GLOB)
                             && result.value instanceof RuntimeBase base
                             && base.refCount > 0) {
                         result.refCountOwned = false;
                         runtimeArray.forgetOwnedAliasElement(result);
-                        base.releaseActiveOwner(result);
-                        MortalList.requestWeakSweepsForDestroyedContainer(base);
                         MortalList.deferDecrementFromArraySlot(
                                 base, result, "RuntimeArray.pop");
                     }
@@ -738,13 +900,12 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                     // If this element owned a refCount, defer the decrement.
                     // See pop() for rationale and elementsOwned guard.
                     if (runtimeArray.ownsElement(result) && result.refCountOwned
-                            && (result.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                            && ((result.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                                || result.type == RuntimeScalarType.GLOB)
                             && result.value instanceof RuntimeBase base
                             && base.refCount > 0) {
                         result.refCountOwned = false;
                         runtimeArray.forgetOwnedAliasElement(result);
-                        base.releaseActiveOwner(result);
-                        MortalList.requestWeakSweepsForDestroyedContainer(base);
                         MortalList.deferDecrementFromArraySlot(
                                 base, result, "RuntimeArray.shift");
                     }
@@ -1597,7 +1758,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         }
         this.eachIteratorIndex = null;
         notePackageRootMutation();
-        MortalList.deferDestroyForContainerClear(this.elements);
+        this.deferOwnedElementReleases();
         this.elements.clear();
         this.ownedAliasElements = null;
         this.elementsAliased = false;
@@ -1630,7 +1791,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 }
 
                 int originalSize = this.elements.size();
-                MortalList.deferDestroyForContainerClear(this.elements);
+                this.deferOwnedElementReleases();
                 if (needsCopy) {
                     // Make a defensive copy of the list before clearing
                     RuntimeList listCopy = new RuntimeList();
@@ -1737,7 +1898,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      * Behavior:
      * <ol>
      *   <li>Defer-decrement any existing counted elements (like normal {@code setFromList}).</li>
-     *   <li>Copy new elements in without incrementing their referents' refCounts.</li>
+     *   <li>Store the source scalar cells directly, without creating new ref owners.</li>
      *   <li>Mark {@code elementsOwned=false} so {@link #shift(RuntimeArray)}
      *       and other removal paths don't defer a spurious decrement.</li>
      * </ol>
@@ -1750,19 +1911,23 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         }
         this.eachIteratorIndex = null;
         notePackageRootMutation();
-        MortalList.deferDestroyForContainerClear(this.elements);
+        this.deferOwnedElementReleases();
         this.elements.clear();
-        list.addToArray(this);
-        // Elements are aliases: mark as non-owning. setLarge in later
-        // overwrites will still work correctly because setLarge checks
-        // refCountOwned before decrementing.
-        for (RuntimeScalar elem : this.elements) {
-            if (elem != null) elem.refCountOwned = false;
-            markPackageRootedValue(elem);
-        }
-        this.elementsOwned = false;
+        // This array is a view of existing SV cells. Preserve their identity
+        // so updates and source-cell cleanup are visible through the alias;
+        // copying each scalar here creates an extra untracked reference owner
+        // whose lifetime can outlast the source argument slot.
         this.elementsAliased = true;
+        this.elementsOwned = false;
         this.ownedAliasElements = null;
+        for (RuntimeBase value : list.elements) {
+            if (value instanceof RuntimeScalar scalar) {
+                this.elements.add(scalar);
+            } else if (value != null) {
+                value.addToArray(this);
+            }
+        }
+        list.elements.clear();
         return this;
     }
 
@@ -1779,7 +1944,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         RuntimeArray references = new RuntimeArray();
         references.setFromList(list);
         notePackageRootMutation();
-        MortalList.deferDestroyForContainerClear(this.elements);
+        this.deferOwnedElementReleases();
         this.elements.clear();
         for (RuntimeScalar reference : references.elements) {
             // This is refaliasing, not an ordinary dereference.  In
@@ -2365,7 +2530,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         }
         notePackageRootMutation();
         markScalarLocalContainerCleared();
-        MortalList.deferDestroyForContainerClear(this.elements);
+        this.deferOwnedElementReleases();
         if (elementSlotsAliasedIntoCallFrame) {
             for (RuntimeScalar element : this.elements) {
                 if (element != null
@@ -2509,7 +2674,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             // Without this, `local @_ = ($obj)` where $obj is tracked would
             // leak refCounts because the local elements are replaced without
             // ever going through scopeExitCleanup.
-            MortalList.deferDestroyForContainerClear(this.elements);
+            this.deferOwnedElementReleases();
             // Real Perl semantics: `local @arr` creates a fresh temporary AV
             // for the scope; `bless \@arr, 'X'` blesses that temporary; at
             // local-restore, the temporary is freed and DESTROY fires for
@@ -2540,6 +2705,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 this.elements = previousState.elements;
             } else {
                 this.elements = newElementList(previousState.elements);
+                refreshUntrackedElementOwners();
+                previousState.elements.clear();
             }
             markPackageRootedValues(0);
             // Restore the type from the saved state (important for tied arrays)
@@ -2568,6 +2735,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             this.blessId = activeState.blessId;
             this.scalarContextSize = activeState.scalarContextSize;
             this.elements.addAll(activeState.elements);
+            activeState.elements.clear();
         }
     }
 

@@ -1089,6 +1089,13 @@ public class Dereference {
                         "(I)Lorg/perlonjava/runtime/runtimetypes/RuntimeCode$CallArguments;", false);
                 mv.visitVarInsn(Opcodes.ASTORE, argsArraySlot);
 
+                // Argument evaluation can throw before the RuntimeCode call
+                // wrapper gets a chance to finish this staging frame.
+                Label argumentsStart = new Label();
+                Label argumentsEnd = new Label();
+                Label argumentsFailure = new Label();
+                Label argumentsReady = new Label();
+                mv.visitLabel(argumentsStart);
                 for (int index = 0; index < argCount; index++) {
                     int argSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
                     boolean pooledArg = argSlot >= 0;
@@ -1102,6 +1109,20 @@ public class Dereference {
                             "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)V", false);
                     if (pooledArg) emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
                 }
+                mv.visitLabel(argumentsEnd);
+                mv.visitJumpInsn(Opcodes.GOTO, argumentsReady);
+                mv.visitLabel(argumentsFailure);
+                // Keep the original throwable on the operand stack while
+                // releasing only this call's acquired argument owners.
+                mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
+                mv.visitInsn(Opcodes.SWAP);
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeCode$CallArguments", "abandon",
+                        "(Ljava/lang/Throwable;)Ljava/lang/Throwable;", false);
+                mv.visitInsn(Opcodes.ATHROW);
+                mv.visitLabel(argumentsReady);
+                // Register after the body so inner eval handlers take priority.
+                mv.visitTryCatchBlock(argumentsStart, argumentsEnd, argumentsFailure, null);
             }
 
             // The call context is NOT stored in a local slot (see EmitSubroutine.java comment for why:

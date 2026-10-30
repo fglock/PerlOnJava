@@ -47,7 +47,10 @@ public class AutovivificationArray extends ArrayList<RuntimeScalar> {
 
             RuntimeScalar referent = arrayProxy.scalarToAutovivify;
             if (referent instanceof RuntimeBaseProxy proxy) {
-                proxy.set(array.createReference());
+                // This array is owned through the scalar slot being
+                // autovivified.  It has no separate named @array binding;
+                // the scalar slot's counted owner keeps it alive.
+                proxy.set(array.createAnonymousReference());
             } else {
                 referent.value = array;
                 referent.type = RuntimeScalarType.ARRAYREFERENCE;

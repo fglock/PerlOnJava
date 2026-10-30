@@ -24,6 +24,9 @@ final class LifecycleRuntimeState {
     // Parallel to pending.  Weak provenance permits a tail-call handoff to
     // drain only the decrement whose owning argument it actually replaces.
     final ArrayList<java.lang.ref.WeakReference<RuntimeScalar>> pendingOwnerScalars = new ArrayList<>();
+    // Parallel to pending. Captured when a scalar decrement is queued so a
+    // tail-call handoff can match its source argument frame by identity.
+    final ArrayList<Object> pendingArgumentFrames = new ArrayList<>();
     // Parallel to pending. A non-scalar transient owner kind is recorded only
     // for trace attribution; it never changes runtime reachability.
     final ArrayList<String> pendingTransientOwnerKinds = new ArrayList<>();
@@ -31,6 +34,7 @@ final class LifecycleRuntimeState {
             new ArrayList<>();
     final ArrayList<TiedVariableBase> pendingTiedReleases = new ArrayList<>();
     final ArrayList<RuntimeScalar> pendingIoReleases = new ArrayList<>();
+    final ArrayList<RuntimeScalar> pendingUntrackedReturnOwnerReleases = new ArrayList<>();
     final ArrayList<RuntimeScalar> deferredCaptures = new ArrayList<>();
     final IdentityHashMap<RuntimeScalar, Integer> deferredCapturesSet = new IdentityHashMap<>();
     final Set<RuntimeScalar> deferredScopeExitCaptureCandidates =
@@ -45,22 +49,14 @@ final class LifecycleRuntimeState {
     int[] marks = new int[INITIAL_MARK_CAPACITY];
     int[] tiedReleaseMarks = new int[INITIAL_MARK_CAPACITY];
     int[] ioReleaseMarks = new int[INITIAL_MARK_CAPACITY];
+    int[] untrackedReturnOwnerMarks = new int[INITIAL_MARK_CAPACITY];
     int markDepth;
     boolean flushing;
     int reachabilityDrainDepth;
     int topLevelFlushDepth;
-    // Start within the configured quiet-sweep throttle window. A zero value
-    // would trigger a full root walk at the first statement boundary, often
-    // between callbacks that are expected to dispatch together.
-    long lastAutoSweepNanos = System.nanoTime();
-    boolean inAutoSweep;
     /** Suppress sweeps while clone hooks and the first child entry build Perl roots. */
     int weakSweepSuppressionDepth;
     boolean immediateWeakSweepRequested;
-    boolean deferCaptureReachabilityToBoundarySweep;
-    final ArrayList<RuntimeBase> deferredCaptureSweepCandidates = new ArrayList<>();
-    long boundaryWeakSweepGeneration;
-    long deferredCaptureSweepGeneration;
     final Set<RuntimeBase> targetedWeakSweepReferents =
             Collections.newSetFromMap(new IdentityHashMap<>());
     Set<RuntimeBase> flushReachableCache;
@@ -79,16 +75,19 @@ final class LifecycleRuntimeState {
             weakSweepRootWitnesses = new IdentityHashMap<>();
     ReachabilityQueryStats activeReachabilityQueryStats;
 
-    void pushMortalMark(int pendingSize, int tiedReleaseSize, int ioReleaseSize) {
+    void pushMortalMark(int pendingSize, int tiedReleaseSize, int ioReleaseSize,
+                        int untrackedReturnOwnerReleaseSize) {
         if (markDepth == marks.length) {
             int capacity = marks.length * 2;
             marks = Arrays.copyOf(marks, capacity);
             tiedReleaseMarks = Arrays.copyOf(tiedReleaseMarks, capacity);
             ioReleaseMarks = Arrays.copyOf(ioReleaseMarks, capacity);
+            untrackedReturnOwnerMarks = Arrays.copyOf(untrackedReturnOwnerMarks, capacity);
         }
         marks[markDepth] = pendingSize;
         tiedReleaseMarks[markDepth] = tiedReleaseSize;
         ioReleaseMarks[markDepth] = ioReleaseSize;
+        untrackedReturnOwnerMarks[markDepth] = untrackedReturnOwnerReleaseSize;
         markDepth++;
     }
 
@@ -139,9 +138,14 @@ final class LifecycleRuntimeState {
         pending.clear();
         pendingOwnerReleases.clear();
         pendingOwnerScalars.clear();
+        pendingArgumentFrames.clear();
         pendingTransientOwnerKinds.clear();
         pendingTiedReleases.clear();
         pendingIoReleases.clear();
+        for (RuntimeScalar scalar : pendingUntrackedReturnOwnerReleases) {
+            if (scalar != null) scalar.releaseMortalReturnValueOwner();
+        }
+        pendingUntrackedReturnOwnerReleases.clear();
         deferredCaptures.clear();
         deferredCapturesSet.clear();
         deferredScopeExitCaptureCandidates.clear();
@@ -155,17 +159,11 @@ final class LifecycleRuntimeState {
         flushing = false;
         reachabilityDrainDepth = 0;
         topLevelFlushDepth = 0;
-        lastAutoSweepNanos = System.nanoTime();
-        inAutoSweep = false;
         fullRootSnapshot = null;
         unblessedAggregateRootSnapshot = null;
         weakSweepRootWitnesses.clear();
         activeReachabilityQueryStats = null;
         immediateWeakSweepRequested = false;
-        deferCaptureReachabilityToBoundarySweep = false;
-        deferredCaptureSweepCandidates.clear();
-        boundaryWeakSweepGeneration = 0;
-        deferredCaptureSweepGeneration = 0;
         targetedWeakSweepReferents.clear();
         flushReachableCache = null;
         flushTiedReachableCache = null;
@@ -194,4 +192,5 @@ final class LifecycleRuntimeState {
         scalarRegistry.clear();
         scalarRegisterStacks.clear();
     }
+
 }

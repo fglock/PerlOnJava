@@ -384,9 +384,16 @@ test {
 // Provider we already record as an input so configuration-cache invalidation
 // stays correct when the env var changes between invocations.
 def jperlTestFilterProp = providers.environmentVariable('JPERL_TEST_FILTER').orElse('')
+def jperlEnableCorrectiveSweeps = providers.environmentVariable('JPERL_ENABLE_CORRECTIVE_SWEEPS').orElse('')
+def jperlDisableCorrectiveSweeps = providers.environmentVariable('JPERL_DISABLE_CORRECTIVE_SWEEPS').orElse('')
 tasks.withType(Test).configureEach { t ->
     t.inputs.property('jperlTestFilter', jperlTestFilterProp)
     t.environment('JPERL_TEST_FILTER', jperlTestFilterProp.get())
+    // Policy changes must not inherit a previous run's cached Test environment.
+    t.inputs.property('jperlEnableCorrectiveSweeps', jperlEnableCorrectiveSweeps)
+    t.inputs.property('jperlDisableCorrectiveSweeps', jperlDisableCorrectiveSweeps)
+    t.environment('JPERL_ENABLE_CORRECTIVE_SWEEPS', jperlEnableCorrectiveSweeps.get())
+    t.environment('JPERL_DISABLE_CORRECTIVE_SWEEPS', jperlDisableCorrectiveSweeps.get())
 }
 
 // Fast unit tests only (tests in unit/ directory)

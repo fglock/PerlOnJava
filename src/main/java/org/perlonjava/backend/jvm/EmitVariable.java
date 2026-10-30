@@ -3273,6 +3273,19 @@ public class EmitVariable {
                                 false);
                     }
 
+                    if (operator.equals("my") && (sigil.equals("@") || sigil.equals("%"))) {
+                        // The active pad map is a strong runtime owner of this
+                        // aggregate. Give it an identity after the lexical has
+                        // been registered so scope cleanup can retire it.
+                        emitterVisitor.ctx.mv.visitLdcInsn(var);
+                        emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, varIndex);
+                        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                                "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                                "registerCurrentActiveLexical",
+                                "(Ljava/lang/String;Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)V",
+                                false);
+                    }
+
                     // Emit runtime attribute dispatch for my/state variables.
                     // For 'our', attributes were already dispatched at compile time.
                     if (!operator.equals("our") && node.annotations != null

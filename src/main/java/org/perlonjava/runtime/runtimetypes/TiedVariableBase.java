@@ -35,20 +35,9 @@ public abstract class TiedVariableBase extends RuntimeBaseProxy {
      */
     public TiedVariableBase(RuntimeScalar tiedObject, String tiedPackage) {
         super();
-        this.self = tiedObject;
+        this.self = RuntimeScalar.retainTiedHandlerValue(tiedObject);
         this.tiedPackage = tiedPackage;
-        // The tie wrapper holds a strong reference to the tied object.
-        // Increment refCount so that untie's decrement can trigger DESTROY
-        // when no other references remain (matching Perl 5 behavior).
-        // Note: tiedObject is null for proxy entries (RuntimeTiedHashProxyEntry,
-        // RuntimeTiedArrayProxyEntry) which delegate to the parent container.
-        if (tiedObject != null
-                && (tiedObject.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                && tiedObject.value instanceof RuntimeBase base
-                && base.refCount >= 0) {
-            base.refCount++;
-            base.acquireTransientTraceOwner("tie wrapper", "TiedVariableBase");
-        }
+
     }
 
     /**
@@ -212,6 +201,11 @@ public abstract class TiedVariableBase extends RuntimeBaseProxy {
         return super.addToScalar(v);
     }
 
+    /** Storage kept alive by an escaping magic lvalue; this is a borrowed reference. */
+    RuntimeScalar storageOwnerReference() {
+        return self;
+    }
+
     public RuntimeScalar getSelf() {
         return self;
     }
@@ -231,13 +225,6 @@ public abstract class TiedVariableBase extends RuntimeBaseProxy {
         // Array/hash element proxy entries delegate to their parent tied
         // container and intentionally have no handler of their own.
         if (self == null) return;
-        if ((self.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                && self.value instanceof RuntimeBase base) {
-            base.releaseTransientTraceOwner("tie wrapper", "TiedVariableBase");
-            if (base.refCount > 0 && --base.refCount == 0) {
-                base.refCount = Integer.MIN_VALUE;
-                DestroyDispatch.callDestroy(base);
-            }
-        }
+        RuntimeScalar.releaseTiedHandlerValue(self);
     }
 }

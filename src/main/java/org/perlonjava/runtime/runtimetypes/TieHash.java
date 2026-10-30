@@ -54,14 +54,7 @@ public class TieHash extends HashMap<String, RuntimeScalar> {
     public TieHash(String tiedPackage, RuntimeHash previousValue, RuntimeScalar self) {
         this.tiedPackage = tiedPackage;
         this.previousValue = previousValue;
-        this.self = self;
-        // Increment refCount: the tie wrapper holds a strong reference to the tied object.
-        if (self != null && (self.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                && self.value instanceof RuntimeBase base
-                && base.refCount >= 0) {
-            base.refCount++;
-            base.acquireTransientTraceOwner("tie wrapper", "TieHash");
-        }
+        this.self = RuntimeScalar.retainTiedHandlerValue(self);
         if (self != null && (self.type & RuntimeScalarType.REFERENCE_BIT) != 0
                 && self.value instanceof RuntimeBase base) {
             base.markPossiblyStoredInTiedHandler();
@@ -228,13 +221,6 @@ public class TieHash extends HashMap<String, RuntimeScalar> {
         if (tiedObjectReleased) return;
         tiedObjectReleased = true;
         if (self == null) return;
-        if ((self.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                && self.value instanceof RuntimeBase base) {
-            base.releaseTransientTraceOwner("tie wrapper", "TieHash");
-            if (base.refCount > 0 && --base.refCount == 0) {
-                base.refCount = Integer.MIN_VALUE;
-                DestroyDispatch.callDestroy(base);
-            }
-        }
+        RuntimeScalar.releaseTiedHandlerValue(self);
     }
 }

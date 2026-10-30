@@ -475,6 +475,10 @@ public final class SharedPerlStorage {
         PerlRuntime runtime = PerlRuntime.current();
         RuntimeBase view = new RuntimeGraphCloner(runtime, runtime).cloneGraph(nested);
         view.threadSharedFetchedView = true;
+        // The fetched view can be discarded before any receiving scalar slot
+        // stores it. Register the local view now so its first release is
+        // classified as a view cleanup rather than canonical shared DESTROY.
+        view.registerSharedFetchedView();
         return new SharedElementProxy(stored, view);
     }
 

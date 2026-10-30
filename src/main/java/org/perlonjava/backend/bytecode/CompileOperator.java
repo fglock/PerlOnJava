@@ -26,18 +26,18 @@ public class CompileOperator {
     }
 
     private static void emitSubroutineExitCleanup(BytecodeCompiler bc, int returnReg) {
-        java.util.List<Integer> scalarIdxs = bc.symbolTable.getMyScalarIndicesInScope(0);
+        java.util.List<Integer> scalarIdxs = bc.myScalarCleanupIndicesInScope(0);
         for (int idx : scalarIdxs) {
             if (idx == returnReg) continue;
             bc.emit(Opcodes.SCOPE_EXIT_CLEANUP);
             bc.emitReg(idx);
         }
-        java.util.List<Integer> hashIdxs = bc.symbolTable.getMyHashIndicesInScope(0);
+        java.util.List<Integer> hashIdxs = bc.myHashCleanupIndicesInScope(0);
         for (int idx : hashIdxs) {
             bc.emit(Opcodes.SCOPE_EXIT_CLEANUP_HASH);
             bc.emitReg(idx);
         }
-        java.util.List<Integer> arrayIdxs = bc.symbolTable.getMyArrayIndicesInScope(0);
+        java.util.List<Integer> arrayIdxs = bc.myArrayCleanupIndicesInScope(0);
         for (int idx : arrayIdxs) {
             bc.emit(Opcodes.SCOPE_EXIT_CLEANUP_ARRAY);
             bc.emitReg(idx);
@@ -1435,18 +1435,19 @@ public class CompileOperator {
                 // Explicit 'return' bypasses the normal block-end cleanup.
                 // Use return-specific cleanup opcodes so the returned register remains
                 // readable by RETURN while lexical owner counts are still released.
-                java.util.List<Integer> scalarIdxs = bytecodeCompiler.symbolTable.getMyScalarIndicesInScope(0);
+                exprReg = bytecodeCompiler.separateReturnRegister(exprReg);
+                java.util.List<Integer> scalarIdxs = bytecodeCompiler.myScalarCleanupIndicesInScope(0);
                 for (int idx : scalarIdxs) {
                     bytecodeCompiler.emit(Opcodes.RETURN_SCOPE_CLEANUP);
                     bytecodeCompiler.emitReg(idx);
                     bytecodeCompiler.emitReg(exprReg);
                 }
-                java.util.List<Integer> hashIdxs = bytecodeCompiler.symbolTable.getMyHashIndicesInScope(0);
+                java.util.List<Integer> hashIdxs = bytecodeCompiler.myHashCleanupIndicesInScope(0);
                 for (int idx : hashIdxs) {
                     bytecodeCompiler.emit(Opcodes.RETURN_SCOPE_CLEANUP_HASH);
                     bytecodeCompiler.emitReg(idx);
                 }
-                java.util.List<Integer> arrayIdxs = bytecodeCompiler.symbolTable.getMyArrayIndicesInScope(0);
+                java.util.List<Integer> arrayIdxs = bytecodeCompiler.myArrayCleanupIndicesInScope(0);
                 for (int idx : arrayIdxs) {
                     bytecodeCompiler.emit(Opcodes.RETURN_SCOPE_CLEANUP_ARRAY);
                     bytecodeCompiler.emitReg(idx);

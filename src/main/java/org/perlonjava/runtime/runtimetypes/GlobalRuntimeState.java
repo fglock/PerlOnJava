@@ -24,8 +24,11 @@ public final class GlobalRuntimeState {
     private static final AtomicInteger NEXT_THREAD_COMPILED_CODE_REF_BASE =
             new AtomicInteger(COMPILED_CODE_REF_RANGE_SIZE);
     private final Map<String, RuntimeScalar> scalarValues = new HashMap<>();
+    private final Map<String, PerlOwnerSlot> packageScalarOwnerSlots = new HashMap<>();
     private final Map<String, RuntimeArray> arrayValues = new HashMap<>();
+    private final Map<String, PerlOwnerSlot> packageArrayOwnerSlots = new HashMap<>();
     private final Map<String, RuntimeHash> hashValues = new HashMap<>();
+    private final Map<String, PerlOwnerSlot> packageHashOwnerSlots = new HashMap<>();
     private final Map<String, RuntimeScalar> foreachScalarAliases = new HashMap<>();
     private final Map<String, RuntimeScalar> temporaryScalarAliases = new HashMap<>();
     private final Map<String, Boolean> importedSubs = new HashMap<>();
@@ -87,6 +90,67 @@ public final class GlobalRuntimeState {
     /** Core package scalar slots owned by this runtime. */
     public Map<String, RuntimeScalar> scalarValues() {
         return scalarValues;
+    }
+
+    Map<String, PerlOwnerSlot> packageScalarOwnerSlots() {
+        return packageScalarOwnerSlots;
+    }
+
+    void rebuildPackageScalarOwnerSlots() {
+        for (PerlOwnerSlot ownerSlot : packageScalarOwnerSlots.values()) {
+            RuntimeScalar previous = ownerSlot.referent() instanceof RuntimeScalar scalar
+                    ? scalar : null;
+            ownerSlot.release();
+            if (previous != null) previous.refreshUntrackedReferenceOwner();
+        }
+        packageScalarOwnerSlots.clear();
+        for (Map.Entry<String, RuntimeScalar> entry : scalarValues.entrySet()) {
+            RuntimeScalar scalar = entry.getValue();
+            if (scalar == null) continue;
+            PerlOwnerSlot ownerSlot = new PerlOwnerSlot(
+                    PerlOwnerSlot.Kind.PACKAGE_SCALAR_SLOT);
+            ownerSlot.acquirePackageScalarIdentity(scalar);
+            packageScalarOwnerSlots.put(entry.getKey(), ownerSlot);
+            scalar.refreshUntrackedReferenceOwner();
+        }
+    }
+
+    Map<String, PerlOwnerSlot> packageArrayOwnerSlots() {
+        return packageArrayOwnerSlots;
+    }
+
+    Map<String, PerlOwnerSlot> packageHashOwnerSlots() {
+        return packageHashOwnerSlots;
+    }
+
+    void rebuildPackageAggregateOwnerSlots() {
+        releasePackageAggregateOwnerSlots(packageArrayOwnerSlots, false);
+        releasePackageAggregateOwnerSlots(packageHashOwnerSlots, false);
+        rebuildPackageAggregateOwnerSlots(arrayValues, packageArrayOwnerSlots);
+        rebuildPackageAggregateOwnerSlots(hashValues, packageHashOwnerSlots);
+    }
+
+    private static void rebuildPackageAggregateOwnerSlots(
+            Map<String, ? extends RuntimeBase> values,
+            Map<String, PerlOwnerSlot> slots) {
+        for (Map.Entry<String, ? extends RuntimeBase> entry : values.entrySet()) {
+            RuntimeBase aggregate = entry.getValue();
+            if (aggregate == null) continue;
+            PerlOwnerSlot ownerSlot = new PerlOwnerSlot(
+                    PerlOwnerSlot.Kind.PACKAGE_AGGREGATE_SLOT);
+            ownerSlot.acquirePackageAggregateIdentity(aggregate);
+            slots.put(entry.getKey(), ownerSlot);
+        }
+    }
+
+    private static void releasePackageAggregateOwnerSlots(
+            Map<String, PerlOwnerSlot> slots, boolean finalRelease) {
+        for (PerlOwnerSlot ownerSlot : slots.values()) {
+            RuntimeBase aggregate = ownerSlot.referent();
+            ownerSlot.release();
+            if (finalRelease) WeakRefRegistry.onStrongOwnerSlotReleased(aggregate);
+        }
+        slots.clear();
     }
 
     long scalarBindingVersion() {
@@ -279,6 +343,7 @@ public final class GlobalRuntimeState {
 
     synchronized int registerCompiledCodeRef(RuntimeScalar ref) {
         int id = nextCompiledCodeRefId++;
+        if (ref != null) ref.retainCodeSlotBinding();
         compiledCodeRefs.put(id, ref);
         return id;
     }
@@ -329,6 +394,7 @@ public final class GlobalRuntimeState {
     private static boolean isCodeRefEdgeRoot(RuntimeScalar scalar) {
         if (scalar == null) return false;
         return !(scalar.value instanceof RuntimeCode code)
+                || code.retiredOwnedEdges
                 || ReachabilityWalker.hasWalkableCodeEdges(code, true);
     }
 
@@ -388,6 +454,18 @@ public final class GlobalRuntimeState {
 
     void clearCoreValues() {
         scalarValues.clear();
+        for (PerlOwnerSlot ownerSlot : packageScalarOwnerSlots.values()) {
+            RuntimeScalar scalar = ownerSlot.referent() instanceof RuntimeScalar value
+                    ? value : null;
+            ownerSlot.release();
+            if (scalar != null) {
+                scalar.refreshUntrackedReferenceOwner();
+                WeakRefRegistry.onStrongOwnerSlotReleased(scalar);
+            }
+        }
+        packageScalarOwnerSlots.clear();
+        releasePackageAggregateOwnerSlots(packageArrayOwnerSlots, true);
+        releasePackageAggregateOwnerSlots(packageHashOwnerSlots, true);
         invalidateScalarBindingCache();
         arrayValues.clear();
         hashValues.clear();
@@ -455,9 +533,11 @@ public final class GlobalRuntimeState {
         cloneMap(foreachScalarAliases, target.foreachScalarAliases, cloner, RuntimeScalar.class);
         cloneMap(temporaryScalarAliases, target.temporaryScalarAliases, cloner, RuntimeScalar.class);
         cloneMap(codeRefs, target.codeRefs, cloner, RuntimeScalar.class);
+        cloner.restoreCodeSlotBindings(target.codeRefs.values());
         cloneMap(pseudoConstants, target.pseudoConstants, cloner, RuntimeScalar.class);
         cloneMap(compactStashValues, target.compactStashValues, cloner, RuntimeScalar.class);
         cloneMap(pinnedCodeRefs, target.pinnedCodeRefs, cloner, RuntimeScalar.class);
+        cloner.restoreCodeSlotBindings(target.pinnedCodeRefs.values());
         // Parsers register many inert glob placeholders (notably through eval).
         // Cloning all of them into every ithread makes snapshot cost quadratic
         // for regex matrices that compile thousands of evals. Only an IO slot
@@ -474,6 +554,7 @@ public final class GlobalRuntimeState {
             target.compiledCodeRefs.put(entry.getKey(),
                     (RuntimeScalar) cloner.cloneValue(entry.getValue()));
         }
+        cloner.restoreCodeSlotBindings(target.compiledCodeRefs.values());
 
         target.importedSubs.putAll(importedSubs);
         target.subsPragmaDeclarations.putAll(subsPragmaDeclarations);
@@ -525,6 +606,9 @@ public final class GlobalRuntimeState {
                         + entry.getKey());
             }
             target.compiledCodeRefs.put(entry.getKey(), cloned);
+            if (existing == null && cloned != null) {
+                cloner.restoreCodeSlotBindings(java.util.List.of(cloned));
+            }
         }
         target.nextCompiledCodeRefId = Math.max(target.nextCompiledCodeRefId,
                 nextCompiledCodeRefId);

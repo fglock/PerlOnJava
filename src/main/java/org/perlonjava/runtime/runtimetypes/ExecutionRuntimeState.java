@@ -72,8 +72,10 @@ public final class ExecutionRuntimeState {
     public final Deque<RuntimeCode.EvalSourceFrame> activeEvalSources = new ArrayDeque<>();
     public final ArrayDeque<ArrayList<String>> syntheticCallerFrames = new ArrayDeque<>();
     public final Deque<RuntimeArray> argsStack = new ArrayDeque<>();
-    /** Weak roots for JVM call arguments while their expressions are evaluated. */
-    final ArrayList<java.lang.ref.WeakReference<RuntimeCode.CallArguments>> callArgumentFrames =
+    final Deque<List<RuntimeScalar.ArgumentAliasOwner>> argumentAliasOwnerFrames =
+            new ArrayDeque<>();
+    /** Explicit owners for staged arguments, retired by call completion or frame exit. */
+    final ArrayList<RuntimeCode.CallArguments> callArgumentFrames =
             new ArrayList<>();
     public final Deque<RuntimeCode> activeCodeStack = new ArrayDeque<>();
     /** Perl source callsites aligned with the active Perl code frames. */
@@ -98,6 +100,8 @@ public final class ExecutionRuntimeState {
     public Object reusableActiveLexicalFrame;
     /** Lexical cells owned by the top-level compilation unit. */
     public final Map<String, RuntimeBase> topLevelLexicals = new LinkedHashMap<>();
+    /** Owner identities for aggregate cells held by top-level lexical names. */
+    final Map<String, PerlOwnerSlot> topLevelLexicalOwnerSlots = new LinkedHashMap<>();
     public final Deque<List<RuntimeScalar>> pristineArgsStack = new ArrayDeque<>();
     /** Reusable one-scalar return lists, populated only after scalar extraction. */
     final Deque<RuntimeList> availableScalarResultLists = new ArrayDeque<>();

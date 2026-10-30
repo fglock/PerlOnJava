@@ -3,6 +3,7 @@ package org.perlonjava.backend.bytecode;
 import org.perlonjava.runtime.runtimetypes.RegexState;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.DynamicVariableManager;
 
 import java.util.ArrayDeque;
@@ -23,6 +24,7 @@ public final class SuspendedInterpreterFrame {
     final RuntimeBase[] registers;
     final int callContext;
     final String subroutineName;
+    final RuntimeScalar selfReference;
 
     int pc;
     int virtualEvalFrameDepth;
@@ -56,5 +58,8 @@ public final class SuspendedInterpreterFrame {
         this.registers = registers;
         this.callContext = callContext;
         this.subroutineName = subroutineName;
+        // ACTIVE_CODE owns this invocation. Borrow its CV value independently
+        // of a mutable glob slot, which Perl may undefine during the call.
+        this.selfReference = code.__SUB__ == null ? null : new RuntimeScalar(code.__SUB__);
     }
 }

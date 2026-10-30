@@ -474,6 +474,10 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
             }
             MyVarCleanupStack.releaseOrTransferSocketOwnersOnReturn(cleanupMark, returned);
             return returned;
+        } catch (PerlNonLocalReturnException e) {
+            // The enclosing RuntimeCode boundary consumes the result; preserve
+            // its mortal owners while this frame's lexical cleanup is queued.
+            throw e;
         } catch (RuntimeException e) {
             if (!(e instanceof PerlExitException)) {
                 MyVarCleanupStack.unwindTo(cleanupMark);
@@ -547,6 +551,9 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
             }
             return RuntimeCode.coerceScalarCallResult(
                     result, effectiveContext, callContext, !RuntimeCode.isLvalueCode(this));
+        } catch (PerlNonLocalReturnException e) {
+            // A map/grep return carries a value through this frame's unwind.
+            throw e;
         } catch (RuntimeException e) {
             if (!(e instanceof PerlExitException)) {
                 MyVarCleanupStack.unwindTo(cleanupMark);

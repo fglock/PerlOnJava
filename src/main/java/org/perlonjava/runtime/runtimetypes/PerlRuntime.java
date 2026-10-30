@@ -539,6 +539,10 @@ public final class PerlRuntime implements AutoCloseable {
                     sourceMapperState.snapshotInto(child.sourceMapperState);
                     regexState.snapshotInto(child.regexState);
                 }
+                try (Binding ignored = child.bind()) {
+                    child.globalState.rebuildPackageScalarOwnerSlots();
+                    child.globalState.rebuildPackageAggregateOwnerSlots();
+                }
                 java.util.List<RuntimeBase> clonedRoots = cloner.cloneSnapshotRoots(roots);
                 cloner.finishSnapshot();
                 child.currentDirectory = currentDirectory;

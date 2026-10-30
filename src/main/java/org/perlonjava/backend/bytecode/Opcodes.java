@@ -2787,6 +2787,14 @@ public class Opcodes {
     /** Restore a loop regex baseline and retain a fresh baseline for its next iteration. Format: register. */
     public static final short RESTORE_LOOP_REGEX_STATE = 631;
 
+    /** Preserve rvalue reference owners before a nested scope exits. Format: rd sourceReg context. */
+    public static final short SNAPSHOT_SCOPE_RESULT = 639;
+
+    /** Dereference a compiler-owned scalar temporary and release it after lookup. Format: rd rs. */
+    public static final short DEREF_SCALAR_STRICT_TEMP = 640;
+    /** Non-strict scalar dereference that consumes its scalar input. Format: rd rs pkgIdx. */
+    public static final short DEREF_SCALAR_NONSTRICT_TEMP = 641;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

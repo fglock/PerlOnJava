@@ -371,7 +371,7 @@ Run on JVM and interpreter backends with `timeout` and complete output logs:
 
 ## Progress Tracking
 
-### Current Status: Net::Async::HTTP captured-owner, hash-slice, and eval-capture finalization fixes complete
+### Current Status: sweep scheduling removed; owner-source migration continues
 
 The designated issue branch, `fix/issue-1132-closure-lifetime`, includes the
 handoff commits below. On 2026-09-01, the required pre-change `make` rebuilt
@@ -529,6 +529,78 @@ external workload has drained before changing runtime source.
   in `perl5_t/t/run/fresh_perl.t` test 75 now passes, restoring the baseline
   73/91 result; the other 18 historical failures are unchanged. Full `make`
   passed in the isolated PR worktree on 2026-09-02.
+- [x] On 2026-10-28, removed automatic, targeted, and statement-boundary weak
+  cleanup scheduling from `MortalList`; legacy request methods remain no-op
+  compatibility hooks. Added direct cleanup for an untracked value when its
+  final scalar-cell owner exits, and kept reachability fallbacks where slot
+  coverage is incomplete. `nice -n 19 make` passed with
+  `JPERL_DISABLE_CORRECTIVE_SWEEPS=1` and Gradle limited to two workers.
+- [x] On 2026-10-28, CODE weak-reference registration stopped walking scalar
+  roots to decide whether an anonymous CODE value still has an owner. The
+  existing stash, active-frame, and owner-slot checks in `clearWeakRefsTo()`
+  now make that decision. Added
+  `WeakCodeOwnerSlotNoReachabilityTest`; the full `make` gate passed with
+  corrective sweeps disabled.
+- [x] On 2026-10-29, package-rooted untracked aggregates now retire the
+  temporary count rescued at first weaken when their final untracked owner
+  slot leaves. Added Java owner-release coverage and six Perl assertions for
+  package-array clear and package-hash delete; system Perl, both backends,
+  the full no-sweeps `make`, and HTML-Tree 5.07 `t/refloop.t` (8/8 on both
+  backends) passed. The first-weaken root-query entry now returns from the
+  owner-slot ledger before inspecting package edges; its regression sees zero
+  edges and nodes visited.
+- [x] On 2026-10-29, tracked zero-count weakening now trusts surviving
+  uncounted owner slots directly and enters `WEAKLY_TRACKED`; final slot release
+  clears weak observers without a root walk or compatibility pin.
+  `WeakUncountedOwnerSlotFastPathTest`, the no-sweeps full `make`, and the weak,
+  DESTROY, resurrection, closure, cycle, and HTML-Tree 8/8 matrix pass.
+- [x] On 2026-10-29, first weaken of an untracked aggregate now keeps a
+  transitional `WEAKLY_TRACKED` sentinel without the generic root-graph
+  fallback; its durable slot release clears the weak observer directly.
+  `UntrackedAggregateFirstWeakenFastPathTest`, the no-sweeps full `make`, and
+  HTML-Tree 5.07 `t/refloop.t` (8/8 on both backends) pass. The package-root
+  rescue proof remains for the legacy nested-aggregate case.
+- [x] On 2026-10-29, a surviving uncounted owner slot now preserves weak
+  observers when `RuntimeScalar` releases the last counted slot. The final
+  owner release performs direct cleanup without a root query; permanent
+  regression coverage is in `RuntimeScalarUncountedOwnerRepairTest`.
+- [x] On 2026-10-29, localized CODE restoration now releases displaced CODE
+  captures from active-frame and owner-slot identities, without scalar-registry
+  or root-graph scans. `LocalizedGlobCodeOwnerReleaseTest` covers final capture
+  cleanup; `LocalizedGlobCodeOwnerSlotFastPathTest` covers a live active call.
+  The no-sweeps full `make`, closure/weak/DESTROY/resurrection/cycle matrix, and
+  HTML-Tree 5.07 `t/refloop.t` (8/8) pass on both backends.
+- [x] On 2026-10-29, scalar overwrite, deferred decrement, and tail-call release
+  now defer zero-count cleanup for aggregates with a surviving uncounted owner
+  slot, even with no weak observer. `UncountedOwnerSlotZeroCountReleaseTest`
+  verifies each path and final destruction after the sole owner slot leaves.
+  Scalar and IO referents still need owner-slot release coverage before this
+  rule can safely apply to them.
+- [x] On 2026-10-29, tail-call zero-count release no longer treats a
+  Java-live scalar-registry wrapper as a Perl owner or forces GC to inspect it.
+  `TailCallScalarRegistryOwnershipTest` verifies that a released tail-call
+  referent is destroyed while its scalar wrapper remains Java-live.
+- [x] On 2026-10-29, tail-call release now trusts any direct non-counted Perl
+  owner slot, excluding temporary runtime roots. Added
+  `TailCallUncountedOwnerSlotFastPathTest` for package scalar ownership; it
+  passes in the full no-sweeps `make` gate (10m58s).
+- [x] On 2026-10-29, preserve live uncounted scalar owner slots through
+  referent promotion, while pruning slots in temporary containers without a
+  Perl owner at final release. `PromotedUntrackedOwnerSlotTest` covers both
+  cases. The no-sweeps full `make` gate passed in 14m59s; tempfile, closure,
+  weak/DESTROY, resurrection, weak-cycle, and HTML-Tree 8/8 checks passed on
+  both backends.
+- [x] On 2026-10-29, async Future resume now checks counted and direct owner
+  slots instead of rebuilding root graphs or forcing GC for a scalar-registry
+  lookup. Temporary evaluation roots do not count as Perl owners.
+  `PerlStrongOwnerProofTest`, the full no-sweeps `make`, the closure/weak/
+  DESTROY/resurrection/cycle matrix, and HTML-Tree `t/refloop.t` (8/8 on both
+  backends) pass.
+- [x] On 2026-10-29, void-discard cleanup now uses registered container
+  membership directly as proof that a CODE scalar slot is live, avoiding a
+  duplicate scalar reachability query. `MortalizeRegisteredCodeOwnerFastPathTest`
+  verifies zero scalar queries and root walks; the no-sweeps full `make` passed
+  in 21m18s.
 
 ### Handoff: issue #1132 / PR #1204
 
@@ -546,9 +618,16 @@ pass. Preserve both focused ownership regressions when evolving the ledger.
 
 ### Next Steps
 
-1. Continue the owner-source migration inventory and remove only diagnosed
-   ownership heuristics with permanent system-Perl-validated regressions.
-2. Keep Cookie2 formatting and content-coding exception handling separate from
+1. Audit remaining `RuntimeScalar` and `MortalList` reachability fallbacks; add
+   explicit slot identities where ownership is missing, then remove each
+   fallback only after system Perl and both backends pass.
+2. Remove the legacy package-root rescue pin after every final-slot release
+   path has direct coverage.
+3. Migrate real weak CODE captures to capture-owner identities while retaining
+   compatibility behavior for unrecorded legacy captures.
+4. Requalify HTML-Tree's 8/8 and the full suite after remaining owner changes;
+   remove compatibility APIs after all gates pass.
+5. Keep Cookie2 formatting and content-coding exception handling separate from
    this ownership work.
 
 ### Open Questions
