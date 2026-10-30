@@ -473,7 +473,8 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             if (slot.kind() != PerlOwnerSlot.Kind.UNTRACKED_REFERENCE || !slot.isActive()) continue;
             RuntimeScalar owner = slot.untrackedScalarOwner();
             if (owner != null && owner.type == scalarType
-                    && owner.hasLiveDurableStrongValueSlot()) {
+                    && owner.hasLiveDurableStrongValueSlot()
+                    && !owner.hasPackageAggregateUntrackedReferenceOwner()) {
                 return true;
             }
         }
@@ -495,7 +496,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             }
             if (slot.kind() == PerlOwnerSlot.Kind.UNTRACKED_REFERENCE) {
                 RuntimeScalar scalar = slot.untrackedScalarOwner();
-                if (scalar != null && scalar.isPackageAggregateUntrackedReferenceOwner()) {
+                if (scalar != null && scalar.hasPackageAggregateUntrackedReferenceOwner()) {
                     continue;
                 }
             }

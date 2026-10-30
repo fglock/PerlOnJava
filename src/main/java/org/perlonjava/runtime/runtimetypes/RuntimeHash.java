@@ -158,7 +158,11 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     void restoreRegexMutationState(Object token) {
         if (!(token instanceof RegexMutationState state)) return;
         deferValuesAddedSince(state.elements.values());
+        List<RuntimeScalar> replaced = new ArrayList<>(elements.values());
         elements = newElementMap(state.elements);
+        for (RuntimeScalar value : replaced) {
+            if (value != null) value.reconcileContainerOwnerAfterMutation(this);
+        }
         refreshUntrackedElementOwners();
         byteKeys = state.byteKeys == null ? null : new HashSet<>(state.byteKeys);
         type = state.type;
@@ -192,7 +196,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     private void refreshUntrackedElementOwners() {
         if (elements == null) return;
         for (RuntimeScalar value : elements.values()) {
-            if (value != null) value.refreshUntrackedReferenceOwner();
+            if (value != null) value.reconcileContainerOwnerAfterMutation(this);
         }
     }
 
@@ -228,17 +232,17 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             }
             owner.notePackageRootMutation(previous, value);
             if (value != null) {
-                value.markContainerOwner(owner);
                 if (owner.hasDurableElementLifetime()) {
                     RuntimeScalar.retainUnstashedIoForDurableSlot(value);
                 }
             }
-            owner.markPackageRootedValue(value);
             RuntimeScalar result = super.put(key, value);
             stableMethodFieldCacheRevision++;
+            if (value != null) value.markContainerOwner(owner);
+            owner.markPackageRootedValue(value);
             refreshStoredUntrackedOwner(value);
             if (previous != null && previous != value) {
-                previous.refreshUntrackedReferenceOwner();
+                previous.reconcileContainerOwnerAfterMutation(owner);
             }
             updateReferentHashSlotOwnership(previous, value);
             return result;
@@ -267,19 +271,21 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             for (RuntimeScalar value : m.values()) {
                 if (owner.threadShared) SharedPerlStorage.publishBlessing(value);
                 if (value != null) {
-                    value.markContainerOwner(owner);
                     if (owner.hasDurableElementLifetime()) {
                         RuntimeScalar.retainUnstashedIoForDurableSlot(value);
                     }
                 }
-                owner.markPackageRootedValue(value);
             }
             super.putAll(m);
             if (!m.isEmpty()) stableMethodFieldCacheRevision++;
             for (RuntimeScalar value : m.values()) {
+                if (value != null) value.markContainerOwner(owner);
+                owner.markPackageRootedValue(value);
                 refreshStoredUntrackedOwner(value);
             }
-            for (RuntimeScalar value : replacedValues) value.refreshUntrackedReferenceOwner();
+            for (RuntimeScalar value : replacedValues) {
+                value.reconcileContainerOwnerAfterMutation(owner);
+            }
         }
 
         private void refreshStoredUntrackedOwner(RuntimeScalar value) {
@@ -289,7 +295,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 if (owner.isPackageRootedHash()) {
                     value.markPrepopulatedPackageAggregateOwner(owner);
                 }
-                value.refreshUntrackedReferenceOwner();
+                value.reconcileContainerOwnerAfterMutation(owner);
             }
         }
 
@@ -302,7 +308,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                     MortalList.deferDestroyForContainerClear(java.util.Collections.singletonList(previous));
                 }
                 owner.notePackageRootMutation(previous, null);
-                previous.refreshUntrackedReferenceOwner();
+                previous.reconcileContainerOwnerAfterMutation(owner);
             }
             return previous;
         }
@@ -318,7 +324,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 owner.notePackageRootClear(removed);
                 super.clear();
                 for (RuntimeScalar scalar : removed) {
-                    if (scalar != null) scalar.refreshUntrackedReferenceOwner();
+                    if (scalar != null) scalar.reconcileContainerOwnerAfterMutation(owner);
                 }
                 return;
             }
@@ -2066,11 +2072,15 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         // parallel-load DBIC tests pushed t/cdbi/68 / t/96 / t/debug/core
         // past their 300s harness timeout.
         if (!hasDestroyableValues()) {
+            List<RuntimeScalar> removed = new ArrayList<>(this.elements.values());
             MortalList.deferDestroyForContainerClear(this.elements.values());
             if (this.type == PLAIN_HASH) {
                 this.elements = newElementMap();
             } else {
                 this.elements.clear();
+            }
+            for (RuntimeScalar value : removed) {
+                if (value != null) value.reconcileContainerOwnerAfterMutation(this);
             }
             this.byteKeys = null;
             hashIterator = null;
@@ -2091,6 +2101,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             String key = entry.getKey();
             RuntimeScalar value = entry.getValue();
             it.remove();
+            if (value != null) value.reconcileContainerOwnerAfterMutation(this);
             notePackageRootMutation(value, null);
             if (this.byteKeys != null) this.byteKeys.remove(key);
             // Defer DESTROY for this one value, then flush so it runs now.
@@ -2214,7 +2225,9 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 this.blessId = savedBlessId;
             }
             notePackageRootClear(this.elements.values());
-            this.elements = previousState.elements;
+            this.elements = newElementMap(previousState.elements);
+            refreshUntrackedElementOwners();
+            previousState.elements.clear();
             notePackageRootClear(this.elements.values());
             if (isPackageRootedHash()) {
                 for (RuntimeScalar value : this.elements.values()) {
@@ -2248,6 +2261,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             this.blessId = activeState.blessId;
             this.byteKeys = activeState.byteKeys != null ? new HashSet<>(activeState.byteKeys) : null;
             this.elements.putAll(activeState.elements);
+            activeState.elements.clear();
         }
     }
 
