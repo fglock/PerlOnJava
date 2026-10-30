@@ -1515,7 +1515,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 || isActiveCode(this)
                 || isConstantCv
                 || constantValue != null
-                || GlobalVariable.installedGlobalCodeRefsView().contains(this);
+                || GlobalVariable.installedGlobalCodeRefsView().contains(this)
+                || GlobalVariable.hasLocalizedCodeRef(this);
     }
 
     /** Whether a Perl owner other than one scalar slot still needs this CV's captures. */
@@ -1531,7 +1532,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 || isActiveCode(this)
                 || isConstantCv
                 || constantValue != null
-                || GlobalVariable.installedGlobalCodeRefsView().contains(this);
+                || GlobalVariable.installedGlobalCodeRefsView().contains(this)
+                || GlobalVariable.hasLocalizedCodeRef(this);
+    }
+
+    /** A removed stash slot requests final state cleanup at the last owner boundary. */
+    void noteStashOwnerReleased() {
+        if (perlLifecycleState() == RuntimeBase.PerlLifecycleState.DESTROYED
+                || stashRefCount > 0
+                || GlobalVariable.installedGlobalCodeRefsView().contains(this)) return;
+        deferFinalReleaseToActiveCode();
+        finishActiveCodeOwnerRelease();
     }
 
     /**
@@ -1596,7 +1607,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // or END-block owner still protects it. Recheck at each such owner
         // release boundary; otherwise the count can stay at zero after its
         // last real owner leaves and the closure captures never get released.
-        if (refCount != 0 || hasPerlOwnerForCaptureOtherThan(null)
+        if (hasPerlOwnerForCaptureOtherThan(null)
                 || activeEndBlockExecutions > 0 || SpecialBlock.hasPendingEndBlock(this)) return;
         finalReleaseDeferredToActiveCode = false;
         refCount = Integer.MIN_VALUE;
@@ -7852,7 +7863,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         RuntimeArray frameArgs = DebugState.getArgsForFrame(frame);
                         if (frameArgs != null) {
                             frameArgs.clearStaleLocalArrayAliases();
-                            dbArgs.setFromListAliased(frameArgs.getList());
+                            dbArgs.setFromListAliased(new RuntimeList(frameArgs.elements));
                         } else {
                             dbArgs.setFromListAliased(new RuntimeList());
                         }
@@ -7878,7 +7889,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         }
                         if (frameArgs != null) {
                             frameArgs.clearStaleLocalArrayAliases();
-                            dbArgs.setFromListAliased(frameArgs.getList());
+                            dbArgs.setFromListAliased(new RuntimeList(frameArgs.elements));
                         } else {
                             dbArgs.setFromListAliased(new RuntimeList());
                         }
