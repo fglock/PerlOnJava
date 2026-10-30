@@ -2795,6 +2795,9 @@ public class Opcodes {
     /** Non-strict scalar dereference that consumes its scalar input. Format: rd rs pkgIdx. */
     public static final short DEREF_SCALAR_NONSTRICT_TEMP = 641;
 
+    /** Acquire the subroutine return owner before any lexical cleanup. Format: returnReg. */
+    public static final short PREPARE_SCOPE_RETURN = 642;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }
