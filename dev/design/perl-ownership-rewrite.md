@@ -1626,11 +1626,39 @@ WebSocket case remains acceptance coverage rather than a reproduced failure.
 The full `nice -n 19 make` gate still needs to run after this ownership batch is
 complete.
 
+### Weak CODE capture walk removed from quiet sweep decisions (2026-10-30)
+
+Quiet weak-reference cleanup no longer builds `WeakBackrefCaptureSnapshot` to
+preserve aggregate candidates by traversing captures from weak CODE referents.
+Real closure captures already carry `CLOSURE_PAD`, `ARRAY_ELEMENT`, and
+`HASH_ELEMENT` owner identities; the regular issue-1649 aggregate lifecycle
+tests pass with corrective sweeps disabled on both backends. The weakly held
+closure oracle also clears both CODE and captured target on system Perl and
+both backends. Full `nice -n 19 make` passes in 7m59s.
+
+The snapshot helper remains reachable only through the post-DESTROY diagnostic
+path in `MortalList.flush`; `WeakBackrefCodeCaptureSweepTest` currently asserts
+those diagnostic walk counters. The production corrective sweep constant is
+already disabled, so this gate compiled the removal but did not execute that
+legacy sweep branch. Remove the remaining diagnostic walk when the test no
+longer requires its internal counters.
+
+### Weakening retires stale untracked owner slots (2026-10-30)
+
+When the last counted owner is weakened, `WeakRefRegistry.weaken()` now
+refreshes `UNTRACKED_REFERENCE` slots against their scalar cell's current
+durable storage before preserving the referent. A cell whose container has
+lost its Perl owner can no longer leave a stale slot behind and strand the weak
+observer until a later sweep. `WeakeningPrunesStaleUntrackedOwnerSlotTest`
+checks final weak clearing with zero root queries or snapshots. The full
+`nice -n 19 make` gate passes in 8m08s; issue-1649 aggregate and closure-owner
+tests pass on both backends, as does HTML-Tree 5.07 `t/refloop.t` (8/8 each).
+
 ### Next steps
 
-1. Migrate remaining weak-backref capture cases to explicit owner identities,
-   then remove `weakBackrefCaptureSnapshot` and preserve aggregate lifetime and
-   weak clearing without the compatibility graph walk.
+1. Remove the diagnostic-only `weakBackrefCaptureSnapshot` call and its
+   counters; retain aggregate lifetime and weak clearing through explicit owner
+   identities.
 2. In one ownership-family batch, finish CODE template and optree pins, raw
    descriptor/embedding borrows, native call buffers, escaping lvalues and
    refaliases, and targeted try/finally returns. Add regressions before running

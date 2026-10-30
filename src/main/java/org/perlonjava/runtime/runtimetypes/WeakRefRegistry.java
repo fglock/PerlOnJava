@@ -197,11 +197,12 @@ public class WeakRefRegistry {
                         && !(base instanceof RuntimeScalar scalar
                         && scalar.ephemeralScalarReferenceReferent)
                         && hasWeakRefsTo(base)
-                        && base.hasOwnerSlots()) {
-                    // Uncounted owner identities are sufficient evidence too.
-                    // Enter WEAKLY_TRACKED so their final release can clear the
-                    // weak refs directly, without rebuilding the owner graph or
-                    // leaving a compatibility count behind.
+                        && (base.hasUntrackedReferenceOwnerSlotIdentity()
+                            || base.hasDirectOwnerSlotProofForReleasedWeakReferent())) {
+                    // Refresh each untracked scalar owner against its current
+                    // durable storage before accepting it. A stale slot must
+                    // not turn a final release into a WEAKLY_TRACKED referent
+                    // that waits for a later sweep to clear its weak observers.
                     base.refCount = WEAKLY_TRACKED;
                 } else if (!(identifiedOwner && snapshotRoots.isEmpty()
                         && MortalList.canTrustFinalCountedRelease(base))
