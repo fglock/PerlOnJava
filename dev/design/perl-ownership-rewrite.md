@@ -1902,7 +1902,27 @@ Deferred release no longer builds a tied-handler root snapshot. A handler's
 its own current `HASH_ELEMENT` slot. `TiedHandlerNestedOwnerSlotRepairTest`
 models a legacy count undercount, drains the deferred release, and requires the
 nested value to survive with zero root queries before its final hash slot
-clears the weak observer. Validation is pending for this change.
+clears the weak observer. The final `nice -n 19 make` gate passed on
+`59a4e03eb` in 7m50s with corrective sweeps disabled; `make check-links`
+passed. Full gate log:
+`/private/tmp/ownership-tied-handler-no-sweeps-make-resumed-20261031.log`.
+
+The remaining `processDeferredBase` recovery paths still mix several owner
+families. The next audit distinguishes the semantic edge from the fallback
+that currently protects it:
+
+| Recovery path | Semantic strong edge | Remaining gap before removal |
+|---|---|---|
+| `restoreReachableOwnerCount` | Scalar cells in `activeOwners` | Legacy scalar-cell producers and releases still need stable slot identity on every path. |
+| Unblessed aggregate root snapshot | Array/hash elements reachable through lexical or package storage | Normal slots have identities; parser assembly and compatibility mutation paths still need producer-level invariant coverage. |
+| Strong-cycle graph walk | Internal scalar-reference and aggregate-element edges | All cycle edges must be counted by owner slots so cycles survive without graph discovery. |
+| Live/global CODE capture walk | Closure pads and installed CODE metadata | Aggregate pads use capture slots; scalar captures and some CODE metadata still use the compatibility bridge. |
+| Nested-call depth pin | Active argument aliases and compiler temporaries | Borrowed aliases and owned argument/return values must remain distinct through unwind and async suspension. |
+| Blessed root snapshots and package cache | Package scalar, aggregate, glob, or CODE slots | Root-producing package slots need identities and ordered replacement/release at their actual storage operations. |
+
+This is an inventory, not evidence that these compatibility paths are safe to
+delete. For each row, the next migration must fix acquisition, replacement,
+transfer, and cleanup at the producer before removing its fallback.
 
 ### Next steps
 
