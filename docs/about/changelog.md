@@ -74,6 +74,7 @@ priorities and future plans.
 - Repair unblessed referent undercounts from verified scalar and aggregate owner slots in immediate and deferred cleanup, without root snapshots (#1649).
 - Remove live-scalar-registry reachability from first-weaken, tail-call, and async-Future owner decisions.
 - Release weakly tracked referents from their final uncounted owner slot without a root walk.
+- Detect global `DESTROY` resurrection from current owner-slot identities instead of walking Perl roots, while excluding temporary call owners (#1649).
 
 
 
