@@ -1916,8 +1916,8 @@ interpreter. The filtered `nice -n 19 make` gate passes in 1m15s; logs:
 `/private/tmp/tied-handler-nested-owner-interpreter.log`, and
 `/private/tmp/tied-handler-nested-owner-focused-make.log`.
 The final full no-sweeps `nice -n 19 make` including this fixture passed on
-`12794fde2` in 7m28s; log:
-`/private/tmp/ownership-tied-handler-final-no-sweeps-make.log`.
+the immutable commit `cbebfc724` in 6m57s; log:
+`/private/tmp/ownership-tied-handler-immutable-make-20261031.log`.
 
 The remaining `processDeferredBase` recovery paths still mix several owner
 families. The next audit distinguishes the semantic edge from the fallback
