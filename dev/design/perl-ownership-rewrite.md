@@ -1772,16 +1772,23 @@ The focused unit gate and full `nice -n 19 make` pass; the full gate took
 on both backends. `make check-links` and standard Perl lifetime and lvalue
 oracles pass.
 
+### Scalar overwrite uses owner identities (2026-10-31)
+
+`RuntimeScalar.setLargeRefCounted` now defers cleanup when any remaining
+non-counted Perl owner slot proves the value is live, after refreshing the
+untracked scalar-cell ledger and repairing current counted owners. This removes
+the package-global reachability query from scalar overwrite. Production callers
+no longer request corrective sweeps during scalar overwrite/undef, lexical
+scope exit, or final weak-owner release; the explicit diagnostic helpers remain
+for their focused tests. Post-rebase validation is pending.
+
 ### Next steps
 
-1. Remove production corrective-sweep scheduling as each strong-owner family
-   becomes identity-complete. Keep explicit diagnostic sweep helpers isolated
-   from production lifecycle paths while existing helper tests still exercise
-   them.
-2. In one ownership-family batch, finish remaining CODE template and optree
+1. Run the post-rebase full `nice -n 19 make` gate for the owner-identity and
+   dead-scheduling cleanup batch; fix any failures before publishing the PR head.
+2. In the next ownership-family batch, finish remaining CODE template and optree
    pins, raw descriptor/embedding borrows, native call buffers, escaping
-   lvalues and refaliases. Add regressions before running focused gates and one
-   full `nice -n 19 make`.
+   lvalues and refaliases. Add regressions before the next grouped full gate.
 3. Requalify the full upstream HTML-Tree suite, weak/DESTROY, resurrection,
    cycle, and repository suite after each ownership-family migration.
 4. Make semantic owner counts authoritative, then remove the compatibility

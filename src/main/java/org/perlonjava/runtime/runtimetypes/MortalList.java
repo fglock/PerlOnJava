@@ -450,18 +450,14 @@ public class MortalList {
             } else if (base.refCount == 0
                     && base.clearedOwnedAggregateElement
                     && WeakRefRegistry.hasWeakRefsTo(base)) {
-                // A nested-call reachability guard may have preserved this object
-                // at a selective count of zero. The scalar still represents a live
-                // Perl owner even though there is no count left to decrement. Drop
-                // that stale ownership marker and ask the reachability walker to
-                // decide at the next safe (non-nested) boundary whether the weak
-                // observers should be cleared.
+                // A nested-call guard may preserve this object at a selective
+                // count of zero. Retire the stale scalar owner identity; scope
+                // exit or the final remaining owner slot performs cleanup.
                 scalar.refCountOwned = false;
                 if (base.refCountTrace) {
                     base.releaseOwner(scalar, "deferDecrementIfTracked zero-count owner");
                 }
                 base.releaseActiveOwner(scalar);
-                requestCorrectiveWeakSweep();
             }
             // Note: WEAKLY_TRACKED (-2) objects are NOT scheduled for destruction
             // on scope exit. We can't count strong refs for non-DESTROY objects
