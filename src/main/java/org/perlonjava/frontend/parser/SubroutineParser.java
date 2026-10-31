@@ -2747,6 +2747,10 @@ public class SubroutineParser {
                     installClosureCaptureMetadata(placeholder, materializedCaptures);
                     placeholder.cvStartFile = interpretedCode.cvStartFile;
                     placeholder.cvStartLine = interpretedCode.cvStartLine;
+                    // The published placeholder is the Perl-owned CV. Move
+                    // the interpreter optree's constant edges onto it so the
+                    // temporary executable wrapper cannot pin pad literals.
+                    interpretedCode.transferPadConstantTreeTo(placeholder);
                 }
             } catch (VerifyError ve) {
                 // VerifyError extends Error (not Exception), so it's not caught by catch(Exception).
@@ -2800,6 +2804,7 @@ public class SubroutineParser {
                 installClosureCaptureMetadata(placeholder, materializedCaptures);
                 placeholder.cvStartFile = interpretedCode.cvStartFile;
                 placeholder.cvStartLine = interpretedCode.cvStartLine;
+                interpretedCode.transferPadConstantTreeTo(placeholder);
             } catch (Exception e) {
                 // Handle any exceptions during subroutine creation
                 throw new PerlCompilerException("Subroutine error: " + e.getMessage());

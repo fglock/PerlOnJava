@@ -1518,9 +1518,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     /** Release an untracked CV's pad tree when its last Perl owner leaves. */
     void releasePadConstantsForUntrackedOwnerSlot() {
-        if ((refCount != -1 && refCount != WeakRefRegistry.WEAKLY_TRACKED)
-                || PerlRuntime.currentOrNull() == null
-                || hasPerlOwnerForCapture()
+        // The compatibility count can outlive the scalar slot that contributed
+        // it. Once a slot release reaches this point, capture liveness comes
+        // from the remaining owner identities and non-scalar CODE roots.
+        if (PerlRuntime.currentOrNull() == null
+                || hasPerlOwnerForCaptureOtherThan(null)
                 || padConstantOwnerSlots.isEmpty()) {
             return;
         }
