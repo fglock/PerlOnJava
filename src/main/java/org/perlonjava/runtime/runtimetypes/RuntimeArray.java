@@ -1999,6 +1999,17 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         this.ownedAliasElements = null;
         this.elementsAliased = false;
         this.elements.add(value);
+        if (value != null) {
+            if (hasDurableElementLifetime()) {
+                RuntimeScalar.retainUnstashedIoForDurableSlot(value);
+            }
+            // This store transfers the supplied scalar cell into an owned
+            // array element. Existing counted cells keep their slot identity
+            // and are reclassified by this call; uncounted cells acquire the
+            // element's count only after the destination storage is current.
+            RuntimeScalar.incrementRefCountForContainerStore(value);
+        }
+        elementsOwned = true;
         markPackageRootedValue(value);
         MortalList.flush();
         return this;
