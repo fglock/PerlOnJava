@@ -1303,13 +1303,16 @@ public class MortalList {
                 || !WeakRefRegistry.hasWeakRefsTo(base)) {
             return;
         }
-        // This check runs at individual lexical scope exits, often many times
-        // while a package is loading. Keep package-root traversal cached
-        // across those exits; the live lexical snapshot is independently
-        // invalidated as each lexical leaves scope.
-        if (isReachableFromExternalRootCached(base)) {
+        // Scope cleanup retires the exact lexical owner before reaching this
+        // point. Package, container, and capture edges have their own owner
+        // slots; temporary roots are checked separately because they are
+        // evaluation scaffolding rather than Perl ownership. Prefer these
+        // identities, retaining the cached graph proof only for ownerless
+        // compatibility cases that have not yet migrated.
+        if (base.hasPerlStrongOwner() || temporaryRootDirectlyReferences(base)) {
             return;
         }
+        if (isReachableFromExternalRootCached(base)) return;
         base.refCount = Integer.MIN_VALUE;
         DestroyDispatch.callDestroy(base);
     }
