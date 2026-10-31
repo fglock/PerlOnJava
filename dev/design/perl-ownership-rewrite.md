@@ -1717,6 +1717,16 @@ full `nice -n 19 make` gate passes in 6m55s with the test included. This records
 the observable contract while the package-root compatibility pin remains a
 migration bridge; it does not claim the bridge has been removed.
 
+### Cleared aggregate cleanup ignores legacy count as sole owner proof (2026-10-31)
+
+The cleared-aggregate scope-exit finalizer now checks current Perl owner
+identities independently of `refCount`. A positive legacy count alone no longer
+blocks final weak cleanup; temporary roots and the cached external-root proof
+still preserve owners at boundaries that have not migrated. The regression
+releases a nested untracked scalar owner, leaves a positive compatibility count,
+and verifies the weak observer is cleared. The full `nice -n 19 make` gate passes
+in 7m17s with the regression included.
+
 ### Next steps
 
 1. Remove production corrective-sweep scheduling as each strong-owner family
