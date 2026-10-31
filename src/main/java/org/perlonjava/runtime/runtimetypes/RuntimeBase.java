@@ -345,9 +345,15 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     private int argumentAliasOwnerSlots;
     private int countedOwnerSlots;
     private int pendingReturnOwners;
+    private int pendingOwnerReleases;
 
     synchronized boolean hasPendingReturnOwner() {
         return pendingReturnOwners != 0;
+    }
+
+    /** A queued Perl owner release has retired its live slot but not its count yet. */
+    synchronized boolean hasPendingOwnerRelease() {
+        return pendingOwnerReleases != 0;
     }
 
     /** Explicit call-transfer owners remain authoritative during the legacy bridge. */
@@ -363,7 +369,9 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                     || hasOwnerSlots() || hasPendingReturnOwner());
     }
 
-    private synchronized void retainPendingReturnOwner(PerlOwnerSlot.PendingRelease release) {
+    private synchronized void registerPendingOwnerRelease(
+            PerlOwnerSlot.PendingRelease release) {
+        pendingOwnerReleases++;
         if (release != null && release.kind() == PerlOwnerSlot.Kind.RETURN_VALUE) {
             pendingReturnOwners++;
         }
@@ -831,10 +839,11 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     }
 
     /**
-     * Immutable trace record retained between queueing and draining an owned
-     * decrement.  It deliberately does not retain the scalar itself: source
-     * identity and acquisition site are enough for shutdown diagnosis, and a
-     * trace facility must not change Perl/JVM reachability.
+     * Release token retained between queueing and draining an owned decrement.
+     * It deliberately does not retain the scalar itself: source identity and
+     * acquisition site are enough for shutdown diagnosis, and a trace facility
+     * must not change Perl/JVM reachability. Completion is idempotent so the
+     * pending-release count and owner-slot token retire exactly once.
      */
     static final class PendingOwnerRelease {
         final int scalarIdentity;
@@ -842,6 +851,8 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         final String acquireSite;
         final String queueSite;
         final PerlOwnerSlot.PendingRelease ownerSlotRelease;
+        final java.util.concurrent.atomic.AtomicBoolean completed =
+                new java.util.concurrent.atomic.AtomicBoolean();
 
         PendingOwnerRelease(int scalarIdentity, long referentGeneration,
                             String acquireSite, String queueSite) {
@@ -897,9 +908,9 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     /** Move an active owner trace into the deferred-decrement queue. */
     public PendingOwnerRelease queueOwnerRelease(RuntimeScalar owner, String queueSite) {
         PerlOwnerSlot.PendingRelease slotRelease = owner.deferCountedOwnerRelease(this);
-        retainPendingReturnOwner(slotRelease);
+        registerPendingOwnerRelease(slotRelease);
         if (!refCountTrace || !REFCOUNT_TRACE_ENV) {
-            return slotRelease == null ? null : new PendingOwnerRelease(
+            return new PendingOwnerRelease(
                     System.identityHashCode(owner), 0, "counted owner-slot", queueSite, slotRelease);
         }
         return queueTracedOwnerRelease(owner, queueSite, slotRelease);
@@ -922,6 +933,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     /** Queue provenance for a deferred owner-slot decrement. */
     synchronized PendingOwnerRelease queueOwnerSlotRelease(
             PerlOwnerSlot.PendingRelease ownerSlotRelease) {
+        registerPendingOwnerRelease(ownerSlotRelease);
         PendingOwnerRelease release = new PendingOwnerRelease(
                 0, REFCOUNT_TRACE_ENV ? traceReferentGeneration(this) : 0,
                 "owner-slot", "MortalList.deferOwnerSlotDecrement", ownerSlotRelease);
@@ -935,12 +947,14 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     /** Mark the exact queued trace record as drained without relying on scalar state. */
     public synchronized void completeQueuedOwnerRelease(PendingOwnerRelease release, String releaseSite) {
         if (release == null) return;
-        if (release.ownerSlotRelease != null && !release.ownerSlotRelease.isCompleted()) {
+        if (!release.completed.compareAndSet(false, true)) return;
+        if (release.ownerSlotRelease != null) {
             if (release.ownerSlotRelease.kind() == PerlOwnerSlot.Kind.RETURN_VALUE) {
                 pendingReturnOwners--;
             }
             release.ownerSlotRelease.complete();
         }
+        pendingOwnerReleases--;
         if (!REFCOUNT_TRACE_ENV) return;
         java.util.ArrayList<PendingOwnerRelease> releases = pendingTraceOwnerReleases.get(this);
         if (releases != null) {
