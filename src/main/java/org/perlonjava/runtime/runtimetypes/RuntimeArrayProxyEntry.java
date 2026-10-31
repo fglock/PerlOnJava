@@ -272,12 +272,14 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
                 RuntimeArray.traceLocalizedOwnerDebug(
                         "RuntimeArrayProxyEntry.dynamicRestoreState before removal",
                         parent, removedOwner);
+                boolean countedArraySlot =
+                        RuntimeArray.hasCurrentCountedArrayElementOwner(parent, removedOwner);
                 int removedIndex = removedOwner == null
                         ? -1 : parent.elements.indexOf(removedOwner);
                 if (removedIndex >= 0) {
                     parent.elements.set(removedIndex, null);
                     RuntimeArray.deferRemovedElementRelease(parent, removedOwner,
-                            "RuntimeArrayProxyEntry.dynamicRestoreState");
+                            "RuntimeArrayProxyEntry.dynamicRestoreState", countedArraySlot);
                     removedStoredOwner = true;
                 }
                 this.lvalue = null;
