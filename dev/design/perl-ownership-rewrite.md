@@ -1742,8 +1742,13 @@ counted owner slot is retired but before its queued decrement drains. RuntimeBas
 now tracks queued owner releases through completion, and cleared-aggregate
 finalization leaves those releases to decide the lifecycle transition. A focused
 Java regression exercises this real queue path and passes in the full
-`nice -n 19 make` gate. A Perl-level async case passes 2/2 checks on both
-PerlOnJava backends; the equivalent standard-Perl lifetime check passes 2/2.
+`nice -n 19 make` gate. The async scope-exit oracle is now tracked as
+`issue_1649_cleared_aggregate_async_scope_exit.t`; it suspends on a pending
+Future, checks that the frame retains its weakly observed root, then verifies
+weak clearing and one `DESTROY` after resume. It passes 3/3 on system Perl and
+both no-sweeps backends. This is acceptance coverage for the real Perl cleanup
+path; the queued-release ordering regression remains specifically covered by
+`PendingOwnerReleaseFinalizationTest`.
 
 ### Explicit returns cross try/finally wrappers (2026-10-31)
 
