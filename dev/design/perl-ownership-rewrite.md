@@ -655,8 +655,8 @@ backends, and unchanged HTML::Tree still passes 8/8 on both.
   caller. Interpreter evals consume untargeted callback returns as successful
   eval results rather than errors. Explicit return owners protect referenced
   results throughout lexical cleanup, abandoned method arguments, invocant
-  release, and local restoration. Targeted try/finally paths remain a separate
-  ownership boundary to complete.
+  release, and local restoration. Try/finally return paths now unwind lexical
+  registrations at each frame they leave, on both execution backends.
 - [x] Scalar overwrite's external-root fallback cannot clear weak observers
   while identified strong slots remain. This exposed an actual native-call
   argument leak in `HTMLParser.fireEvent`: freshly owned event-data and call
@@ -1745,6 +1745,28 @@ Java regression exercises this real queue path and passes in the full
 `nice -n 19 make` gate. A Perl-level async case passes 2/2 checks on both
 PerlOnJava backends; the equivalent standard-Perl lifetime check passes 2/2.
 
+### Explicit returns cross try/finally wrappers (2026-10-31)
+
+The parser lowers `try/finally` through a synthetic `:lvalue` wrapper so the
+expression can preserve aliases when its caller requests an lvalue. Two frame
+exit paths missed that wrapper: ordinary rvalue returns skipped acquiring a
+return owner because the wrapper is marked `:lvalue`, and non-local returns
+could bypass lexical teardown before the enclosing subroutine resumed. The
+compiler now snapshots rvalue returns before cleanup while preserving true
+lvalue aliases. The JVM wrapper registers its lexical slots even when the
+static cleanup heuristic would omit them. The interpreter's lexical register
+metadata includes return-specific cleanup opcodes, and both `RETURN_NONLOCAL`
+propagation and marker consumption retire the active frame's slots before
+leaving it. JVM and interpreter call boundaries unwind their cleanup marks as
+well. The focused JUnit regression checks weak-reference and `DESTROY` timing
+on both backends, plus lvalue assignment through `finally`. A
+`Try::Tiny` oracle validates the standard Perl lifetime contract; system Perl
+does not parse PerlOnJava's `finally` syntax directly.
+The focused unit gate and full `nice -n 19 make` pass; the full gate took
+7m42s. With corrective sweeps disabled, HTML::Tree `t/refloop.t` passes 8/8
+on both backends. `make check-links` and standard Perl lifetime and lvalue
+oracles pass.
+
 ### Next steps
 
 1. Remove production corrective-sweep scheduling as each strong-owner family
@@ -1753,8 +1775,8 @@ PerlOnJava backends; the equivalent standard-Perl lifetime check passes 2/2.
    them.
 2. In one ownership-family batch, finish remaining CODE template and optree
    pins, raw descriptor/embedding borrows, native call buffers, escaping
-   lvalues and refaliases, and targeted try/finally returns. Add regressions
-   before running the focused gates and one full `nice -n 19 make`.
+   lvalues and refaliases. Add regressions before running focused gates and one
+   full `nice -n 19 make`.
 3. Requalify the full upstream HTML-Tree suite, weak/DESTROY, resurrection,
    cycle, and repository suite after each ownership-family migration.
 4. Make semantic owner counts authoritative, then remove the compatibility

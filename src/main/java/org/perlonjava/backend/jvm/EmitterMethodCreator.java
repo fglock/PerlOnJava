@@ -712,7 +712,11 @@ public class EmitterMethodCreator implements Opcodes {
                 org.perlonjava.frontend.analysis.CleanupNeededVisitor cleanupVisitor =
                         new org.perlonjava.frontend.analysis.CleanupNeededVisitor();
                 ast.accept(cleanupVisitor);
-                ctx.javaClassInfo.cleanupNeeded = cleanupVisitor.needsCleanup();
+                // A try-expression wrapper can leave via PerlNonLocalReturnException
+                // after its finally block. Its locals need cleanup-stack registrations
+                // even when ordinary AST analysis sees no user calls or blesses.
+                ctx.javaClassInfo.cleanupNeeded = ctx.javaClassInfo.isTryExpressionWrapper
+                        || cleanupVisitor.needsCleanup();
             }
 
             // Manual frames removed - using COMPUTE_FRAMES for automatic frame computation

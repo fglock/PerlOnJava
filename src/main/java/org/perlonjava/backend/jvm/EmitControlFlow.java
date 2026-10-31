@@ -394,6 +394,8 @@ public class EmitControlFlow {
      */
     static void handleReturnOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
         EmitterContext ctx = emitterVisitor.ctx;
+        boolean copyScopeReturn = !ctx.javaClassInfo.isLvalueSubroutine
+                || ctx.javaClassInfo.isTryExpressionWrapper;
 
         // Check if we're inside a defer block - return out of defer is prohibited
         if (ctx.javaClassInfo.isInDeferBlock) {
@@ -512,8 +514,7 @@ public class EmitControlFlow {
         // returns, whose DESTROY timing must remain unchanged.
         if (protectsLexicalAggregate) {
             ctx.mv.visitVarInsn(Opcodes.ILOAD, 2);
-            ctx.mv.visitInsn(ctx.javaClassInfo.isLvalueSubroutine
-                    ? Opcodes.ICONST_0 : Opcodes.ICONST_1);
+            ctx.mv.visitInsn(copyScopeReturn ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
             ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                     "returnList",
@@ -522,7 +523,7 @@ public class EmitControlFlow {
         }
 
         ctx.mv.visitVarInsn(Opcodes.ILOAD, 2);
-        ctx.mv.visitInsn(ctx.javaClassInfo.isLvalueSubroutine ? Opcodes.ICONST_0 : Opcodes.ICONST_1);
+        ctx.mv.visitInsn(copyScopeReturn ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
         ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/runtimetypes/RuntimeCode", "prepareScopeReturn",
                 "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;IZ)Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;",
@@ -602,8 +603,7 @@ public class EmitControlFlow {
                 ctx.javaClassInfo.loadSpillRef(ctx.mv, spillRef);
                 ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
                 ctx.mv.visitVarInsn(Opcodes.ILOAD, 2);
-                ctx.mv.visitInsn(ctx.javaClassInfo.isLvalueSubroutine
-                        ? Opcodes.ICONST_0 : Opcodes.ICONST_1);
+                ctx.mv.visitInsn(copyScopeReturn ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
                 ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                         "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                         "prepareLocalArrayReturn",

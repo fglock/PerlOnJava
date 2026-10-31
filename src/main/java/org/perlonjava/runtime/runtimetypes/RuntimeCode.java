@@ -9614,6 +9614,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     return returned;
                 }
             } catch (PerlNonLocalReturnException e) {
+                // A non-local return exits this invocation even when it is
+                // propagated to an enclosing subroutine. Retire this frame's
+                // lexicals before deciding which boundary consumes the value.
+                MyVarCleanupStack.unwindTo(cleanupMark);
                 if (e.targetCode != null && e.targetCode != code) {
                     throw e;
                 }
@@ -10320,6 +10324,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     RuntimeList result = code.apply(subroutineName, a, callContext);
                     returnedTailCall = result instanceof RuntimeControlFlowList cfList
                             && cfList.getControlFlowType() == ControlFlowType.TAILCALL;
+                    if (result instanceof RuntimeControlFlowList flow
+                            && flow.getControlFlowType() != ControlFlowType.TAILCALL) {
+                        MyVarCleanupStack.unwindTo(cleanupMark);
+                        if (flow.getControlFlowType() != ControlFlowType.RETURN) {
+                            MortalList.flush();
+                        }
+                    }
                     // Flush deferred DESTROY decrements for void-context calls.
                     // See the 3-arg apply() overload for detailed rationale.
                     if (effectiveContext == RuntimeContextType.VOID) {
@@ -10332,6 +10343,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             cleanupMark, result);
                     return result;
                 } catch (PerlNonLocalReturnException e) {
+                    // The exception unwinds this Perl frame even when it is
+                    // only being relayed to the frame that owns the return.
+                    MyVarCleanupStack.unwindTo(cleanupMark);
                     if (e.targetCode != null && e.targetCode != code) {
                         throw e;
                     }
@@ -10341,7 +10355,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     }
                     // Consume at normal subroutine and eval-block boundaries.
                     RuntimeList result = e.returnValue != null ? e.returnValue.getList() : new RuntimeList();
-                    return coerceScalarCallResult(result, effectiveContext, callContext, !isLvalueCode(code));
+                    RuntimeList returned = coerceScalarCallResult(
+                            result, effectiveContext, callContext, !isLvalueCode(code));
+                    if (effectiveContext == RuntimeContextType.VOID
+                            || containsNoReference(returned)) {
+                        flushAfterScopeExit = true;
+                    }
+                    MyVarCleanupStack.releaseOrTransferSocketOwnersOnReturn(
+                            cleanupMark, returned);
+                    return returned;
                 } catch (RuntimeException e) {
                     e = WarnDie.maybeInvokeUnhandledDieHandler(e);
                     if (!(e instanceof PerlExitException)) {
@@ -10709,6 +10731,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     RuntimeList result = code.apply(subroutineName, a, callContext);
                     returnedTailCall = result instanceof RuntimeControlFlowList cfList
                             && cfList.getControlFlowType() == ControlFlowType.TAILCALL;
+                    if (result instanceof RuntimeControlFlowList flow
+                            && flow.getControlFlowType() != ControlFlowType.TAILCALL) {
+                        MyVarCleanupStack.unwindTo(cleanupMark);
+                        if (flow.getControlFlowType() != ControlFlowType.RETURN) {
+                            MortalList.flushAboveMark();
+                        }
+                    }
                     // Flush deferred DESTROY decrements for void-context calls.
                     // See the 3-arg apply() overload for detailed rationale.
                     if (effectiveContext == RuntimeContextType.VOID) {
@@ -10719,6 +10748,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     }
                     return result;
                 } catch (PerlNonLocalReturnException e) {
+                    MyVarCleanupStack.unwindTo(cleanupMark);
                     if (e.targetCode != null && e.targetCode != code) {
                         throw e;
                     }
@@ -10728,7 +10758,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     }
                     // Consume at normal subroutine and eval-block boundaries.
                     RuntimeList result = e.returnValue != null ? e.returnValue.getList() : new RuntimeList();
-                    return coerceScalarCallResult(result, effectiveContext, callContext, !isLvalueCode(code));
+                    RuntimeList returned = coerceScalarCallResult(
+                            result, effectiveContext, callContext, !isLvalueCode(code));
+                    if (effectiveContext == RuntimeContextType.VOID
+                            || containsNoReference(returned)) {
+                        MortalList.flushAboveMark();
+                    }
+                    MyVarCleanupStack.releaseOrTransferSocketOwnersOnReturn(
+                            cleanupMark, returned);
+                    return returned;
                 } catch (RuntimeException e) {
                     e = WarnDie.maybeInvokeUnhandledDieHandler(e);
                     if (!(e instanceof PerlExitException)) {

@@ -240,6 +240,9 @@ public class JavaClassInfo {
      */
     public boolean isLvalueSubroutine;
 
+    /** A synthetic lvalue wrapper must use the caller's context for returns. */
+    public boolean isTryExpressionWrapper;
+
     /**
      * Counter tracking nesting depth inside finally blocks.
      * Control flow statements (last, next, redo, return, goto) are prohibited in finally blocks.

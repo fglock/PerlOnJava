@@ -4,11 +4,12 @@ import java.util.ArrayList;
 import java.util.IdentityHashMap;
 
 /**
- * Runtime cleanup stack for my-variables during exception unwinding.
+ * Runtime cleanup stack for my-variables when a Perl frame exits early.
  * <p>
  * Parallels the {@code local} mechanism (InterpreterState save/restore):
- * my-variables are registered at creation time, and cleaned up on exception
- * via {@link #unwindTo(int)}. On normal scope exit, existing
+ * my-variables are registered at creation time, and cleaned up when an
+ * exception or non-local control-flow return bypasses normal teardown via
+ * {@link #unwindTo(int)}. On normal scope exit, existing
  * {@code scopeExitCleanup} bytecodes handle cleanup, and {@link #popMark(int)}
  * discards the registrations without cleanup.
  * <p>
@@ -268,7 +269,8 @@ public class MyVarCleanupStack {
     }
 
     /**
-     * Called on exception in {@code RuntimeCode.apply()}.
+     * Called when a Perl frame exits before its ordinary scope cleanup runs.
+     * This includes exception propagation and non-local returns.
      * Runs {@link MortalList#evalExceptionScopeCleanup(Object)} for all
      * registered-but-not-yet-cleaned variables since the mark, in LIFO order.
      * <p>
