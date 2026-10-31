@@ -682,32 +682,33 @@ public class EmitEval {
         mv.visitLabel(compileSuccess);
         // Stack: [Class]
 
-        // Create array of parameter types for the constructor
-        // Each captured variable becomes a constructor parameter (including null gaps)
-        emitIntConstant(mv, newEnv.length - skipVariables);
-        mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Class");
-        // Stack: [Class, Class[]]
-
-        // Fill the parameter types array based on variable types
-        // Variables starting with @ are RuntimeArray, % are RuntimeHash, others are RuntimeScalar
-        // getVariableDescriptor handles nulls gracefully (returns RuntimeScalar descriptor)
-        for (int i = 0; i < newEnv.length - skipVariables; i++) {
-            mv.visitInsn(Opcodes.DUP);
-            emitIntConstant(mv, i);
-            String descriptor = EmitterMethodCreator.getVariableDescriptor(newEnv[i + skipVariables]);
-            mv.visitLdcInsn(Type.getType(descriptor));
-            mv.visitInsn(Opcodes.AASTORE);
+        // Create array of parameter types for the constructor and call the caching helper.
+        // RuntimeCode.evalGetCachedConstructor(clazz, paramTypes) avoids the expensive
+        // Class.getConstructor() reflection call on cache hits.
+        int paramCount = newEnv.length - skipVariables;
+        if (paramCount == 0) {
+            mv.visitFieldInsn(Opcodes.GETSTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "EMPTY_CLASSES",
+                    "[Ljava/lang/Class;");
+        } else {
+            emitIntConstant(mv, paramCount);
+            mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Class");
+            for (int i = 0; i < paramCount; i++) {
+                mv.visitInsn(Opcodes.DUP);
+                emitIntConstant(mv, i);
+                String descriptor = EmitterMethodCreator.getVariableDescriptor(newEnv[i + skipVariables]);
+                mv.visitLdcInsn(Type.getType(descriptor));
+                mv.visitInsn(Opcodes.AASTORE);
+            }
         }
         // Stack: [Class, Class[]]
 
-        // Use reflection to get the constructor
-        // Note: Direct instantiation (NEW/INVOKESPECIAL) isn't possible because
-        // the class name is only known at runtime
         mv.visitMethodInsn(
-                Opcodes.INVOKEVIRTUAL,
-                "java/lang/Class",
-                "getConstructor",
-                "([Ljava/lang/Class;)Ljava/lang/reflect/Constructor;",
+                Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                "evalGetCachedConstructor",
+                "(Ljava/lang/Class;[Ljava/lang/Class;)Ljava/lang/reflect/Constructor;",
                 false);
         // Stack: [Constructor]
 

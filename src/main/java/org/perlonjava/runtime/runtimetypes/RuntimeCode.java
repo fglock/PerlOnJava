@@ -1012,13 +1012,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public static void incrementEvalDepth() {
         ExecutionRuntimeState state = PerlRuntime.current().executionState();
         state.evalDepth++;
-        state.evalPseudoConstantScopes.push(new java.util.LinkedHashMap<>());
+        state.evalPseudoConstantScopes.add(null);  // lazy: allocate only when a sub is promoted
     }
 
     public static void decrementEvalDepth() {
         ExecutionRuntimeState state = PerlRuntime.current().executionState();
         java.util.LinkedHashMap<String, RuntimeScalar> promotions =
-                state.evalPseudoConstantScopes.isEmpty() ? null : state.evalPseudoConstantScopes.pop();
+                state.evalPseudoConstantScopes.isEmpty() ? null
+                        : state.evalPseudoConstantScopes.remove(state.evalPseudoConstantScopes.size() - 1);
         if (promotions != null) {
             for (var entry : promotions.entrySet()) {
                 GlobalVariable.clearGlobalPseudoConstant(entry.getKey());
@@ -4380,6 +4381,28 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return evalStringHelper(code, evalTag, new Object[0]);
     }
 
+    /** Shared empty-array sentinel to avoid allocation in no-capture evals. */
+    public static final Class<?>[] EMPTY_CLASSES = new Class<?>[0];
+
+    /**
+     * Returns a cached {@link java.lang.reflect.Constructor} for the class produced by
+     * {@link #evalStringHelper}. Avoids the expensive reflection lookup on cache hits.
+     * Thread-safe via the per-runtime constructor cache (same lifecycle as evalCache).
+     */
+    @SuppressWarnings("unchecked")
+    public static java.lang.reflect.Constructor<?> evalGetCachedConstructor(
+            Class<?> clazz, Class<?>[] paramTypes) throws Exception {
+        Map<Class<?>, java.lang.reflect.Constructor<?>> ctorCache =
+                PerlRuntime.current().runtimeCodeState().evalConstructorCache;
+        synchronized (ctorCache) {
+            java.lang.reflect.Constructor<?> ctor = ctorCache.get(clazz);
+            if (ctor != null) return ctor;
+            ctor = clazz.getDeclaredConstructor(paramTypes);
+            ctorCache.put(clazz, ctor);
+            return ctor;
+        }
+    }
+
     public static boolean shouldDecodeEvalbytesUtf8Source(String source) {
         if (source == null) {
             return false;
@@ -4485,6 +4508,42 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * @throws Exception if an error occurs during compilation
      */
     public static Class<?> evalStringHelper(RuntimeScalar code, String evalTag, Object[] runtimeValues) throws Exception {
+
+        // Fast-path: skip compilation lock, binding-frame, and all save/restore overhead
+        // for repeated evals of the same string. Only applies when:
+        //   - not in debugger mode ($^P == 0)
+        //   - source is a plain STRING (not BYTE_STRING, not evalbytes)
+        // On a cache hit the method returns without modifying any state, so no save/restore is needed.
+        // Thread-safe: the eval cache is itself synchronized; Class<?> objects are immutable.
+        if (code.type == RuntimeScalarType.STRING) {
+            int debugFast = GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("P")).getInt();
+            if (debugFast == 0) {
+                EmitterContext fastCtx = getEvalContext(evalTag);
+                if (fastCtx != null && !fastCtx.isEvalbytes) {
+                    String evalStr = code.toString();
+                    boolean hasUnicode = false;
+                    for (int i = 0; i < evalStr.length(); i++) {
+                        if (evalStr.charAt(i) > 127) { hasUnicode = true; break; }
+                    }
+                    int featureFlags = fastCtx.symbolTable.featureFlagsStack.peek();
+                    String runtimePkg = InterpreterState.currentPackage.get().toString();
+                    String callsiteSubFast = fastCtx.symbolTable.getCurrentSubroutine();
+                    boolean topLevelMainFast = callsiteSubFast == null || callsiteSubFast.isEmpty()
+                            || "main".equals(callsiteSubFast);
+                    String currentPackageFast = ClassRegistry.isClass(runtimePkg)
+                            ? runtimePkg : topLevelMainFast ? runtimePkg
+                            : fastCtx.symbolTable.getCurrentPackage();
+                    // Key must exactly match the slow-path key (all byte-string booleans are false for STRING)
+                    String fastKey = evalStr + '\0' + evalTag + '\0' + hasUnicode
+                            + "\0false\0false\0false\0false\0" + featureFlags + '\0' + currentPackageFast;
+                    Map<String, Class<?>> fastCache = PerlRuntime.current().runtimeCodeState().evalCache;
+                    synchronized (fastCache) {
+                        Class<?> hit = fastCache.get(fastKey);
+                        if (hit != null) return hit;
+                    }
+                }
+            }
+        }
 
         try (PerlRuntime.Binding runtimeBinding = PerlRuntime.current().bind();
              PerlLanguageProvider.CompilationLockGuard ignored =

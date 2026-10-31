@@ -4,6 +4,7 @@ import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.frontend.astnode.OperatorNode;
 
 import java.lang.invoke.MethodHandle;
+import java.lang.reflect.Constructor;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
@@ -20,6 +21,7 @@ public final class RuntimeCodeRuntimeState {
 
     final IdentityHashMap<OperatorNode, Integer> evalBeginIds = new IdentityHashMap<>();
     final Map<String, Class<?>> evalCache = lruMap(EVAL_CACHE_SIZE);
+    final Map<Class<?>, Constructor<?>> evalConstructorCache = lruMap(EVAL_CACHE_SIZE);
     final Map<Class<?>, MethodHandle> methodHandleCache = lruMap(METHOD_HANDLE_CACHE_SIZE);
     final HashMap<String, Class<?>> anonymousSubs = new HashMap<>();
     final HashMap<String, String> deparseSourceTextsByClassName = new HashMap<>();
@@ -138,6 +140,7 @@ public final class RuntimeCodeRuntimeState {
     void clearCaches() {
         evalBeginIds.clear();
         evalCache.clear();
+        evalConstructorCache.clear();
         methodHandleCache.clear();
         anonymousSubs.clear();
         deparseSourceTextsByClassName.clear();
