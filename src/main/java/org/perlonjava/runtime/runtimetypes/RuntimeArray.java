@@ -1007,7 +1007,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     /** Temporary trace for diagnosing localized element ownership. */
     static void traceLocalizedOwnerDebug(
             String site, RuntimeArray array, RuntimeScalar scalar) {
-        if (System.getenv("PJ_ARRAY_OWNER_DEBUG") == null) return;
+        if (System.getenv("PJ_ARRAY_OWNER_DEBUG") == null
+                && System.getProperty("PJ_ARRAY_OWNER_DEBUG") == null) return;
         RuntimeBase base = scalar != null && scalar.value instanceof RuntimeBase value
                 ? value : null;
         PerlOwnerSlot slot = scalar == null ? null : scalar.countedOwnerSlot();
