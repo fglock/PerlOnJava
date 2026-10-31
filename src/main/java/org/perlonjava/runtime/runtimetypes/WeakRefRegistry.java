@@ -463,11 +463,6 @@ public class WeakRefRegistry {
                 || (referent instanceof RuntimeScalarReadOnly
                     && RuntimeCode.isInstalledPadConstant(referent))) return;
 
-        if (ReachabilityWalker.correctiveSweepsEnabled()) {
-            MortalList.requestTargetedWeakSweep(referent);
-            return;
-        }
-
         if (referent.blessId != 0
                 || referent instanceof RuntimeArray
                 || referent instanceof RuntimeHash) {
@@ -506,16 +501,6 @@ public class WeakRefRegistry {
                 && (referent instanceof RuntimeArray || referent instanceof RuntimeHash);
         if (untrackedAggregate && referent.refCount == 1) {
             referent.refCount = WEAKLY_TRACKED;
-        }
-
-        // Keep the compatibility path's targeted scheduling when explicitly
-        // enabled. The default-off path below finalizes directly from slot
-        // identity and does not need a later reachability pass.
-        if (ReachabilityWalker.correctiveSweepsEnabled()) {
-            if (referent.refCount == WEAKLY_TRACKED && hasWeakRefsTo(referent)) {
-                MortalList.requestTargetedWeakSweep(referent);
-            }
-            return;
         }
 
         if (referent.blessId != 0) {
