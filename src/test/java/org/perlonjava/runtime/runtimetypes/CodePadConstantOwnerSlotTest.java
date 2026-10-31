@@ -109,7 +109,7 @@ class CodePadConstantOwnerSlotTest {
     }
 
     @Test
-    void finalUntrackedCodeReferenceReleasesItsPadTree() {
+    void finalUntrackedCodeReferenceReleasesItsPadTreeDespiteStaleLegacyCount() {
         PerlRuntime runtime = new PerlRuntime();
         RuntimeScalarReadOnly constant = new RuntimeScalarReadOnly("owned");
         RuntimeCode closure = new RuntimeCode((args, context) -> new RuntimeList(), null);
@@ -130,8 +130,18 @@ class CodePadConstantOwnerSlotTest {
                         closure.ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE));
                 assertEquals(1,
                         constant.ownerSlotCount(PerlOwnerSlot.Kind.CODE_PAD_CONSTANT));
+                // The scalar slot is the actual CODE owner. Its old
+                // compatibility count can remain positive after that owner
+                // identity is the only remaining proof of Perl liveness.
+                closure.refCount = 7;
 
-                codeSlot.set(new RuntimeScalar());
+                try (MortalList.ReachabilityQueryMeasurement measurement =
+                             MortalList.measureReachabilityQueries()) {
+                    codeSlot.set(new RuntimeScalar());
+
+                    assertEquals(0, measurement.stats().rootQueries);
+                    assertEquals(0, measurement.stats().snapshotsBuilt);
+                }
 
                 assertEquals(0,
                         constant.ownerSlotCount(PerlOwnerSlot.Kind.CODE_PAD_CONSTANT));

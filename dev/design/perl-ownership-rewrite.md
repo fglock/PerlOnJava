@@ -1671,15 +1671,33 @@ checks final weak clearing with zero root queries or snapshots. The full
 `nice -n 19 make` gate passes in 8m08s; issue-1649 aggregate and closure-owner
 tests pass on both backends, as does HTML-Tree 5.07 `t/refloop.t` (8/8 each).
 
+### Interpreter pad constants follow the published CV owner (2026-10-31)
+
+Lazy interpreter materialization left optree constant owner slots on the
+temporary `InterpretedCode` wrapper, while the stable placeholder is the
+Perl-owned CV. Transfer the direct and embedded pad-constant tree to that
+placeholder on both the normal interpreter path and the VerifyError fallback.
+The stale-positive-count cleanup check now uses the remaining owner identities
+instead of treating the compatibility count as another owner. The
+`pad_constant_cv_owner_lifetime.t` oracle passes 10/10 on system Perl and both
+backends with corrective sweeps disabled; the new Java owner-slot regression
+also checks final pad-tree release with zero root queries or snapshots. The
+full `nice -n 19 make` gate passes in 7m27s. HTML-Tree 5.07 `t/refloop.t`
+passes 8/8 on all three runtimes. The #1860 growing-output regression and
+Data-Tumbler 0.010 `t/90-stress.t` pass on system Perl and both no-sweeps
+backends; the stress case generates 65,536 results in 6.56s on JVM and 10.76s
+on the interpreter. The #1794 controller and WebSocket regressions pass on
+system Perl and both no-sweeps backends.
+
 ### Next steps
 
 1. Remove the diagnostic-only `weakBackrefCaptureSnapshot` call and its
    counters; retain aggregate lifetime and weak clearing through explicit owner
    identities.
-2. In one ownership-family batch, finish CODE template and optree pins, raw
-   descriptor/embedding borrows, native call buffers, escaping lvalues and
-   refaliases, and targeted try/finally returns. Add regressions before running
-   the focused gates and one full `nice -n 19 make`.
+2. In one ownership-family batch, finish remaining CODE template and optree
+   pins, raw descriptor/embedding borrows, native call buffers, escaping
+   lvalues and refaliases, and targeted try/finally returns. Add regressions
+   before running the focused gates and one full `nice -n 19 make`.
 3. Requalify upstream HTML-Tree, weak/DESTROY, resurrection, cycle, and full-suite
    behavior as each family migrates; then qualify the full HTML-Tree suite.
 4. Make semantic owner counts authoritative, then remove the compatibility
