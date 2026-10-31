@@ -30,6 +30,7 @@ priorities and future plans.
 - Keep weakly tracked referents alive while an explicit Perl owner slot remains; undef now retires only the released cell's identity (#1649).
 - Track package-root weak compatibility pins by owner-slot identity and retire each pin with the final scalar owner (#1649).
 - Finalize cleared aggregate weak references from live owner identities even when a legacy count remains; retain reachability checks only for unmigrated owner cases (#1649).
+- Keep queued owner releases visible to cleared-aggregate cleanup until their deferred count transition completes (#1649).
 - Keep backslash-addressed optree constants alive through saved CODE references, transfer interpreter optree owner trees to published CVs, and release each constant edge with its CV owner (#1649).
 - Acquire interpreter return owners before lexical cleanup so returned closures retain captured aggregates (#1649).
 - Keep recursive output cleanup on explicit owner slots as lexical result graphs grow, avoiding repeated live-root snapshots (#1860).

@@ -1734,6 +1734,17 @@ on both backends, and the #1860 growing-output regression passes 4/4 on both.
 A focused post-change weak/DESTROY/resurrection/cycle matrix also passes all
 8 fixtures and 68 assertions on each backend.
 
+The count of `5` in `finalCellCleanupReleasesNestedUntrackedOwnerDespiteLegacyCount`
+is assigned directly by the Java test; it is an invariant check, not evidence
+that normal runtime operations create that state. A Perl-level async reproducer
+did expose a real ordering window: scope-exit finalization can run after a
+counted owner slot is retired but before its queued decrement drains. RuntimeBase
+now tracks queued owner releases through completion, and cleared-aggregate
+finalization leaves those releases to decide the lifecycle transition. A focused
+Java regression exercises this real queue path and passes in the full
+`nice -n 19 make` gate. A Perl-level async case passes 2/2 checks on both
+PerlOnJava backends; the equivalent standard-Perl lifetime check passes 2/2.
+
 ### Next steps
 
 1. Remove production corrective-sweep scheduling as each strong-owner family

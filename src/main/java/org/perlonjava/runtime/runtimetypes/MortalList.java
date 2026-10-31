@@ -1311,6 +1311,11 @@ public class MortalList {
         if (base.hasPerlStrongOwnerIdentity() || temporaryRootDirectlyReferences(base)) {
             return;
         }
+        // A deferred count release has already retired its live owner slot,
+        // but the compatibility count is not decremented until the mortal
+        // queue drains. Let that exact release decide finalization instead of
+        // racing it with scope-exit cleanup.
+        if (base.hasPendingOwnerRelease()) return;
         if (isReachableFromExternalRootCached(base)) return;
         base.refCount = Integer.MIN_VALUE;
         DestroyDispatch.callDestroy(base);
