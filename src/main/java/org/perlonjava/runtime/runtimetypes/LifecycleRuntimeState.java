@@ -60,7 +60,6 @@ final class LifecycleRuntimeState {
     final Set<RuntimeBase> targetedWeakSweepReferents =
             Collections.newSetFromMap(new IdentityHashMap<>());
     Set<RuntimeBase> flushReachableCache;
-    ReachabilityWalker.TiedHashReachabilitySnapshot flushTiedReachableCache;
     ReachabilityWalker.ExternalRootSnapshot externalRootSnapshot;
     ReachabilityWalker.LiveRootSnapshot liveRootSnapshot;
     ReachabilityWalker.ScalarRootReachabilitySnapshot scalarRootSnapshot;
@@ -166,7 +165,6 @@ final class LifecycleRuntimeState {
         immediateWeakSweepRequested = false;
         targetedWeakSweepReferents.clear();
         flushReachableCache = null;
-        flushTiedReachableCache = null;
         externalRootSnapshot = null;
         liveRootSnapshot = null;
         scalarRootSnapshot = null;

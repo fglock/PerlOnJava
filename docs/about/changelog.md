@@ -31,6 +31,7 @@ priorities and future plans.
 - Give mutable scalar-reference contents stable owner-slot identities, share the contents count across aliases, and carry slot identity through localization and deferred release (#1649).
 - Clear nested weak observers after explicit undef from validated Perl owner identities, without treating rescued or temporary roots as owners (#1649).
 - Keep async lexical values owned while interpreter frames are suspended, then finalize cleared aggregate weak observers from current slots without stale-count root walks (#1649, #1860).
+- Repair deferred undercounts for values nested in tied handlers from their explicit hash slots, removing the tied-root reachability snapshot from deferred cleanup (#1649).
 
 - Bundle `Devel::Size` with JVM-based `size` and `total_size` estimates.
 
