@@ -1004,30 +1004,6 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         return ownedAliasElements != null && ownedAliasElements.contains(scalar);
     }
 
-    /** Temporary trace for diagnosing localized element ownership. */
-    static void traceLocalizedOwnerDebug(
-            String site, RuntimeArray array, RuntimeScalar scalar) {
-        if (System.getenv("PJ_ARRAY_OWNER_DEBUG") == null
-                && System.getProperty("PJ_ARRAY_OWNER_DEBUG") == null) return;
-        RuntimeBase base = scalar != null && scalar.value instanceof RuntimeBase value
-                ? value : null;
-        PerlOwnerSlot slot = scalar == null ? null : scalar.countedOwnerSlot();
-        System.err.println("[ARRAY_OWNER_DEBUG] site=" + site
-                + " array=" + System.identityHashCode(array)
-                + " size=" + array.elements.size()
-                + " elementsOwned=" + array.elementsOwned
-                + " elementsAliased=" + array.elementsAliased
-                + " scalar=" + (scalar == null ? 0 : System.identityHashCode(scalar))
-                + " stored=" + (scalar != null && array.elements.contains(scalar))
-                + " owns=" + array.ownsElement(scalar)
-                + " refCountOwned=" + (scalar != null && scalar.refCountOwned)
-                + " scalarType=" + (scalar == null ? -1 : scalar.type)
-                + " base=" + (base == null ? 0 : System.identityHashCode(base))
-                + " baseRefCount=" + (base == null ? -1 : base.refCount)
-                + " slot=" + (slot == null ? "none" : slot.kind())
-                + " slotActive=" + (slot != null && slot.isActive()));
-    }
-
     /** Transfer a removed owned element through the normal deferred-release path. */
     static void deferRemovedElementRelease(
             RuntimeArray array, RuntimeScalar scalar, String releaseSite) {
@@ -1049,7 +1025,6 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     static void deferRemovedElementRelease(
             RuntimeArray array, RuntimeScalar scalar, String releaseSite,
             boolean currentCountedArrayElementOwner) {
-        traceLocalizedOwnerDebug(releaseSite, array, scalar);
         if ((array.ownsElement(scalar) || currentCountedArrayElementOwner)
                 && scalar.refCountOwned
                 && ((scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
@@ -1721,9 +1696,6 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             @Override
             public void dynamicRestoreState() {
                 boolean releasedLocalizedOwner = false;
-                traceLocalizedOwnerDebug("RuntimeArray.deleteLocal before restore",
-                        self, idx >= 0 && idx < self.elements.size()
-                                ? self.elements.get(idx) : null);
                 // undef @array can remove the container slots while one or
                 // more element locals are active. Restore the pre-local
                 // container shape first; nested local states then restore
@@ -1739,10 +1711,13 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                     // Remove the localized slot itself, but retain values
                     // assigned to intervening slots during the scope.
                     while (self.elements.size() > idx) {
+                        RuntimeScalar candidate = self.elements.getLast();
+                        boolean countedArraySlot =
+                                hasCurrentCountedArrayElementOwner(self, candidate);
                         RuntimeScalar removed = self.elements.removeLast();
                         if (removed != null) {
                             deferRemovedElementRelease(self, removed,
-                                    "RuntimeArray.deleteLocal");
+                                    "RuntimeArray.deleteLocal", countedArraySlot);
                             releasedLocalizedOwner = true;
                         }
                     }
@@ -1758,19 +1733,23 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 if (existed) {
                     if (idx < self.elements.size()) {
                         RuntimeScalar displaced = self.elements.get(idx);
+                        boolean countedArraySlot =
+                                hasCurrentCountedArrayElementOwner(self, displaced);
                         self.elements.set(idx, savedValue);
                         if (displaced != null && displaced != savedValue) {
                             deferRemovedElementRelease(self, displaced,
-                                    "RuntimeArray.deleteLocal");
+                                    "RuntimeArray.deleteLocal", countedArraySlot);
                             releasedLocalizedOwner = true;
                         }
                     }
                 } else if (idx >= 0 && idx < self.elements.size()) {
                     RuntimeScalar displaced = self.elements.get(idx);
+                    boolean countedArraySlot =
+                            hasCurrentCountedArrayElementOwner(self, displaced);
                     self.elements.set(idx, null);
                     if (displaced != null) {
                         deferRemovedElementRelease(self, displaced,
-                                "RuntimeArray.deleteLocal");
+                                "RuntimeArray.deleteLocal", countedArraySlot);
                         releasedLocalizedOwner = true;
                     }
                 }
