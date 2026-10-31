@@ -1004,19 +1004,14 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         return ownedAliasElements != null && ownedAliasElements.contains(scalar);
     }
 
-    /** Transfer a removed owned element through the normal deferred-release path. */
-    static void deferRemovedElementRelease(
-            RuntimeArray array, RuntimeScalar scalar, String releaseSite) {
-        deferRemovedElementRelease(array, scalar, releaseSite, false);
-    }
-
     /** Check the exact counted slot before a structural mutation removes it. */
     static boolean hasCurrentCountedArrayElementOwner(
             RuntimeArray array, RuntimeScalar scalar) {
         if (array == null || scalar == null
                 || !(scalar.value instanceof RuntimeBase referent)) return false;
         PerlOwnerSlot slot = scalar.countedOwnerSlot();
-        return slot != null
+        return scalar.containerOwner == array
+                && slot != null
                 && slot.kind() == PerlOwnerSlot.Kind.ARRAY_ELEMENT
                 && scalar.isCurrentAggregateElementOwner(referent, slot);
     }
@@ -1116,17 +1111,21 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                     yield new RuntimeScalar(); // Return undefined if empty
                 }
                 runtimeArray.notePackageRootMutation();
+                RuntimeScalar candidate = runtimeArray.elements.getLast();
+                boolean countedArraySlot =
+                        hasCurrentCountedArrayElementOwner(runtimeArray, candidate);
                 RuntimeScalar result = runtimeArray.elements.removeLast();
                 // Sparse arrays can have null elements - return undef in that case
                 if (result != null) {
                     // If this element owned a refCount (stored via push or array assignment),
                     // defer the decrement so the caller can capture the value first.
                     // This matches Perl 5's sv_2mortal on popped values.
-                    // Only do this for arrays that own their elements (elementsOwned=true).
-                    // @_ uses aliasing (setArrayOfAlias) without refCount increments,
-                    // so its elements must NOT be mortal-ized on shift/pop — doing so
-                    // would corrupt the caller's refCount tracking.
-                    deferRemovedElementRelease(runtimeArray, result, "RuntimeArray.pop");
+                    // Release only an owned element. The pre-mutation slot proof
+                    // handles counted owners even when the legacy summary flag is
+                    // stale; borrowed @_ cells have no ARRAY_ELEMENT owner and
+                    // must not consume the caller's reference.
+                    deferRemovedElementRelease(runtimeArray, result, "RuntimeArray.pop",
+                            countedArraySlot);
                     yield result;
                 }
                 yield scalarUndef;
@@ -1154,12 +1153,16 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                     yield new RuntimeScalar(); // Return undefined if empty
                 }
                 runtimeArray.notePackageRootMutation();
+                RuntimeScalar candidate = runtimeArray.elements.getFirst();
+                boolean countedArraySlot =
+                        hasCurrentCountedArrayElementOwner(runtimeArray, candidate);
                 RuntimeScalar result = runtimeArray.elements.removeFirst();
                 // Sparse arrays can have null elements - return undef in that case
                 if (result != null) {
                     // If this element owned a refCount, defer the decrement.
-                    // See pop() for rationale and elementsOwned guard.
-                    deferRemovedElementRelease(runtimeArray, result, "RuntimeArray.shift");
+                    // See pop() for the owner identity rationale.
+                    deferRemovedElementRelease(runtimeArray, result, "RuntimeArray.shift",
+                            countedArraySlot);
                     yield result;
                 }
                 yield scalarUndef;
@@ -1507,9 +1510,12 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                     yield previous;
                 }
                 RuntimeScalar ownerScalar = elements.get(index);
+                boolean countedArraySlot =
+                        hasCurrentCountedArrayElementOwner(this, ownerScalar);
                 RuntimeScalar previous = this.get(index);
                 this.elements.set(index, null);
-                deferRemovedElementRelease(this, ownerScalar, "RuntimeArray.delete");
+                deferRemovedElementRelease(this, ownerScalar, "RuntimeArray.delete",
+                        countedArraySlot);
                 yield previous;
             }
             case AUTOVIVIFY_ARRAY -> scalarUndef;
