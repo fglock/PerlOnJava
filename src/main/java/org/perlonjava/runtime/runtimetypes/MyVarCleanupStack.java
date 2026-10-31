@@ -377,7 +377,6 @@ public class MyVarCleanupStack {
                     && !scalar.refCountOwned
                     && seen.put(scalar, Boolean.TRUE) == null) {
                 scalar.refCountOwned = true;
-                scalar.recordCountedOwner(referent);
                 referent.recordOwner(scalar, "blessed glob lexical alias");
                 referent.recordActiveOwner(scalar);
                 referent.traceRefCount(+1, "MyVarCleanupStack.retainBlessedGlobAliases");
@@ -393,7 +392,6 @@ public class MyVarCleanupStack {
                     && !scalar.refCountOwned
                     && seen.put(scalar, Boolean.TRUE) == null) {
                 scalar.refCountOwned = true;
-                scalar.recordCountedOwner(referent);
                 referent.recordOwner(scalar, "blessed glob package alias");
                 referent.recordActiveOwner(scalar);
                 referent.traceRefCount(+1, "MyVarCleanupStack.retainBlessedGlobAliases");
