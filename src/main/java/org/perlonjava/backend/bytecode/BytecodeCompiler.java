@@ -9241,7 +9241,14 @@ public class BytecodeCompiler implements Visitor {
 
     void emitTryFinallyReturn(int valueReg) {
         TryFinallyReturnTarget target = tryFinallyReturnTargets.peek();
-        emitAliasWithTarget(target.valueReg, valueReg);
+        // A return crossing the synthetic try/finally wrapper must acquire its
+        // result owner before the wrapper's lexical cleanup runs. Keep the
+        // source register intact because it may be a lexical cell that cleanup
+        // will retire before RETURN_NONLOCAL reaches the enclosing subroutine.
+        int returnReg = separateReturnRegister(valueReg);
+        emit(Opcodes.PREPARE_SCOPE_RETURN);
+        emitReg(returnReg);
+        emitAliasWithTarget(target.valueReg, returnReg);
         emit(Opcodes.LOAD_INT);
         emitReg(target.pendingReg);
         emitInt(1);

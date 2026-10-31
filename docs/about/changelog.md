@@ -72,6 +72,7 @@ priorities and future plans.
 - Keep queued owner releases visible to cleared-aggregate cleanup until their deferred count transition completes (#1649).
 - Keep backslash-addressed optree constants alive through saved CODE references, transfer interpreter optree owner trees to published CVs, and release each constant edge with its CV owner (#1649).
 - Acquire interpreter return owners before lexical cleanup so returned closures retain captured aggregates (#1649).
+- Unwind lexical owners on returns through try/finally wrappers while preserving returned reference and lvalue behavior (#1649).
 - Keep recursive output cleanup on explicit owner slots as lexical result graphs grow, avoiding repeated live-root snapshots (#1860).
 - Preserve multiline regex searches when positive lookaheads constrain a lazy any-character prefix, restoring Text::YAWikiFormater formatting (#1596).
 - Compile executable format argument expressions at write time on both backends, scope line-local lexicals correctly, preserve literal-only pictures, and refresh deferred lexical bindings (#1234).

@@ -129,22 +129,21 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
     public final ErrorMessageUtil errorUtil; // For converting token index to line numbers
 
     // BitSet of register indices that are actual "my" variables (not temporaries).
-    // Computed from SCOPE_EXIT_CLEANUP opcodes in the bytecode.
-    // Used by exception propagation cleanup to avoid calling scopeExitCleanup
-    // on temporaries that may alias hash/array elements (which would incorrectly
-    // decrement refCounts and cause premature DESTROY).
+    // Computed from scope-exit cleanup opcodes in the bytecode.
+    // Used by early frame teardown (exceptions and non-local returns) to avoid
+    // calling scopeExitCleanup on temporaries that may alias hash/array elements
+    // (which would incorrectly decrement refCounts and cause premature DESTROY).
     public final BitSet myVarRegisters;
 
     /**
-     * Scan bytecodes for SCOPE_EXIT_CLEANUP, SCOPE_EXIT_CLEANUP_HASH, and
-     * SCOPE_EXIT_CLEANUP_ARRAY opcodes to identify which registers hold actual
-     * "my" variables. These are the only registers that should get
-     * scopeExitCleanup during exception propagation.
+     * Scan bytecodes for scope-exit cleanup opcodes to identify registers
+     * holding actual "my" variables. These are the registers that should get
+     * scopeExitCleanup when early control flow bypasses ordinary block teardown.
      * <p>
      * Uses a simple scan: looks for the specific opcode values and reads the
-     * next int as the register index. Since SCOPE_EXIT_CLEANUP opcodes have
-     * high values (463, 466, 467) that are unlikely to appear as register
-     * indices, false positives are extremely rare.
+     * next int as the register index. Since these opcodes have high values
+     * (463 through 496) that are unlikely to appear as register indices, false
+     * positives are extremely rare.
      */
     private static BitSet scanMyVarRegisters(int[] bytecode, int maxRegisters) {
         BitSet result = new BitSet();
@@ -152,7 +151,10 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
             int opcode = bytecode[i];
             if (opcode == Opcodes.SCOPE_EXIT_CLEANUP
                     || opcode == Opcodes.SCOPE_EXIT_CLEANUP_HASH
-                    || opcode == Opcodes.SCOPE_EXIT_CLEANUP_ARRAY) {
+                    || opcode == Opcodes.SCOPE_EXIT_CLEANUP_ARRAY
+                    || opcode == Opcodes.RETURN_SCOPE_CLEANUP
+                    || opcode == Opcodes.RETURN_SCOPE_CLEANUP_HASH
+                    || opcode == Opcodes.RETURN_SCOPE_CLEANUP_ARRAY) {
                 int register = bytecode[i + 1];
                 // This lightweight scan also sees opcode-shaped values in
                 // instruction operands. Never let a following sentinel (for
@@ -161,7 +163,10 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
                 if (register >= 0 && register < maxRegisters) {
                     result.set(register);
                 }
-                i++; // skip the operand
+                // RETURN_SCOPE_CLEANUP and RETURN_SCOPE_CLEANUP_ARRAY have
+                // both a lexical register and a return-value register.
+                i += opcode == Opcodes.RETURN_SCOPE_CLEANUP
+                        || opcode == Opcodes.RETURN_SCOPE_CLEANUP_ARRAY ? 2 : 1;
             }
         }
         return result;
@@ -458,6 +463,12 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
             // retaining async initial-result wrapping from master.
             RuntimeList result = BytecodeInterpreter.execute(
                     this, args, effectiveContext, this.subName);
+            if (result instanceof RuntimeControlFlowList flow
+                    && flow.getControlFlowType() == ControlFlowType.RETURN) {
+                // A non-local return leaves this interpreted frame without
+                // reaching its normal block teardown opcodes.
+                MyVarCleanupStack.unwindTo(cleanupMark);
+            }
             result = RuntimeCode.handleEscapingLoopControl(
                     result, generatedClassConstructor, classAdjustBlock);
             if (isSortComparator && result instanceof RuntimeControlFlowList flow) {
@@ -483,6 +494,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         } catch (PerlNonLocalReturnException e) {
             // The enclosing RuntimeCode boundary consumes the result; preserve
             // its mortal owners while this frame's lexical cleanup is queued.
+            MyVarCleanupStack.unwindTo(cleanupMark);
             throw e;
         } catch (RuntimeException e) {
             if (!(e instanceof PerlExitException)) {
