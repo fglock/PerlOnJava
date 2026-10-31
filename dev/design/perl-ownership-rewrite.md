@@ -1935,6 +1935,11 @@ test, passes in 1m13s. Logs:
 `/private/tmp/blessed-glob-alias-owner-jvm.log`,
 `/private/tmp/blessed-glob-alias-owner-interpreter.log`, and
 `/private/tmp/blessed-glob-alias-owner-focused-make.log`.
+The full no-sweeps `nice -n 19 make` gate passed on immutable commit
+`5170c88e6` in 7m38s; log:
+`/private/tmp/ownership-blessed-glob-immutable-make-20261031.log`. The
+documentation link check also passed; log:
+`/private/tmp/blessed-glob-alias-check-links.log`.
 
 The remaining `processDeferredBase` recovery paths still mix several owner
 families. The next audit distinguishes the semantic edge from the fallback
