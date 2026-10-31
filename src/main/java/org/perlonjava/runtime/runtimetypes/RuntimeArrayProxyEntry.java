@@ -269,6 +269,9 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
                 // Retire the exact stored cell after removing it, through the
                 // same owner-slot deferred release used by delete/pop/shift.
                 RuntimeScalar removedOwner = this.lvalue;
+                RuntimeArray.traceLocalizedOwnerDebug(
+                        "RuntimeArrayProxyEntry.dynamicRestoreState before removal",
+                        parent, removedOwner);
                 int removedIndex = removedOwner == null
                         ? -1 : parent.elements.indexOf(removedOwner);
                 if (removedIndex >= 0) {
