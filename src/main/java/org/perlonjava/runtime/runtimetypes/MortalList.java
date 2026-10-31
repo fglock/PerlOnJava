@@ -1298,7 +1298,6 @@ public class MortalList {
     static void finalizeClearedAggregateOwnerAfterScopeExit(RuntimeBase base) {
         if (!isActive()
                 || base == null
-                || base.refCount != 0
                 || !base.clearedOwnedAggregateElement
                 || !WeakRefRegistry.hasWeakRefsTo(base)) {
             return;
@@ -1309,7 +1308,7 @@ public class MortalList {
         // evaluation scaffolding rather than Perl ownership. Prefer these
         // identities, retaining the cached graph proof only for ownerless
         // compatibility cases that have not yet migrated.
-        if (base.hasPerlStrongOwner() || temporaryRootDirectlyReferences(base)) {
+        if (base.hasPerlStrongOwnerIdentity() || temporaryRootDirectlyReferences(base)) {
             return;
         }
         if (isReachableFromExternalRootCached(base)) return;
