@@ -304,6 +304,7 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
                         && isEmptyPlaceholder(parent.elements.getLast())) {
                     parent.elements.removeLast();
                 }
+                if (removedStoredOwner) MortalList.flush();
                 return;
             }
             if (parent.elements.size() > previousSize) {
@@ -312,6 +313,7 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
             while (parent.elements.size() > previousSize) {
                 parent.elements.removeLast();
             }
+            if (removedStoredOwner) MortalList.flush();
         }
     }
 
