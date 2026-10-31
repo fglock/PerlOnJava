@@ -1859,15 +1859,30 @@ async cleanup runs pass on both backends. HTML-Tree 5.07 `t/refloop.t` passes
 `/private/tmp/ownership-scalar-reference-focused-status-20261031.txt`, and
 `/private/tmp/ownership-scalar-reference-html-tree-refloop-{system-perl,jvm,interpreter}-20261031.log`.
 
+### Rescued-object cleanup checks owner identity (2026-10-31)
+
+After explicit undef, nested weak cleanup now checks live Perl owner identities
+directly. The rescued-object queue and temporary evaluation roots do not count
+as Perl owners, and this decision no longer walks external roots. The new
+`RescuedObjectOwnerIdentityTest` covers durable package ownership and confirms
+that rescued and temporary roots do not trigger root queries.
+
+The full single-worker `nice -n 19 make` passes in 22m56s. With corrective
+sweeps disabled, 32 focused ownership, lifecycle, weak-reference, resurrection,
+and cycle runs pass across JVM and interpreter. HTML-Tree 5.07 `t/refloop.t`
+passes 8/8 on both backends. Logs:
+`/private/tmp/ownership-scalar-rescue-owner-full-make-20261031.log`,
+`/private/tmp/ownership-rescue-owner-final-status-20261031.txt`, and
+`/private/tmp/ownership-rescue-owner-html-tree-refloop-{jvm,interpreter}-20261031.log`.
+
 ### Next steps
 
-1. Trace remaining `RuntimeScalar` and `MortalList` reachability decisions to
-   missing owner families, then replace those fallbacks with validated slot
-   identities.
-2. Remove remaining compatibility pins and corrective scheduling; preserve
-   weak-reference, `DESTROY`, resurrection, and cycle behavior through exact
-   owner release.
-3. After those runtime changes, rerun the full serial repository gate and the
-   two-backend #1618, #1794, #1860, and lifecycle acceptance matrix.
-4. Rebase the existing PR on current master, publish the completed migration,
-   and verify the PR remains open with the intended files.
+1. Replace the remaining `MortalList.processDeferredBase` root-graph fallbacks
+   with validated owner identities, including tied-handler, closure-capture,
+   active-call, and strong-cycle cases.
+2. Remove remaining compatibility pins and corrective scheduling while
+   preserving weak-reference, `DESTROY`, resurrection, and cycle behavior.
+3. Rerun the full serial repository gate and the two-backend #1618, #1794,
+   #1860, and lifecycle acceptance matrix after those runtime changes.
+4. Rebase the completed candidate on current master, update the ownership PR,
+   and verify that it remains open with the intended files.
