@@ -84,6 +84,7 @@ priorities and future plans.
 - Transfer scalar-cell owner identity into a single-value array replacement so deferred cleanup validates the current element slot without a root walk (#1649).
 - Release displaced hash element owners when cloned values replace an existing slot (#1649).
 - Release deleted middle-array element owners after transferring the result to the caller (#1649).
+- Release localized array-element owners through their exact deferred slot identity when scope unwinds (#1649).
 
 
 
