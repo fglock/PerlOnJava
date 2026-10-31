@@ -752,6 +752,19 @@ public class DestroyDispatch {
                         && (owner.type & RuntimeScalarType.REFERENCE_BIT) != 0
                         && owner.value == referent;
             }
+            case SCALAR_REFERENCE_CONTENTS -> {
+                RuntimeScalar owner = slot.scalarContentsOwner();
+                RuntimeScalar scalarCell = slot.scalarReferenceCell();
+                return owner != null && scalarCell != null
+                        && owner.scalarReferenceContentsOwner == slot
+                        && owner.hasLiveDurableStrongValueSlot()
+                        && !WeakRefRegistry.isweak(owner)
+                        && owner.type == RuntimeScalarType.REFERENCE
+                        && owner.value == scalarCell
+                        && !WeakRefRegistry.isweak(scalarCell)
+                        && (scalarCell.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                        && scalarCell.value == referent;
+            }
             case SCALAR_CAPTURE -> {
                 RuntimeCode captureOwner = slot.captureOwner();
                 return captureOwner != null && captureOwner.hasPerlOwnerForCapture();
