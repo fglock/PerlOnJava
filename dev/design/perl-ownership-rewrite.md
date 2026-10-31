@@ -1784,7 +1784,11 @@ for their focused tests. The first post-rebase compile caught duplicate
 `RuntimeHashElementMap` mutator overrides from combining the cache and owner
 reconciliation changes. The duplicate block is removed; the owner-aware Map
 methods and collection views remain, and collection removal now reconciles the
-same owner slot as direct removal. Full post-rebase validation is pending.
+same owner slot as direct removal. The first full gate then caught three missed
+merge behaviors: Map mutators and entry/key views must disable stable-method
+caching while retaining owner hooks, and an executing CODE with active frames
+must defer final release at refcount zero until its last `ACTIVE_CODE` owner
+leaves. Those source paths are corrected; the final full gate is pending.
 
 ### Next steps
 

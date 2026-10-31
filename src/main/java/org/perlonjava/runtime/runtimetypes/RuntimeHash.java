@@ -252,12 +252,14 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
 
         @Override
         public RuntimeScalar putIfAbsent(String key, RuntimeScalar value) {
+            disableStableMethodFieldCaching();
             RuntimeScalar current = get(key);
             return current == null ? put(key, value) : current;
         }
 
         @Override
         public boolean remove(Object key, Object value) {
+            disableStableMethodFieldCaching();
             if (!containsKey(key) || !Objects.equals(get(key), value)) return false;
             remove(key);
             return true;
@@ -265,6 +267,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
 
         @Override
         public boolean replace(String key, RuntimeScalar oldValue, RuntimeScalar newValue) {
+            disableStableMethodFieldCaching();
             if (!containsKey(key) || !Objects.equals(get(key), oldValue)) return false;
             put(key, newValue);
             return true;
@@ -272,6 +275,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
 
         @Override
         public RuntimeScalar replace(String key, RuntimeScalar value) {
+            disableStableMethodFieldCaching();
             if (!containsKey(key)) return null;
             return put(key, value);
         }
@@ -279,6 +283,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         @Override
         public void replaceAll(java.util.function.BiFunction<? super String,
                 ? super RuntimeScalar, ? extends RuntimeScalar> function) {
+            disableStableMethodFieldCaching();
             Objects.requireNonNull(function);
             for (String key : new ArrayList<>(super.keySet())) {
                 put(key, function.apply(key, get(key)));
@@ -288,6 +293,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         @Override
         public RuntimeScalar computeIfAbsent(String key,
                 java.util.function.Function<? super String, ? extends RuntimeScalar> function) {
+            disableStableMethodFieldCaching();
             Objects.requireNonNull(function);
             RuntimeScalar current = get(key);
             if (current != null) return current;
@@ -300,6 +306,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         public RuntimeScalar computeIfPresent(String key,
                 java.util.function.BiFunction<? super String, ? super RuntimeScalar,
                         ? extends RuntimeScalar> function) {
+            disableStableMethodFieldCaching();
             Objects.requireNonNull(function);
             RuntimeScalar current = get(key);
             if (current == null) return null;
@@ -313,6 +320,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         public RuntimeScalar compute(String key,
                 java.util.function.BiFunction<? super String, ? super RuntimeScalar,
                         ? extends RuntimeScalar> function) {
+            disableStableMethodFieldCaching();
             Objects.requireNonNull(function);
             RuntimeScalar current = get(key);
             boolean present = current != null || containsKey(key);
@@ -329,6 +337,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         public RuntimeScalar merge(String key, RuntimeScalar value,
                 java.util.function.BiFunction<? super RuntimeScalar, ? super RuntimeScalar,
                         ? extends RuntimeScalar> function) {
+            disableStableMethodFieldCaching();
             Objects.requireNonNull(value);
             Objects.requireNonNull(function);
             RuntimeScalar current = get(key);
@@ -340,6 +349,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
 
         @Override
         public Set<Map.Entry<String, RuntimeScalar>> entrySet() {
+            disableStableMethodFieldCaching();
             if (entrySetView == null) {
                 entrySetView = new AbstractSet<>() {
                     @Override
@@ -377,6 +387,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
 
         @Override
         public Set<String> keySet() {
+            disableStableMethodFieldCaching();
             if (keySetView == null) {
                 keySetView = new AbstractSet<>() {
                     @Override
@@ -641,6 +652,10 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
 
         private long stableMethodFieldCacheRevision() {
             return stableMethodFieldCacheable ? stableMethodFieldCacheRevision : -1;
+        }
+
+        private void disableStableMethodFieldCaching() {
+            stableMethodFieldCacheable = false;
         }
 
     }
