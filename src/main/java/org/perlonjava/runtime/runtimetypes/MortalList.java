@@ -1653,6 +1653,11 @@ public class MortalList {
                 // aggregate or untracked scalar slot is enough to defer cleanup
                 // until its release, even when no weak observer currently exists.
                 base.deferFinalReleaseToUncountedOwnerSlots();
+            } else if (hasWeakRefs && restoreReachableOwnerCount(base)) {
+                // A counted owner that is still reachable through a real
+                // Perl root is authoritative, including for classes with
+                // DESTROY. Unmigrated slots still need this compatibility
+                // fallback until their owner identities are complete.
             } else if (base.blessId == 0
                     && (base instanceof RuntimeArray || base instanceof RuntimeHash)
                     && isUnblessedAggregateReachableDuringDrain(base)) {
@@ -1789,6 +1794,13 @@ public class MortalList {
                     TIE_HANDLER, SCALAR_REFERENCE_CONTENTS -> true;
             default -> false;
         };
+    }
+
+    private static boolean restoreReachableOwnerCount(RuntimeBase base) {
+        int ownerCount = base.reachableOwnerCount();
+        if (ownerCount == 0) return false;
+        base.refCount = ownerCount;
+        return true;
     }
 
     public static void flush() {
