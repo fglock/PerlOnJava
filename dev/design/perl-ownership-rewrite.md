@@ -1692,17 +1692,31 @@ backends; the stress case generates 65,536 results in 6.56s on JVM and 10.76s
 on the interpreter. The #1794 controller and WebSocket regressions pass on
 system Perl and both no-sweeps backends.
 
+### Full upstream HTML::Tree 5.07 suite (2026-10-31)
+
+Ran all 23 test files from the [upstream HTML-Tree 5.07 distribution](https://metacpan.org/dist/HTML-Tree),
+not just the previously extracted `t/refloop.t` fixture. System Perl passes
+969 tests; `t/leaktest.t` skips because `Test::LeakTrace` is unavailable.
+JVM and interpreter each pass all 23 files with corrective sweeps disabled
+(988 TAP checks per backend). The bundled PerlOnJava `Test::LeakTrace` module
+is a no-op stub, so its 20 `t/leaktest.t` checks are not leak measurements.
+The target `t/refloop.t` remains 8/8 on system Perl and both backends. Logs:
+`/private/tmp/html-tree-full-system-perl.log`,
+`/private/tmp/html-tree-full-jvm-gate.log`, and
+`/private/tmp/html-tree-full-interpreter-gate.log`.
+
 ### Next steps
 
-1. Remove the diagnostic-only `weakBackrefCaptureSnapshot` call and its
-   counters; retain aggregate lifetime and weak clearing through explicit owner
-   identities.
+1. Remove production corrective-sweep scheduling as each strong-owner family
+   becomes identity-complete. Keep explicit diagnostic sweep helpers isolated
+   from production lifecycle paths while existing helper tests still exercise
+   them.
 2. In one ownership-family batch, finish remaining CODE template and optree
    pins, raw descriptor/embedding borrows, native call buffers, escaping
    lvalues and refaliases, and targeted try/finally returns. Add regressions
    before running the focused gates and one full `nice -n 19 make`.
-3. Requalify upstream HTML-Tree, weak/DESTROY, resurrection, cycle, and full-suite
-   behavior as each family migrates; then qualify the full HTML-Tree suite.
+3. Requalify the full upstream HTML-Tree suite, weak/DESTROY, resurrection,
+   cycle, and repository suite after each ownership-family migration.
 4. Make semantic owner counts authoritative, then remove the compatibility
    bridge, production corrective scheduling, and reachability fallbacks after
    all acceptance gates pass.
