@@ -243,7 +243,8 @@ public class BytecodeInterpreter {
 
         InterpretedCode code = frame.code;
         RuntimeBase[] registers = frame.registers;
-        boolean needsFlush = cleanupMyVarRegisters(code, registers);
+        boolean needsFlush = cleanupMyVarRegisters(frame);
+        frame.releaseSuspendedLexicalOwners();
         if (needsFlush) {
             MortalList.flush();
         }
@@ -251,8 +252,9 @@ public class BytecodeInterpreter {
     }
 
     /** Release the active frame's lexical slots without draining their mortals. */
-    private static boolean cleanupMyVarRegisters(
-            InterpretedCode code, RuntimeBase[] registers) {
+    private static boolean cleanupMyVarRegisters(SuspendedInterpreterFrame frame) {
+        InterpretedCode code = frame.code;
+        RuntimeBase[] registers = frame.registers;
         int firstMyVarReg = 3 + (code.capturedVars != null ? code.capturedVars.length : 0);
         BitSet myVars = code.myVarRegisters;
         boolean needsFlush = false;
@@ -273,6 +275,7 @@ public class BytecodeInterpreter {
                 MortalList.scopeExitCleanupArray(array);
                 needsFlush = true;
             }
+            frame.releaseSuspendedOwnerForRegister(i);
             MyVarCleanupStack.unregister(reg);
             registers[i] = null;
         }
@@ -561,6 +564,7 @@ public class BytecodeInterpreter {
                                 if (!scopeCleanupBatches.isEmpty()) {
                                     for (int cleanupReg : scopeCleanupBatches.pop()) {
                                         RuntimeBase slot = registers[cleanupReg];
+                                        frame.releaseSuspendedOwnerForRegister(cleanupReg);
                                         MyVarCleanupStack.unregister(slot);
                                         registers[cleanupReg] = null;
                                     }
@@ -600,6 +604,7 @@ public class BytecodeInterpreter {
                                 if (slot instanceof RuntimeScalar rs) {
                                     RuntimeScalar.scopeExitCleanup(rs);
                                 }
+                                frame.releaseSuspendedOwnerForRegister(reg);
                                 if (!scopeCleanupBatches.isEmpty()) {
                                     scopeCleanupBatches.peek().add(reg);
                                 } else {
@@ -717,6 +722,7 @@ public class BytecodeInterpreter {
                                 if (slot instanceof RuntimeHash rh) {
                                     MortalList.scopeExitCleanupHash(rh);
                                 }
+                                frame.releaseSuspendedOwnerForRegister(reg);
                                 if (!scopeCleanupBatches.isEmpty()) {
                                     scopeCleanupBatches.peek().add(reg);
                                 } else {
@@ -763,6 +769,7 @@ public class BytecodeInterpreter {
                                 if (slot instanceof RuntimeArray ra) {
                                     MortalList.scopeExitCleanupArray(ra);
                                 }
+                                frame.releaseSuspendedOwnerForRegister(reg);
                                 if (!scopeCleanupBatches.isEmpty()) {
                                     scopeCleanupBatches.peek().add(reg);
                                 } else {
@@ -846,7 +853,7 @@ public class BytecodeInterpreter {
                                 // This opcode exits the active interpreted frame
                                 // directly. Run its lexical teardown before the
                                 // RETURN marker crosses into the caller.
-                                cleanupMyVarRegisters(code, registers);
+                                cleanupMyVarRegisters(frame);
                                 return new RuntimeControlFlowList(retList, code.sourceName, code.sourceLine);
                             }
 
@@ -2170,7 +2177,7 @@ public class BytecodeInterpreter {
                                             // active interpreter frame, bypassing RETURN and its
                                             // ordinary lexical teardown opcodes. Retire that
                                             // frame's slots before returning the value.
-                                            cleanupMyVarRegisters(code, registers);
+                                            cleanupMyVarRegisters(frame);
                                             // Consume: unwrap and return the value from this subroutine
                                             RuntimeBase retVal = flow.getReturnValue();
                                             return retVal != null ? retVal.getList() : new RuntimeList();
@@ -3787,6 +3794,7 @@ public class BytecodeInterpreter {
                                 }
 
                                 frame.pc = pc;
+                                frame.retainSuspendedLexicalOwners();
                                 frame.suspendedRegexState = new RegexState();
                                 frame.suspendedPackage = currentPackageScalar.toString();
                                 frame.suspended = true;
@@ -3898,7 +3906,10 @@ public class BytecodeInterpreter {
                                 });
                         for (int i = myVars.nextSetBit(baseReg);
                              i >= 0 && i < registers.length; i = myVars.nextSetBit(i + 1)) {
-                            if (i != resultReg) registers[i] = null;
+                            if (i != resultReg) {
+                                frame.releaseSuspendedOwnerForRegister(i);
+                                registers[i] = null;
+                            }
                         }
                         // Skip the failed-eval result opcode: this transfer succeeded.
                         pc = catchPc + 3;
@@ -3936,6 +3947,7 @@ public class BytecodeInterpreter {
                                     MortalList.scopeExitCleanupArray(ra);
                                     needsFlush = true;
                                 }
+                                frame.releaseSuspendedOwnerForRegister(i);
                                 MyVarCleanupStack.unregister(reg);
                                 registers[i] = null;
                             }
@@ -4073,6 +4085,7 @@ public class BytecodeInterpreter {
                         MortalList.scopeExitCleanupArray(ra);
                         needsFlush = true;
                     }
+                    frame.releaseSuspendedOwnerForRegister(i);
                     MyVarCleanupStack.unregister(reg);
                     registers[i] = null;
                 }

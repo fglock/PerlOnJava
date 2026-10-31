@@ -794,6 +794,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     /** Identity for this scalar cell's strong edge to a non-counted referent. */
     private PerlOwnerSlot untrackedReferenceOwnerSlot;
     private ArrayList<PerlOwnerSlot> argumentAliasOwnerSlots;
+    /** Frame identities following this mutable scalar while async code is paused. */
+    private Set<PerlOwnerSlot> suspendedFrameOwnerSlots;
     // Names sharing one GP/CODE scalar share one CV edge. A saved localized
     // slot also keeps this binding alive while its names address a new slot.
     private int codeSlotBindings;
@@ -1044,6 +1046,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     void refreshUntrackedReferenceOwner() {
         updateUntrackedReferenceOwner((type & RuntimeScalarType.REFERENCE_BIT) != 0
                 && value instanceof RuntimeBase referent ? referent : null);
+        refreshSuspendedFrameOwnerSlots();
     }
 
     static final class ArgumentAliasOwner {
@@ -1083,17 +1086,63 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     synchronized void refreshArgumentAliasOwnerSlots() {
-        if (argumentAliasOwnerSlots == null) return;
-        RuntimeBase referent = null;
-        if (((type & RuntimeScalarType.REFERENCE_BIT) != 0 || type == RuntimeScalarType.GLOB)
-                && value instanceof RuntimeBase base
-                && !WeakRefRegistry.isweak(this)) {
-            referent = base;
+        if (argumentAliasOwnerSlots != null) {
+            RuntimeBase referent = null;
+            if (((type & RuntimeScalarType.REFERENCE_BIT) != 0 || type == RuntimeScalarType.GLOB)
+                    && value instanceof RuntimeBase base
+                    && !WeakRefRegistry.isweak(this)) {
+                referent = base;
+            }
+            for (PerlOwnerSlot ownerSlot : argumentAliasOwnerSlots) {
+                if (referent == null) ownerSlot.release();
+                else ownerSlot.acquireArgumentAliasIdentity(referent);
+            }
         }
-        for (PerlOwnerSlot ownerSlot : argumentAliasOwnerSlots) {
-            if (referent == null) ownerSlot.release();
-            else ownerSlot.acquireArgumentAliasIdentity(referent);
+        refreshSuspendedFrameOwnerSlots();
+    }
+
+    /** Attach the owner identity for one lexical register retained by a suspended frame. */
+    public synchronized void attachSuspendedFrameOwner(PerlOwnerSlot ownerSlot) {
+        if (ownerSlot == null || ownerSlot.kind() != PerlOwnerSlot.Kind.SUSPENDED_FRAME) {
+            throw new IllegalArgumentException("suspended lexical owner requires a suspended-frame slot");
         }
+        if (suspendedFrameOwnerSlots == null) {
+            suspendedFrameOwnerSlots = Collections.newSetFromMap(new IdentityHashMap<>());
+        }
+        suspendedFrameOwnerSlots.add(ownerSlot);
+        ownerSlot.associateSuspendedScalarOwner(this);
+        ownerSlot.updateSuspendedFrameIdentity(currentStrongReferenceValue());
+    }
+
+    /** Detach and release one suspended-frame identity from this scalar cell. */
+    public synchronized void detachSuspendedFrameOwner(PerlOwnerSlot ownerSlot) {
+        if (suspendedFrameOwnerSlots != null) {
+            suspendedFrameOwnerSlots.remove(ownerSlot);
+            if (suspendedFrameOwnerSlots.isEmpty()) suspendedFrameOwnerSlots = null;
+        }
+        if (ownerSlot != null) {
+            ownerSlot.associateSuspendedScalarOwner(null);
+            ownerSlot.release();
+        }
+    }
+
+    private void refreshSuspendedFrameOwnerSlots() {
+        if (suspendedFrameOwnerSlots == null) return;
+        RuntimeBase referent = currentStrongReferenceValue();
+        for (PerlOwnerSlot ownerSlot : new ArrayList<>(suspendedFrameOwnerSlots)) {
+            ownerSlot.updateSuspendedFrameIdentity(referent);
+        }
+    }
+
+    private RuntimeBase currentStrongReferenceValue() {
+        PerlRuntime runtime = PerlRuntime.currentOrNull();
+        if ((runtime != null && WeakRefRegistry.isweak(this))
+                || ((type & RuntimeScalarType.REFERENCE_BIT) == 0 && type != RuntimeScalarType.GLOB)
+                || !(value instanceof RuntimeBase referent)
+                || referent.refCount == Integer.MIN_VALUE) {
+            return null;
+        }
+        return referent;
     }
 
     boolean hasStorageOwnerForVoidDiscard() {

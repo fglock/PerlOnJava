@@ -1301,10 +1301,11 @@ public class MortalList {
         // Scope cleanup retires the exact lexical owner before reaching this
         // point. Package, container, and capture edges have their own owner
         // slots; temporary roots are checked separately because they are
-        // evaluation scaffolding rather than Perl ownership. Prefer these
-        // identities, retaining the cached graph proof only for ownerless
-        // compatibility cases that have not yet migrated.
-        if (base.hasPerlStrongOwnerIdentity() || temporaryRootDirectlyReferences(base)) {
+        // evaluation scaffolding rather than Perl ownership. Use validated
+        // identities so stale slots and compatibility counts cannot preserve
+        // an aggregate after its final owner cell is cleared.
+        if (DestroyDispatch.hasLivePerlOwnerIdentity(base)
+                || temporaryRootDirectlyReferences(base)) {
             return;
         }
         // A deferred count release has already retired its live owner slot,
@@ -1312,7 +1313,12 @@ public class MortalList {
         // queue drains. Let that exact release decide finalization instead of
         // racing it with scope-exit cleanup.
         if (base.hasPendingOwnerRelease()) return;
-        if (isReachableFromExternalRootCached(base)) return;
+        // The exact Perl owners are represented by current owner slots. A
+        // positive selective count alone is stale bookkeeping after this
+        // cleared-element callback; do not rebuild roots to validate it. Keep
+        // the cached compatibility proof for zero-count objects whose owner
+        // family has not yet migrated to slot identities.
+        if (base.refCount <= 0 && isReachableFromExternalRootCached(base)) return;
         base.refCount = Integer.MIN_VALUE;
         DestroyDispatch.callDestroy(base);
     }

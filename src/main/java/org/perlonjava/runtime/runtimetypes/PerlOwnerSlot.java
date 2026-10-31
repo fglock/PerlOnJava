@@ -40,6 +40,8 @@ public final class PerlOwnerSlot {
         PACKAGE_AGGREGATE_SLOT,
         /** Active lexical frame or top-level pad entry owning an aggregate. */
         ACTIVE_LEXICAL,
+        /** Strong value held by a lexical register in a suspended interpreter frame. */
+        SUSPENDED_FRAME,
         /** Strong container edge whose referent is not on the legacy refcount bridge. */
         UNTRACKED_REFERENCE,
         /** Temporary legacy count pin for a package-rooted weak aggregate. */
@@ -64,6 +66,8 @@ public final class PerlOwnerSlot {
     private WeakReference<RuntimeScalar> scalarReferenceCell;
     /** Scalar wrapper that currently carries this scalar-reference identity. */
     private WeakReference<RuntimeScalar> scalarContentsOwner;
+    /** Lexical cell whose current value is retained by a suspended frame. */
+    private WeakReference<RuntimeScalar> suspendedScalarOwner;
     private PerlRuntime ownerRuntime;
     private LifecycleRuntimeState ownerRuntimeState;
     private boolean registeredInOwnerLedger;
@@ -168,6 +172,18 @@ public final class PerlOwnerSlot {
 
     public synchronized RuntimeBase referent() {
         return referent;
+    }
+
+    /** Source cell for a suspended-frame owner, if that register is scalar-backed. */
+    public synchronized RuntimeScalar suspendedScalarOwner() {
+        return suspendedScalarOwner == null ? null : suspendedScalarOwner.get();
+    }
+
+    synchronized void associateSuspendedScalarOwner(RuntimeScalar owner) {
+        if (kind != Kind.SUSPENDED_FRAME) {
+            throw new IllegalStateException("scalar association requires a suspended-frame slot");
+        }
+        suspendedScalarOwner = owner == null ? null : new WeakReference<>(owner);
     }
 
     /** Scalar cell implementing this counted edge, when it has one. */
@@ -311,6 +327,30 @@ public final class PerlOwnerSlot {
             throw new IllegalStateException("active lexical slot has pending legacy releases");
         }
         transferWithoutRuntimeRoot(target, true);
+    }
+
+    /** Record one strong lexical value retained while its interpreter frame is suspended. */
+    public synchronized void acquireSuspendedFrameIdentity(RuntimeBase target) {
+        if (kind != Kind.SUSPENDED_FRAME) {
+            throw new IllegalStateException("suspended-frame acquisition requires a suspended-frame slot");
+        }
+        Objects.requireNonNull(target, "target");
+        if (target.refCount == Integer.MIN_VALUE) {
+            throw new IllegalStateException("cannot own a destroyed suspended-frame value");
+        }
+        if (legacyCaptureCount != 0) {
+            throw new IllegalStateException("suspended-frame slot has pending legacy releases");
+        }
+        transferWithoutRuntimeRoot(target, true);
+    }
+
+    /** Keep a suspended lexical owner synchronized with its mutable scalar cell. */
+    synchronized void updateSuspendedFrameIdentity(RuntimeBase target) {
+        if (kind != Kind.SUSPENDED_FRAME) {
+            throw new IllegalStateException("suspended-frame update requires a suspended-frame slot");
+        }
+        if (target != null && target.refCount == Integer.MIN_VALUE) target = null;
+        transferWithoutRuntimeRoot(target, target != null);
     }
 
     /** Record a strong edge without promoting an untracked referent's legacy count. */
@@ -733,6 +773,7 @@ public final class PerlOwnerSlot {
         captureOwner = null;
         scalarReferenceCell = null;
         scalarContentsOwner = null;
+        suspendedScalarOwner = null;
         ownerRuntime = null;
         ownerRuntimeState = null;
         if (previous != null && registeredInOwnerLedger) previous.removeOwnerSlot(this);
