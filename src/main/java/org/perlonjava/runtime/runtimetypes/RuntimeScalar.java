@@ -3835,7 +3835,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (shouldReleaseUnrootedRescuedGraph
                 && DestroyDispatch.isRescued(oldBase)
                 && !ModuleInitGuard.inModuleInit()
-                && !ReachabilityWalker.isReachableFromExternalRootExcludingRescued(oldBase)) {
+                && !DestroyDispatch.hasLivePerlOwnerIdentity(oldBase)) {
             DestroyDispatch.clearNestedWeakRefsForRescued(oldBase);
         }
 

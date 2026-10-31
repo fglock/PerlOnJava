@@ -712,6 +712,20 @@ public class DestroyDispatch {
         return hasCurrentPerlOwnerSlot(referent, referent.ownerSlotSnapshot());
     }
 
+    /**
+     * Whether a live Perl owner remains apart from the rescued-object queue,
+     * temporary roots, and compatibility counts. The rescued-object caller
+     * uses this after an explicit overwrite to decide whether nested weak
+     * callbacks still have an owning Perl path.
+     */
+    static boolean hasLivePerlOwnerIdentity(RuntimeBase referent) {
+        return referent != null
+                && (referent.localBindingExists
+                    || referent.hasPendingReturnOwner()
+                    || referent.hasSemanticCaptureOwner()
+                    || hasCurrentPerlOwnerSlot(referent));
+    }
+
     private static boolean hasCurrentPerlOwnerSlot(
             RuntimeBase referent, Set<PerlOwnerSlot> ownerSlots) {
         for (PerlOwnerSlot ownerSlot : ownerSlots) {
