@@ -47,6 +47,7 @@ public final class GlobalRuntimeState {
     private final IdentityHashMap<RuntimeScalar, String> displacedLocalizedCodeRefs =
             new IdentityHashMap<>();
     private final Map<String, RuntimeGlob> ioSlots = new HashMap<>();
+    private final Map<String, PerlOwnerSlot> packageIoGlobOwnerSlots = new HashMap<>();
     private final Map<String, RuntimeFormat> formatSlots = new HashMap<>();
     private final Set<String> hiddenIoSlotsAfterStashDelete = new HashSet<>();
     /** Packages whose current stashes were made anonymous by undef %Pkg::. */
@@ -230,6 +231,28 @@ public final class GlobalRuntimeState {
 
     Map<String, RuntimeGlob> ioSlots() {
         return ioSlots;
+    }
+
+    Map<String, PerlOwnerSlot> packageIoGlobOwnerSlots() {
+        return packageIoGlobOwnerSlots;
+    }
+
+    void rebuildPackageIoGlobOwnerSlots() {
+        releasePackageIoGlobOwnerSlots();
+        for (Map.Entry<String, RuntimeGlob> entry : ioSlots.entrySet()) {
+            RuntimeGlob glob = entry.getValue();
+            if (glob == null) continue;
+            PerlOwnerSlot ownerSlot = new PerlOwnerSlot(PerlOwnerSlot.Kind.PACKAGE_GLOB_SLOT);
+            ownerSlot.acquirePackageGlobIdentity(glob);
+            packageIoGlobOwnerSlots.put(entry.getKey(), ownerSlot);
+        }
+    }
+
+    void releasePackageIoGlobOwnerSlots() {
+        for (PerlOwnerSlot ownerSlot : packageIoGlobOwnerSlots.values()) {
+            ownerSlot.release();
+        }
+        packageIoGlobOwnerSlots.clear();
     }
 
     Map<String, RuntimeFormat> formatSlots() {
@@ -493,6 +516,7 @@ public final class GlobalRuntimeState {
     }
 
     void clearIoAndFormatValues() {
+        releasePackageIoGlobOwnerSlots();
         ioSlots.clear();
         formatSlots.clear();
         hiddenIoSlotsAfterStashDelete.clear();

@@ -38,6 +38,8 @@ public final class PerlOwnerSlot {
         PACKAGE_SCALAR_SLOT,
         /** Package array or hash table entry owning one aggregate. */
         PACKAGE_AGGREGATE_SLOT,
+        /** Named IO stash entry owning one typeglob. */
+        PACKAGE_GLOB_SLOT,
         /** Active lexical frame or top-level pad entry owning an aggregate. */
         ACTIVE_LEXICAL,
         /** Strong value held by a lexical register in a suspended interpreter frame. */
@@ -310,6 +312,18 @@ public final class PerlOwnerSlot {
         Objects.requireNonNull(target, "target");
         if (legacyCaptureCount != 0) {
             throw new IllegalStateException("package aggregate slot has pending legacy releases");
+        }
+        transferWithoutRuntimeRoot(target, true);
+    }
+
+    /** Record one named IO stash entry as an identity-owned typeglob root. */
+    synchronized void acquirePackageGlobIdentity(RuntimeGlob target) {
+        if (kind != Kind.PACKAGE_GLOB_SLOT) {
+            throw new IllegalStateException("package glob acquisition requires a glob-slot identity");
+        }
+        Objects.requireNonNull(target, "target");
+        if (legacyCaptureCount != 0) {
+            throw new IllegalStateException("package glob slot has pending legacy releases");
         }
         transferWithoutRuntimeRoot(target, true);
     }

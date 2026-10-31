@@ -765,6 +765,32 @@ public class GlobalVariable {
             return table.apply(globalState());
         }
 
+        private Map<String, PerlOwnerSlot> packageIoGlobOwnerSlots(GlobalRuntimeState state) {
+            return table.apply(state) == state.ioSlots()
+                    ? state.packageIoGlobOwnerSlots() : null;
+        }
+
+        private void updatePackageIoGlobOwner(
+                GlobalRuntimeState state, String key, T value) {
+            Map<String, PerlOwnerSlot> ownerSlots = packageIoGlobOwnerSlots(state);
+            if (ownerSlots == null) return;
+            RuntimeGlob nextGlob = value instanceof RuntimeGlob glob ? glob : null;
+            PerlOwnerSlot ownerSlot = ownerSlots.get(key);
+            if (nextGlob == null) {
+                if (ownerSlot != null) {
+                    ownerSlots.remove(key, ownerSlot);
+                    ownerSlot.release();
+                }
+                return;
+            }
+            if (ownerSlot != null && ownerSlot.referent() == nextGlob) return;
+            if (ownerSlot == null) {
+                ownerSlot = new PerlOwnerSlot(PerlOwnerSlot.Kind.PACKAGE_GLOB_SLOT);
+                ownerSlots.put(key, ownerSlot);
+            }
+            ownerSlot.acquirePackageGlobIdentity(nextGlob);
+        }
+
         @Override public T get(Object key) { return delegate().get(key); }
         @Override public boolean containsKey(Object key) { return delegate().containsKey(key); }
         @Override public int size() { return delegate().size(); }
@@ -772,8 +798,11 @@ public class GlobalVariable {
 
         @Override
         public T put(String key, T value) {
-            boolean newKey = !delegate().containsKey(key);
-            T previous = delegate().put(key, value);
+            GlobalRuntimeState state = globalState();
+            Map<String, T> entries = table.apply(state);
+            boolean newKey = !entries.containsKey(key);
+            T previous = entries.put(key, value);
+            updatePackageIoGlobOwner(state, key, value);
             if (newKey) {
                 invalidateStashEnumerationCache();
             }
@@ -782,8 +811,11 @@ public class GlobalVariable {
 
         @Override
         public T putIfAbsent(String key, T value) {
-            T previous = delegate().putIfAbsent(key, value);
+            GlobalRuntimeState state = globalState();
+            Map<String, T> entries = table.apply(state);
+            T previous = entries.putIfAbsent(key, value);
             if (previous == null) {
+                updatePackageIoGlobOwner(state, key, value);
                 invalidateStashEnumerationCache();
             }
             return previous;
@@ -791,8 +823,12 @@ public class GlobalVariable {
 
         @Override
         public T remove(Object key) {
-            T previous = delegate().remove(key);
+            GlobalRuntimeState state = globalState();
+            T previous = table.apply(state).remove(key);
             if (previous != null) {
+                if (key instanceof String name) {
+                    updatePackageIoGlobOwner(state, name, null);
+                }
                 invalidateStashEnumerationCache();
             }
             return previous;
@@ -800,15 +836,20 @@ public class GlobalVariable {
 
         @Override
         public void clear() {
+            GlobalRuntimeState state = globalState();
             if (!isEmpty()) {
                 invalidateStashEnumerationCache();
             }
-            delegate().clear();
+            table.apply(state).clear();
+            if (packageIoGlobOwnerSlots(state) != null) {
+                state.releasePackageIoGlobOwnerSlots();
+            }
         }
 
         @Override
         public Set<Entry<String, T>> entrySet() {
-            Map<String, T> entries = delegate();
+            GlobalRuntimeState ownerState = globalState();
+            Map<String, T> entries = table.apply(ownerState);
             return new AbstractSet<>() {
                 @Override
                 public Iterator<Entry<String, T>> iterator() {
@@ -837,7 +878,9 @@ public class GlobalVariable {
                         @Override
                         public void remove() {
                             if (!canRemove) throw new IllegalStateException("next() has not been called");
+                            String key = current.getKey();
                             iterator.remove();
+                            updatePackageIoGlobOwner(ownerState, key, null);
                             canRemove = false;
                             invalidateStashEnumerationCache();
                         }
