@@ -1519,6 +1519,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 || GlobalVariable.hasLocalizedCodeRef(this);
     }
 
+    /** Release an untracked CV's pad tree when its last Perl owner leaves. */
+    void releasePadConstantsForUntrackedOwnerSlot() {
+        if ((refCount != -1 && refCount != WeakRefRegistry.WEAKLY_TRACKED)
+                || PerlRuntime.currentOrNull() == null
+                || hasPerlOwnerForCapture()
+                || padConstantOwnerSlots.isEmpty()) {
+            return;
+        }
+        clearPadConstantWeakRefs();
+    }
+
     /** Whether a Perl owner other than one scalar slot still needs this CV's captures. */
     public boolean hasPerlOwnerForCaptureOtherThan(PerlOwnerSlot excludedOwner) {
         // Do not use refCount here: this release path handles CODE objects
@@ -3135,7 +3146,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             Map<String, RuntimeBase[]> embeddedConstants,
             Map<String, Set<String>> embeddedDescendants) {
         RuntimeCodeRuntimeState state = PerlRuntime.current().runtimeCodeState();
-        tracePadConstants("register", className, constants);
         state.padConstantsByClassName.put(className,
                 constants == null ? new RuntimeBase[0] : constants.clone());
         state.embeddedPadConstantsByClassName.put(className, copyPadConstantArrays(embeddedConstants));
@@ -3148,13 +3158,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         RuntimeCode activeCode = getActiveCodeAt(0);
         RuntimeBase[] constants = activeCode == null
                 ? null : activeCode.padConstantsForClass(className);
-        if (constants == null) {
-            constants = PerlRuntime.current().runtimeCodeState()
-                    .padConstantsByClassName.get(className);
+        if (constants == null || index < 0 || index >= constants.length
+                || !(constants[index] instanceof RuntimeScalar)) {
+            RuntimeCodeRuntimeState state = PerlRuntime.current().runtimeCodeState();
+            constants = state.padConstantsByClassName.get(className);
         }
         if (constants == null || index < 0 || index >= constants.length
                 || !(constants[index] instanceof RuntimeScalar scalar)) {
-            tracePadConstants("lookup-miss", className, constants);
             throw new IllegalStateException(
                     "missing pad constant " + index + " for " + className);
         }
@@ -3888,7 +3898,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             RuntimeBase[] constants,
             Map<String, RuntimeBase[]> embeddedConstants,
             Map<String, Set<String>> embeddedDescendants) {
-        tracePadConstants("install", className, constants);
         RuntimeBase[] previousConstants = allPadConstantValues();
         Set<String> previousRegistryNames = new LinkedHashSet<>(padConstantRegistryClassNames);
         List<PerlOwnerSlot> previousSlots = new ArrayList<>(padConstantOwnerSlots);
@@ -3988,6 +3997,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 source.padConstantDescendantTreesForClass(source.padConstantClassName));
     }
 
+    /** Transfer this compiled optree's constant owners to its published CV. */
+    public void transferPadConstantTreeTo(RuntimeCode target) {
+        if (target == null || target == this
+                || (padConstants == null && padConstantClassName == null
+                    && padConstantArraysByClassName.isEmpty())) {
+            return;
+        }
+        copyPadConstantTree(this, target, values -> values.clone());
+        clearPadConstantWeakRefs();
+    }
+
     private void releasePadConstantOwners() {
         RuntimeBase[] constants = allPadConstantValues();
         Set<String> registryNames = new LinkedHashSet<>(padConstantRegistryClassNames);
@@ -3999,6 +4019,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         padConstantRegistryClassNames.clear();
         padConstantOwnerSlots.clear();
         for (PerlOwnerSlot owner : owners) owner.release();
+        Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (RuntimeBase constant : constants) {
+            if (constant != null && seen.add(constant)
+                    && constant.ownerSlotCount(PerlOwnerSlot.Kind.CODE_PAD_CONSTANT) == 0
+                    && constant.refCount != Integer.MIN_VALUE
+                    && constant.refCount <= 0) {
+                // A caller may retain a backslash-addressed literal through an
+                // uncounted scalar reference after this CV dies. Carry the
+                // final-release obligation onto that exact slot so its release
+                // clears weak observers without a later reachability sweep.
+                constant.deferFinalReleaseToUncountedOwnerSlots();
+            }
+        }
         clearUnownedPadConstantWeakRefs(constants);
         removeUnownedPadConstantRegistryEntries(registryNames);
     }
@@ -4026,22 +4059,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     .anyMatch(constant -> constant.ownerSlotCount(
                             PerlOwnerSlot.Kind.CODE_PAD_CONSTANT) != 0);
             if (!stillOwned) {
-                tracePadConstants("remove", className, constants);
                 if (constants == null) state.padConstantsByClassName.remove(className);
                 else state.padConstantsByClassName.remove(className, constants);
                 state.embeddedPadConstantsByClassName.remove(className);
                 state.embeddedPadConstantDescendantsByClassName.remove(className);
             }
         }
-    }
-
-    private static void tracePadConstants(String action, String className, RuntimeBase[] constants) {
-        if (System.getenv("JPERL_PAD_CONSTANT_TRACE") == null) return;
-        int length = constants == null ? -1 : constants.length;
-        String activeClass = getActiveCodeAt(0) == null
-                ? "none" : getActiveCodeAt(0).padConstantClassName;
-        System.err.println("[pad-constant] " + action + " " + className
-                + " length=" + length + " active=" + activeClass);
     }
 
     RuntimeBase[] padConstantsForClass(String className) {
