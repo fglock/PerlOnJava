@@ -1895,11 +1895,20 @@ on system Perl, JVM, and interpreter. The full single-worker no-sweeps
 `/private/tmp/ownership-async-owner-interpreter-final-20261031.log`, and
 `/private/tmp/ownership-async-owner-identities-final-make-20261031.log`.
 
+### Tied-handler cleanup uses nested owner slots (2026-10-31)
+
+Deferred release no longer builds a tied-handler root snapshot. A handler's
+`TIE_HANDLER` slot keeps the handler alive, while each value in its hash keeps
+its own current `HASH_ELEMENT` slot. `TiedHandlerNestedOwnerSlotRepairTest`
+models a legacy count undercount, drains the deferred release, and requires the
+nested value to survive with zero root queries before its final hash slot
+clears the weak observer. Validation is pending for this change.
+
 ### Next steps
 
-1. Replace the remaining `MortalList.processDeferredBase` root-graph fallbacks
-   with validated owner identities, including tied-handler, closure-capture,
-   active-call, and strong-cycle cases.
+1. Migrate remaining closure-capture, active-call, strong-cycle, and package-root
+   owner families so `MortalList.processDeferredBase` no longer depends on
+   root-graph fallbacks.
 2. Remove remaining compatibility pins and corrective scheduling while
    preserving weak-reference, `DESTROY`, resurrection, and cycle behavior.
 3. Rerun the full serial repository gate and the two-backend #1618, #1794,
