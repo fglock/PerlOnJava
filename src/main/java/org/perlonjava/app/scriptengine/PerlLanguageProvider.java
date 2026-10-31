@@ -962,6 +962,12 @@ public class PerlLanguageProvider {
                         ast,
                         false  // no try-catch
                 );
+                if (System.getenv("JPERL_PAD_CONSTANT_TRACE") != null) {
+                    System.err.println("[pad-constant] root-compile "
+                            + ctx.javaClassInfo.javaClassName + " count="
+                            + (ctx.javaClassInfo.padConstants == null
+                                    ? 0 : ctx.javaClassInfo.padConstants.size()));
+                }
                 Constructor<?> constructor = generatedClass.getConstructor();
                 Object instance = constructor.newInstance();
 
@@ -981,6 +987,16 @@ public class PerlLanguageProvider {
                         generatedClass,
                         ctx
                 );
+                RuntimeBase[] padConstants = ctx.javaClassInfo.padConstants == null
+                        ? new RuntimeBase[0]
+                        : ctx.javaClassInfo.padConstants.toArray(new RuntimeBase[0]);
+                if (padConstants.length != 0 || !ctx.javaClassInfo.embeddedPadConstants.isEmpty()) {
+                    compiled.installPadConstantTree(
+                            ctx.javaClassInfo.javaClassName,
+                            padConstants,
+                            ctx.javaClassInfo.embeddedPadConstants,
+                            ctx.javaClassInfo.embeddedPadConstantDescendants);
+                }
                 // File-scope `our` declarations, for PadWalker::peek_our(0) at file scope
                 Map<String, String> ourDeclarations = VariableCollectorVisitor.declaredOurVariables(ast);
                 compiled.declaredOurVariables = ourDeclarations.isEmpty() ? null : ourDeclarations;

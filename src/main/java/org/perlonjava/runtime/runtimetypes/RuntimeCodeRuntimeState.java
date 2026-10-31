@@ -29,6 +29,10 @@ public final class RuntimeCodeRuntimeState {
             new ConcurrentHashMap<>();
     final ConcurrentHashMap<String, String[]> stableHashMutationMethodKeysByClassName =
             new ConcurrentHashMap<>();
+    final ConcurrentHashMap<String, Map<String, RuntimeBase[]>> embeddedPadConstantsByClassName =
+            new ConcurrentHashMap<>();
+    final ConcurrentHashMap<String, Map<String, Set<String>>> embeddedPadConstantDescendantsByClassName =
+            new ConcurrentHashMap<>();
     final ConcurrentHashMap<String, Set<String>> disabledWarningsByClassName =
             new ConcurrentHashMap<>();
 
@@ -145,6 +149,8 @@ public final class RuntimeCodeRuntimeState {
         evalContexts.clear();
         padConstantsByClassName.clear();
         stableHashMutationMethodKeysByClassName.clear();
+        embeddedPadConstantsByClassName.clear();
+        embeddedPadConstantDescendantsByClassName.clear();
         disabledWarningsByClassName.clear();
         nextMethodCallsiteId = 0;
         clearInlineMethodCache();
