@@ -1705,6 +1705,18 @@ The target `t/refloop.t` remains 8/8 on system Perl and both backends. Logs:
 `/private/tmp/html-tree-full-jvm-gate.log`, and
 `/private/tmp/html-tree-full-interpreter-gate.log`.
 
+### Package-root nested weak-owner oracle (2026-10-31)
+
+Added `src/test/resources/unit/refcount/issue_1649_package_nested_untracked_weak_owner.t`
+to exercise an untracked aggregate retained only by a package array, then release
+that owner while checking weak-observer cleanup. The second scenario verifies
+that `unweaken` creates a strong owner that survives package-array removal and
+releases the weak probe only when that scalar is dropped. The test passes 7/7 on
+system Perl and both PerlOnJava backends with corrective sweeps disabled; the
+full `nice -n 19 make` gate passes in 6m55s with the test included. This records
+the observable contract while the package-root compatibility pin remains a
+migration bridge; it does not claim the bridge has been removed.
+
 ### Next steps
 
 1. Remove production corrective-sweep scheduling as each strong-owner family
