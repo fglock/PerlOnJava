@@ -1677,8 +1677,11 @@ Lazy interpreter materialization left optree constant owner slots on the
 temporary `InterpretedCode` wrapper, while the stable placeholder is the
 Perl-owned CV. Transfer the direct and embedded pad-constant tree to that
 placeholder on both the normal interpreter path and the VerifyError fallback.
-The stale-positive-count cleanup check now uses the remaining owner identities
-instead of treating the compatibility count as another owner. The
+The stale-positive-count cleanup check seeds a positive `refCount` in the Java
+test to exercise this boundary; it is an invariant test, not evidence that this
+scenario naturally leaves a positive count after the last owner exits. In
+production, cleanup uses the remaining owner identities instead of treating the
+compatibility count as another owner. The
 `pad_constant_cv_owner_lifetime.t` oracle passes 10/10 on system Perl and both
 backends with corrective sweeps disabled; the new Java owner-slot regression
 also checks final pad-tree release with zero root queries or snapshots. The
