@@ -80,6 +80,7 @@ priorities and future plans.
 - Clear nested weak observers after explicit undef from validated Perl owner identities, without treating rescued or temporary roots as owners (#1649).
 - Keep async lexical values owned while interpreter frames are suspended, then finalize cleared aggregate weak observers from current slots without stale-count root walks (#1649, #1860).
 - Repair deferred undercounts for values nested in tied handlers from their explicit hash slots, removing the tied-root reachability snapshot from deferred cleanup (#1649).
+- Give blessed glob lexical and package aliases counted owner-slot identities so their scope cleanup balances acquisition (#1649).
 
 
 
