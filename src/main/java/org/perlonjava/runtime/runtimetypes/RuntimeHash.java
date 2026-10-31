@@ -1179,11 +1179,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         if (allHashValuesLocked || (lockedHashValues != null && lockedHashValues.contains(key))) {
             throw new PerlCompilerException("Modification of a read-only value attempted");
         }
-        elements.put(key, value == null ? new RuntimeScalar() : value);
-        if (value != null) {
-            value.markContainerOwner(this);
-            RuntimeScalar.incrementRefCountForContainerStore(value);
-        }
+        storeOwnedElement(key, elements.get(key), value);
     }
 
     /**
