@@ -1172,9 +1172,6 @@ public class MortalList {
                     || untrackedReturnOwnerIdx
                         < state.pendingUntrackedReturnOwnerReleases.size()) {
                 while (tiedReleaseIdx < state.pendingTiedReleases.size()) {
-                    // Releasing a tie handler changes the graph represented by
-                    // the per-drain tied-reachability snapshot.
-                    state.flushTiedReachableCache = null;
                     state.pendingTiedReleases.get(tiedReleaseIdx++).releaseTiedObject();
                 }
                 while (pendingIdx < state.pending.size()) {
@@ -1546,22 +1543,12 @@ public class MortalList {
     private static void invalidateDrainReachabilityCaches() {
         LifecycleRuntimeState state = state();
         state.flushReachableCache = null;
-        state.flushTiedReachableCache = null;
         state.scalarRootSnapshot = null;
         state.fullRootSnapshot = null;
         if (!state.flushing && state.reachabilityDrainDepth == 0) {
             state.unblessedAggregateDrainRoots.clear();
             state.unblessedAggregateDrainSnapshotIncomplete = false;
         }
-    }
-
-    private static boolean isReachableThroughTiedHashCached(RuntimeBase base) {
-        LifecycleRuntimeState state = state();
-        if (state.flushTiedReachableCache == null) {
-            state.flushTiedReachableCache =
-                    ReachabilityWalker.reachableThroughTiedHashes();
-        }
-        return state.flushTiedReachableCache.contains(base);
     }
 
     private static void processDeferredBase(RuntimeBase base, boolean clearWeakRefsForLocalBinding,
@@ -1682,14 +1669,6 @@ public class MortalList {
                 // later weaken() sees a destroyed referent. The next cleanup
                 // boundary can still reclaim a tree after its Perl root goes
                 // away.
-                base.refCount = 1;
-            } else if (hasWeakRefs
-                    && base.possiblyStoredInTiedHandler
-                    && isReachableThroughTiedHashCached(base)) {
-                // The active-owner set starts recording at the first weaken,
-                // so a handler slot populated just before weaken can be absent
-                // from it. Confirm the missing ownership through the narrower
-                // tied-handler root walk before protecting DESTROY objects.
                 base.refCount = 1;
             } else if (base.blessId == 0
                     && hasWeakRefs
