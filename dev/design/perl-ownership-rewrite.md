@@ -1788,7 +1788,7 @@ same owner slot as direct removal. The first full gate then caught three missed
 merge behaviors: Map mutators and entry/key views must disable stable-method
 caching while retaining owner hooks, and an executing CODE with active frames
 must defer final release at refcount zero until its last `ACTIVE_CODE` owner
-leaves. Those source paths are corrected; the final full gate is pending.
+leaves. Those source paths are corrected.
 
 Post-rebase validation on 2026-10-31 passes: the full `nice -n 19 make` gate
 completed in 22m41s with Gradle limited to one worker for the busy host. Eight
@@ -1806,13 +1806,35 @@ the `/private/tmp/ownership-rebased-{jvm,interpreter}-` prefix,
 `/private/tmp/ownership-rebased-html-refloop-perl.log`, and
 `/private/tmp/ownership-rebased-async-scope-system-perl.log`.
 
+### Global DESTROY checks use owner-slot deltas (2026-10-31)
+
+Global-destruction resurrection checks now compare owner slots before and
+after `DESTROY` and validate counted scalar and aggregate slots against their
+current storage. Durable untracked scalar owners and optree constant pins are
+recognized directly. Staged arguments, return transfers, argument aliases,
+active CODE frames, temporary roots, and the weak-tracking compatibility pin
+do not count as resurrection. This removes the global-teardown scalar-root
+walk while preserving the existing non-global compatibility path.
+
+`DestroyOwnerSlotResurrectionTest` covers counted and untracked durable owners,
+a detached counted cell, and a temporary call argument. The full serial
+`nice -n 19 make` gate passes in 22m09s. Ten weak, `DESTROY`, resurrection,
+cycle, closure, and async scope-exit fixtures pass 110/110 on each backend
+with corrective sweeps disabled. HTML::Tree 5.07 passes all 23 files and 989
+TAP checks on each backend, including `t/refloop.t` 8/8. The system-Perl
+global-destruction oracle passes 3/3. Logs:
+`/private/tmp/ownership-destroy-owner-ledger-full-make-20261031.txt`,
+`/private/tmp/ownership-destroy-accept-{jvm,interpreter}-*.log`, and
+`/private/tmp/ownership-destroy-htmltree-{jvm,interpreter}-*.log`.
+
 ### Next steps
 
-1. In the next ownership-family batch, finish remaining CODE template and optree
-   pins, raw descriptor/embedding borrows, native call buffers, escaping
-   lvalues and refaliases. Add regressions before the next grouped full gate.
-2. Requalify the full upstream HTML-Tree suite, weak/DESTROY, resurrection,
-   cycle, and repository suite after each ownership-family migration.
-3. Make semantic owner counts authoritative, then remove the compatibility
-   bridge, production corrective scheduling, and reachability fallbacks after
-   all acceptance gates pass.
+1. Audit the remaining `RuntimeScalar` and `MortalList` root fallbacks; map each
+   fallback to a missing strong-slot identity and add a focused regression
+   before removing it.
+2. Continue the CODE template/optree pin, raw descriptor/embedding borrow,
+   native call buffer, escaping lvalue, and refalias owner families.
+3. Requalify weak/DESTROY, resurrection, cycles, HTML::Tree, and the full
+   repository suite after each grouped migration.
+4. Make semantic owner counts authoritative, then remove remaining
+   compatibility pins, corrective scheduling, and reachability fallbacks.

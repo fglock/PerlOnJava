@@ -444,11 +444,9 @@ public class DestroyDispatch {
                 GlobalContext.GLOBAL_PHASE).toString();
         boolean checkingGlobalOwnerDelta = "DESTRUCT".equals(globalPhase)
                 || MortalList.isDrainingTopLevelTemporary();
-        Set<RuntimeScalar> activeOwnersAtStart = null;
         Set<PerlOwnerSlot> ownerSlotsAtStart = null;
         if (checkingGlobalOwnerDelta) {
             referent.activateOwnerTracking();
-            activeOwnersAtStart = referent.activeOwnerSnapshot();
             ownerSlotsAtStart = referent.ownerSlotSnapshot();
         }
 
@@ -563,7 +561,7 @@ public class DestroyDispatch {
 
             callbackCompleted = true;
             finishDestroyOwnership(referent, className, destroyBlessId,
-                    checkingGlobalOwnerDelta, activeOwnersAtStart, ownerSlotsAtStart);
+                    checkingGlobalOwnerDelta, ownerSlotsAtStart);
         } catch (Exception e) {
             String msg = e.getMessage();
             if (msg == null) msg = e.getClass().getName();
@@ -589,7 +587,7 @@ public class DestroyDispatch {
             } finally {
                 if (!callbackCompleted) {
                     finishDestroyOwnership(referent, className, destroyBlessId,
-                            checkingGlobalOwnerDelta, activeOwnersAtStart, ownerSlotsAtStart);
+                            checkingGlobalOwnerDelta, ownerSlotsAtStart);
                 }
             }
         } finally {
@@ -628,8 +626,7 @@ public class DestroyDispatch {
     /** The callback's success or failure does not change its ownership obligations. */
     private static void finishDestroyOwnership(
             RuntimeBase referent, String className, int destroyBlessId,
-            boolean checkingGlobalOwnerDelta, Set<RuntimeScalar> activeOwnersAtStart,
-            Set<PerlOwnerSlot> ownerSlotsAtStart) {
+            boolean checkingGlobalOwnerDelta, Set<PerlOwnerSlot> ownerSlotsAtStart) {
         LifecycleRuntimeState state = state();
         if (referent.blessId != destroyBlessId) {
             String reblessedClassName = NameNormalizer.getBlessStr(referent.blessId);
@@ -644,7 +641,7 @@ public class DestroyDispatch {
             }
         }
         if (hasEscapedPerlOwner(referent, checkingGlobalOwnerDelta,
-                activeOwnersAtStart, ownerSlotsAtStart) && !state.destroyTargetRescued) {
+                ownerSlotsAtStart) && !state.destroyTargetRescued) {
             referent.needsReDestroy = true;
             warnIfResurrectedDuringGlobalDestruction(referent, className);
             return;
@@ -687,24 +684,9 @@ public class DestroyDispatch {
      */
     private static boolean hasEscapedPerlOwner(RuntimeBase referent,
                                                 boolean checkingGlobalOwnerDelta,
-                                                Set<RuntimeScalar> activeOwnersAtStart,
                                                 Set<PerlOwnerSlot> ownerSlotsAtStart) {
         if (checkingGlobalOwnerDelta) {
-            for (RuntimeScalar owner : referent.activeOwnerSnapshot()) {
-                // DESTROY commonly creates short-lived aliases while it calls
-                // methods on $self. They are new ledger entries, but they do
-                // not resurrect the object if their Perl slots are gone by the
-                // time the destructor returns. During global teardown, package
-                // roots are still available to the reachability walker, so
-                // require a new scalar owner to remain rooted before warning.
-                if (!activeOwnersAtStart.contains(owner)
-                        && ReachabilityWalker.isScalarReachable(owner)) return true;
-            }
-            for (PerlOwnerSlot ownerSlot : referent.ownerSlotSnapshot()) {
-                if ((ownerSlot.isNativeOwner() || ownerSlot.kind() == PerlOwnerSlot.Kind.CLOSURE_PAD)
-                        && !ownerSlotsAtStart.contains(ownerSlot)) return true;
-            }
-            return false;
+            return hasNewPerlOwnerSlot(referent, ownerSlotsAtStart);
         }
         if (referent.activeOwners == null) {
             return referent.refCount > 0;
@@ -715,6 +697,63 @@ public class DestroyDispatch {
         // walker can still reach; otherwise a DBH with dead CachedKids can be
         // marked needsReDestroy and skip its aggregate cleanup permanently.
         return referent.reachableOwnerCount() > 0 || referent.hasSemanticCaptureOwner();
+    }
+
+    static boolean hasNewPerlOwnerSlot(
+            RuntimeBase referent, Set<PerlOwnerSlot> ownerSlotsAtStart) {
+        for (PerlOwnerSlot ownerSlot : referent.ownerSlotSnapshot()) {
+            if ((ownerSlotsAtStart == null || !ownerSlotsAtStart.contains(ownerSlot))
+                    && isCurrentPerlOwnerSlot(referent, ownerSlot)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Check one newly installed slot as an owner after DESTROY. Call and
+     * return transfer slots, argument aliases, active frames, temporary roots,
+     * and the weak-tracking compatibility pin are runtime scaffolding at this
+     * boundary. Durable counted slots are checked against their current scalar
+     * or container storage; identity-only slots are already tied to their
+     * owning storage lifecycle.
+     */
+    static boolean isCurrentPerlOwnerSlot(RuntimeBase referent, PerlOwnerSlot slot) {
+        if (slot == null || !slot.isActive() || slot.referent() != referent) return false;
+        PerlOwnerSlot.Kind kind = slot.kind();
+        switch (kind) {
+            case TEMPORARY_ROOT, WEAKLY_TRACKED_COMPATIBILITY_PIN,
+                    ARGUMENT_ALIAS, ARGUMENT_VALUE, RETURN_VALUE, ACTIVE_CODE -> {
+                return false;
+            }
+            case ARRAY_ELEMENT, HASH_ELEMENT -> {
+                RuntimeScalar owner = slot.countedScalarOwner();
+                return owner != null && owner.isCurrentAggregateElementOwner(referent, slot);
+            }
+            case SCALAR_CELL, CODE_SLOT, TIE_HANDLER -> {
+                RuntimeScalar owner = slot.countedScalarOwner();
+                return owner != null && owner.isCurrentCountedScalarOwner(referent, slot);
+            }
+            case UNTRACKED_REFERENCE -> {
+                RuntimeScalar owner = slot.untrackedScalarOwner();
+                return owner != null
+                        && owner.hasLiveDurableStrongValueSlot()
+                        && !WeakRefRegistry.isweak(owner)
+                        && (owner.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                        && owner.value == referent;
+            }
+            case SCALAR_CAPTURE -> {
+                RuntimeCode captureOwner = slot.captureOwner();
+                return captureOwner != null && captureOwner.hasPerlOwnerForCapture();
+            }
+            case CLOSURE_PAD -> {
+                return slot.isNativeCaptureOwner() || slot.legacyCaptureCount() > 0;
+            }
+            case CODE_PAD_CONSTANT -> {
+                return true;
+            }
+            default -> {
+                return slot.isNativeOwner();
+            }
+        }
     }
 
     /**
