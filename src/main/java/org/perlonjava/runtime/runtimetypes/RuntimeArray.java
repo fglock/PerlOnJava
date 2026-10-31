@@ -1031,8 +1031,27 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     /** Transfer a removed owned element through the normal deferred-release path. */
     static void deferRemovedElementRelease(
             RuntimeArray array, RuntimeScalar scalar, String releaseSite) {
+        deferRemovedElementRelease(array, scalar, releaseSite, false);
+    }
+
+    /** Check the exact counted slot before a structural mutation removes it. */
+    static boolean hasCurrentCountedArrayElementOwner(
+            RuntimeArray array, RuntimeScalar scalar) {
+        if (array == null || scalar == null
+                || !(scalar.value instanceof RuntimeBase referent)) return false;
+        PerlOwnerSlot slot = scalar.countedOwnerSlot();
+        return slot != null
+                && slot.kind() == PerlOwnerSlot.Kind.ARRAY_ELEMENT
+                && scalar.isCurrentAggregateElementOwner(referent, slot);
+    }
+
+    /** Transfer a removed slot using its pre-mutation owner proof if needed. */
+    static void deferRemovedElementRelease(
+            RuntimeArray array, RuntimeScalar scalar, String releaseSite,
+            boolean currentCountedArrayElementOwner) {
         traceLocalizedOwnerDebug(releaseSite, array, scalar);
-        if (array.ownsElement(scalar) && scalar.refCountOwned
+        if ((array.ownsElement(scalar) || currentCountedArrayElementOwner)
+                && scalar.refCountOwned
                 && ((scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
                     || scalar.type == RuntimeScalarType.GLOB)
                 && scalar.value instanceof RuntimeBase base
