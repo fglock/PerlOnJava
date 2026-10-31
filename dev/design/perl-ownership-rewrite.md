@@ -1725,7 +1725,12 @@ blocks final weak cleanup; temporary roots and the cached external-root proof
 still preserve owners at boundaries that have not migrated. The regression
 releases a nested untracked scalar owner, leaves a positive compatibility count,
 and verifies the weak observer is cleared. The full `nice -n 19 make` gate passes
-in 7m17s with the regression included.
+in 7m17s with the regression included. After this change, the full upstream
+HTML-Tree 5.07 suite passes all 23 files and 989 TAP checks on both backends
+with corrective sweeps disabled; `t/refloop.t` passes 8/8. The bundled
+`Test::LeakTrace` stub makes HTML-Tree's 20 leak-test checks non-measurements.
+The #1794 controller and WebSocket regressions pass 3/3 and 6/6 respectively
+on both backends, and the #1860 growing-output regression passes 4/4 on both.
 
 ### Next steps
 
