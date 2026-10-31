@@ -118,6 +118,7 @@ public class WeakRefRegistry {
 
         state.weakScalars.add(ref);
         ref.refreshArgumentAliasOwnerSlots();
+        ref.refreshUntrackedReferenceOwner();
         state.referentToWeakRefs
                 .computeIfAbsent(base, k -> Collections.newSetFromMap(new IdentityHashMap<>()))
                 .add(ref);
@@ -470,6 +471,14 @@ public class WeakRefRegistry {
             DestroyDispatch.callDestroy(referent);
         } else {
             clearWeakRefsTo(referent);
+        }
+    }
+
+    /** Recheck cleared aggregate cleanup after a suspended lexical owner retires. */
+    public static void onSuspendedFrameOwnerReleased(RuntimeBase referent) {
+        if (referent != null && referent.refCount != Integer.MIN_VALUE
+                && referent.clearedOwnedAggregateElement) {
+            MortalList.finalizeClearedAggregateOwnerAfterScopeExit(referent);
         }
     }
 

@@ -1875,6 +1875,26 @@ passes 8/8 on both backends. Logs:
 `/private/tmp/ownership-rescue-owner-final-status-20261031.txt`, and
 `/private/tmp/ownership-rescue-owner-html-tree-refloop-{jvm,interpreter}-20261031.log`.
 
+### Suspended async frames retain lexical owner identities (2026-10-31)
+
+Before the active cleanup mark unwinds at `await`, the suspended interpreter
+frame now records owner slots for its live lexical registers. Scalar-backed
+slots follow reassignment and weakening; each slot leaves at lexical scope exit
+or frame completion, failure, or cancellation. The final frame-owner release
+rechecks cleared aggregate cleanup after any queued counted release is visible.
+That lets async cleanup use exact owner identities without treating a stale
+positive compatibility count as a reason to rebuild external roots.
+
+`ClearedAggregateOwnerIdentityNoRootWalkTest` requires immediate weak-observer
+cleanup with zero root queries. `PendingOwnerReleaseFinalizationTest` confirms
+queued decrements remain authoritative. The async scope-exit Perl fixture passes
+on system Perl, JVM, and interpreter. The full single-worker no-sweeps
+`nice -n 19 make` passes in 21m52s. Logs:
+`/private/tmp/ownership-async-system-perl-current.txt`,
+`/private/tmp/ownership-async-owner-jvm-final-20261031.log`,
+`/private/tmp/ownership-async-owner-interpreter-final-20261031.log`, and
+`/private/tmp/ownership-async-owner-identities-final-make-20261031.log`.
+
 ### Next steps
 
 1. Replace the remaining `MortalList.processDeferredBase` root-graph fallbacks
