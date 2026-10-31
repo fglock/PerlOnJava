@@ -1005,7 +1005,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     }
 
     /** Transfer a removed owned element through the normal deferred-release path. */
-    private static void deferRemovedElementRelease(
+    static void deferRemovedElementRelease(
             RuntimeArray array, RuntimeScalar scalar, String releaseSite) {
         if (array.ownsElement(scalar) && scalar.refCountOwned
                 && ((scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
