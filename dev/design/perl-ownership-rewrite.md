@@ -1806,35 +1806,47 @@ the `/private/tmp/ownership-rebased-{jvm,interpreter}-` prefix,
 `/private/tmp/ownership-rebased-html-refloop-perl.log`, and
 `/private/tmp/ownership-rebased-async-scope-system-perl.log`.
 
-### Global DESTROY checks use owner-slot deltas (2026-10-31)
+### DESTROY checks use current owner-slot identities (2026-10-31)
 
 Global-destruction resurrection checks now compare owner slots before and
 after `DESTROY` and validate counted scalar and aggregate slots against their
 current storage. Durable untracked scalar owners and optree constant pins are
 recognized directly. Staged arguments, return transfers, argument aliases,
 active CODE frames, temporary roots, and the weak-tracking compatibility pin
-do not count as resurrection. This removes the global-teardown scalar-root
-walk while preserving the existing non-global compatibility path.
+do not count as resurrection. Non-global DESTROY now validates current owner
+slots as well; the legacy positive-count rule remains only when no owner-slot
+identity exists. Detached scalar cells no longer survive on a stale count,
+and neither path walks scalar roots to decide whether destruction should be
+deferred.
 
 `DestroyOwnerSlotResurrectionTest` covers counted and untracked durable owners,
-a detached counted cell, and a temporary call argument. The full serial
-`nice -n 19 make` gate passes in 22m09s. Ten weak, `DESTROY`, resurrection,
-cycle, closure, and async scope-exit fixtures pass 110/110 on each backend
-with corrective sweeps disabled. HTML::Tree 5.07 passes all 23 files and 989
-TAP checks on each backend, including `t/refloop.t` 8/8. The system-Perl
-global-destruction oracle passes 3/3. Logs:
-`/private/tmp/ownership-destroy-owner-ledger-full-make-20261031.txt`,
-`/private/tmp/ownership-destroy-accept-{jvm,interpreter}-*.log`, and
-`/private/tmp/ownership-destroy-htmltree-{jvm,interpreter}-*.log`.
+a detached counted cell, a temporary call argument, and non-global checks for
+both live and detached counted cells. The focused Make gate and full serial
+`nice -n 19 make` pass; the full gate took 22m17s. With corrective sweeps
+disabled, #1794 controller release passes 3/3, the long-poll controller test
+passes 5/5, and the WebSocket lifetime test passes 6/6 on both backends. The
+#1860 growing-output test passes 4/4, tied-hash autovivification passes 6/6,
+and both HTML lifecycle reproducers pass 4/4 on each backend. The latter
+socket-based tests required extended access to enable loopback sockets.
+HTML::Tree 5.07 passes all 23 files and 989 TAP checks on each backend,
+including `t/refloop.t` 8/8. Its single `TODO` assertion remains marked TODO;
+the bundled `Test::LeakTrace` stub does not measure leaks. Logs:
+`/private/tmp/ownership-nonglobal-destroy-owner-full-make-20261031.txt`,
+`/private/tmp/ownership-nonglobal-destroy-owner-20261031.txt`,
+`/private/tmp/ownership-nonglobal-ext-{jvm,interpreter}-mojo-{controller,websocket}.log`,
+`/private/tmp/ownership-nonglobal-{jvm,interpreter}-*-20261031.log`, and
+`/private/tmp/ownership-nonglobal-htmltree-{jvm,interpreter}-*-20261031.log`.
 
 ### Next steps
 
-1. Audit the remaining `RuntimeScalar` and `MortalList` root fallbacks; map each
-   fallback to a missing strong-slot identity and add a focused regression
-   before removing it.
-2. Continue the CODE template/optree pin, raw descriptor/embedding borrow,
-   native call buffer, escaping lvalue, and refalias owner families.
-3. Requalify weak/DESTROY, resurrection, cycles, HTML::Tree, and the full
-   repository suite after each grouped migration.
-4. Make semantic owner counts authoritative, then remove remaining
-   compatibility pins, corrective scheduling, and reachability fallbacks.
+1. Trace each remaining `RuntimeScalar` and `MortalList` reachability decision
+   to its missing owner family. The scalar-reference-contents retain/release
+   path still changes `refCount` directly without an owner-slot identity.
+2. Add permanent tests for the missing edges, including mutable scalar
+   references, and replace their root-walk fallbacks with validated identities.
+3. Requalify #1618 HTML::Tree, #1794 controller/WebSocket lifetimes, #1860
+   growing-output cost, and weak/DESTROY/resurrection/cycle behavior with
+   corrective sweeps disabled on both backends.
+4. Run one full serial repository gate after the grouped migration, then remove
+   remaining compatibility pins, corrective scheduling, and reachability
+   fallbacks before the final update to the existing PR.

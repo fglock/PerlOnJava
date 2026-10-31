@@ -680,23 +680,23 @@ public class DestroyDispatch {
      * active. During global destruction the legacy selective count can still
      * include temporary argument aliases after their Perl owners have gone;
      * those aliases are not resurrection. Objects which have not activated
-     * owner tracking retain the legacy count-based behavior.
+     * owner-slot identities retain the legacy count-based behavior.
      */
-    private static boolean hasEscapedPerlOwner(RuntimeBase referent,
-                                                boolean checkingGlobalOwnerDelta,
-                                                Set<PerlOwnerSlot> ownerSlotsAtStart) {
+    static boolean hasEscapedPerlOwner(RuntimeBase referent,
+                                       boolean checkingGlobalOwnerDelta,
+                                       Set<PerlOwnerSlot> ownerSlotsAtStart) {
         if (checkingGlobalOwnerDelta) {
             return hasNewPerlOwnerSlot(referent, ownerSlotsAtStart);
         }
-        if (referent.activeOwners == null) {
-            return referent.refCount > 0;
-        }
-        // A DESTROY frame can still leave refCountOwned call-frame aliases in
-        // activeOwners after the Perl-visible owner has gone away. Those are
-        // bookkeeping remnants, not resurrection. Count only slots the root
-        // walker can still reach; otherwise a DBH with dead CachedKids can be
-        // marked needsReDestroy and skip its aggregate cleanup permanently.
-        return referent.reachableOwnerCount() > 0 || referent.hasSemanticCaptureOwner();
+        Set<PerlOwnerSlot> ownerSlots = referent.ownerSlotSnapshot();
+        if (hasCurrentPerlOwnerSlot(referent, ownerSlots)) return true;
+        if (referent.hasSemanticCaptureOwner()) return true;
+        // Values that have not acquired owner identities retain the legacy
+        // count rule. Once identities exist, they are the authority: walking
+        // roots here repeatedly made non-global DESTROY proportional to the
+        // size of the live Perl graph and could count stale Java aliases.
+        return ownerSlots.isEmpty() && referent.activeOwners == null
+                && referent.refCount > 0;
     }
 
     static boolean hasNewPerlOwnerSlot(
@@ -704,6 +704,18 @@ public class DestroyDispatch {
         for (PerlOwnerSlot ownerSlot : referent.ownerSlotSnapshot()) {
             if ((ownerSlotsAtStart == null || !ownerSlotsAtStart.contains(ownerSlot))
                     && isCurrentPerlOwnerSlot(referent, ownerSlot)) return true;
+        }
+        return false;
+    }
+
+    static boolean hasCurrentPerlOwnerSlot(RuntimeBase referent) {
+        return hasCurrentPerlOwnerSlot(referent, referent.ownerSlotSnapshot());
+    }
+
+    private static boolean hasCurrentPerlOwnerSlot(
+            RuntimeBase referent, Set<PerlOwnerSlot> ownerSlots) {
+        for (PerlOwnerSlot ownerSlot : ownerSlots) {
+            if (isCurrentPerlOwnerSlot(referent, ownerSlot)) return true;
         }
         return false;
     }

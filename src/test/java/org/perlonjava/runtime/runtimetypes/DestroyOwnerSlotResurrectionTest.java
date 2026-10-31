@@ -71,6 +71,33 @@ class DestroyOwnerSlotResurrectionTest {
     }
 
     @Test
+    void currentCountedOwnerIsDetectedOutsideGlobalTeardownWithoutRootWalk() {
+        try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
+            RuntimeHash referent = new RuntimeHash();
+            referent.refCount = 0;
+            RuntimeScalar global = GlobalVariable.getGlobalVariable(
+                    "DestroyOwnerSlotResurrectionTest::nonGlobalCountedOwner");
+
+            try {
+                global.set(referenceTo(referent));
+                assertEquals(1, referent.ownerSlotCount(PerlOwnerSlot.Kind.SCALAR_CELL));
+
+                try (MortalList.ReachabilityQueryMeasurement measurement =
+                             MortalList.measureReachabilityQueries()) {
+                    assertTrue(DestroyDispatch.hasEscapedPerlOwner(referent, false, null),
+                            "a durable current owner slot keeps a local DESTROY from finalizing");
+                    assertEquals(0, measurement.stats().rootQueries,
+                            "local DESTROY owner checks must not walk Perl roots");
+                    assertEquals(0, measurement.stats().snapshotsBuilt,
+                            "local DESTROY owner checks must not build root snapshots");
+                }
+            } finally {
+                global.set(new RuntimeScalar());
+            }
+        }
+    }
+
+    @Test
     void detachedCountedCellDoesNotResurrectTheReferent() {
         try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
             RuntimeHash referent = new RuntimeHash();
@@ -87,6 +114,17 @@ class DestroyOwnerSlotResurrectionTest {
                         "a scalar cell outside any live slot is stale bookkeeping");
                 assertEquals(0, measurement.stats().rootQueries,
                         "stale scalar slots should be rejected without a root walk");
+                assertFalse(referent.hasSemanticCaptureOwner(),
+                        "the detached scalar has no live closure capture");
+                String ownerSlotState = referent.ownerSlotSnapshot().stream()
+                        .map(slot -> slot.kind() + "="
+                                + DestroyDispatch.isCurrentPerlOwnerSlot(referent, slot))
+                        .toList().toString();
+                assertFalse(DestroyDispatch.hasCurrentPerlOwnerSlot(referent), ownerSlotState);
+                assertFalse(DestroyDispatch.hasEscapedPerlOwner(referent, false, null),
+                        "a detached counted cell does not escape a local DESTROY");
+                assertEquals(0, measurement.stats().rootQueries,
+                        "local DESTROY must reject stale cells without a root walk");
             } finally {
                 detachedCell.set(new RuntimeScalar());
             }
