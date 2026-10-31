@@ -1919,28 +1919,6 @@ The final full no-sweeps `nice -n 19 make` including this fixture passed on
 the immutable commit `cbebfc724` in 6m57s; log:
 `/private/tmp/ownership-tied-handler-immutable-make-20261031.log`.
 
-### Blessed glob aliases acquire counted owner slots (2026-10-31)
-
-`MyVarCleanupStack.retainBlessedGlobAliases` found a producer that incremented
-`refCount` and set `refCountOwned` without recording a counted scalar-cell
-identity. It now records the identity before incrementing the compatibility
-count for both live lexical and package-scalar aliases. Normal
-`RuntimeScalar.scopeExitCleanup` and replacement paths retire those same slots.
-`BlessedGlobAliasOwnerSlotTest` checks three distinct current identities for two
-lexical aliases and one package alias, then verifies one slot leaves at each
-scope exit. `refcount/blessed_glob_alias_owner_slots.t` passes 4/4 on system
-Perl, JVM, and interpreter. The filtered make gate, including the owner-ledger
-test, passes in 1m13s. Logs:
-`/private/tmp/blessed-glob-alias-owner-system-perl.log`,
-`/private/tmp/blessed-glob-alias-owner-jvm.log`,
-`/private/tmp/blessed-glob-alias-owner-interpreter.log`, and
-`/private/tmp/blessed-glob-alias-owner-focused-make.log`.
-The full no-sweeps `nice -n 19 make` gate passed on immutable commit
-`5170c88e6` in 7m38s; log:
-`/private/tmp/ownership-blessed-glob-immutable-make-20261031.log`. The
-documentation link check also passed; log:
-`/private/tmp/blessed-glob-alias-check-links.log`.
-
 The remaining `processDeferredBase` recovery paths still mix several owner
 families. The next audit distinguishes the semantic edge from the fallback
 that currently protects it:
@@ -1952,7 +1930,7 @@ that currently protects it:
 | Strong-cycle graph walk | Internal scalar-reference and aggregate-element edges | All cycle edges must be counted by owner slots so cycles survive without graph discovery. |
 | Live/global CODE capture walk | Closure pads and installed CODE metadata | Aggregate pads use capture slots; scalar captures and some CODE metadata still use the compatibility bridge. |
 | Nested-call depth pin | Active argument aliases and compiler temporaries | Borrowed aliases and owned argument/return values must remain distinct through unwind and async suspension. |
-| Blessed root snapshots and package cache | Package scalar, aggregate, glob, or CODE slots | Package scalar and aggregate paths are partly migrated; blessed glob aliases now use counted cells. Direct glob/CODE stash roots and remaining compatibility writes still need audit. |
+| Blessed root snapshots and package cache | Package scalar, aggregate, glob, or CODE slots | Package scalar and aggregate paths are partly migrated; blessed glob aliases already acquire counted identities through `recordActiveOwner`. Direct glob/CODE stash roots and remaining compatibility writes still need audit. |
 
 This is an inventory, not evidence that these compatibility paths are safe to
 delete. For each row, the next migration must fix acquisition, replacement,
