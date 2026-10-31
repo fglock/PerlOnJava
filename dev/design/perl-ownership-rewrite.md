@@ -8,11 +8,14 @@ passed on immutable commit `e8aa31d4f` in 7m43s; log:
 `/private/tmp/ownership-final-after-glob-audit-correction-20261031.log`.
 Blessed glob aliases already record counted owner identities through
 `RuntimeBase.recordActiveOwner`; no additional acquisition path is needed.
-The deferred `activeOwners` reachability fallback remains necessary for
-legacy scalar owners whose actual package-array storage has no current
-container-owner marker. Existing cost tests require those edges to be
-validated through the shared drain snapshot; the fallback can retire after
-those producers register their storage identity.
+On `a6a779140`, the full no-sweeps `nice -n 19 make` passes in 7m35s; log:
+`/private/tmp/ownership-retained-deferred-root-fallback-make-20261031.log`.
+`CurrentCountedOwnerRepairsDeferredUndercountTest` confirms that current
+counted scalar slots repair their deferred undercount with zero root queries,
+scalar-reachability queries, or snapshots. The `activeOwners` reachability
+fallback remains necessary for legacy scalar owners whose package-array
+storage lacks a current container-owner marker, and for deferred releases with
+no owner-slot provenance; existing cost tests preserve that boundary.
 Next work is to finish the fallback inventory across overwrite, first weaken,
 closure cleanup, and destruction, then migrate the remaining owner families
 before removing recovery machinery.
