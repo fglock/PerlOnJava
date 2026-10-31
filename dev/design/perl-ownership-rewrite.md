@@ -3,19 +3,25 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, and async cleanup regressions pass on both backends. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-10-31):** On branch
-`wip/glob-alias-owners-20261031-184210`, source `c9572eb57` includes two
+`wip/glob-alias-owners-20261031-184210`, source `624824675` includes three
 container owner-transfer fixes. `RuntimeArray.set(RuntimeScalar)` reclassifies
-an existing counted scalar-cell slot as an `ARRAY_ELEMENT` slot, acquires
-uncounted values after storage, preserves durable IO values, and marks the
-resulting array as owning its element. `RuntimeHash.putClonedElement` now uses
-the same acquire-before-release path as ordinary hash replacement, so replacing
-a cloned same-key value retires the displaced slot. Their focused Java tests
-verify stable owner identities, weak-observer cleanup, and zero root queries
-where the owner identity is sufficient.
+an existing counted scalar-cell slot as an `ARRAY_ELEMENT` slot and acquires
+uncounted values after storage. `RuntimeHash.putClonedElement` acquires the new
+`HASH_ELEMENT` before deferring release of a displaced cloned value.
+`RuntimeArray.delete(int)` now transfers removed middle-element ownership
+through the same deferred release path as `pop` and `shift`, keeping the
+returned value alive through its caller. Focused tests verify owner identities,
+weak-observer cleanup, and return-value lifetime.
 
-The full `nice -n 19 make` gate passed on immutable source `c9572eb57` in 7m6s;
-log: `/private/tmp/ownership-hash-clone-replacement-make-committed-20261031.log`.
-The documentation link check passed 821 links. The preceding array-only source
+The full `nice -n 19 make` gate passed on immutable source `624824675` in 7m36s;
+log: `/private/tmp/ownership-array-middle-delete-make-20261031.log`. The new
+`refcount/array_delete_middle_owner_release.t` passes 6/6 on system Perl, JVM,
+and interpreter. It failed 4/6 on the unfixed JVM parent; evidence:
+`/private/tmp/array-delete-middle-owner-release-parent-jvm.log`. The documentation
+link check passed 821 links. The preceding source `c9572eb57` passed the full
+gate in 7m6s; log:
+`/private/tmp/ownership-hash-clone-replacement-make-committed-20261031.log`.
+The earlier array-only source
 `ba029c3d8` also passed the full gate in 7m35s; log:
 `/private/tmp/ownership-array-single-value-owner-make-20261031.log`. The prior
 source `dd255e847`
@@ -57,6 +63,16 @@ scalar magic and avoiding ordinary assignment/FETCH semantics.
 release, and replacing the new slot with `undef` releases its final owner.
 The full gate passes on source `c9572eb57`; the focused JUnit case reports one
 test and zero failures.
+
+### Middle array deletion releases the displaced owner (2026-10-31)
+
+Plain-array `delete` previously cleared an interior slot without scheduling its
+counted owner release; deleting the tail already used `pop` and released it.
+Deletion now passes the removed storage scalar through the shared array-slot
+release helper while returning the fetched result to the caller. The permanent
+regression verifies that the returned reference keeps its object alive, that
+dropping it triggers `DESTROY` and weak cleanup, and that void-context deletion
+releases immediately. System Perl, JVM, and interpreter each pass 6/6.
 
 **Tracking:** [#1649](https://github.com/fglock/PerlOnJava/issues/1649)
 
