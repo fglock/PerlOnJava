@@ -243,9 +243,7 @@ public class WeakRefRegistry {
         } else if (base.refCount == -1
                 && base instanceof RuntimeScalarReadOnly
                 && RuntimeCode.isInstalledPadConstant(base)) {
-            // The defining subroutine's pad is the strong owner. Its ownership
-            // is not represented in selective refCount, and glob replacement
-            // clears the weak ref explicitly via clearPadConstantWeakRefs().
+            // A live CV optree owns this constant through an explicit owner slot.
         } else if (base.refCount == -1 && !(base instanceof RuntimeCode)) {
             // Untracked non-CODE object: transition to WEAKLY_TRACKED so that
             // undefine() and scopeExitCleanup() can clear weak refs

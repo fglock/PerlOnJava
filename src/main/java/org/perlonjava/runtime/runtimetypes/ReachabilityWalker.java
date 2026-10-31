@@ -341,7 +341,6 @@ public class ReachabilityWalker {
                     visitScalar(value, todo);
                 }
             } else if (cur instanceof RuntimeCode code) {
-                visitCodePadConstants(code, todo);
                 visitCodeStateVariables(code, todo);
                 if (code.closedOverVariables != null) {
                     for (RuntimeBase captured : code.closedOverVariables.values()) {
@@ -398,7 +397,6 @@ public class ReachabilityWalker {
                 if (!hasWalkableCodeEdges(code, walkCaptures)) {
                     continue;
                 }
-                visitCodePadConstants(code, todo);
                 visitCodeStateVariables(code, todo);
                 // Phase 2 normally keeps closure captures opaque to avoid
                 // over-rescuing DBIC objects through internal callbacks.
@@ -430,14 +428,6 @@ public class ReachabilityWalker {
         }
     }
 
-    private void visitCodePadConstants(RuntimeCode code,
-                                       java.util.ArrayDeque<RuntimeBase> todo) {
-        if (code.padConstants == null) return;
-        for (RuntimeBase constant : code.padConstants) {
-            addReachable(constant, todo);
-        }
-    }
-
     /**
      * Global CODE slots themselves are roots, but most named subs have no
      * object-valued pad, state, or capture edges. Keep those CODE refs in the
@@ -456,8 +446,7 @@ public class ReachabilityWalker {
     }
 
     static boolean hasWalkableCodeEdges(RuntimeCode code, boolean walkCaptures) {
-        if ((code.padConstants != null && code.padConstants.length != 0)
-                || !code.stateVariable.isEmpty()
+        if (!code.stateVariable.isEmpty()
                 || !code.stateArray.isEmpty()
                 || !code.stateHash.isEmpty()) {
             return true;

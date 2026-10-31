@@ -319,6 +319,23 @@ walker. Remaining uncounted targets still use the existing fallback. The new
 with the existing targeted-query and weak-CODE fallback tests. HTML-Tree
 5.07 `t/refloop.t` still passes 8/8 on both backends with sweeps disabled.
 
+### CODE optree constants receive owner identities (2026-10-31)
+
+System Perl confirms that a saved coderef keeps a backslash-addressable
+constant alive after its named glob is replaced, and that a nested anonymous
+optree shares its constant identity across closure instances while its factory
+CV remains alive. The expanded permanent Perl regression passes 8/8 on system
+Perl. Each compiled optree now has a distinct constant scalar per source
+occurrence and one CODE_PAD_CONSTANT slot per strong edge. A parent CV owns
+embedded anonymous optrees as templates; each produced closure also owns its
+own edges. The interpreter tracks constants from its constant pool and nested
+closures in the same owner ledger. Glob replacement retires only the stash
+owner, and final CV cleanup releases constant slots and clears weak observers
+after the last owner. Runtime lookup uses the owning CV's registered optree
+constants; the reachability walker no longer follows pad constants as a
+substitute for explicit edges. Full build and backend validation for this
+batch is pending.
+
 ### Next steps
 
 1. Extend the ownership path through scalar proxies and ordinary array/hash

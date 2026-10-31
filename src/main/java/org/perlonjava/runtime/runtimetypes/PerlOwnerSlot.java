@@ -23,6 +23,8 @@ public final class PerlOwnerSlot {
         SCALAR_CAPTURE,
         SCALAR_CELL,
         CODE_SLOT,
+        /** Compiled CODE optree retaining one backslash-addressable pad constant. */
+        CODE_PAD_CONSTANT,
         /** Executable regex callback retaining its closure CODE object. */
         REGEX_CALLBACK,
         ARRAY_ELEMENT,
@@ -242,6 +244,21 @@ public final class PerlOwnerSlot {
             throw new IllegalStateException("package scalar slot has pending legacy releases");
         }
         transferWithoutRuntimeRoot(target, true);
+    }
+
+    /** Record one compiled CODE optree's strong reference to a pad constant. */
+    synchronized void acquireCodePadConstantIdentity(RuntimeBase target) {
+        if (kind != Kind.CODE_PAD_CONSTANT) {
+            throw new IllegalStateException("pad-constant acquisition requires a CODE-pad slot");
+        }
+        Objects.requireNonNull(target, "target");
+        if (target.refCount == Integer.MIN_VALUE) {
+            throw new IllegalStateException("cannot own a destroyed pad constant");
+        }
+        if (legacyCaptureCount != 0) {
+            throw new IllegalStateException("pad-constant slot has pending legacy releases");
+        }
+        transferWithoutRuntimeRoot(target, false);
     }
 
     /** Record one package array/hash table entry as an identity-owned aggregate root. */

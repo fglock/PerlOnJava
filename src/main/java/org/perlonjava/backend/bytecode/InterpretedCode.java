@@ -621,6 +621,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
                 true,
                 this.deparseSourceText
         );
+        copy.installPadConstants(this.padConstants);
         copy.prototype = this.prototype;
         copy.isConstantCv = this.isConstantCv;
         copy.isLexicalConstantCv = this.isLexicalConstantCv;
