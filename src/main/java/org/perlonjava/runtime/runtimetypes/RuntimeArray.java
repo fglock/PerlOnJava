@@ -1676,6 +1676,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
 
             @Override
             public void dynamicRestoreState() {
+                boolean releasedLocalizedOwner = false;
                 // undef @array can remove the container slots while one or
                 // more element locals are active. Restore the pre-local
                 // container shape first; nested local states then restore
@@ -1691,7 +1692,12 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                     // Remove the localized slot itself, but retain values
                     // assigned to intervening slots during the scope.
                     while (self.elements.size() > idx) {
-                        self.elements.removeLast();
+                        RuntimeScalar removed = self.elements.removeLast();
+                        if (removed != null) {
+                            deferRemovedElementRelease(self, removed,
+                                    "RuntimeArray.deleteLocal");
+                            releasedLocalizedOwner = true;
+                        }
                     }
                     while (self.elements.size() > savedSize
                             && isEmptyLocalPlaceholder(self.elements.getLast())) {
@@ -1704,11 +1710,24 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 }
                 if (existed) {
                     if (idx < self.elements.size()) {
+                        RuntimeScalar displaced = self.elements.get(idx);
                         self.elements.set(idx, savedValue);
+                        if (displaced != null && displaced != savedValue) {
+                            deferRemovedElementRelease(self, displaced,
+                                    "RuntimeArray.deleteLocal");
+                            releasedLocalizedOwner = true;
+                        }
                     }
                 } else if (idx >= 0 && idx < self.elements.size()) {
+                    RuntimeScalar displaced = self.elements.get(idx);
                     self.elements.set(idx, null);
+                    if (displaced != null) {
+                        deferRemovedElementRelease(self, displaced,
+                                "RuntimeArray.deleteLocal");
+                        releasedLocalizedOwner = true;
+                    }
                 }
+                if (releasedLocalizedOwner) MortalList.flush();
             }
         });
 
