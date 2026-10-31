@@ -397,8 +397,16 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
      * Perl references, and are deliberately excluded.
      */
     public boolean hasPerlStrongOwner() {
-        if (refCount > 0 || localBindingExists || captureCount > 0
-                || hasPendingReturnOwner()) {
+        return refCount > 0 || hasPerlStrongOwnerIdentity();
+    }
+
+    /**
+     * Whether current Perl owner identities, apart from the legacy count,
+     * prove that this value is still owned. Temporary roots and compatibility
+     * count pins are not Perl owners.
+     */
+    boolean hasPerlStrongOwnerIdentity() {
+        if (localBindingExists || captureCount > 0 || hasPendingReturnOwner()) {
             return true;
         }
         for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
