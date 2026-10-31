@@ -446,10 +446,6 @@ public class EmitSubroutine {
             RuntimeBase[] padConstants = subCtx.javaClassInfo.padConstants == null
                     ? new RuntimeBase[0]
                     : subCtx.javaClassInfo.padConstants.toArray(new RuntimeBase[0]);
-            if (System.getenv("JPERL_PAD_CONSTANT_TRACE") != null) {
-                System.err.println("[pad-constant] sub-compile "
-                        + subCtx.javaClassInfo.javaClassName + " count=" + padConstants.length);
-            }
             Map<String, RuntimeBase[]> embeddedPadConstants =
                     subCtx.javaClassInfo.embeddedPadConstants;
             Map<String, Set<String>> embeddedPadDescendants =

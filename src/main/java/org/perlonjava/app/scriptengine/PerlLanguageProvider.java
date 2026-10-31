@@ -962,12 +962,6 @@ public class PerlLanguageProvider {
                         ast,
                         false  // no try-catch
                 );
-                if (System.getenv("JPERL_PAD_CONSTANT_TRACE") != null) {
-                    System.err.println("[pad-constant] root-compile "
-                            + ctx.javaClassInfo.javaClassName + " count="
-                            + (ctx.javaClassInfo.padConstants == null
-                                    ? 0 : ctx.javaClassInfo.padConstants.size()));
-                }
                 Constructor<?> constructor = generatedClass.getConstructor();
                 Object instance = constructor.newInstance();
 

@@ -5,10 +5,151 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("unit")
 class CodePadConstantOwnerSlotTest {
+    @Test
+    void compiledPadTreeTransfersToThePublishedCvOwner() {
+        PerlRuntime runtime = new PerlRuntime();
+        RuntimeScalarReadOnly constant = new RuntimeScalarReadOnly("owned");
+        RuntimeCode compiledCode = new RuntimeCode((args, context) -> new RuntimeList(), null);
+        RuntimeCode publishedCv = new RuntimeCode((args, context) -> new RuntimeList(), null);
+        RuntimeScalar weakObserver = referenceTo(constant);
+        String className = "org/perlonjava/test/PadConstantTransfer";
+
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            boolean previousMortalListState = MortalList.isActive();
+            MortalList.setActive(true);
+            try {
+                WeakRefRegistry.weaken(weakObserver);
+                compiledCode.installPadConstantTree(
+                        className, new RuntimeBase[]{constant}, java.util.Map.of(), java.util.Map.of());
+                PerlOwnerSlot compiledOwner = constant.ownerSlotSnapshot().stream()
+                        .filter(slot -> slot.kind() == PerlOwnerSlot.Kind.CODE_PAD_CONSTANT)
+                        .findFirst().orElseThrow();
+
+                compiledCode.transferPadConstantTreeTo(publishedCv);
+
+                assertFalse(compiledOwner.isActive(),
+                        "the temporary compiler wrapper gives up its owner slot");
+                assertEquals(1, constant.ownerSlotCount(PerlOwnerSlot.Kind.CODE_PAD_CONSTANT),
+                        "the published CV replaces the temporary owner exactly once");
+                assertSame(constant, RuntimeCode.getPadConstant(className, 0),
+                        "generated code resolves the constant through the published CV tree");
+                assertTrue(WeakRefRegistry.isweak(weakObserver),
+                        "transferring the owner does not clear a live constant");
+
+                publishedCv.refCount = Integer.MIN_VALUE;
+                DestroyDispatch.callDestroy(publishedCv);
+                assertEquals(0, constant.ownerSlotCount(PerlOwnerSlot.Kind.CODE_PAD_CONSTANT));
+                assertFalse(WeakRefRegistry.isweak(weakObserver),
+                        "the published CV's final release reaps its constant");
+            } finally {
+                if (compiledCode.perlLifecycleState() != RuntimeBase.PerlLifecycleState.DESTROYED) {
+                    compiledCode.refCount = Integer.MIN_VALUE;
+                    DestroyDispatch.callDestroy(compiledCode);
+                }
+                if (publishedCv.perlLifecycleState() != RuntimeBase.PerlLifecycleState.DESTROYED) {
+                    publishedCv.refCount = Integer.MIN_VALUE;
+                    DestroyDispatch.callDestroy(publishedCv);
+                }
+                WeakRefRegistry.clearWeakRefsTo(constant);
+                MortalList.invalidateAllRootSnapshots();
+                MortalList.setActive(previousMortalListState);
+            }
+        }
+    }
+
+    @Test
+    void untrackedCallerOwnerIsFinalizedAfterItsCvReleasesThePadConstant() {
+        PerlRuntime runtime = new PerlRuntime();
+        RuntimeScalarReadOnly constant = new RuntimeScalarReadOnly("owned");
+        RuntimeCode code = new RuntimeCode((args, context) -> new RuntimeList(), null);
+        RuntimeScalar strongOwner = new RuntimeScalar();
+        RuntimeScalar weakObserver = referenceTo(constant);
+
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            boolean previousMortalListState = MortalList.isActive();
+            MortalList.setActive(true);
+            int mark = MyVarCleanupStack.pushMark();
+            MyVarCleanupStack.register(strongOwner);
+            try {
+                code.installPadConstants(new RuntimeBase[]{constant});
+                strongOwner.set(referenceTo(constant));
+                assertTrue(strongOwner.untrackedReferenceOwnerSlot().isActive());
+                WeakRefRegistry.weaken(weakObserver);
+
+                code.clearPadConstantWeakRefs();
+
+                assertEquals(0, constant.ownerSlotCount(PerlOwnerSlot.Kind.CODE_PAD_CONSTANT));
+                assertEquals(1, constant.ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE));
+                assertTrue(WeakRefRegistry.isweak(weakObserver),
+                        "the caller's strong scalar keeps the constant alive after CV release");
+
+                strongOwner.undefine();
+
+                assertEquals(0, constant.ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE));
+                assertFalse(WeakRefRegistry.isweak(weakObserver),
+                        "the final untracked caller slot triggers immediate weak cleanup");
+            } finally {
+                RuntimeScalar.scopeExitCleanup(strongOwner);
+                MyVarCleanupStack.unregister(strongOwner);
+                MyVarCleanupStack.popMark(mark);
+                if (code.perlLifecycleState() != RuntimeBase.PerlLifecycleState.DESTROYED) {
+                    code.refCount = Integer.MIN_VALUE;
+                    DestroyDispatch.callDestroy(code);
+                }
+                WeakRefRegistry.clearWeakRefsTo(constant);
+                MortalList.invalidateAllRootSnapshots();
+                MortalList.setActive(previousMortalListState);
+            }
+        }
+    }
+
+    @Test
+    void finalUntrackedCodeReferenceReleasesItsPadTree() {
+        PerlRuntime runtime = new PerlRuntime();
+        RuntimeScalarReadOnly constant = new RuntimeScalarReadOnly("owned");
+        RuntimeCode closure = new RuntimeCode((args, context) -> new RuntimeList(), null);
+        RuntimeScalar codeSlot = new RuntimeScalar();
+        RuntimeScalar weakObserver = referenceTo(constant);
+
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            boolean previousMortalListState = MortalList.isActive();
+            MortalList.setActive(true);
+            int mark = MyVarCleanupStack.pushMark();
+            MyVarCleanupStack.register(codeSlot);
+            try {
+                closure.installPadConstants(new RuntimeBase[]{constant});
+                codeSlot.set(new RuntimeScalar(closure));
+                WeakRefRegistry.weaken(weakObserver);
+
+                assertEquals(1,
+                        closure.ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE));
+                assertEquals(1,
+                        constant.ownerSlotCount(PerlOwnerSlot.Kind.CODE_PAD_CONSTANT));
+
+                codeSlot.set(new RuntimeScalar());
+
+                assertEquals(0,
+                        constant.ownerSlotCount(PerlOwnerSlot.Kind.CODE_PAD_CONSTANT));
+                assertEquals(0, closure.padConstantOwnerReferents().length);
+                assertFalse(WeakRefRegistry.isweak(weakObserver),
+                        "the final uncounted CV slot releases the optree constants");
+            } finally {
+                RuntimeScalar.scopeExitCleanup(codeSlot);
+                MyVarCleanupStack.unregister(codeSlot);
+                MyVarCleanupStack.popMark(mark);
+                closure.clearPadConstantWeakRefs();
+                WeakRefRegistry.clearWeakRefsTo(constant);
+                MortalList.invalidateAllRootSnapshots();
+                MortalList.setActive(previousMortalListState);
+            }
+        }
+    }
+
     @Test
     void eachOptreeConstantEdgeLivesUntilItsCvOwnerIsDestroyed() {
         PerlRuntime runtime = new PerlRuntime();

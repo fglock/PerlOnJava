@@ -391,10 +391,6 @@ public class EmitLiteral {
             constant.type = RuntimeScalarType.BYTE_STRING;
         }
         int padIndex = ctx.javaClassInfo.addPadConstant(constant);
-        if (System.getenv("JPERL_PAD_CONSTANT_TRACE") != null) {
-            System.err.println("[pad-constant] emit " + ctx.javaClassInfo.javaClassName
-                    + " index=" + padIndex + " value=" + node.value);
-        }
         emitPadConstantReference(ctx, padIndex);
     }
 

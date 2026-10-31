@@ -393,6 +393,9 @@ public class WeakRefRegistry {
 
     /** Finish tracked cleanup when its final owner slot leaves. */
     static void onStrongOwnerSlotReleased(RuntimeBase referent) {
+        if (referent instanceof RuntimeCode code) {
+            code.releasePadConstantsForUntrackedOwnerSlot();
+        }
         boolean zeroCountOwnerSlotsExhausted = referent != null
                 && referent.refCount == 0
                 && !(referent instanceof RuntimeCode)
