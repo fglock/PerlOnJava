@@ -3,29 +3,32 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, and async cleanup regressions pass on both backends. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-10-31):** On branch
-`wip/glob-alias-owners-20261031-184210`, source `dd255e847` resolves package
-aggregate roots from active `PACKAGE_AGGREGATE_SLOT` identities instead of
-scanning package tables; installation markers remain in place. The new
-`PackageRootOwnerIdentityLookupTest` covers root-slot acquisition and final
-release. The full `nice -n 19 make` gate passed in 6m57s with sweeps disabled;
-log: `/private/tmp/ownership-package-root-owner-lookup-offline-make-20261031.log`.
-JOL 0.17 was checksum-verified from Google's Maven Central mirror and resolved
-through a temporary local repository because Java rejected the configured
-Maven Central TLS chain; no build configuration or dependency version changed.
+`wip/glob-alias-owners-20261031-184210`, source `ba029c3d8` adds current
+container ownership to `RuntimeArray.set(RuntimeScalar)`. The store now
+reclassifies an existing counted scalar-cell slot as an `ARRAY_ELEMENT` slot,
+acquires uncounted values after storage, preserves durable IO values, and marks
+the resulting array as owning its element. `RuntimeArraySingleValueOwnerTransferTest`
+forces a transient undercount during weakening and requires owner-slot repair
+with zero root queries; overwriting the final cell must clear the weak observer.
 
-The upstream HTML-Tree 5.07 suite passes all 23 files: system Perl passes 969
-tests with `t/leaktest.t` skipped; JVM and interpreter each pass 989 checks
-with sweeps disabled. `t/refloop.t` passes 8/8 on all three runtimes. The
-PerlOnJava `Test::LeakTrace` stub makes its 20 leaktest checks non-measurements.
-Logs: `/private/tmp/ownership-package-root-owner-lookup-html-tree-system-20261031.log`,
-`/private/tmp/ownership-package-root-owner-lookup-html-tree-jvm-20261031.log`,
-and `/private/tmp/ownership-package-root-owner-lookup-html-tree-interpreter-20261031.log`.
+The full `nice -n 19 make` gate passed on this immutable source in 7m35s; log:
+`/private/tmp/ownership-array-single-value-owner-make-20261031.log`. The focused
+JUnit XML reports one test and zero failures. The prior source `dd255e847`
+resolved package aggregate roots from active `PACKAGE_AGGREGATE_SLOT` identities
+and passed full HTML-Tree 5.07 validation on system Perl, JVM, and interpreter;
+those results are recorded in that section below and must be rerun after the
+final ownership candidate. JOL 0.17 was checksum-verified from Google's Maven
+Central mirror and resolved through a temporary local repository because Java
+rejected the configured Maven Central TLS chain; no build configuration or
+dependency version changed.
 
-The deferred-release root fallback remains necessary for legacy scalar cells
-without current container-owner provenance; removing it failed the existing
-reachability-cost and unblessed-aggregate snapshot regressions. Continue by
-migrating those storage producers and auditing closure cleanup and destruction
-before removing recovery machinery.
+The deferred-release graph fallback remains necessary for legacy cells whose
+counted owner does not describe their current storage. The snapshot regressions
+deliberately acquire an owner before directly inserting its cell, so they keep
+the compatibility path covered; ordinary `push`, list assignment, hash stores,
+and the migrated single-value replacement now establish storage provenance
+before counting. Next, audit remaining transfer paths and migrate closure,
+active-call, cycle, and CODE roots before removing recovery machinery.
 
 **Sweep policy (2026-10-27):** Corrective sweeps are disabled by default, as
 requested. `JPERL_ENABLE_CORRECTIVE_SWEEPS=1` temporarily enables legacy
@@ -1979,11 +1982,27 @@ This removes the package-table membership scan only; deferred
 release, first-weaken, closure, and destruction graph fallbacks remain under
 audit.
 
+### Single-value array replacement transfers the counted cell (2026-10-31)
+
+The deferred-root snapshot tests construct their legacy case by acquiring a
+counted scalar owner before inserting it directly into an aggregate. The
+ordinary `push`, list assignment, and hash-store producers establish container
+storage before `incrementRefCountForContainerStore`, so they already classify
+the counted owner correctly. `RuntimeArray.set(RuntimeScalar)` was an omitted
+producer: it stored the same cell without acquiring/reclassifying its owner,
+and left `elementsOwned` false. It now acquires the element owner after the
+store, preserves any existing owner identity, and marks the array as owning the
+cell. `RuntimeArraySingleValueOwnerTransferTest` forces an undercount and
+requires current-slot repair with zero root queries; final cell overwrite must
+clear the weak observer. The full `nice -n 19 make` gate passed in 7m35s,
+including the regression (one test, zero failures); log:
+`/private/tmp/ownership-array-single-value-owner-make-20261031.log`.
+
 ### Next steps
 
-1. Add current container-owner provenance to remaining legacy scalar cells,
-   then migrate closure-capture, active-call, strong-cycle, and CODE-root paths
-   so ordinary cleanup can stop consulting root graphs.
+1. Continue auditing less common scalar stores and transfers, then migrate
+   closure-capture, active-call, strong-cycle, and CODE-root paths so ordinary
+   cleanup can stop consulting root graphs.
 2. Remove remaining compatibility pins and corrective scheduling while
    preserving weak-reference, `DESTROY`, resurrection, and cycle behavior.
 3. Rerun the full serial repository gate and the two-backend #1618, #1794,
