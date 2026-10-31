@@ -75,6 +75,7 @@ priorities and future plans.
 - Remove live-scalar-registry reachability from first-weaken, tail-call, and async-Future owner decisions.
 - Release weakly tracked referents from their final uncounted owner slot without a root walk.
 - Detect global `DESTROY` resurrection from current owner-slot identities instead of walking Perl roots, while excluding temporary call owners (#1649).
+- Detect non-global `DESTROY` resurrection from validated owner slots, avoiding repeated root walks and stale detached-cell retention (#1649, #1860).
 
 
 
