@@ -545,6 +545,8 @@ public class BytecodeCompiler implements Visitor {
     final int sourceLine;
     // Non-final + no field initializer: pooled on the cached eval path (round 21).
     private List<Object> constants;
+    /** Read-only scalar literals addressed by backslash in this optree. */
+    private final List<RuntimeBase> padConstants = new ArrayList<>();
     private List<String> stringPool;
     private final Map<String, Integer> stringPoolIndex = new HashMap<>(16);  // O(1) lookup
     private final Map<Object, Integer> constantPoolIndex = new HashMap<>(16);  // O(1) lookup
@@ -1853,6 +1855,18 @@ public class BytecodeCompiler implements Visitor {
                 evalSitePragmaFlags.isEmpty() ? null : evalSitePragmaFlags,
                 warningBitsString
         );
+        List<RuntimeBase> ownedPadConstants = new ArrayList<>(padConstants);
+        for (Object constant : constants) {
+            RuntimeCode nestedCode = constant instanceof RuntimeCode codeConstant
+                    ? codeConstant
+                    : constant instanceof RuntimeScalar codeRef
+                            && codeRef.value instanceof RuntimeCode codeValue
+                                    ? codeValue : null;
+            if (nestedCode != null) {
+                Collections.addAll(ownedPadConstants, nestedCode.padConstantOwnerReferents());
+            }
+        }
+        code.installPadConstants(ownedPadConstants.toArray(new RuntimeBase[0]));
         if (metadataScope != null) {
             code.setLexicalDisabledWarningCategories(
                     metadataScope.getDisabledWarningCategories());
@@ -6781,6 +6795,7 @@ public class BytecodeCompiler implements Visitor {
                         emit(Opcodes.LOAD_CONST);
                         emitReg(valueReg);
                         emit(addToConstantPool(constant));
+                        padConstants.add(constant);
                         if (emitterContext != null && emitterContext.javaClassInfo != null) {
                             emitterContext.javaClassInfo.addPadConstant(constant);
                         }
