@@ -1004,6 +1004,20 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         return ownedAliasElements != null && ownedAliasElements.contains(scalar);
     }
 
+    /** Transfer a removed owned element through the normal deferred-release path. */
+    private static void deferRemovedElementRelease(
+            RuntimeArray array, RuntimeScalar scalar, String releaseSite) {
+        if (array.ownsElement(scalar) && scalar.refCountOwned
+                && ((scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                    || scalar.type == RuntimeScalarType.GLOB)
+                && scalar.value instanceof RuntimeBase base
+                && base.refCount > 0) {
+            scalar.refCountOwned = false;
+            array.forgetOwnedAliasElement(scalar);
+            MortalList.deferDecrementFromArraySlot(base, scalar, releaseSite);
+        }
+    }
+
     /** Whole-array replacement releases owned SVs, preserving borrowed caller cells. */
     private void deferOwnedElementReleases() {
         if (!elementsAliased) {
@@ -1093,16 +1107,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                     // @_ uses aliasing (setArrayOfAlias) without refCount increments,
                     // so its elements must NOT be mortal-ized on shift/pop — doing so
                     // would corrupt the caller's refCount tracking.
-                    if (runtimeArray.ownsElement(result) && result.refCountOwned
-                            && ((result.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                                || result.type == RuntimeScalarType.GLOB)
-                            && result.value instanceof RuntimeBase base
-                            && base.refCount > 0) {
-                        result.refCountOwned = false;
-                        runtimeArray.forgetOwnedAliasElement(result);
-                        MortalList.deferDecrementFromArraySlot(
-                                base, result, "RuntimeArray.pop");
-                    }
+                    deferRemovedElementRelease(runtimeArray, result, "RuntimeArray.pop");
                     yield result;
                 }
                 yield scalarUndef;
@@ -1135,16 +1140,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 if (result != null) {
                     // If this element owned a refCount, defer the decrement.
                     // See pop() for rationale and elementsOwned guard.
-                    if (runtimeArray.ownsElement(result) && result.refCountOwned
-                            && ((result.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                                || result.type == RuntimeScalarType.GLOB)
-                            && result.value instanceof RuntimeBase base
-                            && base.refCount > 0) {
-                        result.refCountOwned = false;
-                        runtimeArray.forgetOwnedAliasElement(result);
-                        MortalList.deferDecrementFromArraySlot(
-                                base, result, "RuntimeArray.shift");
-                    }
+                    deferRemovedElementRelease(runtimeArray, result, "RuntimeArray.shift");
                     yield result;
                 }
                 yield scalarUndef;
@@ -1491,8 +1487,10 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                     }
                     yield previous;
                 }
+                RuntimeScalar ownerScalar = elements.get(index);
                 RuntimeScalar previous = this.get(index);
                 this.elements.set(index, null);
+                deferRemovedElementRelease(this, ownerScalar, "RuntimeArray.delete");
                 yield previous;
             }
             case AUTOVIVIFY_ARRAY -> scalarUndef;
