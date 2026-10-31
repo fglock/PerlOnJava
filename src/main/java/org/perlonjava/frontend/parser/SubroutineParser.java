@@ -2693,6 +2693,7 @@ public class SubroutineParser {
                     installClosureCaptureMetadata(placeholder, paramList);
                     placeholder.cvStartFile = compiledCode.cvStartFile;
                     placeholder.cvStartLine = compiledCode.cvStartLine;
+                    compiledCode.transferPadConstantTreeTo(placeholder);
 
                 } else if (runtimeCode instanceof InterpretedCode interpretedCode) {
                     // InterpretedCode path - update placeholder in-place (not replace codeRef.value)
@@ -2802,14 +2803,6 @@ public class SubroutineParser {
             } catch (Exception e) {
                 // Handle any exceptions during subroutine creation
                 throw new PerlCompilerException("Subroutine error: " + e.getMessage());
-            }
-
-            // Transfer pad constants (cached string literals referenced via \)
-            // from compile context to the RuntimeCode for optree reaping.
-            if (newCtx.javaClassInfo.padConstants != null && !newCtx.javaClassInfo.padConstants.isEmpty()) {
-                placeholder.padConstants = newCtx.javaClassInfo.padConstants.toArray(
-                        new org.perlonjava.runtime.runtimetypes.RuntimeBase[0]);
-                GlobalVariable.invalidateGlobalCodeRefGraphRoots();
             }
 
             // Clear the compilerSupplier once done (use the captured placeholder variable)
