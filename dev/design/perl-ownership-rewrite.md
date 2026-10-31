@@ -1780,7 +1780,11 @@ untracked scalar-cell ledger and repairing current counted owners. This removes
 the package-global reachability query from scalar overwrite. Production callers
 no longer request corrective sweeps during scalar overwrite/undef, lexical
 scope exit, or final weak-owner release; the explicit diagnostic helpers remain
-for their focused tests. Post-rebase validation is pending.
+for their focused tests. The first post-rebase compile caught duplicate
+`RuntimeHashElementMap` mutator overrides from combining the cache and owner
+reconciliation changes. The duplicate block is removed; the owner-aware Map
+methods and collection views remain, and collection removal now reconciles the
+same owner slot as direct removal. Full post-rebase validation is pending.
 
 ### Next steps
 
