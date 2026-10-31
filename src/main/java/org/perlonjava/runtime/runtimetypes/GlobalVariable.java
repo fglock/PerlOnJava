@@ -888,14 +888,16 @@ public class GlobalVariable {
         return root;
     }
 
-    /** Whether an aggregate is installed in a package slot, including direct map writes. */
+    /** Whether an aggregate has a package-root owner slot or a package-root marker. */
     static boolean isPackageRootedAggregate(RuntimeBase value) {
         if (PerlRuntime.currentOrNull() == null) return false;
         if (value instanceof RuntimeArray array) {
-            return array.isPackageGlobalRoot || globalArrays.containsValue(array);
+            return array.isPackageGlobalRoot
+                    || array.ownerSlotCount(PerlOwnerSlot.Kind.PACKAGE_AGGREGATE_SLOT) != 0;
         }
         if (value instanceof RuntimeHash hash) {
-            return hash.isPackageRootedHash() || globalHashes.containsValue(hash);
+            return hash.isPackageRootedHash()
+                    || hash.ownerSlotCount(PerlOwnerSlot.Kind.PACKAGE_AGGREGATE_SLOT) != 0;
         }
         return false;
     }
