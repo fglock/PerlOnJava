@@ -1,6 +1,6 @@
 # Perl-compatible ownership rewrite
 
-**Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, and async cleanup regressions pass on both backends. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
+**Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, and async cleanup regressions pass on both backends. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-01):** Branch
 `wip/glob-alias-owners-20261031-184210`, source `a0f50e758`. Phase 2 remains in
@@ -25,18 +25,29 @@ logs are `/private/tmp/localized-array-all-removals-jvm-final-a0f50e758-20261101
 `/private/tmp/issue-1646-alias-exclusion-jvm-final-a0f50e758-20261101.log`, and
 `/private/tmp/issue-1646-alias-exclusion-interpreter-final-a0f50e758-20261101.log`;
 system Perl: `/private/tmp/localized-array-all-removals-perl-20261031.log`.
-The latest HTML-Tree `t/refloop.t` and #1794/#1860 acceptance evidence predates
-this source and must be rerun on the final candidate. Next, audit all remaining
-release and clear producers, then migrate scalar, closure, active-call, cycle,
-and CODE ownership before removing compatibility pins, root-reachability
-fallbacks, and sweep machinery.
+With `JPERL_DISABLE_CORRECTIVE_SWEEPS=1`, unchanged HTML-Tree 5.07
+`t/refloop.t` passes 8/8 on system Perl, JVM, and interpreter. The full suite
+passes 23 files / 989 checks on both PerlOnJava backends (11 TODO); system Perl
+passes 23 files / 969 tests, with `t/leaktest.t` skipped because
+Test::LeakTrace is unavailable. Logs:
+`/private/tmp/html-tree-refloop-system-perl-a0f50e758-20261101.log`,
+`/private/tmp/html-tree-refloop-jvm-a0f50e758-20261101.log`,
+`/private/tmp/html-tree-refloop-interpreter-a0f50e758-20261101.log`,
+`/private/tmp/html-tree-full-system-perl-a0f50e758-20261101.log`,
+`/private/tmp/html-tree-full-jvm-runner-a0f50e758-20261101.log`, and
+`/private/tmp/html-tree-full-interpreter-runner-a0f50e758-20261101.log`.
+The full integration gate is now current for `a0f50e758`. Recheck #1794 and
+#1860 lifetime coverage after the next runtime change. Next, audit all
+remaining release and clear producers, then migrate scalar, closure,
+active-call, cycle, and CODE ownership before removing compatibility pins,
+root-reachability fallbacks, and sweep machinery.
 
 Earlier commits in this branch establish explicit owner identities for package
 roots, scalar-reference contents, async frames, tied-handler nested values,
-array replacement, and cloned hash replacement. The latest HTML-Tree
-`t/refloop.t` and #1794/#1860 acceptance evidence predates this source and must
-be rerun on the final candidate. The immediate next work is a producer-level
-audit of remaining release helpers and scalar/CODE/cycle ownership: every
+array replacement, and cloned hash replacement. The latest HTML-Tree `t/refloop.t`
+and full-suite evidence is current for `a0f50e758`; #1794/#1860 acceptance
+evidence must be refreshed after the next runtime change. The immediate next
+work is a producer-level audit of remaining release helpers and scalar/CODE/cycle ownership: every
 acquisition, replacement, transfer, and cleanup must agree before removing
 reachability fallbacks, compatibility pins, or corrective-sweep machinery.
 
