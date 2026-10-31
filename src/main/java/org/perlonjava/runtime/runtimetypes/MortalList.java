@@ -1806,7 +1806,7 @@ public class MortalList {
                 || release == null || release.ownerSlotRelease == null) return false;
         return switch (release.ownerSlotRelease.kind()) {
             case SCALAR_CELL, CODE_SLOT, ARRAY_ELEMENT, HASH_ELEMENT, ARGUMENT_VALUE, RETURN_VALUE,
-                    TIE_HANDLER -> true;
+                    TIE_HANDLER, SCALAR_REFERENCE_CONTENTS -> true;
             default -> false;
         };
     }

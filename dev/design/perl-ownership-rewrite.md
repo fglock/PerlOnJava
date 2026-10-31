@@ -1837,16 +1837,37 @@ the bundled `Test::LeakTrace` stub does not measure leaks. Logs:
 `/private/tmp/ownership-nonglobal-{jvm,interpreter}-*-20261031.log`, and
 `/private/tmp/ownership-nonglobal-htmltree-{jvm,interpreter}-*-20261031.log`.
 
+### Scalar-reference contents have retargetable owner slots (2026-10-31)
+
+Scalar-reference contents now use `SCALAR_REFERENCE_CONTENTS` owner slots
+instead of a wrapper boolean and anonymous `refCount` adjustments. Each strong
+wrapper has a stable slot identity; aliases to one mutable scalar cell share
+one compatibility count. Replacing the cell's value retargets those slots, and
+final direct or deferred release carries the slot provenance into counted
+destruction. Global and lexical localization transfer the slot identity with
+the saved scalar state. `DestroyDispatch` validates the owner wrapper, scalar
+cell, and current referent before treating the slot as live.
+
+`PerlOwnerSlotScalarReferenceContentsTest` covers retargeting, alias release,
+and deferred final release. Three Perl regressions cover returned scalar
+references, mutable contents, and localized global teardown. The full
+single-worker `nice -n 19 make` passes with corrective sweeps disabled in 23m;
+all 30 focused ownership, #1794, #1860, weak/DESTROY/resurrection/cycle, and
+async cleanup runs pass on both backends. HTML-Tree 5.07 `t/refloop.t` passes
+8/8 on system Perl, JVM, and interpreter. Logs:
+`/private/tmp/ownership-scalar-reference-full-make-20261031.log`,
+`/private/tmp/ownership-scalar-reference-focused-status-20261031.txt`, and
+`/private/tmp/ownership-scalar-reference-html-tree-refloop-{system-perl,jvm,interpreter}-20261031.log`.
+
 ### Next steps
 
-1. Trace each remaining `RuntimeScalar` and `MortalList` reachability decision
-   to its missing owner family. The scalar-reference-contents retain/release
-   path still changes `refCount` directly without an owner-slot identity.
-2. Add permanent tests for the missing edges, including mutable scalar
-   references, and replace their root-walk fallbacks with validated identities.
-3. Requalify #1618 HTML::Tree, #1794 controller/WebSocket lifetimes, #1860
-   growing-output cost, and weak/DESTROY/resurrection/cycle behavior with
-   corrective sweeps disabled on both backends.
-4. Run one full serial repository gate after the grouped migration, then remove
-   remaining compatibility pins, corrective scheduling, and reachability
-   fallbacks before the final update to the existing PR.
+1. Trace remaining `RuntimeScalar` and `MortalList` reachability decisions to
+   missing owner families, then replace those fallbacks with validated slot
+   identities.
+2. Remove remaining compatibility pins and corrective scheduling; preserve
+   weak-reference, `DESTROY`, resurrection, and cycle behavior through exact
+   owner release.
+3. After those runtime changes, rerun the full serial repository gate and the
+   two-backend #1618, #1794, #1860, and lifecycle acceptance matrix.
+4. Rebase the existing PR on current master, publish the completed migration,
+   and verify the PR remains open with the intended files.
