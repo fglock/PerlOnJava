@@ -432,11 +432,31 @@ public class EmitSubroutine {
                 deparseFlags |= RuntimeCode.DEPARSE_FLAG_WARNINGS;
             }
 
-            // Transfer pad constants (cached string literals referenced via \) from compile time
-            // to a registry so makeCodeObject() can attach them to the RuntimeCode at runtime.
-            if (subCtx.javaClassInfo.padConstants != null && !subCtx.javaClassInfo.padConstants.isEmpty()) {
+            // Register this optree's constants and nested anonymous optrees.
+            // The parent CV owns nested anonymous constants as the template
+            // from which later closure instances are created.
+            RuntimeBase[] padConstants = subCtx.javaClassInfo.padConstants == null
+                    ? new RuntimeBase[0]
+                    : subCtx.javaClassInfo.padConstants.toArray(new RuntimeBase[0]);
+            Map<String, RuntimeBase[]> embeddedPadConstants =
+                    subCtx.javaClassInfo.embeddedPadConstants;
+            Map<String, Set<String>> embeddedPadDescendants =
+                    subCtx.javaClassInfo.embeddedPadConstantDescendants;
+            if (padConstants.length != 0 || !embeddedPadConstants.isEmpty()) {
                 RuntimeCode.registerPadConstants(subCtx.javaClassInfo.javaClassName,
-                        subCtx.javaClassInfo.padConstants.toArray(new RuntimeBase[0]));
+                        padConstants, embeddedPadConstants, embeddedPadDescendants);
+                boolean embeddedAnonymousOptree = !node.useTryCatch
+                        && (node.name == null || node.name.equals("<anon>")
+                            || node.getBooleanAnnotation("isMapGrepBlock")
+                            || node.getBooleanAnnotation("inheritsSelfReference")
+                            || node.getBooleanAnnotation("regexCallbackPseudoBlock"));
+                if (embeddedAnonymousOptree && ctx.javaClassInfo != null) {
+                    ctx.javaClassInfo.addEmbeddedPadConstants(
+                            subCtx.javaClassInfo.javaClassName,
+                            padConstants,
+                            embeddedPadConstants,
+                            embeddedPadDescendants);
+                }
             }
 
             // Direct instantiation approach - no reflection needed!

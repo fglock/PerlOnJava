@@ -27,6 +27,10 @@ public final class RuntimeCodeRuntimeState {
     final HashMap<String, EmitterContext> evalContexts = new HashMap<>();
     final ConcurrentHashMap<String, RuntimeBase[]> padConstantsByClassName =
             new ConcurrentHashMap<>();
+    final ConcurrentHashMap<String, Map<String, RuntimeBase[]>> embeddedPadConstantsByClassName =
+            new ConcurrentHashMap<>();
+    final ConcurrentHashMap<String, Map<String, Set<String>>> embeddedPadConstantDescendantsByClassName =
+            new ConcurrentHashMap<>();
     final ConcurrentHashMap<String, Set<String>> disabledWarningsByClassName =
             new ConcurrentHashMap<>();
 
@@ -117,6 +121,8 @@ public final class RuntimeCodeRuntimeState {
         interpretedSubs.clear();
         evalContexts.clear();
         padConstantsByClassName.clear();
+        embeddedPadConstantsByClassName.clear();
+        embeddedPadConstantDescendantsByClassName.clear();
         disabledWarningsByClassName.clear();
         nextMethodCallsiteId = 0;
         clearInlineMethodCache();

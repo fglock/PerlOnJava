@@ -1204,6 +1204,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 || GlobalVariable.hasLocalizedCodeRef(this);
     }
 
+    /** Release an untracked CV's pad tree when its last Perl owner leaves. */
+    void releasePadConstantsForUntrackedOwnerSlot() {
+        // The compatibility count can outlive the scalar slot that contributed
+        // it. Once a slot release reaches this point, capture liveness comes
+        // from the remaining owner identities and non-scalar CODE roots.
+        if (PerlRuntime.currentOrNull() == null
+                || hasPerlOwnerForCaptureOtherThan(null)
+                || padConstantOwnerSlots.isEmpty()) {
+            return;
+        }
+        clearPadConstantWeakRefs();
+    }
+
     /** Whether a Perl owner other than one scalar slot still needs this CV's captures. */
     public boolean hasPerlOwnerForCaptureOtherThan(PerlOwnerSlot excludedOwner) {
         // Do not use refCount here: this release path handles CODE objects
@@ -2805,7 +2818,57 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     public static void registerPadConstants(String className, RuntimeBase[] constants) {
-        PerlRuntime.current().runtimeCodeState().padConstantsByClassName.put(className, constants);
+        registerPadConstants(className, constants, Map.of(), Map.of());
+    }
+
+    public static void registerPadConstants(
+            String className,
+            RuntimeBase[] constants,
+            Map<String, RuntimeBase[]> embeddedConstants,
+            Map<String, Set<String>> embeddedDescendants) {
+        RuntimeCodeRuntimeState state = PerlRuntime.current().runtimeCodeState();
+        state.padConstantsByClassName.put(className,
+                constants == null ? new RuntimeBase[0] : constants.clone());
+        state.embeddedPadConstantsByClassName.put(className, copyPadConstantArrays(embeddedConstants));
+        state.embeddedPadConstantDescendantsByClassName.put(
+                className, copyPadConstantDescendants(embeddedDescendants));
+    }
+
+    /** Read a stable optree constant by generated code class and pad index. */
+    public static RuntimeScalar getPadConstant(String className, int index) {
+        RuntimeCode activeCode = getActiveCodeAt(0);
+        RuntimeBase[] constants = activeCode == null
+                ? null : activeCode.padConstantsForClass(className);
+        if (constants == null || index < 0 || index >= constants.length
+                || !(constants[index] instanceof RuntimeScalar)) {
+            RuntimeCodeRuntimeState state = PerlRuntime.current().runtimeCodeState();
+            constants = state.padConstantsByClassName.get(className);
+        }
+        if (constants == null || index < 0 || index >= constants.length
+                || !(constants[index] instanceof RuntimeScalar scalar)) {
+            throw new IllegalStateException(
+                    "missing pad constant " + index + " for " + className);
+        }
+        return scalar;
+    }
+
+    private static Map<String, RuntimeBase[]> copyPadConstantArrays(
+            Map<String, RuntimeBase[]> source) {
+        if (source == null || source.isEmpty()) return Collections.emptyMap();
+        Map<String, RuntimeBase[]> copy = new LinkedHashMap<>();
+        source.forEach((name, values) -> copy.put(name,
+                values == null ? new RuntimeBase[0] : values.clone()));
+        return Collections.unmodifiableMap(copy);
+    }
+
+    private static Map<String, Set<String>> copyPadConstantDescendants(
+            Map<String, Set<String>> source) {
+        if (source == null || source.isEmpty()) return Collections.emptyMap();
+        Map<String, Set<String>> copy = new LinkedHashMap<>();
+        source.forEach((name, descendants) -> copy.put(name,
+                descendants == null ? Collections.emptySet()
+                        : Collections.unmodifiableSet(new LinkedHashSet<>(descendants))));
+        return Collections.unmodifiableMap(copy);
     }
 
     public static void registerDisabledWarnings(String className, Set<String> categories) {
@@ -3090,6 +3153,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     /** Retire this CV's persistent pad bindings at final CV destruction. */
     void releaseStateStorage() {
+        clearPadConstantWeakRefs();
         if (stateVariable.isEmpty() && stateArray.isEmpty() && stateHash.isEmpty()
                 && stateAggregateAliasOwners.isEmpty()) {
             stateVariableInitialized.clear();
@@ -3439,53 +3503,238 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
     }
 
-    /**
-     * Cached constants referenced via backslash (e.g., \"yay") inside this subroutine.
-     * When the CODE slot of a glob is replaced, weak references to these constants
-     * are cleared to emulate Perl 5's "optree reaping" behavior.
-     */
+    /** Cached scalar constants referenced via backslash inside this CV's optree. */
     public RuntimeBase[] padConstants;
+    /** One identity for each strong constant edge held by this optree. */
+    private final List<PerlOwnerSlot> padConstantOwnerSlots = new ArrayList<>();
+    /** Direct constants for this CV and embedded anonymous optrees. */
+    private final Map<String, RuntimeBase[]> padConstantArraysByClassName = new LinkedHashMap<>();
+    private final Map<String, Set<String>> padConstantDescendantsByClassName = new LinkedHashMap<>();
+    private final Set<String> padConstantRegistryClassNames = new LinkedHashSet<>();
+    private String padConstantClassName;
 
-    /**
-     * Registry mapping generated class names to their pad constants.
-     * Used to transfer pad constants from compile time to runtime for anonymous subs.
-     */
-    /**
-     * Clears weak references to this subroutine's pad constants.
-     * Called when the CODE slot of a glob is replaced, emulating Perl 5's
-     * behavior where replacing a sub frees its op-tree and clears weak refs
-     * to compile-time constants.
-     */
-    public void clearPadConstantWeakRefs() {
-        if (padConstants != null) {
-            for (RuntimeBase constant : padConstants) {
+    /** Attach compiled constants and acquire one owner identity per optree edge. */
+    public void installPadConstants(RuntimeBase[] constants) {
+        installPadConstantTree(null, constants, Map.of(), Map.of());
+    }
+
+    public void installPadConstantTree(
+            String className,
+            RuntimeBase[] constants,
+            Map<String, RuntimeBase[]> embeddedConstants,
+            Map<String, Set<String>> embeddedDescendants) {
+        RuntimeBase[] previousConstants = allPadConstantValues();
+        Set<String> previousRegistryNames = new LinkedHashSet<>(padConstantRegistryClassNames);
+        List<PerlOwnerSlot> previousSlots = new ArrayList<>(padConstantOwnerSlots);
+
+        padConstants = constants == null ? null : constants.clone();
+        padConstantClassName = className;
+        padConstantArraysByClassName.clear();
+        padConstantDescendantsByClassName.clear();
+        padConstantRegistryClassNames.clear();
+        if (className != null) {
+            padConstantArraysByClassName.put(className,
+                    padConstants == null ? new RuntimeBase[0] : padConstants);
+            padConstantDescendantsByClassName.put(className,
+                    embeddedConstants == null || embeddedConstants.isEmpty()
+                            ? Collections.emptySet()
+                            : Collections.unmodifiableSet(
+                                    new LinkedHashSet<>(embeddedConstants.keySet())));
+            padConstantRegistryClassNames.add(className);
+        }
+        if (embeddedConstants != null) {
+            embeddedConstants.forEach((nestedClassName, nestedConstants) -> {
+                padConstantArraysByClassName.put(nestedClassName,
+                        nestedConstants == null ? new RuntimeBase[0] : nestedConstants.clone());
+                padConstantRegistryClassNames.add(nestedClassName);
+            });
+        }
+        if (embeddedDescendants != null) {
+            embeddedDescendants.forEach((nestedClassName, descendants) ->
+                    padConstantDescendantsByClassName.put(nestedClassName,
+                            descendants == null || descendants.isEmpty()
+                                    ? Collections.emptySet()
+                                    : Collections.unmodifiableSet(
+                                            new LinkedHashSet<>(descendants))));
+        }
+        padConstantOwnerSlots.clear();
+        if (padConstantArraysByClassName.isEmpty()) {
+            acquirePadConstantOwners(padConstants);
+        } else {
+            padConstantArraysByClassName.values().forEach(this::acquirePadConstantOwners);
+            RuntimeCodeRuntimeState runtimeState = PerlRuntime.current().runtimeCodeState();
+            for (String ownedClassName : padConstantArraysByClassName.keySet()) {
+                runtimeState.padConstantsByClassName.put(ownedClassName,
+                        padConstantArraysByClassName.get(ownedClassName).clone());
+                runtimeState.embeddedPadConstantsByClassName.put(ownedClassName,
+                        copyPadConstantArrays(embeddedPadConstantsForClass(ownedClassName)));
+                runtimeState.embeddedPadConstantDescendantsByClassName.put(ownedClassName,
+                        copyPadConstantDescendants(
+                                padConstantDescendantTreesForClass(ownedClassName)));
+            }
+        }
+
+        for (PerlOwnerSlot owner : previousSlots) owner.release();
+        clearUnownedPadConstantWeakRefs(previousConstants);
+        removeUnownedPadConstantRegistryEntries(previousRegistryNames);
+    }
+
+    private void acquirePadConstantOwners(RuntimeBase[] constants) {
+        if (constants == null) return;
+        for (RuntimeBase constant : constants) {
+            if (constant == null) continue;
+            PerlOwnerSlot owner = new PerlOwnerSlot(PerlOwnerSlot.Kind.CODE_PAD_CONSTANT);
+            owner.acquireCodePadConstantIdentity(constant);
+            padConstantOwnerSlots.add(owner);
+        }
+    }
+
+    private RuntimeBase[] allPadConstantValues() {
+        List<RuntimeBase> values = new ArrayList<>();
+        if (padConstantArraysByClassName.isEmpty()) {
+            if (padConstants != null) Collections.addAll(values, padConstants);
+        } else {
+            padConstantArraysByClassName.values().forEach(array -> {
+                if (array != null) Collections.addAll(values, array);
+            });
+        }
+        return values.toArray(new RuntimeBase[0]);
+    }
+
+    public RuntimeBase[] padConstantOwnerReferents() {
+        return allPadConstantValues();
+    }
+
+    static void copyPadConstantTree(
+            RuntimeCode source,
+            RuntimeCode target,
+            java.util.function.Function<RuntimeBase[], RuntimeBase[]> copyValues) {
+        RuntimeBase[] direct = source.padConstants == null
+                ? null : copyValues.apply(source.padConstants);
+        if (source.padConstantClassName == null) {
+            target.installPadConstants(direct);
+            return;
+        }
+        Map<String, RuntimeBase[]> embedded = new LinkedHashMap<>();
+        source.embeddedPadConstantsForClass(source.padConstantClassName)
+                .forEach((name, values) -> embedded.put(name, copyValues.apply(values)));
+        target.installPadConstantTree(source.padConstantClassName, direct, embedded,
+                source.padConstantDescendantTreesForClass(source.padConstantClassName));
+    }
+
+    /** Transfer this compiled optree's constant owners to its published CV. */
+    public void transferPadConstantTreeTo(RuntimeCode target) {
+        if (target == null || target == this
+                || (padConstants == null && padConstantClassName == null
+                    && padConstantArraysByClassName.isEmpty())) {
+            return;
+        }
+        copyPadConstantTree(this, target, values -> values.clone());
+        clearPadConstantWeakRefs();
+    }
+
+    private void releasePadConstantOwners() {
+        RuntimeBase[] constants = allPadConstantValues();
+        Set<String> registryNames = new LinkedHashSet<>(padConstantRegistryClassNames);
+        List<PerlOwnerSlot> owners = new ArrayList<>(padConstantOwnerSlots);
+        padConstants = null;
+        padConstantClassName = null;
+        padConstantArraysByClassName.clear();
+        padConstantDescendantsByClassName.clear();
+        padConstantRegistryClassNames.clear();
+        padConstantOwnerSlots.clear();
+        for (PerlOwnerSlot owner : owners) owner.release();
+        Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (RuntimeBase constant : constants) {
+            if (constant != null && seen.add(constant)
+                    && constant.ownerSlotCount(PerlOwnerSlot.Kind.CODE_PAD_CONSTANT) == 0
+                    && constant.refCount != Integer.MIN_VALUE
+                    && constant.refCount <= 0) {
+                // A caller may retain a backslash-addressed literal through an
+                // uncounted scalar reference after this CV dies. Carry the
+                // final-release obligation onto that exact slot so its release
+                // clears weak observers without a later reachability sweep.
+                constant.deferFinalReleaseToUncountedOwnerSlots();
+            }
+        }
+        clearUnownedPadConstantWeakRefs(constants);
+        removeUnownedPadConstantRegistryEntries(registryNames);
+    }
+
+    private static void clearUnownedPadConstantWeakRefs(RuntimeBase[] constants) {
+        if (constants == null) return;
+        Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (RuntimeBase constant : constants) {
+            if (constant != null && seen.add(constant)
+                    && constant.ownerSlotCount(PerlOwnerSlot.Kind.CODE_PAD_CONSTANT) == 0
+                    && !constant.hasPerlStrongOwner()) {
                 WeakRefRegistry.clearWeakRefsTo(constant);
             }
         }
     }
 
-    /**
-     * Return whether a readonly scalar is owned by the optree/pad of a
-     * currently installed named subroutine.
-     *
-     * <p>Pad constants are JVM references that selective refcounting cannot
-     * observe. This targeted lookup lets mortal processing preserve a weak
-     * reference until the owning glob is replaced, when
-     * {@link #clearPadConstantWeakRefs()} performs Perl-compatible optree
-     * reaping.</p>
-     */
-    public static boolean isInstalledPadConstant(RuntimeBase target) {
-        if (target == null) return false;
-        for (RuntimeScalar codeScalar : GlobalVariable.globalCodeRefValuesView()) {
-            if (codeScalar == null || !(codeScalar.value instanceof RuntimeCode code)
-                    || code.padConstants == null) {
-                continue;
-            }
-            for (RuntimeBase constant : code.padConstants) {
-                if (constant == target) return true;
+    private static void removeUnownedPadConstantRegistryEntries(Set<String> classNames) {
+        PerlRuntime runtime = PerlRuntime.currentOrNull();
+        if (runtime == null || classNames == null || classNames.isEmpty()) return;
+        RuntimeCodeRuntimeState state = runtime.runtimeCodeState();
+        for (String className : classNames) {
+            RuntimeBase[] constants = state.padConstantsByClassName.get(className);
+            boolean stillOwned = constants != null && Arrays.stream(constants)
+                    .filter(Objects::nonNull)
+                    .anyMatch(constant -> constant.ownerSlotCount(
+                            PerlOwnerSlot.Kind.CODE_PAD_CONSTANT) != 0);
+            if (!stillOwned) {
+                if (constants == null) state.padConstantsByClassName.remove(className);
+                else state.padConstantsByClassName.remove(className, constants);
+                state.embeddedPadConstantsByClassName.remove(className);
+                state.embeddedPadConstantDescendantsByClassName.remove(className);
             }
         }
-        return false;
+    }
+
+    RuntimeBase[] padConstantsForClass(String className) {
+        return padConstantArraysByClassName.get(className);
+    }
+
+    Map<String, RuntimeBase[]> embeddedPadConstantsForClass(String className) {
+        Set<String> descendants = padConstantDescendantsByClassName.get(className);
+        if (descendants == null || descendants.isEmpty()) return Collections.emptyMap();
+        Map<String, RuntimeBase[]> result = new LinkedHashMap<>();
+        for (String descendant : descendants) {
+            RuntimeBase[] values = padConstantArraysByClassName.get(descendant);
+            if (values != null) result.put(descendant, values);
+        }
+        return result;
+    }
+
+    Map<String, Set<String>> padConstantDescendantTreesForClass(String className) {
+        Set<String> descendants = padConstantDescendantsByClassName.get(className);
+        if (descendants == null || descendants.isEmpty()) return Collections.emptyMap();
+        Map<String, Set<String>> result = new LinkedHashMap<>();
+        for (String descendant : descendants) {
+            Set<String> nested = padConstantDescendantsByClassName.get(descendant);
+            if (nested != null) result.put(descendant, nested);
+        }
+        return result;
+    }
+
+    Map<String, RuntimeBase[]> allPadConstantArraysByClassName() {
+        return Collections.unmodifiableMap(padConstantArraysByClassName);
+    }
+
+    Map<String, Set<String>> allPadConstantDescendantsByClassName() {
+        return Collections.unmodifiableMap(padConstantDescendantsByClassName);
+    }
+
+    /** Release this CV's optree constant edges and clear observers after the last owner. */
+    public void clearPadConstantWeakRefs() {
+        releasePadConstantOwners();
+    }
+
+    /** Return whether an active CODE optree owns this compiled pad constant. */
+    public static boolean isInstalledPadConstant(RuntimeBase target) {
+        return target != null
+                && target.ownerSlotCount(PerlOwnerSlot.Kind.CODE_PAD_CONSTANT) != 0;
     }
 
     /**
@@ -3648,6 +3897,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         clone.isDeclared = this.isDeclared;
         clone.hasBodyDefinition = this.hasBodyDefinition;
         clone.constantValue = this.constantValue;
+        copyPadConstantTree(this, clone, values -> values.clone());
+        // The closure prototype is no longer callable after this clone is
+        // installed. Transfer its optree edges to the callable CV.
+        clearPadConstantWeakRefs();
         clone.lexicalVariableNames = this.lexicalVariableNames == null
                 ? null : new java.util.LinkedHashSet<>(this.lexicalVariableNames);
         clone.ourVariableRegistry = this.ourVariableRegistry == null
@@ -4359,6 +4612,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         code.deparseFlags = codeFrom.deparseFlags;
         code.deparseSourceOffset = codeFrom.deparseSourceOffset;
         code.deparseSourceEnd = codeFrom.deparseSourceEnd;
+        copyPadConstantTree(codeFrom, code, values -> values.clone());
     }
 
     public void adoptDefinitionFrom(RuntimeCode codeFrom) {
@@ -4453,7 +4707,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         this.lexicalDisabledWarningCategories = codeFrom.lexicalDisabledWarningCategories;
         this.ourVariableRegistry = codeFrom.ourVariableRegistry;
         this.declaredOurVariables = codeFrom.declaredOurVariables;
-        this.padConstants = codeFrom.padConstants;
+        copyPadConstantTree(codeFrom, this, values -> values.clone());
         rebindCaptureOwnerSlots();
     }
 
@@ -5977,14 +6231,25 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         code.deparseSourceOffset = deparseSourceOffset;
         code.deparseSourceEnd = deparseSourceEnd;
 
-        // Look up pad constants registered at compile time for this class.
-        // These track cached string literals referenced via \ inside the sub,
-        // needed for optree reaping (clearing weak refs when sub is replaced).
+        // Transfer the compiled optree's backslash-addressable constants to
+        // this CV so they receive owner identities with the rest of its body.
         String internalClassName = clazz.getName().replace('.', '/');
-        RuntimeBase[] padConsts = PerlRuntime.current().runtimeCodeState()
-                .padConstantsByClassName.remove(internalClassName);
-        if (padConsts != null) {
-            code.padConstants = padConsts;
+        RuntimeCodeRuntimeState runtimeCodeState = PerlRuntime.current().runtimeCodeState();
+        RuntimeCode activeCode = getActiveCodeAt(0);
+        boolean activeCodeOwnsTree = activeCode != null
+                && activeCode.padConstantsForClass(internalClassName) != null;
+        RuntimeBase[] padConsts = activeCodeOwnsTree
+                ? activeCode.padConstantsForClass(internalClassName)
+                : runtimeCodeState.padConstantsByClassName.get(internalClassName);
+        Map<String, RuntimeBase[]> embeddedPadConsts = activeCodeOwnsTree
+                ? activeCode.embeddedPadConstantsForClass(internalClassName)
+                : runtimeCodeState.embeddedPadConstantsByClassName.get(internalClassName);
+        Map<String, Set<String>> embeddedPadDescendants = activeCodeOwnsTree
+                ? activeCode.padConstantDescendantTreesForClass(internalClassName)
+                : runtimeCodeState.embeddedPadConstantDescendantsByClassName.get(internalClassName);
+        if (padConsts != null || embeddedPadConsts != null && !embeddedPadConsts.isEmpty()) {
+            code.installPadConstantTree(internalClassName, padConsts,
+                    embeddedPadConsts, embeddedPadDescendants);
             GlobalVariable.invalidateGlobalCodeRefGraphRoots();
         }
         Set<String> disabledWarnings = PerlRuntime.current().runtimeCodeState()

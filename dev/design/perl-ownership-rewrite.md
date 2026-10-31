@@ -319,6 +319,23 @@ walker. Remaining uncounted targets still use the existing fallback. The new
 with the existing targeted-query and weak-CODE fallback tests. HTML-Tree
 5.07 `t/refloop.t` still passes 8/8 on both backends with sweeps disabled.
 
+### CODE optree constants receive owner identities (2026-10-31)
+
+System Perl confirms that a saved coderef keeps a backslash-addressable
+constant alive after its named glob is replaced, and that a nested anonymous
+optree shares its constant identity across closure instances while its factory
+CV remains alive. The expanded permanent Perl regression passes 8/8 on system
+Perl. Each compiled optree now has a distinct constant scalar per source
+occurrence and one CODE_PAD_CONSTANT slot per strong edge. A parent CV owns
+embedded anonymous optrees as templates; each produced closure also owns its
+own edges. The interpreter tracks constants from its constant pool and nested
+closures in the same owner ledger. Glob replacement retires only the stash
+owner, and final CV cleanup releases constant slots and clears weak observers
+after the last owner. Runtime lookup uses the owning CV's registered optree
+constants; the reachability walker no longer follows pad constants as a
+substitute for explicit edges. Full build and backend validation for this
+batch is pending.
+
 ### Next steps
 
 1. Extend the ownership path through scalar proxies and ordinary array/hash
@@ -1565,24 +1582,124 @@ instead of relying on a positive legacy count to hide that path.
 `weakly_tracked_undef_preserves_other_owner.t` records the standard Perl
 behavior. Both backend runs pass with corrective sweeps disabled. The no-sweeps
 full `nice -n 19 make` gate passes in 11m55s, and HTML-Tree 5.07 `t/refloop.t`
-passes 8/8 on both backends. The package-root compatibility pin remains for a
-separate migration step.
+passes 8/8 on both backends.
+
+### Package-nested aggregate cleanup uses owner identities (2026-10-30)
+
+The package-root compatibility count remains required by the existing
+root-proof contract, but it now has a dedicated owner-slot identity. The
+package element scalar slots remain the Perl ownership evidence; when their final slot
+leaves, cleanup retires the compatibility identity and count before clearing
+the weak observer. This makes the transitional pin explicit and exactly-once
+instead of leaving it as an untracked positive count. A focused Java regression
+checks pin identity, final-slot release, idempotence, and unweakened count
+preservation; a Perl-level test records the package array lifetime oracle. The
+root proof validates direct scalar-owner identities without traversing package
+edges.
+
+### Interpreter return ownership precedes aggregate cleanup (2026-10-30)
+
+The interpreter previously prepared an explicit return value from scalar
+cleanup opcodes. A subroutine with only an array or hash lexical skipped those
+opcodes, so aggregate cleanup could release a returned closure's captures
+before the closure acquired its return owner. The bytecode now prepares the
+return owner once before any scalar, array, or hash cleanup, matching the JVM
+backend's ordering. The existing `closure_capture_explicit_return.t` test
+reproduces the interpreter failure and passes 6/6 on standard Perl, the JVM,
+and the interpreter after the change, with corrective sweeps disabled. The
+full no-sweeps `nice -n 19 make` gate passes in 12m47s. The related closure,
+weak-reference, DESTROY, resurrection, and cycle matrix passes on both
+backends; HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both.
+
+### Growing recursive output avoids repeated live-root scans (2026-10-30)
+
+Added `issue_1860_growing_lexical_output.t`, a project-owned reproduction of
+Data::Tumbler's recursive path/value/payload results accumulating in a lexical
+output array. It passes 4/4 on system Perl and both PerlOnJava backends with
+corrective sweeps disabled. `GrowingLexicalOutputOwnerSlotCostTest` grows a
+256-row nested output graph while running the corresponding temporary-array
+cleanup; its measured work is zero root queries, live/external snapshots, and
+edges inspected, while weak observers stay live until the final output owner
+is removed. The full no-sweeps `nice -n 19 make` gate passes in 12m39s.
+Unchanged Data-Tumbler 0.010 `t/90-stress.t` generates all 65,536 results in
+7.38s on the JVM backend and 11.20s on the interpreter; system Perl completes
+it in 0.15s.
+
+### Mojolicious controller teardown follows callback owners (2026-10-30)
+
+Added focused #1794 coverage for controller destruction after a long-poll
+response finishes, controller retention while a WebSocket is open, and release
+of a controller captured by transaction callbacks. The three project tests pass
+14/14 on system Perl and both PerlOnJava backends with corrective sweeps
+disabled. `NestedUntrackedOwnerFinalCellCleanupTest` also passes 1/1: retiring
+the nested cell slot preserves an independently counted owner and its weak
+observer, which clears when that counted owner leaves. The no-sweeps
+`nice -n 19 make test-unit` gate passes in 12m24s. Mojolicious 9.53
+`t/mojolicious/app.t` passes 459/459 and
+`t/mojolicious/websocket_lite_app.t` passes 35/35 on all three runtimes. The
+pre-fix baseline reproduces the controller teardown failure in both backends;
+the WebSocket server-push suite also passes on that baseline, so the added
+WebSocket case remains acceptance coverage rather than a reproduced failure.
+The full `nice -n 19 make` gate still needs to run after this ownership batch is
+complete.
+
+### Weak CODE capture walk removed from quiet sweep decisions (2026-10-30)
+
+Quiet weak-reference cleanup no longer builds `WeakBackrefCaptureSnapshot` to
+preserve aggregate candidates by traversing captures from weak CODE referents.
+Real closure captures already carry `CLOSURE_PAD`, `ARRAY_ELEMENT`, and
+`HASH_ELEMENT` owner identities; the regular issue-1649 aggregate lifecycle
+tests pass with corrective sweeps disabled on both backends. The weakly held
+closure oracle also clears both CODE and captured target on system Perl and
+both backends. Full `nice -n 19 make` passes in 7m59s.
+
+The snapshot helper remains reachable only through the post-DESTROY diagnostic
+path in `MortalList.flush`; `WeakBackrefCodeCaptureSweepTest` currently asserts
+those diagnostic walk counters. The production corrective sweep constant is
+already disabled, so this gate compiled the removal but did not execute that
+legacy sweep branch. Remove the remaining diagnostic walk when the test no
+longer requires its internal counters.
+
+### Weakening retires stale untracked owner slots (2026-10-30)
+
+When the last counted owner is weakened, `WeakRefRegistry.weaken()` now
+refreshes `UNTRACKED_REFERENCE` slots against their scalar cell's current
+durable storage before preserving the referent. A cell whose container has
+lost its Perl owner can no longer leave a stale slot behind and strand the weak
+observer until a later sweep. `WeakeningPrunesStaleUntrackedOwnerSlotTest`
+checks final weak clearing with zero root queries or snapshots. The full
+`nice -n 19 make` gate passes in 8m08s; issue-1649 aggregate and closure-owner
+tests pass on both backends, as does HTML-Tree 5.07 `t/refloop.t` (8/8 each).
+
+### Interpreter pad constants follow the published CV owner (2026-10-31)
+
+Lazy interpreter materialization left optree constant owner slots on the
+temporary `InterpretedCode` wrapper, while the stable placeholder is the
+Perl-owned CV. Transfer the direct and embedded pad-constant tree to that
+placeholder on both the normal interpreter path and the VerifyError fallback.
+The stale-positive-count cleanup check now uses the remaining owner identities
+instead of treating the compatibility count as another owner. The
+`pad_constant_cv_owner_lifetime.t` oracle passes 10/10 on system Perl and both
+backends with corrective sweeps disabled; the new Java owner-slot regression
+also checks final pad-tree release with zero root queries or snapshots. The
+full `nice -n 19 make` gate passes in 7m27s. HTML-Tree 5.07 `t/refloop.t`
+passes 8/8 on all three runtimes. The #1860 growing-output regression and
+Data-Tumbler 0.010 `t/90-stress.t` pass on system Perl and both no-sweeps
+backends; the stress case generates 65,536 results in 6.56s on JVM and 10.76s
+on the interpreter. The #1794 controller and WebSocket regressions pass on
+system Perl and both no-sweeps backends.
 
 ### Next steps
 
-1. Finish package-rooted aggregate cleanup. Late inserts and cross-container
-   scalar aliases now retain direct cell provenance; remove the remaining
-   package-root compatibility pin and replace its root-snapshot cleanup paths
-   with the owner ledger.
-2. Migrate remaining weak-backref capture cases to explicit owner identities,
-   then remove `weakBackrefCaptureSnapshot` and preserve aggregate lifetime and
-   weak clearing without the compatibility graph walk.
-3. In one ownership-family batch, finish CODE template and optree pins, raw
-   descriptor/embedding borrows, native call buffers, escaping lvalues and
-   refaliases, and targeted try/finally returns. Add regressions before running
-   the focused gates and one full `nice -n 19 make`.
-4. Requalify upstream HTML-Tree, weak/DESTROY, resurrection, cycle, and full-suite
+1. Remove the diagnostic-only `weakBackrefCaptureSnapshot` call and its
+   counters; retain aggregate lifetime and weak clearing through explicit owner
+   identities.
+2. In one ownership-family batch, finish remaining CODE template and optree
+   pins, raw descriptor/embedding borrows, native call buffers, escaping
+   lvalues and refaliases, and targeted try/finally returns. Add regressions
+   before running the focused gates and one full `nice -n 19 make`.
+3. Requalify upstream HTML-Tree, weak/DESTROY, resurrection, cycle, and full-suite
    behavior as each family migrates; then qualify the full HTML-Tree suite.
-5. Make semantic owner counts authoritative, then remove the compatibility
+4. Make semantic owner counts authoritative, then remove the compatibility
    bridge, production corrective scheduling, and reachability fallbacks after
    all acceptance gates pass.

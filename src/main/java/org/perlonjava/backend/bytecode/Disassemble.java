@@ -62,6 +62,10 @@ public class Disassemble {
                                 .append(" source=r").append(ssrSource)
                                 .append(" context=").append(ssrContext).append("\n");
                         break;
+                    case Opcodes.PREPARE_SCOPE_RETURN:
+                        int psrReturnReg = interpretedCode.bytecode[pc++];
+                        sb.append("PREPARE_SCOPE_RETURN return=r").append(psrReturnReg).append("\n");
+                        break;
                     case Opcodes.RETURN_SCOPE_CLEANUP:
                         int rscReg = interpretedCode.bytecode[pc++];
                         int rscReturnReg = interpretedCode.bytecode[pc++];

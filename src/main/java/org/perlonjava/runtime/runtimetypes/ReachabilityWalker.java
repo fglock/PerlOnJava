@@ -341,7 +341,6 @@ public class ReachabilityWalker {
                     visitScalar(value, todo);
                 }
             } else if (cur instanceof RuntimeCode code) {
-                visitCodePadConstants(code, todo);
                 visitCodeStateVariables(code, todo);
                 if (code.closedOverVariables != null) {
                     for (RuntimeBase captured : code.closedOverVariables.values()) {
@@ -398,7 +397,6 @@ public class ReachabilityWalker {
                 if (!hasWalkableCodeEdges(code, walkCaptures)) {
                     continue;
                 }
-                visitCodePadConstants(code, todo);
                 visitCodeStateVariables(code, todo);
                 // Phase 2 normally keeps closure captures opaque to avoid
                 // over-rescuing DBIC objects through internal callbacks.
@@ -430,14 +428,6 @@ public class ReachabilityWalker {
         }
     }
 
-    private void visitCodePadConstants(RuntimeCode code,
-                                       java.util.ArrayDeque<RuntimeBase> todo) {
-        if (code.padConstants == null) return;
-        for (RuntimeBase constant : code.padConstants) {
-            addReachable(constant, todo);
-        }
-    }
-
     /**
      * Global CODE slots themselves are roots, but most named subs have no
      * object-valued pad, state, or capture edges. Keep those CODE refs in the
@@ -456,8 +446,7 @@ public class ReachabilityWalker {
     }
 
     static boolean hasWalkableCodeEdges(RuntimeCode code, boolean walkCaptures) {
-        if ((code.padConstants != null && code.padConstants.length != 0)
-                || !code.stateVariable.isEmpty()
+        if (!code.stateVariable.isEmpty()
                 || !code.stateArray.isEmpty()
                 || !code.stateHash.isEmpty()) {
             return true;
@@ -3043,7 +3032,6 @@ public class ReachabilityWalker {
         Set<RuntimeBase> countedStrongOwners = releasedSweepResult == null
                 ? Collections.emptySet()
                 : releasedSweepResult.countedStrongOwners();
-        WeakBackrefCaptureSnapshot weakBackrefCaptures = null;
         for (RuntimeBase referent : WeakRefRegistry.snapshotWeakRefReferents()) {
             boolean liveReferent = live.contains(referent);
             traceWeakReferent(referent, liveReferent, strongCycleProtected.contains(referent));
@@ -3101,21 +3089,6 @@ public class ReachabilityWalker {
                             && s.value instanceof RuntimeCode) {
                         continue;
                     }
-                }
-                // Quiet auto-sweeps can run while a deferred CODE ref is being
-                // returned to its caller. Sub::Quote stores weak registry
-                // entries in hashes/arrays that are strongly captured by that
-                // CODE, but the caller's lexical may not be visible as a root
-                // yet. Keep this exception limited to unblessed metadata
-                // containers and only for quiet statement-boundary sweeps;
-                // explicit jperl_gc() keeps the stricter root-based behavior.
-                if (quiet
-                        && referent.blessId == 0
-                        && (referent instanceof RuntimeHash || referent instanceof RuntimeArray)) {
-                    if (weakBackrefCaptures == null) {
-                        weakBackrefCaptures = weakBackrefCaptureSnapshot();
-                    }
-                    if (weakBackrefCaptures.protects(referent)) continue;
                 }
                 // Quiet auto-sweeps run at statement boundaries. Do not clear
                 // weak refs into, or strongly reachable from, a strong cycle:

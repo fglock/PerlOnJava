@@ -740,11 +740,10 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                     return value;
                 }
 
-                // Before overwriting, clear weak refs to the old sub's pad constants.
-                // This emulates Perl 5's behavior where replacing a sub frees its op-tree,
-                // causing compile-time constants to be freed and weak refs to be cleared.
+                // Replacing this glob drops only its CODE-slot owner. A saved
+                // coderef may still keep the old CV and its optree constants alive;
+                // final CV cleanup releases those constants after the last owner leaves.
                 if (codeContainer.value instanceof RuntimeCode oldCode) {
-                    oldCode.clearPadConstantWeakRefs();
                     // Decrement stashRefCount on the old CODE ref being replaced
                     if (oldCode.stashRefCount > 0) {
                         oldCode.stashRefCount--;

@@ -1642,15 +1642,12 @@ public class MortalList {
                 // nested dispatch call undefer_sub(undef).
                 base.refCount = 1;
             } else if (base instanceof RuntimeScalarReadOnly
-                    && hasWeakRefs
                     && RuntimeCode.isInstalledPadConstant(base)) {
-                // A readonly scalar referenced through \("literal") belongs to
-                // its defining subroutine's pad. Constructor/call temporaries
-                // are selectively counted, but that pad ownership is not.
-                // Preserve the weak ref while the sub remains installed;
-                // RuntimeCode.clearPadConstantWeakRefs() clears it when the
-                // sub's glob is replaced, matching Perl optree reaping.
-                base.refCount = 1;
+                // A readonly scalar referenced through \("literal") has an
+                // explicit owner slot from each live CV optree that contains it.
+                // Defer lifecycle cleanup to those slots instead of fabricating
+                // a legacy count that has no corresponding Perl reference.
+                base.deferFinalReleaseToUncountedOwnerSlots();
             } else if (base.hasNonPackageAggregateUncountedOwnerSlotIdentity()
                     || (aggregateReferent
                         ? base.hasUntrackedReferenceOwnerSlotIdentity(

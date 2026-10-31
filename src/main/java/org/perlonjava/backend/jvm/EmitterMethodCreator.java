@@ -2113,6 +2113,16 @@ public class EmitterMethodCreator implements Opcodes {
                 System.err.println("Note: JVM compilation succeeded.");
             }
             RuntimeCode code = wrapAsCompiledCode(generatedClass, ctx, ast);
+            RuntimeBase[] padConstants = ctx.javaClassInfo.padConstants == null
+                    ? new RuntimeBase[0]
+                    : ctx.javaClassInfo.padConstants.toArray(new RuntimeBase[0]);
+            if (padConstants.length != 0 || !ctx.javaClassInfo.embeddedPadConstants.isEmpty()) {
+                code.installPadConstantTree(
+                        ctx.javaClassInfo.javaClassName,
+                        padConstants,
+                        ctx.javaClassInfo.embeddedPadConstants,
+                        ctx.javaClassInfo.embeddedPadConstantDescendants);
+            }
             code.setJvmClosureFrameRequired(ctx.javaClassInfo.jvmClosureFrameRequired);
             code.setPristineArgsSnapshotRequired(
                     ctx.javaClassInfo.pristineArgsSnapshotRequired);

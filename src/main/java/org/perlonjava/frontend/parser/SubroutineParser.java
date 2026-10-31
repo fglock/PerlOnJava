@@ -2524,6 +2524,7 @@ public class SubroutineParser {
                     installClosureCaptureMetadata(placeholder, paramList);
                     placeholder.cvStartFile = compiledCode.cvStartFile;
                     placeholder.cvStartLine = compiledCode.cvStartLine;
+                    compiledCode.transferPadConstantTreeTo(placeholder);
 
                 } else if (runtimeCode instanceof InterpretedCode interpretedCode) {
                     // InterpretedCode path - update placeholder in-place (not replace codeRef.value)
@@ -2577,6 +2578,10 @@ public class SubroutineParser {
                     installClosureCaptureMetadata(placeholder, materializedCaptures);
                     placeholder.cvStartFile = interpretedCode.cvStartFile;
                     placeholder.cvStartLine = interpretedCode.cvStartLine;
+                    // The published placeholder is the Perl-owned CV. Move
+                    // the interpreter optree's constant edges onto it so the
+                    // temporary executable wrapper cannot pin pad literals.
+                    interpretedCode.transferPadConstantTreeTo(placeholder);
                 }
             } catch (VerifyError ve) {
                 // VerifyError extends Error (not Exception), so it's not caught by catch(Exception).
@@ -2630,17 +2635,10 @@ public class SubroutineParser {
                 installClosureCaptureMetadata(placeholder, materializedCaptures);
                 placeholder.cvStartFile = interpretedCode.cvStartFile;
                 placeholder.cvStartLine = interpretedCode.cvStartLine;
+                interpretedCode.transferPadConstantTreeTo(placeholder);
             } catch (Exception e) {
                 // Handle any exceptions during subroutine creation
                 throw new PerlCompilerException("Subroutine error: " + e.getMessage());
-            }
-
-            // Transfer pad constants (cached string literals referenced via \)
-            // from compile context to the RuntimeCode for optree reaping.
-            if (newCtx.javaClassInfo.padConstants != null && !newCtx.javaClassInfo.padConstants.isEmpty()) {
-                placeholder.padConstants = newCtx.javaClassInfo.padConstants.toArray(
-                        new org.perlonjava.runtime.runtimetypes.RuntimeBase[0]);
-                GlobalVariable.invalidateGlobalCodeRefGraphRoots();
             }
 
             // Clear the compilerSupplier once done (use the captured placeholder variable)

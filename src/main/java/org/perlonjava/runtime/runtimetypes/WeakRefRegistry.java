@@ -197,11 +197,12 @@ public class WeakRefRegistry {
                         && !(base instanceof RuntimeScalar scalar
                         && scalar.ephemeralScalarReferenceReferent)
                         && hasWeakRefsTo(base)
-                        && base.hasOwnerSlots()) {
-                    // Uncounted owner identities are sufficient evidence too.
-                    // Enter WEAKLY_TRACKED so their final release can clear the
-                    // weak refs directly, without rebuilding the owner graph or
-                    // leaving a compatibility count behind.
+                        && (base.hasUntrackedReferenceOwnerSlotIdentity()
+                            || base.hasDirectOwnerSlotProofForReleasedWeakReferent())) {
+                    // Refresh each untracked scalar owner against its current
+                    // durable storage before accepting it. A stale slot must
+                    // not turn a final release into a WEAKLY_TRACKED referent
+                    // that waits for a later sweep to clear its weak observers.
                     base.refCount = WEAKLY_TRACKED;
                 } else if (!(identifiedOwner && snapshotRoots.isEmpty()
                         && MortalList.canTrustFinalCountedRelease(base))
@@ -242,9 +243,7 @@ public class WeakRefRegistry {
         } else if (base.refCount == -1
                 && base instanceof RuntimeScalarReadOnly
                 && RuntimeCode.isInstalledPadConstant(base)) {
-            // The defining subroutine's pad is the strong owner. Its ownership
-            // is not represented in selective refCount, and glob replacement
-            // clears the weak ref explicitly via clearPadConstantWeakRefs().
+            // A live CV optree owns this constant through an explicit owner slot.
         } else if (base.refCount == -1 && !(base instanceof RuntimeCode)) {
             // Untracked non-CODE object: transition to WEAKLY_TRACKED so that
             // undefine() and scopeExitCleanup() can clear weak refs
@@ -271,13 +270,18 @@ public class WeakRefRegistry {
                     && base.ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE) != 0;
             if (legacyPackageNestedAggregate
                     && ReachabilityWalker.hasLiveUntrackedOwnerSlot(base)) {
-                // An untracked aggregate may already be owned by a live tree
-                // before its first weak parent edge is installed. Keep it
-                // through this transition, then retire the compatibility pin
-                // when its recorded strong owner slots are all released. Exact
-                // scalar-owner identities prove this without a root-graph walk.
+                // Keep the existing compatibility count at this unmigrated
+                // package-root boundary, but give that temporary pin an exact
+                // identity. The scalar owner slots remain the Perl ownership
+                // evidence and release this bridge when the last one leaves.
                 base.refCount = 1;
                 base.packageRootRescuedUntrackedAggregate = true;
+                if (base.packageRootRescueOwnerSlot == null
+                        || !base.packageRootRescueOwnerSlot.isActive()) {
+                    base.packageRootRescueOwnerSlot = new PerlOwnerSlot(
+                            PerlOwnerSlot.Kind.WEAKLY_TRACKED_COMPATIBILITY_PIN);
+                }
+                base.packageRootRescueOwnerSlot.acquireWeaklyTrackedCompatibilityPin(base);
             } else {
                 // Keep the compatibility sentinel while an untracked value is
                 // between expression evaluation and installation in a durable
@@ -389,6 +393,9 @@ public class WeakRefRegistry {
 
     /** Finish tracked cleanup when its final owner slot leaves. */
     static void onStrongOwnerSlotReleased(RuntimeBase referent) {
+        if (referent instanceof RuntimeCode code) {
+            code.releasePadConstantsForUntrackedOwnerSlot();
+        }
         boolean zeroCountOwnerSlotsExhausted = referent != null
                 && referent.refCount == 0
                 && !(referent instanceof RuntimeCode)
@@ -411,21 +418,37 @@ public class WeakRefRegistry {
             DestroyDispatch.callDestroy(referent);
             return;
         }
+        PerlOwnerSlot packagePin = referent == null
+                ? null : referent.packageRootRescueOwnerSlot;
         if (referent != null
                 && referent.packageRootRescuedUntrackedAggregate
-                && referent.refCount == 1
-                && !referent.hasOwnerSlots()
+                && packagePin != null
+                && packagePin.isActive()
+                && referent.refCount > 0
+                && referent.ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE) == 0
                 && PerlRuntime.currentOrNull() != null
-                && hasWeakRefsTo(referent)
-                && !referent.localBindingExists
-                && referent.captureCount == 0
-                && !referent.hasPendingReturnOwner()
-                && referent.countedOwnerSlotCount() == 0
                 && !(referent instanceof RuntimeScalarReadOnly
                     && RuntimeCode.isInstalledPadConstant(referent))) {
+            boolean hasWeakObservers = hasWeakRefsTo(referent);
+            boolean hasOtherPerlOwner = referent.refCount > 1
+                    || referent.localBindingExists
+                    || referent.captureCount > 0
+                    || referent.hasPendingReturnOwner()
+                    || referent.countedOwnerSlotCount() != 0
+                    || referent.hasUncountedPerlOwnerSlotIdentity();
             referent.packageRootRescuedUntrackedAggregate = false;
-            referent.refCount = Integer.MIN_VALUE;
-            DestroyDispatch.callDestroy(referent);
+            referent.packageRootRescueOwnerSlot = null;
+            boolean finalWeakRelease = !hasOtherPerlOwner && hasWeakObservers;
+            if (finalWeakRelease) {
+                referent.refCount = Integer.MIN_VALUE;
+            } else if (hasOtherPerlOwner && referent.refCount == 1 && hasWeakObservers) {
+                referent.refCount = WEAKLY_TRACKED;
+            } else {
+                referent.refCount = referent.refCount == 1
+                        ? -1 : referent.refCount - 1;
+            }
+            packagePin.release();
+            if (finalWeakRelease) DestroyDispatch.callDestroy(referent);
             return;
         }
         if (referent == null

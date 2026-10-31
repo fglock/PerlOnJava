@@ -28,6 +28,10 @@ priorities and future plans.
 - Keep nested Rose::HTML::Objects form results alive with counted argument owners so weak parent links and qualified field names survive argument evaluation (#1851).
 - Preserve caller argument identity in @DB::args so borrowed debugger slots share source-cell cleanup instead of creating detached untracked references (#1649).
 - Keep weakly tracked referents alive while an explicit Perl owner slot remains; undef now retires only the released cell's identity (#1649).
+- Track package-root weak compatibility pins by owner-slot identity and retire each pin with the final scalar owner (#1649).
+- Keep backslash-addressed optree constants alive through saved CODE references, transfer interpreter optree owner trees to published CVs, and release each constant edge with its CV owner (#1649).
+- Acquire interpreter return owners before lexical cleanup so returned closures retain captured aggregates (#1649).
+- Keep recursive output cleanup on explicit owner slots as lexical result graphs grow, avoiding repeated live-root snapshots (#1860).
 - Warn for undefined right operands of `.=` while keeping an undefined left operand quiet (#1382).
 - Fix bundled IO, nested launcher, locale, and core user/group database module compatibility.
 - Snapshot mutable array entries while marking package roots and during reachability walks so concurrent thread teardown cannot fail with `ConcurrentModificationException`.

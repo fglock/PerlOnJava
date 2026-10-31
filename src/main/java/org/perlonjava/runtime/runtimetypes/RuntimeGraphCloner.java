@@ -413,7 +413,12 @@ public class RuntimeGraphCloner {
                             clones.put(source, target);
                         }
                     }
-                    target.adoptDefinitionFrom(completed);
+                    try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
+                        target.adoptDefinitionFrom(completed);
+                        // The materialized child copy was an intermediate CV;
+                        // the installed placeholder now owns its pad constants.
+                        completed.clearPadConstantWeakRefs();
+                    }
                     target.compilerSupplier = null;
                 } finally {
                     org.perlonjava.app.scriptengine.PerlLanguageProvider.COMPILE_LOCK.unlock();
@@ -431,6 +436,7 @@ public class RuntimeGraphCloner {
         target.lexicalSubDisplayName = source.lexicalSubDisplayName;
         target.isConstantCv = source.isConstantCv;
         target.isLexicalConstantCv = source.isLexicalConstantCv;
+        RuntimeCode.copyPadConstantTree(source, target, this::cloneRuntimeBases);
         target.stashInstallPackage = source.stashInstallPackage;
         target.stashInstallSub = source.stashInstallSub;
         target.hadStashRef = source.hadStashRef;

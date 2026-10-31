@@ -294,6 +294,10 @@ public class JavaClassInfo {
      * are cleared to emulate Perl 5's "optree reaping" behavior.
      */
     public List<RuntimeBase> padConstants;
+    /** Constants owned by anonymous optrees embedded in this code body. */
+    public final Map<String, RuntimeBase[]> embeddedPadConstants = new LinkedHashMap<>();
+    /** Embedded optree descendant class names, grouped by their immediate template. */
+    public final Map<String, Set<String>> embeddedPadConstantDescendants = new LinkedHashMap<>();
 
     /**
      * Constructs a new JavaClassInfo object.
@@ -324,11 +328,38 @@ public class JavaClassInfo {
     /**
      * Records a cached constant that was referenced via backslash in this subroutine.
      */
-    public void addPadConstant(RuntimeBase constant) {
+    public int addPadConstant(RuntimeBase constant) {
         if (padConstants == null) {
             padConstants = new ArrayList<>();
         }
         padConstants.add(constant);
+        return padConstants.size() - 1;
+    }
+
+    /** Retain an embedded anonymous optree's constants with this CV template. */
+    public void addEmbeddedPadConstants(
+            String className,
+            RuntimeBase[] constants,
+            Map<String, RuntimeBase[]> descendants,
+            Map<String, Set<String>> descendantTrees) {
+        if (className != null && !className.isEmpty()) {
+            embeddedPadConstants.put(className,
+                    constants == null ? new RuntimeBase[0] : constants.clone());
+            Set<String> descendantsForClass = descendants == null
+                    ? new LinkedHashSet<>() : new LinkedHashSet<>(descendants.keySet());
+            embeddedPadConstantDescendants.put(className, descendantsForClass);
+        }
+        if (descendants != null) {
+            descendants.forEach((nestedClassName, nestedConstants) ->
+                    embeddedPadConstants.put(nestedClassName,
+                            nestedConstants == null ? new RuntimeBase[0] : nestedConstants.clone()));
+        }
+        if (descendantTrees != null) {
+            descendantTrees.forEach((nestedClassName, nestedClasses) ->
+                    embeddedPadConstantDescendants.put(nestedClassName,
+                            nestedClasses == null ? new LinkedHashSet<>()
+                                    : new LinkedHashSet<>(nestedClasses)));
+        }
     }
 
     public int acquireSpillSlot() {
