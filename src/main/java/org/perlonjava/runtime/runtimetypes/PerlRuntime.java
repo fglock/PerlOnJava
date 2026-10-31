@@ -542,6 +542,7 @@ public final class PerlRuntime implements AutoCloseable {
                 try (Binding ignored = child.bind()) {
                     child.globalState.rebuildPackageScalarOwnerSlots();
                     child.globalState.rebuildPackageAggregateOwnerSlots();
+                    child.globalState.rebuildPackageIoGlobOwnerSlots();
                 }
                 java.util.List<RuntimeBase> clonedRoots = cloner.cloneSnapshotRoots(roots);
                 cloner.finishSnapshot();

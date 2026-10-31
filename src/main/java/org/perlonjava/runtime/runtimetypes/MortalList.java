@@ -1614,6 +1614,11 @@ public class MortalList {
                 if (clearWeakRefsForLocalBinding) {
                     WeakRefRegistry.clearWeakRefsTo(base);
                 }
+            } else if (base.ownerSlotCount(PerlOwnerSlot.Kind.PACKAGE_GLOB_SLOT) != 0) {
+                // A named IO stash slot directly owns its typeglob even though
+                // that edge does not participate in the legacy referent count.
+                // Keep weak observers until the exact stash entry is removed.
+                base.deferFinalReleaseToUncountedOwnerSlots();
             } else if (isFinalCountedReferentRelease(base, ownerRelease)) {
                 // This decrement retired an identified scalar/element edge.
                 // Every other migrated edge is already absent from the ledger;
