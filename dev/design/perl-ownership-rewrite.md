@@ -3,17 +3,22 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, and async cleanup regressions pass on both backends. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-10-31):** On branch
-`wip/glob-alias-owners-20261031-184210`, source `ba029c3d8` adds current
-container ownership to `RuntimeArray.set(RuntimeScalar)`. The store now
-reclassifies an existing counted scalar-cell slot as an `ARRAY_ELEMENT` slot,
-acquires uncounted values after storage, preserves durable IO values, and marks
-the resulting array as owning its element. `RuntimeArraySingleValueOwnerTransferTest`
-forces a transient undercount during weakening and requires owner-slot repair
-with zero root queries; overwriting the final cell must clear the weak observer.
+`wip/glob-alias-owners-20261031-184210`, source `c9572eb57` includes two
+container owner-transfer fixes. `RuntimeArray.set(RuntimeScalar)` reclassifies
+an existing counted scalar-cell slot as an `ARRAY_ELEMENT` slot, acquires
+uncounted values after storage, preserves durable IO values, and marks the
+resulting array as owning its element. `RuntimeHash.putClonedElement` now uses
+the same acquire-before-release path as ordinary hash replacement, so replacing
+a cloned same-key value retires the displaced slot. Their focused Java tests
+verify stable owner identities, weak-observer cleanup, and zero root queries
+where the owner identity is sufficient.
 
-The full `nice -n 19 make` gate passed on this immutable source in 7m35s; log:
-`/private/tmp/ownership-array-single-value-owner-make-20261031.log`. The focused
-JUnit XML reports one test and zero failures. The prior source `dd255e847`
+The full `nice -n 19 make` gate passed on immutable source `c9572eb57` in 7m6s;
+log: `/private/tmp/ownership-hash-clone-replacement-make-committed-20261031.log`.
+The documentation link check passed 821 links. The preceding array-only source
+`ba029c3d8` also passed the full gate in 7m35s; log:
+`/private/tmp/ownership-array-single-value-owner-make-20261031.log`. The prior
+source `dd255e847`
 resolved package aggregate roots from active `PACKAGE_AGGREGATE_SLOT` identities
 and passed full HTML-Tree 5.07 validation on system Perl, JVM, and interpreter;
 those results are recorded in that section below and must be rerun after the
@@ -26,9 +31,10 @@ The deferred-release graph fallback remains necessary for legacy cells whose
 counted owner does not describe their current storage. The snapshot regressions
 deliberately acquire an owner before directly inserting its cell, so they keep
 the compatibility path covered; ordinary `push`, list assignment, hash stores,
-and the migrated single-value replacement now establish storage provenance
-before counting. Next, audit remaining transfer paths and migrate closure,
-active-call, cycle, and CODE roots before removing recovery machinery.
+cloned same-key replacement, and the migrated single-value replacement now
+establish storage provenance before counting. Next, audit remaining transfer
+paths and migrate closure, active-call, cycle, and CODE roots before removing
+recovery machinery.
 
 **Sweep policy (2026-10-27):** Corrective sweeps are disabled by default, as
 requested. `JPERL_ENABLE_CORRECTIVE_SWEEPS=1` temporarily enables legacy
@@ -39,6 +45,18 @@ Post-END global teardown remains separate from ordinary reference release.
 The build tracks both switches as test inputs so Gradle's configuration cache
 cannot silently reuse another run's policy. Default-off is a migration step,
 not evidence that every owner family is complete.
+
+### Cloned hash replacement releases the displaced slot (2026-10-31)
+
+`RuntimeHash.putClonedElement` now routes same-key replacement through
+`storeOwnedElement`. The destination slot acquires its owner before the old
+slot is deferred for release, while retaining cloned-value behavior for tied
+scalar magic and avoiding ordinary assignment/FETCH semantics.
+`RuntimeHashClonedElementReplacementOwnerTest` verifies the replacement has a
+`HASH_ELEMENT` identity, the displaced weak observer clears after deferred
+release, and replacing the new slot with `undef` releases its final owner.
+The full gate passes on source `c9572eb57`; the focused JUnit case reports one
+test and zero failures.
 
 **Tracking:** [#1649](https://github.com/fglock/PerlOnJava/issues/1649)
 
