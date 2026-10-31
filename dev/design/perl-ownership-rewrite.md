@@ -1790,15 +1790,29 @@ caching while retaining owner hooks, and an executing CODE with active frames
 must defer final release at refcount zero until its last `ACTIVE_CODE` owner
 leaves. Those source paths are corrected; the final full gate is pending.
 
+Post-rebase validation on 2026-10-31 passes: the full `nice -n 19 make` gate
+completed in 22m41s with Gradle limited to one worker for the busy host. Eight
+focused lifecycle fixtures covering weaken, DESTROY, exception resurrection,
+self-cycles, nested-form weak lifetime, explicit closure return, Sub::Quote
+cleanup, and async scope exit pass 80/80 on each backend with corrective
+sweeps disabled. The full upstream HTML-Tree 5.07 suite passes all 23 files
+and 989 TAP checks on both backends; `t/refloop.t` is 8/8 on system Perl and
+both backends. The async scope-exit regression passes 3/3 on system Perl with
+standard `Future::AsyncAwait` 0.71 installed in a temporary local Perl library.
+Logs: `/private/tmp/ownership-rebased-make-20261031-serial.txt`, files with
+the `/private/tmp/ownership-rebased-{jvm,interpreter}-` prefix,
+`/private/tmp/ownership-rebased-html-tree-full-jvm.log`,
+`/private/tmp/ownership-rebased-html-tree-full-interpreter.log`,
+`/private/tmp/ownership-rebased-html-refloop-perl.log`, and
+`/private/tmp/ownership-rebased-async-scope-system-perl.log`.
+
 ### Next steps
 
-1. Run the post-rebase full `nice -n 19 make` gate for the owner-identity and
-   dead-scheduling cleanup batch; fix any failures before publishing the PR head.
-2. In the next ownership-family batch, finish remaining CODE template and optree
+1. In the next ownership-family batch, finish remaining CODE template and optree
    pins, raw descriptor/embedding borrows, native call buffers, escaping
    lvalues and refaliases. Add regressions before the next grouped full gate.
-3. Requalify the full upstream HTML-Tree suite, weak/DESTROY, resurrection,
+2. Requalify the full upstream HTML-Tree suite, weak/DESTROY, resurrection,
    cycle, and repository suite after each ownership-family migration.
-4. Make semantic owner counts authoritative, then remove the compatibility
+3. Make semantic owner counts authoritative, then remove the compatibility
    bridge, production corrective scheduling, and reachability fallbacks after
    all acceptance gates pass.
