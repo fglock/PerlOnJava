@@ -3684,10 +3684,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     // jointly repair transient undercounts without a root walk.
                 } else if (oldBase.hasUncountedAggregateOwnerSlotIdentity()
                         || oldBase.hasUntrackedReferenceOwnerSlotIdentity(
-                                RuntimeScalarType.REFERENCE)) {
-                    // Counted slots have already been repaired above. Any
-                    // remaining aggregate or untracked scalar slot is direct
-                    // evidence of a strong value; defer cleanup until it leaves.
+                                RuntimeScalarType.REFERENCE)
+                        || oldBase.hasUncountedPerlOwnerSlotIdentity()) {
+                    // Counted slots have already been repaired above. A
+                    // remaining native owner identity is direct evidence of a
+                    // strong value; defer cleanup until that exact slot leaves.
                     oldBase.deferFinalReleaseToUncountedOwnerSlots();
                 } else if (oldBase.blessId == 0
                         && (oldBase instanceof RuntimeArray || oldBase instanceof RuntimeHash)
@@ -3699,7 +3700,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     // aggregate alive. Defer clearing until the statement
                     // boundary so the shared root snapshot can distinguish a
                     // live ancestor from one whose final owner has gone away.
-                    MortalList.requestTargetedWeakSweep(oldBase);
                 } else if (oldBase.blessId != 0
                         && WeakRefRegistry.hasWeakRefsTo(oldBase)
                         && !blessedClassHasDestroy(oldBase)
@@ -3713,44 +3713,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     // Defer the reachability decision until the enclosing Perl
                     // statement boundary, where all method-local temporaries
                     // have gone away and the walker can see real Perl roots.
-                    MortalList.requestTargetedWeakSweep(oldBase);
-                } else if (oldBase.blessId != 0
-                        && oldBase.storedInPackageGlobal
-                        && WeakRefRegistry.hasWeakRefsTo(oldBase)
-                        && ReachabilityWalker.isReachableFromRoots(oldBase)) {
-                    // D-W6.18: property-based walker gate (mirror of
-                    // MortalList.flush). Replaces classNeedsWalkerGate
-                    // class-name heuristic with the storedInPackageGlobal
-                    // flag set at hash-store time.
-                    // Phase D / Step W3-Path 2: mirror of the gate in
-                    // MortalList.flush(). Blessed object with outstanding
-                    // weak refs whose selective refCount dipped to 0
-                    // under an overwrite, but the walker says it's still
-                    // reachable from roots (e.g. held by `our %METAS`).
-                    // Treat as transient refCount drift; don't fire
-                    // DESTROY; don't clear weak refs.
-                    //
-                    // See MortalList.flush() for full rationale and
-                    // dev/modules/moose_support.md (Phase D / Step W).
                 } else {
                     oldBase.refCount = Integer.MIN_VALUE;
                     DestroyDispatch.callDestroy(oldBase);
-                }
-            } else if (oldBase.refCount > 0 && value.type == UNDEF
-                    && oldBase.blessId != 0
-                    && DestroyDispatch.isInsideDestroy()
-                    && WeakRefRegistry.weakRefsExist()) {
-                // Phase D: inside a DESTROY body, an explicit undef
-                // assignment released our strong ref to another
-                // blessed-with-DESTROY object but selective refCount
-                // didn't drop to 0 (cycles). Flag a deferred sweep to
-                // run once at the end of the outermost DESTROY.
-                // Narrow gating (only inside DESTROY, only value==UNDEF,
-                // only blessed) keeps per-set() cost to an int compare
-                // and one BitSet lookup.
-                String cn = NameNormalizer.getBlessStr(oldBase.blessId);
-                if (cn != null && DestroyDispatch.classHasDestroy(oldBase.blessId, cn)) {
-                    DestroyDispatch.requestSweepAfterOuterDestroy();
                 }
             }
         }
@@ -3807,19 +3772,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // Overwriting ONE reference doesn't mean no other strong refs exist —
         // closures may capture copies (e.g., Sub::Quote's $_QUOTED capture).
         // This is the same rationale as in scopeExitCleanup.
-        // Weak refs for WEAKLY_TRACKED objects are cleared only when a strong
-        // reference is explicitly undef'd (or assigned undef), via a targeted
-        // sweep so other strong scalar refs can still keep the referent alive.
-        if (oldBase != null
-                && oldBase.refCount == WeakRefRegistry.WEAKLY_TRACKED
-                && value.type == UNDEF) {
-            MortalList.requestTargetedWeakSweep(oldBase);
-        }
-        if (undefAssignmentOfDestroyableRef
-                && oldBase.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_ALIAS) == 0
-                && !ModuleInitGuard.inModuleInit()) {
-            MortalList.requestTargetedWeakSweep(oldBase);
-        }
+        // Final strong-owner release clears weak refs through the owner-slot
+        // ledger; overwrite does not schedule a later reachability sweep.
 
         // Update ownership: this scalar now owns a refCount iff we incremented.
         this.refCountOwned = newOwned;
@@ -5748,8 +5702,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.formatPictureTainted = false;
 
         // Decrement AFTER clearing (Perl 5 semantics: DESTROY sees the new state)
-        boolean undefOnBlessedWithDestroy = false;
-        boolean undefOnWeakObservedBlessedWrapper = false;
         if (oldBase != null) {
             if (argumentAliasKeepsOldBase) {
                 if (oldBase.refCount == WeakRefRegistry.WEAKLY_TRACKED) {
@@ -5784,56 +5736,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     } else {
                         oldBase.refCount = Integer.MIN_VALUE;
                         DestroyDispatch.callDestroy(oldBase);
-                        // Phase H (t/storage/error.t test 49): if the DESTROY self-
-                        // saved the object (rescued), user's explicit undef still
-                        // means their lexical handle is gone — weak refs pointing
-                        // to the rescued object (e.g. HandleError closure's weak
-                        // $schema) must be cleared so callbacks that fire AFTER
-                        // this point can detect "schema is gone".
-                        if (oldBase.blessId != 0 && WeakRefRegistry.weakRefsExist()) {
-                            String cn = NameNormalizer.getBlessStr(oldBase.blessId);
-                            if (cn != null && DestroyDispatch.classHasDestroy(oldBase.blessId, cn)) {
-                                undefOnBlessedWithDestroy = true;
-                            }
-                        }
                     }
-                } else if (oldBase.blessId != 0 && oldBase.refCount > 0
-                        && WeakRefRegistry.weakRefsExist()) {
-                    // Phase D: selective refCount suggests this object still has
-                    // strong references, but those may all be internal cycles
-                    // (e.g. DBIC's Schema <-> source_registrations). Defer to the
-                    // reachability walker if the class has DESTROY — it's the
-                    // canonical decider of liveness once the user has explicitly
-                    // released their lexical handle.
-                    String cn = NameNormalizer.getBlessStr(oldBase.blessId);
-                    if (cn != null && DestroyDispatch.classHasDestroy(oldBase.blessId, cn)) {
-                        undefOnBlessedWithDestroy = true;
-                    }
-                }
-            } else if (oldBase.blessId != 0 && WeakRefRegistry.weakRefsExist()) {
-                // Phase D: no owned-count decrement (refCountOwned was false, or
-                // refCount was already 0 from prior selective drift). The
-                // object is blessed — if its class has DESTROY, let the walker
-                // decide whether this undef just released the last live lexical
-                // handle.
-                String cn = NameNormalizer.getBlessStr(oldBase.blessId);
-                if (cn != null && DestroyDispatch.classHasDestroy(oldBase.blessId, cn)) {
-                    undefOnBlessedWithDestroy = true;
                 }
             }
-        }
-
-        // An explicitly released blessed wrapper may have no DESTROY method
-        // of its own while still owning a tied container whose handler does.
-        // If the wrapper itself is being observed weakly, let the reachability
-        // walker decide at the next statement boundary whether this was its
-        // last strong owner.
-        // Hash::AutoHash's wraptie constructor has exactly this shape.
-        if (oldBase != null
-                && oldBase.blessId != 0
-                && WeakRefRegistry.hasWeakRefsTo(oldBase)
-                && !argumentAliasKeepsOldBase) {
-            undefOnWeakObservedBlessedWrapper = true;
         }
 
         // Flush deferred mortal decrements. Without this, pending DECs from
@@ -5842,26 +5747,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // appear inflated at the point of `undef $ref`. This matches Perl 5
         // where FREETMPS runs at statement boundaries.
         MortalList.flush();
-
-        // Phase D: undef-of-blessed auto-trigger for the reachability walker.
-        // When the user explicitly undef's a blessed ref with DESTROY but
-        // selective refCount stays > 0 (internal cycles), ask the walker
-        // to determine real reachability. Bypasses the MortalList auto-sweep
-        // throttle because this is an explicit release, not an opportunistic
-        // check. Skips when we're in module-init to avoid clearing weak refs
-        // that require/use chains still depend on.
-        if ((undefOnBlessedWithDestroy || undefOnWeakObservedBlessedWrapper)
-                && !ModuleInitGuard.inModuleInit()) {
-            // The current undef call can still have JVM temporaries that make
-            // the just-released wrapper appear live.  Also arm the next Perl
-            // statement boundary, after those temporaries have disappeared.
-            MortalList.requestTargetedWeakSweep(oldBase);
-            if (System.getenv("JPERL_PHASE_D_DBG") != null) {
-                System.err.println("DBG Phase D undef-of-blessed trigger for " +
-                        (oldBase != null ? org.perlonjava.runtime.runtimetypes.NameNormalizer.getBlessStr(oldBase.blessId) : "?") +
-                        " refCount=" + (oldBase != null ? oldBase.refCount : -1));
-            }
-        }
 
         return this;
     }

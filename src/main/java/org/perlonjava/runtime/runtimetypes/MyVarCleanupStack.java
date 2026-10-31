@@ -261,11 +261,6 @@ public class MyVarCleanupStack {
 
     private static void requestWeakCleanupAfterScopeExit(RuntimeBase base) {
         MortalList.finalizeClearedAggregateOwnerAfterScopeExit(base);
-        // Selective owner records can outlive the Perl lexical that created
-        // them when a closure graph is being torn down. Recheck weak refs at
-        // the scope boundary so the reachability walker can reconcile those
-        // records with the remaining Perl-visible roots.
-        MortalList.requestCorrectiveWeakSweep();
     }
 
     /**
