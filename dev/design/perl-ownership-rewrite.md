@@ -1731,6 +1731,8 @@ with corrective sweeps disabled; `t/refloop.t` passes 8/8. The bundled
 `Test::LeakTrace` stub makes HTML-Tree's 20 leak-test checks non-measurements.
 The #1794 controller and WebSocket regressions pass 3/3 and 6/6 respectively
 on both backends, and the #1860 growing-output regression passes 4/4 on both.
+A focused post-change weak/DESTROY/resurrection/cycle matrix also passes all
+8 fixtures and 68 assertions on each backend.
 
 ### Next steps
 
