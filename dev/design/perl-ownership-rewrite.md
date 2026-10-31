@@ -1904,8 +1904,20 @@ models a legacy count undercount, drains the deferred release, and requires the
 nested value to survive with zero root queries before its final hash slot
 clears the weak observer. The final `nice -n 19 make` gate passed on
 `59a4e03eb` in 7m50s with corrective sweeps disabled; `make check-links`
-passed. Full gate log:
+passed at that checkpoint. Full gate log:
 `/private/tmp/ownership-tied-handler-no-sweeps-make-resumed-20261031.log`.
+
+The Perl-level companion `refcount/tied_handler_nested_value_owner.t` covers
+the normal producer path: a tie handler's nested hash element owns the target
+until `untie` releases the handler. It passes on system Perl, the JVM, and the
+interpreter. The filtered `nice -n 19 make` gate passes in 1m15s; logs:
+`/private/tmp/tied-handler-nested-owner-system-perl.log`,
+`/private/tmp/tied-handler-nested-owner-jvm.log`,
+`/private/tmp/tied-handler-nested-owner-interpreter.log`, and
+`/private/tmp/tied-handler-nested-owner-focused-make.log`.
+The final full no-sweeps `nice -n 19 make` including this fixture passed on
+`12794fde2` in 7m28s; log:
+`/private/tmp/ownership-tied-handler-final-no-sweeps-make.log`.
 
 The remaining `processDeferredBase` recovery paths still mix several owner
 families. The next audit distinguishes the semantic edge from the fallback
