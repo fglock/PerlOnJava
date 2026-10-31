@@ -262,16 +262,20 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
         if (!dynamicStateStack.isEmpty()) {
             // Pop the most recent saved state from the stack
             RuntimeScalar previousState = dynamicStateStack.pop();
+            boolean removedStoredOwner = false;
             if (previousState == null) {
                 parent.notePackageRootMutation();
                 // Element didn't exist before.
-                // Decrement refCount of the current value being displaced.
-                if (this.lvalue != null
-                        && (this.lvalue.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                        && this.lvalue.value instanceof RuntimeBase displacedBase
-                        && displacedBase.refCount > 0 && --displacedBase.refCount == 0) {
-                    displacedBase.refCount = Integer.MIN_VALUE;
-                    DestroyDispatch.callDestroy(displacedBase);
+                // Retire the exact stored cell after removing it, through the
+                // same owner-slot deferred release used by delete/pop/shift.
+                RuntimeScalar removedOwner = this.lvalue;
+                int removedIndex = removedOwner == null
+                        ? -1 : parent.elements.indexOf(removedOwner);
+                if (removedIndex >= 0) {
+                    parent.elements.set(removedIndex, null);
+                    RuntimeArray.deferRemovedElementRelease(parent, removedOwner,
+                            "RuntimeArrayProxyEntry.dynamicRestoreState");
+                    removedStoredOwner = true;
                 }
                 this.lvalue = null;
                 this.type = RuntimeScalarType.UNDEF;
@@ -290,9 +294,11 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
                 // assigned to intervening indices during the scope.
                 // Structural array operations can move the proxy, so remove
                 // its current physical slot rather than the original index.
-                int currentKey = currentKey();
-                if (currentKey >= 0 && currentKey < parent.elements.size()) {
-                    parent.elements.set(currentKey, null);
+                if (!removedStoredOwner) {
+                    int currentKey = currentKey();
+                    if (currentKey >= 0 && currentKey < parent.elements.size()) {
+                        parent.elements.set(currentKey, null);
+                    }
                 }
                 while (parent.elements.size() > previousSize
                         && isEmptyPlaceholder(parent.elements.getLast())) {
