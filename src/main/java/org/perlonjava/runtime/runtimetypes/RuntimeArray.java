@@ -1010,7 +1010,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         if (array == null || scalar == null
                 || !(scalar.value instanceof RuntimeBase referent)) return false;
         PerlOwnerSlot slot = scalar.countedOwnerSlot();
-        return scalar.containerOwner == array
+        return !RuntimeCode.isCurrentArgumentAlias(scalar)
+                && scalar.containerOwner == array
                 && slot != null
                 && slot.kind() == PerlOwnerSlot.Kind.ARRAY_ELEMENT
                 && scalar.isCurrentAggregateElementOwner(referent, slot);
