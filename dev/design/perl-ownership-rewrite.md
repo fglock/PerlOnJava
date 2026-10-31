@@ -1998,6 +1998,17 @@ clear the weak observer. The full `nice -n 19 make` gate passed in 7m35s,
 including the regression (one test, zero failures); log:
 `/private/tmp/ownership-array-single-value-owner-make-20261031.log`.
 
+### Cloned hash replacement releases the displaced slot (2026-10-31)
+
+`RuntimeHash.putClonedElement` previously wrote and acquired the replacement
+directly, leaving any old value at the same key counted after it left the
+hash. It now uses `storeOwnedElement`, which applies the same independent-slot
+copy rules, installs the new owner before queuing release of the displaced
+slot, and balances host-side graph construction. The regression
+`RuntimeHashClonedElementReplacementOwnerTest` verifies that replacing the
+final hash owner clears its weak observer and that the new slot remains alive
+until removal. Full validation is pending on this source.
+
 ### Next steps
 
 1. Continue auditing less common scalar stores and transfers, then migrate

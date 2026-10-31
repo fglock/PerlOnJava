@@ -82,6 +82,7 @@ priorities and future plans.
 - Repair deferred undercounts for values nested in tied handlers from their explicit hash slots, removing the tied-root reachability snapshot from deferred cleanup (#1649).
 - Resolve package aggregate liveness from active package-root owner slots instead of scanning package tables (#1649).
 - Transfer scalar-cell owner identity into a single-value array replacement so deferred cleanup validates the current element slot without a root walk (#1649).
+- Release displaced hash element owners when cloned values replace an existing slot (#1649).
 
 
 
