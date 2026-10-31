@@ -25,7 +25,33 @@ my $weak;
     ok(!defined($weak), 'unwinding a new localized array slot releases its reference');
 }
 
-is($LocalizedArraySlotOwner::destroyed, 1,
-   'the localized slot dispatches DESTROY exactly once');
+sub check_localized_array_removal {
+    my ($operation, $index) = @_;
+    my $weak;
+    {
+        my @values;
+        local $values[$index];
+        my $value = bless {}, 'LocalizedArraySlotOwner';
+        $weak = $value;
+        weaken($weak);
+        $values[$index] = $value;
+        undef $value;
+
+        my $removed = $operation eq 'pop' ? pop @values
+                    : $operation eq 'shift' ? shift @values
+                    : delete $values[$index];
+        ok(defined($weak), "$operation keeps its returned value alive");
+        ok(defined($removed), "$operation returns the localized value");
+        undef $removed;
+        ok(!defined($weak), "$operation releases the removed array owner");
+    }
+}
+
+check_localized_array_removal('pop', 0);
+check_localized_array_removal('shift', 0);
+check_localized_array_removal('delete', 1);
+
+is($LocalizedArraySlotOwner::destroyed, 4,
+   'localized slot removal dispatches DESTROY exactly once per value');
 
 done_testing();
