@@ -8,14 +8,14 @@ passed on immutable commit `e8aa31d4f` in 7m43s; log:
 `/private/tmp/ownership-final-after-glob-audit-correction-20261031.log`.
 Blessed glob aliases already record counted owner identities through
 `RuntimeBase.recordActiveOwner`; no additional acquisition path is needed.
-Deferred owner-count repair now relies on current counted slots and no longer
-uses `RuntimeBase.reachableOwnerCount()` to query roots for active scalar
-wrappers. The focused `CurrentCountedOwnerRepairsDeferredUndercountTest` passes
-with zero root queries, scalar-reachability queries, or snapshots; log:
-`/private/tmp/current-counted-owner-deferred-focused-make.log`. The full gate
-for this migration is pending. Remaining work includes the fallback inventory
-across overwrite, first weaken, closure cleanup, and destruction, followed by
-the remaining owner families and recovery removal.
+The deferred `activeOwners` reachability fallback remains necessary for
+legacy scalar owners whose actual package-array storage has no current
+container-owner marker. Existing cost tests require those edges to be
+validated through the shared drain snapshot; the fallback can retire after
+those producers register their storage identity.
+Next work is to finish the fallback inventory across overwrite, first weaken,
+closure cleanup, and destruction, then migrate the remaining owner families
+before removing recovery machinery.
 
 **Sweep policy (2026-10-27):** Corrective sweeps are disabled by default, as
 requested. `JPERL_ENABLE_CORRECTIVE_SWEEPS=1` temporarily enables legacy
@@ -1940,7 +1940,7 @@ that currently protects it:
 
 | Recovery path | Semantic strong edge | Remaining gap before removal |
 |---|---|---|
-| Current counted-owner repair | Scalar cells and aggregate elements represented by counted slots | Deferred release now uses `restoreVerifiedCurrentCountedOwnerSlotRefCount`; `recordActiveOwner` acquires a counted identity for every entry it adds to `activeOwners`. Producers outside that API and uncounted owner families remain under audit. |
+| `restoreReachableOwnerCount` | Scalar cells in `activeOwners`, including nested package-array cells | Some legacy scalar cells lack a current container-owner marker even when stored under a package root. `ReachabilityQueryCostTest.deferredOwnerChecksShareOneRootSnapshotPerDrain` and `UnblessedAggregateReachabilitySnapshotTest` preserve this compatibility boundary; migrate those storage producers before removing the shared-snapshot fallback. |
 | Scalar overwrite (`RuntimeScalar.setLargeRefCounted`) | The scalar cell's old referent edge; new edge is acquired before old release | Counted scalar/aggregate slots repair identified undercounts. The remaining external-root and live-CODE queries run for aggregate referents with no owner slots; their unmigrated producers and final release need explicit identities. `RuntimeScalarOwnerSlotTest` covers identified final element release without a stale snapshot. |
 | First weaken (`WeakRefRegistry.weaken`) | The scalar cell being weakened and any other current scalar, aggregate, or capture owners | Counted identities repair transient undercounts. Initial lexical backfill, strong-root checks, and untracked-owner refresh still consult graph/storage snapshots for unmigrated cells. `PerlFinalWeakOwnerTest` and `WeakeningCountedOwnerSlotTest` cover counted-cell paths with zero root queries. |
 | Unblessed aggregate root snapshot | Array/hash elements reachable through lexical or package storage | Normal slots have identities; parser assembly and compatibility mutation paths still need producer-level invariant coverage. `UnblessedAggregateReachabilitySnapshotTest` deliberately exercises the remaining fallback. |
