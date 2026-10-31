@@ -243,31 +243,40 @@ public class BytecodeInterpreter {
 
         InterpretedCode code = frame.code;
         RuntimeBase[] registers = frame.registers;
+        boolean needsFlush = cleanupMyVarRegisters(code, registers);
+        if (needsFlush) {
+            MortalList.flush();
+        }
+        code.releaseRegisters();
+    }
+
+    /** Release the active frame's lexical slots without draining their mortals. */
+    private static boolean cleanupMyVarRegisters(
+            InterpretedCode code, RuntimeBase[] registers) {
         int firstMyVarReg = 3 + (code.capturedVars != null ? code.capturedVars.length : 0);
         BitSet myVars = code.myVarRegisters;
         boolean needsFlush = false;
-        for (int i = myVars.nextSetBit(firstMyVarReg);
-             i >= 0 && i < registers.length;
-             i = myVars.nextSetBit(i + 1)) {
+        // Higher registers are declared later, so clean them first to preserve
+        // Perl's reverse declaration order for DESTROY.
+        for (int i = myVars.previousSetBit(registers.length - 1);
+             i >= firstMyVarReg;
+             i = myVars.previousSetBit(i - 1)) {
             RuntimeBase reg = registers[i];
             if (reg == null) continue;
-            if (reg instanceof RuntimeScalar rs) {
-                RuntimeScalar.scopeExitCleanup(rs);
+            if (reg instanceof RuntimeScalar scalar) {
+                RuntimeScalar.scopeExitCleanup(scalar);
                 needsFlush = true;
-            } else if (reg instanceof RuntimeHash rh) {
-                MortalList.scopeExitCleanupHash(rh);
+            } else if (reg instanceof RuntimeHash hash) {
+                MortalList.scopeExitCleanupHash(hash);
                 needsFlush = true;
-            } else if (reg instanceof RuntimeArray ra) {
-                MortalList.scopeExitCleanupArray(ra);
+            } else if (reg instanceof RuntimeArray array) {
+                MortalList.scopeExitCleanupArray(array);
                 needsFlush = true;
             }
             MyVarCleanupStack.unregister(reg);
             registers[i] = null;
         }
-        if (needsFlush) {
-            MortalList.flush();
-        }
-        code.releaseRegisters();
+        return needsFlush;
     }
 
     /**
@@ -618,7 +627,8 @@ public class BytecodeInterpreter {
                                 int returnReg = bytecode[pc++];
                                 registers[returnReg] = RuntimeCode.prepareScopeReturn(
                                         registers[returnReg], callContext,
-                                        !RuntimeCode.isLvalueCode(code));
+                                        !RuntimeCode.isLvalueCode(code)
+                                                || code.isTryExpressionWrapper);
                             }
 
                             case Opcodes.RETURN_SCOPE_CLEANUP -> {
@@ -803,7 +813,9 @@ public class BytecodeInterpreter {
                                 }
                                 RuntimeCode.requireInterpreterLvalueReturn(code, retVal, callContext);
                                 RuntimeList retList = RuntimeCode.returnList(
-                                        retVal, callContext, !RuntimeCode.isLvalueCode(code));
+                                        retVal, callContext,
+                                        !RuntimeCode.isLvalueCode(code)
+                                                || code.isTryExpressionWrapper);
                                 RuntimeCode.materializeSpecialVarsInResult(
                                         retList, RuntimeCode.currentRawCallContext());
                                 frame.returnedClosures = collectReturnedClosures(retList);
@@ -831,6 +843,10 @@ public class BytecodeInterpreter {
                                         retList, RuntimeCode.currentRawCallContext());
                                 frame.returnedClosures = collectReturnedClosures(retList);
 
+                                // This opcode exits the active interpreted frame
+                                // directly. Run its lexical teardown before the
+                                // RETURN marker crosses into the caller.
+                                cleanupMyVarRegisters(code, registers);
                                 return new RuntimeControlFlowList(retList, code.sourceName, code.sourceLine);
                             }
 
@@ -2150,6 +2166,11 @@ public class BytecodeInterpreter {
                                     // Handle RETURN markers: consume at non-map/grep boundaries, propagate in map/grep
                                     if (flow.getControlFlowType() == ControlFlowType.RETURN) {
                                         if (!code.isMapGrepBlock) {
+                                            // Consuming this marker returns directly from the
+                                            // active interpreter frame, bypassing RETURN and its
+                                            // ordinary lexical teardown opcodes. Retire that
+                                            // frame's slots before returning the value.
+                                            cleanupMyVarRegisters(code, registers);
                                             // Consume: unwrap and return the value from this subroutine
                                             RuntimeBase retVal = flow.getReturnValue();
                                             return retVal != null ? retVal.getList() : new RuntimeList();
