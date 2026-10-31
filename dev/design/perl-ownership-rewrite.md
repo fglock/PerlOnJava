@@ -2,6 +2,16 @@
 
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, and async cleanup regressions pass on both backends. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
+**Current checkpoint (2026-10-31):** The tied-handler nested-value migration is
+present on the local ownership branch. The full no-sweeps `nice -n 19 make`
+passed on immutable commit `e8aa31d4f` in 7m43s; log:
+`/private/tmp/ownership-final-after-glob-audit-correction-20261031.log`.
+Blessed glob aliases already record counted owner identities through
+`RuntimeBase.recordActiveOwner`; no additional acquisition path is needed.
+Next work is to finish the fallback inventory across overwrite, first weaken,
+closure cleanup, and destruction, then migrate the remaining owner families
+before removing recovery machinery.
+
 **Sweep policy (2026-10-27):** Corrective sweeps are disabled by default, as
 requested. `JPERL_ENABLE_CORRECTIVE_SWEEPS=1` temporarily enables legacy
 comparison; a nonempty `JPERL_DISABLE_CORRECTIVE_SWEEPS` overrides it. Disabled
