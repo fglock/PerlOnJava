@@ -1,6 +1,6 @@
 # Perl-compatible ownership rewrite
 
-**Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, and async cleanup regressions pass on both backends. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
+**Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Named package IO globs now carry a `PACKAGE_GLOB_SLOT` identity from stash insertion through replacement and removal. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, and async cleanup regressions pass on both backends. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-01):** Branch
 `wip/glob-alias-owners-20261031-184210`, source `a0f50e758`. Phase 2 remains in
@@ -36,18 +36,43 @@ Test::LeakTrace is unavailable. Logs:
 `/private/tmp/html-tree-full-system-perl-a0f50e758-20261101.log`,
 `/private/tmp/html-tree-full-jvm-runner-a0f50e758-20261101.log`, and
 `/private/tmp/html-tree-full-interpreter-runner-a0f50e758-20261101.log`.
-The full integration gate is now current for `a0f50e758`. Recheck #1794 and
-#1860 lifetime coverage after the next runtime change. Next, audit all
-remaining release and clear producers, then migrate scalar, closure,
-active-call, cycle, and CODE ownership before removing compatibility pins,
-root-reachability fallbacks, and sweep machinery.
+The full integration gate is current for `a0f50e758`. After that source, the
+#1794 transaction callback, long-poll controller, WebSocket lifetime, and
+#1860 growing-output regressions pass on system Perl and both backends; the
+PerlOnJava runs disabled corrective sweeps. Logs:
+`/private/tmp/ownership-1794-1860-system-perl-extended-a0f50e758-20261101.log`,
+`/private/tmp/ownership-issue_1794_controller_owner_release-jvm-a0f50e758-20261101.log`,
+`/private/tmp/ownership-mojolicious_controller_destroy_after_finish-jvm-a0f50e758-20261101.log`,
+`/private/tmp/ownership-mojolicious_websocket_controller_release-jvm-a0f50e758-20261101.log`,
+`/private/tmp/ownership-issue_1860_growing_lexical_output-jvm-a0f50e758-20261101.log`,
+and the equivalent `-interpreter-` logs.
+
+The new package IO glob regression passes 3/3 on system Perl and fails 1/3
+on both unfixed backends because the weak glob clears while its stash owner is
+still present. Its source and parent logs are
+`src/test/resources/unit/refcount/package_io_glob_owner_lifetime.t`,
+`/private/tmp/package-io-glob-owner-system-perl-parent-a0f50e758-20261101.log`,
+`/private/tmp/package-io-glob-owner-unfixed-parent-jvm-a0f50e758.log`, and
+`/private/tmp/package-io-glob-owner-unfixed-parent-interpreter-a0f50e758.log`.
+`GlobalVariable.StashSlotMap` now acquires a package glob slot for each named
+IO stash entry, transfers it on replacement, and releases it from remove,
+clear, iterator removal, reset, and child-runtime snapshot reconstruction.
+Deferred cleanup recognizes this uncounted owner kind so the weak observer
+waits for the corresponding stash entry to leave. The full no-sweeps make gate
+is pending; the initial attempt stopped before compilation because Maven
+Central TLS certificate validation failed while resolving `jol-core:0.17`.
+The retry uses the existing verified local JOL Maven repository.
+
+Next, audit remaining release and clear producers, then migrate scalar,
+closure, active-call, cycle, and CODE ownership before removing compatibility
+pins, root-reachability fallbacks, and sweep machinery.
 
 Earlier commits in this branch establish explicit owner identities for package
 roots, scalar-reference contents, async frames, tied-handler nested values,
 array replacement, and cloned hash replacement. The latest HTML-Tree `t/refloop.t`
 and full-suite evidence is current for `a0f50e758`; #1794/#1860 acceptance
-evidence must be refreshed after the next runtime change. The immediate next
-work is a producer-level audit of remaining release helpers and scalar/CODE/cycle ownership: every
+evidence is also current for that source. The immediate next work is a
+producer-level audit of remaining release helpers and scalar/CODE/cycle ownership: every
 acquisition, replacement, transfer, and cleanup must agree before removing
 reachability fallbacks, compatibility pins, or corrective-sweep machinery.
 
@@ -2017,7 +2042,7 @@ that currently protects it:
 | Strong-cycle graph walk | Internal scalar-reference and aggregate-element edges | All cycle edges must be counted by owner slots so cycles survive without graph discovery. |
 | Live/global CODE capture walk | Closure pads and installed CODE metadata | Aggregate pads use capture slots; scalar captures and some CODE metadata still use the compatibility bridge. |
 | Nested-call depth pin | Active argument aliases and compiler temporaries | Borrowed aliases and owned argument/return values must remain distinct through unwind and async suspension. |
-| Blessed root snapshots and package cache | Package scalar, aggregate, glob, or CODE slots | Package scalar and aggregate paths are partly migrated; blessed glob aliases already acquire counted identities through `recordActiveOwner`. Direct glob/CODE stash roots and remaining compatibility writes still need audit. |
+| Blessed root snapshots and package cache | Package scalar, aggregate, glob, or CODE slots | Package scalar, array/hash, named IO glob, and CODE stash entries now have owner identities. Other glob components and compatibility writes still need producer audit before removing root snapshots. |
 | Closure cleanup (`RuntimeCode.releaseCaptures`) | `SCALAR_CAPTURE`, `CLOSURE_PAD`, and aggregate capture slots held by live CODE | Aggregate captures release natively; scalar captures still balance their selective bridge count after the final closure. Their exceptional, nested-CODE, and ownership-transfer cases need end-to-end producer proofs before graph fallbacks are removed. |
 | Final destruction and resurrection (`DestroyDispatch`) | Current durable Perl owner slots, active CODE, and actual internal cycle edges | Durable scalar/package/container owners determine resurrection. CODE strong-cycle retention and legacy positive-count fallback remain; lifecycle must preserve cycles through explicit internal owners and keep reentrant/resurrection behavior. `DestroyOwnerSlotResurrectionTest` covers current durable slots without root walks. |
 
