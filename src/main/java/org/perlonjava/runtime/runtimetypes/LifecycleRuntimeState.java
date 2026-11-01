@@ -44,7 +44,6 @@ final class LifecycleRuntimeState {
     final IdentityHashMap<RuntimeBase, Integer> positiveOwnerReferents = new IdentityHashMap<>();
     boolean deferredCapturesMayBeReady;
     final ArrayDeque<RuntimeBase> temporaryRoots = new ArrayDeque<>();
-    final IdentityHashMap<RuntimeBase, Integer> suspendedRoots = new IdentityHashMap<>();
     private static final int INITIAL_MARK_CAPACITY = 16;
     int[] marks = new int[INITIAL_MARK_CAPACITY];
     int[] tiedReleaseMarks = new int[INITIAL_MARK_CAPACITY];
@@ -153,7 +152,6 @@ final class LifecycleRuntimeState {
         }
         deferredCapturesMayBeReady = false;
         temporaryRoots.clear();
-        suspendedRoots.clear();
         markDepth = 0;
         flushing = false;
         reachabilityDrainDepth = 0;

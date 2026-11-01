@@ -233,9 +233,6 @@ public class ReachabilityWalker {
         for (RuntimeBase ownerReferent : PerlRuntime.snapshotOwnerSlotReferents()) {
             addReachable(ownerReferent, todo);
         }
-        for (RuntimeBase suspended : MortalList.snapshotSuspendedRoots()) {
-            addReachable(suspended, todo);
-        }
         if (useLexicalSeeds) {
             // Phase D-W1 (walker_gate_dbic_minimal.t): seed from live
             // my-vars themselves (RuntimeArray / RuntimeHash that the
@@ -693,12 +690,6 @@ public class ReachabilityWalker {
         int hhIdx = 0;
         for (RuntimeScalar sc : org.perlonjava.runtime.WarningBitsRegistry.snapshotHintHashStackScalars()) {
             seedPath(sc, "<hint-hash#" + (hhIdx++) + ">", howReached, todo);
-        }
-        int suspendedIdx = 0;
-        for (RuntimeBase suspended : MortalList.snapshotSuspendedRoots()) {
-            if (howReached.putIfAbsent(suspended, "<suspended#" + (suspendedIdx++) + ">") == null) {
-                todo.add(suspended);
-            }
         }
         // Phase B1: seed from ScalarRefRegistry (same as walk()) so the
         // trace matches what sweepWeakRefs sees.

@@ -133,7 +133,7 @@ public class PerlLanguageProvider {
             SpecialBlockParser.resetTopLevelState();
             WeakRefRegistry.resetState();
             ScalarRefRegistry.resetState();
-            MortalList.clearSuspendedRoots();
+            MortalList.clearTemporaryRoots();
             // A prior script may have closed its Perl-level STDIN glob. Script
             // engine resets run multiple top-level programs in one JVM, so give
             // the next program a fresh wrapper around the process standard input.
