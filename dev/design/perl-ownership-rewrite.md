@@ -1,9 +1,9 @@
 # Perl-compatible ownership rewrite
 
-**Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; hidden entries release that owner while retaining their lookup state. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
+**Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; hidden entries release that owner while retaining their lookup state. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-01):** Phase 2 continues on branch
-`wip/socket-gensym-owner-20261101-020558` at source `6a94453f7`.
+`wip/socket-gensym-owner-20261101-020558` at source `ea28e59c7`.
 `RuntimeCode.adoptDefinitionFrom()` now retains old capture edges while
 rebinding incoming scalar and aggregate owner identities, defers replacement
 release through active CODE ownership, marks legacy metadata retired without a
@@ -29,19 +29,30 @@ when the last owner slot is retired while the CV remains on the active stack
 the full gate on immutable `6a94453f7`, which completed in 7m33 with zero
 failures: `/private/tmp/active-code-owner-order-make-6a94453f7.log`.
 
+Runtime reset now releases every compiled, pinned, and localized CODE slot
+binding. Displaced localized slots retain a stack of active names, so aliases
+sharing one scalar release their own binding and leave the remaining scope
+lookup intact. `RuntimeCode` capture-lifecycle checks use the owner ledger
+instead of scanning installed global CODE roots. `CodeSlotOwnerTest` reproduced
+the compiled-slot reset leak on parent `c788e899f` (one failure in 1,420 tests,
+six skips; `/private/tmp/compiled-slot-clear-parent-c788e899f.log`) and covers
+compiled, pinned, and repeated localized bindings. The focused class passed;
+the full gate passed on immutable `ea28e59c7` in 7m17:
+`/private/tmp/ownership-code-reset-make-ea28e59c7.log`.
+
 Earlier weak-reference, resurrection, #1794, #1860, and HTML-Tree matrices are
-documented at their tested commits; they were not all rerun on `6a94453f7`.
+documented at their tested commits; they were not all rerun on `ea28e59c7`.
 Other capture producers, argument/return/mortal lifetimes, package roots,
 strong cycles, cloned/shared storage, and resource owners remain. Corrective
 sweeps and compatibility recovery remain in the runtime; ownership completion
 is not claimed.
 
-Next, audit the remaining capture reconciliation and global CODE-root fallbacks
-at their producers, then continue package aggregates, cycles, clone/shared
-storage, and resource owners. Remove recovery paths only after their source
-invariants and lifecycle matrix are covered. Rerun the final no-sweeps
-HTML-Tree and lifecycle acceptance matrix, then reconcile open PR #1938 with
-the tested candidate.
+Next, distinguish visible package CODE slots from compiler pins in the weak
+reference and final-release cleanup paths. Then continue capture reconciliation,
+package aggregates, cycles, clone/shared storage, and resource owners. Remove
+recovery paths only after their source invariants and lifecycle matrix are
+covered. Rerun the final no-sweeps HTML-Tree and lifecycle acceptance matrix,
+then reconcile open PR #1938 with the tested candidate.
 
 **Sweep policy (2026-10-27):** Corrective sweeps are disabled by default, as
 requested. `JPERL_ENABLE_CORRECTIVE_SWEEPS=1` temporarily enables legacy
