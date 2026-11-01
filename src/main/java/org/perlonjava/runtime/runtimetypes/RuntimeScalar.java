@@ -593,11 +593,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return true;
     }
 
-    public void retainClosureCapture() {
+    public synchronized void retainClosureCapture() {
         retainClosureCapture(true);
     }
 
-    private void retainClosureCapture(boolean legacyOwner) {
+    private synchronized void retainClosureCapture(boolean legacyOwner) {
         boolean firstCapture = captureCount == 0;
         retainClosureCaptureCount(legacyOwner);
         refreshUntrackedReferenceOwner();
@@ -627,7 +627,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     /** Retain this lexical cell and identify the CODE object that owns the capture. */
-    public PerlOwnerSlot retainClosureCaptureSlot(RuntimeCode captureOwner) {
+    public synchronized PerlOwnerSlot retainClosureCaptureSlot(RuntimeCode captureOwner) {
         retainClosureCapture(false);
         PerlOwnerSlot ownerSlot = new PerlOwnerSlot(PerlOwnerSlot.Kind.SCALAR_CAPTURE);
         ownerSlot.acquireCaptureIdentity(this, captureOwner);
@@ -636,7 +636,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     /** Release one closure's lexical-cell owner and its matching capture count. */
-    public void releaseClosureCaptureSlot(PerlOwnerSlot ownerSlot) {
+    public synchronized void releaseClosureCaptureSlot(PerlOwnerSlot ownerSlot) {
         if (ownerSlot == null) {
             releaseClosureCapture();
             return;
@@ -648,7 +648,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     /** Reconstruct capture ownership for an independent ithread snapshot. */
-    PerlOwnerSlot retainThreadCloneClosureCapture(RuntimeCode captureOwner) {
+    synchronized PerlOwnerSlot retainThreadCloneClosureCapture(RuntimeCode captureOwner) {
         retainClosureCaptureCount(false);
         refreshUntrackedReferenceOwner();
         // An owning lexical slot already protects its referent. Borrowed
@@ -661,12 +661,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return ownerSlot;
     }
 
-    public void releaseClosureCapture() {
+    public synchronized void releaseClosureCapture() {
         if (captureCount == 0 && legacyCaptureOwnerCount() == 0) return;
         releaseClosureCapture(true);
     }
 
-    private void releaseClosureCapture(boolean legacyOwner) {
+    private synchronized void releaseClosureCapture(boolean legacyOwner) {
         releaseClosureCaptureCount(legacyOwner);
         if (captureCount == 0) {
             releaseOneClosureCaptureReferent();
