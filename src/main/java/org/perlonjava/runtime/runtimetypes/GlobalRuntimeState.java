@@ -570,7 +570,7 @@ public final class GlobalRuntimeState {
         cloneMap(foreachScalarAliases, target.foreachScalarAliases, cloner, RuntimeScalar.class);
         cloneMap(temporaryScalarAliases, target.temporaryScalarAliases, cloner, RuntimeScalar.class);
         cloneMap(codeRefs, target.codeRefs, cloner, RuntimeScalar.class);
-        cloner.restoreCodeSlotBindings(target.codeRefs.values());
+        cloner.restoreStashCodeSlotBindings(target.codeRefs.values());
         cloneMap(pseudoConstants, target.pseudoConstants, cloner, RuntimeScalar.class);
         cloneMap(compactStashValues, target.compactStashValues, cloner, RuntimeScalar.class);
         cloneMap(pinnedCodeRefs, target.pinnedCodeRefs, cloner, RuntimeScalar.class);

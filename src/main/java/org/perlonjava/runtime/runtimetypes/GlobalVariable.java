@@ -586,7 +586,7 @@ public class GlobalVariable {
             markPackageGlobalRoot(value);
             RuntimeScalar old = delegate().put(key, value);
             if (old != value) {
-                if (value != null) value.retainCodeSlotBinding();
+                if (value != null) value.retainStashCodeSlotBinding();
                 noteCodeRefMutation(old, value);
             }
             if (newKey) {
@@ -603,7 +603,7 @@ public class GlobalVariable {
                 }
             }
             maybeInvalidateMethodCacheForCodeRefPut(key, old, value);
-            if (old != null && old != value) old.releaseCodeSlotBinding();
+            if (old != null && old != value) old.releaseStashCodeSlotBinding();
             return old;
         }
 
@@ -629,7 +629,7 @@ public class GlobalVariable {
             if (key instanceof String s) {
                 InheritanceResolver.invalidateMethodLookupCachesForStashSubKey(s);
             }
-            if (prev != null) prev.releaseCodeSlotBinding();
+            if (prev != null) prev.releaseStashCodeSlotBinding();
             return prev;
         }
 
@@ -650,7 +650,7 @@ public class GlobalVariable {
             }
             delegate().clear();
             for (RuntimeScalar slot : previous) {
-                if (slot != null) slot.releaseCodeSlotBinding();
+                if (slot != null) slot.releaseStashCodeSlotBinding();
             }
         }
 
@@ -698,7 +698,7 @@ public class GlobalVariable {
                             invalidateStashEnumerationCache();
                             invalidatePackageRootSnapshot();
                             InheritanceResolver.invalidateMethodLookupCachesForStashSubKey(key);
-                            if (value != null) value.releaseCodeSlotBinding();
+                            if (value != null) value.releaseStashCodeSlotBinding();
                         }
                     };
                 }

@@ -172,6 +172,14 @@ public class RuntimeGraphCloner {
         }
     }
 
+    void restoreStashCodeSlotBindings(java.util.Collection<RuntimeScalar> slots) {
+        try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
+            for (RuntimeScalar slot : slots) {
+                if (slot != null) slot.retainStashCodeSlotBinding();
+            }
+        }
+    }
+
     /** Package/runtime snapshot entry point that retains the shared graph map. */
     RuntimeBase cloneValue(RuntimeBase value) {
         if (value == null) return null;
