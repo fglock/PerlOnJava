@@ -1163,15 +1163,22 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         private void put(String name, RuntimeBase cell) {
             if (cells == null) cells = new HashMap<>();
             RuntimeBase previous = cells.put(name, cell);
-            if (previous == cell) return;
-            releaseAggregateOwner(name);
-            if ((cell instanceof RuntimeArray || cell instanceof RuntimeHash)
-                    && MyVarCleanupStack.isRegistered(cell)) {
-                if (aggregateOwnerSlots == null) aggregateOwnerSlots = new HashMap<>();
-                PerlOwnerSlot ownerSlot = new PerlOwnerSlot(PerlOwnerSlot.Kind.ACTIVE_LEXICAL);
-                ownerSlot.acquireActiveLexicalIdentity(cell);
-                aggregateOwnerSlots.put(name, ownerSlot);
+            if (previous == cell) {
+                retainAggregateOwner(name, cell);
+                return;
             }
+            releaseAggregateOwner(name);
+            retainAggregateOwner(name, cell);
+        }
+
+        private void retainAggregateOwner(String name, RuntimeBase cell) {
+            if (!(cell instanceof RuntimeArray || cell instanceof RuntimeHash)
+                    || !MyVarCleanupStack.isRegistered(cell)
+                    || aggregateOwnerSlots != null && aggregateOwnerSlots.containsKey(name)) return;
+            if (aggregateOwnerSlots == null) aggregateOwnerSlots = new HashMap<>();
+            PerlOwnerSlot ownerSlot = new PerlOwnerSlot(PerlOwnerSlot.Kind.ACTIVE_LEXICAL);
+            ownerSlot.acquireActiveLexicalIdentity(cell);
+            aggregateOwnerSlots.put(name, ownerSlot);
         }
 
         private void remove(String name) {
@@ -1916,14 +1923,44 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
     }
 
+    /** Backfill aggregate owner identities when lexical registration follows its first pad bind. */
+    static void noteMyVarRegistered(RuntimeBase cell) {
+        if (!(cell instanceof RuntimeArray || cell instanceof RuntimeHash)
+                || PerlRuntime.currentOrNull() == null) return;
+        ExecutionRuntimeState state = PerlRuntime.current().executionState();
+        for (ActiveLexicalFrame frame : activeLexicalFrames(state)) {
+            for (Map.Entry<String, RuntimeBase> entry : frame.cells().entrySet()) {
+                if (entry.getValue() == cell) {
+                    frame.retainAggregateOwner(entry.getKey(), cell);
+                    return;
+                }
+            }
+        }
+        for (Map.Entry<String, RuntimeBase> entry : state.topLevelLexicals.entrySet()) {
+            if (entry.getValue() == cell) {
+                retainTopLevelAggregateOwner(state, entry.getKey(), cell);
+                return;
+            }
+        }
+    }
+
     private static void putTopLevelLexical(
             ExecutionRuntimeState state, String variableName, RuntimeBase cell) {
         RuntimeBase previous = state.topLevelLexicals.put(variableName, cell);
-        if (previous == cell) return;
+        if (previous == cell) {
+            retainTopLevelAggregateOwner(state, variableName, cell);
+            return;
+        }
         PerlOwnerSlot previousSlot = state.topLevelLexicalOwnerSlots.remove(variableName);
         if (previousSlot != null) previousSlot.release();
+        retainTopLevelAggregateOwner(state, variableName, cell);
+    }
+
+    private static void retainTopLevelAggregateOwner(
+            ExecutionRuntimeState state, String variableName, RuntimeBase cell) {
         if ((cell instanceof RuntimeArray || cell instanceof RuntimeHash)
-                && MyVarCleanupStack.isRegistered(cell)) {
+                && MyVarCleanupStack.isRegistered(cell)
+                && !state.topLevelLexicalOwnerSlots.containsKey(variableName)) {
             PerlOwnerSlot ownerSlot = new PerlOwnerSlot(PerlOwnerSlot.Kind.ACTIVE_LEXICAL);
             ownerSlot.acquireActiveLexicalIdentity(cell);
             state.topLevelLexicalOwnerSlots.put(variableName, ownerSlot);
