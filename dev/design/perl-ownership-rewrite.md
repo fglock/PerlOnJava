@@ -15,7 +15,8 @@ disabled. The unfixed parent fails the new owner-slot regression at
 `/private/tmp/code-state-owner-parent-focused-refcount-make.log`; focused
 candidate evidence is in
 `/private/tmp/code-state-owner-cloner-focused-make.log`. The full no-sweeps
-make on this source commit is pending.
+`make` passes on immutable candidate `b8ac7b1b9` in 6m20:
+`/private/tmp/ownership-code-state-immutable-no-sweeps-make-b8ac7b1b9.log`.
 
 The deferred and tail-call raw-count bridge remains: removing it failed
 `ActiveArgumentOwnerLedgerFastPathTest` and
@@ -28,10 +29,9 @@ Other blessed root snapshots, corrective-sweep scheduling, compatibility pins,
 and owner producers for tied handlers, suspended frames, resource owners, and
 shared storage remain under audit. Earlier acceptance includes the full
 HTML::Tree suite (23 files, 989 checks), `t/refloop.t` 8/8 on both backends,
-and #1794/#1860 lifetime cases. Next, complete the full no-sweeps gate, then
-trace remaining count/root disagreements to their producers and rerun the
-lifecycle matrix before reconciling draft PR #1938. Ownership completion is
-not claimed.
+and #1794/#1860 lifetime cases. Next, trace remaining count/root disagreements
+to their producers and rerun the lifecycle matrix before reconciling draft PR
+#1938. Ownership completion is not claimed.
 
 **Sweep policy (2026-10-27):** Corrective sweeps are disabled by default, as
 requested. `JPERL_ENABLE_CORRECTIVE_SWEEPS=1` temporarily enables legacy
@@ -2163,8 +2163,9 @@ owner without root queries and covers scalar, array, hash, and alias slots.
 independent slots. `closure_state_owner_release.t` passes 10/10 on system Perl
 and both backends with sweeps disabled; nine additional closure/state fixtures
 also pass on all three engines. Parent and focused candidate evidence is listed
-in the current checkpoint above. Full no-sweeps validation on `1c893a2bc` is
-pending.
+in the current checkpoint above. The full no-sweeps make passed on candidate
+`b8ac7b1b9` in 6m20; log:
+`/private/tmp/ownership-code-state-immutable-no-sweeps-make-b8ac7b1b9.log`.
 
 This retires one deferred reachability path. Blessed root snapshots, the raw
 count bridge, and corrective-sweep scheduling still have unmigrated producers.
