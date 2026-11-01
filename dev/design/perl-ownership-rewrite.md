@@ -27,7 +27,11 @@ backends. Logs:
 `/private/tmp/unblessed-call-depth-1860-{jvm,interpreter}-3380ebe8a.log`, and
 `/private/tmp/unblessed-call-depth-refloop-{jvm,interpreter}-3380ebe8a.log`.
 The first CODE-cycle fixture run exposed an untracked CODE setup; the fixture
-now initializes its tracked count before acquiring the self-edge.
+now initializes its tracked count before acquiring the self-edge. On the latest
+source `3380ebe8a`, the self-retaining weak callback and self-capture lifecycle
+fixtures pass 3/3 and 9/9 on JVM and interpreter with sweeps disabled. Logs:
+`/private/tmp/code-cycle-final-weak-{jvm,interpreter}-3380ebe8a.log` and
+`/private/tmp/code-cycle-final-capture-{jvm,interpreter}-3380ebe8a.log`.
 
 Earlier evidence remains: the 18-fixture capture batch passes on system Perl,
 JVM, and interpreter; the tied pre-weaken regression passes on all three; and
