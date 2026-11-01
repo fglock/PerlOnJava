@@ -189,10 +189,11 @@ public class WeakRefRegistry {
                     // slot holds a strong reference not counted in refCount.
                     // Don't call callDestroy — the container is still alive.
                     // Cleanup will happen at scope exit (scopeExitCleanupHash/Array).
-                } else if (base.restoreCountedOwnerSlotRefCount()) {
+                } else if (base.restoreVerifiedCurrentCountedOwnerSlotRefCount()) {
                     // A surviving counted identity is direct evidence of a Perl
-                    // owner. Repair a transient legacy undercount before asking
-                    // the root walker to rediscover the same scalar/container edge.
+                    // owner only while its scalar still occupies the same storage
+                    // slot. Repair from those current edges before considering a
+                    // compatibility path.
                 } else if (!(identifiedOwner && snapshotRoots.isEmpty()
                         && MortalList.canTrustFinalCountedRelease(base))
                         && !(base instanceof RuntimeScalar scalar
@@ -210,15 +211,14 @@ public class WeakRefRegistry {
                         && !(base instanceof RuntimeScalar scalar
                         && scalar.ephemeralScalarReferenceReferent)
                         && hasWeakRefsTo(base)
-                        && (ReachabilityWalker.isReachableFromLiveCodeCaptures(base)
-                        || ReachabilityWalker.isReachableFromStrongRoots(base, snapshotRoots)
+                        && ((!snapshotRoots.isEmpty()
+                            && ReachabilityWalker.isReachableFromStrongRoots(base, snapshotRoots))
                         || RuntimeCode.isInstalledPadConstant(base))) {
-                    // A temporary probe can be weakened without owning the last
-                    // strong Perl reference. Test::Refcount does this when it
-                    // weakens a local copy before calling B::svref_2object().
-                    // If another strong lexical/global path is still reachable,
-                    // keep existing weak refs intact instead of treating this
-                    // selective refCount==0 as object death.
+                    // A cloned thread entry graph is not installed in the child
+                    // runtime's ordinary owner ledger yet. Preserve its explicit
+                    // snapshot roots until the clone finishes installing owners.
+                    // Ordinary lexicals, package slots, captures, and containers
+                    // are handled above through their current owner identities.
                     base.refCount = 1;
                 } else {
                     // No local binding: refCount==0 means truly no strong refs.
