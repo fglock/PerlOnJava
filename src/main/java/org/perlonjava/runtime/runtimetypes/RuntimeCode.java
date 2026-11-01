@@ -4403,23 +4403,35 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
     }
 
+    // Cached reference to the $^P global variable scalar to avoid ConcurrentHashMap
+    // lookup on every eval STRING call. Populated lazily on first access.
+    private static volatile RuntimeScalar cachedDebuggerFlagsScalar;
+
+    private static int getDebuggerFlagsInt() {
+        RuntimeScalar s = cachedDebuggerFlagsScalar;
+        if (s == null) {
+            s = GlobalVariable.getGlobalVariable(GlobalContext.DEBUGGER_FLAGS);
+            cachedDebuggerFlagsScalar = s;
+        }
+        return s.getInt();
+    }
+
     /**
      * Returns a cached {@link java.lang.reflect.Constructor} for the class produced by
      * {@link #evalStringHelper}. Avoids the expensive reflection lookup on cache hits.
-     * Thread-safe via the per-runtime constructor cache (same lifecycle as evalCache).
+     * No synchronization needed — cache is per-runtime (per-thread), accessed only by
+     * one thread.
      */
     @SuppressWarnings("unchecked")
     public static java.lang.reflect.Constructor<?> evalGetCachedConstructor(
             Class<?> clazz, Class<?>[] paramTypes) throws Exception {
         Map<Class<?>, java.lang.reflect.Constructor<?>> ctorCache =
                 PerlRuntime.current().runtimeCodeState().evalConstructorCache;
-        synchronized (ctorCache) {
-            java.lang.reflect.Constructor<?> ctor = ctorCache.get(clazz);
-            if (ctor != null) return ctor;
-            ctor = clazz.getDeclaredConstructor(paramTypes);
-            ctorCache.put(clazz, ctor);
-            return ctor;
-        }
+        java.lang.reflect.Constructor<?> ctor = ctorCache.get(clazz);
+        if (ctor != null) return ctor;
+        ctor = clazz.getDeclaredConstructor(paramTypes);
+        ctorCache.put(clazz, ctor);
+        return ctor;
     }
 
     /**
@@ -4427,22 +4439,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * The eval class instance is stateless (no captures), so the same code ref
      * is safe to reuse — avoids constructor.newInstance() and makeCodeObject()
      * on every warm eval invocation.
-     * Thread-safe: uses the per-runtime cache (one per PerlRuntime thread).
+     * No synchronization needed — cache is per-runtime (per-thread).
      */
     public static RuntimeScalar evalGetOrMakeCachedCodeRef(Class<?> clazz) throws Exception {
         Map<Class<?>, RuntimeScalar> codeRefCache =
                 PerlRuntime.current().runtimeCodeState().evalCodeRefCache;
-        synchronized (codeRefCache) {
-            RuntimeScalar cached = codeRefCache.get(clazz);
-            if (cached != null) return cached;
-        }
+        RuntimeScalar cached = codeRefCache.get(clazz);
+        if (cached != null) return cached;
         java.lang.reflect.Constructor<?> ctor = clazz.getDeclaredConstructor(EMPTY_CLASSES);
         Object instance = ctor.newInstance((Object[]) null);
         RuntimeScalar codeRef = makeCodeObject(instance);
-        synchronized (codeRefCache) {
-            RuntimeScalar existing = codeRefCache.putIfAbsent(clazz, codeRef);
-            return existing != null ? existing : codeRef;
-        }
+        codeRefCache.put(clazz, codeRef);
+        return codeRef;
     }
 
     public static boolean shouldDecodeEvalbytesUtf8Source(String source) {
@@ -4556,9 +4564,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         //   - not in debugger mode ($^P == 0)
         //   - source is a plain STRING (not BYTE_STRING, not evalbytes)
         // On a cache hit the method returns without modifying any state, so no save/restore is needed.
-        // Thread-safe: the eval cache is itself synchronized; Class<?> objects are immutable.
+        // Per-thread cache: no synchronization needed (accessed only by one thread per PerlRuntime).
         if (code.type == RuntimeScalarType.STRING) {
-            int debugFast = GlobalVariable.getGlobalVariable(GlobalContext.DEBUGGER_FLAGS).getInt();
+            int debugFast = getDebuggerFlagsInt();
             if (debugFast == 0) {
                 EmitterContext fastCtx = getEvalContext(evalTag);
                 if (fastCtx != null && !fastCtx.isEvalbytes) {
@@ -4579,10 +4587,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     String fastKey = evalStr + '\0' + evalTag + '\0' + hasUnicode
                             + "\0false\0false\0false\0false\0" + featureFlags + '\0' + currentPackageFast;
                     Map<String, Class<?>> fastCache = PerlRuntime.current().runtimeCodeState().evalCache;
-                    synchronized (fastCache) {
-                        Class<?> hit = fastCache.get(fastKey);
-                        if (hit != null) return hit;
-                    }
+                    Class<?> hit = fastCache.get(fastKey);
+                    if (hit != null) return hit;
                 }
             }
         }
@@ -4720,12 +4726,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             Class<?> cachedClass = null;
             if (!isDebugging) {
                 Map<String, Class<?>> runtimeEvalCache = evalCache();
-                synchronized (runtimeEvalCache) {
-                    if (runtimeEvalCache.containsKey(cacheKey)) {
-                        cachedClass = runtimeEvalCache.get(cacheKey);
-                    }
-                }
-
+                cachedClass = runtimeEvalCache.get(cacheKey);
                 if (cachedClass != null) {
                     return cachedClass;
                 }
@@ -5028,10 +5029,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
             // Cache the result (unless debugging is enabled)
             if (!isDebugging) {
-                Map<String, Class<?>> runtimeEvalCache = evalCache();
-                synchronized (runtimeEvalCache) {
-                    runtimeEvalCache.put(cacheKey, generatedClass);
-                }
+                evalCache().put(cacheKey, generatedClass);
             }
 
             return generatedClass;
@@ -6000,12 +5998,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
         // Get per-class field metadata from cache; build on first encounter.
         // Avoids repeated getDeclaredFields() reflection on warm eval paths.
+        // No synchronization needed — cache is per-runtime (per-thread).
         Map<Class<?>, EvalClassMeta> metaCache =
                 PerlRuntime.current().runtimeCodeState().evalClassMetaCache;
-        EvalClassMeta meta;
-        synchronized (metaCache) {
-            meta = metaCache.get(clazz);
-        }
+        EvalClassMeta meta = metaCache.get(clazz);
         if (meta == null) {
             Field[] allFields = clazz.getDeclaredFields();
             Field subF = null;
@@ -6023,9 +6019,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             meta = new EvalClassMeta(subF,
                     scalarList.toArray(new Field[0]),
                     aggList.toArray(new Field[0]));
-            synchronized (metaCache) {
-                metaCache.put(clazz, meta);
-            }
+            metaCache.put(clazz, meta);
         }
 
         code.captureFieldsRecorded = true;
