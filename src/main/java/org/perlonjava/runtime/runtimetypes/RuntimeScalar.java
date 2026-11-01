@@ -2552,12 +2552,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         arr.elements.add(this);
         if (type == RuntimeScalarType.CODE && value instanceof RuntimeCode code
                 && !isPackageGlobalRoot && !localBindingExists
-                && (code.refCount == 0 || scopeExited)
+                && (!RuntimeCode.hasPersistentArgumentCell(this) || scopeExited)
                 && (code.capturedScalars != null || code.capturedAggregates != null)) {
-            // A temporary closure in @_ is a strong argument slot. Give the
-            // aliased cell its own counted identity so argument cleanup can
-            // release the captures from that count, without proving liveness
-            // by walking the Java object graph.
+            // A temporary closure in @_ is a strong argument slot. The code's
+            // count can belong to a different scalar cell, so decide whether
+            // this cell needs an owner from its storage identity. Argument
+            // cleanup can then retire this edge without a graph walk.
             incrementRefCountForContainerStore(this);
             if (countedOwnerSlot != null && countedOwnerSlot.isActive()) {
                 countedOwnerSlot.reclassifyCountedIdentity(PerlOwnerSlot.Kind.ARGUMENT_VALUE);

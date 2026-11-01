@@ -225,7 +225,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
     }
 
-    private static boolean hasPersistentArgumentCell(RuntimeScalar scalar) {
+    static boolean hasPersistentArgumentCell(RuntimeScalar scalar) {
         return scalar.hasPersistentArgumentStorageCell() || isCurrentArgumentAlias(scalar);
     }
 
