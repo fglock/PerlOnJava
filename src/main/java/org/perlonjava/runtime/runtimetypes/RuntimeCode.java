@@ -1428,41 +1428,47 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     private static void popActiveCode(
             RuntimeCode code, ExecutionRuntimeState executionState) {
         Deque<ActiveLexicalFrame> frames = activeLexicalFrames(executionState);
+        ActiveLexicalFrame retiredFrame = null;
         if (!frames.isEmpty() && frames.peek().code() == code) {
-            ActiveLexicalFrame frame = frames.pop();
+            retiredFrame = frames.pop();
             executionState.currentCallerPackage.setInternalPackageName(
-                    frame.previousCallerPackage());
-            recycleActiveLexicalFrame(frame, executionState);
+                    retiredFrame.previousCallerPackage());
         } else {
             var iterator = frames.iterator();
             while (iterator.hasNext()) {
                 ActiveLexicalFrame frame = iterator.next();
                 if (frame.code() == code) {
                     iterator.remove();
-                    recycleActiveLexicalFrame(frame, executionState);
+                    retiredFrame = frame;
                     break;
                 }
             }
         }
         Deque<RuntimeCode> stack = activeCodeStack(executionState);
+        boolean removedStackEntry = false;
         if (!stack.isEmpty() && stack.peek() == code) {
             stack.pop();
             if (!executionState.activeCodeCallSites.isEmpty()) {
                 executionState.activeCodeCallSites.pop();
             }
-            code.finishActiveCodeOwnerRelease();
-            return;
-        }
-        int index = 0;
-        for (Iterator<RuntimeCode> iterator = stack.iterator(); iterator.hasNext();) {
-            if (iterator.next() == code) {
-                iterator.remove();
-                removeActiveCodeCallSiteAt(executionState, index);
-                code.finishActiveCodeOwnerRelease();
-                break;
+            removedStackEntry = true;
+        } else {
+            int index = 0;
+            for (Iterator<RuntimeCode> iterator = stack.iterator(); iterator.hasNext();) {
+                if (iterator.next() == code) {
+                    iterator.remove();
+                    removeActiveCodeCallSiteAt(executionState, index);
+                    removedStackEntry = true;
+                    break;
+                }
+                index++;
             }
-            index++;
         }
+        // Remove the stack entry while its ACTIVE_CODE slot still owns the CV.
+        // Releasing the slot then becomes the final, authoritative lifecycle
+        // boundary instead of relying on a second stack-membership check.
+        if (removedStackEntry) code.finishActiveCodeOwnerRelease();
+        if (retiredFrame != null) recycleActiveLexicalFrame(retiredFrame, executionState);
     }
 
     private static void removeActiveCodeCallSiteAt(
@@ -1512,7 +1518,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 || hasActiveCodeOwner()
                 || hasCallTransferOwner()
                 || hasOwnerSlots()
-                || isActiveCode(this)
                 || isConstantCv
                 || constantValue != null
                 || GlobalVariable.installedGlobalCodeRefsView().contains(this)
@@ -1542,7 +1547,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 || hasActiveCodeOwner()
                 || hasCallTransferOwner()
                 || hasOwnerSlotsOtherThan(excludedOwner)
-                || isActiveCode(this)
                 || isConstantCv
                 || constantValue != null
                 || GlobalVariable.installedGlobalCodeRefsView().contains(this)
@@ -1564,7 +1568,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * metadata does not extend the scalar's lifetime.
      */
     public boolean releaseTemporaryCodeScalarOwners() {
-        if (isActiveCode(this)) return false;
+        if (hasActiveCodeOwner()) return false;
         boolean released = false;
         for (PerlOwnerSlot ownerSlot : ownerSlotSnapshot()) {
             if (!ownerSlot.isActive()
@@ -1615,7 +1619,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     void finishActiveCodeOwnerRelease() {
-        if (hasActiveCodeOwner() || isActiveCode(this)) return;
+        if (hasActiveCodeOwner()) return;
         releasePendingCaptureEdges();
         if (!finalReleaseDeferredToActiveCode) return;
         // CODE can reach refCount zero while a transient call-frame, argument,
@@ -4183,7 +4187,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     private void retireReplacedCaptureEdges(RetiredCaptureEdges captures) {
         if (captures == null || captures.isEmpty()) return;
-        if (hasActiveCodeOwner() || isActiveCode(this)) {
+        if (hasActiveCodeOwner()) {
             pendingRetiredCaptureEdges.add(captures);
         } else {
             releaseCaptureEdges(captures);
