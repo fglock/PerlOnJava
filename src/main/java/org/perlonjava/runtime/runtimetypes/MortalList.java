@@ -1677,13 +1677,6 @@ public class MortalList {
                 base.refCount = 1;
             } else if (base.blessId == 0
                     && hasWeakRefs
-                    && ReachabilityWalker.hasStrongCycle(base)) {
-                // Perl keeps unblessed strong cycles alive even without an
-                // external root. Decide this before deferring to a registry
-                // sweep: the cycle itself proves the target is still alive.
-                base.refCount = 1;
-            } else if (base.blessId == 0
-                    && hasWeakRefs
                     && (ReachabilityWalker.isReachableFromLiveCodeCaptures(base)
                     || ReachabilityWalker.isReachableFromGlobalCodeCaptures(base))) {
                 // A positive capture query is conclusive for this unblessed
