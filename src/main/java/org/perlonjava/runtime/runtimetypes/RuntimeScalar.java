@@ -703,14 +703,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (closureOwnerSlot != null) closureOwnerSlot.release();
     }
 
-    private void retainMissingClosureCaptureReferents() {
-        while (captureRefCountOwned() < captureCount) {
-            int before = captureRefCountOwned();
-            retainClosureCaptureReferent();
-            if (captureRefCountOwned() == before) break;
-        }
-    }
-
     private RuntimeBase closureCaptureReferent() {
         if (WeakRefRegistry.isweak(this)) return null;
         if ((type & RuntimeScalarType.REFERENCE_BIT) == 0 || !(value instanceof RuntimeBase base)) {
@@ -773,14 +765,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             releaseClosureOwnerSlot();
         }
         releaseAllClosureCaptureReferents(oldBase);
-    }
-
-    void retainClosureCaptureReferentsForUnweaken() {
-        if (captureCount > 0) {
-            RuntimeBase base = semanticCaptureReferent();
-            updateClosureOwnerSlot(base);
-        }
-        retainMissingClosureCaptureReferents();
     }
 
     /**
