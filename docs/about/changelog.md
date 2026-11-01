@@ -18,7 +18,7 @@ priorities and future plans.
 - Avoid duplicate scalar reachability queries when a registered container proves a live CODE owner (#1649).
 - Use direct non-counted Perl owner slots to defer tail-call cleanup without a root walk; ignore temporary runtime roots (#1649).
 - Repair transient unblessed referent undercounts from verified array/hash element slots during overwrite and deferred cleanup, avoiding root walks (#1649).
-- Resolve scalar-overwrite liveness from current owner-slot identities instead of a package-root graph walk, and remove production corrective-sweep triggers (#1649).
+- Resolve scalar-overwrite liveness from current owner-slot identities, removing external-root and live-CODE graph queries and production corrective-sweep triggers (#1649).
 - Repair unblessed referent undercounts from captured scalar-cell owners only while a live closure owns the cell, in overwrite and deferred cleanup (#1649).
 - Release captures from a final scalar CODE owner using explicit owner identities instead of a root walk (#1649).
 - Release aggregate closure captures at scope exit from CODE owner identities, ignoring stale compatibility counts (#1649).
