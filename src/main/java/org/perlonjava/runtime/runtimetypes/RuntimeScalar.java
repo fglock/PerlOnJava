@@ -3036,7 +3036,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     public static void retainUnstashedIoForDurableSlot(RuntimeScalar scalar) {
-        if (scalar == null) return;
+        if (scalar == null || (PerlRuntime.currentOrNull() != null
+                && WeakRefRegistry.isweak(scalar))) return;
         scalar.copiedFromArgumentFrame = null;
         if (scalar.ioOwnerSlot != null) {
             if (scalar.ioOwnerSlot == null

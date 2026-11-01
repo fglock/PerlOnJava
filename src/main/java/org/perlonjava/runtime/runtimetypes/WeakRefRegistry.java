@@ -112,6 +112,7 @@ public class WeakRefRegistry {
                 ref.type = RuntimeScalarType.UNDEF;
                 ref.value = null;
                 ref.refreshArgumentAliasOwnerSlots();
+                RuntimeScalar.releaseIoOwner(ref);
                 return;
             }
         }
@@ -127,7 +128,10 @@ public class WeakRefRegistry {
         // Releasing the final strong slot can synchronously run DESTROY and
         // clear this newly registered weak observer, as Perl does when the
         // weakened variable was the last owner.
-        if (!state.weakScalars.contains(ref) || ref.value != base) return;
+        if (!state.weakScalars.contains(ref) || ref.value != base) {
+            RuntimeScalar.releaseIoOwner(ref);
+            return;
+        }
         ref.releaseClosureCaptureReferentsForWeaken(base);
         if (System.getenv("PJ_WEAKCLEAR_TRACE") != null) {
             System.err.println("[WEAKEN] ref=" + System.identityHashCode(ref)
@@ -318,6 +322,10 @@ public class WeakRefRegistry {
                 clearWeakRefsTo(code);
             }
         }
+        // A weakened glob scalar cannot keep an anonymous IO resource alive
+        // independently of the glob referent. Release its resource-owner slot
+        // only after any final DESTROY dispatch above has completed.
+        RuntimeScalar.releaseIoOwner(ref);
     }
 
     private static boolean codeRefHasCountedOwners(RuntimeBase base) {
@@ -355,6 +363,9 @@ public class WeakRefRegistry {
                 base.recordActiveOwner(ref);
             }
             RuntimeScalar.incrementRefCountForContainerStore(ref);
+            if (base.refCount != Integer.MIN_VALUE) {
+                RuntimeScalar.retainUnstashedIoForDurableSlot(ref);
+            }
             // Note: if MIN_VALUE, object already destroyed — unweaken is a no-op
         }
         ref.refreshArgumentAliasOwnerSlots();

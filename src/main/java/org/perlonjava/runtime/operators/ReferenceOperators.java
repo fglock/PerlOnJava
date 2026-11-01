@@ -234,6 +234,7 @@ public class ReferenceOperators {
                     // tracked.
                     boolean existingScalarOwner =
                             RuntimeScalarType.isReference(runtimeScalar)
+                            && !WeakRefRegistry.isweak(runtimeScalar)
                             && !runtimeScalar.refCountOwned
                             && (runtimeScalar instanceof GlobalRuntimeScalar
                             || GlobalVariable.scalarSlots().containsValue(runtimeScalar)
