@@ -85,6 +85,21 @@ because loopback access is unavailable. Logs:
 `/private/tmp/ownership-io-slot-system-perl-matrix-ec4d3eb05.log`, and the
 JVM/interpreter files matching
 `/private/tmp/ownership-io-slot-*-ec4d3eb05.log`.
+The scalar-capture producer audit found that JVM construction, interpreter
+closure construction, and thread cloning pair each captured scalar with a
+`SCALAR_CAPTURE` slot. `Internals` rebinding also acquires the replacement
+before releasing the matching old slot when its capture entry is present; the
+legacy fallback for absent metadata and scope-exit reconciliation of surplus
+`captureCount` remain under producer investigation. The PadWalker rebind matrix
+passes 13/13 on system Perl and both backends. A new lifecycle regression also
+passes 5/5 on all three, covering the displaced capture's `DESTROY`, the
+replacement's retention while the closure lives, and its release with the
+closure. Logs:
+`/private/tmp/ownership-capture-padwalker-system-perl-ec4d3eb05.log`,
+`/private/tmp/padwalker-rebind-capture-lifecycle-system-perl-ec4d3eb05.log`,
+and JVM/interpreter logs matching
+`/private/tmp/ownership-capture-*-ec4d3eb05.log` and
+`/private/tmp/padwalker-rebind-capture-lifecycle-*-ec4d3eb05.log`.
 
 The raw-count bridge, scalar-overwrite external-root/live-CODE fallback,
 deferred reachability recovery, package-nested untracked compatibility pin,
@@ -105,11 +120,13 @@ Issue #1649 remains open. Draft PR #1938 is still at its older remote head and
 has not been reconciled or published. The tied-handler nested values now have
 both owner-slot and Perl-level lifetime coverage. Anonymous IO holder identity
 is migrated and its normal setter, return, localization, and cleanup paths pass
-the focused matrix. Next, trace each scalar capture count/owner-slot mismatch
-to its producer and cleanup. In particular, audit `Internals` capture rebinding
-and the compatibility reconciliation in `MyVarCleanupStack.scopeExitCleanup`,
-then continue through active CODE, thread-clone capture transfer, returned and
-mortal values, and package-nested aggregates. Keep
+the focused matrix. Normal closure constructors and independent thread clones
+create matching scalar capture identities, and the direct PadWalker rebind
+path releases the displaced capture and preserves the replacement. No
+count/slot leak reproduced. Next, identify the producer behind the remaining
+`Internals` absent-entry fallback and `MyVarCleanupStack.scopeExitCleanup`
+surplus-count reconciliation, then continue through active CODE, thread-clone
+capture transfer, returned and mortal values, and package-nested aggregates. Keep
 explicit post-END teardown and diagnostic traversal separate from ordinary
 ownership decisions.
 
