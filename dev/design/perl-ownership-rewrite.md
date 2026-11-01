@@ -37,6 +37,13 @@ passed all 23 files and 989 checks on each backend, including `t/refloop.t`
 - HTML-Tree JVM/interpreter: `/private/tmp/html-tree-full-jvm-3c8a51c4f-20261101.log`, `/private/tmp/html-tree-full-interpreter-3c8a51c4f-20261101.log`
 - System Perl weak-tree oracles: `/private/tmp/weak-blessed-tree-descendant-cleanup-system-perl-20261101.log`, `/private/tmp/weak-blessed-recursive-closure-cleanup-system-perl-20261101.log`
 
+The tied-handler ownership batch was rechecked on this source: four Perl-level
+tests pass 25/25 on standard Perl, the JVM, and the interpreter. This covers
+pre-weaken nested handler storage, untie and nested release, tied return values,
+local restoration, exception unwind, and exactly-once handler retirement.
+Logs: `/private/tmp/ownership-tied-perl-a47b083f2.log`, plus the JVM and
+interpreter logs matching `/private/tmp/ownership-tied-*-a47b083f2.log`.
+
 The raw-count bridge, scalar-overwrite external-root/live-CODE fallback,
 deferred reachability recovery, package-nested untracked compatibility pin,
 closure cleanup fallbacks, and other audited owner families remain. A broad
@@ -53,10 +60,12 @@ and `/private/tmp/ownership-count-repair-proof-no-sweeps-make-428669ea5-20261101
 This checkpoint does not claim that corrective recovery is removed.
 
 Issue #1649 remains open. Draft PR #1938 is still at its older remote head and
-has not been reconciled or published. Continue by tracing the producers and
-release sites for deferred cleanup, scalar overwrite, active argument aliases,
-captured scalar cells, and package-nested aggregates. Keep explicit post-END
-teardown and diagnostic traversal separate from ordinary ownership decisions.
+has not been reconciled or published. The tied-handler nested values now have
+both owner-slot and Perl-level lifetime coverage. Continue by tracing scalar
+capture owner reconciliation, active CODE, thread clone transfers, returned
+and mortal values, package-nested aggregates, and resource transfers. Keep
+explicit post-END teardown and diagnostic traversal separate from ordinary
+ownership decisions.
 
 **Sweep policy (2026-10-27):** Corrective sweeps are disabled by default, as
 requested. `JPERL_ENABLE_CORRECTIVE_SWEEPS=1` temporarily enables legacy
