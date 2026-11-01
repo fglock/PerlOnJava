@@ -118,6 +118,38 @@ reachability. Explicit post-END teardown and diagnostic traversal are separate.
 
 ## Baseline ownership map
 
+### Producer audit checkpoint (2026-11-01)
+
+The array element-list and hash element-map mutation wrappers maintain
+`containerOwners` and the current `containerOwner` hint on add, replacement,
+bulk insertion, and removal. Hash assignment uses `independentSlot` to avoid
+reusing one mutable hash cell for two keys; explicit refaliasing paths
+intentionally preserve the aliased scalar cell. Array literal, push,
+whole-array assignment, tracked-reference construction, hash assignment, and
+tracked hash construction acquire counted element identities at separate call
+sites. The common APIs acquire after storage is current, while the direct
+helper remains callable before storage and then records `SCALAR_CELL`; the
+legacy snapshot tests cover this ordering. The call-site audit has not yet
+found an ordinary producer that relies on it, but that audit must finish before
+the raw bridge is removed.
+
+Package scalar, array, hash, and named IO-glob table facades acquire their
+`PACKAGE_SCALAR_SLOT`, `PACKAGE_AGGREGATE_SLOT`, and `PACKAGE_GLOB_SLOT`
+identities on insertion and retire them on replacement, deletion, or clear.
+Stash CODE slots use `CODE_SLOT` bindings. Package aggregate element values
+also receive their normal scalar/element owner identities when populated.
+These root-slot families are present; the remaining root-walk cleanup paths
+must be tied to concrete producers that still lack current slot proof.
+
+Two existing tests intentionally preserve fallback behavior. The
+`UnblessedAggregateReachabilitySnapshotTest` case clears a marker directly to
+exercise an owner inconsistent with normal container mutations. The package
+nested untracked aggregate case requires the first-weaken compatibility pin.
+Neither establishes completion of producer accounting. The repository rule
+against editing existing tests means those historical assertions remain until
+the migration can preserve their defensive purpose through a separate
+testable boundary.
+
 | Concern | Current implementation | Phase 1 implication |
 |---|---|---|
 | Referent identity and lifecycle | `RuntimeBase.refCount` combines selective counts with `-1`, `-2`, and `Integer.MIN_VALUE` sentinels; `blessId`, destruction flags, and owner metadata are separate fields | Count and lifecycle must be split for migrated referents; the legacy fields remain behind the boundary for unmigrated referents |
@@ -2004,9 +2036,9 @@ that currently protects it:
 
 | Recovery path | Semantic strong edge | Remaining gap before removal |
 |---|---|---|
-| `restoreReachableOwnerCount` | Scalar cells in `activeOwners`, including nested package-array cells | Some legacy scalar cells lack a current container-owner marker even when stored under a package root. `ReachabilityQueryCostTest.deferredOwnerChecksShareOneRootSnapshotPerDrain` and `UnblessedAggregateReachabilitySnapshotTest` preserve this compatibility boundary; migrate those storage producers before removing the shared-snapshot fallback. |
+| `restoreReachableOwnerCount` | Scalar cells in `activeOwners`, including nested package-array cells | The audited array and hash mutation wrappers mark current storage; their main count-acquiring APIs do so after insertion. The remaining root-snapshot tests exercise earlier count acquisition: `ReachabilityQueryCostTest.deferredOwnerChecksShareOneRootSnapshotPerDrain` calls `incrementRefCountForContainerStore` before adding the scalar to the nested package array, leaving a `SCALAR_CELL` identity; `UnblessedAggregateReachabilitySnapshotTest.repeatedOwnerScalarChecksShareOneRootSnapshotPerDrain` also clears `containerOwner` directly. No production caller with this exact ordering has been identified in the call-site audit so far. These tests preserve the bridge for synthetic/out-of-order states and do not establish a normal store-path defect. |
 | Scalar overwrite (`RuntimeScalar.setLargeRefCounted`) | The scalar cell's old referent edge; new edge is acquired before old release | Counted scalar/aggregate slots repair identified undercounts. The remaining external-root and live-CODE queries and the blessed weak-referent raw-count bridge run for aggregate referents with incomplete owner proof. Their unmigrated producers and final release need explicit identities. `RuntimeScalarOwnerSlotTest` covers identified final element release without a stale snapshot. |
-| First weaken (`WeakRefRegistry.weaken`) | The scalar cell being weakened and any other current scalar, aggregate, or capture owners | Ordinary tracked owners use current counted-slot identities; general live-CODE and strong-root walks were removed from this path. Clone snapshot roots and the package-nested untracked compatibility query/pin remain. `FirstWeakenUsesCurrentPackageOwnerTest` and `WeakeningCountedOwnerSlotTest` cover current counted cells with zero root queries. |
+| First weaken (`WeakRefRegistry.weaken`) | The scalar cell being weakened and any other current scalar, aggregate, or capture owners | Ordinary tracked owners use current counted-slot identities; general live-CODE and strong-root walks were removed from this path. Clone snapshot roots and the package-nested untracked compatibility query/pin remain. `PackageNestedUntrackedAggregateReleaseTest` explicitly asserts both the query and fabricated positive count; this is a compatibility test boundary, not evidence that `UNTRACKED_REFERENCE` release is absent. Retiring the pin still requires replacing that test's contract with lifecycle-state assertions, which repository test policy currently forbids. `FirstWeakenUsesCurrentPackageOwnerTest` and `WeakeningCountedOwnerSlotTest` cover current counted cells with zero root queries. |
 | Unblessed aggregate root snapshot | Array/hash elements reachable through lexical or package storage | Normal slots have identities; parser assembly and compatibility mutation paths still need producer-level invariant coverage. `UnblessedAggregateReachabilitySnapshotTest` deliberately exercises the remaining fallback. |
 | Strong-cycle graph walk | Internal scalar-reference and aggregate-element edges | All cycle edges must be counted by owner slots so cycles survive without graph discovery. |
 | Live/global CODE capture walk | Closure pads and installed CODE metadata | Aggregate pads use capture slots; scalar captures and some CODE metadata still use the compatibility bridge. |
