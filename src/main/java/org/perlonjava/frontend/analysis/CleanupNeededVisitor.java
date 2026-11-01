@@ -91,6 +91,13 @@ public class CleanupNeededVisitor implements Visitor {
             mark();
             return;
         }
+        // An explicit die skips emitted normal scope-exit cleanup. Lexicals
+        // that receive reference arguments must still be registered so the
+        // call boundary can retire their owners while unwinding the error.
+        if ("die".equals(node.operator)) {
+            mark();
+            return;
+        }
         if (node.operand != null) node.operand.accept(this);
     }
 
