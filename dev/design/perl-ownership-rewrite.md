@@ -38,8 +38,12 @@ ownership (`d8d8124d1`), and synchronized closure capture transitions
 (`654cf0d5f`). On `bcbd75f2f`, HTML::Tree 5.07 `t/refloop.t` passes 8/8 on
 both backends with corrective sweeps disabled; logs are
 `/private/tmp/tied-before-weaken-html-refloop-{jvm,interpreter}-bcbd75f2f.log`.
-The full no-sweeps HTML-Tree and lifecycle matrix still needs a final-candidate
-rerun. Other tied-handler paths, additional capture producers, argument,
+The full no-sweeps HTML-Tree suite also passes 23/23 files and 989/989 checks
+on both backends; logs are
+`/private/tmp/tied-before-weaken-html-full-{jvm,interpreter}-bcbd75f2f.log`.
+Rerun it after remaining ownership and recovery changes; the broader lifecycle
+matrix still needs a final-candidate run. Other tied-handler paths, additional
+capture producers, argument,
 return and mortal lifetimes, package roots, strong cycles, cloned/shared
 storage, and resource owners remain under audit. Corrective sweeps and
 compatibility recovery remain; ownership completion is not claimed.
