@@ -449,8 +449,7 @@ public class Internals extends PerlModuleBase {
                     ? existingSlots[i] : null;
             if (slot == null || !slot.isActive()) {
                 RuntimeScalar captured = existing[i];
-                if (captured.captureCount > captured.ownerSlotCount(
-                        PerlOwnerSlot.Kind.SCALAR_CAPTURE)) {
+                if (captured.legacyCaptureOwnerCount() > 0) {
                     captured.releaseClosureCapture();
                 }
                 slot = captured.retainClosureCaptureSlot(code);
@@ -477,8 +476,7 @@ public class Internals extends PerlModuleBase {
                     ? existingSlots[i] : null;
             if (slot == null || !slot.isActive()) {
                 RuntimeBase captured = existing[i];
-                if (captured.captureCount > captured.ownerSlotCount(
-                        PerlOwnerSlot.Kind.CLOSURE_PAD)) {
+                if (captured.legacyCaptureOwnerCount() > 0) {
                     captured.releaseClosureCapture();
                 }
                 slot = captured.retainClosureCaptureOwner(code);

@@ -245,6 +245,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
      */
     public int captureCount = 0;
     public boolean scopeExited = false;
+    private int legacyCaptureOwnerCount;
 
     /**
      * A lexical array whose scope has ended without an escaped {@code \@array}
@@ -254,7 +255,43 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     public boolean arrayLengthLvalueOrphaned = false;
 
     public void retainClosureCapture() {
+        retainClosureCaptureCount(true);
+    }
+
+    public synchronized int legacyCaptureOwnerCount() {
+        return legacyCaptureOwnerCount;
+    }
+
+    protected final synchronized void retainClosureCaptureCount(boolean legacyOwner) {
+        if (captureCount == Integer.MAX_VALUE
+                || (legacyOwner && legacyCaptureOwnerCount == Integer.MAX_VALUE)) {
+            throw new IllegalStateException("closure capture count overflow");
+        }
         captureCount++;
+        if (legacyOwner) legacyCaptureOwnerCount++;
+    }
+
+    protected final synchronized void releaseClosureCaptureCount(boolean legacyOwner) {
+        if (legacyOwner) {
+            if (legacyCaptureOwnerCount <= 0) {
+                throw new IllegalStateException("release has no legacy closure capture owner");
+            }
+            legacyCaptureOwnerCount--;
+        }
+        if (captureCount <= 0) {
+            throw new IllegalStateException("closure capture count underflow");
+        }
+        captureCount--;
+    }
+
+    final void verifyClosureCaptureOwnerCount(PerlOwnerSlot.Kind ownerKind) {
+        int slotCount = ownerSlotCount(ownerKind);
+        int legacyCount = legacyCaptureOwnerCount();
+        if (captureCount != slotCount + legacyCount) {
+            throw new IllegalStateException("closure capture owner mismatch: count="
+                    + captureCount + ", slots=" + slotCount + ", legacy=" + legacyCount
+                    + ", kind=" + ownerKind);
+        }
     }
 
     /** Retain one aggregate pad capture through an explicit owner slot. */
@@ -276,7 +313,10 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         }
         PerlOwnerSlot ownerSlot = new PerlOwnerSlot(PerlOwnerSlot.Kind.CLOSURE_PAD);
         ownerSlot.acquireCapture(this, captureOwner);
-        retainClosureCapture();
+        retainClosureCaptureCount(false);
+        if (this instanceof RuntimeArray || this instanceof RuntimeHash) {
+            verifyClosureCaptureOwnerCount(PerlOwnerSlot.Kind.CLOSURE_PAD);
+        }
         return ownerSlot;
     }
 
@@ -291,25 +331,24 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             // before releasing the capture so a final release can dispatch
             // from the owner count without manufacturing a legacy decrement.
             ownerSlot.release();
-            releaseClosureCapture(true);
+            releaseClosureCapture(true, false);
             return;
         }
         ownerSlot.deferLegacyCaptureRelease(this);
         try {
-            releaseClosureCapture(false);
+            releaseClosureCapture(false, false);
         } finally {
             ownerSlot.release();
         }
     }
 
     public void releaseClosureCapture() {
-        releaseClosureCapture(false);
+        if (captureCount == 0 && legacyCaptureOwnerCount() == 0) return;
+        releaseClosureCapture(false, true);
     }
 
-    private void releaseClosureCapture(boolean nativeOwnerSlot) {
-        if (captureCount > 0) {
-            captureCount--;
-        }
+    private void releaseClosureCapture(boolean nativeOwnerSlot, boolean legacyOwner) {
+        releaseClosureCaptureCount(legacyOwner);
         if (captureCount == 0 && scopeExited) {
             scopeExited = false;
             if (this instanceof RuntimeHash hash) {
@@ -325,6 +364,9 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                     && !hasSemanticCaptureOwner()) {
                 MortalList.deferDecrement(this, "closure aggregate release");
             }
+        }
+        if (this instanceof RuntimeArray || this instanceof RuntimeHash) {
+            verifyClosureCaptureOwnerCount(PerlOwnerSlot.Kind.CLOSURE_PAD);
         }
     }
 
