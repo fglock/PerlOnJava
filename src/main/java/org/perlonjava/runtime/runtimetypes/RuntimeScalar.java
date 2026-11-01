@@ -6031,20 +6031,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && !scalar.hasScalarReferenceContentsOwner()
                 && scalar.untrackedReferenceOwnerSlot == null
                 && scalar.type != RuntimeScalarType.TIED_SCALAR) {
-            // Special case: CODE refs with unreleased captures that were never
-            // stored via set() (e.g., anonymous subs passed directly as arguments).
-            // These have refCount=0 (from makeCodeObject) and refCountOwned=false
-            // (never went through setLargeRefCounted). Without this check,
-            // releaseCaptures() would never fire, permanently elevating
-            // captureCount on captured variables and leaking blessed objects.
-            // The null check on capturedScalars ensures we only fire once
-            // (releaseCaptures sets capturedScalars=null to prevent re-entry).
+            // A temporary CODE scalar may reach scope exit without passing
+            // through setLargeRefCounted. Ask the CODE owner ledger to retire
+            // its captures; the request waits for active, pending, or durable
+            // owners and does not trust the compatibility count.
             if (scalar.type == RuntimeScalarType.CODE
                     && scalar.value instanceof RuntimeCode code
-                    && code.capturedScalars != null
-                    && code.refCount == 0
-                    && !code.hasStashCodeSlotOwner()) {
-                code.releaseCaptures();
+                    && (code.capturedScalars != null || code.capturedAggregates != null)) {
+                code.requestCaptureReleaseWhenUnowned();
             }
             return;
         }

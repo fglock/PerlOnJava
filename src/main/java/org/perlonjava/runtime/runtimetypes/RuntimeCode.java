@@ -547,11 +547,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (frame.created != null) {
             for (RuntimeCode closure : frame.created) {
                 if ((closure.capturedScalars != null || closure.capturedAggregates != null)
-                        && closure.refCount == 0
-                        && closure.stashRefCount <= 0
-                        && !closure.localBindingExists
                         && (frame.returned == null || !frame.returned.containsKey(closure))) {
-                    closure.releaseCaptures();
+                    closure.requestCaptureReleaseWhenUnowned();
                 }
             }
         }
@@ -1505,6 +1502,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     private boolean finalReleaseDeferredToActiveCode;
+    /** A temporary closure cleanup requested capture retirement at its last owner boundary. */
+    private boolean captureReleaseRequested;
 
     boolean hasActiveCodeOwner() {
         return ownerSlotCount(PerlOwnerSlot.Kind.ACTIVE_CODE) != 0;
@@ -1644,6 +1643,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     void finishActiveCodeOwnerRelease() {
         if (hasActiveCodeOwner()) return;
         releasePendingCaptureEdges();
+        finishRequestedCaptureRelease();
         if (!finalReleaseDeferredToActiveCode) return;
         // CODE can reach refCount zero while a transient call-frame, argument,
         // or END-block owner still protects it. Recheck at each such owner
@@ -1654,6 +1654,25 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         finalReleaseDeferredToActiveCode = false;
         refCount = Integer.MIN_VALUE;
         DestroyDispatch.callDestroyFromCountedOwner(this);
+    }
+
+    /** Request capture retirement for a temporary closure without consulting its count. */
+    public void requestCaptureReleaseWhenUnowned() {
+        if (capturedScalars == null && capturedAggregates == null) return;
+        captureReleaseRequested = true;
+        finishRequestedCaptureRelease();
+    }
+
+    private void finishRequestedCaptureRelease() {
+        if (!captureReleaseRequested
+                || hasPerlOwnerForCaptureOtherThan(null)
+                || hasPendingOwnerRelease()
+                || activeEndBlockExecutions > 0
+                || SpecialBlock.hasPendingEndBlock(this)) {
+            return;
+        }
+        captureReleaseRequested = false;
+        releaseCaptures();
     }
 
     public static RuntimeCode getActiveCodeAt(int depth) {
@@ -4379,6 +4398,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             deferFinalReleaseToActiveCode();
             return;
         }
+        captureReleaseRequested = false;
         RetiredCaptureEdges captures = new RetiredCaptureEdges(this, Collections.emptySet());
         capturedScalars = null;
         capturedScalarOwnerSlots = null;
