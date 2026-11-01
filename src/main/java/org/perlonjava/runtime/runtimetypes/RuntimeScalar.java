@@ -3744,10 +3744,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     // cached root walks cannot supply a replacement owner.
                     oldBase.refCount = Integer.MIN_VALUE;
                     DestroyDispatch.callDestroyFromCountedOwner(oldBase);
-                } else if ((oldBase.blessId != 0
-                        && WeakRefRegistry.hasWeakRefsTo(oldBase)
-                        && oldBase.restoreCountedOwnerSlotRefCount())
-                        || oldBase.restoreVerifiedCurrentCountedOwnerSlotRefCount()) {
+                } else if (oldBase.restoreVerifiedCurrentCountedOwnerSlotRefCount()) {
                     // Verified current scalar cells and aggregate elements
                     // jointly repair transient undercounts without a root walk.
                 } else if (oldBase instanceof RuntimeCode code
