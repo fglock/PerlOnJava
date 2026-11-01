@@ -91,6 +91,7 @@ priorities and future plans.
 - Track visible named package IO globs with per-stash owner identities, excluding anonymous `Symbol::gensym` handles from package ownership (#1649).
 - Acquire active lexical owner identities when aggregate registration follows the initial pad bind, and clear weak aggregate observers on normal scope exit (#1649).
 - Exclude weak glob aliases from strong-owner backfill; release their anonymous IO holder on weaken and restore it on unweaken (#1649).
+- Release displaced hash-element owners when multi-LHS list assignment replaces a hash tail, through the normal tied and package-root-aware store path (#1649).
 
 
 
