@@ -130,4 +130,38 @@ class CodeSlotOwnerTest {
             }
         }
     }
+
+    @Test
+    void resettingRuntimeReleasesCodeSlotOwners() {
+        try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
+            GlobalVariable.resetAllGlobals();
+            RuntimeCode compiledCode = code();
+            RuntimeScalar compiledRef = new RuntimeScalar(compiledCode);
+            GlobalVariable.registerCompiledCodeRef(compiledRef);
+
+            RuntimeCode pinnedCode = code();
+            RuntimeScalar pinnedRef = GlobalVariable.getGlobalCodeRef("CodeOwner::resetPinned");
+            pinnedRef.set(new RuntimeScalar(pinnedCode));
+            GlobalVariable.globalCodeRefs.remove("CodeOwner::resetPinned");
+
+            RuntimeCode localizedCode = code();
+            RuntimeScalar localizedRef = new RuntimeScalar(localizedCode);
+            GlobalVariable.enterLocalizedCodeRef("CodeOwner::resetLocalized", localizedRef);
+            GlobalVariable.enterLocalizedCodeRef("CodeOwner::resetLocalized", localizedRef);
+
+            assertEquals(1, compiledCode.refCount);
+            assertEquals(1, compiledCode.ownerSlotCount(PerlOwnerSlot.Kind.CODE_SLOT));
+            assertEquals(1, pinnedCode.refCount);
+            assertEquals(1, pinnedCode.ownerSlotCount(PerlOwnerSlot.Kind.CODE_SLOT));
+            assertEquals(1, localizedCode.refCount);
+            assertEquals(1, localizedCode.ownerSlotCount(PerlOwnerSlot.Kind.CODE_SLOT));
+
+            GlobalVariable.resetAllGlobals();
+
+            for (RuntimeCode code : new RuntimeCode[]{compiledCode, pinnedCode, localizedCode}) {
+                assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, code.perlLifecycleState());
+                assertEquals(0, code.ownerSlotCount(PerlOwnerSlot.Kind.CODE_SLOT));
+            }
+        }
+    }
 }

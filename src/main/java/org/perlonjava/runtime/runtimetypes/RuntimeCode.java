@@ -1519,9 +1519,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 || hasCallTransferOwner()
                 || hasOwnerSlots()
                 || isConstantCv
-                || constantValue != null
-                || GlobalVariable.installedGlobalCodeRefsView().contains(this)
-                || GlobalVariable.hasLocalizedCodeRef(this);
+                || constantValue != null;
     }
 
     /** Release an untracked CV's pad tree when its last Perl owner leaves. */
@@ -1548,16 +1546,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 || hasCallTransferOwner()
                 || hasOwnerSlotsOtherThan(excludedOwner)
                 || isConstantCv
-                || constantValue != null
-                || GlobalVariable.installedGlobalCodeRefsView().contains(this)
-                || GlobalVariable.hasLocalizedCodeRef(this);
+                || constantValue != null;
     }
 
     /** A removed stash slot requests final state cleanup at the last owner boundary. */
     void noteStashOwnerReleased() {
         if (perlLifecycleState() == RuntimeBase.PerlLifecycleState.DESTROYED
                 || stashRefCount > 0
-                || GlobalVariable.installedGlobalCodeRefsView().contains(this)) return;
+                || ownerSlotCount(PerlOwnerSlot.Kind.CODE_SLOT) != 0) return;
         deferFinalReleaseToActiveCode();
         finishActiveCodeOwnerRelease();
     }
