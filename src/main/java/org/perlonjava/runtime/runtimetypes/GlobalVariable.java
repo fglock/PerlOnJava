@@ -248,7 +248,7 @@ public class GlobalVariable {
         return globalState().localizedCodeRefDepth();
     }
 
-    private static IdentityHashMap<RuntimeScalar, String> displacedLocalizedCodeRefs() {
+    private static IdentityHashMap<RuntimeScalar, ArrayList<String>> displacedLocalizedCodeRefs() {
         return globalState().displacedLocalizedCodeRefs();
     }
 
@@ -2900,21 +2900,23 @@ public class GlobalVariable {
         localizedCodeRefDepth().merge(key, 1, Integer::sum);
         if (displacedCodeRef != null) {
             displacedCodeRef.retainCodeSlotBinding();
-            displacedLocalizedCodeRefs().put(displacedCodeRef, key);
+            displacedLocalizedCodeRefs().computeIfAbsent(
+                    displacedCodeRef, ignored -> new ArrayList<>()).add(key);
         }
-    }
-
-    static boolean hasLocalizedCodeRef(RuntimeCode code) {
-        if (code == null) return false;
-        for (RuntimeScalar displacedCodeRef : displacedLocalizedCodeRefs().keySet()) {
-            if (displacedCodeRef != null && displacedCodeRef.value == code) return true;
-        }
-        return false;
     }
 
     static void exitLocalizedCodeRef(String key, RuntimeScalar displacedCodeRef) {
         if (displacedCodeRef != null) {
-            displacedLocalizedCodeRefs().remove(displacedCodeRef);
+            ArrayList<String> bindings = displacedLocalizedCodeRefs().get(displacedCodeRef);
+            if (bindings != null) {
+                for (int i = bindings.size() - 1; i >= 0; i--) {
+                    if (java.util.Objects.equals(bindings.get(i), key)) {
+                        bindings.remove(i);
+                        break;
+                    }
+                }
+                if (bindings.isEmpty()) displacedLocalizedCodeRefs().remove(displacedCodeRef);
+            }
             displacedCodeRef.releaseCodeSlotBinding();
         }
         Integer depth = localizedCodeRefDepth().get(key);
@@ -2930,7 +2932,8 @@ public class GlobalVariable {
 
     public static RuntimeScalar getLocalizedCodeRefForDirectCall(String key, RuntimeScalar fallback) {
         if ((key == null || key.isEmpty()) && fallback != null) {
-            key = displacedLocalizedCodeRefs().get(fallback);
+            ArrayList<String> bindings = displacedLocalizedCodeRefs().get(fallback);
+            if (bindings != null && !bindings.isEmpty()) key = bindings.getLast();
         }
         if (key == null || key.isEmpty() || !localizedCodeRefDepth().containsKey(key)) {
             return fallback;
