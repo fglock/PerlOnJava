@@ -1503,6 +1503,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return ownerSlotCount(PerlOwnerSlot.Kind.ACTIVE_CODE) != 0;
     }
 
+    /** Whether a current named package CODE slot still installs this CV. */
+    boolean hasStashCodeSlotOwner() {
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (!slot.isActive() || slot.kind() != PerlOwnerSlot.Kind.CODE_SLOT
+                    || slot.referent() != this) continue;
+            RuntimeScalar scalar = slot.countedScalarOwner();
+            if (scalar != null && scalar.value == this && scalar.hasStashCodeSlotBinding()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /**
      * Whether this CODE object still has a Perl owner that can use its pad.
      * Closure-capture cleanup uses this ledger instead of proving liveness by

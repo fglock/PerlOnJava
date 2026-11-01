@@ -785,17 +785,36 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     private ArrayList<PerlOwnerSlot> argumentAliasOwnerSlots;
     /** Frame identities following this mutable scalar while async code is paused. */
     private Set<PerlOwnerSlot> suspendedFrameOwnerSlots;
-    // Names sharing one GP/CODE scalar share one CV edge. A saved localized
-    // slot also keeps this binding alive while its names address a new slot.
+    // Package names, compiler pins, localized saved slots, and compiled
+    // references can share one physical CV edge. Keep visible stash bindings
+    // distinct so weak cleanup does not confuse them with compiler pins.
     private int codeSlotBindings;
+    private int stashCodeSlotBindings;
 
     boolean hasCodeSlotBinding() {
         return codeSlotBindings != 0;
     }
 
+    boolean hasStashCodeSlotBinding() {
+        return stashCodeSlotBindings != 0;
+    }
+
     void retainCodeSlotBinding() {
         codeSlotBindings++;
         refreshCodeSlotOwner();
+    }
+
+    void retainStashCodeSlotBinding() {
+        stashCodeSlotBindings++;
+        retainCodeSlotBinding();
+    }
+
+    void releaseStashCodeSlotBinding() {
+        if (stashCodeSlotBindings <= 0) {
+            throw new IllegalStateException("unbalanced stash CODE slot binding");
+        }
+        stashCodeSlotBindings--;
+        releaseCodeSlotBinding();
     }
 
     void releaseCodeSlotBinding() {
@@ -6027,7 +6046,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     && scalar.value instanceof RuntimeCode code
                     && code.capturedScalars != null
                     && code.refCount == 0
-                    && !GlobalVariable.installedGlobalCodeRefsView().contains(code)) {
+                    && !code.hasStashCodeSlotOwner()) {
                 code.releaseCaptures();
             }
             return;

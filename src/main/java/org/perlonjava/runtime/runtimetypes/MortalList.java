@@ -1764,7 +1764,7 @@ public class MortalList {
                 && !(base instanceof RuntimeCode code
                     && (code.hasActiveCodeOwner()
                         || code.stashRefCount > 0
-                        || GlobalVariable.installedGlobalCodeRefsView().contains(code)))) {
+                        || code.hasStashCodeSlotOwner()))) {
             base.refCount = Integer.MIN_VALUE;
             DestroyDispatch.callDestroyFromCountedOwner(base);
         }
