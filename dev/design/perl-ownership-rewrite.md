@@ -3,67 +3,42 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; hidden entries release that owner while retaining their lookup state. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-01):** Phase 2 continues on branch
-`wip/socket-gensym-owner-20261101-020558` at source `d8d8124d1`.
-`RuntimeCode.adoptDefinitionFrom()` now retains old capture edges while
-rebinding incoming scalar and aggregate owner identities, defers replacement
-release through active CODE ownership, marks legacy metadata retired without a
-count slot, and invalidates cached CODE roots. The full gate passed on
-`1561b58b9` in 7m51; log:
-`/private/tmp/ownership-adopt-definition-followup-make-1561b58b9.log`.
+`wip/socket-gensym-owner-20261101-020558` at source `654cf0d5f`. Closure
+capture counts now distinguish explicit `SCALAR_CAPTURE`/`CLOSURE_PAD` slots
+from compatibility-only retains. Scalar and aggregate producers verify that
+their count equals active owner slots plus legacy retains; scope cleanup retires
+only recorded legacy owners. `RuntimeScalar` and `RuntimeBase` now share one
+capture-count field, removing the scalar shadow that caused the two ledgers to
+diverge. The paired count/slot updates and checks are serialized so concurrent
+ithread snapshots cannot observe half-completed transitions. Missing scalar
+owner-slot metadata remains a no-op only when no capture count exists; a
+positive raw count without provenance raises an invariant failure.
 
-The unused `retainClosureCaptureReferentsForUnweaken()` and its private count
-repair helper were removed after a whole-source search found no callers. New
-`closure_capture_multiple_unweaken_owner.t` covers two closures sharing a
-captured cell across weaken/unweaken and final release; it passes 6/6 on system
-Perl, JVM, and interpreter with sweeps disabled. It also passed before removal,
-so no defect is claimed for this scenario. Full gate on `249c09b3d` passed in
-7m59; log: `/private/tmp/ownership-multiple-unweaken-make-249c09b3d.log`.
+`CaptureOwnerLedgerTest` covers scalar and aggregate acquire/release, legacy
+provenance, stale counts, and absent-slot cleanup. The targeted ownership/root
+suite passes. The lazy thread-snapshot regression passes 3 consecutive JVM
+runs after the synchronization fix; the condition-broadcast stress and both
+thread regressions pass on system Perl. The full gate passes on immutable
+`654cf0d5f` in 7m08; log:
+`/private/tmp/ownership-capture-ledger-atomic-make-654cf0d5f.log`. Earlier
+candidate logs retain the reproduced null-slot and concurrent-check failures:
+`/private/tmp/ownership-capture-ledger-make-eae9232c9.log` and
+`/private/tmp/ownership-capture-ledger-final-make-5f548fcd1.log`.
 
-`popActiveCode()` now removes the active stack entry before releasing its
-`ACTIVE_CODE` owner slot. Lifecycle checks for capture ownership, temporary CODE
-cleanup, final release, and capture replacement no longer use stack membership
-as a fallback. `ActiveCodeOwnerReleaseOrderingTest` fails on parent `b09fa3a25`
-when the last owner slot is retired while the CV remains on the active stack
-(1,419 shard tests, one failure, six skips; log:
-`/private/tmp/active-code-owner-ordering-parent-b09fa3a25.log`). It passes in
-the full gate on immutable `6a94453f7`, which completed in 7m33 with zero
-failures: `/private/tmp/active-code-owner-order-make-6a94453f7.log`.
+Prior gates also cover active CODE stack ordering (`6a94453f7`), reset of
+compiled, pinned, and localized CODE slots (`ea28e59c7`), and visible stash
+CODE ownership (`d8d8124d1`). The weak-reference, resurrection, #1794, #1860,
+and HTML-Tree acceptance matrices are recorded at their tested commits; they
+were not all rerun on `654cf0d5f`. Other capture producers, argument/return/
+mortal lifetimes, package roots, strong cycles, cloned/shared storage, and
+resource owners remain. Corrective sweeps and compatibility recovery remain;
+ownership completion is not claimed.
 
-Runtime reset now releases every compiled, pinned, and localized CODE slot
-binding. Displaced localized slots retain a stack of active names, so aliases
-sharing one scalar release their own binding and leave the remaining scope
-lookup intact. `RuntimeCode` capture-lifecycle checks use the owner ledger
-instead of scanning installed global CODE roots. `CodeSlotOwnerTest` reproduced
-the compiled-slot reset leak on parent `c788e899f` (one failure in 1,420 tests,
-six skips; `/private/tmp/compiled-slot-clear-parent-c788e899f.log`) and covers
-compiled, pinned, and repeated localized bindings. The focused class passed;
-the full gate passed on immutable `ea28e59c7` in 7m17:
-`/private/tmp/ownership-code-reset-make-ea28e59c7.log`.
-
-Visible stash CODE bindings now have a distinct scalar binding marker while
-sharing one physical `CODE_SLOT` owner with compiler pins and localized slots.
-Weak-reference cleanup and final release use that marker rather than scanning
-the installed-CODE root index; the index remains in the explicit reachability
-walker. Package-state cloning restores the stash marker with each cloned name.
-Focused CODE owner, weak-code, active-call, capture-adoption, and clone tests
-passed, including weak-observer preservation with zero measured root queries.
-The full gate passed on immutable `d8d8124d1` in 7m22:
-`/private/tmp/ownership-stash-code-slot-make-d8d8124d1.log`.
-
-Earlier weak-reference, resurrection, #1794, #1860, and HTML-Tree matrices are
-documented at their tested commits; they were not all rerun on `d8d8124d1`.
-Other capture producers, argument/return/mortal lifetimes, package roots,
-strong cycles, cloned/shared storage, and resource owners remain. Corrective
-sweeps and compatibility recovery remain in the runtime; ownership completion
-is not claimed.
-
-Next, trace every remaining capture-count mismatch to a capture producer,
-transfer, or cleanup path and remove repair only when the invariant is covered.
-Then continue package aggregates, cycles, clone/shared storage, argument/return/
-mortal values, and resource owners. Remove recovery paths only after their
-source invariants and lifecycle matrix are covered. Rerun the final no-sweeps
-HTML-Tree and lifecycle acceptance matrix, then reconcile open PR #1938 with
-the tested candidate.
+Next, continue the producer/transfer/cleanup audit across tied values, closure
+aliases, package roots, cycles, shared storage, argument/return/mortal values,
+and resources. Remove each recovery path only after its source invariant and
+lifecycle matrix are covered. Rerun the final no-sweeps HTML-Tree and lifecycle
+acceptance matrix, then reconcile open PR #1938 with the tested candidate.
 
 **Sweep policy (2026-10-27):** Corrective sweeps are disabled by default, as
 requested. `JPERL_ENABLE_CORRECTIVE_SWEEPS=1` temporarily enables legacy
