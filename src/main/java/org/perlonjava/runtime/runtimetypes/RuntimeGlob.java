@@ -151,6 +151,9 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     /** True when this glob's current IO was created by accept(). */
     public boolean acceptedSocket;
 
+    /** True for the generated Symbol::GEN<n> globs, which are not stash slots. */
+    public boolean symbolGensym;
+
     /**
      * Constructor for RuntimeGlob.
      * Initializes a new instance of the RuntimeGlob class with the specified glob name.
@@ -211,6 +214,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     public RuntimeGlob createDetachedCopy() {
         RuntimeGlob copy = new RuntimeGlob(this.globName);
         copy.stringificationName = this.stringificationName;
+        copy.symbolGensym = this.symbolGensym;
         copy.slotSnapshot = true;
         copy.IO = this.IO;  // Share the current IO reference
         // A copied typeglob retains the CODE slot that was visible when it was
@@ -1581,7 +1585,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     }
 
     public RuntimeGlob setIO(RuntimeScalar io) {
-        GlobalVariable.markStashEntryVisible(this.globName);
+        if (symbolGensym) {
+            GlobalVariable.hideIORefAfterStashDelete(this.globName);
+        } else {
+            GlobalVariable.markStashEntryVisible(this.globName);
+        }
         acceptedSocket = false;
         // Check if the current IO is the selected handle - if so, update it
         RuntimeIO oldIO = null;
@@ -1623,7 +1631,9 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     }
 
     private RuntimeGlob setIO(RuntimeIO io, boolean makeStashEntryVisible) {
-        if (makeStashEntryVisible) {
+        if (symbolGensym) {
+            GlobalVariable.hideIORefAfterStashDelete(this.globName);
+        } else if (makeStashEntryVisible) {
             GlobalVariable.markStashEntryVisible(this.globName);
         }
         acceptedSocket = false;

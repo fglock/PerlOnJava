@@ -6062,13 +6062,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (scalar.type == GLOBREFERENCE
                 && scalar.value instanceof RuntimeGlob glob
                 && isUnstashedIoGlob(glob)) {
+            if (glob.ioHolderCount > 0) {
+                glob.ioHolderCount--;
+            }
             RuntimeScalar ioSlot = glob.getIO();
-            if (ioSlot != null && ioSlot.value instanceof RuntimeIO io
-                    && !(io.ioHandle instanceof ClosedIOHandle)) {
-                if (glob.ioHolderCount > 0) {
-                    glob.ioHolderCount--;
-                }
-                if (glob.ioHolderCount <= 0) {
+            if (glob.ioHolderCount <= 0) {
+                if (ioSlot != null && ioSlot.value instanceof RuntimeIO io
+                        && !(io.ioHandle instanceof ClosedIOHandle)) {
                     // Closing is required for stream sockets: merely dropping
                     // the synthetic fileno does not send EOF to the peer.
                     // Other anonymous handles still encounter transient
@@ -6078,6 +6078,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     if (isSocketIOHandle(io.ioHandle)) io.close();
                     else io.unregisterFileno();
                 }
+                GlobalVariable.retireHiddenIORef(glob);
             }
         }
     }
