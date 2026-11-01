@@ -81,4 +81,33 @@ class RuntimeCodeAdoptDefinitionCaptureOwnerTest {
             assertEquals(0, newPad.captureCount);
         }
     }
+
+    @Test
+    void adoptingCaptureMetadataInvalidatesTheCodeRootCache() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeCode placeholder = new RuntimeCode((args, context) -> new RuntimeList(), null);
+            RuntimeScalar codeRoot = new RuntimeScalar(placeholder);
+            String name = "RuntimeCodeAdoptDefinitionCaptureOwnerTest::root_cache";
+            GlobalVariable.globalCodeRefs.put(name, codeRoot);
+            try {
+                var previousRoots = GlobalVariable.globalCodeRefEdgeRootsView();
+                assertFalse(previousRoots.contains(codeRoot));
+
+                RuntimeCode definition = new RuntimeCode((args, context) -> new RuntimeList(), null);
+                RuntimeScalar pad = new RuntimeScalar(3);
+                definition.capturedScalars = new RuntimeScalar[] {pad};
+                definition.capturedScalarOwnerSlots = new PerlOwnerSlot[] {
+                        pad.retainClosureCaptureSlot(definition)
+                };
+
+                placeholder.adoptDefinitionFrom(definition);
+
+                assertTrue(GlobalVariable.globalCodeRefEdgeRootsView().contains(codeRoot));
+                placeholder.releaseCaptures();
+            } finally {
+                GlobalVariable.globalCodeRefs.remove(name);
+            }
+        }
+    }
 }
