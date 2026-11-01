@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.runtimetypes;
 
+import org.perlonjava.runtime.operators.ReferenceOperators;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
@@ -45,6 +46,34 @@ class BlessedGlobAliasOwnerSlotTest {
                 MyVarCleanupStack.unregister(weak);
                 MyVarCleanupStack.unregister(second);
                 MyVarCleanupStack.unregister(first);
+                MortalList.invalidateAllRootSnapshots();
+            }
+        }
+    }
+
+    @Test
+    void blessingWeakRegisteredScalarDoesNotAcquireStrongGlobOwner() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeGlob glob = new RuntimeGlob(null);
+            glob.refCount = WeakRefRegistry.WEAKLY_TRACKED;
+            RuntimeScalar weak = globReference(glob);
+            MyVarCleanupStack.register(weak);
+            WeakRefRegistry.weaken(weak);
+
+            try {
+                ReferenceOperators.bless(weak,
+                        new RuntimeScalar("BlessedGlobAliasOwnerSlotTest::WeakBless"));
+
+                assertEquals(1, glob.refCount);
+                assertEquals(0, glob.ownerSlotCount(PerlOwnerSlot.Kind.SCALAR_CELL));
+                assertFalse(weak.refCountOwned,
+                        "bless must not turn a weak scalar into a strong glob owner");
+                assertTrue(WeakRefRegistry.isweak(weak));
+            } finally {
+                WeakRefRegistry.clearWeakRefsTo(glob);
+                MyVarCleanupStack.unregister(weak);
+                MortalList.flush();
                 MortalList.invalidateAllRootSnapshots();
             }
         }

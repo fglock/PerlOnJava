@@ -381,6 +381,7 @@ public class MyVarCleanupStack {
                     && (scalar.type == RuntimeScalarType.GLOB
                         || scalar.type == RuntimeScalarType.GLOBREFERENCE)
                     && scalar.value == glob
+                    && !WeakRefRegistry.isweak(scalar)
                     && !scalar.refCountOwned
                     && seen.put(scalar, Boolean.TRUE) == null) {
                 scalar.refCountOwned = true;
@@ -396,6 +397,7 @@ public class MyVarCleanupStack {
                     && (scalar.type == RuntimeScalarType.GLOB
                     || scalar.type == RuntimeScalarType.GLOBREFERENCE)
                     && scalar.value == glob
+                    && !WeakRefRegistry.isweak(scalar)
                     && !scalar.refCountOwned
                     && seen.put(scalar, Boolean.TRUE) == null) {
                 scalar.refCountOwned = true;
