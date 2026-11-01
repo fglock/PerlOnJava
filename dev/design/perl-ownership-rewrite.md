@@ -4,29 +4,34 @@
 
 **Current checkpoint (2026-11-01):** Phase 2 remains in progress on branch
 `wip/socket-gensym-owner-20261101-020558`, runtime source
-`460c13f43`. Deferred release, tail-call cleanup, and scalar overwrite try
+`a47b083f2`. Deferred release, tail-call cleanup, and scalar overwrite try
 verified current counted-owner slots before the raw-count compatibility bridge.
 Current-cell verification also recognizes an active forwarded
 `ARGUMENT_ALIAS`; temporary expression wrappers remain excluded from
 persistent alias ownership. Aggregate clear/replacement now queues anonymous
-IO holder release with deferred container cleanup.
+IO holder release with deferred container cleanup. Localized array and hash
+slot unwind also releases the temporary IO holder; the missing-key hash path
+is handled by `RuntimeHashProxyEntry`.
 
-The full no-sweeps `nice -n 19 make` passed on `460c13f43` in 7m46 using the
+The full no-sweeps `nice -n 19 make` passed on `a47b083f2` in 6m57 using the
 verified local JOL 0.17 mirror: 3,305 unit-shard tests,
 525 Joni tests, and two integration checks; zero failures or errors and seven
-skips. The added aggregate-clear regression passes 4/4 on system Perl, JVM,
-and interpreter; the failing parent run at `3c8a51c4f` fails both final-close
-assertions. The existing socket scope-exit regression passes 35/35 on each
-backend. The lifecycle matrix passed 18 files and 162 checks on each backend,
+skips. The expanded aggregate and localization regression passes 8/8 on system
+Perl, JVM, and interpreter. The bulk-clear parent run at `3c8a51c4f` fails both
+final-close assertions; localization assertions fail on `460c13f43`, and the
+first unwind candidate `8ed1a2158` still failed the missing-key hash case. The
+existing socket scope-exit regression passes 35/35 on each backend. The
+lifecycle matrix passed 18 files and 162 checks on each backend,
 including #1794 controller release and #1860 growing output. HTML-Tree 5.07
 passed all 23 files and 989 checks on each backend, including `t/refloop.t`
 8/8. The filtered focused gate also passed the forwarded-alias test and three
 `weak_blessed_*` fixtures. Logs:
 
 - Full gate: `/private/tmp/ownership-verified-forwarded-alias-no-sweeps-make-3c8a51c4f-20261101.log`
-- Aggregate-clear candidate gate: `/private/tmp/ownership-io-aggregate-clear-make-460c13f43.log`
-- Aggregate-clear regression: `/private/tmp/io-owner-aggregate-clear-perl-3c8a51c4f.log`, `/private/tmp/io-owner-aggregate-clear-parent-3c8a51c4f.log`, `/private/tmp/io-owner-aggregate-clear-jvm-460c13f43.log`, `/private/tmp/io-owner-aggregate-clear-interpreter-460c13f43.log`
-- Socket scope-exit JVM/interpreter: `/private/tmp/socket-scope-eof-jvm-460c13f43.log`, `/private/tmp/socket-scope-eof-interpreter-460c13f43.log`
+- Aggregate/localization candidate gate: `/private/tmp/ownership-io-local-slot-make-a47b083f2.log`
+- Aggregate/localization regression: `/private/tmp/io-owner-aggregate-and-local-perl-460c13f43.log`, `/private/tmp/io-owner-aggregate-clear-parent-3c8a51c4f.log`, `/private/tmp/io-owner-aggregate-and-local-parent-460c13f43.log`, `/private/tmp/io-owner-aggregate-clear-jvm-a47b083f2.log`, `/private/tmp/io-owner-aggregate-clear-interpreter-a47b083f2.log`
+- Intermediate failure evidence: `/private/tmp/ownership-io-local-slot-make-8ed1a2158.log`
+- Socket scope-exit JVM/interpreter: `/private/tmp/socket-scope-eof-jvm-a47b083f2.log`, `/private/tmp/socket-scope-eof-interpreter-a47b083f2.log`
 - Focused gate: `/private/tmp/forwarded-argument-owner-focused-units-3c8a51c4f-20261101.log`
 - Lifecycle JVM/interpreter: `/private/tmp/ownership-lifecycle-matrix-jvm-3c8a51c4f-20261101.log`, `/private/tmp/ownership-lifecycle-matrix-interpreter-3c8a51c4f-20261101.log`
 - HTML-Tree JVM/interpreter: `/private/tmp/html-tree-full-jvm-3c8a51c4f-20261101.log`, `/private/tmp/html-tree-full-interpreter-3c8a51c4f-20261101.log`
@@ -123,7 +128,7 @@ reachability. Explicit post-END teardown and diagnostic traversal are separate.
 | Cleared aggregate | Scope-exit finalization can consult cached external-root snapshots when the aggregate count is already zero; deferred cleanup still has capture and nested-call recovery branches. | Container elements acquire `ARRAY_ELEMENT`/`HASH_ELEMENT` identities; active lexical and suspended-frame owners have dedicated slots. Clear and scope-exit paths queue displaced element releases. | `ClearedAggregateOwnerIdentityNoRootWalkTest` and `ClearedAggregateOwnerIdentityFinalizationTest` cover explicit slots. Incomplete producer coverage still reaches the cached-root boundary. |
 | Closure, CODE, and cycles | Deferred cleanup and `DestroyDispatch` still query live/global CODE captures; `DestroyDispatch` retains a CODE-cycle query. `GlobalRuntimeState` uses a graph walk when building its installed-CODE root index. The unblessed array/hash cycle rescue in `MortalList` is removed. | `CLOSURE_PAD`, `SCALAR_CAPTURE`, `CODE_SLOT`, `ACTIVE_CODE`, and `CODE_PAD_CONSTANT` identify capture, stash, active-frame, and optree edges; regex callbacks have `REGEX_CALLBACK`. Scalar capture releases still use the legacy count bridge, while aggregate capture slots are native. | Closure, active-CODE, CODE-slot, strong-cycle, resurrection, and regex-callback tests cover migrated families. `MyVarCleanupStack.scopeExitCleanup` still reconciles legacy `captureCount` against explicit `SCALAR_CAPTURE` slots. Compiler templates and several CODE/glob producer/cleanup boundaries remain under audit. |
 | Temporary evaluation roots | `MortalList` stores temporary roots and the reachability walker follows them during cleanup; temporary roots intentionally do not count as Perl owners. | `pushTemporaryRoot`/`popTemporaryRoot` bracket setter and return cleanup. A temporary root must defer finalization only until its exact removal, without turning it into a persistent Perl edge. | `PerlStrongOwnerProofTest` distinguishes temporary roots from Perl owners; `TemporaryReturnOwnerTraversalTest` covers direct aggregate values. Final cleanup on temporary-root release remains part of the migration. |
-| Resource holders | Anonymous IO lifetime uses `RuntimeScalar.ioOwner` and `RuntimeGlob.ioHolderCount`; it is not part of the Perl owner-slot ledger. | `retainUnstashedIoForDurableSlot`, `releaseIoOwner`, `releaseIoOwnerPreservingReturned`, `transferIoOwnerToReturnedCopy`, and `releaseOrTransferSocketIoOwnerOnReturn` acquire, release, or move the holder token across stores and returns. `MortalList.deferDestroyForContainerClear` now queues the IO release when bulk cleanup retires an aggregate slot. | New hash and array clear regressions pass on both backends and system Perl; the parent fails both final-close assertions. Socket scope, return, async cancellation, #1794, and #1860 coverage pass on both backends. The token has no stable `PerlOwnerSlot` identity; cloning, exception transfer, and non-socket anonymous-handle cleanup remain under audit. |
+| Resource holders | Anonymous IO lifetime uses `RuntimeScalar.ioOwner` and `RuntimeGlob.ioHolderCount`; it is not part of the Perl owner-slot ledger. | `retainUnstashedIoForDurableSlot`, `releaseIoOwner`, `releaseIoOwnerPreservingReturned`, `transferIoOwnerToReturnedCopy`, and `releaseOrTransferSocketIoOwnerOnReturn` acquire, release, or move the holder token across stores and returns. `MortalList.deferDestroyForContainerClear` queues release for bulk cleanup; localized array cleanup and both existing-key and missing-key hash proxy cleanup retire temporary holders at unwind. | The aggregate clear/localization regression passes on both backends and system Perl; failing parent evidence is retained. Socket scope, return, async cancellation, #1794, and #1860 coverage pass on both backends. The token has no stable `PerlOwnerSlot` identity; cloning, exception transfer, and non-socket anonymous-handle cleanup remain under audit. |
 
 ## Baseline ownership map
 
@@ -173,11 +178,12 @@ those counts.
 
 Anonymous IO resource ownership has a separate representation: a scalar's
 `ioOwner` boolean pairs with `RuntimeGlob.ioHolderCount`. Durable stores,
-lexical cleanup, aggregate cleanup, and returned values use explicit retain,
-release, and transfer helpers, but there is no `PerlOwnerSlot` for the holder
-token. Socket lifetime coverage includes #1794 and the async cleanup paths;
-cloning, exception transfer, and ordinary anonymous-file close semantics still
-need a producer-by-producer audit before resource ownership can be considered
+lexical cleanup, aggregate clear/replacement, localized array slots, localized
+hash proxy slots, and returned values now use explicit retain, release, or
+transfer paths, but there is no `PerlOwnerSlot` for the holder token. Socket
+lifetime coverage includes #1794 and async cleanup; cloning, exception
+transfer, and ordinary anonymous-file close semantics still need a
+producer-by-producer audit before resource ownership can be considered
 complete.
 
 | Concern | Current implementation | Phase 1 implication |
