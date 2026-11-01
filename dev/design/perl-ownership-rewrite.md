@@ -22,8 +22,13 @@ interpreter; final backend logs are
 the assertion that an unrelated strong-cycle owner does not consume a pending
 rescue. The Java lifecycle test
 `PerlReferentDestroyLifecycleTest.rescuedBlessedReferentMovesFromResurrectedToDestroyed`
-also passes in the full gate. The unfixed JVM failure for the new regression
-and the failing intermediate candidates are preserved in `/private/tmp`.
+also passes in the full gate. The post-gate acceptance recheck passes HTML-Tree
+`t/refloop.t` 8/8, #1794 controller ownership 3/3, long-poll 5/5 and WebSocket
+6/6, plus #1860 growing output 4/4 on both backends. Logs are in
+`/private/tmp/ownership-final-html-tree-refloop-*0a2ef400a.log` and
+`/private/tmp/ownership-final-{1794,1860}-*0a2ef400a.log`. The unfixed JVM
+failure for the new regression and the failing intermediate candidates are
+preserved in `/private/tmp`.
 
 Deferred release still has raw counted-slot, `reachableOwnerCount`, and
 root-snapshot recovery paths; first-weaken retains a compatibility pin.
