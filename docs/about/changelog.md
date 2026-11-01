@@ -85,7 +85,7 @@ priorities and future plans.
 - Release displaced hash element owners when cloned values replace an existing slot (#1649).
 - Release deleted middle-array element owners after transferring the result to the caller (#1649).
 - Carry exact array-element owner identities through pop, shift, delete, and localized unwind while preserving borrowed `@_` aliases, so removed references release despite stale array ownership summaries (#1649).
-- Track visible named package IO globs with per-stash owner identities, releasing hidden entries while preserving their lookup state (#1649).
+- Track visible named package IO globs with per-stash owner identities, excluding anonymous `Symbol::gensym` handles from package ownership (#1649).
 
 
 

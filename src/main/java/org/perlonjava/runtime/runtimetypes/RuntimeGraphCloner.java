@@ -799,6 +799,7 @@ public class RuntimeGraphCloner {
         target.type = source.type;
         target.value = target;
         target.nameOverride = source.nameOverride;
+        target.symbolGensym = source.symbolGensym;
         target.scalarSlot = (RuntimeScalar) cloneValue(source.scalarSlot);
         target.arraySlot = (RuntimeArray) cloneValue(source.arraySlot);
         target.hashSlot = (RuntimeHash) cloneValue(source.hashSlot);
