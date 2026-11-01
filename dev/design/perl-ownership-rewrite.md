@@ -4,8 +4,9 @@
 
 **Current checkpoint (2026-11-01):** Phase 2 remains in progress on branch
 `wip/socket-gensym-owner-20261101-020558`, runtime source
-`ec4d3eb05`. Deferred release, tail-call cleanup, and scalar overwrite try
-verified current counted-owner slots before the raw-count compatibility bridge.
+`ec4d3eb05` plus the capture regression at `5a90883fe`. Deferred release,
+tail-call cleanup, and scalar overwrite try verified current counted-owner
+slots before the raw-count compatibility bridge.
 Current-cell verification also recognizes an active forwarded
 `ARGUMENT_ALIAS`; temporary expression wrappers remain excluded from
 persistent alias ownership. Aggregate clear/replacement now queues anonymous
@@ -100,6 +101,11 @@ closure. Logs:
 and JVM/interpreter logs matching
 `/private/tmp/ownership-capture-*-ec4d3eb05.log` and
 `/private/tmp/padwalker-rebind-capture-lifecycle-*-ec4d3eb05.log`.
+The immutable full `nice -n 19 make` gate on `5a90883fe` passed in 7m35s;
+Gradle injected that exact source commit. The five unit shards, Joni suite,
+and PerlOnJava home integration completed with zero failures or errors; the
+PadWalker lifecycle regression appears in the shard report. Full log:
+`/private/tmp/ownership-capture-padwalker-make-5a90883fe.log`.
 
 The raw-count bridge, scalar-overwrite external-root/live-CODE fallback,
 deferred reachability recovery, package-nested untracked compatibility pin,
