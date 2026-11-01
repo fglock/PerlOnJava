@@ -3,62 +3,49 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; hidden entries release that owner while retaining their lookup state. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-01):** Phase 2 continues on branch
-`wip/socket-gensym-owner-20261101-020558` at source `bcbd75f2f`. Closure
-capture counts distinguish explicit `SCALAR_CAPTURE`/`CLOSURE_PAD` slots from
-compatibility-only retains. Scalar and aggregate producers verify that counts
-equal active owner slots plus legacy retains; scope cleanup retires only
-recorded legacy owners. The capture count is shared by `RuntimeBase` and
-`RuntimeScalar`, and paired count/slot transitions are serialized so concurrent
-ithread snapshots cannot observe partial updates. Lifecycle decisions now ask
-whether capture owner identities or pending capture releases exist, instead of
-branching on the raw capture count. A release stays visible as an owner until
-its slot callback finishes. Missing slot metadata is accepted only when no
-capture count exists; unexplained positive counts raise an invariant failure.
+`wip/socket-gensym-owner-20261101-020558` at runtime source `4da9ec7cf`.
+Closure capture counts distinguish explicit `SCALAR_CAPTURE`/`CLOSURE_PAD`
+slots from compatibility retains. Producer checks balance active slots,
+legacy provenance, and pending releases; paired transitions are serialized
+for ithread snapshots. Tied handlers and nested values now retain separate
+`TIE_HANDLER` and aggregate-element identities, including stores made before
+first weaken.
 
-`CaptureOwnerLedgerTest` covers acquire/release, legacy provenance, stale
-counts, absent slots, owner identity, and pending releases. The focused owner
-and root-query suite passes. Eighteen Perl fixtures passed on system Perl with
-243 assertions; the same set passed on JVM and interpreter with corrective
-sweeps disabled (36 backend invocations). The full immutable-source gate passed
-on `bcbd75f2f` in 7m20; log:
-`/private/tmp/tied-handler-before-weaken-make-bcbd75f2f.log`. The added
-`tied_handler_nested_value_owner_before_weaken.t` stores a nested referent
-before first weakening, then confirms the tied owner retains it and untie
-releases it. It passes on system Perl, JVM, and interpreter with corrective
-sweeps disabled. Its logs are
-`/private/tmp/tied-handler-before-weaken-{system-perl,jvm,interpreter}.log`.
-Earlier focused and backend evidence is in
+CODE destruction no longer asks `ReachabilityWalker` to search a strong cycle
+for weak referents or fabricates a count of one. A non-final CODE release
+restores the compatibility count only from current counted owner slots that
+match their storage. `CodeCycleOwnerSlotLifecycleTest` checks that path and
+requires zero root queries. The existing self-retaining weak callback and
+self-capture lifecycle fixtures pass on system Perl, JVM, and interpreter with
+corrective sweeps disabled (3/3 and 9/9 each). The immutable full gate passes
+on `4da9ec7cf` in 6m44; log:
+`/private/tmp/code-cycle-owner-slot-make-4da9ec7cf.log`. The first default
+Gradle invocation stopped at Maven TLS dependency resolution; the successful
+retry used the local mirror. An earlier fixture run exposed an untracked CODE
+setup; the fixture now initializes its tracked count before acquiring the
+self-edge.
+
+Earlier evidence remains: the 18-fixture capture batch passes on system Perl,
+JVM, and interpreter; the tied pre-weaken regression passes on all three; and
+HTML::Tree 5.07 passes all 23 files and 989 checks on both no-sweeps backends.
+Its `t/refloop.t` result is 8/8 on each backend. The #1794 controller,
+long-poll, and WebSocket tests pass 3/3, 5/5, and 6/6, and #1860 growing-output
+cleanup passes 4/4 on both. Evidence logs:
 `/private/tmp/ownership-capture-owner-query-focused.log`,
-`/private/tmp/capture-owner-query-system-perl-rerun.log`, and
-`/private/tmp/capture-owner-query-no-sweeps-perlonjava.log`.
+`/private/tmp/capture-owner-query-system-perl-rerun.log`,
+`/private/tmp/capture-owner-query-no-sweeps-perlonjava.log`,
+`/private/tmp/tied-handler-before-weaken-{system-perl,jvm,interpreter}.log`,
+`/private/tmp/tied-before-weaken-html-{refloop,full}-{jvm,interpreter}-bcbd75f2f.log`,
+and `/private/tmp/ownership-current-mojo-lifetimes-{jvm,interpreter}-bcbd75f2f.log`.
 
-Earlier gates cover active CODE stack ordering (`6a94453f7`), reset of
-compiled, pinned, and localized CODE slots (`ea28e59c7`), visible stash CODE
-ownership (`d8d8124d1`), and synchronized closure capture transitions
-(`654cf0d5f`). On `bcbd75f2f`, HTML::Tree 5.07 `t/refloop.t` passes 8/8 on
-both backends with corrective sweeps disabled; logs are
-`/private/tmp/tied-before-weaken-html-refloop-{jvm,interpreter}-bcbd75f2f.log`.
-The full no-sweeps HTML-Tree suite also passes 23/23 files and 989/989 checks
-on both backends; logs are
-`/private/tmp/tied-before-weaken-html-full-{jvm,interpreter}-bcbd75f2f.log`.
-The #1794 controller, long-poll, and WebSocket tests pass 3/3, 5/5, and 6/6;
-the #1860 growing-output test passes 4/4 on both backends with sweeps disabled.
-Logs are `/private/tmp/ownership-current-mojo-lifetimes-{jvm,interpreter}-bcbd75f2f.log`.
-Rerun these gates after remaining ownership and recovery changes; the broader
-lifecycle matrix still needs a final-candidate run. Other tied-handler paths,
-additional capture producers, argument, return and mortal lifetimes, package
-roots, strong cycles, cloned/shared storage, and resource owners remain under
-audit. Corrective sweeps and compatibility recovery remain; ownership
-completion is not claimed.
-
-Tied handlers retain their handler objects through `TIE_HANDLER` slots, and
-nested hash/array stores retain values through ordinary element slots. The
-pre-weaken regression confirms those identities work when aggregate storage
-precedes weak tracking. Next, continue the producer, transfer, and cleanup
-audit across the remaining owner families. Remove recovery paths only after
-source invariants and lifecycle coverage establish their replacement. Rerun
-the full no-sweeps HTML-Tree and lifecycle acceptance matrix on the final
-candidate before reconciling open PR #1938.
+Other tied-handler producers, capture transfer and cleanup, arguments,
+returns, mortals, package roots, scalar-reference and aggregate cycles,
+cloned/shared storage, and resource owners remain under audit. Corrective
+sweep scheduling, compatibility pins, and remaining reachability recovery are
+still present. Next, trace remaining destruction and deferred-release decisions
+to their producers and owner identities, then rerun the full no-sweeps
+HTML-Tree and lifecycle acceptance matrix on the final candidate before
+reconciling open PR #1938. Ownership completion is not claimed.
 
 **Sweep policy (2026-10-27):** Corrective sweeps are disabled by default, as
 requested. `JPERL_ENABLE_CORRECTIVE_SWEEPS=1` temporarily enables legacy
@@ -2077,12 +2064,12 @@ that currently protects it:
 | Scalar overwrite (`RuntimeScalar.setLargeRefCounted`) | The scalar cell's old referent edge; new edge is acquired before old release | Counted scalar/aggregate slots repair identified undercounts. The remaining external-root and live-CODE queries and the blessed weak-referent raw-count bridge run for aggregate referents with incomplete owner proof. Their unmigrated producers and final release need explicit identities. `RuntimeScalarOwnerSlotTest` covers identified final element release without a stale snapshot. |
 | First weaken (`WeakRefRegistry.weaken`) | The scalar cell being weakened and any other current scalar, aggregate, or capture owners | Ordinary tracked owners use current counted-slot identities; general live-CODE and strong-root walks were removed from this path. Clone snapshot roots and the package-nested untracked compatibility query/pin remain. `PackageNestedUntrackedAggregateReleaseTest` explicitly asserts both the query and fabricated positive count; this is a compatibility test boundary, not evidence that `UNTRACKED_REFERENCE` release is absent. Retiring the pin still requires replacing that test's contract with lifecycle-state assertions, which repository test policy currently forbids. `FirstWeakenUsesCurrentPackageOwnerTest` and `WeakeningCountedOwnerSlotTest` cover current counted cells with zero root queries. |
 | Unblessed aggregate root snapshot | Array/hash elements reachable through lexical or package storage | Normal slots have identities; parser assembly and compatibility mutation paths still need producer-level invariant coverage. `UnblessedAggregateReachabilitySnapshotTest` deliberately exercises the remaining fallback. |
-| Strong-cycle graph walk | Internal scalar-reference and aggregate-element edges | All cycle edges must be counted by owner slots so cycles survive without graph discovery. |
+| Strong-cycle graph walk | Internal scalar-reference and aggregate-element edges | The CODE weak-referent cycle walk has been removed; non-final CODE releases restore from verified current counted slots. Self-capture lifetime is covered on both backends. Audit uncounted cycle edge kinds and producer coverage before removing remaining cycle or cleanup recovery. |
 | Live/global CODE capture walk | Closure pads and installed CODE metadata | Aggregate pads use capture slots; scalar captures and some CODE metadata still use the compatibility bridge. |
 | Nested-call depth pin | Active argument aliases and compiler temporaries | Borrowed aliases and owned argument/return values must remain distinct through unwind and async suspension. |
 | Blessed root snapshots and package cache | Package scalar, aggregate, glob, or CODE slots | Package scalar, array/hash, named IO glob, and CODE stash entries now have owner identities. Other glob components and compatibility writes still need producer audit before removing root snapshots. |
 | Closure cleanup (`RuntimeCode.releaseCaptures`) | `SCALAR_CAPTURE`, `CLOSURE_PAD`, and aggregate capture slots held by live CODE | Aggregate captures release natively; scalar captures still balance their selective bridge count after the final closure. Their exceptional, nested-CODE, and ownership-transfer cases need end-to-end producer proofs before graph fallbacks are removed. |
-| Final destruction and resurrection (`DestroyDispatch`) | Current durable Perl owner slots, active CODE, and actual internal cycle edges | Durable scalar/package/container owners determine resurrection. CODE strong-cycle retention and legacy positive-count fallback remain; lifecycle must preserve cycles through explicit internal owners and keep reentrant/resurrection behavior. `DestroyOwnerSlotResurrectionTest` covers current durable slots without root walks. |
+| Final destruction and resurrection (`DestroyDispatch`) | Current durable Perl owner slots, active CODE, and actual internal cycle edges | Durable scalar/package/container owners determine resurrection. CODE cycle retention now uses verified counted owner slots instead of a graph walk; legacy positive-count recovery and reentrant/resurrection behavior still need the full producer audit. `DestroyOwnerSlotResurrectionTest` covers current durable slots without root walks. |
 
 This is an inventory, not evidence that these compatibility paths are safe to
 delete. For each row, the next migration must fix acquisition, replacement,
