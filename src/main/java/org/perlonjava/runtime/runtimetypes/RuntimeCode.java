@@ -4403,9 +4403,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
     }
 
-    // Cached reference to the $^P global variable scalar to avoid ConcurrentHashMap
-    // lookup on every eval STRING call. Populated lazily on first access.
+    // Cached references to frequently-accessed global variable scalars to avoid
+    // ConcurrentHashMap lookups on every subroutine/eval call. Populated lazily.
     private static volatile RuntimeScalar cachedDebuggerFlagsScalar;
+    private static volatile RuntimeScalar cachedWarningScopeScalar;
 
     private static int getDebuggerFlagsInt() {
         RuntimeScalar s = cachedDebuggerFlagsScalar;
@@ -4414,6 +4415,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             cachedDebuggerFlagsScalar = s;
         }
         return s.getInt();
+    }
+
+    static RuntimeScalar getWarningScopeScalar() {
+        RuntimeScalar s = cachedWarningScopeScalar;
+        if (s == null) {
+            s = GlobalVariable.getGlobalVariable(GlobalContext.WARNING_SCOPE);
+            cachedWarningScopeScalar = s;
+        }
+        return s;
     }
 
     /**
@@ -8407,7 +8417,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     compilationState.runtimeDisabledWarningCategories;
             compilationState.runtimeDisabledWarningCategories =
                     code.lexicalDisabledWarningCategories;
-            RuntimeScalar warningScopeScalar = GlobalVariable.getGlobalVariable(GlobalContext.WARNING_SCOPE);
+            RuntimeScalar warningScopeScalar = getWarningScopeScalar();
             int savedRuntimeWarningScope = enterCalleeWarningScope(warningScopeScalar);
             // Save caller's call-site warning bits so caller()[9] can retrieve them
             WarningBitsRegistry.pushCallerBits(
@@ -9203,7 +9213,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         compilationState.runtimeDisabledWarningCategories;
                 compilationState.runtimeDisabledWarningCategories =
                         code.lexicalDisabledWarningCategories;
-                RuntimeScalar warningScopeScalar = GlobalVariable.getGlobalVariable(GlobalContext.WARNING_SCOPE);
+                RuntimeScalar warningScopeScalar = getWarningScopeScalar();
             int savedRuntimeWarningScope = enterCalleeWarningScope(warningScopeScalar);
                 // Save caller's call-site warning bits so caller()[9] can retrieve them
                 WarningBitsRegistry.pushCallerBits(
@@ -9580,7 +9590,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         compilationState.runtimeDisabledWarningCategories;
                 compilationState.runtimeDisabledWarningCategories =
                         code.lexicalDisabledWarningCategories;
-                RuntimeScalar warningScopeScalar = GlobalVariable.getGlobalVariable(GlobalContext.WARNING_SCOPE);
+                RuntimeScalar warningScopeScalar = getWarningScopeScalar();
             int savedRuntimeWarningScope = enterCalleeWarningScope(warningScopeScalar);
                 // Save caller's call-site warning bits so caller()[9] can retrieve them
                 WarningBitsRegistry.pushCallerBits(
@@ -10613,7 +10623,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     WarningBitsRegistry.getRuntimeDisabledWarningCategories();
             WarningBitsRegistry.setRuntimeDisabledWarningCategories(
                     lexicalDisabledWarningCategories);
-            RuntimeScalar warningScopeScalar = GlobalVariable.getGlobalVariable(GlobalContext.WARNING_SCOPE);
+            RuntimeScalar warningScopeScalar = getWarningScopeScalar();
             int savedRuntimeWarningScope = enterCalleeWarningScope(warningScopeScalar);
             JvmClosureFrame closureFrame = jvmClosureFrameRequired
                     ? pushJvmClosureFrame() : null;
