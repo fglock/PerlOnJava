@@ -602,12 +602,23 @@ public class DestroyDispatch {
             // Restore the DESTROY target and rescue flag for nested DESTROY calls
             state.currentDestroyTarget = savedTarget;
             state.destroyTargetRescued = savedRescued;
-            // Phase 3: Exit DESTROY state. If refCount is still 0 and we're
-            // not taking the resurrection path, set MIN_VALUE so future
-            // callDestroy enters the normal cleanup path.
+            // Phase 3: Exit DESTROY state. A weak slot can be promoted during
+            // the callback after its old count was consumed. Rebuild that
+            // count from current storage identities before declaring the
+            // referent dead; the callback's temporary self argument is not a
+            // substitute for the surviving Perl slot.
             referent.currentlyDestroying = savedCurrentlyDestroying;
             if (referent.refCount == 0 && !referent.needsReDestroy) {
-                referent.refCount = Integer.MIN_VALUE;
+                boolean currentCountedOwner =
+                        referent.restoreVerifiedCurrentCountedOwnerSlotRefCount();
+                boolean otherOwner = referent.localBindingExists
+                        || referent.hasSemanticCaptureOwner()
+                        || referent.hasPendingReturnOwner()
+                        || referent.hasUncountedPerlOwnerSlotIdentity()
+                        || referent.hasScalarCellOwner();
+                if (!currentCountedOwner && !otherOwner) {
+                    referent.refCount = Integer.MIN_VALUE;
+                }
             }
             // Restore $@ — must happen whether DESTROY succeeded or threw.
             // Without this, die inside DESTROY would clobber the caller's $@.
