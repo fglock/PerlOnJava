@@ -3,40 +3,35 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; hidden entries release that owner while retaining their lookup state. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-01):** Phase 2 continues on branch
-`wip/socket-gensym-owner-20261101-020558` at source commit `0e3285f5a`.
-`RuntimeScalar.setLargeRefCounted` decides final release from current owner-slot
-identities in nested and top-level calls. `MortalList.processDeferredBase` now
-also retires the active-CODE/call-depth positive-count pin; active frames and
-current scalar/aggregate slots carry the real owners. The focused refcount
-gate passes, as do all four Sub::Quote/Sub::Defer fixtures on JVM and
-interpreter with sweeps disabled and on system Perl. The full no-sweeps `make`
-passes in 7m27s:
-`/private/tmp/ownership-deferred-code-depth-removal-immutable-no-sweeps-make-0e3285f5a.log`.
-Scalar nested-parent, recursive-builder, and sliding-window fixtures also pass
-on system Perl and both no-sweeps backends; logs are under
-`/private/tmp/ownership-call-depth-{baseline,removal}-*` and
-`/private/tmp/ownership-code-depth-{baseline,removal}-*`.
+`wip/socket-gensym-owner-20261101-020558` at source commit `1c893a2bc`.
+`RuntimeScalar.setLargeRefCounted` and `MortalList.processDeferredBase` now
+release from current owner identities without the nested call-depth pins or
+the deferred live/global CODE capture traversal. Persistent CODE state scalars,
+arrays, hashes, and refalias cells carry `CODE_STATE` slots through replacement,
+definition adoption, cloning, and state-storage cleanup. The focused no-sweeps
+make passes with 934 tests and 6 skips; the new state-owner and clone cases pass.
+Ten closure/state fixtures pass on system Perl and both backends with sweeps
+disabled. The unfixed parent fails the new owner-slot regression at
+`/private/tmp/code-state-owner-parent-focused-refcount-make.log`; focused
+candidate evidence is in
+`/private/tmp/code-state-owner-cloner-focused-make.log`. The full no-sweeps
+make on this source commit is pending.
 
-The earlier scalar-overwrite changes also removed external-root/live-CODE
-queries and unverified counted-slot restoration. The deferred and tail-call
-raw-count bridge remains: removing it failed
+The deferred and tail-call raw-count bridge remains: removing it failed
 `ActiveArgumentOwnerLedgerFastPathTest` and
 `DeferredReleaseOwnerSlotFastPathTest`, whose synthetic unregistered scalar
 cells conflict with the desired current-storage rule. Failure evidence is
 preserved at `/private/tmp/ownership-no-raw-counted-restoration-immutable-make-c734f0c93.log`;
 the restored bridge passes at
 `/private/tmp/ownership-deferred-raw-bridge-immutable-full-make-18707627f.log`.
-
-Earlier acceptance remains: the active-lexical aggregate fix passed the full
-no-sweeps suite, both HTML::Tree backends (23 files, 989 checks; `t/refloop.t`
-8/8), and the #1794 and #1860 lifetime cases. Tied handlers, closure captures,
-active CODE, scalar-reference contents, package roots, cycles, cloned/shared
-storage, and resource owners still have producer and cleanup paths under audit.
-Deferred release retains raw-count, live-CODE, and root-snapshot fallbacks;
-corrective-sweep scheduling and compatibility pins also remain. Next, trace
-the remaining deferred count/root disagreements to their producers, then rerun
-the final lifecycle matrix before reconciling draft PR #1938. Ownership
-completion is not claimed.
+Other blessed root snapshots, corrective-sweep scheduling, compatibility pins,
+and owner producers for tied handlers, suspended frames, resource owners, and
+shared storage remain under audit. Earlier acceptance includes the full
+HTML::Tree suite (23 files, 989 checks), `t/refloop.t` 8/8 on both backends,
+and #1794/#1860 lifetime cases. Next, complete the full no-sweeps gate, then
+trace remaining count/root disagreements to their producers and rerun the
+lifecycle matrix before reconciling draft PR #1938. Ownership completion is
+not claimed.
 
 **Sweep policy (2026-10-27):** Corrective sweeps are disabled by default, as
 requested. `JPERL_ENABLE_CORRECTIVE_SWEEPS=1` temporarily enables legacy
@@ -2082,7 +2077,7 @@ that currently protects it:
 | First weaken (`WeakRefRegistry.weaken`) | The scalar cell being weakened and any other current scalar, aggregate, or capture owners | Ordinary tracked owners use current counted-slot identities; general live-CODE and strong-root walks were removed from this path. Clone snapshot roots and the package-nested untracked compatibility query/pin remain. `PackageNestedUntrackedAggregateReleaseTest` explicitly asserts both the query and fabricated positive count; this is a compatibility test boundary, not evidence that `UNTRACKED_REFERENCE` release is absent. Retiring the pin still requires replacing that test's contract with lifecycle-state assertions, which repository test policy currently forbids. `FirstWeakenUsesCurrentPackageOwnerTest` and `WeakeningCountedOwnerSlotTest` cover current counted cells with zero root queries. |
 | Unblessed aggregate root snapshot | Array/hash elements reachable through lexical or package storage | Normal slots have identities; parser assembly and compatibility mutation paths still need producer-level invariant coverage. `UnblessedAggregateReachabilitySnapshotTest` deliberately exercises the remaining fallback. |
 | Strong-cycle graph walk | Internal scalar-reference and aggregate-element edges | The CODE weak-referent cycle walk has been removed; non-final CODE releases restore from verified current counted slots. Self-capture lifetime is covered on both backends. Audit uncounted cycle edge kinds and producer coverage before removing remaining cycle or cleanup recovery. |
-| Live/global CODE capture walk | Closure pads and installed CODE metadata | Aggregate pads use capture slots; scalar captures and some CODE metadata still use the compatibility bridge. |
+| Deferred live/global CODE capture walk | Captured scalar cells, aggregate pads, and persistent CODE state | Persistent state cells and aggregates now carry `CODE_STATE` identities; closure captures use `SCALAR_CAPTURE` / `CLOSURE_PAD` slots. The deferred traversal and its unused live/global query helpers are removed. |
 | Nested-call depth pin | Active argument aliases and compiler temporaries | Borrowed aliases and owned argument/return values must remain distinct through unwind and async suspension. |
 | Blessed root snapshots and package cache | Package scalar, aggregate, glob, or CODE slots | Package scalar, array/hash, named IO glob, and CODE stash entries now have owner identities. Other glob components and compatibility writes still need producer audit before removing root snapshots. |
 | Closure cleanup (`RuntimeCode.releaseCaptures`) | `SCALAR_CAPTURE`, `CLOSURE_PAD`, and aggregate capture slots held by live CODE | Aggregate captures release natively; scalar captures still balance their selective bridge count after the final closure. Their exceptional, nested-CODE, and ownership-transfer cases need end-to-end producer proofs before graph fallbacks are removed. |
@@ -2152,11 +2147,33 @@ misclassification: an active `@_` cell had an `ARRAY_ELEMENT` label but was
 borrowed by the argument frame. The owner proof now excludes the current
 argument alias, and both the focused and full gates pass.
 
+### Persistent CODE state bindings use owner identities (2026-11-01)
+
+Source commit `1c893a2bc` adds `CODE_STATE` slots for persistent state scalar
+cells, arrays, hashes, and refalias cells. `StateVariable` acquires the slot
+when it installs a per-CV binding; replacement acquires the new edge before
+retiring the old one. Final state cleanup detaches maps before releasing their
+owners, and definition adoption plus `RuntimeGraphCloner` rebind or reconstruct
+the identities for the resulting CV. `MortalList.processDeferredBase` no longer
+walks live/global CODE capture graphs for unblessed weak referents.
+
+`CodeStateAggregateOwnerSlotTest` proves deferred cleanup uses the direct state
+owner without root queries and covers scalar, array, hash, and alias slots.
+`RuntimeCodeStateGraphClonerOwnerTest` verifies cloned state storage receives
+independent slots. `closure_state_owner_release.t` passes 10/10 on system Perl
+and both backends with sweeps disabled; nine additional closure/state fixtures
+also pass on all three engines. Parent and focused candidate evidence is listed
+in the current checkpoint above. Full no-sweeps validation on `1c893a2bc` is
+pending.
+
+This retires one deferred reachability path. Blessed root snapshots, the raw
+count bridge, and corrective-sweep scheduling still have unmigrated producers.
+
 ### Next steps
 
-1. Audit remaining capture reconciliation and global CODE-root fallbacks at
-   their producer and release sites; add source-level invariants for any
-   remaining count/owner discrepancy.
+1. Audit remaining capture reconciliation and blessed root snapshots at their
+   producer and release sites; add source-level invariants for remaining
+   count/owner disagreements.
 2. Continue through argument aliases, returned and mortal values, package
    aggregate roots, strong cycles, thread cloning/shared storage, and resources.
 3. Remove reachability fallbacks, compatibility pins, and corrective scheduling
