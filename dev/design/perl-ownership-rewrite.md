@@ -1,22 +1,28 @@
 # Perl-compatible ownership rewrite
 
-**Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; hidden entries release that owner while retaining their lookup state. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
+**Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; hidden entries release that owner while retaining their lookup state. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-01):** Phase 2 continues on branch
-`wip/socket-gensym-owner-20261101-020558` at source commit `1c893a2bc`.
-`RuntimeScalar.setLargeRefCounted` and `MortalList.processDeferredBase` now
-release from current owner identities without the nested call-depth pins or
-the deferred live/global CODE capture traversal. Persistent CODE state scalars,
-arrays, hashes, and refalias cells carry `CODE_STATE` slots through replacement,
-definition adoption, cloning, and state-storage cleanup. The focused no-sweeps
-make passes with 934 tests and 6 skips; the new state-owner and clone cases pass.
-Ten closure/state fixtures pass on system Perl and both backends with sweeps
-disabled. The unfixed parent fails the new owner-slot regression at
-`/private/tmp/code-state-owner-parent-focused-refcount-make.log`; focused
-candidate evidence is in
-`/private/tmp/code-state-owner-cloner-focused-make.log`. The full no-sweeps
-`make` passes on immutable candidate `b8ac7b1b9` in 6m20:
-`/private/tmp/ownership-code-state-immutable-no-sweeps-make-b8ac7b1b9.log`.
+`wip/socket-gensym-owner-20261101-020558` at source commit `8245755e9`.
+Persistent CODE state slots remain in place from the prior checkpoint. This
+batch completes the weak blessed-glob path: first blessing and lexical/package
+alias discovery skip weak scalars; weakening retires the scalar's anonymous
+IO resource-holder identity after any final `DESTROY`; unweaken reacquires the
+resource identity for a live glob. `retainUnstashedIoForDurableSlot` no longer
+creates an IO owner for a weak scalar.
+
+The new Perl regression passes 5/5 on system Perl, JVM, and interpreter, with
+corrective sweeps disabled on both PerlOnJava backends. `BlessedGlobAliasOwnerSlotTest`
+and `WeakGlobIoOwnerSlotTest` cover scalar owner slots, IO holder identity,
+weakening, and unweaken. The unfixed parent fails all three focused assertions
+in `/private/tmp/blessed-glob-weak-bless-parent-make-extended.log`. The first
+count-only candidate still failed the Perl lifecycle checks because a weak
+glob scalar retained an `IO_RESOURCE_HOLDER`; that evidence is in
+`/private/tmp/blessed-glob-weak-bless-fixed-focused-make.log`. The fixed
+focused gate passes at
+`/private/tmp/blessed-glob-weak-owner-fixed-focused-make-2.log`. Full no-sweeps
+`make` passes on immutable candidate `8245755e9` in 9m36:
+`/private/tmp/ownership-blessed-glob-immutable-make-8245755e9.log`.
 
 The deferred and tail-call raw-count bridge remains: removing it failed
 `ActiveArgumentOwnerLedgerFastPathTest` and
@@ -103,7 +109,7 @@ reachability. Explicit post-END teardown and diagnostic traversal are separate.
 | Cleared aggregate | Scope-exit finalization can consult cached external-root snapshots when the aggregate count is already zero; deferred cleanup still has capture and nested-call recovery branches. | Container elements acquire `ARRAY_ELEMENT`/`HASH_ELEMENT` identities; active lexical and suspended-frame owners have dedicated slots. Registration backfills active lexical slots when it follows the first pad bind, and scope cleanup retires that identity before testing whether children still have owners. Clear and scope-exit paths queue displaced element releases. | `ClearedAggregateOwnerIdentityNoRootWalkTest`, `ClearedAggregateOwnerIdentityFinalizationTest`, `active_lexical_aggregate_owner_release.t`, and the no-sweeps lifecycle batch cover explicit slots. Incomplete producer coverage still reaches the cached-root boundary. |
 | Closure, CODE, and cycles | Deferred cleanup and `DestroyDispatch` still query live/global CODE captures; `DestroyDispatch` retains a CODE-cycle query. `GlobalRuntimeState` uses a graph walk when building its installed-CODE root index. The unblessed array/hash cycle rescue in `MortalList` is removed. | `CLOSURE_PAD`, `SCALAR_CAPTURE`, `CODE_SLOT`, `ACTIVE_CODE`, and `CODE_PAD_CONSTANT` identify capture, stash, active-frame, and optree edges; regex callbacks have `REGEX_CALLBACK`. Scalar capture releases still use the legacy count bridge, while aggregate capture slots are native. | Closure, active-CODE, CODE-slot, strong-cycle, resurrection, and regex-callback tests cover migrated families. `MyVarCleanupStack.scopeExitCleanup` still reconciles legacy `captureCount` against explicit `SCALAR_CAPTURE` slots. Compiler templates and several CODE/glob producer/cleanup boundaries remain under audit. |
 | Temporary evaluation roots | `MortalList` stores temporary roots and the reachability walker follows them during cleanup; temporary roots intentionally do not count as Perl owners. | `pushTemporaryRoot`/`popTemporaryRoot` bracket setter and return cleanup. A temporary root must defer finalization only until its exact removal, without turning it into a persistent Perl edge. | `PerlStrongOwnerProofTest` distinguishes temporary roots from Perl owners; `TemporaryReturnOwnerTraversalTest` covers direct aggregate values. Final cleanup on temporary-root release remains part of the migration. |
-| Resource holders | Each anonymous IO resource holder has a native `IO_RESOURCE_HOLDER` identity on its `RuntimeGlob`; `RuntimeScalar.ioOwnerSlot` carries that identity, and `RuntimeGlob.ioHolderCount()` derives the active count from the owner ledger. | `retainUnstashedIoForDurableSlot` acquires a slot, while `releaseIoOwner` retires it exactly once. Detached-value assignment, returned aliases, and localized-global suspension move the same identity. Replacement acquires the new edge before releasing the old one. Bulk clear still queues the owning scalar for release. Thread cloning drops nonportable IO ownership. | Five Java owner-slot tests and the eight-file Perl IO matrix pass on both backends and system Perl (74 checks; TCP loopback test skipped because the listener is unavailable). Socket return, exception unwind, localization, aggregate clear, selected-glob restoration, #1794, and #1860 remain covered. Non-socket handle close policy and broader resource-owner acquisition paths remain under audit. |
+| Resource holders | Each anonymous IO resource holder has a native `IO_RESOURCE_HOLDER` identity on its `RuntimeGlob`; `RuntimeScalar.ioOwnerSlot` carries that identity, and `RuntimeGlob.ioHolderCount()` derives the active count from the owner ledger. | `retainUnstashedIoForDurableSlot` acquires a slot for a strong scalar, while `releaseIoOwner` retires it exactly once. Weaken releases a weak scalar's holder after any final destructor dispatch; unweaken reacquires it for a live glob. Detached-value assignment, returned aliases, and localized-global suspension move the same identity. Replacement acquires the new edge before releasing the old one. Bulk clear still queues the owning scalar for release. Thread cloning drops nonportable IO ownership. | Existing IO coverage remains; `WeakGlobIoOwnerSlotTest` verifies weak and strong aliases, IO-holder release, and unweaken. The new blessed-glob regression passes 5/5 on both backends and system Perl. The eight-file Perl IO matrix passes on both backends and system Perl (74 checks; TCP loopback test skipped because the listener is unavailable). Socket return, exception unwind, localization, aggregate clear, selected-glob restoration, #1794, and #1860 remain covered. Non-socket handle close policy and broader resource-owner acquisition paths remain under audit. |
 
 ### Active lexical aggregate registration backfill (2026-11-01)
 
@@ -130,6 +136,22 @@ standard Perl oracle passes 20/20 across the return-handoff, closure/localized-
 cache, nested-container destruction, and active-lexical fixtures. The full
 no-sweeps `make` gate passes on immutable source `18707627f` in 7m13s. The
 remaining scalar-overwrite nested-call deferrals are an open audit item.
+
+### Weak blessed glob aliases release scalar and IO owners (2026-11-01)
+
+First blessing a weak glob scalar previously promoted it as an existing strong
+owner, and the blessed-glob alias scan counted weak lexical and package cells.
+Both acquisition paths now skip weak scalars. The parent failure also exposed
+a separate edge: a weak anonymous glob scalar retained its native
+`IO_RESOURCE_HOLDER` slot after `weaken`, so the glob remained alive until
+lexical scope exit. Weakening now retires that slot after any final destructor
+dispatch; durable-slot acquisition ignores weak scalars, and `unweaken` restores
+the IO identity for a live glob.
+
+`blessed_glob_alias_owner_release.t` passes 5/5 on system Perl, JVM, and
+interpreter. Java coverage checks weak scalar owner slots and IO holder counts.
+The full no-sweeps `make` passes on source `8245755e9`; parent and intermediate
+failure evidence plus final focused logs are listed in the current checkpoint.
 
 ## Baseline ownership map
 
