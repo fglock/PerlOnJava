@@ -241,7 +241,7 @@ public final class GlobalRuntimeState {
         releasePackageIoGlobOwnerSlots();
         for (Map.Entry<String, RuntimeGlob> entry : ioSlots.entrySet()) {
             RuntimeGlob glob = entry.getValue();
-            if (glob == null) continue;
+            if (glob == null || hiddenIoSlotsAfterStashDelete.contains(entry.getKey())) continue;
             PerlOwnerSlot ownerSlot = new PerlOwnerSlot(PerlOwnerSlot.Kind.PACKAGE_GLOB_SLOT);
             ownerSlot.acquirePackageGlobIdentity(glob);
             packageIoGlobOwnerSlots.put(entry.getKey(), ownerSlot);
