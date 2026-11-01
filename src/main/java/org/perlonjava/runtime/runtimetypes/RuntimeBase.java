@@ -574,7 +574,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                     || kind == PerlOwnerSlot.Kind.ARGUMENT_VALUE
                     || kind == PerlOwnerSlot.Kind.RETURN_VALUE
                     || kind == PerlOwnerSlot.Kind.TIE_HANDLER)
-                    && owner.isCurrentCountedScalarOwner(this, slot)) {
+                    && owner.isCurrentCountedScalarCellForCountRepair(this, slot)) {
                 count++;
             }
         }
