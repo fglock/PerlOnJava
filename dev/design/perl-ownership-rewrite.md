@@ -3,104 +3,36 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; hidden entries release that owner while retaining their lookup state. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-01):** Phase 2 continues on branch
-`wip/socket-gensym-owner-20261101-020558` at source checkpoint `18707627f`.
-The new `active_lexical_aggregate_owner_release.t` regression passes 4/4 on
-system Perl, JVM, and interpreter; it failed 2/4 on each PerlOnJava backend at
-parent `3380ebe8a`. The focused `make` shard passes. The fix records one
-`ACTIVE_LEXICAL` owner for each matching active pad or top-level binding when
-`MyVarCleanupStack.register` follows the initial pad bind. Scope cleanup now
-retires that identity before deciding whether aggregate elements still have a
-live owner; the current-frame lookup falls through to the top-level pad when
-needed. `Internals::SvREFCNT` avoids counting this lifecycle identity twice
-when `localBindingExists` already reports the same lexical edge. An initial
-gate on `860526807` exposed the cleanup ordering and duplicate count. The
-corrected unfiltered no-sweeps `make` passes on `c352f070e` in 6m58s. Sixteen
-focused weaken, DESTROY, resurrection, cycle, closure, #1794, and #1860 files
-pass on both backends. HTML::Tree 5.07 passes all 23 files and 989 checks on
-both backends; `t/refloop.t` is 8/8 on each. System Perl passes all 23 files
-with 969 checks and skips the optional Test::LeakTrace file. Evidence:
-`/private/tmp/ownership-active-lexical-final-full-no-sweeps-make-c352f070e.log`,
-`/private/tmp/ownership-htmltree-full-{jvm,interpreter}-c352f070e.log`,
-`/private/tmp/ownership-htmltree-full-system-perl-c352f070e.log`, and
-`/private/tmp/ownership-acceptance-final-jvm-interpreter-summary.txt`.
-Earlier diagnostic evidence:
-`/private/tmp/active-lexical-aggregate-cleanup-order-focused-make.log`,
-`/private/tmp/ownership-lifecycle-{jvm,interpreter}-after-order-summary.txt`,
-and `/private/tmp/active-lexical-aggregate-owner-release-final-full-no-sweeps-make-860526807.log`.
+`wip/socket-gensym-owner-20261101-020558` at source commit `95a83027e`.
+`RuntimeScalar.setLargeRefCounted` now decides final release from current
+owner-slot identities in nested and top-level calls; both `argsStackDepth()`
+deferrals have been removed. The change passed the focused refcount `make`
+gate and the full no-sweeps `make` in 7m17s:
+`/private/tmp/ownership-scalar-call-depth-removal-immutable-no-sweeps-make-95a83027e.log`.
+Nested weak-parent, recursive-builder, and sliding-window lifetime fixtures
+pass on system Perl, JVM, and interpreter; PerlOnJava checks ran with sweeps
+disabled. Logs are under `/private/tmp/ownership-call-depth-{baseline,removal}-*`.
 
-`RuntimeScalar.setLargeRefCounted` no longer walks external roots or live CODE
-captures after scalar replacement and no longer restores the count from
-unverified counted slots; current storage-matched identities drive that path.
-The relevant return-handoff, closure/localized-cache, nested-container
-destruction, and active-lexical Perl fixtures pass 20/20 on system Perl. The
-immutable no-sweeps `make` gate passes on `18707627f` in 7m13s:
+The earlier scalar-overwrite changes also removed external-root/live-CODE
+queries and unverified counted-slot restoration. The deferred and tail-call
+raw-count bridge remains: removing it failed
+`ActiveArgumentOwnerLedgerFastPathTest` and
+`DeferredReleaseOwnerSlotFastPathTest`, whose synthetic unregistered scalar
+cells conflict with the desired current-storage rule. Failure evidence is
+preserved at `/private/tmp/ownership-no-raw-counted-restoration-immutable-make-c734f0c93.log`;
+the restored bridge passes at
 `/private/tmp/ownership-deferred-raw-bridge-immutable-full-make-18707627f.log`.
-Scalar overwrite still has nested-call depth deferrals.
 
-An attempt to remove raw counted restoration from deferred and tail-call
-release failed `ActiveArgumentOwnerLedgerFastPathTest` and
-`DeferredReleaseOwnerSlotFastPathTest`: both deliberately model an unregistered
-scalar cell, which the producer test separately says is not current Perl
-storage. The bridge remains at those release boundaries; it is still absent
-from scalar overwrite.
-
-The restored focused shard and refcount fixture gate pass in 2m15s at
-immutable source `18707627f`:
-`/private/tmp/ownership-deferred-raw-bridge-focused-make-18707627f.log`. The
-failing immutable evidence is preserved at:
-`/private/tmp/ownership-no-raw-counted-restoration-immutable-make-c734f0c93.log`.
-
-Closure capture counts distinguish explicit `SCALAR_CAPTURE`/`CLOSURE_PAD`
-slots from compatibility retains. Producer checks balance active slots,
-legacy provenance, and pending releases; paired transitions are serialized
-for ithread snapshots. Tied handlers and nested values now retain separate
-`TIE_HANDLER` and aggregate-element identities, including stores made before
-first weaken.
-
-CODE destruction no longer searches a strong cycle for weak referents or
-fabricates a count of one. A non-final CODE release restores the compatibility
-count only from current counted owner slots that match their storage.
-`CodeCycleOwnerSlotLifecycleTest` checks that path and requires zero root
-queries. Deferred cleanup no longer sets `refCount = 1` merely because an
-unblessed aggregate reaches zero during a nested call; current owner identities
-and existing root proofs preserve actual owners. The immutable full gate passes
-on `3380ebe8a` in 7m; log:
-`/private/tmp/unblessed-call-depth-owner-make-3380ebe8a.log`. The #1860
-growing-output fixture passes 4/4 on system Perl, JVM, and interpreter with
-sweeps disabled. HTML::Tree 5.07 `t/refloop.t` passes 8/8 on both no-sweeps
-backends. Logs:
-`/private/tmp/issue-1860-system-perl-call-depth-audit.log`,
-`/private/tmp/unblessed-call-depth-1860-{jvm,interpreter}-3380ebe8a.log`, and
-`/private/tmp/unblessed-call-depth-refloop-{jvm,interpreter}-3380ebe8a.log`.
-The first CODE-cycle fixture run exposed an untracked CODE setup; the fixture
-now initializes its tracked count before acquiring the self-edge. On the latest
-source `3380ebe8a`, the self-retaining weak callback and self-capture lifecycle
-fixtures pass 3/3 and 9/9 on JVM and interpreter with sweeps disabled. Logs:
-`/private/tmp/code-cycle-final-weak-{jvm,interpreter}-3380ebe8a.log` and
-`/private/tmp/code-cycle-final-capture-{jvm,interpreter}-3380ebe8a.log`.
-
-Earlier evidence remains: the 18-fixture capture batch passes on system Perl,
-JVM, and interpreter; the tied pre-weaken regression passes on all three; and
-HTML::Tree 5.07 passes all 23 files and 989 checks on both no-sweeps backends.
-Its `t/refloop.t` result is 8/8 on each backend. The #1794 controller,
-long-poll, and WebSocket tests pass 3/3, 5/5, and 6/6, and #1860 growing-output
-cleanup passes 4/4 on both. Evidence logs:
-`/private/tmp/ownership-capture-owner-query-focused.log`,
-`/private/tmp/capture-owner-query-system-perl-rerun.log`,
-`/private/tmp/capture-owner-query-no-sweeps-perlonjava.log`,
-`/private/tmp/tied-handler-before-weaken-{system-perl,jvm,interpreter}.log`,
-`/private/tmp/tied-before-weaken-html-{refloop,full}-{jvm,interpreter}-bcbd75f2f.log`,
-and `/private/tmp/ownership-current-mojo-lifetimes-{jvm,interpreter}-bcbd75f2f.log`.
-
-Other tied-handler producers, capture transfer and cleanup, arguments,
-returns, mortals, package roots, scalar-reference and aggregate cycles,
-cloned/shared storage, and resource owners remain under audit. Scalar overwrite
-still has call-depth deferrals; deferred release still has raw counted-slot,
-CODE, closure, and root-snapshot recovery branches.
-Corrective-sweep scheduling and compatibility pins remain. Next, trace these
-paths to their acquisition and release producers, then rerun the full no-sweeps
-HTML-Tree and lifecycle acceptance matrix on the final candidate before
-reconciling open PR #1938. Ownership completion is not claimed.
+Earlier acceptance remains: the active-lexical aggregate fix passed the full
+no-sweeps suite, both HTML::Tree backends (23 files, 989 checks; `t/refloop.t`
+8/8), and the #1794 and #1860 lifetime cases. Tied handlers, closure captures,
+active CODE, scalar-reference contents, package roots, cycles, cloned/shared
+storage, and resource owners still have producer and cleanup paths under audit.
+Deferred release retains raw-count, live-CODE, root-snapshot, and a CODE
+call-depth fallback. Corrective-sweep scheduling and compatibility pins also
+remain. Next, continue the deferred-release producer audit, then rerun the
+final lifecycle matrix before reconciling draft PR #1938. Ownership completion
+is not claimed.
 
 **Sweep policy (2026-10-27):** Corrective sweeps are disabled by default, as
 requested. `JPERL_ENABLE_CORRECTIVE_SWEEPS=1` temporarily enables legacy
@@ -167,7 +99,7 @@ reachability. Explicit post-END teardown and diagnostic traversal are separate.
 | Lifecycle path | Remaining fallback | Strong edge and acquisition/release sites | Existing coverage and open boundary |
 |---|---|---|---|
 | Deferred release | `MortalList.processDeferredBase` tries verified current counted slots before raw count restoration, then may call `restoreReachableOwnerCount` or consult drain snapshots, live CODE captures, or call depth when exact proofs are empty. The unblessed aggregate strong-cycle count rescue has been removed. Raw restoration remains for tail-call release and blessed referents. | Counted cells use `RuntimeScalar.setLargeRefCounted` or `incrementRefCountForContainerStore`; aggregate stores include array/hash mutation APIs. Each internal hash/array cycle edge has a `HASH_ELEMENT`/`ARRAY_ELEMENT` identity acquired by the store and released by mutation cleanup. Array pop/shift/delete and localized cleanup capture current slot proof before removal, while excluding active argument aliases. Hash clear/delete, scalar overwrite, and deferred container clear remain under producer audit. | `StrongCycleOwnerSlotTest`, `strong_cycle_owner_slots.t`, `DeferredReleaseOwnerSlotFastPathTest`, `RuntimeScalarCountedOwnerRepairTest`, `ClearedAggregateOwnerIdentityNoRootWalkTest`, and the expanded localized-array regression cover migrated paths. `ForwardedArgumentAliasCurrentOwnerTest` verifies the current cell through nested argument forwarding. Synthetic raw-insertion cases still exercise the legacy bridge; normal producers need continued audit. |
-| Scalar overwrite | `RuntimeScalar.setLargeRefCounted` no longer queries external roots/live CODE captures or restores counts from unverified counted slots. Nested-call depth deferrals remain. | Scalar cells acquire counted or untracked identities in `setLargeRefCounted`; package scalar, aggregate, CODE, active lexical, and closure slots identify their respective edges. Overwrite installs the replacement before releasing the old counted edge. Active forwarded argument aliases are accepted as proof for their current scalar cell. | `PackageRootOwnerSlotFastPathTest`, counted/untracked owner repair tests, `ForwardedArgumentAliasCurrentOwnerTest`, `weak_localized_cache_lifetime.t`, and `weak_return_handoff_assignment.t` cover current-owner and return/closure lifetimes. Audit the remaining nested-call deferrals and their statement-boundary cleanup producers. |
+| Scalar overwrite | `RuntimeScalar.setLargeRefCounted` no longer queries external roots/live CODE captures, restores counts from unverified counted slots, or defers based on nested call depth. | Scalar cells acquire counted or untracked identities in `setLargeRefCounted`; package scalar, aggregate, CODE, active lexical, and closure slots identify their respective edges. Overwrite installs the replacement before releasing the old counted edge. Active forwarded argument aliases are accepted as proof for their current scalar cell. | `PackageRootOwnerSlotFastPathTest`, counted/untracked owner repair tests, `ForwardedArgumentAliasCurrentOwnerTest`, `weak_localized_cache_lifetime.t`, `weak_return_handoff_assignment.t`, nested weak-parent, recursive-builder, and sliding-window fixtures cover current-owner and nested release lifetimes. The latest full no-sweeps `make` passes at `95a83027e`. |
 | First weaken | Ordinary tracked referents no longer query live CODE captures or general strong-root graphs. The cloned-thread snapshot root and direct CODE pad-constant check remain; package-nested untracked aggregates still use `hasLiveUntrackedOwnerSlot` and a `WEAKLY_TRACKED_COMPATIBILITY_PIN`. | Strong scalar cells carry `SCALAR_CELL` or `UNTRACKED_REFERENCE`; package scalar/aggregate slots, closure pads, and active CODE slots have separate identities. Weakening retires the weakened cell's strong edge. | `FirstWeakenUsesCurrentPackageOwnerTest`, `UntrackedReferenceOwnerSlotTest`, and `UntrackedAggregateOwnerSlotTest` cover current owner identities. `PackageNestedUntrackedAggregateReleaseTest` still expects the package compatibility query and pin, so that boundary is not migrated. |
 | Cleared aggregate | Scope-exit finalization can consult cached external-root snapshots when the aggregate count is already zero; deferred cleanup still has capture and nested-call recovery branches. | Container elements acquire `ARRAY_ELEMENT`/`HASH_ELEMENT` identities; active lexical and suspended-frame owners have dedicated slots. Registration backfills active lexical slots when it follows the first pad bind, and scope cleanup retires that identity before testing whether children still have owners. Clear and scope-exit paths queue displaced element releases. | `ClearedAggregateOwnerIdentityNoRootWalkTest`, `ClearedAggregateOwnerIdentityFinalizationTest`, `active_lexical_aggregate_owner_release.t`, and the no-sweeps lifecycle batch cover explicit slots. Incomplete producer coverage still reaches the cached-root boundary. |
 | Closure, CODE, and cycles | Deferred cleanup and `DestroyDispatch` still query live/global CODE captures; `DestroyDispatch` retains a CODE-cycle query. `GlobalRuntimeState` uses a graph walk when building its installed-CODE root index. The unblessed array/hash cycle rescue in `MortalList` is removed. | `CLOSURE_PAD`, `SCALAR_CAPTURE`, `CODE_SLOT`, `ACTIVE_CODE`, and `CODE_PAD_CONSTANT` identify capture, stash, active-frame, and optree edges; regex callbacks have `REGEX_CALLBACK`. Scalar capture releases still use the legacy count bridge, while aggregate capture slots are native. | Closure, active-CODE, CODE-slot, strong-cycle, resurrection, and regex-callback tests cover migrated families. `MyVarCleanupStack.scopeExitCleanup` still reconciles legacy `captureCount` against explicit `SCALAR_CAPTURE` slots. Compiler templates and several CODE/glob producer/cleanup boundaries remain under audit. |
