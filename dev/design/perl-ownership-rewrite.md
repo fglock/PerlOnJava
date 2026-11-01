@@ -3,7 +3,7 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; hidden entries release that owner while retaining their lookup state. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, and async cleanup regressions pass on both backends. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-01):** Phase 2 remains in progress on branch
-`wip/socket-gensym-owner-20261101-020558`, candidate `dd1b5f501`. Its merge base
+`wip/socket-gensym-owner-20261101-020558`, candidate `6585cadd7`. Its merge base
 matches current `master` (`4a5c33753f1da3f9838c44567bbba878e8f567e0`). Issue
 #1649 remains open; the latest claim is from 2026-10-31. Draft PR #1938 is still
 open at remote head `b2f44fc2d36b8f0a1bc7067790e1731a604cba45`; local work has
@@ -23,6 +23,11 @@ focused unit gates. Evidence:
 - AnyEvent: `/private/tmp/anyevent-accept-scope-focused-make-dd1b5f501-20261101.log`
 - Package glob: `/private/tmp/package-io-glob-owner-focused-make-dd1b5f501-20261101.log`
 
+The full no-sweeps `nice -n 19 make` gate then passed on immutable candidate
+`6585cadd7` in 7m46, with all five unit shard reports free of failures (2,524
+Perl unit cases total). Full output is
+`/private/tmp/ownership-gensym-no-sweeps-full-make-6585cadd7-20261101.log`.
+
 Unfixed-parent evidence remains at
 `/private/tmp/socket-gensym-hidden-parent-c040d444c-jvm.log` and
 `/private/tmp/package-io-glob-owner-unfixed-parent-jvm-a0f50e758.log` (with its
@@ -32,10 +37,10 @@ generated-glob assertion; their complete logs are retained under
 `/private/tmp/socket-owner-all-focused-make-c89e0a438-20261101.log`, and
 `/private/tmp/socket-owner-focused-make-b1b271a51-20261101.log`.
 
-This candidate has not yet passed a full no-sweeps make or the HTML-Tree,
-weak-reference/DESTROY/cycle, #1794, and #1860 acceptance gates. Previous full
-acceptance on `a0f50e758` does not validate it. Next, run the immutable full
-no-sweeps gate, then continue the producer audit across deferred release,
+This candidate still needs the HTML-Tree, weak-reference/DESTROY/cycle, #1794,
+and #1860 acceptance gates on both backends. Earlier versions passed these, but
+that evidence does not validate `6585cadd7`. Next, rerun those acceptance paths
+on this candidate, then continue the producer audit across deferred release,
 closure captures, and remaining package roots before removing lifecycle
 fallbacks.
 
