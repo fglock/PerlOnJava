@@ -113,8 +113,9 @@ reachability. Explicit post-END teardown and diagnostic traversal are separate.
 | Scalar overwrite | `RuntimeScalar.setLargeRefCounted` tries verified current counted slots before the raw-count bridge, but still queries external roots and live CODE captures when an overwritten aggregate has weak observers but no current owner slot. Blessed weak referents can still restore from raw counted-slot counts. | Scalar cells acquire counted or untracked identities in `setLargeRefCounted`; package scalar, aggregate, and CODE slots use their respective owner-slot registration paths. Overwrite releases the previous counted edge after installing the new value. Active forwarded argument aliases are accepted as proof for their current scalar cell. | `PackageRootOwnerSlotFastPathTest`, counted/untracked owner repair tests, and `ForwardedArgumentAliasCurrentOwnerTest` cover current-owner proofs. Legacy returned aliases and unmigrated owner families still need producer-level explanation. |
 | First weaken | Ordinary tracked referents no longer query live CODE captures or general strong-root graphs. The cloned-thread snapshot root and direct CODE pad-constant check remain; package-nested untracked aggregates still use `hasLiveUntrackedOwnerSlot` and a `WEAKLY_TRACKED_COMPATIBILITY_PIN`. | Strong scalar cells carry `SCALAR_CELL` or `UNTRACKED_REFERENCE`; package scalar/aggregate slots, closure pads, and active CODE slots have separate identities. Weakening retires the weakened cell's strong edge. | `FirstWeakenUsesCurrentPackageOwnerTest`, `UntrackedReferenceOwnerSlotTest`, and `UntrackedAggregateOwnerSlotTest` cover current owner identities. `PackageNestedUntrackedAggregateReleaseTest` still expects the package compatibility query and pin, so that boundary is not migrated. |
 | Cleared aggregate | Scope-exit finalization can consult cached external-root snapshots when the aggregate count is already zero; deferred cleanup still has capture and nested-call recovery branches. | Container elements acquire `ARRAY_ELEMENT`/`HASH_ELEMENT` identities; active lexical and suspended-frame owners have dedicated slots. Clear and scope-exit paths queue displaced element releases. | `ClearedAggregateOwnerIdentityNoRootWalkTest` and `ClearedAggregateOwnerIdentityFinalizationTest` cover explicit slots. Incomplete producer coverage still reaches the cached-root boundary. |
-| Closure, CODE, and cycles | Deferred cleanup and `DestroyDispatch` still query live/global CODE captures; `DestroyDispatch` retains a CODE-cycle query. `GlobalRuntimeState` uses a graph walk when building its installed-CODE root index. The unblessed array/hash cycle rescue in `MortalList` is removed. | `CLOSURE_PAD`, `SCALAR_CAPTURE`, `CODE_SLOT`, `ACTIVE_CODE`, and `CODE_PAD_CONSTANT` identify capture, stash, active-frame, and optree edges; regex callbacks have `REGEX_CALLBACK`. | Closure, active-CODE, CODE-slot, strong-cycle, resurrection, and regex-callback tests cover migrated families. Compiler templates, resource owners, and several CODE/glob producer/cleanup boundaries remain under audit. |
+| Closure, CODE, and cycles | Deferred cleanup and `DestroyDispatch` still query live/global CODE captures; `DestroyDispatch` retains a CODE-cycle query. `GlobalRuntimeState` uses a graph walk when building its installed-CODE root index. The unblessed array/hash cycle rescue in `MortalList` is removed. | `CLOSURE_PAD`, `SCALAR_CAPTURE`, `CODE_SLOT`, `ACTIVE_CODE`, and `CODE_PAD_CONSTANT` identify capture, stash, active-frame, and optree edges; regex callbacks have `REGEX_CALLBACK`. Scalar capture releases still use the legacy count bridge, while aggregate capture slots are native. | Closure, active-CODE, CODE-slot, strong-cycle, resurrection, and regex-callback tests cover migrated families. `MyVarCleanupStack.scopeExitCleanup` still reconciles legacy `captureCount` against explicit `SCALAR_CAPTURE` slots. Compiler templates and several CODE/glob producer/cleanup boundaries remain under audit. |
 | Temporary evaluation roots | `MortalList` stores temporary roots and the reachability walker follows them during cleanup; temporary roots intentionally do not count as Perl owners. | `pushTemporaryRoot`/`popTemporaryRoot` bracket setter and return cleanup. A temporary root must defer finalization only until its exact removal, without turning it into a persistent Perl edge. | `PerlStrongOwnerProofTest` distinguishes temporary roots from Perl owners; `TemporaryReturnOwnerTraversalTest` covers direct aggregate values. Final cleanup on temporary-root release remains part of the migration. |
+| Resource holders | Anonymous IO lifetime uses `RuntimeScalar.ioOwner` and `RuntimeGlob.ioHolderCount`; it is not part of the Perl owner-slot ledger. | `retainUnstashedIoForDurableSlot`, `releaseIoOwner`, `releaseIoOwnerPreservingReturned`, `transferIoOwnerToReturnedCopy`, and `releaseOrTransferSocketIoOwnerOnReturn` acquire, release, or move the holder token across stores and returns. | Socket scope, return, async cancellation, #1794, and #1860 coverage pass on both backends. The token has no stable `PerlOwnerSlot` identity; cloning, exception transfer, and non-socket anonymous-handle cleanup remain under audit. |
 
 ## Baseline ownership map
 
@@ -146,9 +147,30 @@ Two existing tests intentionally preserve fallback behavior. The
 exercise an owner inconsistent with normal container mutations. The package
 nested untracked aggregate case requires the first-weaken compatibility pin.
 Neither establishes completion of producer accounting. The repository rule
-against editing existing tests means those historical assertions remain until
-the migration can preserve their defensive purpose through a separate
-testable boundary.
+against editing existing tests means those historical assertions remain; the
+fallback-removal phase must add separate defensive coverage for the invalid
+metadata and final-owner-release cases before retiring their runtime paths.
+
+Closure construction records one `SCALAR_CAPTURE` identity per captured scalar
+cell and a `CLOSURE_PAD` identity for each captured aggregate. Scalar cells also
+carry a `CLOSURE_PAD` edge to the referent; tracked scalar captures still use
+the legacy capture-count bridge, while aggregate captures use native owner
+slots. `RuntimeCode.releaseCaptures` clears its capture arrays before releasing
+slots, then queues the declaring-scope decrement only after the final capture
+leaves. Ithread clone paths reconstruct and rebind these identities. The
+remaining audit is the mismatch cleanup in `MyVarCleanupStack.scopeExitCleanup`
+for `captureCount` values exceeding explicit `SCALAR_CAPTURE` slots, plus the
+exception, async-suspend, and nested-CODE paths that can create or transfer
+those counts.
+
+Anonymous IO resource ownership has a separate representation: a scalar's
+`ioOwner` boolean pairs with `RuntimeGlob.ioHolderCount`. Durable stores,
+lexical cleanup, aggregate cleanup, and returned values use explicit retain,
+release, and transfer helpers, but there is no `PerlOwnerSlot` for the holder
+token. Socket lifetime coverage includes #1794 and the async cleanup paths;
+cloning, exception transfer, and ordinary anonymous-file close semantics still
+need a producer-by-producer audit before resource ownership can be considered
+complete.
 
 | Concern | Current implementation | Phase 1 implication |
 |---|---|---|
