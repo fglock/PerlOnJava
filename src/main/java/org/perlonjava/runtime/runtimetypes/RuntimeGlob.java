@@ -231,11 +231,14 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         }
         copy.codeSlot = new RuntimeScalar(visibleCode != null
                 ? visibleCode : GlobalVariable.getGlobalCodeRef(this.globName));
-        copy.scalarSlot = GlobalVariable.scalarSlots().get(this.globName);
+        copy.scalarSlot = symbolGensym
+                ? this.scalarSlot : GlobalVariable.scalarSlots().get(this.globName);
         if (copy.scalarSlot == null) {
             copy.scalarSlot = new RuntimeScalar();
         }
-        if (GlobalVariable.existsGlobalArray(this.globName)) {
+        if (symbolGensym) {
+            copy.arraySlot = this.arraySlot;
+        } else if (GlobalVariable.existsGlobalArray(this.globName)) {
             copy.arraySlot = GlobalVariable.getGlobalArray(this.globName);
         }
         if (this.hashSlot != null) {
@@ -244,6 +247,8 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                     && GlobalVariable.peekGlobalIO(this.globName) == this) {
                 copy.hashSlotAliasesNamedGlob = true;
             }
+        } else if (symbolGensym) {
+            copy.hashSlot = this.hashSlot;
         } else if (GlobalVariable.existsGlobalHash(this.globName) || isStashGlobName(this.globName)) {
             copy.hashSlot = GlobalVariable.getGlobalHash(this.globName);
         } else if (GlobalVariable.peekGlobalIO(this.globName) == this) {
@@ -1216,12 +1221,12 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // `@Fooo::ISA = (...)` visible through Baro even when neither side
         // had an ARRAY slot at alias time.  Ordinary absent ARRAY slots stay
         // unmaterialized so `defined *glob{ARRAY}` retains its Perl meaning.
-        if ((value.slotSnapshot && value.arraySlot != null)
+        if (((value.slotSnapshot || value.symbolGensym) && value.arraySlot != null)
                 || GlobalVariable.existsGlobalArray(globName)
                 || this.globName.endsWith("::ISA")
                 || globName.endsWith("::ISA")) {
             RuntimeArray sourceArray;
-            if (value.slotSnapshot) {
+            if (value.slotSnapshot || value.symbolGensym) {
                 sourceArray = value.arraySlot;
             } else if (this.globName.endsWith("::ISA") || globName.endsWith("::ISA")) {
                 // Read the source slot directly.  Alias-group lookup here can
@@ -1266,7 +1271,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // that mirrors the package's symbol table — getGlobSlot("HASH") returns
         // it unconditionally for stashes, so we must materialise the alias here
         // even if globalHashes hasn't been populated yet.
-        boolean sourceHasHash = (value.slotSnapshot && value.hashSlot != null)
+        boolean sourceHasHash = ((value.slotSnapshot || value.symbolGensym) && value.hashSlot != null)
                 || GlobalVariable.existsGlobalHash(globName)
                 || isStashGlobName(globName)
                 || (!isLocalizedGlob(this.globName)
@@ -1274,7 +1279,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                         || globName.equals("main::+")
                         || globName.equals("main::-")));
         if (sourceHasHash) {
-            RuntimeHash sourceHash = value.slotSnapshot
+            RuntimeHash sourceHash = value.slotSnapshot || value.symbolGensym
                     ? value.hashSlot
                     : GlobalVariable.getGlobalHash(globName);
             if ("main::ENV".equals(this.globName) || "ENV".equals(this.globName)) {
@@ -1296,7 +1301,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // neither has been written yet. Without this, the second `*& = 0`
         // hits the original read-only `$&` instead of the freshly-aliased
         // scalar (refstack.t GH#15752).
-        RuntimeScalar sourceScalar = value.slotSnapshot
+        RuntimeScalar sourceScalar = value.slotSnapshot || value.symbolGensym
                 ? value.getGlobScalarSlot()
                 : GlobalVariable.getGlobalVariable(globName);
         GlobalVariable.markPackageGlobalRoot(sourceScalar);
@@ -1425,7 +1430,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             }
             case "SCALAR" -> {
                 // For anonymous globs (null globName), use local scalarSlot
-                if (this.globName == null || this.slotSnapshot) {
+                if (this.globName == null || this.slotSnapshot || this.symbolGensym) {
                     if (this.scalarSlot == null) {
                         this.scalarSlot = new RuntimeScalar();
                     }
@@ -1448,7 +1453,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                     }
                 }
                 // For anonymous globs (null globName), use local arraySlot
-                if (this.globName == null) {
+                if (this.globName == null || this.symbolGensym) {
                     if (this.arraySlot == null) {
                         this.arraySlot = new RuntimeArray();
                     }
@@ -1468,7 +1473,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             case "HASH" -> {
                 // For *glob{HASH} (glob slot access), always use the global hash.
                 // The local hashSlot is only for *glob->{key} (arrow hash deref via getGlobHash()).
-                if (this.globName == null) {
+                if (this.globName == null || this.symbolGensym) {
                     // Anonymous globs use local hashSlot since they have no global name
                     if (this.hashSlot == null) {
                         this.hashSlot = new RuntimeHash();
@@ -1519,7 +1524,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
      * This is distinct from *glob{SCALAR}, which returns a reference to the slot.
      */
     public RuntimeScalar getGlobScalarSlot() {
-        if (this.globName == null || this.slotSnapshot) {
+        if (this.globName == null || this.slotSnapshot || this.symbolGensym) {
             if (this.scalarSlot == null) {
                 this.scalarSlot = new RuntimeScalar();
             }
@@ -1538,9 +1543,10 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
      * For named globs without a local hashSlot, retrieves from GlobalVariable.
      */
     public RuntimeHash getGlobHash() {
-        if (this.slotSnapshot) {
+        if (this.slotSnapshot || this.symbolGensym) {
             if (this.hashSlot == null) {
-                this.hashSlot = this.hashSlotAliasesNamedGlob && this.globName != null
+                this.hashSlot = !this.symbolGensym
+                        && this.hashSlotAliasesNamedGlob && this.globName != null
                         ? GlobalVariable.getGlobalHash(this.globName)
                         : new RuntimeHash();
             }
@@ -1575,7 +1581,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
      * For named globs, retrieves from GlobalVariable.
      */
     public RuntimeArray getGlobArray() {
-        if (this.globName == null || this.slotSnapshot) {
+        if (this.globName == null || this.slotSnapshot || this.symbolGensym) {
             if (this.arraySlot == null) {
                 this.arraySlot = new RuntimeArray();
             }
