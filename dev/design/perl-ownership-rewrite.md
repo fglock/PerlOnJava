@@ -1,9 +1,9 @@
 # Perl-compatible ownership rewrite
 
-**Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; hidden entries release that owner while retaining their lookup state. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
+**Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; hidden entries release that owner while retaining their lookup state. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-01):** Phase 2 continues on branch
-`wip/socket-gensym-owner-20261101-020558` at runtime source `4da9ec7cf`.
+`wip/socket-gensym-owner-20261101-020558` at runtime source `3380ebe8a`.
 Closure capture counts distinguish explicit `SCALAR_CAPTURE`/`CLOSURE_PAD`
 slots from compatibility retains. Producer checks balance active slots,
 legacy provenance, and pending releases; paired transitions are serialized
@@ -11,19 +11,23 @@ for ithread snapshots. Tied handlers and nested values now retain separate
 `TIE_HANDLER` and aggregate-element identities, including stores made before
 first weaken.
 
-CODE destruction no longer asks `ReachabilityWalker` to search a strong cycle
-for weak referents or fabricates a count of one. A non-final CODE release
-restores the compatibility count only from current counted owner slots that
-match their storage. `CodeCycleOwnerSlotLifecycleTest` checks that path and
-requires zero root queries. The existing self-retaining weak callback and
-self-capture lifecycle fixtures pass on system Perl, JVM, and interpreter with
-corrective sweeps disabled (3/3 and 9/9 each). The immutable full gate passes
-on `4da9ec7cf` in 6m44; log:
-`/private/tmp/code-cycle-owner-slot-make-4da9ec7cf.log`. The first default
-Gradle invocation stopped at Maven TLS dependency resolution; the successful
-retry used the local mirror. An earlier fixture run exposed an untracked CODE
-setup; the fixture now initializes its tracked count before acquiring the
-self-edge.
+CODE destruction no longer searches a strong cycle for weak referents or
+fabricates a count of one. A non-final CODE release restores the compatibility
+count only from current counted owner slots that match their storage.
+`CodeCycleOwnerSlotLifecycleTest` checks that path and requires zero root
+queries. Deferred cleanup no longer sets `refCount = 1` merely because an
+unblessed aggregate reaches zero during a nested call; current owner identities
+and existing root proofs preserve actual owners. The immutable full gate passes
+on `3380ebe8a` in 7m; log:
+`/private/tmp/unblessed-call-depth-owner-make-3380ebe8a.log`. The #1860
+growing-output fixture passes 4/4 on system Perl, JVM, and interpreter with
+sweeps disabled. HTML::Tree 5.07 `t/refloop.t` passes 8/8 on both no-sweeps
+backends. Logs:
+`/private/tmp/issue-1860-system-perl-call-depth-audit.log`,
+`/private/tmp/unblessed-call-depth-1860-{jvm,interpreter}-3380ebe8a.log`, and
+`/private/tmp/unblessed-call-depth-refloop-{jvm,interpreter}-3380ebe8a.log`.
+The first CODE-cycle fixture run exposed an untracked CODE setup; the fixture
+now initializes its tracked count before acquiring the self-edge.
 
 Earlier evidence remains: the 18-fixture capture batch passes on system Perl,
 JVM, and interpreter; the tied pre-weaken regression passes on all three; and
@@ -40,10 +44,11 @@ and `/private/tmp/ownership-current-mojo-lifetimes-{jvm,interpreter}-bcbd75f2f.l
 
 Other tied-handler producers, capture transfer and cleanup, arguments,
 returns, mortals, package roots, scalar-reference and aggregate cycles,
-cloned/shared storage, and resource owners remain under audit. Corrective
-sweep scheduling, compatibility pins, and remaining reachability recovery are
-still present. Next, trace remaining destruction and deferred-release decisions
-to their producers and owner identities, then rerun the full no-sweeps
+cloned/shared storage, and resource owners remain under audit. Scalar overwrite
+still has call-depth deferral for aggregates and root-query cleanup; deferred
+release still has CODE, closure, and root-snapshot recovery branches.
+Corrective-sweep scheduling and compatibility pins remain. Next, trace these
+paths to their acquisition and release producers, then rerun the full no-sweeps
 HTML-Tree and lifecycle acceptance matrix on the final candidate before
 reconciling open PR #1938. Ownership completion is not claimed.
 
