@@ -3798,22 +3798,27 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             // object stays untracked (-1) and weak refs are never cleared, causing
             // leak detection failures (DBIC t/52leaks.t tests 12-20).
             //
-            // Set to 1: the rescue container's single counted reference.
-            // When the rescue source dies and DESTROY weakens source->{schema},
-            // refCount goes 1→0→callDestroy. That callDestroy is intercepted by
-            // the rescuedObjects check in callDestroy's destroyFired path (no
-            // clearWeakRefsTo or cascade), keeping Schema's internals intact.
-            // Proper cleanup happens at END time via clearRescuedWeakRefs.
-            if (base.refCount == Integer.MIN_VALUE) {
+            // The ordinary store above already counted and identified this
+            // slot unless the scalar-reference-contents slot is its owner.
+            // Rescue changes the lifecycle decision; it must not add a second
+            // count for the same strong edge. Only install a count here when
+            // the normal store path left this edge uncounted and no contents
+            // owner already represents it.
+            boolean rescueNeedsCountedOwner = !newOwned
+                    && !scalarContentsOwnedByEscapedReference;
+            if (rescueNeedsCountedOwner && base.refCount == Integer.MIN_VALUE) {
                 base.traceRefCount(0, "RuntimeScalar.setLargeRefCounted (rescue MIN_VALUE -> 1)");
                 base.refCount = 1;
-            } else if (base.refCount >= 0) {
+            } else if (rescueNeedsCountedOwner && base.refCount >= 0) {
                 base.traceRefCount(+1, "RuntimeScalar.setLargeRefCounted (rescue increment)");
                 base.refCount++;
             }
-            base.hadCountedReference = true;
-            base.recordOwner(this, "rescue from currentDestroyTarget");
-            newOwned = true;
+            if (rescueNeedsCountedOwner) {
+                base.hadCountedReference = true;
+                base.recordOwner(this, "rescue from currentDestroyTarget");
+                base.recordActiveOwner(this);
+                newOwned = true;
+            }
         }
 
         // Phase B1 (refcount_alignment_52leaks_plan.md): register this scalar
