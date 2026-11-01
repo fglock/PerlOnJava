@@ -4,14 +4,18 @@
 
 **Current checkpoint (2026-11-01):** Phase 2 remains in progress on branch
 `wip/socket-gensym-owner-20261101-020558`, runtime source
-`a47b083f2`. Deferred release, tail-call cleanup, and scalar overwrite try
+`c76b66daa`. Deferred release, tail-call cleanup, and scalar overwrite try
 verified current counted-owner slots before the raw-count compatibility bridge.
 Current-cell verification also recognizes an active forwarded
 `ARGUMENT_ALIAS`; temporary expression wrappers remain excluded from
 persistent alias ownership. Aggregate clear/replacement now queues anonymous
 IO holder release with deferred container cleanup. Localized array and hash
 slot unwind also releases the temporary IO holder; the missing-key hash path
-is handled by `RuntimeHashProxyEntry`.
+is handled by `RuntimeHashProxyEntry`. Localized package scalar slots now mark
+their temporary cell as package rooted while active, so assignment acquires an
+anonymous IO holder; normal restore releases that holder before reinstalling
+the saved global scalar, and suspended localization transfers the holder with
+the saved scalar state.
 
 The full no-sweeps `nice -n 19 make` passed on `a47b083f2` in 6m57 using the
 verified local JOL 0.17 mirror: 3,305 unit-shard tests,
@@ -37,12 +41,35 @@ passed all 23 files and 989 checks on each backend, including `t/refloop.t`
 - HTML-Tree JVM/interpreter: `/private/tmp/html-tree-full-jvm-3c8a51c4f-20261101.log`, `/private/tmp/html-tree-full-interpreter-3c8a51c4f-20261101.log`
 - System Perl weak-tree oracles: `/private/tmp/weak-blessed-tree-descendant-cleanup-system-perl-20261101.log`, `/private/tmp/weak-blessed-recursive-closure-cleanup-system-perl-20261101.log`
 
-The tied-handler ownership batch was rechecked on this source: four Perl-level
+The tied-handler ownership batch was rechecked on the prior source: four Perl-level
 tests pass 25/25 on standard Perl, the JVM, and the interpreter. This covers
 pre-weaken nested handler storage, untie and nested release, tied return values,
 local restoration, exception unwind, and exactly-once handler retirement.
 Logs: `/private/tmp/ownership-tied-perl-a47b083f2.log`, plus the JVM and
 interpreter logs matching `/private/tmp/ownership-tied-*-a47b083f2.log`.
+
+The localized-global-scalar IO regression passes 11/11 on system Perl, JVM,
+and interpreter. It covers use during localization, normal restoration, and
+exception unwind. The failing parent evidence is retained at
+`/private/tmp/io-owner-local-scalar-restore-parent-jvm-a47b083f2.log` and
+`/private/tmp/io-owner-local-scalar-restore-parent-interpreter-a47b083f2.log`;
+both fail to observe peer EOF after restoration. The focused post-fix runs are
+`/private/tmp/io-owner-local-scalar-restore-system-perl-final.log`,
+`/private/tmp/io-owner-local-scalar-restore-jvm-final.log`, and
+`/private/tmp/io-owner-local-scalar-restore-interpreter-final.log`. The
+producer bug was that `GlobalRuntimeScalar.dynamicSaveState` installed the
+temporary scalar without setting its package-root marker, so durable-slot
+assignment did not acquire the IO holder that restore later had to release.
+The fix is committed in `c76b66daa`.
+
+Related resource coverage passes on both backends: socket scope exit 35/35,
+aggregate clear 8/8, socket `fileno` 12/12, localized glob restoration 4/4,
+selected glob restoration 3/3, and localized stdout capture 1/1. TCP socket
+scope coverage is skipped because the loopback listener is unavailable in this
+environment. The full no-sweeps build log
+`/private/tmp/ownership-io-local-scalar-restore-make-final.log` reports
+`BUILD SUCCESSFUL` in 6m53s. It ran immediately before `c76b66daa` was
+committed, so the final immutable committed candidate still needs a full gate.
 
 The raw-count bridge, scalar-overwrite external-root/live-CODE fallback,
 deferred reachability recovery, package-nested untracked compatibility pin,
@@ -61,9 +88,11 @@ This checkpoint does not claim that corrective recovery is removed.
 
 Issue #1649 remains open. Draft PR #1938 is still at its older remote head and
 has not been reconciled or published. The tied-handler nested values now have
-both owner-slot and Perl-level lifetime coverage. Continue by tracing scalar
+both owner-slot and Perl-level lifetime coverage. Next, give each anonymous IO
+holder a stable owner-slot identity and verify replacement, transfer, clone,
+and release operations against the holder count. Continue by tracing scalar
 capture owner reconciliation, active CODE, thread clone transfers, returned
-and mortal values, package-nested aggregates, and resource transfers. Keep
+and mortal values, and package-nested aggregates. Keep
 explicit post-END teardown and diagnostic traversal separate from ordinary
 ownership decisions.
 
