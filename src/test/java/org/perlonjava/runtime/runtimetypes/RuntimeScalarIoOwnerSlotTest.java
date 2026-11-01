@@ -1,5 +1,7 @@
 package org.perlonjava.runtime.runtimetypes;
 
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.perlonjava.runtime.io.StandardIO;
@@ -10,6 +12,19 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @Tag("unit")
 class RuntimeScalarIoOwnerSlotTest {
+    private PerlRuntime runtime;
+    private PerlRuntime.Binding runtimeBinding;
+
+    @BeforeEach
+    void bindRuntime() {
+        runtime = new PerlRuntime();
+        runtimeBinding = runtime.bind();
+    }
+
+    @AfterEach
+    void unbindRuntime() {
+        runtimeBinding.close();
+    }
 
     @Test
     void durableIoOwnerHasOneIdentityAndReleasesExactlyOnce() {
