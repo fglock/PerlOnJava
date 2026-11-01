@@ -1627,6 +1627,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 if (ownerSlot != null) ownerSlot.rebindCaptureOwner(this);
             }
         }
+        rebindStateOwnerSlots(stateScalarOwnerSlots);
+        rebindStateOwnerSlots(stateArrayOwnerSlots);
+        rebindStateOwnerSlots(stateHashOwnerSlots);
+        rebindStateOwnerSlots(stateAggregateAliasOwnerSlots);
+    }
+
+    private void rebindStateOwnerSlots(Map<String, PerlOwnerSlot> ownerSlots) {
+        for (PerlOwnerSlot ownerSlot : ownerSlots.values()) {
+            if (ownerSlot != null) ownerSlot.rebindCaptureOwner(this);
+        }
     }
 
     void deferFinalReleaseToActiveCode() {
@@ -3538,6 +3548,52 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public Map<String, RuntimeArray> stateArray = new HashMap<>();
     public Map<String, RuntimeHash> stateHash = new HashMap<>();
     Map<String, RuntimeScalar> stateAggregateAliasOwners = new HashMap<>();
+    Map<String, PerlOwnerSlot> stateScalarOwnerSlots = new HashMap<>();
+    Map<String, PerlOwnerSlot> stateArrayOwnerSlots = new HashMap<>();
+    Map<String, PerlOwnerSlot> stateHashOwnerSlots = new HashMap<>();
+    Map<String, PerlOwnerSlot> stateAggregateAliasOwnerSlots = new HashMap<>();
+
+    void bindStateScalar(String name, RuntimeScalar scalar) {
+        PerlOwnerSlot replacementSlot = scalar.retainCodeStateOwner(this);
+        RuntimeScalar previous = stateVariable.put(name, scalar);
+        PerlOwnerSlot previousSlot = stateScalarOwnerSlots.put(name, replacementSlot);
+        GlobalVariable.invalidateGlobalCodeRefGraphRoots();
+        if (previous != null && (previous != scalar || previousSlot != replacementSlot)) {
+            releaseStateScalarBinding(previous, previousSlot);
+        }
+    }
+
+    private void bindStateAggregate(String name, RuntimeBase aggregate) {
+        boolean array = aggregate instanceof RuntimeArray;
+        String aliasKey = (array ? "@" : "%") + name;
+        PerlOwnerSlot replacementSlot = aggregate.retainCodeStateOwner(this);
+        RuntimeBase previous = array
+                ? stateArray.put(name, (RuntimeArray) aggregate)
+                : stateHash.put(name, (RuntimeHash) aggregate);
+        PerlOwnerSlot previousSlot = array
+                ? stateArrayOwnerSlots.put(name, replacementSlot)
+                : stateHashOwnerSlots.put(name, replacementSlot);
+        RuntimeScalar previousAlias = stateAggregateAliasOwners.remove(aliasKey);
+        PerlOwnerSlot previousAliasSlot = stateAggregateAliasOwnerSlots.remove(aliasKey);
+        GlobalVariable.invalidateGlobalCodeRefGraphRoots();
+        if (previousAlias != null) releaseStateScalarBinding(previousAlias, previousAliasSlot);
+        if (previous != null && previous != aggregate) {
+            if (previousSlot != null) releaseStateAggregateBinding(previous, previousSlot);
+            else if (previousAlias == null) {
+                releaseStateAggregateBinding(previous, (PerlOwnerSlot) null);
+            }
+        } else if (previousSlot != null && previousSlot != replacementSlot) {
+            releaseStateAggregateBinding(previous, previousSlot);
+        }
+    }
+
+    void bindStateArray(String name, RuntimeArray array) {
+        bindStateAggregate(name, array);
+    }
+
+    void bindStateHash(String name, RuntimeHash hash) {
+        bindStateAggregate(name, hash);
+    }
 
     void bindStateAggregateAlias(String name, RuntimeBase aggregate) {
         boolean array = aggregate instanceof RuntimeArray;
@@ -3545,57 +3601,160 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         RuntimeScalar owner = new RuntimeScalar();
         owner.set(array ? ((RuntimeArray) aggregate).createAnonymousReference()
                 : ((RuntimeHash) aggregate).createAnonymousReference());
+        PerlOwnerSlot ownerSlot = owner.retainCodeStateOwner(this);
         RuntimeBase previous = array ? stateArray.put(name, (RuntimeArray) aggregate)
                 : stateHash.put(name, (RuntimeHash) aggregate);
         RuntimeScalar previousOwner = stateAggregateAliasOwners.put(ownerKey, owner);
-        if (previousOwner != null) {
-            RuntimeScalar.scopeExitCleanup(previousOwner);
-        } else if (previous instanceof RuntimeArray previousArray) {
-            MortalList.scopeExitCleanupArray(previousArray);
-        } else if (previous instanceof RuntimeHash previousHash) {
-            MortalList.scopeExitCleanupHash(previousHash);
-        }
+        PerlOwnerSlot previousOwnerSlot = stateAggregateAliasOwnerSlots.put(ownerKey, ownerSlot);
+        PerlOwnerSlot previousAggregateSlot = array
+                ? stateArrayOwnerSlots.remove(name) : stateHashOwnerSlots.remove(name);
+        GlobalVariable.invalidateGlobalCodeRefGraphRoots();
+        if (previousOwner != null) releaseStateScalarBinding(previousOwner, previousOwnerSlot);
+        if (previous != null) releaseStateAggregateBinding(previous, previousAggregateSlot);
     }
 
     /** Retire this CV's persistent pad bindings at final CV destruction. */
     void releaseStateStorage() {
         clearPadConstantWeakRefs();
         if (stateVariable.isEmpty() && stateArray.isEmpty() && stateHash.isEmpty()
-                && stateAggregateAliasOwners.isEmpty()) {
+                && stateAggregateAliasOwners.isEmpty()
+                && stateScalarOwnerSlots.isEmpty() && stateArrayOwnerSlots.isEmpty()
+                && stateHashOwnerSlots.isEmpty() && stateAggregateAliasOwnerSlots.isEmpty()) {
             stateVariableInitialized.clear();
             return;
         }
         // Detach all bindings before cleanup: destructors may re-enter Perl.
         // State aliases can address the same cell under more than one name.
-        Set<RuntimeBase> bindings = Collections.newSetFromMap(new IdentityHashMap<>());
-        bindings.addAll(stateVariable.values());
+        Map<RuntimeScalar, List<PerlOwnerSlot>> scalarBindings = new IdentityHashMap<>();
+        for (Map.Entry<String, RuntimeScalar> entry : stateVariable.entrySet()) {
+            addStateScalarBinding(
+                    scalarBindings, entry.getValue(), stateScalarOwnerSlots.get(entry.getKey()));
+        }
+        for (Map.Entry<String, RuntimeScalar> entry : stateAggregateAliasOwners.entrySet()) {
+            addStateScalarBinding(scalarBindings, entry.getValue(),
+                    stateAggregateAliasOwnerSlots.get(entry.getKey()));
+        }
+        Map<RuntimeBase, List<PerlOwnerSlot>> aggregateBindings = new IdentityHashMap<>();
         for (var entry : stateArray.entrySet()) {
             if (!stateAggregateAliasOwners.containsKey("@" + entry.getKey())) {
-                bindings.add(entry.getValue());
+                addStateAggregateBinding(aggregateBindings, entry.getValue(),
+                        stateArrayOwnerSlots.get(entry.getKey()));
             }
         }
         for (var entry : stateHash.entrySet()) {
             if (!stateAggregateAliasOwners.containsKey("%" + entry.getKey())) {
-                bindings.add(entry.getValue());
+                addStateAggregateBinding(aggregateBindings, entry.getValue(),
+                        stateHashOwnerSlots.get(entry.getKey()));
             }
         }
-        // A refalias owns a reference, rather than the source aggregate's
-        // lexical binding. Retiring it must leave the caller's binding intact.
-        bindings.addAll(stateAggregateAliasOwners.values());
         stateVariable.clear();
         stateArray.clear();
         stateHash.clear();
         stateAggregateAliasOwners.clear();
+        stateScalarOwnerSlots.clear();
+        stateArrayOwnerSlots.clear();
+        stateHashOwnerSlots.clear();
+        stateAggregateAliasOwnerSlots.clear();
         stateVariableInitialized.clear();
-        for (RuntimeBase binding : bindings) {
-            if (binding instanceof RuntimeScalar scalar) {
-                RuntimeScalar.scopeExitCleanup(scalar);
-            } else if (binding instanceof RuntimeArray array) {
-                MortalList.scopeExitCleanupArray(array);
-            } else if (binding instanceof RuntimeHash hash) {
-                MortalList.scopeExitCleanupHash(hash);
+        for (Map.Entry<RuntimeScalar, List<PerlOwnerSlot>> entry : scalarBindings.entrySet()) {
+            releaseStateScalarBinding(entry.getKey(), entry.getValue());
+        }
+        for (Map.Entry<RuntimeBase, List<PerlOwnerSlot>> entry : aggregateBindings.entrySet()) {
+            releaseStateAggregateBinding(entry.getKey(), entry.getValue());
+        }
+    }
+
+    private static void addStateScalarBinding(
+            Map<RuntimeScalar, List<PerlOwnerSlot>> bindings,
+            RuntimeScalar scalar, PerlOwnerSlot ownerSlot) {
+        if (scalar == null) return;
+        bindings.computeIfAbsent(scalar, ignored -> new ArrayList<>());
+        if (ownerSlot != null) bindings.get(scalar).add(ownerSlot);
+    }
+
+    private static void addStateAggregateBinding(
+            Map<RuntimeBase, List<PerlOwnerSlot>> bindings,
+            RuntimeBase aggregate, PerlOwnerSlot ownerSlot) {
+        if (aggregate == null) return;
+        bindings.computeIfAbsent(aggregate, ignored -> new ArrayList<>());
+        if (ownerSlot != null) bindings.get(aggregate).add(ownerSlot);
+    }
+
+    private static void releaseStateScalarBinding(RuntimeScalar scalar, PerlOwnerSlot ownerSlot) {
+        releaseStateScalarBinding(scalar,
+                ownerSlot == null ? Collections.emptyList() : List.of(ownerSlot));
+    }
+
+    private static void releaseStateScalarBinding(
+            RuntimeScalar scalar, List<PerlOwnerSlot> ownerSlots) {
+        if (scalar == null) return;
+        scalar.localBindingExists = false;
+        RuntimeScalar.scopeExitCleanup(scalar);
+        for (PerlOwnerSlot ownerSlot : ownerSlots) {
+            scalar.releaseCodeStateOwner(ownerSlot);
+        }
+    }
+
+    private static void releaseStateAggregateBinding(RuntimeBase aggregate,
+                                                     PerlOwnerSlot ownerSlot) {
+        releaseStateAggregateBinding(aggregate,
+                ownerSlot == null ? Collections.emptyList() : List.of(ownerSlot));
+    }
+
+    private static void releaseStateAggregateBinding(
+            RuntimeBase aggregate, List<PerlOwnerSlot> ownerSlots) {
+        if (aggregate == null) return;
+        if (aggregate instanceof RuntimeArray array) MortalList.scopeExitCleanupArray(array);
+        else if (aggregate instanceof RuntimeHash hash) MortalList.scopeExitCleanupHash(hash);
+        for (PerlOwnerSlot ownerSlot : ownerSlots) {
+            aggregate.releaseCodeStateOwner(ownerSlot);
+        }
+        if (aggregate instanceof RuntimeArray array) MortalList.scopeExitCleanupArray(array);
+        else if (aggregate instanceof RuntimeHash hash) MortalList.scopeExitCleanupHash(hash);
+    }
+
+    /** Reconstruct direct owner slots for independently cloned CODE state storage. */
+    void retainClonedStateOwnerSlots() {
+        for (Map.Entry<String, RuntimeScalar> entry : stateVariable.entrySet()) {
+            stateScalarOwnerSlots.put(entry.getKey(), entry.getValue().retainCodeStateOwner(this));
+        }
+        for (Map.Entry<String, RuntimeScalar> entry : stateAggregateAliasOwners.entrySet()) {
+            stateAggregateAliasOwnerSlots.put(entry.getKey(),
+                    entry.getValue().retainCodeStateOwner(this));
+        }
+        for (Map.Entry<String, RuntimeArray> entry : stateArray.entrySet()) {
+            if (!stateAggregateAliasOwners.containsKey("@" + entry.getKey())) {
+                stateArrayOwnerSlots.put(entry.getKey(),
+                        entry.getValue().retainCodeStateOwner(this));
             }
         }
+        for (Map.Entry<String, RuntimeHash> entry : stateHash.entrySet()) {
+            if (!stateAggregateAliasOwners.containsKey("%" + entry.getKey())) {
+                stateHashOwnerSlots.put(entry.getKey(),
+                        entry.getValue().retainCodeStateOwner(this));
+            }
+        }
+    }
+
+    boolean hasStateScalarOwner(RuntimeScalar scalar, PerlOwnerSlot ownerSlot) {
+        if (scalar == null || ownerSlot == null
+                || ownerSlot.kind() != PerlOwnerSlot.Kind.CODE_STATE
+                || ownerSlot.captureOwner() != this || ownerSlot.referent() != scalar
+                || !ownerSlot.isActive()) {
+            return false;
+        }
+        for (Map.Entry<String, RuntimeScalar> entry : stateVariable.entrySet()) {
+            if (entry.getValue() == scalar && stateScalarOwnerSlots.get(entry.getKey()) == ownerSlot) {
+                return true;
+            }
+        }
+        for (Map.Entry<String, RuntimeScalar> entry : stateAggregateAliasOwners.entrySet()) {
+            if (entry.getValue() == scalar
+                    && stateAggregateAliasOwnerSlots.get(entry.getKey()) == ownerSlot) {
+                return true;
+            }
+        }
+        return false;
     }
     public RuntimeList constantValue;
     // Field to hold the thread compiling this code
@@ -5197,6 +5356,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         this.stateArray = codeFrom.stateArray;
         this.stateHash = codeFrom.stateHash;
         this.stateAggregateAliasOwners = codeFrom.stateAggregateAliasOwners;
+        this.stateScalarOwnerSlots = codeFrom.stateScalarOwnerSlots;
+        this.stateArrayOwnerSlots = codeFrom.stateArrayOwnerSlots;
+        this.stateHashOwnerSlots = codeFrom.stateHashOwnerSlots;
+        this.stateAggregateAliasOwnerSlots = codeFrom.stateAggregateAliasOwnerSlots;
         this.constantValue = codeFrom.constantValue;
         if (sourceNeedsDelegation) {
             this.subroutine = (runtimeArgs, callContext) ->

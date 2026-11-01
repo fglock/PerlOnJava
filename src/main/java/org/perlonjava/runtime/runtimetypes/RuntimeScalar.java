@@ -1003,7 +1003,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (localBindingExists || MyVarCleanupStack.isRegistered(this)
                 || ownerSlotCount(PerlOwnerSlot.Kind.PACKAGE_SCALAR_SLOT) != 0
                 || hasCodeSlotBinding() || this instanceof RuntimeBaseProxy
-                || isStoredInRegisteredContainerOwner()) {
+                || isStoredInRegisteredContainerOwner() || hasCurrentCodeStateOwner()) {
             return true;
         }
         for (RuntimeBase owner : containerOwnerSnapshot()) {
@@ -1018,6 +1018,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
         return referencedByScalarReference && (refCount > 0
                 || hasScalarCellOwnerOtherThanClosureCapture());
+    }
+
+    private boolean hasCurrentCodeStateOwner() {
+        for (PerlOwnerSlot ownerSlot : ownerSlotSnapshot()) {
+            if (ownerSlot.kind() != PerlOwnerSlot.Kind.CODE_STATE
+                    || !ownerSlot.isActive() || ownerSlot.referent() != this) continue;
+            RuntimeCode owner = ownerSlot.captureOwner();
+            if (owner != null && owner.hasStateScalarOwner(this, ownerSlot)) return true;
+        }
+        return false;
     }
 
     private void retainUntrackedReferenceOwner(RuntimeBase referent) {

@@ -1674,14 +1674,6 @@ public class MortalList {
                 // boundary can still reclaim a tree after its Perl root goes
                 // away.
                 base.refCount = 1;
-            } else if (base.blessId == 0
-                    && hasWeakRefs
-                    && (ReachabilityWalker.isReachableFromLiveCodeCaptures(base)
-                    || ReachabilityWalker.isReachableFromGlobalCodeCaptures(base))) {
-                // A positive capture query is conclusive for this unblessed
-                // target. Keep it alive without requesting a registry-wide
-                // sweep; unknown targets still use the complete-boundary path.
-                base.refCount = 1;
             } else if (base.blessId != 0
                     && hasWeakRefs
                     && (isReachableFromExternalRootCached(base)
