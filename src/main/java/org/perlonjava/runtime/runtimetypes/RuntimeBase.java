@@ -357,6 +357,13 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             releaseClosureCapture();
             return;
         }
+        if (ownerSlot.kind() != PerlOwnerSlot.Kind.CLOSURE_PAD) {
+            throw new IllegalStateException("capture release requires a closure-pad slot");
+        }
+        if (!ownerSlot.isActive()) return;
+        if (ownerSlot.referent() != this) {
+            throw new IllegalStateException("closure-pad slot belongs to a different aggregate");
+        }
         if (ownerSlot.isNativeCaptureOwner()) {
             // Captured aggregate pads are native owner slots. Remove the slot
             // before releasing the capture so a final release can dispatch

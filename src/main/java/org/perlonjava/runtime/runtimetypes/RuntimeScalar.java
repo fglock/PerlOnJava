@@ -650,7 +650,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             releaseClosureCapture();
             return;
         }
+        if (ownerSlot.kind() != PerlOwnerSlot.Kind.SCALAR_CAPTURE) {
+            throw new IllegalStateException("capture release requires a scalar-capture slot");
+        }
         if (!ownerSlot.isActive()) return;
+        if (ownerSlot.referent() != this) {
+            throw new IllegalStateException("scalar-capture slot belongs to a different pad cell");
+        }
         beginPendingClosureCaptureRelease();
         try {
             ownerSlot.release();
