@@ -682,16 +682,21 @@ public class EmitEval {
         mv.visitLabel(compileSuccess);
         // Stack: [Class]
 
-        // Create array of parameter types for the constructor and call the caching helper.
-        // RuntimeCode.evalGetCachedConstructor(clazz, paramTypes) avoids the expensive
-        // Class.getConstructor() reflection call on cache hits.
         int paramCount = newEnv.length - skipVariables;
         if (paramCount == 0) {
-            mv.visitFieldInsn(Opcodes.GETSTATIC,
+            // No-capture eval: use a cached RuntimeScalar code ref to avoid per-call
+            // constructor.newInstance() and makeCodeObject() overhead.
+            // Stack: [Class]
+            mv.visitMethodInsn(
+                    Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
-                    "EMPTY_CLASSES",
-                    "[Ljava/lang/Class;");
+                    "evalGetOrMakeCachedCodeRef",
+                    "(Ljava/lang/Class;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+            // Stack: [RuntimeScalar(Code)]
         } else {
+            // Closure eval: build constructor arg array from captured variables.
+            // Stack: [Class]
             emitIntConstant(mv, paramCount);
             mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Class");
             for (int i = 0; i < paramCount; i++) {
@@ -701,56 +706,44 @@ public class EmitEval {
                 mv.visitLdcInsn(Type.getType(descriptor));
                 mv.visitInsn(Opcodes.AASTORE);
             }
-        }
-        // Stack: [Class, Class[]]
-
-        mv.visitMethodInsn(
-                Opcodes.INVOKESTATIC,
-                "org/perlonjava/runtime/runtimetypes/RuntimeCode",
-                "evalGetCachedConstructor",
-                "(Ljava/lang/Class;[Ljava/lang/Class;)Ljava/lang/reflect/Constructor;",
-                false);
-        // Stack: [Constructor]
-
-        // Create array for constructor arguments (captured variable values)
-        emitIntConstant(mv, newEnv.length - skipVariables);
-        mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object");
-        // Stack: [Constructor, Object[]]
-
-        // Fill the arguments array with actual variable values from local variables
-        for (Integer index : newSymbolTable.getAllVisibleVariables().keySet()) {
-            if (index >= skipVariables) {
-                String varName = newEnv[index];
-                mv.visitInsn(Opcodes.DUP);
-                emitIntConstant(mv, index - skipVariables);
-                mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.symbolTable.getVariableIndex(varName));
-                mv.visitInsn(Opcodes.AASTORE);
-                if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("Put variable " + emitterVisitor.ctx.symbolTable.getVariableIndex(varName) + " at parameter #" + (index - skipVariables) + " " + varName);
+            // Stack: [Class, Class[]]
+            mv.visitMethodInsn(
+                    Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "evalGetCachedConstructor",
+                    "(Ljava/lang/Class;[Ljava/lang/Class;)Ljava/lang/reflect/Constructor;",
+                    false);
+            // Stack: [Constructor]
+            emitIntConstant(mv, paramCount);
+            mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object");
+            // Stack: [Constructor, Object[]]
+            for (Integer index : newSymbolTable.getAllVisibleVariables().keySet()) {
+                if (index >= skipVariables) {
+                    String varName = newEnv[index];
+                    mv.visitInsn(Opcodes.DUP);
+                    emitIntConstant(mv, index - skipVariables);
+                    mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.symbolTable.getVariableIndex(varName));
+                    mv.visitInsn(Opcodes.AASTORE);
+                    if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("Put variable " + emitterVisitor.ctx.symbolTable.getVariableIndex(varName) + " at parameter #" + (index - skipVariables) + " " + varName);
+                }
             }
+            // Stack: [Constructor, Object[]]
+            mv.visitMethodInsn(
+                    Opcodes.INVOKEVIRTUAL,
+                    "java/lang/reflect/Constructor",
+                    "newInstance",
+                    "([Ljava/lang/Object;)Ljava/lang/Object;",
+                    false);
+            mv.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/Object");
+            // Stack: [Object]
+            mv.visitMethodInsn(
+                    Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "makeCodeObject",
+                    "(Ljava/lang/Object;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+            // Stack: [RuntimeScalar(Code)]
         }
-        // Stack: [Constructor, Object[]]
-
-        // Create instance of the eval class with captured variables
-        // This is where the "closure" behavior happens - the new instance
-        // holds references to the captured variables
-        mv.visitMethodInsn(
-                Opcodes.INVOKEVIRTUAL,
-                "java/lang/reflect/Constructor",
-                "newInstance",
-                "([Ljava/lang/Object;)Ljava/lang/Object;",
-                false);
-        mv.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/Object");
-        // Stack: [Object]
-
-        // Convert the instance to a CODE reference
-        // This wraps the instance in a RuntimeCode object that can be called
-        mv.visitMethodInsn(
-                Opcodes.INVOKESTATIC,
-                "org/perlonjava/runtime/runtimetypes/RuntimeCode",
-                "makeCodeObject",
-                "(Ljava/lang/Object;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
-                false);
-        // Stack: [RuntimeScalar(Code)]
 
         // Push @_ (the current subroutine's arguments) for the eval to access
         mv.visitVarInsn(Opcodes.ALOAD, 1);
