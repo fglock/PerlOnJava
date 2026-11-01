@@ -1210,19 +1210,34 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && !(this instanceof RuntimeBaseProxy)) {
             return false;
         }
-        // A scalar-cell identity remains current while the cell has not exited
-        // scope, even if a runtime-created cell has not been entered in the
-        // lexical stack yet. An active @_ alias also keeps that caller cell
-        // live for the duration of its argument frame. Removed aggregate cells
-        // still require a current storage marker.
         if (kind != PerlOwnerSlot.Kind.SCALAR_CELL
-                || hasDirectScalarCellStorageOwner()
-                || RuntimeCode.isCurrentArgumentAlias(this)
-                || (!scopeExited && containerOwner == null
-                    && !hasStoredContainerOwnerWithoutCurrentOwnerMarker())) {
+                || hasDirectScalarCellStorageOwner()) {
             return true;
         }
         return isCurrentCapturedScalarCellOwner(referent, slot);
+    }
+
+    /**
+     * Whether a counted scalar slot still carries this value for compatibility
+     * count repair. This is deliberately weaker than the Perl-root proof used
+     * by destruction and resurrection: runtime-created cells and active @_ cells
+     * may own a counted edge before they have a registered lexical storage path.
+     */
+    boolean isCurrentCountedScalarCellForCountRepair(RuntimeBase referent, PerlOwnerSlot slot) {
+        PerlOwnerSlot.Kind kind = slot.kind();
+        if (kind != PerlOwnerSlot.Kind.SCALAR_CELL
+                && kind != PerlOwnerSlot.Kind.CODE_SLOT
+                && kind != PerlOwnerSlot.Kind.ARGUMENT_VALUE
+                && kind != PerlOwnerSlot.Kind.RETURN_VALUE
+                && kind != PerlOwnerSlot.Kind.TIE_HANDLER) {
+            return false;
+        }
+        return countedOwnerSlot == slot && refCountOwned && value == referent
+                && ((type & RuntimeScalarType.REFERENCE_BIT) != 0
+                    || type == RuntimeScalarType.GLOB
+                    || type == RuntimeScalarType.CODE)
+                && !WeakRefRegistry.isweak(this) && !scopeExited
+                && slot.isActive() && slot.referent() == referent;
     }
 
     boolean isCurrentCapturedScalarCellOwner(RuntimeBase referent, PerlOwnerSlot slot) {
