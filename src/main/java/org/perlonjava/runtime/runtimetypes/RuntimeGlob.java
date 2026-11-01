@@ -1618,7 +1618,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     }
 
     public RuntimeGlob setIO(RuntimeScalar io) {
-        if (symbolGensym) {
+        if (symbolGensym || GlobalVariable.isIORefHiddenAfterStashDelete(this.globName)) {
             GlobalVariable.hideIORefAfterStashDelete(this.globName);
         } else {
             GlobalVariable.markStashEntryVisible(this.globName);
@@ -1664,9 +1664,10 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     }
 
     private RuntimeGlob setIO(RuntimeIO io, boolean makeStashEntryVisible) {
-        if (symbolGensym) {
+        if (symbolGensym || !makeStashEntryVisible
+                || GlobalVariable.isIORefHiddenAfterStashDelete(this.globName)) {
             GlobalVariable.hideIORefAfterStashDelete(this.globName);
-        } else if (makeStashEntryVisible) {
+        } else {
             GlobalVariable.markStashEntryVisible(this.globName);
         }
         acceptedSocket = false;
