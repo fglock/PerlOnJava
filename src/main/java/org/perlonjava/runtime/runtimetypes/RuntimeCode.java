@@ -4210,8 +4210,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 PerlOwnerSlot ownerSlot = ownerSlots != null && i < ownerSlots.length
                         ? ownerSlots[i] : null;
                 if (ownerSlot != null && captures.retainedOwnerSlots.contains(ownerSlot)) continue;
+                retiredEdge = true;
                 if (ownerSlot != null && !ownerSlot.isActive()) continue;
-                retiredEdge |= scalar.captureCount > 0;
                 scalar.releaseClosureCaptureSlot(ownerSlot);
                 if (scalar.captureCount == 0) {
                     if (scalar.type == RuntimeScalarType.CODE
@@ -4244,9 +4244,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 PerlOwnerSlot ownerSlot = ownerSlots != null && i < ownerSlots.length
                         ? ownerSlots[i] : null;
                 if (ownerSlot != null && captures.retainedOwnerSlots.contains(ownerSlot)) continue;
+                retiredEdge = true;
                 if (ownerSlot != null && !ownerSlot.isActive()) continue;
                 if (aggregate != null) {
-                    retiredEdge |= aggregate.captureCount > 0;
                     aggregate.releaseClosureCaptureOwner(ownerSlot);
                 } else if (ownerSlot != null) {
                     retiredEdge = true;
@@ -5172,6 +5172,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         this.declaredOurVariables = codeFrom.declaredOurVariables;
         copyPadConstantTree(codeFrom, this, values -> values.clone());
         rebindCaptureOwnerSlots();
+        GlobalVariable.invalidateGlobalCodeRefGraphRoots();
         retireReplacedCaptureEdges(replacedCaptures);
     }
 
