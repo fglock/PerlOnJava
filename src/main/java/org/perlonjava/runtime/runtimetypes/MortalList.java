@@ -867,7 +867,7 @@ public class MortalList {
         // Counted owner slots are authoritative even when the compatibility
         // refcount transiently undercounts them during a tail-call handoff.
         // Restore from those identities before allowing final release.
-        if (base.restoreCountedOwnerSlotRefCount()) return;
+        if (base.restoreVerifiedCurrentCountedOwnerSlotRefCount()) return;
 
         if (base.localBindingExists) {
             base.refCount = 1;
@@ -1625,10 +1625,6 @@ public class MortalList {
                 // a cached root snapshot must not invent a replacement owner.
                 base.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroyFromCountedOwner(base);
-            } else if (base.blessId != 0 && base.restoreCountedOwnerSlotRefCount()) {
-                // For blessed referents, remaining counted slots prove that
-                // the transient zero was an undercount. Unblessed referents
-                // use stricter current-storage checks below.
             } else if (base.restoreVerifiedCurrentCountedOwnerSlotRefCount()) {
                 // Verified current scalar cells and array/hash elements jointly
                 // restore the surviving owner count without a root walk.
