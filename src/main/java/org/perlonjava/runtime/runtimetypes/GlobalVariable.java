@@ -3216,6 +3216,14 @@ public class GlobalVariable {
         RuntimeGlob glob = globalIORefs.get(resolvedKey);
         if (glob == null) {
             glob = new RuntimeGlob(resolvedKey);
+            // Symbol::gensym may return a detached RuntimeGlob without first
+            // materializing its name in this table. Later symbolic handle
+            // access resolves the same name here; preserve the anonymous
+            // slot behavior on that canonical object too.
+            if (isSymbolGensymName(resolvedKey)
+                    || hiddenIORefsAfterStashDelete().contains(resolvedKey)) {
+                glob.symbolGensym = true;
+            }
             globalIORefs.put(resolvedKey, glob);
         }
         RuntimeScalar visibleCode = globalCodeRefs.get(resolvedKey);
