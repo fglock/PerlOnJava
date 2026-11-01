@@ -571,6 +571,12 @@ public class Internals extends PerlModuleBase {
                 // lifecycle cleanup, but Perl's SvREFCNT helper deliberately
                 // hides this special global slot from the reported count.
                 nativeOwners -= base.ownerSlotCount(PerlOwnerSlot.Kind.PACKAGE_AGGREGATE_SLOT);
+            } else if (nativeOwners > 0 && base.localBindingExists
+                    && base.ownerSlotCount(PerlOwnerSlot.Kind.ACTIVE_LEXICAL) > 0) {
+                // ACTIVE_LEXICAL is the lifecycle identity for a named pad
+                // edge. The lexical-binding adjustment below already reports
+                // that same Perl owner, so do not count its identity twice.
+                nativeOwners--;
             }
             if (rc < 0) {
                 if (nativeOwners == 0) return new RuntimeScalar(1).getList(); // untracked

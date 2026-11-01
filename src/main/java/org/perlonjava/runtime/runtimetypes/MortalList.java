@@ -581,6 +581,7 @@ public class MortalList {
         // variable no longer holds a strong reference.
         boolean hadLocalBinding = hash.localBindingExists;
         hash.localBindingExists = false;
+        if (!finalRelease) RuntimeCode.releaseActiveLexicalAggregateOwner(hash);
         hash.releaseUnownedClosureCaptures();
         if (!finalRelease && hash.hasClosureCaptureOwner()) {
             hash.scopeExited = true;
@@ -691,6 +692,7 @@ public class MortalList {
         // or flush) to correctly trigger callDestroy, since the local
         // variable no longer holds a strong reference.
         arr.localBindingExists = false;
+        if (!finalRelease) RuntimeCode.releaseActiveLexicalAggregateOwner(arr);
         arr.releaseUnownedClosureCaptures();
         if (!finalRelease && arr.hasClosureCaptureOwner()) {
             arr.scopeExited = true;

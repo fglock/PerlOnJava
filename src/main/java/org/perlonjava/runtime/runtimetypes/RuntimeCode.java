@@ -1972,7 +1972,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         ExecutionRuntimeState state = PerlRuntime.current().executionState();
         Deque<ActiveLexicalFrame> frames = activeLexicalFrames(state);
         ActiveLexicalFrame currentFrame = frames.peek();
-        if (currentFrame != null) return currentFrame.removeAggregateCell(aggregate) != 0;
+        if (currentFrame != null && currentFrame.removeAggregateCell(aggregate) != 0) {
+            return true;
+        }
         for (Map.Entry<String, RuntimeBase> entry
                 : new ArrayList<>(state.topLevelLexicals.entrySet())) {
             if (entry.getValue() != aggregate) continue;
