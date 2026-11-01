@@ -4403,10 +4403,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
     }
 
-    // Cached references to frequently-accessed global variable scalars to avoid
-    // ConcurrentHashMap lookups on every subroutine/eval call. Populated lazily.
+    // Cached reference to $^P to avoid ConcurrentHashMap lookup on every eval STRING call.
+    // Safe to cache: $^P is rarely localized, and the fast-path check (== 0) is low-stakes.
+    // NOT caching $^{WARNING_SCOPE}: local ${^WARNING_SCOPE} REPLACES the scalar in the
+    // global slot on every subroutine entry, so a cached reference becomes stale immediately.
     private static volatile RuntimeScalar cachedDebuggerFlagsScalar;
-    private static volatile RuntimeScalar cachedWarningScopeScalar;
 
     private static int getDebuggerFlagsInt() {
         RuntimeScalar s = cachedDebuggerFlagsScalar;
@@ -4415,15 +4416,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             cachedDebuggerFlagsScalar = s;
         }
         return s.getInt();
-    }
-
-    static RuntimeScalar getWarningScopeScalar() {
-        RuntimeScalar s = cachedWarningScopeScalar;
-        if (s == null) {
-            s = GlobalVariable.getGlobalVariable(GlobalContext.WARNING_SCOPE);
-            cachedWarningScopeScalar = s;
-        }
-        return s;
     }
 
     /**
@@ -4581,6 +4573,20 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 EmitterContext fastCtx = getEvalContext(evalTag);
                 if (fastCtx != null && !fastCtx.isEvalbytes) {
                     String evalStr = code.toString();
+                    // Hot-spot cache: if the eval string is the same object (common for
+                    // compiled constants / interned strings) skip unicode scan, concat, and
+                    // map lookup entirely.
+                    if (fastCtx.lastEvalClass != null && evalStr == fastCtx.lastEvalStr) {
+                        String runtimePkgHot = InterpreterState.currentPackage.get().toString();
+                        String cssFast2 = fastCtx.symbolTable.getCurrentSubroutine();
+                        boolean tlmFast2 = cssFast2 == null || cssFast2.isEmpty() || "main".equals(cssFast2);
+                        String pkgFast2 = ClassRegistry.isClass(runtimePkgHot)
+                                ? runtimePkgHot : tlmFast2 ? runtimePkgHot
+                                : fastCtx.symbolTable.getCurrentPackage();
+                        if (pkgFast2.equals(fastCtx.lastEvalPackage)) {
+                            return fastCtx.lastEvalClass;
+                        }
+                    }
                     boolean hasUnicode = false;
                     for (int i = 0; i < evalStr.length(); i++) {
                         if (evalStr.charAt(i) > 127) { hasUnicode = true; break; }
@@ -4598,7 +4604,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             + "\0false\0false\0false\0false\0" + featureFlags + '\0' + currentPackageFast;
                     Map<String, Class<?>> fastCache = PerlRuntime.current().runtimeCodeState().evalCache;
                     Class<?> hit = fastCache.get(fastKey);
-                    if (hit != null) return hit;
+                    if (hit != null) {
+                        fastCtx.lastEvalStr = evalStr;
+                        fastCtx.lastEvalPackage = currentPackageFast;
+                        fastCtx.lastEvalClass = hit;
+                        return hit;
+                    }
                 }
             }
         }
@@ -8417,7 +8428,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     compilationState.runtimeDisabledWarningCategories;
             compilationState.runtimeDisabledWarningCategories =
                     code.lexicalDisabledWarningCategories;
-            RuntimeScalar warningScopeScalar = getWarningScopeScalar();
+            RuntimeScalar warningScopeScalar = GlobalVariable.getGlobalVariable(GlobalContext.WARNING_SCOPE);
             int savedRuntimeWarningScope = enterCalleeWarningScope(warningScopeScalar);
             // Save caller's call-site warning bits so caller()[9] can retrieve them
             WarningBitsRegistry.pushCallerBits(
@@ -9213,7 +9224,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         compilationState.runtimeDisabledWarningCategories;
                 compilationState.runtimeDisabledWarningCategories =
                         code.lexicalDisabledWarningCategories;
-                RuntimeScalar warningScopeScalar = getWarningScopeScalar();
+                RuntimeScalar warningScopeScalar = GlobalVariable.getGlobalVariable(GlobalContext.WARNING_SCOPE);
             int savedRuntimeWarningScope = enterCalleeWarningScope(warningScopeScalar);
                 // Save caller's call-site warning bits so caller()[9] can retrieve them
                 WarningBitsRegistry.pushCallerBits(
@@ -9590,7 +9601,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         compilationState.runtimeDisabledWarningCategories;
                 compilationState.runtimeDisabledWarningCategories =
                         code.lexicalDisabledWarningCategories;
-                RuntimeScalar warningScopeScalar = getWarningScopeScalar();
+                RuntimeScalar warningScopeScalar = GlobalVariable.getGlobalVariable(GlobalContext.WARNING_SCOPE);
             int savedRuntimeWarningScope = enterCalleeWarningScope(warningScopeScalar);
                 // Save caller's call-site warning bits so caller()[9] can retrieve them
                 WarningBitsRegistry.pushCallerBits(
@@ -10623,7 +10634,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     WarningBitsRegistry.getRuntimeDisabledWarningCategories();
             WarningBitsRegistry.setRuntimeDisabledWarningCategories(
                     lexicalDisabledWarningCategories);
-            RuntimeScalar warningScopeScalar = getWarningScopeScalar();
+            RuntimeScalar warningScopeScalar = GlobalVariable.getGlobalVariable(GlobalContext.WARNING_SCOPE);
             int savedRuntimeWarningScope = enterCalleeWarningScope(warningScopeScalar);
             JvmClosureFrame closureFrame = jvmClosureFrameRequired
                     ? pushJvmClosureFrame() : null;
