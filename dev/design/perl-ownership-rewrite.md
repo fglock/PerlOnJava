@@ -1,80 +1,42 @@
 # Perl-compatible ownership rewrite
 
-**Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Named package IO globs now carry a `PACKAGE_GLOB_SLOT` identity from stash insertion through replacement and removal. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, and async cleanup regressions pass on both backends. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
+**Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; hidden entries release that owner while retaining their lookup state. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, and async cleanup regressions pass on both backends. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-01):** Branch
-`wip/glob-alias-owners-20261031-184210`, source `a0f50e758`. Phase 2 remains in
-progress. Array removal captures a current `ARRAY_ELEMENT` owner before
-`pop`, `shift`, middle `delete`, or localized cleanup mutates storage, then
-carries that proof into deferred release. It excludes scalars that are aliases
-in the active `@_` frame: the first proof version released a blessed filehandle
-when `IO::Handle::getline` shifted its borrowed invocant, reproducing issue
-`#1646`. `RuntimeCode.isCurrentArgumentAlias` now rejects that edge. The
-existing issue #1646 regression passes on system Perl and both backends; the array
-regression `refcount/localized_array_slot_owner_release.t` passes 12/12 on
-system Perl, JVM, and interpreter. Its unfixed JVM parent fails 4/12; evidence:
+`wip/glob-alias-owners-20261031-184210`, base source `328445402`. Phase 2 remains
+in progress. The named-IO slot ledger initially acquired an owner for every
+`globalIORefs` map entry. The completed no-sweeps gate exposed that deleted
+entries remain in this lookup map for compatibility, and their ledger owner
+kept anonymous sockets alive. The failing gate is
+`/private/tmp/package-glob-owner-local-jol-no-sweeps-make-328445402-20261101.log`:
+the package glob test failed its final weak-clear assertion, while the existing
+AnyEvent and TCP EOF lifetime tests also failed. Parent JVM/interpreter evidence
+for early weak clearing is retained at
+`/private/tmp/package-io-glob-owner-unfixed-parent-jvm-a0f50e758.log` and
+`/private/tmp/package-io-glob-owner-unfixed-parent-interpreter-a0f50e758.log`.
+
+The current worktree changes release `PACKAGE_GLOB_SLOT` ownership when a stash
+entry becomes hidden, reacquire it when the entry becomes visible, and exclude
+hidden entries when rebuilding a cloned runtime's owner table. A new Java unit
+test covers hide, replacement while hidden, and visibility restoration. System
+Perl passes the package glob test 3/3 and both socket tests; loopback checks
+needed extended access, and AnyEvent is unavailable so its two assertions skip.
+The post-fix JVM/interpreter tests have not yet run. Prior acceptance on
+`a0f50e758` is recorded in `/private/tmp/ownership-array-owner-full-make-a0f50e758-20261101.log`,
+`/private/tmp/html-tree-full-jvm-runner-a0f50e758-20261101.log`,
+`/private/tmp/html-tree-full-interpreter-runner-a0f50e758-20261101.log`, and
+the `ownership-*a0f50e758-20261101.log` #1794/#1860 evidence files. That
+evidence does not validate the current candidate. The localized-array
+unfixed-parent evidence remains at
 `/private/tmp/localized-array-all-removals-parent-jvm-20261031.log`.
 
-Full `nice -n 19 make` passes on immutable source `a0f50e758` in 7m24s; log:
-`/private/tmp/ownership-array-owner-full-make-a0f50e758-20261101.log`. Focused
-make logs cover the array regression and issue #1646:
-`/private/tmp/localized-array-argument-alias-fix-make-20261101.log` and
-`/private/tmp/issue-1646-argument-alias-fix-make-20261101.log`. Direct backend
-logs are `/private/tmp/localized-array-all-removals-jvm-final-a0f50e758-20261101.log`,
-`/private/tmp/localized-array-all-removals-interpreter-final-a0f50e758-20261101.log`,
-`/private/tmp/issue-1646-alias-exclusion-jvm-final-a0f50e758-20261101.log`, and
-`/private/tmp/issue-1646-alias-exclusion-interpreter-final-a0f50e758-20261101.log`;
-system Perl: `/private/tmp/localized-array-all-removals-perl-20261031.log`.
-With `JPERL_DISABLE_CORRECTIVE_SWEEPS=1`, unchanged HTML-Tree 5.07
-`t/refloop.t` passes 8/8 on system Perl, JVM, and interpreter. The full suite
-passes 23 files / 989 checks on both PerlOnJava backends (11 TODO); system Perl
-passes 23 files / 969 tests, with `t/leaktest.t` skipped because
-Test::LeakTrace is unavailable. Logs:
-`/private/tmp/html-tree-refloop-system-perl-a0f50e758-20261101.log`,
-`/private/tmp/html-tree-refloop-jvm-a0f50e758-20261101.log`,
-`/private/tmp/html-tree-refloop-interpreter-a0f50e758-20261101.log`,
-`/private/tmp/html-tree-full-system-perl-a0f50e758-20261101.log`,
-`/private/tmp/html-tree-full-jvm-runner-a0f50e758-20261101.log`, and
-`/private/tmp/html-tree-full-interpreter-runner-a0f50e758-20261101.log`.
-The full integration gate is current for `a0f50e758`. After that source, the
-#1794 transaction callback, long-poll controller, WebSocket lifetime, and
-#1860 growing-output regressions pass on system Perl and both backends; the
-PerlOnJava runs disabled corrective sweeps. Logs:
-`/private/tmp/ownership-1794-1860-system-perl-extended-a0f50e758-20261101.log`,
-`/private/tmp/ownership-issue_1794_controller_owner_release-jvm-a0f50e758-20261101.log`,
-`/private/tmp/ownership-mojolicious_controller_destroy_after_finish-jvm-a0f50e758-20261101.log`,
-`/private/tmp/ownership-mojolicious_websocket_controller_release-jvm-a0f50e758-20261101.log`,
-`/private/tmp/ownership-issue_1860_growing_lexical_output-jvm-a0f50e758-20261101.log`,
-and the equivalent `-interpreter-` logs.
-
-The new package IO glob regression passes 3/3 on system Perl and fails 1/3
-on both unfixed backends because the weak glob clears while its stash owner is
-still present. Its source and parent logs are
-`src/test/resources/unit/refcount/package_io_glob_owner_lifetime.t`,
-`/private/tmp/package-io-glob-owner-system-perl-parent-a0f50e758-20261101.log`,
-`/private/tmp/package-io-glob-owner-unfixed-parent-jvm-a0f50e758.log`, and
-`/private/tmp/package-io-glob-owner-unfixed-parent-interpreter-a0f50e758.log`.
-`GlobalVariable.StashSlotMap` now acquires a package glob slot for each named
-IO stash entry, transfers it on replacement, and releases it from remove,
-clear, iterator removal, reset, and child-runtime snapshot reconstruction.
-Deferred cleanup recognizes this uncounted owner kind so the weak observer
-waits for the corresponding stash entry to leave. The full no-sweeps make gate
-is pending; the initial attempt stopped before compilation because Maven
-Central TLS certificate validation failed while resolving `jol-core:0.17`.
-The retry uses the existing verified local JOL Maven repository.
-
-Next, audit remaining release and clear producers, then migrate scalar,
-closure, active-call, cycle, and CODE ownership before removing compatibility
-pins, root-reachability fallbacks, and sweep machinery.
-
-Earlier commits in this branch establish explicit owner identities for package
-roots, scalar-reference contents, async frames, tied-handler nested values,
-array replacement, and cloned hash replacement. The latest HTML-Tree `t/refloop.t`
-and full-suite evidence is current for `a0f50e758`; #1794/#1860 acceptance
-evidence is also current for that source. The immediate next work is a
-producer-level audit of remaining release helpers and scalar/CODE/cycle ownership: every
-acquisition, replacement, transfer, and cleanup must agree before removing
-reachability fallbacks, compatibility pins, or corrective-sweep machinery.
+`make check-links` passes 821 URLs on the current documentation. Immediate next
+action: commit the focused visibility fix and test, then run a complete
+immutable `nice -n 19 make` with corrective sweeps disabled and the verified
+local JOL repository. If green, rerun the
+socket and weak-reference acceptance paths, refresh this checkpoint and the
+issue claim, then continue auditing scalar, closure, active-call, cycle, and
+CODE producers before removing compatibility pins and reachability fallbacks.
 
 **Sweep policy (2026-10-27):** Corrective sweeps are disabled by default, as
 requested. `JPERL_ENABLE_CORRECTIVE_SWEEPS=1` temporarily enables legacy
