@@ -15,7 +15,7 @@ open $handle, '>', \$buffer or die "open scalar handle: $!";
 my $alias = $handle;
 my $weak = $handle;
 weaken($weak);
-bless $handle, 'Local::BlessedGlobAliasOwner';
+bless $weak, 'Local::BlessedGlobAliasOwner';
 ok(isweak($weak), 'observer is weak');
 
 undef $handle;
