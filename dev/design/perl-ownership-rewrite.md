@@ -43,17 +43,18 @@ generated-glob assertion; their complete logs are retained under
 The new cycle-owner regressions pass on system Perl (4/4), and the immutable
 no-sweeps candidate passes the focused weak-reference/`DESTROY`/resurrection/
 cycle matrix on both backends (18 files, 162 checks each). This includes the
-#1794 controller-release case and #1860 growing-output case. The full
-HTML-Tree result is still from source `dd1b5f501`; rerun its 23 files and 989
-checks on the current cycle candidate before the final acceptance barrier.
-Evidence:
+#1794 controller-release case and #1860 growing-output case. The complete
+HTML-Tree 5.07 suite also passes on the current runtime source on both backends:
+23 files and 989 checks each, including `t/refloop.t` at 8/8. Evidence:
 
 - Full gate: `/private/tmp/ownership-strong-cycle-no-sweeps-full-make-e90e39b9b-20261101-extended.log`
 - Cycle JUnit: `build/test-results/testUnitShard0/TEST-org.perlonjava.runtime.runtimetypes.StrongCycleOwnerSlotTest.xml`
 - System Perl cycle test: `/private/tmp/strong-cycle-owner-slots-system-perl-20261101.log`
 - JVM lifecycle matrix: `/private/tmp/ownership-lifecycle-matrix-jvm-e90e39b9b-20261101.log`
 - Interpreter lifecycle matrix: `/private/tmp/ownership-lifecycle-matrix-interpreter-e90e39b9b-20261101.log`
-- Earlier HTML-Tree JVM/interpreter logs: `/private/tmp/html-tree-full-jvm-runner-ed8b53c3f-20261101.log`, `/private/tmp/html-tree-full-interpreter-runner-ed8b53c3f-20261101.log`
+- HTML-Tree JVM: `/private/tmp/html-tree-full-jvm-runner-e90e39b9b-20261101.log`
+- HTML-Tree interpreter: `/private/tmp/html-tree-full-interpreter-runner-e90e39b9b-20261101.log`
+- Link check: `/private/tmp/ownership-cycle-checkpoint-links-e90e39b9b-20261101.log`
 
 Next, trace the remaining scalar-overwrite and first-weaken fallbacks to their
 producers, then continue the package-root and closure cleanup audit. Keep
