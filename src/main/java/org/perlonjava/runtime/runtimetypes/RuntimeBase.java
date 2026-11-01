@@ -254,7 +254,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
      */
     public boolean arrayLengthLvalueOrphaned = false;
 
-    public void retainClosureCapture() {
+    public synchronized void retainClosureCapture() {
         retainClosureCaptureCount(true);
     }
 
@@ -284,7 +284,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         captureCount--;
     }
 
-    final void verifyClosureCaptureOwnerCount(PerlOwnerSlot.Kind ownerKind) {
+    final synchronized void verifyClosureCaptureOwnerCount(PerlOwnerSlot.Kind ownerKind) {
         int slotCount = ownerSlotCount(ownerKind);
         int legacyCount = legacyCaptureOwnerCount();
         if (captureCount != slotCount + legacyCount) {
@@ -295,12 +295,12 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     }
 
     /** Retain one aggregate pad capture through an explicit owner slot. */
-    public PerlOwnerSlot retainClosureCaptureOwner() {
+    public synchronized PerlOwnerSlot retainClosureCaptureOwner() {
         return retainClosureCaptureOwner(null);
     }
 
     /** Retain one aggregate pad capture and identify its owning CODE object. */
-    public PerlOwnerSlot retainClosureCaptureOwner(RuntimeCode captureOwner) {
+    public synchronized PerlOwnerSlot retainClosureCaptureOwner(RuntimeCode captureOwner) {
         // A closure-pad slot is a semantic Perl owner even though it does not
         // contribute to the legacy selective refcount. A targeted weak sweep
         // can therefore leave an unblessed aggregate's legacy count at the
@@ -321,7 +321,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     }
 
     /** Release one aggregate pad capture, balancing its bridged count. */
-    public void releaseClosureCaptureOwner(PerlOwnerSlot ownerSlot) {
+    public synchronized void releaseClosureCaptureOwner(PerlOwnerSlot ownerSlot) {
         if (ownerSlot == null) {
             releaseClosureCapture();
             return;
@@ -342,7 +342,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         }
     }
 
-    public void releaseClosureCapture() {
+    public synchronized void releaseClosureCapture() {
         if (captureCount == 0 && legacyCaptureOwnerCount() == 0) return;
         releaseClosureCapture(false, true);
     }
