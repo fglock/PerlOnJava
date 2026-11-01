@@ -313,7 +313,7 @@ public class MortalList {
 
     /**
      * Record a captured scalar whose scope has exited but whose refCount
-     * could not be decremented because {@code captureCount > 0}.
+     * could not be decremented because a closure owner remains.
      * Called from {@link RuntimeScalar#scopeExitCleanup} for non-CODE
      * blessed references that are captured by closures.
      * <p>
@@ -326,7 +326,7 @@ public class MortalList {
         markBoundaryWork(state);
         state.deferredCaptures.add(scalar);
         state.deferredCapturesSet.merge(scalar, 1, Integer::sum);
-        if (scalar.captureCount == 0 && scalar.scopeExited) {
+        if (!scalar.hasClosureCaptureOwner() && scalar.scopeExited) {
             state.deferredCapturesMayBeReady = true;
         }
     }
@@ -344,18 +344,18 @@ public class MortalList {
     }
 
     /**
-     * Process deferred captures whose captureCount has already reached 0.
+     * Process deferred captures after their final closure owner has left.
      * Called from {@link #popAndFlush()} at block scope exit, AFTER the
      * mortal list has been processed (which may trigger callDestroy →
-     * releaseCaptures → captureCount decrements on captured variables).
+     * releaseCaptures → capture owners are retired from captured variables).
      * <p>
      * This bridges the gap between deferred capture registration (at scope
-     * exit when captureCount > 0) and flushDeferredCaptures (after the main
+     * exit while a closure owner remains) and flushDeferredCaptures (after the main
      * script returns). Without this, objects whose captures are fully
      * released at block exit still appear "alive" to leak tracers like
      * DBIC's assert_empty_weakregistry, which runs inside the main script.
      * <p>
-     * Only processes entries where captureCount == 0 AND scopeExited == true,
+     * Only processes entries with no closure owner AND scopeExited == true,
      * leaving others for later processing (either a subsequent block exit
      * or flushDeferredCaptures at script end).
      */
@@ -366,7 +366,7 @@ public class MortalList {
         boolean found = false;
         for (int i = state.deferredCaptures.size() - 1; i >= 0; i--) {
             RuntimeScalar scalar = state.deferredCaptures.get(i);
-            if (scalar.captureCount == 0 && scalar.scopeExited) {
+            if (!scalar.hasClosureCaptureOwner() && scalar.scopeExited) {
                 deferDecrementIfTracked(scalar);
                 state.deferredCaptures.remove(i);
                 removeFromDeferredSet(scalar);
@@ -478,13 +478,13 @@ public class MortalList {
     /**
      * Like {@link #deferDecrementIfTracked}, but delegates to
      * {@link RuntimeScalar#scopeExitCleanup} if the scalar is captured
-     * by a closure ({@code captureCount > 0}).
+     * by a closure owner.
      * Used by the explicit {@code return} bytecode path which bypasses
      * {@link RuntimeScalar#scopeExitCleanup}.
      */
     public static void deferDecrementIfNotCaptured(RuntimeScalar scalar) {
         if (!isActive() || scalar == null) return;
-        if (scalar.captureCount > 0
+        if (scalar.hasClosureCaptureOwner()
                 || (scalar.referencedByScalarReference && scalar.localBindingExists)) {
             // Delegate to scopeExitCleanup which handles:
             // - Self-referential cycle detection (eval STRING closures)
@@ -581,7 +581,7 @@ public class MortalList {
         boolean hadLocalBinding = hash.localBindingExists;
         hash.localBindingExists = false;
         hash.releaseUnownedClosureCaptures();
-        if (!finalRelease && hash.captureCount > 0) {
+        if (!finalRelease && hash.hasClosureCaptureOwner()) {
             hash.scopeExited = true;
             return;
         }
@@ -692,7 +692,7 @@ public class MortalList {
         // variable no longer holds a strong reference.
         arr.localBindingExists = false;
         arr.releaseUnownedClosureCaptures();
-        if (!finalRelease && arr.captureCount > 0) {
+        if (!finalRelease && arr.hasClosureCaptureOwner()) {
             arr.scopeExited = true;
             return;
         }
@@ -1598,7 +1598,7 @@ public class MortalList {
             } else if (base.localBindingExists) {
                 if (base instanceof RuntimeScalar scalar
                         && scalar.referencedByScalarReference
-                        && scalar.captureCount == 0
+                        && !scalar.hasClosureCaptureOwner()
                         && !MyVarCleanupStack.isRegistered(scalar)) {
                     // The declaring lexical is gone and this was the last
                     // counted scalar reference.  A returned blessed CODE
@@ -1758,7 +1758,7 @@ public class MortalList {
         if (base.refCount == 0
                 && isFinalCountedReferentRelease(base, ownerRelease)
                 && !base.localBindingExists
-                && base.captureCount == 0
+                && !base.hasClosureCaptureOwner()
                 && !base.hasPendingReturnOwner()
                 && !GlobalVariable.isPackageRootedAggregate(base)
                 && !(base instanceof RuntimeCode code
@@ -1782,7 +1782,8 @@ public class MortalList {
     static boolean canTrustFinalCountedRelease(RuntimeBase base) {
         boolean supportedReferent = base instanceof RuntimeArray || base instanceof RuntimeHash
                 || (base instanceof RuntimeScalar scalar
-                    && !(scalar instanceof RuntimeScalarReadOnly) && scalar.captureCount == 0)
+                    && !(scalar instanceof RuntimeScalarReadOnly)
+                    && !scalar.hasClosureCaptureOwner())
                 || (base instanceof RuntimeCode code
                     && (code.hasCountedCodeSlots || (!code.hadStashRef && code.stashRefCount <= 0))
                     && code.activeEndBlockExecutions == 0
@@ -2096,7 +2097,7 @@ public class MortalList {
                 && state.pendingIoReleases.size() <= ioMark
                 && state.pendingUntrackedReturnOwnerReleases.size() <= untrackedReturnOwnerMark) {
             // Even if no mortal entries to process, check deferred captures
-            // that may have become ready (captureCount reached 0) during
+            // that may have become ready after their final closure owner left during
             // scope cleanup.
             processReadyDeferredCaptures(state);
             DestroyDispatch.processRescuedObjects();
