@@ -780,6 +780,9 @@ public class GlobalVariable {
         private static void updatePackageIoGlobOwnerForState(
                 GlobalRuntimeState state, String key, RuntimeGlob nextGlob) {
             Map<String, PerlOwnerSlot> ownerSlots = state.packageIoGlobOwnerSlots();
+            if (isSymbolGensymName(key)) {
+                state.hiddenIoSlotsAfterStashDelete().add(key);
+            }
             if (state.hiddenIoSlotsAfterStashDelete().contains(key)) {
                 nextGlob = null;
             }
@@ -1420,6 +1423,10 @@ public class GlobalVariable {
 
     static void markStashEntryVisible(String key) {
         if (key != null) {
+            if (isSymbolGensymName(key)) {
+                hideIORefAfterStashDelete(key);
+                return;
+            }
             PerlRuntime runtime = PerlRuntime.currentOrNull();
             if (runtime != null && runtime.standardIOGlob(key) != null) {
                 runtime.showStandardIOGlob(key);
