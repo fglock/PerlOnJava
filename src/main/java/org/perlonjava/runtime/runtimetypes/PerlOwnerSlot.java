@@ -77,6 +77,8 @@ public final class PerlOwnerSlot {
     private PerlRuntime ownerRuntime;
     private LifecycleRuntimeState ownerRuntimeState;
     private boolean registeredInOwnerLedger;
+    /** True only for the direct, counted hold created for one method invocant. */
+    private boolean methodInvocantOwner;
     private int legacyCaptureCount;
     private volatile boolean nativeOwner;
     private long nextReleaseSequence;
@@ -221,6 +223,25 @@ public final class PerlOwnerSlot {
             throw new IllegalStateException("scalar owner association requires a counted slot");
         }
         countedScalarOwner = scalar == null ? null : new WeakReference<>(scalar);
+    }
+
+    /** Acquire an ARGUMENT_VALUE identity for a direct method-invocant hold. */
+    synchronized void acquireMethodInvocantIdentity(RuntimeBase target) {
+        if (kind != Kind.ARGUMENT_VALUE || referent != null || nativeOwner
+                || legacyCaptureCount != 0 || methodInvocantOwner) {
+            throw new IllegalStateException("method-invocant slot is not available");
+        }
+        Objects.requireNonNull(target, "target");
+        if (target.refCount == Integer.MIN_VALUE) {
+            throw new IllegalStateException("cannot hold a destroyed method invocant");
+        }
+        methodInvocantOwner = true;
+        transferWithoutRuntimeRoot(target, false);
+    }
+
+    /** Whether this slot still represents its direct method-invocant hold. */
+    synchronized boolean isMethodInvocantOwner(RuntimeBase target) {
+        return methodInvocantOwner && kind == Kind.ARGUMENT_VALUE && referent == target;
     }
 
     public synchronized boolean isActive() {
@@ -821,6 +842,7 @@ public final class PerlOwnerSlot {
         RuntimeBase previous = referent;
         LifecycleRuntimeState previousState = ownerRuntimeState;
         referent = null;
+        methodInvocantOwner = false;
         countedScalarOwner = null;
         captureOwner = null;
         scalarReferenceCell = null;

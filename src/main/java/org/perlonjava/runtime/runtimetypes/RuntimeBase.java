@@ -656,7 +656,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         return countedOwnerSlots;
     }
 
-    /** Restore the legacy count from counted identities at unmigrated release boundaries. */
+    /** Restore from counted identities for owner families that lack storage proof. */
     synchronized boolean restoreCountedOwnerSlotRefCount() {
         int count = countedOwnerSlotCount();
         if (count == 0) return false;
@@ -669,6 +669,13 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         int count = 0;
         for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
             if (!slot.isActive()) continue;
+            if (slot.isMethodInvocantOwner(this)) {
+                // A method call directly owns its invocant for the frame's
+                // lifetime. It has no scalar storage cell, so the slot's
+                // producer identity is its current-storage proof.
+                count++;
+                continue;
+            }
             RuntimeScalar owner = slot.countedScalarOwner();
             if (owner == null) continue;
             PerlOwnerSlot.Kind kind = slot.kind();
