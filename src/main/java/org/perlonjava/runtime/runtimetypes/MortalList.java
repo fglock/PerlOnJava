@@ -864,9 +864,12 @@ public class MortalList {
 
         if (--base.refCount > 0) return;
 
-        // Counted owner slots are authoritative even when the compatibility
-        // refcount transiently undercounts them during a tail-call handoff.
-        // Restore from those identities before allowing final release.
+        // Current counted owner slots are authoritative even when the
+        // compatibility refcount transiently undercounts them during a
+        // tail-call handoff.
+        if (base.restoreVerifiedCurrentCountedOwnerSlotRefCount()) return;
+        // Keep raw counted-slot restoration as a bridge for owner families
+        // whose producers have not yet migrated to current-storage proofs.
         if (base.restoreCountedOwnerSlotRefCount()) return;
 
         if (base.localBindingExists) {
@@ -1625,13 +1628,12 @@ public class MortalList {
                 // a cached root snapshot must not invent a replacement owner.
                 base.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroyFromCountedOwner(base);
-            } else if (base.blessId != 0 && base.restoreCountedOwnerSlotRefCount()) {
-                // For blessed referents, remaining counted slots preserve the
-                // compatibility bridge while scalar and container producers
-                // are still being migrated.
             } else if (base.restoreVerifiedCurrentCountedOwnerSlotRefCount()) {
                 // Verified current scalar cells and array/hash elements jointly
                 // restore the surviving owner count without a root walk.
+            } else if (base.blessId != 0 && base.restoreCountedOwnerSlotRefCount()) {
+                // For blessed referents, raw counted slots preserve the
+                // compatibility bridge while owner producers are being migrated.
             } else if (base instanceof RuntimeCode code
                     && hasWeakRefs
                     && (RuntimeCode.isActiveCode(code)

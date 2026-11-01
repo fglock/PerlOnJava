@@ -1101,6 +1101,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         refreshSuspendedFrameOwnerSlots();
     }
 
+    private synchronized boolean hasActiveArgumentAliasOwner(RuntimeBase referent) {
+        if (referent == null || argumentAliasOwnerSlots == null) return false;
+        for (PerlOwnerSlot ownerSlot : argumentAliasOwnerSlots) {
+            if (ownerSlot.isActive() && ownerSlot.referent() == referent) return true;
+        }
+        return false;
+    }
+
     /** Attach the owner identity for one lexical register retained by a suspended frame. */
     public synchronized void attachSuspendedFrameOwner(PerlOwnerSlot ownerSlot) {
         if (ownerSlot == null || ownerSlot.kind() != PerlOwnerSlot.Kind.SUSPENDED_FRAME) {
@@ -1188,6 +1196,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     boolean isCurrentCountedScalarOwner(RuntimeBase referent, PerlOwnerSlot slot) {
         PerlOwnerSlot.Kind kind = slot.kind();
+        boolean activeArgumentAlias = kind == PerlOwnerSlot.Kind.SCALAR_CELL
+                && hasActiveArgumentAliasOwner(referent);
         if ((kind != PerlOwnerSlot.Kind.SCALAR_CELL
                 && kind != PerlOwnerSlot.Kind.CODE_SLOT
                 && kind != PerlOwnerSlot.Kind.ARGUMENT_VALUE
@@ -1207,11 +1217,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && !MyVarCleanupStack.isRegistered(this)
                 && ownerSlotCount(PerlOwnerSlot.Kind.PACKAGE_SCALAR_SLOT) == 0
                 && !hasCodeSlotBinding()
-                && !(this instanceof RuntimeBaseProxy)) {
+                && !(this instanceof RuntimeBaseProxy)
+                && !activeArgumentAlias) {
             return false;
         }
         if (kind != PerlOwnerSlot.Kind.SCALAR_CELL
-                || hasDirectScalarCellStorageOwner()) {
+                || hasDirectScalarCellStorageOwner() || activeArgumentAlias) {
             return true;
         }
         return isCurrentCapturedScalarCellOwner(referent, slot);
@@ -3730,12 +3741,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     // cached root walks cannot supply a replacement owner.
                     oldBase.refCount = Integer.MIN_VALUE;
                     DestroyDispatch.callDestroyFromCountedOwner(oldBase);
-                } else if ((oldBase.blessId != 0
-                        && WeakRefRegistry.hasWeakRefsTo(oldBase)
-                        && oldBase.restoreCountedOwnerSlotRefCount())
-                        || oldBase.restoreVerifiedCurrentCountedOwnerSlotRefCount()) {
+                } else if (oldBase.restoreVerifiedCurrentCountedOwnerSlotRefCount()) {
                     // Verified current scalar cells and aggregate elements
                     // jointly repair transient undercounts without a root walk.
+                } else if (oldBase.blessId != 0
+                        && WeakRefRegistry.hasWeakRefsTo(oldBase)
+                        && oldBase.restoreCountedOwnerSlotRefCount()) {
+                    // Legacy counted slots that have not yet migrated to
+                    // current-storage proofs remain a compatibility bridge.
                 } else if (oldBase instanceof RuntimeCode code
                         && code.hasActiveCodeOwner()) {
                     // An executing CV owns its final state independently of
