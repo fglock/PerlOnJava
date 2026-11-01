@@ -3,7 +3,7 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; hidden entries release that owner while retaining their lookup state. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-01):** Phase 2 continues on branch
-`wip/socket-gensym-owner-20261101-020558` at source checkpoint `2bab2cf96`.
+`wip/socket-gensym-owner-20261101-020558` at source checkpoint `c352f070e`.
 The new `active_lexical_aggregate_owner_release.t` regression passes 4/4 on
 system Perl, JVM, and interpreter; it failed 2/4 on each PerlOnJava backend at
 parent `3380ebe8a`. The focused `make` shard passes. The fix records one
@@ -13,12 +13,20 @@ retires that identity before deciding whether aggregate elements still have a
 live owner; the current-frame lookup falls through to the top-level pad when
 needed. `Internals::SvREFCNT` avoids counting this lifecycle identity twice
 when `localBindingExists` already reports the same lexical edge. An initial
-full gate on `860526807` exposed the cleanup ordering and duplicate count; the
-14 affected lifecycle files now pass on both backends. Evidence:
+gate on `860526807` exposed the cleanup ordering and duplicate count. The
+corrected unfiltered no-sweeps `make` passes on `c352f070e` in 6m58s. Sixteen
+focused weaken, DESTROY, resurrection, cycle, closure, #1794, and #1860 files
+pass on both backends. HTML::Tree 5.07 passes all 23 files and 989 checks on
+both backends; `t/refloop.t` is 8/8 on each. System Perl passes all 23 files
+with 969 checks and skips the optional Test::LeakTrace file. Evidence:
+`/private/tmp/ownership-active-lexical-final-full-no-sweeps-make-c352f070e.log`,
+`/private/tmp/ownership-htmltree-full-{jvm,interpreter}-c352f070e.log`,
+`/private/tmp/ownership-htmltree-full-system-perl-c352f070e.log`, and
+`/private/tmp/ownership-acceptance-final-jvm-interpreter-summary.txt`.
+Earlier diagnostic evidence:
 `/private/tmp/active-lexical-aggregate-cleanup-order-focused-make.log`,
 `/private/tmp/ownership-lifecycle-{jvm,interpreter}-after-order-summary.txt`,
 and `/private/tmp/active-lexical-aggregate-owner-release-final-full-no-sweeps-make-860526807.log`.
-The unfiltered no-sweeps gate on the corrected candidate is pending.
 
 Closure capture counts distinguish explicit `SCALAR_CAPTURE`/`CLOSURE_PAD`
 slots from compatibility retains. Producer checks balance active slots,
