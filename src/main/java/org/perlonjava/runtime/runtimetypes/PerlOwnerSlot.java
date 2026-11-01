@@ -46,6 +46,8 @@ public final class PerlOwnerSlot {
         SUSPENDED_FRAME,
         /** Strong container edge whose referent is not on the legacy refcount bridge. */
         UNTRACKED_REFERENCE,
+        /** Scalar slot retaining an anonymous IO glob's live resource. */
+        IO_RESOURCE_HOLDER,
         /** Temporary legacy count pin for a package-rooted weak aggregate. */
         WEAKLY_TRACKED_COMPATIBILITY_PIN,
         /** Runtime-owned temporary value retained across a cleanup drain. */

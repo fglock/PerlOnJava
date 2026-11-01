@@ -342,8 +342,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      */
     private boolean scalarStoredGlob;
 
-    /** True on the scalar slot that owns a newly created anonymous IO glob. */
-    public boolean ioOwner;
+    /** Identity of the scalar slot's anonymous IO resource owner, when present. */
+    PerlOwnerSlot ioOwnerSlot;
+
+    /** Whether this scalar currently owns an anonymous IO resource slot. */
+    public boolean hasIoOwner() {
+        return ioOwnerSlot != null;
+    }
 
     /** Active call-frame provenance for copies extracted from aliased arguments. */
     private Object copiedFromArgumentFrame;
@@ -1649,14 +1654,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         Object argumentFrame = RuntimeCode.currentArgumentAliasFrame(scalar);
         this.copiedFromArgumentFrame = argumentFrame != null
                 ? argumentFrame : scalar.copiedFromArgumentFrame;
-        // A scalar detached from both a lexical registration and a durable
-        // container is an expression temporary. Move its socket ownership
+        // A scalar detached from lexical and package registration and from a
+        // durable container is an expression temporary. Move its socket ownership
         // token into the copy (notably RuntimeList return materialization)
         // instead of leaving an unreachable phantom holder behind.
-        if (scalar.ioOwner && scalar.containerOwner == null
+        if (scalar.hasIoOwner() && scalar.containerOwner == null
+                && !scalar.isPackageGlobalRoot
                 && !MyVarCleanupStack.isRegistered(scalar)) {
-            scalar.ioOwner = false;
-            this.ioOwner = true;
+            transferIoOwner(scalar, this);
         }
     }
 
@@ -2914,18 +2919,92 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (PerlRuntime.currentOrNull() != null) ScalarRefRegistry.registerRef(scalar);
     }
 
+    private record IoOwnerRelease(RuntimeGlob glob, int remainingHolders) {}
+
+    private static PerlOwnerSlot acquireIoOwnerSlot(RuntimeGlob glob) {
+        synchronized (glob) {
+            if (glob.ioHolderCount() == Integer.MAX_VALUE) {
+                throw new IllegalStateException("anonymous IO holder count overflow");
+            }
+            PerlOwnerSlot ownerSlot = new PerlOwnerSlot(
+                    PerlOwnerSlot.Kind.IO_RESOURCE_HOLDER);
+            ownerSlot.acquireNativeOwner(glob);
+            return ownerSlot;
+        }
+    }
+
+    private static void attachIoOwnerSlot(RuntimeScalar scalar, PerlOwnerSlot ownerSlot) {
+        if (scalar.ioOwnerSlot != null) {
+            throw new IllegalStateException("scalar already owns an anonymous IO holder");
+        }
+        if (ownerSlot == null || !ownerSlot.isActive()
+                || ownerSlot.kind() != PerlOwnerSlot.Kind.IO_RESOURCE_HOLDER
+                || !ownerSlot.isNativeOwner()
+                || !(ownerSlot.referent() instanceof RuntimeGlob)) {
+            throw new IllegalStateException("cannot attach an inactive anonymous IO holder");
+        }
+        scalar.ioOwnerSlot = ownerSlot;
+    }
+
+    private static IoOwnerRelease releaseIoOwnerSlot(RuntimeScalar scalar) {
+        if (scalar == null) return null;
+        if (scalar.ioOwnerSlot == null) return null;
+        PerlOwnerSlot ownerSlot = scalar.ioOwnerSlot;
+        if (ownerSlot == null || !ownerSlot.isActive()
+                || ownerSlot.kind() != PerlOwnerSlot.Kind.IO_RESOURCE_HOLDER
+                || !(ownerSlot.referent() instanceof RuntimeGlob glob)) {
+            throw new IllegalStateException("scalar IO owner flag has no active owner identity");
+        }
+        synchronized (glob) {
+            if (!ownerSlot.isNativeOwner() || glob.ioHolderCount() <= 0) {
+                throw new IllegalStateException("anonymous IO holder release is unbalanced");
+            }
+            scalar.ioOwnerSlot = null;
+            ownerSlot.release();
+            return new IoOwnerRelease(glob, glob.ioHolderCount());
+        }
+    }
+
+    static void transferIoOwner(RuntimeScalar source, RuntimeScalar destination) {
+        if (source == null || destination == null || source == destination) return;
+        if (source.ioOwnerSlot == null) return;
+        PerlOwnerSlot ownerSlot = source.ioOwnerSlot;
+        if (destination.ioOwnerSlot != null
+                || ownerSlot == null || !ownerSlot.isActive()
+                || ownerSlot.kind() != PerlOwnerSlot.Kind.IO_RESOURCE_HOLDER
+                || !(ownerSlot.referent() instanceof RuntimeGlob glob)
+                || source.type != GLOBREFERENCE || source.value != glob
+                || destination.type != GLOBREFERENCE || destination.value != glob) {
+            throw new IllegalStateException("invalid anonymous IO owner transfer");
+        }
+        synchronized (glob) {
+            if (!ownerSlot.isNativeOwner()) {
+                throw new IllegalStateException("transferred anonymous IO owner is not native");
+            }
+            source.ioOwnerSlot = null;
+            destination.ioOwnerSlot = ownerSlot;
+        }
+    }
+
     public static void retainUnstashedIoForDurableSlot(RuntimeScalar scalar) {
         if (scalar == null) return;
         scalar.copiedFromArgumentFrame = null;
-        if (scalar.ioOwner
-                || scalar.type != GLOBREFERENCE
+        if (scalar.ioOwnerSlot != null) {
+            if (scalar.ioOwnerSlot == null
+                    || !scalar.ioOwnerSlot.isActive()
+                    || !(scalar.ioOwnerSlot.referent() instanceof RuntimeGlob ownedGlob)
+                    || scalar.type != GLOBREFERENCE || scalar.value != ownedGlob) {
+                throw new IllegalStateException("durable scalar has a stale anonymous IO owner");
+            }
+            return;
+        }
+        if (scalar.type != GLOBREFERENCE
                 || !(scalar.value instanceof RuntimeGlob glob)
                 || !isUnstashedIoGlob(glob)
                 || !hasLiveIo(glob)) {
             return;
         }
-        glob.ioHolderCount++;
-        scalar.ioOwner = true;
+        attachIoOwnerSlot(scalar, acquireIoOwnerSlot(glob));
     }
 
     /** Retain a non-socket anonymous IO handle copied into a hash element slot. */
@@ -2949,11 +3028,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 || !isUnstashedIoGlob(glob) || !hasLiveIo(glob)) {
             return null;
         }
-        boolean sourceOwned = source.ioOwner;
+        boolean sourceOwned = source.hasIoOwner();
         RuntimeScalar copy = new RuntimeScalar(source);
-        if (sourceOwned && copy.ioOwner) {
-            copy.ioOwner = false;
-            source.ioOwner = true;
+        if (sourceOwned && copy.hasIoOwner()) {
+            transferIoOwner(copy, source);
         }
         copy.copiedFromArgumentFrame = null;
         copy.reconcileContainerOwners();
@@ -3449,19 +3527,22 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // cleanup responsibility to the destination lexical instead of creating
         // an ownerless extra holder.  The detached source is only an expression
         // temporary and does not receive normal lexical scope cleanup.
-        boolean durableIoDestination = ioOwner
+        boolean durableIoDestination = hasIoOwner()
                 || containerOwner != null
                 || isPackageGlobalRoot
                 || MyVarCleanupStack.isRegistered(this);
         boolean assignedFromArgumentAlias = RuntimeCode.isCurrentArgumentAlias(value)
-                || (!value.ioOwner
+                || (!value.hasIoOwner()
                     && RuntimeCode.isArgumentFrameActive(value.copiedFromArgumentFrame));
         boolean assignedFromAcceptedSocketArgument = assignedFromArgumentAlias
                 && isAcceptedSocket(value);
+        boolean preserveCurrentIoOwner = this == value && hasIoOwner()
+                && ioOwnerSlot != null && ioOwnerSlot.isActive()
+                && ioOwnerSlot.referent() == value.value;
         boolean transferDetachedIoOwner = durableIoDestination
                 && this != value
                 && !assignedFromArgumentAlias
-                && value.ioOwner
+                && value.hasIoOwner()
                 && value.type == GLOBREFERENCE
                 && value.value instanceof RuntimeGlob transferGlob
                 && isUnstashedIoGlob(transferGlob)
@@ -3471,22 +3552,23 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                         && array.transientListAssignmentRhs)
                     || value.containerOwner == RuntimeCode.getCurrentArgs());
 
-        // Track anonymous-glob aliases so the owning slot only releases the
-        // descriptor when no copied scalar still points at that glob.
+        // Acquire a replacement owner before releasing this scalar's previous
+        // holder. A detached value can transfer its existing identity instead
+        // of creating a second owner.
+        PerlOwnerSlot replacementIoOwnerSlot = null;
         if (value.type == GLOBREFERENCE && value.value instanceof RuntimeGlob newGlob
                 && isUnstashedIoGlob(newGlob)
                 && hasLiveIo(newGlob)
                 && durableIoDestination
                 && (!assignedFromArgumentAlias || assignedFromAcceptedSocketArgument)
-                && !transferDetachedIoOwner) {
-            newGlob.ioHolderCount++;
+                && !transferDetachedIoOwner
+                && !preserveCurrentIoOwner) {
+            replacementIoOwnerSlot = acquireIoOwnerSlot(newGlob);
         }
-        if (this.ioOwner
-                && this.type == GLOBREFERENCE && this.value instanceof RuntimeGlob oldGlob
-                && isUnstashedIoGlob(oldGlob)) {
-            this.ioOwner = false;
-            if (oldGlob.ioHolderCount > 0) oldGlob.ioHolderCount--;
-            if (oldGlob.ioHolderCount <= 0) {
+        if (hasIoOwner() && !preserveCurrentIoOwner) {
+            IoOwnerRelease oldRelease = releaseIoOwnerSlot(this);
+            RuntimeGlob oldGlob = oldRelease.glob();
+            if (oldRelease.remainingHolders() <= 0 && isUnstashedIoGlob(oldGlob)) {
                 RuntimeScalar oldIoSlot = oldGlob.getIO();
                 if (oldIoSlot != null && oldIoSlot.value instanceof RuntimeIO oldIo
                         && isSocketIOHandle(oldIo.ioHandle)) {
@@ -3633,16 +3715,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.globalCodeRefFqn = packageCodeRefName != null
                 ? packageCodeRefName : value.globalCodeRefFqn;
         if (transferDetachedIoOwner) {
-            value.ioOwner = false;
-            this.ioOwner = true;
-        } else if (durableIoDestination
-                && (!assignedFromArgumentAlias || assignedFromAcceptedSocketArgument)
-                && this != value
-                && value.type == GLOBREFERENCE
-                && value.value instanceof RuntimeGlob assignedGlob
-                && isUnstashedIoGlob(assignedGlob)
-                && hasLiveIo(assignedGlob)) {
-            this.ioOwner = true;
+            transferIoOwner(value, this);
+        } else if (replacementIoOwnerSlot != null) {
+            attachIoOwnerSlot(this, replacementIoOwnerSlot);
         }
         // Hash and array assignment normally preserves the aggregate's existing
         // scalar slot. If that slot belongs to a tied-handler graph, propagate
@@ -5931,7 +6006,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 // that durable owner leaves; clearing on the borrow breaks
                 // getline/input_line_number calls inside wrapper subroutines.
                 boolean borrowedLiveIo = isUnstashedIoGlob(glob)
-                        && !scalar.ioOwner && glob.ioHolderCount > 0;
+                        && !scalar.hasIoOwner() && glob.ioHolderCount() > 0;
                 if (!borrowedLiveIo) {
                     RuntimeIO.setLastAccessedHandle(null);
                     RuntimeIO.setLastReadlineHandleName(null);
@@ -5966,7 +6041,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // When all three conditions are true, the entire method body is a no-op:
         // - refCountOwned=false → deferDecrementIfTracked returns immediately
         // - captureCount=0 → capture handling branch not taken
-        if (!scalar.refCountOwned && scalar.captureCount == 0 && !scalar.ioOwner
+        if (!scalar.refCountOwned && scalar.captureCount == 0 && !scalar.hasIoOwner()
                 && !scalar.hasScalarReferenceContentsOwner()
                 && scalar.untrackedReferenceOwnerSlot == null
                 && scalar.type != RuntimeScalarType.TIED_SCALAR) {
@@ -6082,18 +6157,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // Since unblessed objects have no DESTROY, delayed clearing is safe.
     }
 
-    /** Release one durable scalar slot's ownership of an unstashed IO glob. */
+    /** Release one durable scalar slot's anonymous IO resource owner identity. */
     public static void releaseIoOwner(RuntimeScalar scalar) {
-        if (scalar == null || !scalar.ioOwner) return;
-        scalar.ioOwner = false;
-        if (scalar.type == GLOBREFERENCE
-                && scalar.value instanceof RuntimeGlob glob
-                && isUnstashedIoGlob(glob)) {
-            if (glob.ioHolderCount > 0) {
-                glob.ioHolderCount--;
-            }
-            RuntimeScalar ioSlot = glob.getIO();
-            if (glob.ioHolderCount <= 0) {
+        IoOwnerRelease ownerRelease = releaseIoOwnerSlot(scalar);
+        if (ownerRelease != null) {
+            RuntimeGlob glob = ownerRelease.glob();
+            if (ownerRelease.remainingHolders() <= 0 && isUnstashedIoGlob(glob)) {
+                RuntimeScalar ioSlot = glob.getIO();
                 if (ioSlot != null && ioSlot.value instanceof RuntimeIO io
                         && !(io.ioHandle instanceof ClosedIOHandle)) {
                     // Closing is required for stream sockets: merely dropping
@@ -6112,7 +6182,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     /** Release an IO owner only when its live handle is a stream/datagram socket. */
     public static void releaseSocketIoOwner(RuntimeScalar scalar) {
-        if (scalar == null || !scalar.ioOwner || scalar.type != GLOBREFERENCE
+        if (scalar == null || !scalar.hasIoOwner() || scalar.type != GLOBREFERENCE
                 || !(scalar.value instanceof RuntimeGlob glob)
                 || !isUnstashedIoGlob(glob)) {
             return;
@@ -6132,7 +6202,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public static void releaseOrTransferSocketIoOwnerOnReturn(
             RuntimeScalar owner, RuntimeBase returned) {
         if (owner == null || owner.captureCount > 0
-                || !owner.ioOwner || owner.type != GLOBREFERENCE
+                || !owner.hasIoOwner() || owner.type != GLOBREFERENCE
                 || !(owner.value instanceof RuntimeGlob glob)
                 || !isUnstashedIoGlob(glob)) {
             return;
@@ -6149,9 +6219,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             owner.reconcileContainerOwners();
             return;
         }
-        if (recipient != null && !recipient.ioOwner) {
-            owner.ioOwner = false;
-            recipient.ioOwner = true;
+        if (recipient != null && !recipient.hasIoOwner()) {
+            transferIoOwner(owner, recipient);
             recipient.copiedFromArgumentFrame = null;
             // RuntimeCode.returnList wraps scalar returns in a temporary list.
             // The returned scalar is a movable value, not a durable element of
@@ -6169,7 +6238,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      */
     public static void releaseIoOwnerPreservingReturned(
             RuntimeScalar owner, RuntimeBase returned) {
-        if (owner == null || !owner.ioOwner
+        if (owner == null || !owner.hasIoOwner()
                 || owner.type != GLOBREFERENCE
                 || !(owner.value instanceof RuntimeGlob glob)
                 || !isUnstashedIoGlob(glob)) {
@@ -6195,7 +6264,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     /** Move an anonymous-IO holder token to the final scalar copy returned to a caller. */
     public static void transferIoOwnerToReturnedCopy(
             RuntimeScalar source, RuntimeScalar returnedCopy) {
-        if (source == null || returnedCopy == null || !source.ioOwner
+        if (source == null || returnedCopy == null || !source.hasIoOwner()
                 || source.type != GLOBREFERENCE
                 || returnedCopy.type != GLOBREFERENCE
                 || source.value != returnedCopy.value
@@ -6203,8 +6272,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 || !isUnstashedIoGlob(glob)) {
             return;
         }
-        source.ioOwner = false;
-        returnedCopy.ioOwner = true;
+        transferIoOwner(source, returnedCopy);
         returnedCopy.copiedFromArgumentFrame = null;
         returnedCopy.reconcileContainerOwners();
     }
@@ -7336,15 +7404,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      * subroutine through the JVM return cleanup path.
      *
      * <p>This deliberately does not release IO ownership, change
-     * {@link RuntimeGlob#ioHolderCount}, unregister the descriptor, or close the
+     * {@link RuntimeGlob#ioHolderCount()}, unregister the descriptor, or close the
      * handle. The general return path may still have a returned or otherwise
      * copied scalar pointing at the anonymous glob; those aliases are reflected
      * by a holder count greater than the lexical owner's single holder.</p>
      */
     public static void clearStaleDiagnosticContextForUnaliasedIO(RuntimeScalar scalar) {
-        if (scalar == null || !scalar.ioOwner || scalar.type != GLOBREFERENCE
+        if (scalar == null || !scalar.hasIoOwner() || scalar.type != GLOBREFERENCE
                 || !(scalar.value instanceof RuntimeGlob glob)
-                || !isUnstashedIoGlob(glob) || glob.ioHolderCount > 1) {
+                || !isUnstashedIoGlob(glob) || glob.ioHolderCount() > 1) {
             return;
         }
         RuntimeScalar ioSlot = glob.getIO();
