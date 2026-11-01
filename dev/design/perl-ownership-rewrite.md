@@ -3,42 +3,44 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; hidden entries release that owner while retaining their lookup state. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-01):** Phase 2 continues on branch
-`wip/socket-gensym-owner-20261101-020558` at source `654cf0d5f`. Closure
-capture counts now distinguish explicit `SCALAR_CAPTURE`/`CLOSURE_PAD` slots
-from compatibility-only retains. Scalar and aggregate producers verify that
-their count equals active owner slots plus legacy retains; scope cleanup retires
-only recorded legacy owners. `RuntimeScalar` and `RuntimeBase` now share one
-capture-count field, removing the scalar shadow that caused the two ledgers to
-diverge. The paired count/slot updates and checks are serialized so concurrent
-ithread snapshots cannot observe half-completed transitions. Missing scalar
-owner-slot metadata remains a no-op only when no capture count exists; a
-positive raw count without provenance raises an invariant failure.
+`wip/socket-gensym-owner-20261101-020558` at source `1a71f907e`. Closure
+capture counts distinguish explicit `SCALAR_CAPTURE`/`CLOSURE_PAD` slots from
+compatibility-only retains. Scalar and aggregate producers verify that counts
+equal active owner slots plus legacy retains; scope cleanup retires only
+recorded legacy owners. The capture count is shared by `RuntimeBase` and
+`RuntimeScalar`, and paired count/slot transitions are serialized so concurrent
+ithread snapshots cannot observe partial updates. Lifecycle decisions now ask
+whether capture owner identities or pending capture releases exist, instead of
+branching on the raw capture count. A release stays visible as an owner until
+its slot callback finishes. Missing slot metadata is accepted only when no
+capture count exists; unexplained positive counts raise an invariant failure.
 
-`CaptureOwnerLedgerTest` covers scalar and aggregate acquire/release, legacy
-provenance, stale counts, and absent-slot cleanup. The targeted ownership/root
-suite passes. The lazy thread-snapshot regression passes 3 consecutive JVM
-runs after the synchronization fix; the condition-broadcast stress and both
-thread regressions pass on system Perl. The full gate passes on immutable
-`654cf0d5f` in 7m08; log:
-`/private/tmp/ownership-capture-ledger-atomic-make-654cf0d5f.log`. Earlier
-candidate logs retain the reproduced null-slot and concurrent-check failures:
-`/private/tmp/ownership-capture-ledger-make-eae9232c9.log` and
-`/private/tmp/ownership-capture-ledger-final-make-5f548fcd1.log`.
+`CaptureOwnerLedgerTest` covers acquire/release, legacy provenance, stale
+counts, absent slots, owner identity, and pending releases. The focused owner
+and root-query suite passes. Eighteen Perl fixtures passed on system Perl with
+243 assertions; the same set passed on JVM and interpreter with corrective
+sweeps disabled (36 backend invocations). The full immutable-source gate passed
+on `1a71f907e` in 6m52; log:
+`/private/tmp/ownership-capture-owner-query-make-1a71f907e.log`. The targeted
+and backend logs are `/private/tmp/ownership-capture-owner-query-focused.log`,
+`/private/tmp/capture-owner-query-system-perl-rerun.log`, and
+`/private/tmp/capture-owner-query-no-sweeps-perlonjava.log`.
 
-Prior gates also cover active CODE stack ordering (`6a94453f7`), reset of
-compiled, pinned, and localized CODE slots (`ea28e59c7`), and visible stash
-CODE ownership (`d8d8124d1`). The weak-reference, resurrection, #1794, #1860,
-and HTML-Tree acceptance matrices are recorded at their tested commits; they
-were not all rerun on `654cf0d5f`. Other capture producers, argument/return/
-mortal lifetimes, package roots, strong cycles, cloned/shared storage, and
-resource owners remain. Corrective sweeps and compatibility recovery remain;
-ownership completion is not claimed.
+Earlier gates cover active CODE stack ordering (`6a94453f7`), reset of
+compiled, pinned, and localized CODE slots (`ea28e59c7`), visible stash CODE
+ownership (`d8d8124d1`), and synchronized closure capture transitions
+(`654cf0d5f`). The latest full gate does not rerun all no-sweeps acceptance
+matrices. Tied-handler nested values, additional capture producers, argument,
+return and mortal lifetimes, package roots, strong cycles, cloned/shared
+storage, and resource owners remain under audit. Corrective sweeps and
+compatibility recovery remain; ownership completion is not claimed.
 
-Next, continue the producer/transfer/cleanup audit across tied values, closure
-aliases, package roots, cycles, shared storage, argument/return/mortal values,
-and resources. Remove each recovery path only after its source invariant and
-lifecycle matrix are covered. Rerun the final no-sweeps HTML-Tree and lifecycle
-acceptance matrix, then reconcile open PR #1938 with the tested candidate.
+Next, trace tied-handler and nested-value acquisition, replacement, transfer,
+and cleanup—including stores made before first weaken—then continue the
+remaining owner families. Remove recovery paths only after producer invariants
+and lifecycle coverage establish their replacement. Rerun the full no-sweeps
+HTML-Tree and lifecycle acceptance matrix on the final candidate before
+reconciling open PR #1938.
 
 **Sweep policy (2026-10-27):** Corrective sweeps are disabled by default, as
 requested. `JPERL_ENABLE_CORRECTIVE_SWEEPS=1` temporarily enables legacy
