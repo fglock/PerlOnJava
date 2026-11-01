@@ -128,6 +128,9 @@ public class MyVarCleanupStack {
             MortalList.invalidateLiveRootSnapshot();
         }
         if (var instanceof RuntimeScalar scalar) scalar.refreshUntrackedReferenceOwner();
+        if (var instanceof RuntimeArray || var instanceof RuntimeHash) {
+            RuntimeCode.noteMyVarRegistered((RuntimeBase) var);
+        }
     }
 
     /**
@@ -299,9 +302,7 @@ public class MyVarCleanupStack {
     private static void releaseActiveAggregateOwnerAfterCleanup(Object var) {
         if (!(var instanceof RuntimeBase base)
                 || (!(base instanceof RuntimeArray) && !(base instanceof RuntimeHash))) return;
-        if (RuntimeCode.releaseActiveLexicalAggregateOwner(base)) {
-            WeakRefRegistry.onActiveLexicalOwnerReleased(base);
-        }
+        RuntimeCode.releaseActiveLexicalAggregateOwner(base);
     }
 
     /**
@@ -326,6 +327,12 @@ public class MyVarCleanupStack {
             if (var != null) {
                 decRegisteredCount(var);
                 decLiveCount(var);
+                if (var instanceof RuntimeBase base
+                        && (base instanceof RuntimeArray || base instanceof RuntimeHash)
+                        && !isRegistered(var)) {
+                    base.localBindingExists = false;
+                }
+                releaseActiveAggregateOwnerAfterCleanup(var);
                 noteVarLeftScope(var);
             }
         }

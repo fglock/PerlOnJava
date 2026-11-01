@@ -800,6 +800,9 @@ public final class PerlOwnerSlot {
         finishDeferredCodeRelease(previous);
         finishDeferredScalarCellRelease(previous);
         WeakRefRegistry.onStrongOwnerSlotReleased(previous);
+        if (kind == Kind.ACTIVE_LEXICAL) {
+            WeakRefRegistry.onActiveLexicalOwnerReleased(previous);
+        }
     }
 
     private static void finishDeferredCodeRelease(RuntimeBase previous) {
