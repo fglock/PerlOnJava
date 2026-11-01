@@ -3,26 +3,28 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; hidden entries release that owner while retaining their lookup state. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-01):** Phase 2 continues on branch
-`wip/socket-gensym-owner-20261101-020558` at source commit `8245755e9`.
-Persistent CODE state slots remain in place from the prior checkpoint. This
-batch completes the weak blessed-glob path: first blessing and lexical/package
-alias discovery skip weak scalars; weakening retires the scalar's anonymous
-IO resource-holder identity after any final `DESTROY`; unweaken reacquires the
-resource identity for a live glob. `retainUnstashedIoForDurableSlot` no longer
-creates an IO owner for a weak scalar.
+`wip/socket-gensym-owner-20261101-020558` at source commit `6a208b198`.
+Persistent CODE state slots remain in place from the prior checkpoint. Weak
+glob scalars are excluded from first-bless owner acquisition and lexical/package
+alias discovery; weakening retires their anonymous IO holder after any final
+`DESTROY`, and unweaken reacquires it for a live glob. Multi-LHS list assignment
+now replaces its array tail through `RuntimeArray.setFromList`, which releases
+displaced element owners, creates current destination slots, and retires any
+temporary RHS owners.
 
-The new Perl regression passes 5/5 on system Perl, JVM, and interpreter, with
-corrective sweeps disabled on both PerlOnJava backends. `BlessedGlobAliasOwnerSlotTest`
-and `WeakGlobIoOwnerSlotTest` cover scalar owner slots, IO holder identity,
-weakening, and unweaken. The unfixed parent fails all three focused assertions
-in `/private/tmp/blessed-glob-weak-bless-parent-make-extended.log`. The first
-count-only candidate still failed the Perl lifecycle checks because a weak
-glob scalar retained an `IO_RESOURCE_HOLDER`; that evidence is in
-`/private/tmp/blessed-glob-weak-bless-fixed-focused-make.log`. The fixed
-focused gate passes at
-`/private/tmp/blessed-glob-weak-owner-fixed-focused-make-2.log`. Full no-sweeps
-`make` passes on immutable candidate `8245755e9` in 9m36:
-`/private/tmp/ownership-blessed-glob-immutable-make-8245755e9.log`.
+`blessed_glob_alias_owner_release.t` passes 5/5 on system Perl, JVM, and
+interpreter with sweeps disabled on both PerlOnJava backends. The parent failed
+three focused ownership assertions in
+`/private/tmp/blessed-glob-weak-bless-parent-make-extended.log`; the count-only
+candidate's remaining IO-holder failure is captured in
+`/private/tmp/blessed-glob-weak-bless-fixed-focused-make.log`.
+`list_assignment_array_tail_releases_displaced_owner.t` passes 5/5 on system
+Perl and both backends; the unfixed parent failed its last two checks at
+`/private/tmp/list-assignment-array-tail-parent-make.log`. The focused fixed
+gate passes at
+`/private/tmp/list-assignment-array-tail-fixed-focused-make.log`. Full
+no-sweeps `make` passes on immutable candidate `6a208b198` in 6m24:
+`/private/tmp/ownership-list-assignment-immutable-make-6a208b198.log`.
 
 The deferred and tail-call raw-count bridge remains: removing it failed
 `ActiveArgumentOwnerLedgerFastPathTest` and
@@ -152,6 +154,21 @@ the IO identity for a live glob.
 interpreter. Java coverage checks weak scalar owner slots and IO holder counts.
 The full no-sweeps `make` passes on source `8245755e9`; parent and intermediate
 failure evidence plus final focused logs are listed in the current checkpoint.
+
+### Multi-LHS array-tail replacement releases displaced owners (2026-11-01)
+
+`RuntimeList.setFromList` previously assigned the materialized RHS list directly
+to a plain array's `elements` field. That skipped cleanup of the displaced
+array cells and left temporary RHS cells as the apparent owners. The array
+tail now goes through `RuntimeArray.setFromList`, which releases old element
+slots, acquires current `ARRAY_ELEMENT` identities for the destination values,
+and then retires any counted temporary RHS owners. Tied-array dispatch and
+autovivification continue through the same store API.
+
+`list_assignment_array_tail_releases_displaced_owner.t` passes 5/5 on system
+Perl and both backends with sweeps disabled. The unfixed parent fails the two
+release checks; the failure and fixed focused logs are recorded above. Full
+no-sweeps `make` passes on source `6a208b198`.
 
 ## Baseline ownership map
 
