@@ -132,6 +132,76 @@ class CodeSlotOwnerTest {
     }
 
     @Test
+    void visibleStashCodeOwnersAreDistinctFromCompilerPins() {
+        try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
+            RuntimeCode code = code();
+            RuntimeScalar sharedSlot = new RuntimeScalar(code);
+            GlobalVariable.globalCodeRefs.put("CodeOwner::visibleA", sharedSlot);
+            GlobalVariable.globalCodeRefs.put("CodeOwner::visibleB", sharedSlot);
+            assertTrue(code.hasStashCodeSlotOwner());
+
+            GlobalVariable.globalCodeRefs.remove("CodeOwner::visibleA");
+            assertTrue(code.hasStashCodeSlotOwner());
+            GlobalVariable.globalCodeRefs.remove("CodeOwner::visibleB");
+            assertFalse(code.hasStashCodeSlotOwner());
+
+            RuntimeCode pinnedCode = code();
+            RuntimeScalar pinnedSlot = GlobalVariable.getGlobalCodeRef("CodeOwner::pinnedOnly");
+            pinnedSlot.set(new RuntimeScalar(pinnedCode));
+            GlobalVariable.globalCodeRefs.remove("CodeOwner::pinnedOnly");
+
+            assertFalse(pinnedCode.hasStashCodeSlotOwner());
+            assertEquals(1, pinnedCode.ownerSlotCount(PerlOwnerSlot.Kind.CODE_SLOT));
+            GlobalVariable.clearPinnedCodeRefsForNamespace("CodeOwner::");
+            assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, pinnedCode.perlLifecycleState());
+        }
+    }
+
+    @Test
+    void installedStashCodeOwnerPreservesWeakObserverWithoutRootScan() {
+        try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
+            RuntimeCode code = code();
+            GlobalVariable.globalCodeRefs.put(
+                    "CodeOwner::weakObserver", new RuntimeScalar(code));
+            RuntimeScalar weakRef = new RuntimeScalar(code);
+            WeakRefRegistry.weaken(weakRef);
+
+            try (MortalList.ReachabilityQueryMeasurement measurement =
+                         MortalList.measureReachabilityQueries()) {
+                WeakRefRegistry.clearWeakRefsTo(code);
+
+                assertTrue(WeakRefRegistry.isweak(weakRef));
+                assertEquals(0, measurement.stats().rootQueries);
+                assertEquals(0, measurement.stats().snapshotsBuilt);
+            }
+
+            GlobalVariable.globalCodeRefs.remove("CodeOwner::weakObserver");
+            assertEquals(RuntimeScalarType.UNDEF, weakRef.type);
+        }
+    }
+
+    @Test
+    void clonedPackageCodeSlotRetainsItsStashOwnerIdentity() {
+        PerlRuntime sourceRuntime = new PerlRuntime();
+        PerlRuntime targetRuntime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = sourceRuntime.bind()) {
+            GlobalVariable.globalCodeRefs.put(
+                    "CodeOwner::cloned", new RuntimeScalar(code()));
+        }
+
+        RuntimeGraphCloner cloner = new RuntimeGraphCloner(sourceRuntime, targetRuntime);
+        try (PerlRuntime.Binding ignored = sourceRuntime.bind()) {
+            sourceRuntime.globalState().snapshotInto(targetRuntime.globalState(), cloner);
+        }
+        try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
+            RuntimeScalar clonedSlot = targetRuntime.globalState().codeRefs().get("CodeOwner::cloned");
+            RuntimeCode clonedCode = (RuntimeCode) clonedSlot.value;
+            assertTrue(clonedCode.hasStashCodeSlotOwner());
+            assertEquals(1, clonedCode.ownerSlotCount(PerlOwnerSlot.Kind.CODE_SLOT));
+        }
+    }
+
+    @Test
     void resettingRuntimeReleasesCodeSlotOwners() {
         try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
             GlobalVariable.resetAllGlobals();

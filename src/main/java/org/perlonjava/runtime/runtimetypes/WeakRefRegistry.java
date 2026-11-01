@@ -563,12 +563,7 @@ public class WeakRefRegistry {
     }
 
     private static boolean isInstalledGlobalCodeRef(RuntimeCode code) {
-        // Anonymous CODE refs have never occupied a package slot, so their
-        // common weak-clear path can avoid consulting the package-root index.
-        // Formerly installed refs remain in the index while any alias occupies
-        // a package slot, independent of their current stash reference count.
-        if (!code.hadStashRef) return false;
-        return GlobalVariable.installedGlobalCodeRefsView().contains(code);
+        return code.hasStashCodeSlotOwner();
     }
 
     private static boolean shouldKeepCodeWeakRefs(RuntimeCode code) {
