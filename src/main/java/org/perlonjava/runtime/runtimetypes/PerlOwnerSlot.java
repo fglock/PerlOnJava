@@ -52,6 +52,8 @@ public final class PerlOwnerSlot {
         WEAKLY_TRACKED_COMPATIBILITY_PIN,
         /** Runtime-owned temporary value retained across a cleanup drain. */
         TEMPORARY_ROOT,
+        /** Persistent scalar or aggregate state binding retained by a CODE object. */
+        CODE_STATE,
         /** Scalar wrapper retaining the current contents of a referenced scalar cell. */
         SCALAR_REFERENCE_CONTENTS
     }
@@ -316,6 +318,19 @@ public final class PerlOwnerSlot {
             throw new IllegalStateException("package aggregate slot has pending legacy releases");
         }
         transferWithoutRuntimeRoot(target, true);
+    }
+
+    /** Record one persistent CODE state binding as an identity-owned Perl edge. */
+    synchronized void acquireCodeStateIdentity(RuntimeBase target, RuntimeCode owner) {
+        if (kind != Kind.CODE_STATE) {
+            throw new IllegalStateException("CODE state acquisition requires a CODE-state identity");
+        }
+        Objects.requireNonNull(target, "target");
+        if (legacyCaptureCount != 0) {
+            throw new IllegalStateException("CODE state slot has pending legacy releases");
+        }
+        transferWithoutRuntimeRoot(target, true);
+        captureOwner = owner == null ? null : new WeakReference<>(owner);
     }
 
     /** Record one named IO stash entry as an identity-owned typeglob root. */
@@ -606,7 +621,8 @@ public final class PerlOwnerSlot {
     }
 
     synchronized void rebindCaptureOwner(RuntimeCode owner) {
-        if (kind != Kind.SCALAR_CAPTURE && kind != Kind.CLOSURE_PAD) {
+        if (kind != Kind.SCALAR_CAPTURE && kind != Kind.CLOSURE_PAD
+                && kind != Kind.CODE_STATE) {
             throw new IllegalStateException("only closure-pad slots have a CODE owner");
         }
         if (referent == null) return;

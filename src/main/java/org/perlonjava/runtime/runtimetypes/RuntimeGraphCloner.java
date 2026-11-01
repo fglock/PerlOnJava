@@ -485,6 +485,9 @@ public class RuntimeGraphCloner {
         target.stateArray = cloneArrayMap(source.stateArray);
         target.stateHash = cloneHashMap(source.stateHash);
         target.stateAggregateAliasOwners = cloneScalarMap(source.stateAggregateAliasOwners);
+        try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
+            target.retainClonedStateOwnerSlots();
+        }
         if (source.__SUB__ != null) {
             target.restoreClonedSelfReference(
                     (RuntimeScalar) cloneValue(source.__SUB__));

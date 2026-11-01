@@ -135,8 +135,7 @@ public class StateVariable {
             // must keep the cell's value after the CV releases that binding.
             variable.refCount = 0;
             variable.localBindingExists = true;
-            code.stateVariable.put(beginVar, variable);
-            GlobalVariable.invalidateGlobalCodeRefGraphRoots();
+            code.bindStateScalar(beginVar, variable);
             return tagGeneratedLexicalSub(variable, var);
         }
     }
@@ -190,8 +189,7 @@ public class StateVariable {
                 return GlobalVariable.getGlobalArray(beginVar);
             }
             variable = new RuntimeArray();
-            code.stateArray.put(beginVar, variable);
-            GlobalVariable.invalidateGlobalCodeRefGraphRoots();
+            code.bindStateArray(beginVar, variable);
             return variable;
         }
     }
@@ -294,8 +292,7 @@ public class StateVariable {
                 return GlobalVariable.getGlobalHash(beginVar);
             }
             variable = new RuntimeHash();
-            code.stateHash.put(beginVar, variable);
-            GlobalVariable.invalidateGlobalCodeRefGraphRoots();
+            code.bindStateHash(beginVar, variable);
             return variable;
         }
     }

@@ -1386,29 +1386,6 @@ public class ReachabilityWalker {
         return isReachableFromLiveScalarRegistry(target, ScalarRefRegistry.forceGcAndSnapshot());
     }
 
-    public static boolean isReachableFromLiveCodeCaptures(RuntimeBase target) {
-        if (target == null) return false;
-        Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
-        java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
-        for (Object liveVar : MyVarCleanupStack.snapshotLiveVars()) {
-            if (!(liveVar instanceof RuntimeScalar sc)) continue;
-            if (WeakRefRegistry.isweak(sc)) continue;
-            if (sc.value instanceof RuntimeCode code
-                    && followGlobalCodeCaptures(code, target, seen, todo)) return true;
-        }
-        // A closure CODE scalar can outlive the lexical register that created
-        // it while the caller is suspended.  ScalarRefRegistry retains a weak
-        // key for such reference-holding scalars; use those live keys as
-        // additional code roots when the cleanup-stack snapshot has detached
-        // the caller's frame.
-        for (RuntimeScalar sc : ScalarRefRegistry.snapshot()) {
-            if (sc == null || sc.scopeExited || WeakRefRegistry.isweak(sc)) continue;
-            if (sc.value instanceof RuntimeCode code
-                    && followGlobalCodeCaptures(code, target, seen, todo)) return true;
-        }
-        return false;
-    }
-
     public static boolean hasLiveStrongScalarReferent(RuntimeBase target) {
         return hasLiveStrongScalarReferentOtherThan(target, null);
     }
@@ -1429,19 +1406,6 @@ public class ReachabilityWalker {
                     && sc.value == target) {
                 return true;
             }
-        }
-        return false;
-    }
-
-    public static boolean isReachableFromGlobalCodeCaptures(RuntimeBase target) {
-        if (target == null) return false;
-        Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
-        Set<RuntimeCode> followed = Collections.newSetFromMap(new IdentityHashMap<>());
-        java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
-        for (RuntimeScalar sc : GlobalVariable.globalCodeRefEdgeRootsView()) {
-            if (sc != null && sc.value instanceof RuntimeCode code
-                    && followed.add(code)
-                    && followGlobalCodeCaptures(code, target, seen, todo)) return true;
         }
         return false;
     }

@@ -380,6 +380,22 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         verifyClosureCaptureOwnerCount(PerlOwnerSlot.Kind.CLOSURE_PAD);
     }
 
+    /** Retain one persistent scalar or aggregate state binding owned by a CV. */
+    synchronized PerlOwnerSlot retainCodeStateOwner(RuntimeCode owner) {
+        PerlOwnerSlot ownerSlot = new PerlOwnerSlot(PerlOwnerSlot.Kind.CODE_STATE);
+        ownerSlot.acquireCodeStateIdentity(this, owner);
+        return ownerSlot;
+    }
+
+    /** Release one persistent CODE state binding identity. */
+    synchronized void releaseCodeStateOwner(PerlOwnerSlot ownerSlot) {
+        if (ownerSlot == null || !ownerSlot.isActive()) return;
+        if (ownerSlot.kind() != PerlOwnerSlot.Kind.CODE_STATE || ownerSlot.referent() != this) {
+            throw new IllegalArgumentException("CODE state release does not match this referent");
+        }
+        ownerSlot.release();
+    }
+
     public synchronized void releaseClosureCapture() {
         if (!hasClosureCaptureOwner()) {
             if (captureCount != 0) {
