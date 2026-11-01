@@ -853,8 +853,9 @@ public class MortalList {
         // compatibility refcount transiently undercounts them during a
         // tail-call handoff.
         if (base.restoreVerifiedCurrentCountedOwnerSlotRefCount()) return;
-        // Tail-call owner families that have not yet migrated to current
-        // storage proofs retain the counted-slot compatibility bridge.
+        // Keep the legacy bridge for counted owners that have no scalar storage
+        // cell proving their current lifetime. Direct method-invocant holds are
+        // handled by the verified path above.
         if (base.restoreCountedOwnerSlotRefCount()) return;
 
         if (base.localBindingExists) {
@@ -1617,8 +1618,8 @@ public class MortalList {
                 // Verified current scalar cells and array/hash elements jointly
                 // restore the surviving owner count without a root walk.
             } else if (base.blessId != 0 && base.restoreCountedOwnerSlotRefCount()) {
-                // The deferred legacy bridge remains for counted slots whose
-                // producer has not yet supplied current-storage proof.
+                // Retain the compatibility bridge for counted slots whose
+                // current Perl storage has not yet been identified.
             } else if (base instanceof RuntimeScalarReadOnly
                     && RuntimeCode.isInstalledPadConstant(base)) {
                 // A readonly scalar referenced through \("literal") has an

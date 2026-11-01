@@ -3018,7 +3018,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
         MethodInvocantHold(RuntimeBase referent) {
             this.referent = referent;
-            owner.acquireCountedIdentity(referent);
+            owner.acquireMethodInvocantIdentity(referent);
             referent.traceRefCount(+1, "RuntimeCode.method invocant hold (+1)");
             referent.refCount++;
             referent.hadCountedReference = true;
