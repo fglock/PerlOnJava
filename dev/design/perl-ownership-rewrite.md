@@ -3,7 +3,7 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; hidden entries release that owner while retaining their lookup state. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-01):** Phase 2 continues on branch
-`wip/socket-gensym-owner-20261101-020558` at source commit `30ae72581`.
+`wip/socket-gensym-owner-20261101-020558` at source commit `fa07d852a`.
 The awaited Future held by an async suspension now has its own
 `SUSPENDED_FRAME` owner identity; completion, cancellation, and exception paths
 retire it through `releaseAwaitedOwner`. The duplicate `suspendedRoots` map and
@@ -245,8 +245,21 @@ was builtin `die`. `CleanupNeededVisitor` now requires cleanup for explicit
 `die`, so reference-valued method lexicals are released during unwind. The
 system Perl oracle and both PerlOnJava backends pass the tied-hash exception
 regression, and the focused multi-LHS gate passes on the current source; the
-full no-sweeps gate passes on immutable source `30ae72581` in 6m15s; its log is
-recorded in the current checkpoint.
+full no-sweeps gate passes on immutable source `30ae72581` in 6m15s at
+`/private/tmp/ownership-list-assignment-exception-immutable-make-30ae72581.log`.
+
+### Counted owner replacement acquires before release (2026-11-01)
+
+`PerlOwnerSlot.acquireCountedIdentity` previously released its current slot
+before registering the replacement referent. This left no explicit strong edge
+during scalar overwrite and could run weak cleanup while the replacement was
+not yet represented. It now retains the replacement's runtime root when
+applicable, registers the same stable slot identity on the replacement, then
+retires the prior referent and its runtime root. The new Java regression fails
+on the parent at
+`/private/tmp/owner-slot-replacement-order-parent-focused.log` and passes after
+the fix at `/private/tmp/owner-slot-replacement-order-fixed-focused.log`. The
+full no-sweeps gate for this change is pending.
 
 ## Baseline ownership map
 

@@ -650,15 +650,35 @@ public final class PerlOwnerSlot {
             throw new IllegalStateException("counted identity cannot replace native or capture ownership");
         }
         if (referent == target) return;
-        release();
+
+        // A stored value replacement is acquire-before-release. Keep this
+        // slot's stable identity for pending-release provenance, but install
+        // its new referent in the ledger before retiring the old edge so a
+        // destructor or weak observer cannot see a gap in strong ownership.
+        RuntimeBase previous = referent;
+        LifecycleRuntimeState previousState = ownerRuntimeState;
+        boolean previousRegistered = registeredInOwnerLedger;
+        PerlRuntime nextRuntime = null;
+        LifecycleRuntimeState nextState = null;
+        if (kind == Kind.ARGUMENT_VALUE) {
+            nextRuntime = PerlRuntime.currentOrNull();
+            if (nextRuntime == null) nextRuntime = ownerRuntime;
+            nextState = nextRuntime == null
+                    ? null : nextRuntime.retainOwnerSlotReferent(target);
+        }
         referent = target;
         registeredInOwnerLedger = true;
         target.addOwnerSlot(this);
-        if (kind == Kind.ARGUMENT_VALUE) {
-            ownerRuntime = PerlRuntime.currentOrNull();
-            ownerRuntimeState = ownerRuntime == null
-                    ? null : ownerRuntime.retainOwnerSlotReferent(target);
+        ownerRuntime = nextRuntime;
+        ownerRuntimeState = nextState;
+
+        if (previous != null && previousRegistered) {
+            previous.removeOwnerSlot(this);
+            PerlRuntime.releaseOwnerSlotReferent(previousState, previous);
         }
+        finishDeferredCodeRelease(previous);
+        finishDeferredScalarCellRelease(previous);
+        WeakRefRegistry.onStrongOwnerSlotReleased(previous);
     }
 
     /**
