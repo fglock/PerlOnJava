@@ -160,6 +160,11 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
         } else {
             newLocal = new GlobalRuntimeScalar(fullName);
         }
+        // The temporary scalar is installed in the package scalar table for
+        // the duration of local(). Treat it as a durable package slot so
+        // assignment acquires value and anonymous-IO owners just as it does
+        // for the original global scalar.
+        newLocal.isPackageGlobalRoot = true;
 
         String savedRuntimeWarningBits = fullName.equals(GlobalContext.WARNING_SCOPE)
                 ? WarningBitsRegistry.getRuntimeWarningBits() : null;
@@ -205,6 +210,10 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
                 RuntimeScalar localVar = saved.localizedVariable;
                 RuntimeBase displacedBase = null;
                 PerlOwnerSlot scalarContentsOwner = null;
+                // The localized package scalar owns its anonymous IO holder
+                // independently of the value saved from the outer slot.
+                // Retire that holder before restoring the original scalar.
+                RuntimeScalar.releaseIoOwner(localVar);
                 // Release container-owned values only when this localized
                 // scalar is dropping the container's last counted owner. A
                 // localized alias to a still-live request or cache must not
@@ -283,6 +292,7 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
                 }
                 if (localVar != null) {
                     localVar.scalarReferenceContentsOwner = null;
+                    localVar.isPackageGlobalRoot = false;
                 }
                 if (scalarContentsOwner != null) {
                     scalarContentsOwner.releaseScalarReferenceContents();
@@ -329,6 +339,8 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
                 RuntimeScalar activeState = suspended.value;
                 activeVariable.type = activeState.type;
                 activeVariable.value = activeState.value;
+                activeVariable.ioOwner = activeState.ioOwner;
+                activeState.ioOwner = false;
                 activeVariable.blessId = activeState.blessId;
                 activeVariable.scalarReferenceContentsOwner =
                         activeState.scalarReferenceContentsOwner;
