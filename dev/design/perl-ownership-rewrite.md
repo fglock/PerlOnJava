@@ -68,8 +68,10 @@ selected glob restoration 3/3, and localized stdout capture 1/1. TCP socket
 scope coverage is skipped because the loopback listener is unavailable in this
 environment. The full no-sweeps build log
 `/private/tmp/ownership-io-local-scalar-restore-make-final.log` reports
-`BUILD SUCCESSFUL` in 6m53s. It ran immediately before `c76b66daa` was
-committed, so the final immutable committed candidate still needs a full gate.
+`BUILD SUCCESSFUL` in 6m53s for the pre-commit candidate. The subsequent
+immutable no-sweeps gate on committed `f0503b6dc` passed in 7m03; Gradle
+injected that exact commit into the build. Its full log is
+`/private/tmp/ownership-io-local-scalar-restore-immutable-f0503b6dc.log`.
 
 The raw-count bridge, scalar-overwrite external-root/live-CODE fallback,
 deferred reachability recovery, package-nested untracked compatibility pin,
