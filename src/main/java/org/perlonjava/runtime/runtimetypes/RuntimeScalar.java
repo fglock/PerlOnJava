@@ -637,14 +637,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     /** Release one closure's lexical-cell owner and its matching capture count. */
     public void releaseClosureCaptureSlot(PerlOwnerSlot ownerSlot) {
-        if (ownerSlot != null) {
-            if (!ownerSlot.isActive()) return;
-            ownerSlot.release();
+        if (ownerSlot == null) {
+            releaseClosureCapture();
+            return;
         }
-        releaseClosureCapture(ownerSlot == null);
-        if (ownerSlot != null) {
-            verifyClosureCaptureOwnerCount(PerlOwnerSlot.Kind.SCALAR_CAPTURE);
-        }
+        if (!ownerSlot.isActive()) return;
+        ownerSlot.release();
+        releaseClosureCapture(false);
+        verifyClosureCaptureOwnerCount(PerlOwnerSlot.Kind.SCALAR_CAPTURE);
     }
 
     /** Reconstruct capture ownership for an independent ithread snapshot. */
