@@ -4,7 +4,7 @@
 
 **Current checkpoint (2026-11-01):** Phase 2 remains in progress on branch
 `wip/socket-gensym-owner-20261101-020558`, runtime source
-`c76b66daa`. Deferred release, tail-call cleanup, and scalar overwrite try
+`ec4d3eb05`. Deferred release, tail-call cleanup, and scalar overwrite try
 verified current counted-owner slots before the raw-count compatibility bridge.
 Current-cell verification also recognizes an active forwarded
 `ARGUMENT_ALIAS`; temporary expression wrappers remain excluded from
@@ -15,7 +15,12 @@ is handled by `RuntimeHashProxyEntry`. Localized package scalar slots now mark
 their temporary cell as package rooted while active, so assignment acquires an
 anonymous IO holder; normal restore releases that holder before reinstalling
 the saved global scalar, and suspended localization transfers the holder with
-the saved scalar state.
+the saved scalar state. Each anonymous IO resource holder now has an
+`IO_RESOURCE_HOLDER` owner-slot identity; the scalar's owner flag and the glob's
+mutable holder counter were removed. `RuntimeGlob.ioHolderCount()` derives the
+number of live holders from the slot ledger, and replacement, detached-value
+move, return transfer, and localization suspend/resume preserve the identity.
+Thread cloning continues to drop nonportable IO ownership.
 
 The full no-sweeps `nice -n 19 make` passed on `a47b083f2` in 6m57 using the
 verified local JOL 0.17 mirror: 3,305 unit-shard tests,
@@ -72,6 +77,14 @@ environment. The full no-sweeps build log
 immutable no-sweeps gate on committed `f0503b6dc` passed in 7m03; Gradle
 injected that exact commit into the build. Its full log is
 `/private/tmp/ownership-io-local-scalar-restore-immutable-f0503b6dc.log`.
+The IO owner-slot batch passes five Java identity tests and the immutable
+no-sweeps build on `ec4d3eb05` in 7m24. The eight-file Perl IO matrix passes
+74 checks on system Perl, JVM, and interpreter; the TCP listener test skips
+because loopback access is unavailable. Logs:
+`/private/tmp/ownership-io-slot-identities-make-ec4d3eb05.log`,
+`/private/tmp/ownership-io-slot-system-perl-matrix-ec4d3eb05.log`, and the
+JVM/interpreter files matching
+`/private/tmp/ownership-io-slot-*-ec4d3eb05.log`.
 
 The raw-count bridge, scalar-overwrite external-root/live-CODE fallback,
 deferred reachability recovery, package-nested untracked compatibility pin,
@@ -90,11 +103,13 @@ This checkpoint does not claim that corrective recovery is removed.
 
 Issue #1649 remains open. Draft PR #1938 is still at its older remote head and
 has not been reconciled or published. The tied-handler nested values now have
-both owner-slot and Perl-level lifetime coverage. Next, give each anonymous IO
-holder a stable owner-slot identity and verify replacement, transfer, clone,
-and release operations against the holder count. Continue by tracing scalar
-capture owner reconciliation, active CODE, thread clone transfers, returned
-and mortal values, and package-nested aggregates. Keep
+both owner-slot and Perl-level lifetime coverage. Anonymous IO holder identity
+is migrated and its normal setter, return, localization, and cleanup paths pass
+the focused matrix. Next, trace each scalar capture count/owner-slot mismatch
+to its producer and cleanup. In particular, audit `Internals` capture rebinding
+and the compatibility reconciliation in `MyVarCleanupStack.scopeExitCleanup`,
+then continue through active CODE, thread-clone capture transfer, returned and
+mortal values, and package-nested aggregates. Keep
 explicit post-END teardown and diagnostic traversal separate from ordinary
 ownership decisions.
 
@@ -168,7 +183,7 @@ reachability. Explicit post-END teardown and diagnostic traversal are separate.
 | Cleared aggregate | Scope-exit finalization can consult cached external-root snapshots when the aggregate count is already zero; deferred cleanup still has capture and nested-call recovery branches. | Container elements acquire `ARRAY_ELEMENT`/`HASH_ELEMENT` identities; active lexical and suspended-frame owners have dedicated slots. Clear and scope-exit paths queue displaced element releases. | `ClearedAggregateOwnerIdentityNoRootWalkTest` and `ClearedAggregateOwnerIdentityFinalizationTest` cover explicit slots. Incomplete producer coverage still reaches the cached-root boundary. |
 | Closure, CODE, and cycles | Deferred cleanup and `DestroyDispatch` still query live/global CODE captures; `DestroyDispatch` retains a CODE-cycle query. `GlobalRuntimeState` uses a graph walk when building its installed-CODE root index. The unblessed array/hash cycle rescue in `MortalList` is removed. | `CLOSURE_PAD`, `SCALAR_CAPTURE`, `CODE_SLOT`, `ACTIVE_CODE`, and `CODE_PAD_CONSTANT` identify capture, stash, active-frame, and optree edges; regex callbacks have `REGEX_CALLBACK`. Scalar capture releases still use the legacy count bridge, while aggregate capture slots are native. | Closure, active-CODE, CODE-slot, strong-cycle, resurrection, and regex-callback tests cover migrated families. `MyVarCleanupStack.scopeExitCleanup` still reconciles legacy `captureCount` against explicit `SCALAR_CAPTURE` slots. Compiler templates and several CODE/glob producer/cleanup boundaries remain under audit. |
 | Temporary evaluation roots | `MortalList` stores temporary roots and the reachability walker follows them during cleanup; temporary roots intentionally do not count as Perl owners. | `pushTemporaryRoot`/`popTemporaryRoot` bracket setter and return cleanup. A temporary root must defer finalization only until its exact removal, without turning it into a persistent Perl edge. | `PerlStrongOwnerProofTest` distinguishes temporary roots from Perl owners; `TemporaryReturnOwnerTraversalTest` covers direct aggregate values. Final cleanup on temporary-root release remains part of the migration. |
-| Resource holders | Anonymous IO lifetime uses `RuntimeScalar.ioOwner` and `RuntimeGlob.ioHolderCount`; it is not part of the Perl owner-slot ledger. | `retainUnstashedIoForDurableSlot`, `releaseIoOwner`, `releaseIoOwnerPreservingReturned`, `transferIoOwnerToReturnedCopy`, and `releaseOrTransferSocketIoOwnerOnReturn` acquire, release, or move the holder token across stores and returns. `MortalList.deferDestroyForContainerClear` queues release for bulk cleanup; localized array cleanup and both existing-key and missing-key hash proxy cleanup retire temporary holders at unwind. | The aggregate clear/localization regression passes on both backends and system Perl; failing parent evidence is retained. Socket scope, return, async cancellation, #1794, and #1860 coverage pass on both backends. The token has no stable `PerlOwnerSlot` identity; cloning, exception transfer, and non-socket anonymous-handle cleanup remain under audit. |
+| Resource holders | Each anonymous IO resource holder has a native `IO_RESOURCE_HOLDER` identity on its `RuntimeGlob`; `RuntimeScalar.ioOwnerSlot` carries that identity, and `RuntimeGlob.ioHolderCount()` derives the active count from the owner ledger. | `retainUnstashedIoForDurableSlot` acquires a slot, while `releaseIoOwner` retires it exactly once. Detached-value assignment, returned aliases, and localized-global suspension move the same identity. Replacement acquires the new edge before releasing the old one. Bulk clear still queues the owning scalar for release. Thread cloning drops nonportable IO ownership. | Five Java owner-slot tests and the eight-file Perl IO matrix pass on both backends and system Perl (74 checks; TCP loopback test skipped because the listener is unavailable). Socket return, exception unwind, localization, aggregate clear, selected-glob restoration, #1794, and #1860 remain covered. Non-socket handle close policy and broader resource-owner acquisition paths remain under audit. |
 
 ## Baseline ownership map
 
