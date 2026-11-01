@@ -2,139 +2,39 @@
 
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; hidden entries release that owner while retaining their lookup state. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
-**Current checkpoint (2026-11-01):** Phase 2 remains in progress on branch
-`wip/socket-gensym-owner-20261101-020558`, runtime source
-`ec4d3eb05` plus the capture regression at `5a90883fe`. Deferred release,
-tail-call cleanup, and scalar overwrite try verified current counted-owner
-slots before the raw-count compatibility bridge.
-Current-cell verification also recognizes an active forwarded
-`ARGUMENT_ALIAS`; temporary expression wrappers remain excluded from
-persistent alias ownership. Aggregate clear/replacement now queues anonymous
-IO holder release with deferred container cleanup. Localized array and hash
-slot unwind also releases the temporary IO holder; the missing-key hash path
-is handled by `RuntimeHashProxyEntry`. Localized package scalar slots now mark
-their temporary cell as package rooted while active, so assignment acquires an
-anonymous IO holder; normal restore releases that holder before reinstalling
-the saved global scalar, and suspended localization transfers the holder with
-the saved scalar state. Each anonymous IO resource holder now has an
-`IO_RESOURCE_HOLDER` owner-slot identity; the scalar's owner flag and the glob's
-mutable holder counter were removed. `RuntimeGlob.ioHolderCount()` derives the
-number of live holders from the slot ledger, and replacement, detached-value
-move, return transfer, and localization suspend/resume preserve the identity.
-Thread cloning continues to drop nonportable IO ownership.
+**Current checkpoint (2026-11-01):** Phase 2 continues on branch
+`wip/socket-gensym-owner-20261101-020558` at source `1561b58b9`. In
+`RuntimeCode.adoptDefinitionFrom()`, prior capture edges are retained while
+new scalar and aggregate capture identities are rebound; replaced edges retire
+only after active CODE ownership ends. The change also marks legacy capture
+metadata retired without a count slot and invalidates cached CODE roots after
+adoption.
 
-The full no-sweeps `nice -n 19 make` passed on `a47b083f2` in 6m57 using the
-verified local JOL 0.17 mirror: 3,305 unit-shard tests,
-525 Joni tests, and two integration checks; zero failures or errors and seven
-skips. The expanded aggregate and localization regression passes 8/8 on system
-Perl, JVM, and interpreter. The bulk-clear parent run at `3c8a51c4f` fails both
-final-close assertions; localization assertions fail on `460c13f43`, and the
-first unwind candidate `8ed1a2158` still failed the missing-key hash case. The
-existing socket scope-exit regression passes 35/35 on each backend. The
-lifecycle matrix passed 18 files and 162 checks on each backend,
-including #1794 controller release and #1860 growing output. HTML-Tree 5.07
-passed all 23 files and 989 checks on each backend, including `t/refloop.t`
-8/8. The filtered focused gate also passed the forwarded-alias test and three
-`weak_blessed_*` fixtures. Logs:
+`RuntimeCodeAdoptDefinitionCaptureOwnerTest` first failed on its unfixed parent
+`3c8ad1e76`, proving that adoption left the old capture owner active. The first
+fix, `de635b2f2`, passed those new cases but exposed an existing CODE-root-cache
+regression; the complete run and its isolated reproduction are preserved in
+`/private/tmp/ownership-adopt-definition-fix-make-de635b2f2.log` and
+`/private/tmp/ownership-adopt-definition-rerun-test-unit-de635b2f2.log`. The
+follow-up regression covers cache invalidation and metadata with no count slot.
+The full `nice -n 19 make` gate passed on immutable `1561b58b9` in 7m51s with
+zero failures; log: `/private/tmp/ownership-adopt-definition-followup-make-1561b58b9.log`.
 
-- Full gate: `/private/tmp/ownership-verified-forwarded-alias-no-sweeps-make-3c8a51c4f-20261101.log`
-- Aggregate/localization candidate gate: `/private/tmp/ownership-io-local-slot-make-a47b083f2.log`
-- Aggregate/localization regression: `/private/tmp/io-owner-aggregate-and-local-perl-460c13f43.log`, `/private/tmp/io-owner-aggregate-clear-parent-3c8a51c4f.log`, `/private/tmp/io-owner-aggregate-and-local-parent-460c13f43.log`, `/private/tmp/io-owner-aggregate-clear-jvm-a47b083f2.log`, `/private/tmp/io-owner-aggregate-clear-interpreter-a47b083f2.log`
-- Intermediate failure evidence: `/private/tmp/ownership-io-local-slot-make-8ed1a2158.log`
-- Socket scope-exit JVM/interpreter: `/private/tmp/socket-scope-eof-jvm-a47b083f2.log`, `/private/tmp/socket-scope-eof-interpreter-a47b083f2.log`
-- Focused gate: `/private/tmp/forwarded-argument-owner-focused-units-3c8a51c4f-20261101.log`
-- Lifecycle JVM/interpreter: `/private/tmp/ownership-lifecycle-matrix-jvm-3c8a51c4f-20261101.log`, `/private/tmp/ownership-lifecycle-matrix-interpreter-3c8a51c4f-20261101.log`
-- HTML-Tree JVM/interpreter: `/private/tmp/html-tree-full-jvm-3c8a51c4f-20261101.log`, `/private/tmp/html-tree-full-interpreter-3c8a51c4f-20261101.log`
-- System Perl weak-tree oracles: `/private/tmp/weak-blessed-tree-descendant-cleanup-system-perl-20261101.log`, `/private/tmp/weak-blessed-recursive-closure-cleanup-system-perl-20261101.log`
+Earlier no-sweeps gates and the tied-handler, PadWalker, #1794, #1860, weak
+reference, resurrection, and HTML-Tree matrices are documented below at their
+validated source commits. They are not all rerun on `1561b58b9`. Remaining
+work includes capture producers and cleanup, active CODE and argument/return
+lifetimes, package aggregate roots, strong cycles, clone/shared storage, and
+resource owners. Corrective sweeps and compatibility recovery remain in the
+runtime; this checkpoint does not claim ownership completion.
 
-The tied-handler ownership batch was rechecked on the prior source: four Perl-level
-tests pass 25/25 on standard Perl, the JVM, and the interpreter. This covers
-pre-weaken nested handler storage, untie and nested release, tied return values,
-local restoration, exception unwind, and exactly-once handler retirement.
-Logs: `/private/tmp/ownership-tied-perl-a47b083f2.log`, plus the JVM and
-interpreter logs matching `/private/tmp/ownership-tied-*-a47b083f2.log`.
-
-The localized-global-scalar IO regression passes 11/11 on system Perl, JVM,
-and interpreter. It covers use during localization, normal restoration, and
-exception unwind. The failing parent evidence is retained at
-`/private/tmp/io-owner-local-scalar-restore-parent-jvm-a47b083f2.log` and
-`/private/tmp/io-owner-local-scalar-restore-parent-interpreter-a47b083f2.log`;
-both fail to observe peer EOF after restoration. The focused post-fix runs are
-`/private/tmp/io-owner-local-scalar-restore-system-perl-final.log`,
-`/private/tmp/io-owner-local-scalar-restore-jvm-final.log`, and
-`/private/tmp/io-owner-local-scalar-restore-interpreter-final.log`. The
-producer bug was that `GlobalRuntimeScalar.dynamicSaveState` installed the
-temporary scalar without setting its package-root marker, so durable-slot
-assignment did not acquire the IO holder that restore later had to release.
-The fix is committed in `c76b66daa`.
-
-Related resource coverage passes on both backends: socket scope exit 35/35,
-aggregate clear 8/8, socket `fileno` 12/12, localized glob restoration 4/4,
-selected glob restoration 3/3, and localized stdout capture 1/1. TCP socket
-scope coverage is skipped because the loopback listener is unavailable in this
-environment. The full no-sweeps build log
-`/private/tmp/ownership-io-local-scalar-restore-make-final.log` reports
-`BUILD SUCCESSFUL` in 6m53s for the pre-commit candidate. The subsequent
-immutable no-sweeps gate on committed `f0503b6dc` passed in 7m03; Gradle
-injected that exact commit into the build. Its full log is
-`/private/tmp/ownership-io-local-scalar-restore-immutable-f0503b6dc.log`.
-The IO owner-slot batch passes five Java identity tests and the immutable
-no-sweeps build on `ec4d3eb05` in 7m24. The eight-file Perl IO matrix passes
-74 checks on system Perl, JVM, and interpreter; the TCP listener test skips
-because loopback access is unavailable. Logs:
-`/private/tmp/ownership-io-slot-identities-make-ec4d3eb05.log`,
-`/private/tmp/ownership-io-slot-system-perl-matrix-ec4d3eb05.log`, and the
-JVM/interpreter files matching
-`/private/tmp/ownership-io-slot-*-ec4d3eb05.log`.
-The scalar-capture producer audit found that JVM construction, interpreter
-closure construction, and thread cloning pair each captured scalar with a
-`SCALAR_CAPTURE` slot. `Internals` rebinding also acquires the replacement
-before releasing the matching old slot when its capture entry is present; the
-legacy fallback for absent metadata and scope-exit reconciliation of surplus
-`captureCount` remain under producer investigation. The PadWalker rebind matrix
-passes 13/13 on system Perl and both backends. A new lifecycle regression also
-passes 5/5 on all three, covering the displaced capture's `DESTROY`, the
-replacement's retention while the closure lives, and its release with the
-closure. Logs:
-`/private/tmp/ownership-capture-padwalker-system-perl-ec4d3eb05.log`,
-`/private/tmp/padwalker-rebind-capture-lifecycle-system-perl-ec4d3eb05.log`,
-and JVM/interpreter logs matching
-`/private/tmp/ownership-capture-*-ec4d3eb05.log` and
-`/private/tmp/padwalker-rebind-capture-lifecycle-*-ec4d3eb05.log`.
-The immutable full `nice -n 19 make` gate on `5a90883fe` passed in 7m35s;
-Gradle injected that exact source commit. The five unit shards, Joni suite,
-and PerlOnJava home integration completed with zero failures or errors; the
-PadWalker lifecycle regression appears in the shard report. Full log:
-`/private/tmp/ownership-capture-padwalker-make-5a90883fe.log`.
-
-The raw-count bridge, scalar-overwrite external-root/live-CODE fallback,
-deferred reachability recovery, package-nested untracked compatibility pin,
-closure cleanup fallbacks, and other audited owner families remain. A broad
-argument-alias expansion regressed weak-tree cleanup and was reverted; its
-failure evidence remains at
-`/private/tmp/ownership-argument-alias-current-owner-no-sweeps-make-cd96fcc8a-candidate-20261101.log`.
-The corrected test fixture first failed at `fca56c027` because it had not
-modeled aliased `@_` storage; the failing run remains at
-`/private/tmp/ownership-verified-forwarded-alias-no-sweeps-make-fca56c027-20261101.log`.
-The earlier bridge-removal attempts are preserved at
-`/private/tmp/ownership-current-slot-repair-no-sweeps-make-d525ff627-20261101.log`,
-`/private/tmp/ownership-current-scalar-cell-no-sweeps-make-5e19df589-20261101.log`,
-and `/private/tmp/ownership-count-repair-proof-no-sweeps-make-428669ea5-20261101.log`.
-This checkpoint does not claim that corrective recovery is removed.
-
-Issue #1649 remains open. Draft PR #1938 is still at its older remote head and
-has not been reconciled or published. The tied-handler nested values now have
-both owner-slot and Perl-level lifetime coverage. Anonymous IO holder identity
-is migrated and its normal setter, return, localization, and cleanup paths pass
-the focused matrix. Normal closure constructors and independent thread clones
-create matching scalar capture identities, and the direct PadWalker rebind
-path releases the displaced capture and preserves the replacement. No
-count/slot leak reproduced. Next, identify the producer behind the remaining
-`Internals` absent-entry fallback and `MyVarCleanupStack.scopeExitCleanup`
-surplus-count reconciliation, then continue through active CODE, thread-clone
-capture transfer, returned and mortal values, and package-nested aggregates. Keep
-explicit post-END teardown and diagnostic traversal separate from ordinary
-ownership decisions.
+Next, audit each remaining capture acquisition, replacement, transfer, and
+release producer. Add oracle-validated regressions for any normal-path
+count/owner mismatch before removing its fallback. Then continue the active
+CODE, argument/return/mortal, package, cycle, clone, and resource paths. Rerun
+the final no-sweeps lifecycle and HTML-Tree acceptance matrix after the
+recovery machinery is removed, then reconcile the tested candidate with open
+PR #1938.
 
 **Sweep policy (2026-10-27):** Corrective sweeps are disabled by default, as
 requested. `JPERL_ENABLE_CORRECTIVE_SWEEPS=1` temporarily enables legacy
@@ -2226,12 +2126,14 @@ argument alias, and both the focused and full gates pass.
 
 ### Next steps
 
-1. Audit remaining aggregate clear/replacement and scalar release producers,
-   then migrate closure-capture, active-call, strong-cycle, and CODE-root paths
-   so ordinary cleanup can stop consulting root graphs.
-2. Remove remaining compatibility pins and corrective scheduling while
-   preserving weak-reference, `DESTROY`, resurrection, and cycle behavior.
-3. Rerun the full serial repository gate and the two-backend #1618, #1794,
-   #1860, and lifecycle acceptance matrix after those runtime changes.
-4. Rebase the completed candidate on current master, update the ownership PR,
-   and verify that it remains open with the intended files.
+1. Audit closure capture producers and lifecycle paths, including stores before
+   first weaken, adoption, PadWalker rebinding, active CODE, thread cloning,
+   exception unwind, and final release. Prove stable identities at each source.
+2. Continue through argument aliases, returned and mortal values, package
+   aggregate roots, strong cycles, shared storage, and resource owners. Trace
+   every count/owner mismatch to its producer, transfer, or cleanup operation.
+3. Remove reachability fallbacks, compatibility pins, and corrective scheduling
+   only after producer-level regressions and the final two-backend lifecycle,
+   #1794, #1860, and HTML-Tree acceptance matrix pass.
+4. Reconcile the tested candidate with current master and PR #1938; verify its
+   open state and intended diff before declaring readiness.
