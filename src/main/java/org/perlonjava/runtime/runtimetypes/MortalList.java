@@ -511,6 +511,11 @@ public class MortalList {
             if (scalar != null && scalar.untrackedReferenceOwnerSlot() != null) {
                 scalar.refreshUntrackedReferenceOwner();
             }
+            // Aggregate clear/replacement retires the durable slot that kept
+            // an anonymous IO glob alive. Queue the holder release beside the
+            // referent cleanup so bulk mutation has the same lifecycle as
+            // delete and lexical scope exit.
+            deferIoOwnerRelease(scalar);
             if (!active) continue;
             // Use the recursive path so a discarded wrapper/container also
             // releases references stored in its fields.  Test::Deep's
