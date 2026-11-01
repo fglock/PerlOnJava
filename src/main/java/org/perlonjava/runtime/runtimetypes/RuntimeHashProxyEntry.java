@@ -229,6 +229,17 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
                     displacedBase.refCount = Integer.MIN_VALUE;
                     DestroyDispatch.callDestroy(displacedBase);
                 }
+                if (current != null) {
+                    // The key was created only inside the localized scope.
+                    // Removing its temporary scalar must also retire any
+                    // anonymous IO holder acquired by assignments to it.
+                    // Hint hashes already queue full slot cleanup in their
+                    // map's remove hook.
+                    if (!parent.isHintHash) {
+                        MortalList.deferIoOwnerRelease(current);
+                    }
+                    MortalList.flush();
+                }
                 this.lvalue = null;
                 this.type = RuntimeScalarType.UNDEF;
                 this.value = null;
