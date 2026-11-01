@@ -4422,6 +4422,29 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
     }
 
+    /**
+     * For no-capture eval classes, cache and reuse the RuntimeScalar code ref.
+     * The eval class instance is stateless (no captures), so the same code ref
+     * is safe to reuse — avoids constructor.newInstance() and makeCodeObject()
+     * on every warm eval invocation.
+     * Thread-safe: uses the per-runtime cache (one per PerlRuntime thread).
+     */
+    public static RuntimeScalar evalGetOrMakeCachedCodeRef(Class<?> clazz) throws Exception {
+        Map<Class<?>, RuntimeScalar> codeRefCache =
+                PerlRuntime.current().runtimeCodeState().evalCodeRefCache;
+        synchronized (codeRefCache) {
+            RuntimeScalar cached = codeRefCache.get(clazz);
+            if (cached != null) return cached;
+        }
+        java.lang.reflect.Constructor<?> ctor = clazz.getDeclaredConstructor(EMPTY_CLASSES);
+        Object instance = ctor.newInstance((Object[]) null);
+        RuntimeScalar codeRef = makeCodeObject(instance);
+        synchronized (codeRefCache) {
+            RuntimeScalar existing = codeRefCache.putIfAbsent(clazz, codeRef);
+            return existing != null ? existing : codeRef;
+        }
+    }
+
     public static boolean shouldDecodeEvalbytesUtf8Source(String source) {
         if (source == null) {
             return false;

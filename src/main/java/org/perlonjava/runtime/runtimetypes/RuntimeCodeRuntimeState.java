@@ -23,6 +23,7 @@ public final class RuntimeCodeRuntimeState {
     final Map<String, Class<?>> evalCache = lruMap(EVAL_CACHE_SIZE);
     final Map<Class<?>, Constructor<?>> evalConstructorCache = lruMap(EVAL_CACHE_SIZE);
     final Map<Class<?>, RuntimeCode.EvalClassMeta> evalClassMetaCache = lruMap(EVAL_CACHE_SIZE);
+    final Map<Class<?>, RuntimeScalar> evalCodeRefCache = lruMap(EVAL_CACHE_SIZE);
     final Map<Class<?>, MethodHandle> methodHandleCache = lruMap(METHOD_HANDLE_CACHE_SIZE);
     final HashMap<String, Class<?>> anonymousSubs = new HashMap<>();
     final HashMap<String, String> deparseSourceTextsByClassName = new HashMap<>();
@@ -143,6 +144,7 @@ public final class RuntimeCodeRuntimeState {
         evalCache.clear();
         evalConstructorCache.clear();
         evalClassMetaCache.clear();
+        evalCodeRefCache.clear();
         methodHandleCache.clear();
         anonymousSubs.clear();
         deparseSourceTextsByClassName.clear();
