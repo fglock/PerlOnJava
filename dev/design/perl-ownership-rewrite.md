@@ -1,42 +1,37 @@
 # Perl-compatible ownership rewrite
 
-**Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; hidden entries release that owner while retaining their lookup state. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
+**Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; hidden entries release that owner while retaining their lookup state. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-01):** #1649 Phase 2 continues on branch
-`wip/socket-gensym-owner-20261101-020558` at source commit `0ee2739d3`.
-Local work is unpublished; draft PR #1938 remains open. Counted-slot replacement
-now registers the same stable slot identity on the new referent before
-releasing the previous referent and its runtime root. The parent failed the
-ordering regression; the fixed Java test passes 1/1. The full no-sweeps
-`timeout 1800 nice -n 19 make` gate passes on immutable source `0ee2739d3` in
-6m19 at `/private/tmp/ownership-async-cancel-immutable-make-0ee2739d3.log`.
-The JUnit result is in
-`build/test-results/testUnit/TEST-org.perlonjava.runtime.runtimetypes.PerlOwnerSlotReplacementOrderTest.xml`.
-`make check-links` checks 821 links with zero errors at
-`/private/tmp/owner-slot-replacement-order-docs-check-links.log`.
+`wip/preflight-ownership-docs-20261101-211239` at source commit `0a2ef400a`.
+The local work is unpublished; draft PR #1938 has not been reconciled with this
+candidate. Rescued-object cleanup now uses current Perl owner identities rather
+than treating `refCount == 1` as proof of death. A real owner installed during
+`DESTROY` keeps the object and weak observers alive, requests a later destructor
+call, and leaves the rescue queue when that final owner is released. Rescue
+markers without a current owner continue directly to cleanup.
 
-Recent migrated paths include async await operands and lexical registers with
-`SUSPENDED_FRAME` identities, tied hash list-assignment cleanup on exception,
-array/hash tail replacement, and weak glob IO-holder release. The async change
-passes its full no-sweeps gate at
-`/private/tmp/ownership-suspended-await-immutable-make-fa07d852a.log`; its
-cleared-aggregate regression passes 3/3 on both backends. The cancellation
-regression passes 5/5 on JVM and interpreter at
-`/private/tmp/ownership-async-cancel-jvm.log` and
-`/private/tmp/ownership-async-cancel-interpreter.log`. System Perl 5.42 cannot
-parse the project's `async sub` syntax; this limitation is captured at
-`/private/tmp/ownership-async-cancel-system-perl.log`. Earlier acceptance
-includes HTML::Tree 5.07 `t/refloop.t` 8/8 on both backends, the full HTML::Tree
-suite (23 files, 989 checks), and the #1794/#1860 lifetime cases.
+The full no-sweeps `timeout 1800 nice -n 19 make` gate passes on immutable
+source `0a2ef400a` in 6m15 at
+`/private/tmp/ownership-rescued-owner-immutable-make-0a2ef400a.log`. The new
+weak aggregate resurrection regression passes 5/5 on system Perl, JVM, and
+interpreter; final backend logs are
+`/private/tmp/ownership-rescue-final-weak-slot-jvm-0a2ef400a.log` and
+`/private/tmp/ownership-rescue-final-weak-slot-interpreter-0a2ef400a.log`.
+`dbic_deep_cycle_weak_shift_regression.t` passes on both backends, including
+the assertion that an unrelated strong-cycle owner does not consume a pending
+rescue. The Java lifecycle test
+`PerlReferentDestroyLifecycleTest.rescuedBlessedReferentMovesFromResurrectedToDestroyed`
+also passes in the full gate. The unfixed JVM failure for the new regression
+and the failing intermediate candidates are preserved in `/private/tmp`.
 
 Deferred release still has raw counted-slot, `reachableOwnerCount`, and
 root-snapshot recovery paths; first-weaken retains a compatibility pin.
 Closure/CODE cleanup, tied-handler producers, package roots, resources, shared
 storage, and suspended-frame cancellation need complete acquisition, transfer,
-and release audits. Next, trace every deferred count/root fallback to its
-producer and add invariant coverage there, then remove obsolete recovery
-machinery and rerun the lifecycle matrix. No blocker is known; ownership
-completion is not claimed.
+and release audits. Next, trace the remaining count/root fallbacks to their
+normal producers and add invariant coverage before removing recovery machinery.
+No blocker is known; ownership completion is not claimed.
 
 **Sweep policy (2026-10-27):** Corrective sweeps are disabled by default, as
 requested. `JPERL_ENABLE_CORRECTIVE_SWEEPS=1` temporarily enables legacy
@@ -107,6 +102,7 @@ reachability. Explicit post-END teardown and diagnostic traversal are separate.
 | First weaken | Ordinary tracked referents no longer query live CODE captures or general strong-root graphs. The cloned-thread snapshot root and direct CODE pad-constant check remain; package-nested untracked aggregates still use `hasLiveUntrackedOwnerSlot` and a `WEAKLY_TRACKED_COMPATIBILITY_PIN`. | Strong scalar cells carry `SCALAR_CELL` or `UNTRACKED_REFERENCE`; package scalar/aggregate slots, closure pads, and active CODE slots have separate identities. Weakening retires the weakened cell's strong edge. | `FirstWeakenUsesCurrentPackageOwnerTest`, `UntrackedReferenceOwnerSlotTest`, and `UntrackedAggregateOwnerSlotTest` cover current owner identities. `PackageNestedUntrackedAggregateReleaseTest` still expects the package compatibility query and pin, so that boundary is not migrated. |
 | Cleared aggregate | Scope-exit finalization can consult cached external-root snapshots when the aggregate count is already zero; deferred cleanup still has capture and nested-call recovery branches. | Container elements acquire `ARRAY_ELEMENT`/`HASH_ELEMENT` identities; active lexical and suspended-frame owners have dedicated slots. Registration backfills active lexical slots when it follows the first pad bind, and scope cleanup retires that identity before testing whether children still have owners. Clear and scope-exit paths queue displaced element releases. | `ClearedAggregateOwnerIdentityNoRootWalkTest`, `ClearedAggregateOwnerIdentityFinalizationTest`, `active_lexical_aggregate_owner_release.t`, and the no-sweeps lifecycle batch cover explicit slots. Incomplete producer coverage still reaches the cached-root boundary. |
 | Closure, CODE, and cycles | Deferred cleanup and `DestroyDispatch` still query live/global CODE captures; `DestroyDispatch` retains a CODE-cycle query. `GlobalRuntimeState` uses a graph walk when building its installed-CODE root index. The unblessed array/hash cycle rescue in `MortalList` is removed. | `CLOSURE_PAD`, `SCALAR_CAPTURE`, `CODE_SLOT`, `ACTIVE_CODE`, and `CODE_PAD_CONSTANT` identify capture, stash, active-frame, and optree edges; regex callbacks have `REGEX_CALLBACK`. Scalar capture releases still use the legacy count bridge, while aggregate capture slots are native. | Closure, active-CODE, CODE-slot, strong-cycle, resurrection, and regex-callback tests cover migrated families. `MyVarCleanupStack.scopeExitCleanup` still reconciles legacy `captureCount` against explicit `SCALAR_CAPTURE` slots. Compiler templates and several CODE/glob producer/cleanup boundaries remain under audit. |
+| Rescued object cleanup | `DestroyDispatch.processRescuedObjects` no longer infers death from `refCount == 1` or `Integer.MIN_VALUE`; it checks current Perl owner identities. | A weak scalar promoted during `DESTROY` acquires its normal counted slot. The rescue list records pending lifecycle work but is not an owner. Releasing the last identified owner removes the queued marker and re-dispatches `DESTROY`; marker-only rescue proceeds to final cleanup. | `destroy_weak_aggregate_slot_resurrection.t` passes system Perl, JVM, and interpreter; `dbic_deep_cycle_weak_shift_regression.t` passes on both backends and preserves an unrelated strong-cycle rescue. `PerlReferentDestroyLifecycleTest` covers marker-only cleanup. Broader producer coverage and removal of the remaining rescue registry are still open. |
 | Temporary evaluation roots | `MortalList` stores temporary roots and the reachability walker follows them during cleanup; temporary roots intentionally do not count as Perl owners. | `pushTemporaryRoot`/`popTemporaryRoot` bracket setter and return cleanup. A temporary root must defer finalization only until its exact removal, without turning it into a persistent Perl edge. | `PerlStrongOwnerProofTest` distinguishes temporary roots from Perl owners; `TemporaryReturnOwnerTraversalTest` covers direct aggregate values. Final cleanup on temporary-root release remains part of the migration. |
 | Suspended async frame | Awaited Future values formerly had a separate `suspendedRoots` map consumed by reachability snapshots. That supplemental root is removed. | `InterpreterSuspension` copies the await operand into a scalar cell and attaches a `SUSPENDED_FRAME` slot. Completion, cancellation, and exception cleanup detach the slot and notify weak cleanup. Lexical registers already use per-register `SUSPENDED_FRAME` identities. | `InterpreterSuspensionOwnerTest` verifies acquisition and final release; `issue_1649_cleared_aggregate_async_scope_exit.t` passes on both backends; `issue_1649_cancelled_async_scope_exit.t` verifies cancellation and exactly-once destruction 5/5 on both backends. Chained-await coverage remains in the final matrix. |
 | Resource holders | Each anonymous IO resource holder has a native `IO_RESOURCE_HOLDER` identity on its `RuntimeGlob`; `RuntimeScalar.ioOwnerSlot` carries that identity, and `RuntimeGlob.ioHolderCount()` derives the active count from the owner ledger. | `retainUnstashedIoForDurableSlot` acquires a slot for a strong scalar, while `releaseIoOwner` retires it exactly once. Weaken releases a weak scalar's holder after any final destructor dispatch; unweaken reacquires it for a live glob. Detached-value assignment, returned aliases, and localized-global suspension move the same identity. Replacement acquires the new edge before releasing the old one. Bulk clear still queues the owning scalar for release. Thread cloning drops nonportable IO ownership. | Existing IO coverage remains; `WeakGlobIoOwnerSlotTest` verifies weak and strong aliases, IO-holder release, and unweaken. The new blessed-glob regression passes 5/5 on both backends and system Perl. The eight-file Perl IO matrix passes on both backends and system Perl (74 checks; TCP loopback test skipped because the listener is unavailable). Socket return, exception unwind, localization, aggregate clear, selected-glob restoration, #1794, and #1860 remain covered. Non-socket handle close policy and broader resource-owner acquisition paths remain under audit. |
@@ -2171,7 +2167,7 @@ that currently protects it:
 | Nested-call depth pin | Active argument aliases and compiler temporaries | Borrowed aliases and owned argument/return values must remain distinct through unwind and async suspension. |
 | Blessed root snapshots and package cache | Package scalar, aggregate, glob, or CODE slots | Package scalar, array/hash, named IO glob, and CODE stash entries now have owner identities. Other glob components and compatibility writes still need producer audit before removing root snapshots. |
 | Closure cleanup (`RuntimeCode.releaseCaptures`) | `SCALAR_CAPTURE`, `CLOSURE_PAD`, and aggregate capture slots held by live CODE | Aggregate captures release natively; scalar captures still balance their selective bridge count after the final closure. Their exceptional, nested-CODE, and ownership-transfer cases need end-to-end producer proofs before graph fallbacks are removed. |
-| Final destruction and resurrection (`DestroyDispatch`) | Current durable Perl owner slots, active CODE, and actual internal cycle edges | Durable scalar/package/container owners determine resurrection. CODE cycle retention now uses verified counted owner slots instead of a graph walk; legacy positive-count recovery and reentrant/resurrection behavior still need the full producer audit. `DestroyOwnerSlotResurrectionTest` covers current durable slots without root walks. |
+| Final destruction and resurrection (`DestroyDispatch`) | Current durable Perl owner slots, active CODE, and actual internal cycle edges | `processRescuedObjects` now retains objects with current owner identities instead of treating a count of one as a rescue pin. A real weak-slot rescue redispatches `DESTROY` after its final owner leaves; marker-only rescue still completes once. CODE cycle retention uses verified counted owner slots instead of a graph walk. The rescue registry and remaining producer paths still need audit. `DestroyOwnerSlotResurrectionTest` plus the new weak aggregate regression cover current durable slots without root walks. |
 
 This is an inventory, not evidence that these compatibility paths are safe to
 delete. For each row, the next migration must fix acquisition, replacement,
