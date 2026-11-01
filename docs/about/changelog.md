@@ -86,6 +86,7 @@ priorities and future plans.
 - Transfer scalar-cell owner identity into a single-value array replacement so deferred cleanup validates the current element slot without a root walk (#1649).
 - Release displaced hash element owners when cloned values replace an existing slot (#1649).
 - Release deleted middle-array element owners after transferring the result to the caller (#1649).
+- Release displaced array-element owners when multi-LHS list assignment replaces an array tail (#1649).
 - Carry exact array-element owner identities through pop, shift, delete, and localized unwind while preserving borrowed `@_` aliases, so removed references release despite stale array ownership summaries (#1649).
 - Track visible named package IO globs with per-stash owner identities, excluding anonymous `Symbol::gensym` handles from package ownership (#1649).
 - Acquire active lexical owner identities when aggregate registration follows the initial pad bind, and clear weak aggregate observers on normal scope exit (#1649).
