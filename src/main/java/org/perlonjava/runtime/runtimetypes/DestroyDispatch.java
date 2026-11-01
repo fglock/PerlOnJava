@@ -668,8 +668,10 @@ public class DestroyDispatch {
             // A weak slot promoted to a rescuing strong owner keeps the
             // object's contents and observers until its rescue lifetime ends.
             // Its final release must dispatch DESTROY again, as Perl does for
-            // an object whose first destructor resurrected it.
-            referent.needsReDestroy = true;
+            // an object whose first destructor installed a current Perl owner.
+            // A rescue marker without an owner identity is only lifecycle
+            // bookkeeping and should proceed directly to final cleanup.
+            referent.needsReDestroy = hasLivePerlOwnerIdentity(referent);
             state.rescuedObjects.add(referent);
             MortalList.invalidateExternalRootSnapshot();
             return;
