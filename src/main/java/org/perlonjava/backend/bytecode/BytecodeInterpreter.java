@@ -230,14 +230,13 @@ public class BytecodeInterpreter {
         if (!frame.suspended) return;
         frame.suspended = false;
         frame.suspendedRuntimeDisabledWarningCategories = null;
+        int pendingBeforeCleanup = MortalList.pendingSize();
 
         for (RuntimeCode closure : frame.createdClosures) {
             if ((closure.capturedScalars != null || closure.capturedAggregates != null)
-                    && closure.refCount == 0
-                    && closure.stashRefCount <= 0
                     && (frame.returnedClosures == null
                         || !frame.returnedClosures.contains(closure))) {
-                closure.releaseCaptures();
+                closure.requestCaptureReleaseWhenUnowned();
             }
         }
 
@@ -245,7 +244,7 @@ public class BytecodeInterpreter {
         RuntimeBase[] registers = frame.registers;
         boolean needsFlush = cleanupMyVarRegisters(frame);
         frame.releaseSuspendedLexicalOwners();
-        if (needsFlush) {
+        if (needsFlush || MortalList.pendingSize() > pendingBeforeCleanup) {
             MortalList.flush();
         }
         code.releaseRegisters();
@@ -488,11 +487,11 @@ public class BytecodeInterpreter {
         int firstMyVarReg = 3 + (code.capturedVars != null ? code.capturedVars.length : 0);
 
         // Track closures created by CREATE_CLOSURE in this frame.
-        // At frame exit, we release captures for closures that were never stored
-        // via set() (refCount stayed at 0). This handles eval STRING map/grep
-        // block closures that over-capture all visible variables but are temporary.
-        // This matches the JVM-compiled path where scopeExitCleanup releases
-        // captures for CODE refs with refCount=0 (RuntimeScalar.java line ~2185).
+        // At frame exit, request capture retirement for temporary closures that
+        // were not returned. The CODE owner ledger keeps captures while a Perl
+        // owner remains, independent of the compatibility count.
+        // This matches the JVM-compiled path where scopeExitCleanup asks the
+        // owner ledger to retire temporary CODE captures.
         java.util.List<RuntimeCode> createdClosures = frame.createdClosures;
 
         // Scope-exit cleanup emitted by BytecodeCompiler is bracketed by
@@ -4028,14 +4027,15 @@ public class BytecodeInterpreter {
                 releaseMethodInvocantHoldsAbove(methodInvocantHolds, 0);
             }
 
-            // Release captures for interpreter closures created in this frame
-            // that were never stored via set() (refCount stayed at 0).
+            // Request capture retirement for interpreter closures created in
+            // this frame that were not returned. The CODE owner ledger decides
+            // whether a strong owner still needs the captures.
             // This handles eval STRING map/grep block closures that over-capture
             // all visible variables but are temporary and should release captures.
             // Also retire unregistered temporary CODE scalar cells that only
             // appear as borrowed values in an aliased @_ array.
-            // This matches the JVM-compiled path where scopeExitCleanup releases
-            // captures for CODE refs with refCount=0 (see RuntimeScalar.java
+            // This matches the JVM-compiled path where scopeExitCleanup asks the
+            // owner ledger to retire temporary CODE captures (see RuntimeScalar.java
             // scopeExitCleanup special case for CODE refs).
             if (!frame.suspended && !createdClosures.isEmpty()) {
                 boolean releasedTemporaryCodeOwner = false;
@@ -4051,10 +4051,8 @@ public class BytecodeInterpreter {
                 }
                 for (RuntimeCode closure : createdClosures) {
                     if ((closure.capturedScalars != null || closure.capturedAggregates != null)
-                            && closure.refCount == 0
-                            && closure.stashRefCount <= 0
                             && (frame.returnedClosures == null || !frame.returnedClosures.contains(closure))) {
-                        closure.releaseCaptures();
+                        closure.requestCaptureReleaseWhenUnowned();
                     }
                 }
             }
