@@ -2,10 +2,11 @@ package org.perlonjava.runtime.runtimetypes;
 
 import org.perlonjava.backend.jvm.CustomClassLoader;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.HashSet;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -44,7 +45,7 @@ public final class GlobalRuntimeState {
     private final Set<String> deletedCodeRefPins = new HashSet<>();
     private final Map<Integer, RuntimeScalar> compiledCodeRefs = new HashMap<>();
     private final Map<String, Integer> localizedCodeRefDepth = new HashMap<>();
-    private final IdentityHashMap<RuntimeScalar, String> displacedLocalizedCodeRefs =
+    private final IdentityHashMap<RuntimeScalar, ArrayList<String>> displacedLocalizedCodeRefs =
             new IdentityHashMap<>();
     private final Map<String, RuntimeGlob> ioSlots = new HashMap<>();
     private final Map<String, PerlOwnerSlot> packageIoGlobOwnerSlots = new HashMap<>();
@@ -225,7 +226,7 @@ public final class GlobalRuntimeState {
         return localizedCodeRefDepth;
     }
 
-    IdentityHashMap<RuntimeScalar, String> displacedLocalizedCodeRefs() {
+    IdentityHashMap<RuntimeScalar, ArrayList<String>> displacedLocalizedCodeRefs() {
         return displacedLocalizedCodeRefs;
     }
 
@@ -506,9 +507,21 @@ public final class GlobalRuntimeState {
         codeRefs.clear();
         pseudoConstants.clear();
         compactStashValues.clear();
+        for (RuntimeScalar slot : pinnedCodeRefs.values()) {
+            if (slot != null) slot.releaseCodeSlotBinding();
+        }
         pinnedCodeRefs.clear();
         deletedCodeRefPins.clear();
+        for (RuntimeScalar slot : compiledCodeRefs.values()) {
+            if (slot != null) slot.releaseCodeSlotBinding();
+        }
         compiledCodeRefs.clear();
+        for (Map.Entry<RuntimeScalar, ArrayList<String>> entry : displacedLocalizedCodeRefs.entrySet()) {
+            RuntimeScalar slot = entry.getKey();
+            ArrayList<String> bindings = entry.getValue();
+            if (slot == null || bindings == null) continue;
+            for (int i = 0; i < bindings.size(); i++) slot.releaseCodeSlotBinding();
+        }
         localizedCodeRefDepth.clear();
         displacedLocalizedCodeRefs.clear();
         nextCompiledCodeRefId = 1;
