@@ -3,7 +3,7 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; hidden entries release that owner while retaining their lookup state. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-01):** Phase 2 continues on branch
-`wip/socket-gensym-owner-20261101-020558` at source checkpoint `682ed82be`.
+`wip/socket-gensym-owner-20261101-020558` at source checkpoint `18707627f`.
 The new `active_lexical_aggregate_owner_release.t` regression passes 4/4 on
 system Perl, JVM, and interpreter; it failed 2/4 on each PerlOnJava backend at
 parent `3380ebe8a`. The focused `make` shard passes. The fix records one
@@ -33,9 +33,22 @@ captures after scalar replacement and no longer restores the count from
 unverified counted slots; current storage-matched identities drive that path.
 The relevant return-handoff, closure/localized-cache, nested-container
 destruction, and active-lexical Perl fixtures pass 20/20 on system Perl. The
-immutable no-sweeps `make` gate passes on `682ed82be` in 7m23s:
-`/private/tmp/ownership-scalar-overwrite-no-raw-bridge-immutable-make-682ed82be.log`.
+immutable no-sweeps `make` gate passes on `18707627f` in 7m13s:
+`/private/tmp/ownership-deferred-raw-bridge-immutable-full-make-18707627f.log`.
 Scalar overwrite still has nested-call depth deferrals.
+
+An attempt to remove raw counted restoration from deferred and tail-call
+release failed `ActiveArgumentOwnerLedgerFastPathTest` and
+`DeferredReleaseOwnerSlotFastPathTest`: both deliberately model an unregistered
+scalar cell, which the producer test separately says is not current Perl
+storage. The bridge remains at those release boundaries; it is still absent
+from scalar overwrite.
+
+The restored focused shard and refcount fixture gate pass in 2m15s at
+immutable source `18707627f`:
+`/private/tmp/ownership-deferred-raw-bridge-focused-make-18707627f.log`. The
+failing immutable evidence is preserved at:
+`/private/tmp/ownership-no-raw-counted-restoration-immutable-make-c734f0c93.log`.
 
 Closure capture counts distinguish explicit `SCALAR_CAPTURE`/`CLOSURE_PAD`
 slots from compatibility retains. Producer checks balance active slots,
@@ -184,7 +197,7 @@ owner slots carry those strong edges through replacement and cleanup. Scalar
 overwrite also no longer restores liveness from unverified counted slots. The
 standard Perl oracle passes 20/20 across the return-handoff, closure/localized-
 cache, nested-container destruction, and active-lexical fixtures. The full
-no-sweeps `make` gate passes on immutable source `682ed82be` in 7m23s. The
+no-sweeps `make` gate passes on immutable source `18707627f` in 7m13s. The
 remaining scalar-overwrite nested-call deferrals are an open audit item.
 
 ## Baseline ownership map
