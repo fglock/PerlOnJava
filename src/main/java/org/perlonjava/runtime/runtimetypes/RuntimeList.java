@@ -835,36 +835,28 @@ public class RuntimeList extends RuntimeBase {
                         ? new ArrayList<>(rhsElements.subList(rhsIndex, rhsSize))
                         : new ArrayList<>();
 
-                // For tied arrays, we must assign through the tied interface.
-                // Overwriting `elements` would discard the TieArray wrapper while leaving
-                // `type == TIED_ARRAY`, leading to ClassCastException when tie operations
-                // cast `array.elements` back to TieArray.
-                // For autovivify arrays, we must also go through setFromList() to trigger
-                // the autovivification that converts the parent scalar from UNDEF to ARRAYREFERENCE.
-                if (runtimeArray.type == RuntimeArray.TIED_ARRAY || runtimeArray.type == RuntimeArray.AUTOVIVIFY_ARRAY) {
-                    RuntimeList remainingList = new RuntimeList();
-                    remainingList.elements.addAll(remaining);
-                    runtimeArray.setFromList(remainingList);
-                    // Undo materialized copies' refCount increments.
-                    // setFromList creates new copies via incrementRefCountForContainerStore;
-                    // the materialized rhs elements' increments are now redundant.
-                    for (RuntimeScalar r : remaining) {
-                        if (r.refCountOwned
-                                && ((r.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                                    || r.type == RuntimeScalarType.GLOB)
-                                && r.value instanceof RuntimeBase base && base.refCount > 0) {
-                            base.releaseOwner(r, "RuntimeList materialized-copy undo (array-target)");
-                            base.releaseActiveOwner(r);
-                            base.refCount--;
-                            r.refCountOwned = false;
-                        }
+                // Replace through the array's normal store path so the old
+                // element owners are released and each destination cell gets
+                // a current ARRAY_ELEMENT identity. This also preserves tied
+                // array dispatch and autovivification.
+                RuntimeList remainingList = new RuntimeList();
+                remainingList.elements.addAll(remaining);
+                RuntimeArray assignedArray = runtimeArray.setFromList(remainingList);
+                // setFromList creates destination cells and acquires their
+                // owners. The materialized RHS copies are temporary transport
+                // values, so retire any counted owners they acquired as well.
+                for (RuntimeScalar r : remaining) {
+                    if (r.refCountOwned
+                            && ((r.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                                || r.type == RuntimeScalarType.GLOB)
+                            && r.value instanceof RuntimeBase base && base.refCount > 0) {
+                        base.releaseOwner(r, "RuntimeList materialized-copy undo (array-target)");
+                        base.releaseActiveOwner(r);
+                        base.refCount--;
+                        r.refCountOwned = false;
                     }
-                } else {
-                    // Plain array: directly reuse the materialized copies.
-                    // Their refCountOwned=true transfers to the array elements.
-                    runtimeArray.elements = remaining;
                 }
-                result.elements.addAll(remaining);  // Use original references
+                result.elements.addAll(assignedArray.elements);
                 rhsIndex = rhsSize; // Consume the rest
             } else if (elem instanceof RuntimeHash runtimeHash) {
                 RuntimeArray remainingArr = new RuntimeArray();
