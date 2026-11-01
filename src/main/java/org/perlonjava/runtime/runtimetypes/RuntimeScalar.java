@@ -955,6 +955,17 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return false;
     }
 
+    private boolean hasLivePackageRootedHashOwner() {
+        for (RuntimeBase owner : containerOwnerSnapshot()) {
+            if (owner instanceof RuntimeHash hash
+                    && hash.isPackageRootedHash()
+                    && isStoredInAnyContainer(owner)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private synchronized List<RuntimeBase> containerOwnerSnapshot() {
         return new ArrayList<>(containerOwners);
     }
@@ -3779,15 +3790,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (thisWasWeak
                 && DestroyDispatch.currentDestroyTarget() != null
                 && oldBase == DestroyDispatch.currentDestroyTarget()
-                // Package weak maps (PPI's global parent indexes are the
-                // common case) may briefly replace/reuse an entry while its
-                // target is being destroyed.  That is handled by the normal
-                // refCount>0 resurrection path below; the special rescued-
-                // object lifecycle is only for an owning aggregate such as a
-                // DBIC ResultSource saving its Schema through a weak slot.
-                && containerOwner != null
-                && !(containerOwner instanceof RuntimeHash owner
-                    && owner.isPackageRootedHash())
+                // The scalar must still occupy durable Perl storage after the
+                // assignment. Use the exact storage proof here because the
+                // fast container hint can be absent during lvalue dispatch.
+                // Package-rooted weak maps retain their separate lifecycle;
+                // they must not consume the rescued-object cleanup queue.
+                && hasLiveDurableStrongValueSlot()
+                && !hasLivePackageRootedHashOwner()
                 && this.value instanceof RuntimeBase base
                 && base == DestroyDispatch.currentDestroyTarget()) {
             DestroyDispatch.markDestroyTargetRescued();
