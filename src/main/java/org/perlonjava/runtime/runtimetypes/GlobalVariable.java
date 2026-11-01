@@ -772,9 +772,17 @@ public class GlobalVariable {
 
         private void updatePackageIoGlobOwner(
                 GlobalRuntimeState state, String key, T value) {
-            Map<String, PerlOwnerSlot> ownerSlots = packageIoGlobOwnerSlots(state);
-            if (ownerSlots == null) return;
             RuntimeGlob nextGlob = value instanceof RuntimeGlob glob ? glob : null;
+            if (packageIoGlobOwnerSlots(state) == null) return;
+            updatePackageIoGlobOwnerForState(state, key, nextGlob);
+        }
+
+        private static void updatePackageIoGlobOwnerForState(
+                GlobalRuntimeState state, String key, RuntimeGlob nextGlob) {
+            Map<String, PerlOwnerSlot> ownerSlots = state.packageIoGlobOwnerSlots();
+            if (state.hiddenIoSlotsAfterStashDelete().contains(key)) {
+                nextGlob = null;
+            }
             PerlOwnerSlot ownerSlot = ownerSlots.get(key);
             if (nextGlob == null) {
                 if (ownerSlot != null) {
@@ -891,6 +899,14 @@ public class GlobalVariable {
                 @Override public void clear() { StashSlotMap.this.clear(); }
             };
         }
+
+        private static void refreshPackageIoGlobOwner(GlobalRuntimeState state, String key) {
+            updatePackageIoGlobOwnerForState(state, key, state.ioSlots().get(key));
+        }
+    }
+
+    private static void refreshPackageIoGlobOwner(String key) {
+        StashSlotMap.refreshPackageIoGlobOwner(globalState(), key);
     }
 
     static <T extends RuntimeBase> T markPackageGlobalRoot(T root) {
@@ -1378,6 +1394,7 @@ public class GlobalVariable {
         }
         if (key != null && globalIORefs.containsKey(key)) {
             if (hiddenIORefsAfterStashDelete().add(key)) {
+                refreshPackageIoGlobOwner(key);
                 invalidateStashEnumerationCache();
             }
         }
@@ -1391,6 +1408,7 @@ public class GlobalVariable {
                 invalidateStashEnumerationCache();
             }
             if (hiddenIORefsAfterStashDelete().remove(key)) {
+                refreshPackageIoGlobOwner(key);
                 invalidateStashEnumerationCache();
             }
         }
