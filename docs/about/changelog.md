@@ -94,6 +94,7 @@ priorities and future plans.
 - Exclude weak glob aliases from strong-owner backfill; release their anonymous IO holder on weaken and restore it on unweaken (#1649).
 - Release displaced hash-element owners when multi-LHS list assignment replaces a hash tail, through the normal tied and package-root-aware store path (#1649).
 - Release materialized list-assignment owners and restore lexical cleanup when tied hash assignment throws from `STORE` (#1649).
+- Acquire replacement counted owner slots before releasing prior referents, preserving slot identity across overwrite and deferred release (#1649).
 
 
 
