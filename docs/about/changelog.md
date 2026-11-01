@@ -95,6 +95,7 @@ priorities and future plans.
 - Release displaced hash-element owners when multi-LHS list assignment replaces a hash tail, through the normal tied and package-root-aware store path (#1649).
 - Release materialized list-assignment owners and restore lexical cleanup when tied hash assignment throws from `STORE` (#1649).
 - Acquire replacement counted owner slots before releasing prior referents, preserving slot identity across overwrite and deferred release (#1649).
+- Count weak-slot resurrection once per restored owner edge, so final release redispatches `DESTROY` and clears weak observers (#1649).
 
 
 
