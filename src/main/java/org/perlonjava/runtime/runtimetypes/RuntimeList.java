@@ -859,25 +859,20 @@ public class RuntimeList extends RuntimeBase {
                 result.elements.addAll(assignedArray.elements);
                 rhsIndex = rhsSize; // Consume the rest
             } else if (elem instanceof RuntimeHash runtimeHash) {
-                RuntimeArray remainingArr = new RuntimeArray();
-                remainingArr.elements = (rhsIndex < rhsSize)
+                List<RuntimeScalar> remaining = (rhsIndex < rhsSize)
                         ? new ArrayList<>(rhsElements.subList(rhsIndex, rhsSize))
                         : new ArrayList<>();
 
-                RuntimeHash hash = RuntimeHash.createHashForAssignment(remainingArr);
-                runtimeHash.elements = hash.elements;
-                // Add lvalue references to hash elements for list assignment
-                for (Map.Entry<String, RuntimeScalar> entry : hash.elements.entrySet()) {
-                    result.elements.add(new RuntimeScalar(entry.getKey()));
-                    result.elements.add(entry.getValue());  // Add reference to hash value
-                }
-                // Undo materialized copies' refCount increments.
-                // createHashForAssignment creates new RuntimeScalars for hash values
-                // and gives those hash slots their own container-store ownership.
-                // The original rhs elements' refCount increments (from materialization
-                // via addToArray -> setLarge) are now redundant and would leak since
-                // nobody decrements them.
-                for (RuntimeScalar r : remainingArr.elements) {
+                RuntimeList remainingList = new RuntimeList();
+                remainingList.elements.addAll(remaining);
+                RuntimeArray assignedHash = runtimeHash.setFromList(remainingList);
+                // setFromList releases displaced hash slots and acquires current
+                // HASH_ELEMENT identities. Its result also preserves tied-hash
+                // assignment behavior and the assigned key/value list.
+                result.elements.addAll(assignedHash.elements);
+                // The RHS materialization is temporary transport; retire its
+                // counted copies after the destination has acquired its slots.
+                for (RuntimeScalar r : remaining) {
                     if (r.refCountOwned
                             && ((r.type & RuntimeScalarType.REFERENCE_BIT) != 0
                                 || r.type == RuntimeScalarType.GLOB)
