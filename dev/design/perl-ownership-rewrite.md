@@ -4,6 +4,12 @@
 
 **Current checkpoint (2026-11-01):** Phase 2 continues on branch
 `wip/socket-gensym-owner-20261101-020558` at source commit `30ae72581`.
+The awaited Future held by an async suspension now has its own
+`SUSPENDED_FRAME` owner identity; completion, cancellation, and exception paths
+retire it through `releaseAwaitedOwner`. The duplicate `suspendedRoots` map and
+its reachability-walker seeds are removed, while explicit temporary roots stay
+separate. The focused Java owner test passes, and the existing cleared-aggregate
+async regression passes 3/3 on JVM and interpreter.
 Persistent CODE state slots remain in place from the prior checkpoint. Weak
 glob scalars are excluded from first-bless owner acquisition and lexical/package
 alias discovery; weakening retires their anonymous IO holder after any final
@@ -61,6 +67,12 @@ interpreter TAP logs are recorded at
 no-sweeps `nice -n 19 make` gate passes on immutable source `30ae72581` in
 6m15s at
 `/private/tmp/ownership-list-assignment-exception-immutable-make-30ae72581.log`.
+The async awaited-value migration is implemented on source `fa07d852a`. Its
+focused Java regression passes 1/1, and the full no-sweeps gate passes in 6m18s
+at `/private/tmp/ownership-suspended-await-immutable-make-fa07d852a.log`. The
+existing `issue_1649_cleared_aggregate_async_scope_exit.t` passes 3/3 on JVM and
+interpreter at `/private/tmp/ownership-suspended-await-jvm.log` and
+`/private/tmp/ownership-suspended-await-interpreter.log`.
 
 The deferred and tail-call raw-count bridge remains: removing it failed
 `ActiveArgumentOwnerLedgerFastPathTest` and
@@ -70,8 +82,10 @@ preserved at `/private/tmp/ownership-no-raw-counted-restoration-immutable-make-c
 the restored bridge passes at
 `/private/tmp/ownership-deferred-raw-bridge-immutable-full-make-18707627f.log`.
 Other blessed root snapshots, corrective-sweep scheduling, compatibility pins,
-and owner producers for tied handlers, suspended frames, resource owners, and
-shared storage remain under audit. Earlier acceptance includes the full
+and owner producers for tied handlers, resource owners, and shared storage
+remain under audit. Suspended lexical registers and awaited Future values now
+use `SUSPENDED_FRAME` identities, but broader frame and async-cancellation
+coverage remains part of acceptance. Earlier coverage includes the full
 HTML::Tree suite (23 files, 989 checks), `t/refloop.t` 8/8 on both backends,
 and #1794/#1860 lifetime cases. Next, trace remaining count/root disagreements
 to the producer, transfer, or cleanup operation responsible, then remove
@@ -148,6 +162,7 @@ reachability. Explicit post-END teardown and diagnostic traversal are separate.
 | Cleared aggregate | Scope-exit finalization can consult cached external-root snapshots when the aggregate count is already zero; deferred cleanup still has capture and nested-call recovery branches. | Container elements acquire `ARRAY_ELEMENT`/`HASH_ELEMENT` identities; active lexical and suspended-frame owners have dedicated slots. Registration backfills active lexical slots when it follows the first pad bind, and scope cleanup retires that identity before testing whether children still have owners. Clear and scope-exit paths queue displaced element releases. | `ClearedAggregateOwnerIdentityNoRootWalkTest`, `ClearedAggregateOwnerIdentityFinalizationTest`, `active_lexical_aggregate_owner_release.t`, and the no-sweeps lifecycle batch cover explicit slots. Incomplete producer coverage still reaches the cached-root boundary. |
 | Closure, CODE, and cycles | Deferred cleanup and `DestroyDispatch` still query live/global CODE captures; `DestroyDispatch` retains a CODE-cycle query. `GlobalRuntimeState` uses a graph walk when building its installed-CODE root index. The unblessed array/hash cycle rescue in `MortalList` is removed. | `CLOSURE_PAD`, `SCALAR_CAPTURE`, `CODE_SLOT`, `ACTIVE_CODE`, and `CODE_PAD_CONSTANT` identify capture, stash, active-frame, and optree edges; regex callbacks have `REGEX_CALLBACK`. Scalar capture releases still use the legacy count bridge, while aggregate capture slots are native. | Closure, active-CODE, CODE-slot, strong-cycle, resurrection, and regex-callback tests cover migrated families. `MyVarCleanupStack.scopeExitCleanup` still reconciles legacy `captureCount` against explicit `SCALAR_CAPTURE` slots. Compiler templates and several CODE/glob producer/cleanup boundaries remain under audit. |
 | Temporary evaluation roots | `MortalList` stores temporary roots and the reachability walker follows them during cleanup; temporary roots intentionally do not count as Perl owners. | `pushTemporaryRoot`/`popTemporaryRoot` bracket setter and return cleanup. A temporary root must defer finalization only until its exact removal, without turning it into a persistent Perl edge. | `PerlStrongOwnerProofTest` distinguishes temporary roots from Perl owners; `TemporaryReturnOwnerTraversalTest` covers direct aggregate values. Final cleanup on temporary-root release remains part of the migration. |
+| Suspended async frame | Awaited Future values formerly had a separate `suspendedRoots` map consumed by reachability snapshots. That supplemental root is removed. | `InterpreterSuspension` copies the await operand into a scalar cell and attaches a `SUSPENDED_FRAME` slot. Completion, cancellation, and exception cleanup detach the slot and notify weak cleanup. Lexical registers already use per-register `SUSPENDED_FRAME` identities. | `InterpreterSuspensionOwnerTest` verifies acquisition and final release; `issue_1649_cleared_aggregate_async_scope_exit.t` passes on both backends. Broader async cancellation and chained-await coverage remains in the final matrix. |
 | Resource holders | Each anonymous IO resource holder has a native `IO_RESOURCE_HOLDER` identity on its `RuntimeGlob`; `RuntimeScalar.ioOwnerSlot` carries that identity, and `RuntimeGlob.ioHolderCount()` derives the active count from the owner ledger. | `retainUnstashedIoForDurableSlot` acquires a slot for a strong scalar, while `releaseIoOwner` retires it exactly once. Weaken releases a weak scalar's holder after any final destructor dispatch; unweaken reacquires it for a live glob. Detached-value assignment, returned aliases, and localized-global suspension move the same identity. Replacement acquires the new edge before releasing the old one. Bulk clear still queues the owning scalar for release. Thread cloning drops nonportable IO ownership. | Existing IO coverage remains; `WeakGlobIoOwnerSlotTest` verifies weak and strong aliases, IO-holder release, and unweaken. The new blessed-glob regression passes 5/5 on both backends and system Perl. The eight-file Perl IO matrix passes on both backends and system Perl (74 checks; TCP loopback test skipped because the listener is unavailable). Socket return, exception unwind, localization, aggregate clear, selected-glob restoration, #1794, and #1860 remain covered. Non-socket handle close policy and broader resource-owner acquisition paths remain under audit. |
 
 ### Active lexical aggregate registration backfill (2026-11-01)
@@ -230,7 +245,8 @@ was builtin `die`. `CleanupNeededVisitor` now requires cleanup for explicit
 `die`, so reference-valued method lexicals are released during unwind. The
 system Perl oracle and both PerlOnJava backends pass the tied-hash exception
 regression, and the focused multi-LHS gate passes on the current source; the
-full no-sweeps make result remains pending.
+full no-sweeps gate passes on immutable source `30ae72581` in 6m15s; its log is
+recorded in the current checkpoint.
 
 ## Baseline ownership map
 
