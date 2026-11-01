@@ -3923,34 +3923,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
         }
 
-        // A returned call-frame alias can leave the selective count one owner
-        // high after the caller overwrites its last real reference. Clear weak
-        // observers only when the referent has no independent package/lexical
-        // root and is not retained by a live closure. ExternalRootSnapshot
-        // deliberately treats a named lexical's own slot as non-external while
-        // preserving nested metadata owners such as Sub::Quote's saved info.
-        if ((oldBase instanceof RuntimeArray || oldBase instanceof RuntimeHash)
-                && !thisWasWeak
-                && !DestroyDispatch.isRescued(oldBase)
-                && !oldBase.hasOwnerSlots()
-                && !(oldBase.blessId != 0 && blessedClassHasDestroy(oldBase))
-                && WeakRefRegistry.hasWeakRefsTo(oldBase)
-                && (RuntimeCode.argsStackDepth() <= 1
-                    || oldBase.clearedOwnedAggregateElement)
-                && !ReachabilityWalker.isReachableFromExternalRoot(oldBase)
-                && !ReachabilityWalker.isReachableFromLiveCodeCaptures(oldBase)) {
-            // The root is already proven unreachable. Use the regular
-            // no-DESTROY disposal path for blessed aggregates so owned child
-            // slots are released with the root; clearing only the root's weak
-            // aliases leaves descendants alive through stale selective counts.
-            if (oldBase.blessId != 0) {
-                oldBase.refCount = Integer.MIN_VALUE;
-                DestroyDispatch.callDestroy(oldBase);
-            } else {
-                WeakRefRegistry.clearWeakRefsTo(oldBase);
-            }
-        }
-
         if (oldOwnedScalarReferenceContents) {
             // Releasing the previous scalar-reference owner may invoke a
             // guard's DESTROY.  Keep deferred return owners dormant until the
