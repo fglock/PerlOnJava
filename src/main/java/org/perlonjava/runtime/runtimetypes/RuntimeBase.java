@@ -640,14 +640,6 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         return countedOwnerSlots;
     }
 
-    /** Restore the compatibility count from surviving counted owner identities. */
-    synchronized boolean restoreCountedOwnerSlotRefCount() {
-        int count = countedOwnerSlotCount();
-        if (count == 0) return false;
-        refCount = count;
-        return true;
-    }
-
     /** Restore from every surviving counted slot after verifying its current storage cell. */
     boolean restoreVerifiedCurrentCountedOwnerSlotRefCount() {
         int count = 0;
