@@ -76,6 +76,17 @@ class CaptureOwnerLedgerTest {
 
         assertThrows(IllegalStateException.class,
                 () -> scalar.verifyClosureCaptureOwnerCount(PerlOwnerSlot.Kind.SCALAR_CAPTURE));
+        assertThrows(IllegalStateException.class,
+                () -> scalar.releaseClosureCaptureSlot(null));
+    }
+
+    @Test
+    void absentLegacyCaptureCanBeReleasedAsAnUntrackedEdge() {
+        RuntimeScalar scalar = new RuntimeScalar();
+
+        assertDoesNotThrow(() -> scalar.releaseClosureCaptureSlot(null));
+        assertEquals(0, scalar.captureCount);
+        assertEquals(0, scalar.legacyCaptureOwnerCount());
     }
 
     private static RuntimeCode code() {
