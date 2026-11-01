@@ -1217,29 +1217,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return isCurrentCapturedScalarCellOwner(referent, slot);
     }
 
-    /**
-     * Whether a counted scalar slot still carries this value for compatibility
-     * count repair. This is deliberately weaker than the Perl-root proof used
-     * by destruction and resurrection: runtime-created cells and active @_ cells
-     * may own a counted edge before they have a registered lexical storage path.
-     */
-    boolean isCurrentCountedScalarCellForCountRepair(RuntimeBase referent, PerlOwnerSlot slot) {
-        PerlOwnerSlot.Kind kind = slot.kind();
-        if (kind != PerlOwnerSlot.Kind.SCALAR_CELL
-                && kind != PerlOwnerSlot.Kind.CODE_SLOT
-                && kind != PerlOwnerSlot.Kind.ARGUMENT_VALUE
-                && kind != PerlOwnerSlot.Kind.RETURN_VALUE
-                && kind != PerlOwnerSlot.Kind.TIE_HANDLER) {
-            return false;
-        }
-        return countedOwnerSlot == slot && refCountOwned && value == referent
-                && ((type & RuntimeScalarType.REFERENCE_BIT) != 0
-                    || type == RuntimeScalarType.GLOB
-                    || type == RuntimeScalarType.CODE)
-                && !WeakRefRegistry.isweak(this) && !scopeExited
-                && slot.isActive() && slot.referent() == referent;
-    }
-
     boolean isCurrentCapturedScalarCellOwner(RuntimeBase referent, PerlOwnerSlot slot) {
         if (slot.kind() != PerlOwnerSlot.Kind.SCALAR_CELL
                 || countedOwnerSlot != slot || !refCountOwned || value != referent
@@ -3753,7 +3730,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     // cached root walks cannot supply a replacement owner.
                     oldBase.refCount = Integer.MIN_VALUE;
                     DestroyDispatch.callDestroyFromCountedOwner(oldBase);
-                } else if (oldBase.restoreVerifiedCurrentCountedOwnerSlotRefCount()) {
+                } else if ((oldBase.blessId != 0
+                        && WeakRefRegistry.hasWeakRefsTo(oldBase)
+                        && oldBase.restoreCountedOwnerSlotRefCount())
+                        || oldBase.restoreVerifiedCurrentCountedOwnerSlotRefCount()) {
                     // Verified current scalar cells and aggregate elements
                     // jointly repair transient undercounts without a root walk.
                 } else if (oldBase instanceof RuntimeCode code
