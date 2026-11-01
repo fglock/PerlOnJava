@@ -3,7 +3,7 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; hidden entries release that owner while retaining their lookup state. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-01):** Phase 2 continues on branch
-`wip/socket-gensym-owner-20261101-020558` at source `1a71f907e`. Closure
+`wip/socket-gensym-owner-20261101-020558` at source `bcbd75f2f`. Closure
 capture counts distinguish explicit `SCALAR_CAPTURE`/`CLOSURE_PAD` slots from
 compatibility-only retains. Scalar and aggregate producers verify that counts
 equal active owner slots plus legacy retains; scope cleanup retires only
@@ -20,9 +20,15 @@ counts, absent slots, owner identity, and pending releases. The focused owner
 and root-query suite passes. Eighteen Perl fixtures passed on system Perl with
 243 assertions; the same set passed on JVM and interpreter with corrective
 sweeps disabled (36 backend invocations). The full immutable-source gate passed
-on `1a71f907e` in 6m52; log:
-`/private/tmp/ownership-capture-owner-query-make-1a71f907e.log`. The targeted
-and backend logs are `/private/tmp/ownership-capture-owner-query-focused.log`,
+on `bcbd75f2f` in 7m20; log:
+`/private/tmp/tied-handler-before-weaken-make-bcbd75f2f.log`. The added
+`tied_handler_nested_value_owner_before_weaken.t` stores a nested referent
+before first weakening, then confirms the tied owner retains it and untie
+releases it. It passes on system Perl, JVM, and interpreter with corrective
+sweeps disabled. Its logs are
+`/private/tmp/tied-handler-before-weaken-{system-perl,jvm,interpreter}.log`.
+Earlier focused and backend evidence is in
+`/private/tmp/ownership-capture-owner-query-focused.log`,
 `/private/tmp/capture-owner-query-system-perl-rerun.log`, and
 `/private/tmp/capture-owner-query-no-sweeps-perlonjava.log`.
 
@@ -30,17 +36,19 @@ Earlier gates cover active CODE stack ordering (`6a94453f7`), reset of
 compiled, pinned, and localized CODE slots (`ea28e59c7`), visible stash CODE
 ownership (`d8d8124d1`), and synchronized closure capture transitions
 (`654cf0d5f`). The latest full gate does not rerun all no-sweeps acceptance
-matrices. Tied-handler nested values, additional capture producers, argument,
+matrices. Other tied-handler paths, additional capture producers, argument,
 return and mortal lifetimes, package roots, strong cycles, cloned/shared
 storage, and resource owners remain under audit. Corrective sweeps and
 compatibility recovery remain; ownership completion is not claimed.
 
-Next, trace tied-handler and nested-value acquisition, replacement, transfer,
-and cleanup—including stores made before first weaken—then continue the
-remaining owner families. Remove recovery paths only after producer invariants
-and lifecycle coverage establish their replacement. Rerun the full no-sweeps
-HTML-Tree and lifecycle acceptance matrix on the final candidate before
-reconciling open PR #1938.
+Tied handlers retain their handler objects through `TIE_HANDLER` slots, and
+nested hash/array stores retain values through ordinary element slots. The
+pre-weaken regression confirms those identities work when aggregate storage
+precedes weak tracking. Next, continue the producer, transfer, and cleanup
+audit across the remaining owner families. Remove recovery paths only after
+source invariants and lifecycle coverage establish their replacement. Rerun
+the full no-sweeps HTML-Tree and lifecycle acceptance matrix on the final
+candidate before reconciling open PR #1938.
 
 **Sweep policy (2026-10-27):** Corrective sweeps are disabled by default, as
 requested. `JPERL_ENABLE_CORRECTIVE_SWEEPS=1` temporarily enables legacy
