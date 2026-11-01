@@ -1663,10 +1663,21 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
 
             @Override
             public void dynamicRestoreState() {
+                RuntimeScalar displaced;
                 if (existed) {
-                    self.elements.put(key, savedValue);
+                    displaced = self.elements.put(key, savedValue);
                 } else {
-                    self.elements.remove(key);
+                    displaced = self.elements.remove(key);
+                }
+                if (displaced != null && displaced != savedValue) {
+                    // Hint-hash map mutations already defer their displaced
+                    // values. Ordinary hashes need the same cleanup here,
+                    // where the localized slot is retired during unwind.
+                    if (!self.isHintHash || self.suppressHintHashLifecycleCleanup) {
+                        MortalList.deferDestroyForContainerClear(
+                                Collections.singletonList(displaced));
+                    }
+                    MortalList.flush();
                 }
             }
         });

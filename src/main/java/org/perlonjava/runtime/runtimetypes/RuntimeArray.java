@@ -1723,6 +1723,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                                 hasCurrentCountedArrayElementOwner(self, candidate);
                         RuntimeScalar removed = self.elements.removeLast();
                         if (removed != null) {
+                            MortalList.deferIoOwnerRelease(removed);
                             deferRemovedElementRelease(self, removed,
                                     "RuntimeArray.deleteLocal", countedArraySlot);
                             releasedLocalizedOwner = true;
@@ -1744,6 +1745,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                                 hasCurrentCountedArrayElementOwner(self, displaced);
                         self.elements.set(idx, savedValue);
                         if (displaced != null && displaced != savedValue) {
+                            MortalList.deferIoOwnerRelease(displaced);
                             deferRemovedElementRelease(self, displaced,
                                     "RuntimeArray.deleteLocal", countedArraySlot);
                             releasedLocalizedOwner = true;
@@ -1755,6 +1757,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                             hasCurrentCountedArrayElementOwner(self, displaced);
                     self.elements.set(idx, null);
                     if (displaced != null) {
+                        MortalList.deferIoOwnerRelease(displaced);
                         deferRemovedElementRelease(self, displaced,
                                 "RuntimeArray.deleteLocal", countedArraySlot);
                         releasedLocalizedOwner = true;
