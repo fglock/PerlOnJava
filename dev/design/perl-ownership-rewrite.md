@@ -37,6 +37,10 @@ was a direct `runtimeHash.elements = hash.elements` replacement that bypassed
 displaced-slot release, current `HASH_ELEMENT` acquisition, tied dispatch, and
 package-root marking. Remaining work includes other hash clear/delete paths and
 the deferred-release root/count fallbacks below.
+The full no-sweeps `make` passes on immutable source `2faa4ab3f` in 8m27s at
+`/private/tmp/ownership-hash-tail-immutable-make-2faa4ab3f.log`; `make check-links`
+checks 821 links with zero errors at
+`/private/tmp/ownership-hash-tail-docs-check-links.log`.
 
 The deferred and tail-call raw-count bridge remains: removing it failed
 `ActiveArgumentOwnerLedgerFastPathTest` and
