@@ -1612,7 +1612,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     void finishActiveCodeOwnerRelease() {
-        if (!finalReleaseDeferredToActiveCode || hasActiveCodeOwner() || isActiveCode(this)) return;
+        if (hasActiveCodeOwner() || isActiveCode(this)) return;
+        releasePendingCaptureEdges();
+        if (!finalReleaseDeferredToActiveCode) return;
         // CODE can reach refCount zero while a transient call-frame, argument,
         // or END-block owner still protects it. Recheck at each such owner
         // release boundary; otherwise the count can stay at zero after its
@@ -3619,6 +3621,49 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     /** Owner slots that keep each captured aggregate pad in Perl reachability. */
     public PerlOwnerSlot[] capturedAggregateOwnerSlots;
 
+    private static final class RetiredCaptureEdges {
+        private final RuntimeScalar[] scalars;
+        private final PerlOwnerSlot[] scalarOwnerSlots;
+        private final RuntimeBase[] aggregates;
+        private final PerlOwnerSlot[] aggregateOwnerSlots;
+        private final Set<PerlOwnerSlot> retainedOwnerSlots;
+
+        private RetiredCaptureEdges(RuntimeCode previous, RuntimeCode replacement) {
+            this(previous, captureOwnerSlots(replacement));
+        }
+
+        private RetiredCaptureEdges(
+                RuntimeCode previous, Set<PerlOwnerSlot> retainedOwnerSlots) {
+            scalars = previous.capturedScalars;
+            scalarOwnerSlots = previous.capturedScalarOwnerSlots;
+            aggregates = previous.capturedAggregates;
+            aggregateOwnerSlots = previous.capturedAggregateOwnerSlots;
+            this.retainedOwnerSlots = retainedOwnerSlots;
+        }
+
+        private boolean isEmpty() {
+            return (scalars == null || scalars.length == 0)
+                    && (aggregates == null || aggregates.length == 0);
+        }
+    }
+
+    private final List<RetiredCaptureEdges> pendingRetiredCaptureEdges = new ArrayList<>();
+
+    private static Set<PerlOwnerSlot> captureOwnerSlots(RuntimeCode code) {
+        Set<PerlOwnerSlot> slots = Collections.newSetFromMap(new IdentityHashMap<>());
+        if (code.capturedScalarOwnerSlots != null) {
+            for (PerlOwnerSlot slot : code.capturedScalarOwnerSlots) {
+                if (slot != null) slots.add(slot);
+            }
+        }
+        if (code.capturedAggregateOwnerSlots != null) {
+            for (PerlOwnerSlot slot : code.capturedAggregateOwnerSlots) {
+                if (slot != null) slots.add(slot);
+            }
+        }
+        return slots;
+    }
+
     /** Live lexical containers keyed by their Perl pad names for PadWalker. */
     public Map<String, RuntimeBase> closedOverVariables;
     private volatile long closedOverVariablesVersion;
@@ -4125,72 +4170,88 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             deferFinalReleaseToActiveCode();
             return;
         }
-        if (capturedScalars != null) {
-            retiredOwnedEdges |= capturedScalars.length != 0;
-            RuntimeScalar[] scalars = capturedScalars;
-            capturedScalars = null;  // null out first to prevent re-entry
-            PerlOwnerSlot[] ownerSlots = capturedScalarOwnerSlots;
-            capturedScalarOwnerSlots = null;
+        RetiredCaptureEdges captures = new RetiredCaptureEdges(this, Collections.emptySet());
+        capturedScalars = null;
+        capturedScalarOwnerSlots = null;
+        capturedAggregates = null;
+        capturedAggregateOwnerSlots = null;
+        releaseCaptureEdges(captures);
+    }
+
+    private void retireReplacedCaptureEdges(RetiredCaptureEdges captures) {
+        if (captures == null || captures.isEmpty()) return;
+        if (hasActiveCodeOwner() || isActiveCode(this)) {
+            pendingRetiredCaptureEdges.add(captures);
+        } else {
+            releaseCaptureEdges(captures);
+        }
+    }
+
+    private void releasePendingCaptureEdges() {
+        if (pendingRetiredCaptureEdges.isEmpty()) return;
+        List<RetiredCaptureEdges> pending = new ArrayList<>(pendingRetiredCaptureEdges);
+        pendingRetiredCaptureEdges.clear();
+        for (RetiredCaptureEdges captures : pending) {
+            releaseCaptureEdges(captures);
+        }
+    }
+
+    private void releaseCaptureEdges(RetiredCaptureEdges captures) {
+        if (captures == null || captures.isEmpty()) return;
+        boolean retiredEdge = false;
+        if (captures.scalars != null) {
+            RuntimeScalar[] scalars = captures.scalars;
+            PerlOwnerSlot[] ownerSlots = captures.scalarOwnerSlots;
             for (int i = 0; i < scalars.length; i++) {
-                RuntimeScalar s = scalars[i];
-                s.releaseClosureCaptureSlot(
-                        ownerSlots != null && i < ownerSlots.length ? ownerSlots[i] : null);
-                if (s.captureCount == 0) {
-                    // If the captured scalar itself holds an unowned CODE ref with
-                    // captures, release those recursively (handles nested closures).
-                    // Do not recurse into CODE refs still stored elsewhere (for
-                    // example Iterator.pm keeps a callback in %code_for while an
-                    // eval block temporarily captures the local $code scalar).
-                    if (s.type == RuntimeScalarType.CODE
-                            && s.value instanceof RuntimeCode innerCode
+                RuntimeScalar scalar = scalars[i];
+                PerlOwnerSlot ownerSlot = ownerSlots != null && i < ownerSlots.length
+                        ? ownerSlots[i] : null;
+                if (ownerSlot != null && captures.retainedOwnerSlots.contains(ownerSlot)) continue;
+                if (ownerSlot != null && !ownerSlot.isActive()) continue;
+                retiredEdge |= scalar.captureCount > 0;
+                scalar.releaseClosureCaptureSlot(ownerSlot);
+                if (scalar.captureCount == 0) {
+                    if (scalar.type == RuntimeScalarType.CODE
+                            && scalar.value instanceof RuntimeCode innerCode
                             && innerCode.refCount <= 0) {
                         innerCode.releaseCaptures();
                     }
-                    // The captured variable's scope has exited but refCount was NOT
-                    // decremented at that time (scopeExitCleanup returns early for
-                    // captured variables to prevent premature clearing while the
-                    // closure is alive). Now that the last closure is releasing this
-                    // capture, decrement refCount to balance the original increment.
-                    //
-                    // Balance the captured lexical's owned reference now that the
-                    // last closure is gone. MortalList handles the weak-ref rescue
-                    // cases for unblessed containers whose selective refCount can
-                    // transiently reach zero while still reachable through live CODE.
-                    if (s.scopeExited) {
-                        RuntimeScalar.releaseIoOwner(s);
-                        if (s.type == RuntimeScalarType.TIED_SCALAR
-                                && s.value instanceof TiedVariableBase tiedVariable) {
+                    if (scalar.scopeExited) {
+                        RuntimeScalar.releaseIoOwner(scalar);
+                        if (scalar.type == RuntimeScalarType.TIED_SCALAR
+                                && scalar.value instanceof TiedVariableBase tiedVariable) {
                             tiedVariable.releaseTiedObject();
                             MortalList.noteDeferredCaptureMayBeReady();
                             continue;
                         }
-                        if ((s.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                                && s.value instanceof RuntimeBase) {
-                            MortalList.releaseCapturedDecrement(s);
+                        if ((scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                                && scalar.value instanceof RuntimeBase) {
+                            MortalList.releaseCapturedDecrement(scalar);
                         }
                         MortalList.noteDeferredCaptureMayBeReady();
                     }
                 }
             }
         }
-        if (capturedAggregates != null) {
-            retiredOwnedEdges |= capturedAggregates.length != 0;
-            RuntimeBase[] aggregates = capturedAggregates;
-            capturedAggregates = null;
-            PerlOwnerSlot[] ownerSlots = capturedAggregateOwnerSlots;
-            capturedAggregateOwnerSlots = null;
+        if (captures.aggregates != null) {
+            RuntimeBase[] aggregates = captures.aggregates;
+            PerlOwnerSlot[] ownerSlots = captures.aggregateOwnerSlots;
             for (int i = 0; i < aggregates.length; i++) {
                 RuntimeBase aggregate = aggregates[i];
+                PerlOwnerSlot ownerSlot = ownerSlots != null && i < ownerSlots.length
+                        ? ownerSlots[i] : null;
+                if (ownerSlot != null && captures.retainedOwnerSlots.contains(ownerSlot)) continue;
+                if (ownerSlot != null && !ownerSlot.isActive()) continue;
                 if (aggregate != null) {
-                    aggregate.releaseClosureCaptureOwner(
-                            ownerSlots != null && i < ownerSlots.length
-                                    ? ownerSlots[i] : null);
-                } else if (ownerSlots != null && i < ownerSlots.length
-                        && ownerSlots[i] != null) {
-                    ownerSlots[i].release();
+                    retiredEdge |= aggregate.captureCount > 0;
+                    aggregate.releaseClosureCaptureOwner(ownerSlot);
+                } else if (ownerSlot != null) {
+                    retiredEdge = true;
+                    ownerSlot.release();
                 }
             }
         }
+        retiredOwnedEdges |= retiredEdge;
     }
 
     /**
@@ -5008,6 +5069,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     public void adoptDefinitionFrom(RuntimeCode codeFrom) {
+        // The incoming definition already owns its capture slots. Keep those
+        // identities while replacing the metadata, then retire the placeholder's
+        // obsolete edges (after any active frame that still uses them returns).
+        RetiredCaptureEdges replacedCaptures = new RetiredCaptureEdges(this, codeFrom);
         Supplier<Void> sourceCompilerSupplier = codeFrom.compilerSupplier;
         boolean sourceNeedsDelegation = (codeFrom instanceof InterpretedCode && this.hasForwardGlobAlias)
                 || (sourceCompilerSupplier != null
@@ -5104,6 +5169,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         this.declaredOurVariables = codeFrom.declaredOurVariables;
         copyPadConstantTree(codeFrom, this, values -> values.clone());
         rebindCaptureOwnerSlots();
+        retireReplacedCaptureEdges(replacedCaptures);
     }
 
     /**
