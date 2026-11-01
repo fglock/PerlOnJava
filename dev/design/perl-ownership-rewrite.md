@@ -3,7 +3,7 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; hidden entries release that owner while retaining their lookup state. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-01):** Phase 2 continues on branch
-`wip/socket-gensym-owner-20261101-020558` at source commit `7de04d94f`.
+`wip/socket-gensym-owner-20261101-020558` at source commit `30ae72581`.
 Persistent CODE state slots remain in place from the prior checkpoint. Weak
 glob scalars are excluded from first-bless owner acquisition and lexical/package
 alias discovery; weakening retires their anonymous IO holder after any final
@@ -57,8 +57,10 @@ All three list-assignment regressions pass in the focused Gradle gate on source
 `/private/tmp/list-assignment-exception-cleanup-fixed-focused-make.log`; JVM and
 interpreter TAP logs are recorded at
 `/private/tmp/list-assignment-exception-fixed-jvm.log` and
-`/private/tmp/list-assignment-exception-fixed-interpreter.log`. The latest full
-no-sweeps gate for this updated source is still pending.
+`/private/tmp/list-assignment-exception-fixed-interpreter.log`. The full
+no-sweeps `nice -n 19 make` gate passes on immutable source `30ae72581` in
+6m15s at
+`/private/tmp/ownership-list-assignment-exception-immutable-make-30ae72581.log`.
 
 The deferred and tail-call raw-count bridge remains: removing it failed
 `ActiveArgumentOwnerLedgerFastPathTest` and
@@ -72,8 +74,9 @@ and owner producers for tied handlers, suspended frames, resource owners, and
 shared storage remain under audit. Earlier acceptance includes the full
 HTML::Tree suite (23 files, 989 checks), `t/refloop.t` 8/8 on both backends,
 and #1794/#1860 lifetime cases. Next, trace remaining count/root disagreements
-to their producers and rerun the lifecycle matrix before reconciling draft PR
-#1938. Ownership completion is not claimed.
+to the producer, transfer, or cleanup operation responsible, then remove
+obsolete fallback machinery and rerun the lifecycle matrix before reconciling
+draft PR #1938. Ownership completion is not claimed.
 
 **Sweep policy (2026-10-27):** Corrective sweeps are disabled by default, as
 requested. `JPERL_ENABLE_CORRECTIVE_SWEEPS=1` temporarily enables legacy
