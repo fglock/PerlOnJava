@@ -184,29 +184,7 @@ public class MortalList {
         return false;
     }
 
-    public static void retainSuspendedRoot(RuntimeBase root) {
-        if (root != null) {
-            state().suspendedRoots.merge(root, 1, Integer::sum);
-            invalidateAllRootSnapshots();
-        }
-    }
-
-    public static void releaseSuspendedRoot(RuntimeBase root) {
-        if (root == null) return;
-        LifecycleRuntimeState state = state();
-        Integer count = state.suspendedRoots.get(root);
-        if (count == null) return;
-        if (count <= 1) state.suspendedRoots.remove(root);
-        else state.suspendedRoots.put(root, count - 1);
-        invalidateAllRootSnapshots();
-    }
-
-    public static java.util.List<RuntimeBase> snapshotSuspendedRoots() {
-        return new java.util.ArrayList<>(state().suspendedRoots.keySet());
-    }
-
-    public static void clearSuspendedRoots() {
-        state().suspendedRoots.clear();
+    public static void clearTemporaryRoots() {
         state().temporaryRoots.clear();
         invalidateAllRootSnapshots();
     }

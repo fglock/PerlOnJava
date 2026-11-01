@@ -33,6 +33,7 @@ priorities and future plans.
 - Give mutable scalar-reference contents stable owner-slot identities, share the contents count across aliases, and carry slot identity through localization and deferred release (#1649).
 - Clear nested weak observers after explicit undef from validated Perl owner identities, without treating rescued or temporary roots as owners (#1649).
 - Keep async lexical values owned while interpreter frames are suspended, then finalize cleared aggregate weak observers from current slots without stale-count root walks (#1649, #1860).
+- Give each awaited Future a `SUSPENDED_FRAME` owner identity and remove its separate reachability-root registry (#1649).
 - Repair deferred undercounts for values nested in tied handlers from their explicit hash slots, removing the tied-root reachability snapshot from deferred cleanup (#1649).
 - Resolve package aggregate liveness from active package-root owner slots instead of scanning package tables (#1649).
 - Transfer scalar-cell owner identity into a single-value array replacement so deferred cleanup validates the current element slot without a root walk (#1649).
