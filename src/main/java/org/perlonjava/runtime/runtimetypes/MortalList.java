@@ -875,9 +875,6 @@ public class MortalList {
         // compatibility refcount transiently undercounts them during a
         // tail-call handoff.
         if (base.restoreVerifiedCurrentCountedOwnerSlotRefCount()) return;
-        // Keep raw counted-slot restoration as a bridge for owner families
-        // whose producers have not yet migrated to current-storage proofs.
-        if (base.restoreCountedOwnerSlotRefCount()) return;
 
         if (base.localBindingExists) {
             base.refCount = 1;
@@ -1638,9 +1635,6 @@ public class MortalList {
             } else if (base.restoreVerifiedCurrentCountedOwnerSlotRefCount()) {
                 // Verified current scalar cells and array/hash elements jointly
                 // restore the surviving owner count without a root walk.
-            } else if (base.blessId != 0 && base.restoreCountedOwnerSlotRefCount()) {
-                // For blessed referents, raw counted slots preserve the
-                // compatibility bridge while owner producers are being migrated.
             } else if (base instanceof RuntimeCode code
                     && hasWeakRefs
                     && (RuntimeCode.isActiveCode(code)
