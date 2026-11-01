@@ -346,8 +346,10 @@ public class DestroyDispatch {
                     code.rescuedActiveEndBlockOwner = true;
                     return;
                 }
-                if (!finalCountedOwner && ReachabilityWalker.strongCycleRetainsWeakReferent(code)) {
-                    code.refCount = 1;
+                if (!finalCountedOwner
+                        && code.restoreVerifiedCurrentCountedOwnerSlotRefCount()) {
+                    ReachabilityQueryStats stats = MortalList.activeReachabilityQueryStats();
+                    if (stats != null) stats.codeOwnerSlotRestorations++;
                     return;
                 }
                 code.releaseCaptures();
