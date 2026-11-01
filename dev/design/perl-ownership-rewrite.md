@@ -35,8 +35,11 @@ Earlier focused and backend evidence is in
 Earlier gates cover active CODE stack ordering (`6a94453f7`), reset of
 compiled, pinned, and localized CODE slots (`ea28e59c7`), visible stash CODE
 ownership (`d8d8124d1`), and synchronized closure capture transitions
-(`654cf0d5f`). The latest full gate does not rerun all no-sweeps acceptance
-matrices. Other tied-handler paths, additional capture producers, argument,
+(`654cf0d5f`). On `bcbd75f2f`, HTML::Tree 5.07 `t/refloop.t` passes 8/8 on
+both backends with corrective sweeps disabled; logs are
+`/private/tmp/tied-before-weaken-html-refloop-{jvm,interpreter}-bcbd75f2f.log`.
+The full no-sweeps HTML-Tree and lifecycle matrix still needs a final-candidate
+rerun. Other tied-handler paths, additional capture producers, argument,
 return and mortal lifetimes, package roots, strong cycles, cloned/shared
 storage, and resource owners remain under audit. Corrective sweeps and
 compatibility recovery remain; ownership completion is not claimed.
