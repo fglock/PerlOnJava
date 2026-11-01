@@ -814,7 +814,7 @@ public final class PerlOwnerSlot {
                 || !scalar.referencedByScalarReference
                 || scalar.perlLifecycleState() == RuntimeBase.PerlLifecycleState.DESTROYED
                 || scalar.refCount > 0
-                || scalar.captureCount != 0
+                || scalar.hasClosureCaptureOwner()
                 || scalar.localBindingExists
                 || MyVarCleanupStack.isRegistered(scalar)
                 || scalar.hasScalarCellOwner()

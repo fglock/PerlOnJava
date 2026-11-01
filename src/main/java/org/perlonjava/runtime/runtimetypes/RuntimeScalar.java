@@ -594,12 +594,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     public synchronized void retainClosureCapture() {
+        verifyClosureCaptureOwnerCount(PerlOwnerSlot.Kind.SCALAR_CAPTURE);
         retainClosureCapture(true);
+        verifyClosureCaptureOwnerCount(PerlOwnerSlot.Kind.SCALAR_CAPTURE);
     }
 
     private synchronized void retainClosureCapture(boolean legacyOwner) {
-        boolean firstCapture = captureCount == 0;
+        boolean firstCapture = !hasClosureCaptureOwner();
         retainClosureCaptureCount(legacyOwner);
+        finishClosureCaptureRetention(firstCapture);
+    }
+
+    private void finishClosureCaptureRetention(boolean firstCapture) {
         refreshUntrackedReferenceOwner();
         if (firstCapture && type == RuntimeScalarType.CODE) {
             retainClosureCaptureReferent();
@@ -628,9 +634,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     /** Retain this lexical cell and identify the CODE object that owns the capture. */
     public synchronized PerlOwnerSlot retainClosureCaptureSlot(RuntimeCode captureOwner) {
-        retainClosureCapture(false);
+        verifyClosureCaptureOwnerCount(PerlOwnerSlot.Kind.SCALAR_CAPTURE);
+        boolean firstCapture = !hasClosureCaptureOwner();
         PerlOwnerSlot ownerSlot = new PerlOwnerSlot(PerlOwnerSlot.Kind.SCALAR_CAPTURE);
         ownerSlot.acquireCaptureIdentity(this, captureOwner);
+        retainClosureCaptureCount(false);
+        finishClosureCaptureRetention(firstCapture);
         verifyClosureCaptureOwnerCount(PerlOwnerSlot.Kind.SCALAR_CAPTURE);
         return ownerSlot;
     }
@@ -642,33 +651,45 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             return;
         }
         if (!ownerSlot.isActive()) return;
-        ownerSlot.release();
+        beginPendingClosureCaptureRelease();
+        try {
+            ownerSlot.release();
+        } finally {
+            endPendingClosureCaptureRelease();
+        }
         releaseClosureCapture(false);
         verifyClosureCaptureOwnerCount(PerlOwnerSlot.Kind.SCALAR_CAPTURE);
     }
 
     /** Reconstruct capture ownership for an independent ithread snapshot. */
     synchronized PerlOwnerSlot retainThreadCloneClosureCapture(RuntimeCode captureOwner) {
+        verifyClosureCaptureOwnerCount(PerlOwnerSlot.Kind.SCALAR_CAPTURE);
+        PerlOwnerSlot ownerSlot = new PerlOwnerSlot(PerlOwnerSlot.Kind.SCALAR_CAPTURE);
+        ownerSlot.acquireCaptureIdentity(this, captureOwner);
         retainClosureCaptureCount(false);
         refreshUntrackedReferenceOwner();
         // An owning lexical slot already protects its referent. Borrowed
         // argument aliases do not, and the source runtime's other owners are
         // not a lifetime guarantee in the cloned runtime.
         if (!refCountOwned) retainClosureCaptureReferent();
-        PerlOwnerSlot ownerSlot = new PerlOwnerSlot(PerlOwnerSlot.Kind.SCALAR_CAPTURE);
-        ownerSlot.acquireCaptureIdentity(this, captureOwner);
         verifyClosureCaptureOwnerCount(PerlOwnerSlot.Kind.SCALAR_CAPTURE);
         return ownerSlot;
     }
 
     public synchronized void releaseClosureCapture() {
-        if (captureCount == 0 && legacyCaptureOwnerCount() == 0) return;
+        if (!hasClosureCaptureOwner()) {
+            if (captureCount != 0) {
+                throw new IllegalStateException("closure capture has no recorded owner");
+            }
+            return;
+        }
         releaseClosureCapture(true);
+        verifyClosureCaptureOwnerCount(PerlOwnerSlot.Kind.SCALAR_CAPTURE);
     }
 
     private synchronized void releaseClosureCapture(boolean legacyOwner) {
         releaseClosureCaptureCount(legacyOwner);
-        if (captureCount == 0) {
+        if (!hasClosureCaptureOwner()) {
             releaseOneClosureCaptureReferent();
             releaseClosureOwnerSlot();
             if (scopeExited) {
@@ -775,7 +796,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     void releaseClosureCaptureReferentsForWeaken(RuntimeBase oldBase) {
-        if (captureCount > 0 && oldBase != null) {
+        if (hasClosureCaptureOwner() && oldBase != null) {
             releaseClosureOwnerSlot();
         }
         releaseAllClosureCaptureReferents(oldBase);
@@ -902,7 +923,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 || ownerSlotCount(PerlOwnerSlot.Kind.PACKAGE_SCALAR_SLOT) != 0
                 || localBindingExists
                 || hasCodeSlotBinding()
-                || captureCount > 0
+                || hasClosureCaptureOwner()
                 || registeredLexical
                 || mortalReturnValueOwner
                 || tiedHandlerValueOwner
@@ -1176,7 +1197,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     boolean hasStorageOwnerForVoidDiscard() {
-        if (captureCount > 0 || isPackageGlobalRoot || MyVarCleanupStack.isRegistered(this)) {
+        if (hasClosureCaptureOwner() || isPackageGlobalRoot
+                || MyVarCleanupStack.isRegistered(this)) {
             return true;
         }
         return countedOwnerSlot != null && countedOwnerSlot.isActive()
@@ -1186,7 +1208,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     /** Whether this scalar is a durable Perl cell that can be aliased by a call. */
     boolean hasPersistentArgumentStorageCell() {
-        if (captureCount > 0 || isPackageGlobalRoot || localBindingExists
+        if (hasClosureCaptureOwner() || isPackageGlobalRoot || localBindingExists
                 || MyVarCleanupStack.isRegistered(this)) {
             return true;
         }
@@ -1257,7 +1279,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     && type != RuntimeScalarType.GLOB
                     && type != RuntimeScalarType.CODE)
                 || WeakRefRegistry.isweak(this) || !slot.isActive()
-                || slot.referent() != referent || captureCount == 0) {
+                || slot.referent() != referent || !hasClosureCaptureOwner()) {
             return false;
         }
         for (PerlOwnerSlot captureSlot : ownerSlotSnapshot()) {
@@ -3451,7 +3473,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && this.value instanceof RuntimeBase oldReferent
                 && (oldReferent instanceof RuntimeHash || oldReferent instanceof RuntimeArray);
         if (!scalarRefContentTrackingNeeded
-                && !this.refCountOwned && this.captureCount == 0 && this.captureRefCountOwned() == 0
+                && !this.refCountOwned && !this.hasClosureCaptureOwner()
+                && this.captureRefCountOwned() == 0
                 && !WeakRefRegistry.isweak(this)
                 && !droppingAggregateWithWeakRefs
                 && this.type != GLOBREFERENCE && value.type != GLOBREFERENCE) {
@@ -3632,7 +3655,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (oldBase != null && this.captureRefCountOwned() > 0) {
             releaseAllClosureCaptureReferents(oldBase);
         }
-        if (oldBase != null && this.captureCount > 0) {
+        if (oldBase != null && this.hasClosureCaptureOwner()) {
             releaseClosureOwnerSlot();
         }
 
@@ -3694,7 +3717,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 newBase.hashSlotOwnerCount++;
             }
         }
-        if (this.captureCount > 0 && (this.type & RuntimeScalarType.REFERENCE_BIT) != 0
+        if (this.hasClosureCaptureOwner()
+                && (this.type & RuntimeScalarType.REFERENCE_BIT) != 0
                 && this.value instanceof RuntimeBase capturedBase
                 && !WeakRefRegistry.isweak(this)) {
             if (this.type == RuntimeScalarType.CODE) {
@@ -3821,7 +3845,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 boolean liveScalarReferentBinding = oldBase.localBindingExists
                         && (!(oldBase instanceof RuntimeScalar scalarReferent)
                             || !scalarReferent.referencedByScalarReference
-                            || scalarReferent.captureCount > 0
+                            || scalarReferent.hasClosureCaptureOwner()
                             || MyVarCleanupStack.isRegistered(scalarReferent));
                 if (liveScalarReferentBinding) {
                     // Named container (my %hash / my @array): the local variable
@@ -5763,7 +5787,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             this.localBindingExists = true;
         } else if (this.refCount == -1
                 && !isRegisteredLexical
-                && captureCount == 0
+                && !hasClosureCaptureOwner()
                 && (!isPackageGlobalRoot || GlobalVariable.isTemporaryGlobalAliasValue(this))
                 && containerOwner == null
                 && !RuntimeCode.isInstalledPadConstant(this)) {
@@ -6018,7 +6042,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
 
         if (!finalRelease && scalar.referencedByScalarReference
-                && scalar.captureCount == 0
+                && !scalar.hasClosureCaptureOwner()
                 && (scalar.localBindingExists || scalar.refCount > 0
                     || scalar.hasScalarCellOwner())) {
             cleanupScalarReferenceBinding(scalar);
@@ -6036,7 +6060,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // A captured lexical or an SV with an escaped scalar reference is still
         // alive after its declaring scope exits. Its destruction watcher fires
         // when the final owner later releases it, not at lexical scope exit.
-        if (scalar.captureCount == 0) {
+        if (!scalar.hasClosureCaptureOwner()) {
             scalar.notifyDestroyedWatchers();
         }
 
@@ -6044,7 +6068,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // When all three conditions are true, the entire method body is a no-op:
         // - refCountOwned=false → deferDecrementIfTracked returns immediately
         // - captureCount=0 → capture handling branch not taken
-        if (!scalar.refCountOwned && scalar.captureCount == 0 && !scalar.hasIoOwner()
+        if (!scalar.refCountOwned && !scalar.hasClosureCaptureOwner()
+                && !scalar.hasIoOwner()
                 && !scalar.hasScalarReferenceContentsOwner()
                 && scalar.untrackedReferenceOwnerSlot == null
                 && scalar.type != RuntimeScalarType.TIED_SCALAR) {
@@ -6081,7 +6106,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // If this variable is captured by a closure, mark it so releaseCaptures
         // knows the scope has exited. But still proceed with refCount cleanup below
         // so that blessed ref refCounts and weak refs are handled properly.
-        if (scalar.captureCount > 0) {
+        if (scalar.hasClosureCaptureOwner()) {
             // Mark that this variable's scope has exited. When releaseCaptures
             // later decrements captureCount to 0, it will know the scope is gone.
             scalar.scopeExited = true;
@@ -6204,7 +6229,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      */
     public static void releaseOrTransferSocketIoOwnerOnReturn(
             RuntimeScalar owner, RuntimeBase returned) {
-        if (owner == null || owner.captureCount > 0
+        if (owner == null || owner.hasClosureCaptureOwner()
                 || !owner.hasIoOwner() || owner.type != GLOBREFERENCE
                 || !(owner.value instanceof RuntimeGlob glob)
                 || !isUnstashedIoGlob(glob)) {
@@ -6247,7 +6272,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 || !isUnstashedIoGlob(glob)) {
             return;
         }
-        boolean capturedOwner = owner.captureCount > 0;
+        boolean capturedOwner = owner.hasClosureCaptureOwner();
         boolean returnedOwner = false;
         if (returned != null) {
             for (RuntimeScalar alias : returnedIoAliases(returned, glob)) {

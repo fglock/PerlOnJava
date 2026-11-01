@@ -148,11 +148,11 @@ public class ReachabilityWalker {
             if (owner == null || !owner.refCountOwned || owner.value != referent) continue;
             RuntimeBase container = owner.containerOwner;
             if (container instanceof RuntimeArray array
-                    && array.captureCount > 0 && array.elements.contains(owner)) {
+                    && array.hasClosureCaptureOwner() && array.elements.contains(owner)) {
                 return true;
             }
             if (container instanceof RuntimeHash hash
-                    && hash.captureCount > 0 && hash.elements.containsValue(owner)) {
+                    && hash.hasClosureCaptureOwner() && hash.elements.containsValue(owner)) {
                 return true;
             }
         }
@@ -714,7 +714,7 @@ public class ReachabilityWalker {
                     : ScalarRefRegistry.snapshot();
             for (RuntimeScalar sc : lexicalScalars) {
                 if (sc == null) continue;
-                if (sc.captureCount > 0) continue;
+                if (sc.hasClosureCaptureOwner()) continue;
                 if (WeakRefRegistry.isweak(sc)) continue;
                 if (MortalList.isDeferredCapture(sc)) continue;
                 if (!MyVarCleanupStack.isLive(sc)) continue;
@@ -1316,7 +1316,8 @@ public class ReachabilityWalker {
             }
             for (RuntimeScalar scalar : ScalarRefRegistry.snapshot()) {
                 if (!budget.visitEdge()) break rootScan;
-                if (scalar == null || scalar.captureCount > 0 || WeakRefRegistry.isweak(scalar)
+                if (scalar == null || scalar.hasClosureCaptureOwner()
+                        || WeakRefRegistry.isweak(scalar)
                         || (!MyVarCleanupStack.isLive(scalar) && !scalar.refCountOwned)
                         || scalar.scopeExited) continue;
                 seedTarget(scalar, null, seen, todo, stats);
@@ -1477,7 +1478,7 @@ public class ReachabilityWalker {
 
         for (RuntimeScalar sc : roots) {
             if (sc == null) continue;
-            if (sc.captureCount > 0) continue;
+            if (sc.hasClosureCaptureOwner()) continue;
             if (WeakRefRegistry.isweak(sc)) continue;
             if (sc.scopeExited) continue;
             if (followScalar(sc, target, seen, todo)) return true;
@@ -1949,7 +1950,7 @@ public class ReachabilityWalker {
             for (RuntimeScalar sc : ScalarRefRegistry.snapshot()) {
                 if (!budget.visitEdge()) return true;
                 if (sc == null) continue;
-                if (sc.captureCount > 0) continue;
+                if (sc.hasClosureCaptureOwner()) continue;
                 if (WeakRefRegistry.isweak(sc)) continue;
                 if (!MyVarCleanupStack.isLive(sc) && !sc.refCountOwned) continue;
                 if (sc.scopeExited) continue;
@@ -2277,7 +2278,7 @@ public class ReachabilityWalker {
         }
         for (RuntimeScalar sc : ScalarRefRegistry.snapshot()) {
             if (sc == null) continue;
-            if (sc.captureCount > 0) continue;
+            if (sc.hasClosureCaptureOwner()) continue;
             if (WeakRefRegistry.isweak(sc)) continue;
             if (sc.scopeExited) continue;
             if (!MyVarCleanupStack.isLive(sc) && !sc.refCountOwned) continue;
@@ -3241,7 +3242,9 @@ public class ReachabilityWalker {
         int padCaptureCount = padCell.captureCount;
         if (captureSlots.isEmpty()) return false;
 
-        boolean allCapturesExplicit = captureSlots.size() == padCaptureCount;
+        boolean allCapturesExplicit = padCell.legacyCaptureOwnerCount() == 0
+                && captureSlots.size() == padCell.ownerSlotCount(
+                        PerlOwnerSlot.Kind.SCALAR_CAPTURE);
         for (PerlOwnerSlot captureSlot : captureSlots) {
             RuntimeCode captureOwner = captureSlot.captureOwner();
             if (captureOwner == null) {
