@@ -41,12 +41,15 @@ both backends with corrective sweeps disabled; logs are
 The full no-sweeps HTML-Tree suite also passes 23/23 files and 989/989 checks
 on both backends; logs are
 `/private/tmp/tied-before-weaken-html-full-{jvm,interpreter}-bcbd75f2f.log`.
-Rerun it after remaining ownership and recovery changes; the broader lifecycle
-matrix still needs a final-candidate run. Other tied-handler paths, additional
-capture producers, argument,
-return and mortal lifetimes, package roots, strong cycles, cloned/shared
-storage, and resource owners remain under audit. Corrective sweeps and
-compatibility recovery remain; ownership completion is not claimed.
+The #1794 controller, long-poll, and WebSocket tests pass 3/3, 5/5, and 6/6;
+the #1860 growing-output test passes 4/4 on both backends with sweeps disabled.
+Logs are `/private/tmp/ownership-current-mojo-lifetimes-{jvm,interpreter}-bcbd75f2f.log`.
+Rerun these gates after remaining ownership and recovery changes; the broader
+lifecycle matrix still needs a final-candidate run. Other tied-handler paths,
+additional capture producers, argument, return and mortal lifetimes, package
+roots, strong cycles, cloned/shared storage, and resource owners remain under
+audit. Corrective sweeps and compatibility recovery remain; ownership
+completion is not claimed.
 
 Tied handlers retain their handler objects through `TIE_HANDLER` slots, and
 nested hash/array stores retain values through ordinary element slots. The
