@@ -298,7 +298,7 @@ public class MortalList {
 
     public static void deferIoOwnerRelease(RuntimeScalar scalar) {
         LifecycleRuntimeState state = state();
-        if (!state.mortalActive || scalar == null || !scalar.ioOwner) return;
+        if (!state.mortalActive || scalar == null || !scalar.hasIoOwner()) return;
         markBoundaryWork(state);
         state.pendingIoReleases.add(scalar);
     }

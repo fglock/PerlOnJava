@@ -957,7 +957,7 @@ public class RuntimeGraphCloner {
         target.lexicalSubPackageName = source.lexicalSubPackageName;
         target.lexicalSubPackageCodeDefinedAtDeclaration =
                 source.lexicalSubPackageCodeDefinedAtDeclaration;
-        target.ioOwner = false;
+        target.ioOwnerSlot = null;
     }
 
     private void copyBase(RuntimeBase source, RuntimeBase target) {
