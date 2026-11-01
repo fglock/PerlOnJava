@@ -56,8 +56,9 @@ class TemporaryCodeArgumentOwnerIdentityTest {
                 if (markActive) MortalList.popAndFlush();
             }
 
+            MortalList.pushMark();
             RuntimeScalar.scopeExitCleanup(durableCell);
-            MortalList.flushAboveMark();
+            MortalList.popAndFlush();
             assertEquals(0, closure.refCount);
             assertEquals(0, closure.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_VALUE));
         }
