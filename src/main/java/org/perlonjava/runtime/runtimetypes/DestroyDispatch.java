@@ -276,6 +276,7 @@ public class DestroyDispatch {
         // resurrected objects (DBIC detected_reinvoked_destructor pattern).
         if (referent.destroyFired && referent.needsReDestroy) {
             referent.needsReDestroy = false;
+            removeRescuedObject(referent);
             String cn = NameNormalizer.getBlessStr(referent.blessId);
             if (cn != null && !cn.isEmpty()) {
                 doCallDestroy(referent, cn);
@@ -666,6 +667,9 @@ public class DestroyDispatch {
             }
             // A weak slot promoted to a rescuing strong owner keeps the
             // object's contents and observers until its rescue lifetime ends.
+            // Its final release must dispatch DESTROY again, as Perl does for
+            // an object whose first destructor resurrected it.
+            referent.needsReDestroy = true;
             state.rescuedObjects.add(referent);
             MortalList.invalidateExternalRootSnapshot();
             return;
@@ -856,22 +860,31 @@ public class DestroyDispatch {
         MortalList.invalidateExternalRootSnapshot();
         boolean anyProcessed = false;
         for (RuntimeBase obj : snapshot) {
-            if (obj.destroyFired && (obj.refCount == 1 || obj.refCount == Integer.MIN_VALUE)) {
-                // Object is dead — either the rescue container was the only reference
-                // (refCount == 1), or the weaken cascade already triggered callDestroy
-                // which was skipped (refCount == MIN_VALUE). Clean up now.
+            if (obj.destroyFired && !hasLivePerlOwnerIdentity(obj)) {
+                // The rescue list is lifecycle bookkeeping, not an owning
+                // reference. A positive count can belong to a real promoted
+                // slot, so only current Perl owner identities decide whether
+                // the object is still alive.
                 obj.refCount = Integer.MIN_VALUE;
-                callDestroy(obj);  // destroyFired=true, NOT in rescuedObjects → clearWeakRefsTo + cascade
+                callDestroy(obj);
                 anyProcessed = true;
             } else {
-                // Object still has external references or unexpected state.
-                // Keep tracking it for later processing.
+                // Keep tracking it until its last current Perl owner leaves.
                 rescuedObjects.add(obj);
                 MortalList.invalidateExternalRootSnapshot();
             }
         }
         if (anyProcessed) {
             MortalList.flush();
+        }
+    }
+
+    private static void removeRescuedObject(RuntimeBase referent) {
+        java.util.List<RuntimeBase> rescuedObjects = state().rescuedObjects;
+        synchronized (rescuedObjects) {
+            if (rescuedObjects.remove(referent)) {
+                MortalList.invalidateExternalRootSnapshot();
+            }
         }
     }
 
