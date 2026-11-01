@@ -1210,8 +1210,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && !(this instanceof RuntimeBaseProxy)) {
             return false;
         }
+        // A scalar-cell identity remains current while the cell has not exited
+        // scope, even if a runtime-created cell has not been entered in the
+        // lexical stack yet. An active @_ alias also keeps that caller cell
+        // live for the duration of its argument frame. Removed aggregate cells
+        // still require a current storage marker.
         if (kind != PerlOwnerSlot.Kind.SCALAR_CELL
-                || hasDirectScalarCellStorageOwner()) {
+                || hasDirectScalarCellStorageOwner()
+                || RuntimeCode.isCurrentArgumentAlias(this)
+                || (!scopeExited && containerOwner == null
+                    && !hasStoredContainerOwnerWithoutCurrentOwnerMarker())) {
             return true;
         }
         return isCurrentCapturedScalarCellOwner(referent, slot);
