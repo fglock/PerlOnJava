@@ -1398,11 +1398,20 @@ public class GlobalVariable {
         }
     }
 
-    /** Drop a generated gensym lookup entry after its final scalar IO owner closes. */
-    static void retireHiddenIORef(RuntimeGlob glob) {
-        if (glob == null || !glob.symbolGensym || glob.globName == null
-                || !hiddenIORefsAfterStashDelete().contains(glob.globName)) return;
-        String key = glob.globName;
+    static boolean isSymbolGensymName(String key) {
+        if (key == null) return false;
+        String name = key.startsWith("main::") ? key.substring("main::".length()) : key;
+        String prefix = "Symbol::GEN";
+        if (!name.startsWith(prefix) || name.length() == prefix.length()) return false;
+        for (int i = prefix.length(); i < name.length(); i++) {
+            if (!Character.isDigit(name.charAt(i))) return false;
+        }
+        return true;
+    }
+
+    /** Drop a hidden lookup entry after its final scalar IO owner closes. */
+    static void retireHiddenIORef(String key) {
+        if (key == null || !hiddenIORefsAfterStashDelete().contains(key)) return;
         globalIORefs.remove(key);
         if (hiddenIORefsAfterStashDelete().remove(key)) {
             invalidateStashEnumerationCache();
