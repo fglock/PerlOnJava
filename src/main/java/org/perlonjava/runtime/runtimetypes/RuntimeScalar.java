@@ -421,8 +421,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      * {@link RuntimeCode#makeCodeObject} and decremented in
      * {@link RuntimeCode#releaseCaptures}.
      */
-    public int captureCount;
-
     /** Explicit identity for this pad cell's closure owner edge. */
     private PerlOwnerSlot closureOwnerSlot;
 
@@ -596,7 +594,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     public void retainClosureCapture() {
-        boolean firstCapture = captureCount++ == 0;
+        retainClosureCapture(true);
+    }
+
+    private void retainClosureCapture(boolean legacyOwner) {
+        boolean firstCapture = captureCount == 0;
+        retainClosureCaptureCount(legacyOwner);
         refreshUntrackedReferenceOwner();
         if (firstCapture && type == RuntimeScalarType.CODE) {
             retainClosureCaptureReferent();
@@ -625,9 +628,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     /** Retain this lexical cell and identify the CODE object that owns the capture. */
     public PerlOwnerSlot retainClosureCaptureSlot(RuntimeCode captureOwner) {
-        retainClosureCapture();
+        retainClosureCapture(false);
         PerlOwnerSlot ownerSlot = new PerlOwnerSlot(PerlOwnerSlot.Kind.SCALAR_CAPTURE);
         ownerSlot.acquireCaptureIdentity(this, captureOwner);
+        verifyClosureCaptureOwnerCount(PerlOwnerSlot.Kind.SCALAR_CAPTURE);
         return ownerSlot;
     }
 
@@ -637,12 +641,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             if (!ownerSlot.isActive()) return;
             ownerSlot.release();
         }
-        releaseClosureCapture();
+        releaseClosureCapture(ownerSlot == null);
+        if (ownerSlot != null) {
+            verifyClosureCaptureOwnerCount(PerlOwnerSlot.Kind.SCALAR_CAPTURE);
+        }
     }
 
     /** Reconstruct capture ownership for an independent ithread snapshot. */
     PerlOwnerSlot retainThreadCloneClosureCapture(RuntimeCode captureOwner) {
-        captureCount++;
+        retainClosureCaptureCount(false);
         refreshUntrackedReferenceOwner();
         // An owning lexical slot already protects its referent. Borrowed
         // argument aliases do not, and the source runtime's other owners are
@@ -650,13 +657,17 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (!refCountOwned) retainClosureCaptureReferent();
         PerlOwnerSlot ownerSlot = new PerlOwnerSlot(PerlOwnerSlot.Kind.SCALAR_CAPTURE);
         ownerSlot.acquireCaptureIdentity(this, captureOwner);
+        verifyClosureCaptureOwnerCount(PerlOwnerSlot.Kind.SCALAR_CAPTURE);
         return ownerSlot;
     }
 
     public void releaseClosureCapture() {
-        if (captureCount > 0) {
-            captureCount--;
-        }
+        if (captureCount == 0 && legacyCaptureOwnerCount() == 0) return;
+        releaseClosureCapture(true);
+    }
+
+    private void releaseClosureCapture(boolean legacyOwner) {
+        releaseClosureCaptureCount(legacyOwner);
         if (captureCount == 0) {
             releaseOneClosureCaptureReferent();
             releaseClosureOwnerSlot();
@@ -664,6 +675,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 cleanupScalarReferenceBinding(this);
             }
             refreshUntrackedReferenceOwner();
+        }
+        if (!legacyOwner) {
+            verifyClosureCaptureOwnerCount(PerlOwnerSlot.Kind.SCALAR_CAPTURE);
         }
     }
 
@@ -6059,10 +6073,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // Retire any remaining compatibility-only capture counts here: they
         // have no CODE slot that could keep the pad alive or release the
         // count later. Live closures remain protected by their explicit slots.
-        int explicitCaptureOwners = scalar.ownerSlotCount(PerlOwnerSlot.Kind.SCALAR_CAPTURE);
-        while (scalar.captureCount > explicitCaptureOwners) {
+        while (scalar.legacyCaptureOwnerCount() > 0) {
             scalar.releaseClosureCapture();
         }
+        scalar.verifyClosureCaptureOwnerCount(PerlOwnerSlot.Kind.SCALAR_CAPTURE);
 
         // If this variable is captured by a closure, mark it so releaseCaptures
         // knows the scope has exited. But still proceed with refCount cleanup below
