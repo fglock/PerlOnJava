@@ -3874,11 +3874,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 } else if (oldBase.restoreVerifiedCurrentCountedOwnerSlotRefCount()) {
                     // Verified current scalar cells and aggregate elements
                     // jointly repair transient undercounts without a root walk.
-                } else if (oldBase.blessId != 0
-                        && WeakRefRegistry.hasWeakRefsTo(oldBase)
-                        && oldBase.restoreCountedOwnerSlotRefCount()) {
-                    // Legacy counted slots that have not yet migrated to
-                    // current-storage proofs remain a compatibility bridge.
                 } else if (oldBase instanceof RuntimeCode code
                         && code.hasActiveCodeOwner()) {
                     // An executing CV owns its final state independently of
