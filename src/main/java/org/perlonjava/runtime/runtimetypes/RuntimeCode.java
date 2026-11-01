@@ -4408,7 +4408,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     // NOT caching $^{WARNING_SCOPE}: local ${^WARNING_SCOPE} REPLACES the scalar in the
     // global slot on every subroutine entry, so a cached reference becomes stale immediately.
     private static volatile RuntimeScalar cachedDebuggerFlagsScalar;
-
     private static int getDebuggerFlagsInt() {
         RuntimeScalar s = cachedDebuggerFlagsScalar;
         if (s == null) {
@@ -4560,7 +4559,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * @throws Exception if an error occurs during compilation
      */
     public static Class<?> evalStringHelper(RuntimeScalar code, String evalTag, Object[] runtimeValues) throws Exception {
-
         // Fast-path: skip compilation lock, binding-frame, and all save/restore overhead
         // for repeated evals of the same string. Only applies when:
         //   - not in debugger mode ($^P == 0)
@@ -5393,7 +5391,25 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     ? runtimePackage
                     : topLevelMain ? runtimePackage : capturedSymbolTable.getCurrentPackage();
 
-            try {
+            // Interpreter eval cache: per-thread LRU cache, no synchronization needed.
+            // Only for: plain STRING (not BYTE_STRING), not evalbytes, no debugger,
+            // no captures (capturedEnv.length <= 3 means only this/@_/wantarray).
+            // Key format matches evalStringHelper for consistency.
+            String interpreterCacheKey = null;
+            if (code.type == RuntimeScalarType.STRING && !ctx.isEvalbytes
+                    && debuggerFlagsAtEntry == 0 && !evalbytesUtf8Source && !byteStringUtf8Source
+                    && (ctx.capturedEnv == null || ctx.capturedEnv.length <= 3)) {
+                int featureFlags = capturedSymbolTable.featureFlagsStack.peek();
+                interpreterCacheKey = evalString + '\0' + evalTag + '\0' + hasUnicode
+                        + "\0false\0false\0false\0false\0" + featureFlags + '\0' + evalCurrentPackage;
+                InterpretedCode cachedIC = PerlRuntime.current().runtimeCodeState().interpreterEvalCache.get(interpreterCacheKey);
+                if (cachedIC != null) {
+                    interpretedCode = cachedIC;
+                    compiledSuccessfully = true;
+                }
+            }
+
+            if (interpretedCode == null) try {
                 // Setup for BEGIN block support - create aliases for captured variables.
                 Map<Integer, SymbolTable.SymbolEntry> capturedVars = capturedSymbolTable.getAllVisibleVariables();
                 for (SymbolTable.SymbolEntry entry : capturedVars.values()) {
@@ -5577,6 +5593,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 compiler.setCompilePackage(evalCurrentPackage);
                 interpretedCode = compiler.compile(ast, evalCtx);
                 compiledSuccessfully = true;
+                // Cache on success when no UNITCHECK blocks (UNITCHECK must re-run per compilation).
+                if (interpreterCacheKey != null && evalCtx.unitcheckBlocks.isEmpty()) {
+                    PerlRuntime.current().runtimeCodeState().interpreterEvalCache.put(interpreterCacheKey, interpretedCode);
+                }
                 evalTrace("evalStringWithInterpreter compiled tag=" + evalTag +
                         " bytecodeLen=" + (interpretedCode != null ? interpretedCode.bytecode.length : -1) +
                         " src=" + (interpretedCode != null ? interpretedCode.sourceName : "null"));

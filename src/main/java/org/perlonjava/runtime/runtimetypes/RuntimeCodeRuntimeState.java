@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.runtimetypes;
 
+import org.perlonjava.backend.bytecode.InterpretedCode;
 import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.frontend.astnode.OperatorNode;
 
@@ -21,6 +22,9 @@ public final class RuntimeCodeRuntimeState {
 
     final IdentityHashMap<OperatorNode, Integer> evalBeginIds = new IdentityHashMap<>();
     final Map<String, Class<?>> evalCache = lruMap(EVAL_CACHE_SIZE);
+    // Per-thread interpreter eval cache: skips Lexer+Parser+BytecodeCompiler on warm paths.
+    // Key matches evalStringHelper for consistency (evalStr+evalTag+unicode+flags+pkg).
+    final Map<String, InterpretedCode> interpreterEvalCache = lruMap(EVAL_CACHE_SIZE);
     final Map<Class<?>, Constructor<?>> evalConstructorCache = lruMap(EVAL_CACHE_SIZE);
     final Map<Class<?>, RuntimeCode.EvalClassMeta> evalClassMetaCache = lruMap(EVAL_CACHE_SIZE);
     final Map<Class<?>, RuntimeScalar> evalCodeRefCache = lruMap(EVAL_CACHE_SIZE);
@@ -142,6 +146,7 @@ public final class RuntimeCodeRuntimeState {
     void clearCaches() {
         evalBeginIds.clear();
         evalCache.clear();
+        interpreterEvalCache.clear();
         evalConstructorCache.clear();
         evalClassMetaCache.clear();
         evalCodeRefCache.clear();
