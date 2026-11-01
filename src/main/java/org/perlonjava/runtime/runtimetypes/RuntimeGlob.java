@@ -145,8 +145,10 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     // See dev/modules/anon_sub_naming.md.
     public String nameOverride;
 
-    /** Number of scalar wrappers currently pointing at this anonymous IO glob. */
-    public int ioHolderCount = 0;
+    /** Number of active scalar owner identities retaining this anonymous IO glob. */
+    public int ioHolderCount() {
+        return ownerSlotCount(PerlOwnerSlot.Kind.IO_RESOURCE_HOLDER);
+    }
 
     /** True when this glob's current IO was created by accept(). */
     public boolean acceptedSocket;

@@ -312,6 +312,7 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
         RuntimeScalar activeState = activeVariable != null
                 ? new RuntimeScalar(activeVariable) : new RuntimeScalar();
         if (activeVariable != null) {
+            RuntimeScalar.transferIoOwner(activeVariable, activeState);
             activeState.scalarReferenceContentsOwner = activeVariable.scalarReferenceContentsOwner;
             if (activeState.scalarReferenceContentsOwner != null) {
                 activeState.scalarReferenceContentsOwner
@@ -339,8 +340,7 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
                 RuntimeScalar activeState = suspended.value;
                 activeVariable.type = activeState.type;
                 activeVariable.value = activeState.value;
-                activeVariable.ioOwner = activeState.ioOwner;
-                activeState.ioOwner = false;
+                RuntimeScalar.transferIoOwner(activeState, activeVariable);
                 activeVariable.blessId = activeState.blessId;
                 activeVariable.scalarReferenceContentsOwner =
                         activeState.scalarReferenceContentsOwner;
