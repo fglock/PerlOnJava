@@ -3,11 +3,13 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; hidden entries release that owner while retaining their lookup state. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, and async cleanup regressions pass on both backends. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-01):** Phase 2 remains in progress on branch
-`wip/socket-gensym-owner-20261101-020558`, candidate `6585cadd7`. Its merge base
-matches current `master` (`4a5c33753f1da3f9838c44567bbba878e8f567e0`). Issue
-#1649 remains open; the latest claim is from 2026-10-31. Draft PR #1938 is still
-open at remote head `b2f44fc2d36b8f0a1bc7067790e1731a604cba45`; local work has
-not yet been reconciled or published. PR #1816 is a separate open draft.
+`wip/socket-gensym-owner-20261101-020558`, current docs candidate `ed8b53c3f`
+and runtime source `dd1b5f501`. The full no-sweeps `make` passed on
+`6585cadd7`; intervening commits only updated this design checkpoint. Merge
+base matches current `master` (`4a5c33753f1da3f9838c44567bbba878e8f567e0`).
+Issue #1649 remains open. Draft PR #1938 is still open at remote head
+`b2f44fc2d36b8f0a1bc7067790e1731a604cba45`; local work has not been
+reconciled or published. PR #1816 is a separate open draft.
 
 The socket owner batch now keeps generated `Symbol::GEN<n>` component slots on
 the surviving glob instead of recreating package scalar/hash roots after stash
@@ -37,12 +39,19 @@ generated-glob assertion; their complete logs are retained under
 `/private/tmp/socket-owner-all-focused-make-c89e0a438-20261101.log`, and
 `/private/tmp/socket-owner-focused-make-b1b271a51-20261101.log`.
 
-This candidate still needs the HTML-Tree, weak-reference/DESTROY/cycle, #1794,
-and #1860 acceptance gates on both backends. Earlier versions passed these, but
-that evidence does not validate `6585cadd7`. Next, rerun those acceptance paths
-on this candidate, then continue the producer audit across deferred release,
-closure captures, and remaining package roots before removing lifecycle
-fallbacks.
+Current-candidate acceptance now passes the complete HTML-Tree 5.07 suite with
+sweeps disabled on both backends: 23 files and 989 checks each, including
+`t/refloop.t` at 8/8. The #1794 controller-release regression passes 3/3 and
+the #1860 growing-output regression passes 4/4 on both backends. Logs:
+
+- JVM HTML-Tree: `/private/tmp/html-tree-full-jvm-runner-ed8b53c3f-20261101.log`
+- Interpreter HTML-Tree: `/private/tmp/html-tree-full-interpreter-runner-ed8b53c3f-20261101.log`
+- #1794/#1860: `/private/tmp/ownership-issue_1794_controller_owner_release-jvm-ed8b53c3f-20261101.log`, `/private/tmp/ownership-issue_1794_controller_owner_release-interpreter-ed8b53c3f-20261101.log`, `/private/tmp/ownership-issue_1860_growing_lexical_output-jvm-ed8b53c3f-20261101.log`, `/private/tmp/ownership-issue_1860_growing_lexical_output-interpreter-ed8b53c3f-20261101.log`
+
+Remaining acceptance includes the weak-reference/`DESTROY`/resurrection/cycle
+matrix. Next, continue the producer audit across deferred release, closure
+captures, and package roots, then fix the producer boundary before retiring any
+lifecycle fallback.
 
 **Sweep policy (2026-10-27):** Corrective sweeps are disabled by default, as
 requested. `JPERL_ENABLE_CORRECTIVE_SWEEPS=1` temporarily enables legacy
