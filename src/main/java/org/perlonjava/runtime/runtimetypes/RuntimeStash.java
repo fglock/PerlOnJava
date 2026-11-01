@@ -243,7 +243,10 @@ public class RuntimeStash extends RuntimeHash {
         GlobalVariable.detachScalarPin(fullKey, savedScalar);
         GlobalVariable.globalArrays.remove(fullKey);
         GlobalVariable.globalHashes.remove(fullKey);
-        if (savedIO != null) {
+        if (savedIO != null || GlobalVariable.isSymbolGensymName(fullKey)) {
+            // Symbol::gensym deletes the generated GV before its IO slot is
+            // installed. Remember the hidden identity even when this lookup
+            // table has not materialized the IO slot yet.
             GlobalVariable.hideIORefAfterStashDelete(fullKey);
         }
         GlobalVariable.globalFormatRefs.remove(fullKey);

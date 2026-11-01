@@ -6100,7 +6100,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     if (isSocketIOHandle(io.ioHandle)) io.close();
                     else io.unregisterFileno();
                 }
-                GlobalVariable.retireHiddenIORef(glob);
+                GlobalVariable.retireHiddenIORef(glob.globName);
             }
         }
     }

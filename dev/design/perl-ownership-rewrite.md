@@ -3,33 +3,34 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; hidden entries release that owner while retaining their lookup state. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, and async cleanup regressions pass on both backends. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-01):** Branch
-`wip/glob-alias-owners-20261031-184210`, base commit `c040d444c`. Phase 2 remains
-in progress; candidate commit is `0a5e7e681`. The no-sweeps full make gate on
-its parent completed in 7m27 but failed two
-socket lifetime tests: the temporary listener stayed bound, and lexical TCP
-scope exit did not deliver EOF. Full evidence is
-`/private/tmp/package-glob-owner-visibility-no-sweeps-make-c040d444c-20261101.log`;
-TAP details are in `build/test-results/testUnitShard1/TEST-org.perlonjava.PerlScriptExecutionTest.xml`.
-The package weak-glob regression passed, as did the Java owner visibility test.
+`wip/glob-alias-owners-20261031-184210`, candidate commit `d3f836e1e`. Phase 2
+remains in progress. The no-sweeps full make gate on parent `2b9fce9b1` took
+7m26 and failed the temporary listener, TCP EOF, and generated gensym stash
+tests. Full evidence is
+`/private/tmp/socket-gensym-owner-no-sweeps-make-2b9fce9b1-20261101.log`; JUnit
+details are in the `testUnitShard1` and `testUnitShard2Worker` PerlScript XML
+reports. On earlier parent `c040d444c`, the package weak-glob test and Java
+owner visibility test passed, but both socket cleanup tests failed.
 
 The socket diagnostics found a phantom visible `Symbol::GEN0` stash entry after
 `IO::Socket::INET` used a generated glob. The new regression
 `src/test/resources/unit/refcount/socket_gensym_not_package_owner.t` passes on
 system Perl and fails on the unfixed JVM parent (`GEN0` remains in the package
 stash); logs are `/private/tmp/socket-gensym-hidden-system-perl.log` and
-`/private/tmp/socket-gensym-hidden-parent-c040d444c-jvm.log`. Commit
-`0a5e7e681` marks generated globs explicitly, hides their lookup entry when IO
-is installed, releases that name on final IO-owner cleanup, and preserves the
-marker through copies and thread cloning. Post-fix JVM/interpreter validation
-has not run yet. Earlier acceptance on `a0f50e758` remains recorded in its full make,
+`/private/tmp/socket-gensym-hidden-parent-c040d444c-jvm.log`. The root cause was
+that `RuntimeStash.deleteGlob` recorded hidden state only when an IO table entry
+already existed. Commit `d3f836e1e` records deletion of `Symbol::GEN<n>` before
+later IO materialization, then retires that hidden lookup entry after the final
+IO owner closes. The producer fix has not yet been validated. Earlier
+acceptance on `a0f50e758` remains recorded in its full make,
 HTML-Tree, and #1794/#1860 logs under `/private/tmp`; it does not validate this
 candidate. The first package-glob parent failures remain at
 `/private/tmp/package-io-glob-owner-unfixed-parent-jvm-a0f50e758.log` and the
 matching interpreter log.
 
 Immediate next action: run the complete immutable no-sweeps make gate on
-`0a5e7e681` with the verified local JOL repository, then rerun the socket,
-weak-reference, HTML-Tree and #1794/#1860 acceptance paths. Continue the
+`d3f836e1e` with the verified local JOL repository, then rerun the
+socket, weak-reference, HTML-Tree and #1794/#1860 acceptance paths. Continue the
 ownership audit before removing compatibility pins and reachability fallbacks.
 
 **Sweep policy (2026-10-27):** Corrective sweeps are disabled by default, as
