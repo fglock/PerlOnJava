@@ -1392,11 +1392,20 @@ public class GlobalVariable {
             invalidateStashEnumerationCache();
             return;
         }
-        if (key != null && globalIORefs.containsKey(key)) {
-            if (hiddenIORefsAfterStashDelete().add(key)) {
-                refreshPackageIoGlobOwner(key);
-                invalidateStashEnumerationCache();
-            }
+        if (key != null && hiddenIORefsAfterStashDelete().add(key)) {
+            refreshPackageIoGlobOwner(key);
+            invalidateStashEnumerationCache();
+        }
+    }
+
+    /** Drop a generated gensym lookup entry after its final scalar IO owner closes. */
+    static void retireHiddenIORef(RuntimeGlob glob) {
+        if (glob == null || !glob.symbolGensym || glob.globName == null
+                || !hiddenIORefsAfterStashDelete().contains(glob.globName)) return;
+        String key = glob.globName;
+        globalIORefs.remove(key);
+        if (hiddenIORefsAfterStashDelete().remove(key)) {
+            invalidateStashEnumerationCache();
         }
     }
 

@@ -1,42 +1,36 @@
 # Perl-compatible ownership rewrite
 
-**Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; hidden entries release that owner while retaining their lookup state. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, and async cleanup regressions pass on both backends. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
+**Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; hidden entries release that owner while retaining their lookup state. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, and async cleanup regressions pass on both backends. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-01):** Branch
-`wip/glob-alias-owners-20261031-184210`, base source `328445402`. Phase 2 remains
-in progress. The named-IO slot ledger initially acquired an owner for every
-`globalIORefs` map entry. The completed no-sweeps gate exposed that deleted
-entries remain in this lookup map for compatibility, and their ledger owner
-kept anonymous sockets alive. The failing gate is
-`/private/tmp/package-glob-owner-local-jol-no-sweeps-make-328445402-20261101.log`:
-the package glob test failed its final weak-clear assertion, while the existing
-AnyEvent and TCP EOF lifetime tests also failed. Parent JVM/interpreter evidence
-for early weak clearing is retained at
-`/private/tmp/package-io-glob-owner-unfixed-parent-jvm-a0f50e758.log` and
-`/private/tmp/package-io-glob-owner-unfixed-parent-interpreter-a0f50e758.log`.
+`wip/glob-alias-owners-20261031-184210`, base commit `c040d444c`. Phase 2 remains
+in progress; candidate commit is `0a5e7e681`. The no-sweeps full make gate on
+its parent completed in 7m27 but failed two
+socket lifetime tests: the temporary listener stayed bound, and lexical TCP
+scope exit did not deliver EOF. Full evidence is
+`/private/tmp/package-glob-owner-visibility-no-sweeps-make-c040d444c-20261101.log`;
+TAP details are in `build/test-results/testUnitShard1/TEST-org.perlonjava.PerlScriptExecutionTest.xml`.
+The package weak-glob regression passed, as did the Java owner visibility test.
 
-The current worktree changes release `PACKAGE_GLOB_SLOT` ownership when a stash
-entry becomes hidden, reacquire it when the entry becomes visible, and exclude
-hidden entries when rebuilding a cloned runtime's owner table. A new Java unit
-test covers hide, replacement while hidden, and visibility restoration. System
-Perl passes the package glob test 3/3 and both socket tests; loopback checks
-needed extended access, and AnyEvent is unavailable so its two assertions skip.
-The post-fix JVM/interpreter tests have not yet run. Prior acceptance on
-`a0f50e758` is recorded in `/private/tmp/ownership-array-owner-full-make-a0f50e758-20261101.log`,
-`/private/tmp/html-tree-full-jvm-runner-a0f50e758-20261101.log`,
-`/private/tmp/html-tree-full-interpreter-runner-a0f50e758-20261101.log`, and
-the `ownership-*a0f50e758-20261101.log` #1794/#1860 evidence files. That
-evidence does not validate the current candidate. The localized-array
-unfixed-parent evidence remains at
-`/private/tmp/localized-array-all-removals-parent-jvm-20261031.log`.
+The socket diagnostics found a phantom visible `Symbol::GEN0` stash entry after
+`IO::Socket::INET` used a generated glob. The new regression
+`src/test/resources/unit/refcount/socket_gensym_not_package_owner.t` passes on
+system Perl and fails on the unfixed JVM parent (`GEN0` remains in the package
+stash); logs are `/private/tmp/socket-gensym-hidden-system-perl.log` and
+`/private/tmp/socket-gensym-hidden-parent-c040d444c-jvm.log`. Commit
+`0a5e7e681` marks generated globs explicitly, hides their lookup entry when IO
+is installed, releases that name on final IO-owner cleanup, and preserves the
+marker through copies and thread cloning. Post-fix JVM/interpreter validation
+has not run yet. Earlier acceptance on `a0f50e758` remains recorded in its full make,
+HTML-Tree, and #1794/#1860 logs under `/private/tmp`; it does not validate this
+candidate. The first package-glob parent failures remain at
+`/private/tmp/package-io-glob-owner-unfixed-parent-jvm-a0f50e758.log` and the
+matching interpreter log.
 
-`make check-links` passes 821 URLs on the current documentation. Immediate next
-action: commit the focused visibility fix and test, then run a complete
-immutable `nice -n 19 make` with corrective sweeps disabled and the verified
-local JOL repository. If green, rerun the
-socket and weak-reference acceptance paths, refresh this checkpoint and the
-issue claim, then continue auditing scalar, closure, active-call, cycle, and
-CODE producers before removing compatibility pins and reachability fallbacks.
+Immediate next action: run the complete immutable no-sweeps make gate on
+`0a5e7e681` with the verified local JOL repository, then rerun the socket,
+weak-reference, HTML-Tree and #1794/#1860 acceptance paths. Continue the
+ownership audit before removing compatibility pins and reachability fallbacks.
 
 **Sweep policy (2026-10-27):** Corrective sweeps are disabled by default, as
 requested. `JPERL_ENABLE_CORRECTIVE_SWEEPS=1` temporarily enables legacy
