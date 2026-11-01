@@ -1935,14 +1935,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             for (Map.Entry<String, RuntimeBase> entry : frame.cells().entrySet()) {
                 if (entry.getValue() == cell) {
                     frame.retainAggregateOwner(entry.getKey(), cell);
-                    return;
                 }
             }
         }
         for (Map.Entry<String, RuntimeBase> entry : state.topLevelLexicals.entrySet()) {
             if (entry.getValue() == cell) {
                 retainTopLevelAggregateOwner(state, entry.getKey(), cell);
-                return;
             }
         }
     }
