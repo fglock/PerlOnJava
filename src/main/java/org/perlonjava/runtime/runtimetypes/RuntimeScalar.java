@@ -955,17 +955,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return false;
     }
 
-    private boolean hasLivePackageRootedHashOwner() {
-        for (RuntimeBase owner : containerOwnerSnapshot()) {
-            if (owner instanceof RuntimeHash hash
-                    && hash.isPackageRootedHash()
-                    && isStoredInAnyContainer(owner)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     private synchronized List<RuntimeBase> containerOwnerSnapshot() {
         return new ArrayList<>(containerOwners);
     }
@@ -3807,10 +3796,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 // The scalar must still occupy durable Perl storage after the
                 // assignment. Use the exact storage proof here because the
                 // fast container hint can be absent during lvalue dispatch.
-                // Package-rooted weak maps retain their separate lifecycle;
-                // they must not consume the rescued-object cleanup queue.
+                // Package-rooted aggregate slots count as durable owners too:
+                // their explicit storage identity keeps a promoted value alive
+                // until that exact slot is released.
                 && hasLiveDurableStrongValueSlot()
-                && !hasLivePackageRootedHashOwner()
                 && this.value instanceof RuntimeBase base
                 && base == DestroyDispatch.currentDestroyTarget()) {
             DestroyDispatch.markDestroyTargetRescued();
