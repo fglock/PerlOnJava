@@ -409,7 +409,7 @@ public class WeakRefRegistry {
                 && !referent.hasOwnerSlots()
                 && PerlRuntime.currentOrNull() != null
                 && !referent.localBindingExists
-                && referent.captureCount == 0
+                && !referent.hasClosureCaptureOwner()
                 && !referent.hasPendingReturnOwner()
                 && referent.countedOwnerSlotCount() == 0
                 && !(referent instanceof RuntimeScalarReadOnly
@@ -433,7 +433,7 @@ public class WeakRefRegistry {
             boolean hasWeakObservers = hasWeakRefsTo(referent);
             boolean hasOtherPerlOwner = referent.refCount > 1
                     || referent.localBindingExists
-                    || referent.captureCount > 0
+                    || referent.hasClosureCaptureOwner()
                     || referent.hasPendingReturnOwner()
                     || referent.countedOwnerSlotCount() != 0
                     || referent.hasUncountedPerlOwnerSlotIdentity();
@@ -458,7 +458,7 @@ public class WeakRefRegistry {
                 || PerlRuntime.currentOrNull() == null
                 || !hasWeakRefsTo(referent)
                 || referent.localBindingExists
-                || referent.captureCount > 0
+                || referent.hasClosureCaptureOwner()
                 || referent.hasPendingReturnOwner()
                 || referent.countedOwnerSlotCount() != 0
                 || (referent instanceof RuntimeScalarReadOnly
@@ -487,7 +487,7 @@ public class WeakRefRegistry {
         if (referent == null || referent.refCount != -1
                 || PerlRuntime.currentOrNull() == null
                 || referent.hasOwnerSlots() || referent.localBindingExists
-                || referent.captureCount > 0 || referent.hasPendingReturnOwner()
+                || referent.hasClosureCaptureOwner() || referent.hasPendingReturnOwner()
                 || referent.countedOwnerSlotCount() != 0
                 || MortalList.temporaryRootDirectlyReferences(referent)
                 || (referent instanceof RuntimeCode code && RuntimeCode.isActiveCode(code))) {
@@ -500,7 +500,7 @@ public class WeakRefRegistry {
     /** Finish an aggregate's cleanup after its active lexical pad owner left. */
     static void onActiveLexicalOwnerReleased(RuntimeBase referent) {
         if (referent == null || PerlRuntime.currentOrNull() == null
-                || referent.hasOwnerSlots() || referent.captureCount > 0
+                || referent.hasOwnerSlots() || referent.hasClosureCaptureOwner()
                 || referent.hasPendingReturnOwner()
                 || referent.countedOwnerSlotCount() != 0
                 || referent.localBindingExists || referent.refCount > 0

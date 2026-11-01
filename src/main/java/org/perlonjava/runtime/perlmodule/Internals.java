@@ -827,7 +827,7 @@ public class Internals extends PerlModuleBase {
             java.util.ArrayList<RuntimeScalar> parentScalars = new java.util.ArrayList<>();
             for (RuntimeScalar sc : ScalarRefRegistry.snapshot()) {
                 if (sc == null) continue;
-                if (sc.captureCount > 0) continue;
+                if (sc.hasClosureCaptureOwner()) continue;
                 if (WeakRefRegistry.isweak(sc)) continue;
                 if (!RuntimeScalarType.isReference(sc)) continue;
                 totalLexIdx++;

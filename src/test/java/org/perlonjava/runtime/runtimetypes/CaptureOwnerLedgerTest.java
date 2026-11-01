@@ -18,12 +18,14 @@ class CaptureOwnerLedgerTest {
             assertEquals(1, scalar.captureCount);
             assertEquals(1, scalar.ownerSlotCount(PerlOwnerSlot.Kind.SCALAR_CAPTURE));
             assertEquals(0, scalar.legacyCaptureOwnerCount());
+            assertTrue(scalar.hasClosureCaptureOwner());
             scalar.verifyClosureCaptureOwnerCount(PerlOwnerSlot.Kind.SCALAR_CAPTURE);
 
             scalar.releaseClosureCaptureSlot(slot);
 
             assertEquals(0, scalar.captureCount);
             assertEquals(0, scalar.ownerSlotCount(PerlOwnerSlot.Kind.SCALAR_CAPTURE));
+            assertFalse(scalar.hasClosureCaptureOwner());
             scalar.verifyClosureCaptureOwnerCount(PerlOwnerSlot.Kind.SCALAR_CAPTURE);
         }
     }
@@ -39,12 +41,14 @@ class CaptureOwnerLedgerTest {
             assertEquals(1, array.captureCount);
             assertEquals(1, array.ownerSlotCount(PerlOwnerSlot.Kind.CLOSURE_PAD));
             assertEquals(0, array.legacyCaptureOwnerCount());
+            assertTrue(array.hasClosureCaptureOwner());
             array.verifyClosureCaptureOwnerCount(PerlOwnerSlot.Kind.CLOSURE_PAD);
 
             array.releaseClosureCaptureOwner(slot);
 
             assertEquals(0, array.captureCount);
             assertEquals(0, array.ownerSlotCount(PerlOwnerSlot.Kind.CLOSURE_PAD));
+            assertFalse(array.hasClosureCaptureOwner());
             array.verifyClosureCaptureOwnerCount(PerlOwnerSlot.Kind.CLOSURE_PAD);
         }
     }
@@ -59,12 +63,14 @@ class CaptureOwnerLedgerTest {
             assertEquals(1, scalar.captureCount);
             assertEquals(0, scalar.ownerSlotCount(PerlOwnerSlot.Kind.SCALAR_CAPTURE));
             assertEquals(1, scalar.legacyCaptureOwnerCount());
+            assertTrue(scalar.hasClosureCaptureOwner());
             scalar.verifyClosureCaptureOwnerCount(PerlOwnerSlot.Kind.SCALAR_CAPTURE);
 
             scalar.releaseClosureCapture();
 
             assertEquals(0, scalar.captureCount);
             assertEquals(0, scalar.legacyCaptureOwnerCount());
+            assertFalse(scalar.hasClosureCaptureOwner());
             scalar.verifyClosureCaptureOwnerCount(PerlOwnerSlot.Kind.SCALAR_CAPTURE);
         }
     }
@@ -76,6 +82,7 @@ class CaptureOwnerLedgerTest {
 
         assertThrows(IllegalStateException.class,
                 () -> scalar.verifyClosureCaptureOwnerCount(PerlOwnerSlot.Kind.SCALAR_CAPTURE));
+        assertFalse(scalar.hasClosureCaptureOwner());
         assertThrows(IllegalStateException.class,
                 () -> scalar.releaseClosureCaptureSlot(null));
     }
@@ -87,6 +94,20 @@ class CaptureOwnerLedgerTest {
         assertDoesNotThrow(() -> scalar.releaseClosureCaptureSlot(null));
         assertEquals(0, scalar.captureCount);
         assertEquals(0, scalar.legacyCaptureOwnerCount());
+    }
+
+    @Test
+    void pendingCaptureReleaseRemainsAnOwnerUntilTheReleaseCompletes() {
+        RuntimeScalar scalar = new RuntimeScalar();
+
+        scalar.beginPendingClosureCaptureRelease();
+        assertTrue(scalar.hasClosureCaptureOwner());
+        assertThrows(IllegalStateException.class,
+                () -> scalar.verifyClosureCaptureOwnerCount(PerlOwnerSlot.Kind.SCALAR_CAPTURE));
+        scalar.endPendingClosureCaptureRelease();
+
+        assertFalse(scalar.hasClosureCaptureOwner());
+        scalar.verifyClosureCaptureOwnerCount(PerlOwnerSlot.Kind.SCALAR_CAPTURE);
     }
 
     private static RuntimeCode code() {

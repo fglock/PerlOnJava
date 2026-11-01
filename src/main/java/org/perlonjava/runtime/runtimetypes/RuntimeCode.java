@@ -4226,7 +4226,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 retiredEdge = true;
                 if (ownerSlot != null && !ownerSlot.isActive()) continue;
                 scalar.releaseClosureCaptureSlot(ownerSlot);
-                if (scalar.captureCount == 0) {
+                if (!scalar.hasClosureCaptureOwner()) {
                     if (scalar.type == RuntimeScalarType.CODE
                             && scalar.value instanceof RuntimeCode innerCode
                             && innerCode.refCount <= 0) {

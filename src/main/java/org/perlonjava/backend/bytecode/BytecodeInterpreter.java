@@ -103,7 +103,7 @@ public class BytecodeInterpreter {
         if (!(val instanceof RuntimeScalar scalar)) return false;
         return scalar instanceof ReadOnlyAlias
                 || scalar.threadShared
-                || scalar.captureCount > 0
+                || scalar.hasClosureCaptureOwner()
                 || scalar.captureRefCountOwned() > 0
                 || scalar.referencedByScalarReference
                 || scalar.hasLiveSubstrLvalueObservers()
