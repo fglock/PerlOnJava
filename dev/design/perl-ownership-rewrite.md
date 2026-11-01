@@ -1,24 +1,32 @@
 # Perl-compatible ownership rewrite
 
-**Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; hidden entries release that owner while retaining their lookup state. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, and async cleanup regressions pass on both backends. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
+**Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; hidden entries release that owner while retaining their lookup state. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-01):** Phase 2 remains in progress on branch
 `wip/socket-gensym-owner-20261101-020558`, runtime source
-`3c8a51c4f29c0ceab9b399fe9db6c09de98d3491`. Deferred release, tail-call
-cleanup, and scalar overwrite now try verified current counted-owner slots
-before the raw-count compatibility bridge. Current-cell verification also
-recognizes an active forwarded `ARGUMENT_ALIAS`; temporary expression wrappers
-remain excluded from persistent alias ownership.
+`460c13f43`. Deferred release, tail-call cleanup, and scalar overwrite try
+verified current counted-owner slots before the raw-count compatibility bridge.
+Current-cell verification also recognizes an active forwarded
+`ARGUMENT_ALIAS`; temporary expression wrappers remain excluded from
+persistent alias ownership. Aggregate clear/replacement now queues anonymous
+IO holder release with deferred container cleanup.
 
-The full no-sweeps `nice -n 19 make` passed in 7m18: 3,305 unit-shard tests,
+The full no-sweeps `nice -n 19 make` passed on `460c13f43` in 7m46 using the
+verified local JOL 0.17 mirror: 3,305 unit-shard tests,
 525 Joni tests, and two integration checks; zero failures or errors and seven
-skips. The lifecycle matrix passed 18 files and 162 checks on each backend,
+skips. The added aggregate-clear regression passes 4/4 on system Perl, JVM,
+and interpreter; the failing parent run at `3c8a51c4f` fails both final-close
+assertions. The existing socket scope-exit regression passes 35/35 on each
+backend. The lifecycle matrix passed 18 files and 162 checks on each backend,
 including #1794 controller release and #1860 growing output. HTML-Tree 5.07
 passed all 23 files and 989 checks on each backend, including `t/refloop.t`
 8/8. The filtered focused gate also passed the forwarded-alias test and three
 `weak_blessed_*` fixtures. Logs:
 
 - Full gate: `/private/tmp/ownership-verified-forwarded-alias-no-sweeps-make-3c8a51c4f-20261101.log`
+- Aggregate-clear candidate gate: `/private/tmp/ownership-io-aggregate-clear-make-460c13f43.log`
+- Aggregate-clear regression: `/private/tmp/io-owner-aggregate-clear-perl-3c8a51c4f.log`, `/private/tmp/io-owner-aggregate-clear-parent-3c8a51c4f.log`, `/private/tmp/io-owner-aggregate-clear-jvm-460c13f43.log`, `/private/tmp/io-owner-aggregate-clear-interpreter-460c13f43.log`
+- Socket scope-exit JVM/interpreter: `/private/tmp/socket-scope-eof-jvm-460c13f43.log`, `/private/tmp/socket-scope-eof-interpreter-460c13f43.log`
 - Focused gate: `/private/tmp/forwarded-argument-owner-focused-units-3c8a51c4f-20261101.log`
 - Lifecycle JVM/interpreter: `/private/tmp/ownership-lifecycle-matrix-jvm-3c8a51c4f-20261101.log`, `/private/tmp/ownership-lifecycle-matrix-interpreter-3c8a51c4f-20261101.log`
 - HTML-Tree JVM/interpreter: `/private/tmp/html-tree-full-jvm-3c8a51c4f-20261101.log`, `/private/tmp/html-tree-full-interpreter-3c8a51c4f-20261101.log`
@@ -115,7 +123,7 @@ reachability. Explicit post-END teardown and diagnostic traversal are separate.
 | Cleared aggregate | Scope-exit finalization can consult cached external-root snapshots when the aggregate count is already zero; deferred cleanup still has capture and nested-call recovery branches. | Container elements acquire `ARRAY_ELEMENT`/`HASH_ELEMENT` identities; active lexical and suspended-frame owners have dedicated slots. Clear and scope-exit paths queue displaced element releases. | `ClearedAggregateOwnerIdentityNoRootWalkTest` and `ClearedAggregateOwnerIdentityFinalizationTest` cover explicit slots. Incomplete producer coverage still reaches the cached-root boundary. |
 | Closure, CODE, and cycles | Deferred cleanup and `DestroyDispatch` still query live/global CODE captures; `DestroyDispatch` retains a CODE-cycle query. `GlobalRuntimeState` uses a graph walk when building its installed-CODE root index. The unblessed array/hash cycle rescue in `MortalList` is removed. | `CLOSURE_PAD`, `SCALAR_CAPTURE`, `CODE_SLOT`, `ACTIVE_CODE`, and `CODE_PAD_CONSTANT` identify capture, stash, active-frame, and optree edges; regex callbacks have `REGEX_CALLBACK`. Scalar capture releases still use the legacy count bridge, while aggregate capture slots are native. | Closure, active-CODE, CODE-slot, strong-cycle, resurrection, and regex-callback tests cover migrated families. `MyVarCleanupStack.scopeExitCleanup` still reconciles legacy `captureCount` against explicit `SCALAR_CAPTURE` slots. Compiler templates and several CODE/glob producer/cleanup boundaries remain under audit. |
 | Temporary evaluation roots | `MortalList` stores temporary roots and the reachability walker follows them during cleanup; temporary roots intentionally do not count as Perl owners. | `pushTemporaryRoot`/`popTemporaryRoot` bracket setter and return cleanup. A temporary root must defer finalization only until its exact removal, without turning it into a persistent Perl edge. | `PerlStrongOwnerProofTest` distinguishes temporary roots from Perl owners; `TemporaryReturnOwnerTraversalTest` covers direct aggregate values. Final cleanup on temporary-root release remains part of the migration. |
-| Resource holders | Anonymous IO lifetime uses `RuntimeScalar.ioOwner` and `RuntimeGlob.ioHolderCount`; it is not part of the Perl owner-slot ledger. | `retainUnstashedIoForDurableSlot`, `releaseIoOwner`, `releaseIoOwnerPreservingReturned`, `transferIoOwnerToReturnedCopy`, and `releaseOrTransferSocketIoOwnerOnReturn` acquire, release, or move the holder token across stores and returns. | Socket scope, return, async cancellation, #1794, and #1860 coverage pass on both backends. The token has no stable `PerlOwnerSlot` identity; cloning, exception transfer, and non-socket anonymous-handle cleanup remain under audit. |
+| Resource holders | Anonymous IO lifetime uses `RuntimeScalar.ioOwner` and `RuntimeGlob.ioHolderCount`; it is not part of the Perl owner-slot ledger. | `retainUnstashedIoForDurableSlot`, `releaseIoOwner`, `releaseIoOwnerPreservingReturned`, `transferIoOwnerToReturnedCopy`, and `releaseOrTransferSocketIoOwnerOnReturn` acquire, release, or move the holder token across stores and returns. `MortalList.deferDestroyForContainerClear` now queues the IO release when bulk cleanup retires an aggregate slot. | New hash and array clear regressions pass on both backends and system Perl; the parent fails both final-close assertions. Socket scope, return, async cancellation, #1794, and #1860 coverage pass on both backends. The token has no stable `PerlOwnerSlot` identity; cloning, exception transfer, and non-socket anonymous-handle cleanup remain under audit. |
 
 ## Baseline ownership map
 
@@ -471,17 +479,16 @@ batch is pending.
 
 ### Next steps
 
-1. Extend the ownership path through scalar proxies and ordinary array/hash
-   slots in Phase 2, then resolve the HTML::Tree teardown failures and verify
-   unchanged `t/refloop.t`.
-2. Resolve the strict target failures in the fresh-home CPAN release
-   acceptance, then rerun that gate on the final candidate. The current run
-   distinguishes prerequisite/setup timeouts and missing dependencies from
-   runtime assertions; those outcomes do not yet satisfy #1642's acceptance.
-3. Rerun Moo and DBIx::Class after their separate tracked fixes land; classify
-   the two DBIx::Class assertions independently.
-4. Run each repository gate from an immutable commit and record before/after
-   evidence for each enabled path.
+1. Continue producer/cleanup audits for tied handlers, closure captures,
+   active CODE, returned and mortal values, package roots, shared storage,
+   suspended frames, and resource owners. Trace each remaining count mismatch
+   to the operation that creates or retires its edge.
+2. Replace lifecycle reachability and count fallbacks with current owner-slot
+   identities, then remove obsolete corrective-sweep machinery and caches.
+3. Rerun the weak-reference, `DESTROY`, resurrection, cycle, cancellation,
+   #1794, #1860, and full HTML::Tree acceptance matrix with sweeps disabled.
+4. Reconcile the tested local history with open draft PR #1938, review required
+   CI, and leave merge to review.
 
 ### Open questions and blockers
 
