@@ -38,6 +38,7 @@ priorities and future plans.
 - Release deleted middle-array element owners after transferring the result to the caller (#1649).
 - Carry exact array-element owner identities through pop, shift, delete, and localized unwind while preserving borrowed `@_` aliases, so removed references release despite stale array ownership summaries (#1649).
 - Track visible named package IO globs with per-stash owner identities, excluding anonymous `Symbol::gensym` handles from package ownership (#1649).
+- Acquire active lexical owner identities when aggregate registration follows the initial pad bind, and clear weak aggregate observers on normal scope exit (#1649).
 
 - Bundle `Devel::Size` with JVM-based `size` and `total_size` estimates.
 
