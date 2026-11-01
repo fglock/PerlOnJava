@@ -62,4 +62,52 @@ class TemporaryCodeArgumentOwnerIdentityTest {
             assertEquals(0, closure.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_VALUE));
         }
     }
+
+    @Test
+    void forwardingAnActiveCodeArgumentBorrowsTheCurrentCellOwner() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeCode closure = new RuntimeCode((args, context) -> new RuntimeList(), null);
+            closure.refCount = 0;
+            closure.capturedScalars = new RuntimeScalar[0];
+            RuntimeScalar argumentCell = new RuntimeScalar(closure);
+            RuntimeCode.CallArguments outer = RuntimeCode.newCallArguments(1);
+            RuntimeCode.CallArguments forwarded = null;
+            boolean markActive = false;
+            boolean outerArgsActive = false;
+
+            try {
+                MortalList.pushMark();
+                markActive = true;
+                outer.add(argumentCell);
+                RuntimeArray outerArgs = outer.toRuntimeArray();
+                assertEquals(1, closure.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_VALUE));
+
+                RuntimeCode.pushArgs(outerArgs);
+                outerArgsActive = true;
+                forwarded = RuntimeCode.newCallArguments(1);
+                forwarded.add(argumentCell);
+                RuntimeArray forwardedArgs = forwarded.toRuntimeArray();
+
+                assertFalse(forwardedArgs.ownsElement(argumentCell));
+                assertEquals(1, closure.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_VALUE),
+                        "the forwarded frame borrows its caller's active scalar cell");
+                forwarded.finish();
+                forwarded = null;
+
+                RuntimeCode.popArgs();
+                outerArgsActive = false;
+                outer.finish();
+                MortalList.popAndFlush();
+                markActive = false;
+
+                assertEquals(0, closure.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_VALUE));
+            } finally {
+                if (forwarded != null) forwarded.finish();
+                if (outerArgsActive) RuntimeCode.popArgs();
+                outer.finish();
+                if (markActive) MortalList.popAndFlush();
+            }
+        }
+    }
 }
