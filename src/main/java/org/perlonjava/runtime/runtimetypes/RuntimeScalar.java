@@ -3874,29 +3874,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     // remaining native owner identity is direct evidence of a
                     // strong value; defer cleanup until that exact slot leaves.
                     oldBase.deferFinalReleaseToUncountedOwnerSlots();
-                } else if (oldBase.blessId == 0
-                        && (oldBase instanceof RuntimeArray || oldBase instanceof RuntimeHash)
-                        && WeakRefRegistry.hasWeakRefsTo(oldBase)
-                        && RuntimeCode.argsStackDepth() > 1
-                        && !oldBase.clearedOwnedAggregateElement) {
-                    // A parser can walk weak parent links through a temporary
-                    // alias while the owning tree still keeps an unblessed
-                    // aggregate alive. Defer clearing until the statement
-                    // boundary so the shared root snapshot can distinguish a
-                    // live ancestor from one whose final owner has gone away.
-                } else if (oldBase.blessId != 0
-                        && WeakRefRegistry.hasWeakRefsTo(oldBase)
-                        && !blessedClassHasDestroy(oldBase)
-                        && RuntimeCode.argsStackDepth() > 1
-                        && !oldBase.clearedOwnedAggregateElement) {
-                    // A nested method can still have JVM expression temporaries
-                    // that are not represented in the selective count.  Do not
-                    // invent a replacement owner here: that count outlives the
-                    // frame when a local alias has already been cleaned up (as
-                    // in Algorithm::SlidingWindow's cleared buffer slot).
-                    // Defer the reachability decision until the enclosing Perl
-                    // statement boundary, where all method-local temporaries
-                    // have gone away and the walker can see real Perl roots.
                 } else {
                     oldBase.refCount = Integer.MIN_VALUE;
                     DestroyDispatch.callDestroy(oldBase);
