@@ -3,14 +3,15 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; hidden entries release that owner while retaining their lookup state. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-01):** Phase 2 continues on branch
-`wip/socket-gensym-owner-20261101-020558` at source commit `6a208b198`.
+`wip/socket-gensym-owner-20261101-020558` at source commit `de5861876`.
 Persistent CODE state slots remain in place from the prior checkpoint. Weak
 glob scalars are excluded from first-bless owner acquisition and lexical/package
 alias discovery; weakening retires their anonymous IO holder after any final
 `DESTROY`, and unweaken reacquires it for a live glob. Multi-LHS list assignment
 now replaces its array tail through `RuntimeArray.setFromList`, which releases
 displaced element owners, creates current destination slots, and retires any
-temporary RHS owners.
+temporary RHS owners. The hash tail follows the same contract through
+`RuntimeHash.setFromList`, preserving tied-hash dispatch and package-root marking.
 
 `blessed_glob_alias_owner_release.t` passes 5/5 on system Perl, JVM, and
 interpreter with sweeps disabled on both PerlOnJava backends. The parent failed
@@ -25,6 +26,17 @@ gate passes at
 `/private/tmp/list-assignment-array-tail-fixed-focused-make.log`. Full
 no-sweeps `make` passes on immutable candidate `6a208b198` in 6m24:
 `/private/tmp/ownership-list-assignment-immutable-make-6a208b198.log`.
+
+`list_assignment_hash_tail_releases_displaced_owner.t` passes 5/5 on system
+Perl, JVM, and interpreter with sweeps disabled on both PerlOnJava backends.
+The unfixed parent fails the final two owner-release assertions in
+`/private/tmp/list-assignment-hash-tail-parent-make.log`; the focused fixed
+gate passes on source `de5861876` in
+`/private/tmp/list-assignment-hash-tail-fixed-focused-make.log`. The producer
+was a direct `runtimeHash.elements = hash.elements` replacement that bypassed
+displaced-slot release, current `HASH_ELEMENT` acquisition, tied dispatch, and
+package-root marking. Remaining work includes other hash clear/delete paths and
+the deferred-release root/count fallbacks below.
 
 The deferred and tail-call raw-count bridge remains: removing it failed
 `ActiveArgumentOwnerLedgerFastPathTest` and
@@ -105,7 +117,7 @@ reachability. Explicit post-END teardown and diagnostic traversal are separate.
 
 | Lifecycle path | Remaining fallback | Strong edge and acquisition/release sites | Existing coverage and open boundary |
 |---|---|---|---|
-| Deferred release | `MortalList.processDeferredBase` tries verified current counted slots before raw count restoration, then may call `restoreReachableOwnerCount` or consult drain snapshots, live CODE captures, or package-root snapshots when exact proofs are empty. The unblessed aggregate strong-cycle and CODE call-depth positive-count rescues have been removed. Raw restoration remains for tail-call release and blessed referents. | Counted cells use `RuntimeScalar.setLargeRefCounted` or `incrementRefCountForContainerStore`; aggregate stores include array/hash mutation APIs. Each internal hash/array cycle edge has a `HASH_ELEMENT`/`ARRAY_ELEMENT` identity acquired by the store and released by mutation cleanup. Array pop/shift/delete and localized cleanup capture current slot proof before removal, while excluding active argument aliases. Hash clear/delete, scalar overwrite, and deferred container clear remain under producer audit. | `StrongCycleOwnerSlotTest`, `strong_cycle_owner_slots.t`, `DeferredReleaseOwnerSlotFastPathTest`, `RuntimeScalarCountedOwnerRepairTest`, `ClearedAggregateOwnerIdentityNoRootWalkTest`, the expanded localized-array regression, and Sub::Quote/Sub::Defer weak-lifecycle fixtures cover migrated paths. `ForwardedArgumentAliasCurrentOwnerTest` verifies the current cell through nested argument forwarding. Synthetic raw-insertion cases still exercise the legacy bridge; normal producers need continued audit. |
+| Deferred release | `MortalList.processDeferredBase` tries verified current counted slots before raw count restoration, then may call `restoreReachableOwnerCount` or consult drain snapshots, live CODE captures, or package-root snapshots when exact proofs are empty. The unblessed aggregate strong-cycle and CODE call-depth positive-count rescues have been removed. Raw restoration remains for tail-call release and blessed referents. | Counted cells use `RuntimeScalar.setLargeRefCounted` or `incrementRefCountForContainerStore`; aggregate stores include array/hash mutation APIs. Each internal hash/array cycle edge has a `HASH_ELEMENT`/`ARRAY_ELEMENT` identity acquired by the store and released by mutation cleanup. Array pop/shift/delete and localized cleanup capture current slot proof before removal, while excluding active argument aliases. Multi-LHS array and hash tail replacement now use the normal slot-aware assignment APIs. Hash clear/delete, scalar overwrite, and deferred container clear remain under producer audit. | `StrongCycleOwnerSlotTest`, `strong_cycle_owner_slots.t`, `DeferredReleaseOwnerSlotFastPathTest`, `RuntimeScalarCountedOwnerRepairTest`, `ClearedAggregateOwnerIdentityNoRootWalkTest`, the expanded localized-array regression, the two multi-LHS tail regressions, and Sub::Quote/Sub::Defer weak-lifecycle fixtures cover migrated paths. `ForwardedArgumentAliasCurrentOwnerTest` verifies the current cell through nested argument forwarding. Synthetic raw-insertion cases still exercise the legacy bridge; normal producers need continued audit. |
 | Scalar overwrite | `RuntimeScalar.setLargeRefCounted` no longer queries external roots/live CODE captures, restores counts from unverified counted slots, or defers based on nested call depth. | Scalar cells acquire counted or untracked identities in `setLargeRefCounted`; package scalar, aggregate, CODE, active lexical, and closure slots identify their respective edges. Overwrite installs the replacement before releasing the old counted edge. Active forwarded argument aliases are accepted as proof for their current scalar cell. | `PackageRootOwnerSlotFastPathTest`, counted/untracked owner repair tests, `ForwardedArgumentAliasCurrentOwnerTest`, `weak_localized_cache_lifetime.t`, `weak_return_handoff_assignment.t`, nested weak-parent, recursive-builder, and sliding-window fixtures cover current-owner and nested release lifetimes. The latest full no-sweeps `make` passes at `95a83027e`. |
 | First weaken | Ordinary tracked referents no longer query live CODE captures or general strong-root graphs. The cloned-thread snapshot root and direct CODE pad-constant check remain; package-nested untracked aggregates still use `hasLiveUntrackedOwnerSlot` and a `WEAKLY_TRACKED_COMPATIBILITY_PIN`. | Strong scalar cells carry `SCALAR_CELL` or `UNTRACKED_REFERENCE`; package scalar/aggregate slots, closure pads, and active CODE slots have separate identities. Weakening retires the weakened cell's strong edge. | `FirstWeakenUsesCurrentPackageOwnerTest`, `UntrackedReferenceOwnerSlotTest`, and `UntrackedAggregateOwnerSlotTest` cover current owner identities. `PackageNestedUntrackedAggregateReleaseTest` still expects the package compatibility query and pin, so that boundary is not migrated. |
 | Cleared aggregate | Scope-exit finalization can consult cached external-root snapshots when the aggregate count is already zero; deferred cleanup still has capture and nested-call recovery branches. | Container elements acquire `ARRAY_ELEMENT`/`HASH_ELEMENT` identities; active lexical and suspended-frame owners have dedicated slots. Registration backfills active lexical slots when it follows the first pad bind, and scope cleanup retires that identity before testing whether children still have owners. Clear and scope-exit paths queue displaced element releases. | `ClearedAggregateOwnerIdentityNoRootWalkTest`, `ClearedAggregateOwnerIdentityFinalizationTest`, `active_lexical_aggregate_owner_release.t`, and the no-sweeps lifecycle batch cover explicit slots. Incomplete producer coverage still reaches the cached-root boundary. |
@@ -169,6 +181,17 @@ autovivification continue through the same store API.
 Perl and both backends with sweeps disabled. The unfixed parent fails the two
 release checks; the failure and fixed focused logs are recorded above. Full
 no-sweeps `make` passes on source `6a208b198`.
+
+### Multi-LHS hash-tail replacement releases displaced owners (2026-11-01)
+
+`RuntimeList.setFromList` previously replaced a hash LHS by assigning a newly
+created map directly into `runtimeHash.elements`. That skipped release of the
+displaced hash slots, left the moved values attached to a temporary hash's
+owner identities, bypassed tied-hash assignment, and skipped package-root
+marking. Hash tails now flow through `RuntimeHash.setFromList`, and list
+assignment returns that API's key/value result while retiring temporary RHS
+owners. The new weak-reference and `DESTROY` regression passes on system Perl
+and both backends; the parent failure is recorded in the current checkpoint.
 
 ## Baseline ownership map
 
