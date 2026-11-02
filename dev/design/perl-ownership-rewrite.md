@@ -3,62 +3,45 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-02):** #1649 Phase 2 continues on branch
-`wip/detached-glob-owner-20261102-064229` at candidate `ab4569170`. Local work
-is unpublished. PR #1938 remains open as a draft at head
+`wip/detached-glob-owner-20261102-064229` at candidate `dc1603047`. Local work
+is unpublished. PR #1938 remains an open draft at head
 `b2f44fc2d36b8f0a1bc7067790e1731a604cba45`, based on
-`4a5c33753f1da3f9838c44567bbba878e8f567e0`; GitHub reports `DIRTY`.
+`4a5c33753f1da3f9838c44567bbba878e8f567e0`; GitHub last reported `DIRTY`.
 
-First bless now carries a counted temporary owner identity through the mortal
-queue, and weak-source bless preserves weak aliases. Weakly tracked `undef`
-defers final cleanup to current argument-alias identities. The full no-sweeps
-suite passed on `9addf278a` in 7m18; log:
-`/private/tmp/issue-1649-argument-alias-fullmake-9addf278a.log`.
+`ab4569170` removed the raw closure-release decrement that could consume
+another scalar's count; production aggregate captures in `SubroutineParser`,
+`OpcodeHandlerExtended`, `RuntimeCode`, `RuntimeGraphCloner`, and `Internals`
+use `CLOSURE_PAD` identities. `dc1603047` also changes recursive container
+cleanup for a blessed zero-count temporary: it queues a zero-count lifecycle
+token instead of manufacturing `refCount = 1`. `RecursiveZeroCountLifecycleTest`
+checks that the count stays zero until the deferred boundary and that final
+destruction completes exactly once.
 
-The closure audit found that production aggregate capture creation in
-`SubroutineParser`, `OpcodeHandlerExtended`, `RuntimeCode`, `RuntimeGraphCloner`,
-and `Internals` attaches `CLOSURE_PAD` identities. No main-source caller uses
-`RuntimeBase.retainClosureCapture()`. The raw closure-release decrement
-had no matching counted-edge acquisition and could consume another scalar's
-count. `LegacyClosureAggregateReleaseOwnerTest` failed on parent source
-`9addf278a` because it processed one synthetic deferred base while a counted
-owner remained. `ab4569170` removes the decrement and preserves pad cleanup.
-The focused shard passed in 6m15 and full no-sweeps `nice -n 19 timeout 3600
-make` passed in 7m28. Evidence:
-`/private/tmp/issue-1649-closure-release-parent-shard0-d026650de.log`,
-`/private/tmp/issue-1649-closure-release-parent-d026650de.xml`,
-`/private/tmp/issue-1649-closure-release-fixed-shard0-ab4569170.log`, and
-`/private/tmp/issue-1649-closure-release-fullmake-ab4569170.log`.
+With corrective sweeps disabled, `nice -n 19 timeout 3600 make` passes on
+`dc1603047` in 6m56 at
+`/private/tmp/issue-1649-zero-count-recursive-fullmake-dc1603047.log`.
+HTML::Tree 5.07 `t/refloop.t` passes 8/8 on each backend; the full suite passes
+23/23 files and 989/989 checks on JVM and interpreter. Logs:
+`/private/tmp/issue-1649-refloop-jvm-dc1603047.log`,
+`/private/tmp/issue-1649-refloop-interpreter-dc1603047.log`,
+`/private/tmp/issue-1649-html-tree-full-jvm-dc1603047.log`, and
+`/private/tmp/issue-1649-html-tree-full-interpreter-dc1603047.log`.
 
-A read-only deferred-release audit found no main-source callers of
-`MortalList.deferDecrement(RuntimeBase)`; its direct callers are ownership
-JUnit fixtures that construct legacy or synthetic states. Production release
-paths queue a scalar or owner-slot release token. This does not yet prove that
-`restoreReachableOwnerCount` is unreachable from every production release
-path, so that recovery branch remains until its other producers are traced.
-The first-weaken compatibility path also does not perform a root-graph walk:
-`hasLiveUntrackedOwnerSlot` verifies active `UNTRACKED_REFERENCE` identities,
-though it still increments the legacy `rootQueries` measurement. The package
-compatibility pin remains because the existing test asserts that count and pin;
-its contract must be replaced before the bridge can be retired.
+The deferred-release audit found no main-source callers of
+`MortalList.deferDecrement(RuntimeBase)`; direct callers are JUnit fixtures.
+Production paths queue scalar or owner-slot release tokens. The zero-count
+recursive branch now carries a lifecycle token, while `restoreReachableOwnerCount`
+and other root/snapshot recovery branches remain pending exact producer audits.
+`hasLiveUntrackedOwnerSlot` checks active `UNTRACKED_REFERENCE` identities,
+although it still increments the legacy `rootQueries` metric. The package
+first-weaken pin remains because the existing test asserts the compatibility
+count and pin. No blocker is known.
 
-The Perl-level scope-exit, explicit-return, weakly tracked `undef`, and
-self-retaining closure-cycle fixtures pass on system Perl, JVM, and
-interpreter (13 assertions per engine). Their logs are
-`/private/tmp/issue-1649-closure-release-system-perl.log`,
-`/private/tmp/issue-1649-closure-release-jvm-scope.log`,
-`/private/tmp/issue-1649-closure-release-jvm-explicit-return.log`,
-`/private/tmp/issue-1649-closure-release-interpreter-scope.log`,
-`/private/tmp/issue-1649-closure-release-interpreter-explicit-return.log`,
-`/private/tmp/issue-1649-argument-alias-system-perl-ab4569170.log`,
-`/private/tmp/issue-1649-argument-alias-jvm-ab4569170.log`,
-`/private/tmp/issue-1649-argument-alias-interpreter-ab4569170.log`, and
-`/private/tmp/issue-1649-closure-cycle-{system-perl,jvm,interpreter}-ab4569170.log`.
-
-Next, trace production callers that can reach `restoreReachableOwnerCount` and
-the exact storage producers for package-nested untracked aggregates. Continue
-the audit of package roots, strong cycles, shared storage, resource owners, and
-exception/unwind cleanup; remove recovery only after current owner identities
-and acceptance coverage are established. No blocker is known.
+Next, trace each production path that can reach `restoreReachableOwnerCount`,
+then map package-nested untracked aggregate stores and releases. Continue the
+producer audit across package roots, cycles, shared storage, resource owners,
+and exception/unwind cleanup; remove recovery only when owner identities and
+acceptance coverage prove the ordinary path is complete.
 
 **Sweep policy (2026-10-27):** Corrective sweeps are disabled by default, as
 requested. `JPERL_ENABLE_CORRECTIVE_SWEEPS=1` temporarily enables legacy
