@@ -364,6 +364,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         detachedGlobValueOwnerSlot = nextSlot;
         if (previousSlot != null) previousSlot.release();
         if (previous != null) previous.releaseDetachedComponentsIfUnowned();
+        if (this instanceof RuntimeGlob ownedGlob
+                && (type != GLOB || value != ownedGlob)) {
+            ownedGlob.releaseDetachedComponentsIfUnowned();
+        }
     }
 
     private void releaseDetachedGlobValueOwner() {
