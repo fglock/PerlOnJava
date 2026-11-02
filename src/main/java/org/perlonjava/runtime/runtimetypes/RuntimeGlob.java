@@ -320,6 +320,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         if (!retainsDetachedComponents() || ownerSlotCount(PerlOwnerSlot.Kind.GLOB_VALUE) != 0) return;
         List<PerlOwnerSlot> owners = detachedComponentOwnerSlots;
         detachedComponentOwnerSlots = null;
+        namespaceMove = null;
         List<RuntimeBase> components = new java.util.ArrayList<>(owners.size());
         for (PerlOwnerSlot owner : owners) {
             RuntimeBase component = owner.referent();
@@ -2050,6 +2051,10 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
      * @return The current RuntimeGlob instance after undefining its elements.
      */
     public RuntimeGlob undefine() {
+        if (namespaceMove != null) {
+            releaseDetachedComponentsIfUnowned();
+            return this;
+        }
         if (globName == null && retainsDetachedComponents()) {
             releaseDetachedComponentsIfUnowned();
             return this;
