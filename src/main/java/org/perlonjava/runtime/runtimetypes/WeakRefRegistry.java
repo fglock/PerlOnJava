@@ -202,16 +202,6 @@ public class WeakRefRegistry {
                     // not turn a final release into a WEAKLY_TRACKED referent
                     // that waits for a later sweep to clear its weak observers.
                     base.refCount = WEAKLY_TRACKED;
-                } else if (!(identifiedOwner
-                        && MortalList.canTrustFinalCountedRelease(base))
-                        && !(base instanceof RuntimeScalar scalar
-                        && scalar.ephemeralScalarReferenceReferent)
-                        && hasWeakRefsTo(base)
-                        && RuntimeCode.isInstalledPadConstant(base)) {
-                    // Installed CODE constants have a direct runtime-owned slot;
-                    // keep their existing compatibility lifecycle until that
-                    // owner is migrated to the common owner ledger.
-                    base.refCount = 1;
                 } else {
                     // No local binding: refCount==0 means truly no strong refs.
                     // Trigger DESTROY + clear weak refs.
