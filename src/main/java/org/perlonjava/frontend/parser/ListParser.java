@@ -614,8 +614,10 @@ public class ListParser {
                 break;
             case OPERATOR:
                 switch (token.text) {
+                    // `print HANDLE` can omit its list before a block closes;
+                    // parsePrint supplies the implicit `$_` in that case.
                     case "[", "\"", "//", "\\", "`", "$", "$#", "@", "%", "&", "!", "~",
-                         "+", "-", "/", "*", ";", "++", "--", "<", "<<":
+                         "+", "-", "/", "*", ";", "}", "++", "--", "<", "<<":
                         isSpace = true;
                         break;
                     case ".":
