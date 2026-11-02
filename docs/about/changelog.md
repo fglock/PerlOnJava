@@ -107,7 +107,7 @@ priorities and future plans.
 - Allow additional quiet time for `local::lib`, `Syntax::Kamelon`, and `DateTime::Event::Holiday::US` CPAN tests that exceed the default timeout during nested JVM launches, syntax highlighting, and recurrence-set construction (#1787, #1370, #1541).
 - Honor Perl's `-T` behavior by excluding `PERL5LIB` from `@INC` while preserving explicit `-I` paths (#1787).
 - Recover malformed HTML through Jsoup in `XML::LibXML`, decode HTML attribute entities by default, report `HTML::Parser` source positions, and allow nested `AUTOLOAD` tail calls from sort comparators (#1416, #1457, #1634).
-- Preserve anonymous and eval caller metadata, retain source-relative require paths, and deparse folded closure expressions; report the final initializer line for multiline imported DSL declarations (#1548, #1620).
+- Preserve anonymous and eval caller metadata, including numeric `0` for eval-frame `hasargs`; retain source-relative require paths and deparse folded closure expressions; report the final initializer line for multiline imported DSL declarations (#1548, #1620).
 - Preserve package-qualified anonymous caller names used by generated accessors (#1276).
 - Reuse live lexical reachability snapshots across cleanup drains while roots remain unchanged, reducing repeated graph walks in large CPAN workloads (#1797).
 - Implement `XML::LibXML::Dtd->parse_string` with a wrapped DTD node that serializes using XML::LibXML's node type and DTD syntax (#1348).
