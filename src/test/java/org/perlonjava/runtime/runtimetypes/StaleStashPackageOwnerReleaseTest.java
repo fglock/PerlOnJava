@@ -21,6 +21,13 @@ class StaleStashPackageOwnerReleaseTest {
             RuntimeStash current = (RuntimeStash) GlobalVariable.getGlobalHash(replacement);
             String childKey = source + "Inner::";
             RuntimeStash child = (RuntimeStash) GlobalVariable.getGlobalHash(childKey);
+            String scalarKey = source + "item";
+            RuntimeScalar packageScalar = new RuntimeScalar();
+            RuntimeHash value = new RuntimeHash();
+            RuntimeScalar weakValue = value.createAnonymousReference();
+            WeakRefRegistry.weaken(weakValue);
+            packageScalar.set(value.createAnonymousReference());
+            GlobalVariable.globalVariables.put(scalarKey, packageScalar);
             RuntimeScalar stashReference = stale.createReference();
             RuntimeScalar lexical = new RuntimeScalar();
 
@@ -39,6 +46,10 @@ class StaleStashPackageOwnerReleaseTest {
                         PerlOwnerSlot.Kind.STASH_NAMESPACE_MOVE));
                 assertEquals(1, child.ownerSlotCount(
                         PerlOwnerSlot.Kind.GLOB_COMPONENT_SLOT));
+                assertEquals(0, packageScalar.ownerSlotCount(
+                        PerlOwnerSlot.Kind.PACKAGE_SCALAR_SLOT));
+                assertEquals(1, packageScalar.ownerSlotCount(
+                        PerlOwnerSlot.Kind.GLOB_COMPONENT_SLOT));
                 assertFalse(stale.localBindingExists);
                 assertEquals(0, stale.ownerSlotCount(
                         PerlOwnerSlot.Kind.PACKAGE_AGGREGATE_SLOT),
@@ -52,11 +63,16 @@ class StaleStashPackageOwnerReleaseTest {
                         PerlOwnerSlot.Kind.STASH_NAMESPACE_MOVE));
                 assertEquals(0, child.ownerSlotCount(
                         PerlOwnerSlot.Kind.GLOB_COMPONENT_SLOT));
+                assertEquals(0, packageScalar.ownerSlotCount(
+                        PerlOwnerSlot.Kind.GLOB_COMPONENT_SLOT));
+                assertEquals(RuntimeScalarType.UNDEF, weakValue.type,
+                        "releasing the saved move must clean its package scalar contents");
             } finally {
                 lexical.undefine();
                 GlobalVariable.globalHashes.remove(source);
                 GlobalVariable.globalHashes.remove(replacement);
                 GlobalVariable.globalHashes.remove(childKey);
+                GlobalVariable.globalVariables.remove(scalarKey);
                 GlobalVariable.globalIORefs.remove(source);
                 GlobalVariable.globalIORefs.remove(replacement);
                 GlobalVariable.clearStashAlias(source);
