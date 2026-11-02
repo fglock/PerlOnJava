@@ -371,7 +371,7 @@ Run on JVM and interpreter backends with `timeout` and complete output logs:
 
 ## Progress Tracking
 
-### Current Status: owner-source migration continues; tested runtime checkpoint `7c1fef04b`
+### Current Status: owner-source migration continues; tested runtime checkpoint `253b3cde9`
 
 The END queue now keeps a real owner identity across dequeue and callback
 execution. `SpecialBlock.hasPendingEndBlock()` accepts only a current queue cell
@@ -398,6 +398,21 @@ system Perl, JVM, and interpreter. Evidence:
 Earlier lifecycle acceptance evidence remains recorded below. The package
 compatibility pin, deferred-release snapshot, cleared-aggregate snapshot, and
 other legacy closure cleanup paths remain under audit.
+
+On 2026-11-02, tail-call argument cleanup now trusts the active lexical owner
+identity before consulting the legacy `localBindingExists` marker. A surviving
+lexical owner defers final cleanup with `refCount` still at the weak-tracking
+sentinel; releasing that final lexical owner clears weak observers. The new
+`TailCallActiveLexicalOwnerTest` failed on test-only parent `2268035cb` because
+the cleanup path replaced the sentinel with a synthetic count of one. The
+no-sweeps full `make` passes on immutable `253b3cde9` in 6m56s, and the focused
+tail-call Perl file passes 5/5 on JVM and interpreter with sweeps disabled.
+System Perl exits successfully but skips the runtime-specific assertions
+because `Internals` is unavailable. Logs:
+`/private/tmp/issue-1649-tailcall-parent-make-2268035cb.log`,
+`/private/tmp/issue-1649-tailcall-owner-fullmake-253b3cde9.log`,
+`/private/tmp/issue-1649-tailcall-jvm-253b3cde9.log`, and
+`/private/tmp/issue-1649-tailcall-interpreter-253b3cde9.log`.
 
 On 2026-11-02, branch `wip/detached-glob-owner-20261102-064229` passed the
 full no-sweeps `make` on `2cc19ab4d` in 7m41s. The 18-file lifecycle matrix
@@ -484,6 +499,7 @@ all five unit shards, and launcher integration. Logs:
 | Cleared aggregates | Scope-exit cleanup checks current Perl owner identities and pending releases before destruction. `ClearedAggregateNestedPackageOwnerNoRootWalkTest` verifies that a live nested package slot preserves its weak observer with zero root queries. | `finalizeClearedAggregateOwnerAfterScopeExit()` still consults a cached external-root snapshot for zero-count candidates with no current owner identity. `ReachabilityQueryCostTest.repeatedAggregateScopeCleanupSharesExternalRootSnapshot` asserts one shared snapshot for this legacy path. |
 | Closure cleanup | Parser, JVM, and interpreter closure producers install explicit `SCALAR_CAPTURE` / `CLOSURE_PAD` slots tied to the owning CODE. Native and legacy semantic capture identities now defer zero-count cleanup without changing `refCount`; final slot release dispatches cleanup and clears weak observers. `LegacyClosureCaptureOwnerReleaseTest` verifies zero root queries. Full HTML::Tree 5.07 passes 23/23 files and 989/989 tests on both backends with sweeps disabled. | Legacy captures without complete CODE-owner identity still use END-root and scalar-root snapshots. Classify the pre-END traversal separately from ordinary lifecycle repair, then audit its remaining producers. |
 | END queue and invocation | Each queued callback's current queue cell has a counted or untracked owner identity. `runEndBlocks()` acquires an `ACTIVE_CODE` identity before `shift()` and releases it after invocation; the removed array edge carries its counted owner token through deferred release. | `EndBlockOwnerIdentityTest` and seven Perl lifecycle tests pass on system Perl and both backends. The pending-queue check verifies exact cell membership and an active counted or untracked identity. The old positive-count pin and broad CODE-owner fallback are removed from this path. |
+| Tail-call argument cleanup | `releaseTailCallArgElement()` releases the argument edge, then checks verified counted and uncounted owner identities before using the legacy lexical marker. | `TailCallActiveLexicalOwnerTest` fails on `2268035cb` with a manufactured count of one and passes on `253b3cde9`; the focused Perl file passes 5/5 on both backends with sweeps disabled. |
 | Destruction / resurrection | Global destruction compares newly installed owner slots; ordinary destruction validates current slots and semantic captures. Counted scalar stores install identities in `recordCountedOwner()`; method-invocant, PerlIO::via, regex callback, and cloned-thread edges have explicit producers. `DestroyOwnerSlotResurrectionTest` covers counted, untracked, detached, and temporary-slot decisions with zero root queries. | `hasEscapedPerlOwner()` now accepts current Perl owner identities and semantic captures only. `DestroyCountOnlyResurrectionTest` proves a fabricated positive count is not resurrection, while an active native slot is; it fails on parent `dba24b49b`. The focused DESTROY suite passes 10/10 on `a1abf6818`; the full no-sweeps `make` passes on the same immutable commit. Logs are listed in Current Status. Continue tracing other direct count producers at their acquisition, transfer, and release sites. |
 
 The remaining snapshot and compatibility paths are not yet proven unnecessary
@@ -791,6 +807,10 @@ integration. Evidence:
   a generic CODE-owner fallback or synthetic positive count. The parent
   regression, full no-sweeps `make`, and 35 END lifecycle assertions on system
   Perl and both backends are recorded in Current Status.
+- [x] On 2026-11-02, tail-call cleanup now uses an active lexical owner identity
+  before the legacy binding marker, preserving the weak-tracking sentinel
+  instead of synthesizing `refCount=1`. Parent failure, full no-sweeps `make`,
+  and both-backend Perl evidence are recorded in Current Status.
 
 ### Historical handoff: issue #1132 / PR #1204
 
