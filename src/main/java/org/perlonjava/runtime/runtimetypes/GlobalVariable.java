@@ -1244,12 +1244,21 @@ public class GlobalVariable {
         return snapshot;
     }
 
-    static RuntimeGlob detachNamespaceForStaleStash(String namespace) {
+    static RuntimeGlob detachNamespaceForStaleStash(
+            String namespace, RuntimeStash staleStash) {
         String prefix = normalizeStashNamespace(namespace);
         Map<String, RuntimeScalar> scalars = snapshotNamespace(globalVariables, prefix);
         Map<String, RuntimeArray> arrays = snapshotNamespace(globalArrays, prefix);
         Map<String, RuntimeHash> hashes = snapshotNamespace(globalHashes, prefix);
         hashes.remove(prefix);
+        // The stash is a root binding, not one of its namespace components.
+        // Its key may use a different spelling from the normalized prefix
+        // (for example `main::Pkg::` versus `Pkg::`). Capturing it by key alone
+        // makes the saved move own the stale stash that owns the saved move,
+        // preventing both from reaching their final release.
+        if (staleStash != null) {
+            hashes.entrySet().removeIf(entry -> entry.getValue() == staleStash);
+        }
         Map<String, RuntimeScalar> codes = snapshotNamespace(globalCodeRefs, prefix);
         RuntimeGlob.NamespaceMove move = new RuntimeGlob.NamespaceMove(
                 prefix, scalars, arrays, hashes, codes);
