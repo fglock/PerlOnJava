@@ -234,6 +234,13 @@ public class RuntimeStash extends RuntimeHash {
         RuntimeGlob savedIO = GlobalVariable.getExistingGlobalIO(fullKey);
         RuntimeScalar savedCode = GlobalVariable.globalCodeRefs.get(fullKey);
 
+        // Transfer the component slots to the detached glob before removing
+        // their package owners.  The returned GV is the new strong owner of
+        // the cells and aggregates even when the old package scalar had the
+        // only counted edge to its referent.
+        RuntimeGlob detached = RuntimeGlob.createDetachedWithSlots(
+                savedScalar, savedArray, savedHash, savedIO, savedCode);
+
         // Delete all slots from GlobalVariable. The CODE slot helper removes
         // the visible stash entry while keeping already-pinned CVs alive for
         // previously compiled call sites.
@@ -259,38 +266,8 @@ public class RuntimeStash extends RuntimeHash {
         GlobalVariable.globalFormatRefs.remove(fullKey);
         GlobalVariable.invalidatePackageRootSnapshot();
 
-        // Clear weak refs when a reference-holding scalar is deleted from the stash.
-        // In Perl 5, removing a global variable drops the strong reference to its referent.
-        // If the referent's only strong ref was the global, its refcount reaches 0, the
-        // referent is freed, and all weak refs to it become undef. In PerlOnJava, the
-        // JVM keeps the referent alive, so we must manually clear weak refs.
-        // This is critical for Class::Unload + DBIC AccessorGroup reload pattern.
-        if (savedScalar != null && (savedScalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                && savedScalar.value instanceof RuntimeBase base) {
-            if (base.refCount == WeakRefRegistry.WEAKLY_TRACKED) {
-                // Unblessed object with weak refs: clear all weak refs to it.
-                // Safe because unblessed objects have no DESTROY side effects.
-                base.refCount = Integer.MIN_VALUE;
-                DestroyDispatch.callDestroy(base);
-            } else if (base.refCount > 0 && savedScalar.refCountOwned) {
-                // Tracked object: decrement refCount (the stash was holding a strong ref).
-                savedScalar.refCountOwned = false;
-                base.releaseActiveOwner(savedScalar);
-                if (--base.refCount == 0) {
-                    base.refCount = Integer.MIN_VALUE;
-                    DestroyDispatch.callDestroy(base);
-                }
-            }
-        }
-
         // Removing symbols from a stash can affect method lookup.
         InheritanceResolver.invalidateCache();
-
-        // Create a detached glob that holds the saved slot values including CODE.
-        // In Perl 5, delete $stash->{name} returns the glob with all its old slot values.
-        // Use globName=null so getGlobSlot() uses local slots instead of GlobalVariable.
-        RuntimeGlob detached = RuntimeGlob.createDetachedWithSlots(
-                savedScalar, savedArray, savedHash, savedIO, savedCode);
 
         return detached;
     }

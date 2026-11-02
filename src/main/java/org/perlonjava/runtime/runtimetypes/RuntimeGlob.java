@@ -140,6 +140,8 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     // did not exist at copy time. A later `%{*$copy}` should vivify/share the
     // canonical GV hash, matching Perl's behavior for globs passed through @_.
     private boolean hashSlotAliasesNamedGlob;
+    /** Owner identities for slots retained by a detached typeglob snapshot. */
+    private List<PerlOwnerSlot> detachedComponentOwnerSlots;
     // Dynamic name override set by `*foo = $string` glob-as-scalar assignment.
     // Used to honor the `local *PKG::__ANON__ = 'name'` idiom (see SUPER.pm,
     // Try::Tiny, namespace::clean) — caller()/Sub::Util::subname report this
@@ -258,6 +260,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         } else if (GlobalVariable.peekGlobalIO(this.globName) == this) {
             copy.hashSlotAliasesNamedGlob = true;
         }
+        copy.retainDetachedComponentOwners();
         return copy;
     }
 
@@ -288,7 +291,58 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         if (io != null) {
             glob.IO = io.IO;
         }
+        glob.retainDetachedComponentOwners();
         return glob;
+    }
+
+    private void retainDetachedComponentOwners() {
+        retainDetachedComponentOwner(scalarSlot);
+        retainDetachedComponentOwner(arraySlot);
+        retainDetachedComponentOwner(hashSlot);
+        retainDetachedComponentOwner(codeSlot);
+        if (IO != null && IO != this) retainDetachedComponentOwner(IO);
+    }
+
+    private void retainDetachedComponentOwner(RuntimeBase component) {
+        if (component == null) return;
+        PerlOwnerSlot ownerSlot = new PerlOwnerSlot(PerlOwnerSlot.Kind.GLOB_COMPONENT_SLOT);
+        ownerSlot.acquireGlobComponentIdentity(component);
+        if (detachedComponentOwnerSlots == null) detachedComponentOwnerSlots = new java.util.ArrayList<>();
+        detachedComponentOwnerSlots.add(ownerSlot);
+    }
+
+    boolean retainsDetachedComponents() {
+        return detachedComponentOwnerSlots != null && !detachedComponentOwnerSlots.isEmpty();
+    }
+
+    /** Release snapshot slots when the final scalar value owner leaves this glob. */
+    synchronized void releaseDetachedComponentsIfUnowned() {
+        if (!retainsDetachedComponents() || ownerSlotCount(PerlOwnerSlot.Kind.GLOB_VALUE) != 0) return;
+        List<PerlOwnerSlot> owners = detachedComponentOwnerSlots;
+        detachedComponentOwnerSlots = null;
+        List<RuntimeBase> components = new java.util.ArrayList<>(owners.size());
+        for (PerlOwnerSlot owner : owners) {
+            RuntimeBase component = owner.referent();
+            if (component != null) components.add(component);
+            owner.release();
+        }
+        for (RuntimeBase component : components) {
+            if (component instanceof RuntimeScalar scalar) {
+                scalar.refreshUntrackedReferenceOwner();
+                if (!scalar.hasPerlStrongOwnerIdentity()
+                        && !MyVarCleanupStack.isRegistered(scalar)) {
+                    RuntimeScalar.scopeExitCleanup(scalar);
+                }
+            } else if (!component.hasPerlStrongOwnerIdentity()
+                    && !MyVarCleanupStack.isRegistered(component)) {
+                if (component instanceof RuntimeArray array) {
+                    MortalList.scopeExitCleanupArray(array);
+                } else if (component instanceof RuntimeHash hash) {
+                    MortalList.scopeExitCleanupHash(hash);
+                }
+            }
+        }
+        MortalList.flush();
     }
 
     static RuntimeGlob createDetachedNamespaceMove(NamespaceMove move) {

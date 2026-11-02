@@ -40,6 +40,10 @@ public final class PerlOwnerSlot {
         PACKAGE_AGGREGATE_SLOT,
         /** Named IO stash entry owning one typeglob. */
         PACKAGE_GLOB_SLOT,
+        /** Detached typeglob slot retaining one scalar, aggregate, or CODE cell. */
+        GLOB_COMPONENT_SLOT,
+        /** Scalar value retaining a detached typeglob snapshot. */
+        GLOB_VALUE,
         /** Active lexical frame or top-level pad entry owning an aggregate. */
         ACTIVE_LEXICAL,
         /** Strong value held by a lexical register in a suspended interpreter frame. */
@@ -364,6 +368,30 @@ public final class PerlOwnerSlot {
             throw new IllegalStateException("package glob slot has pending legacy releases");
         }
         transferWithoutRuntimeRoot(target, true);
+    }
+
+    /** Record one detached typeglob's strong edge to a component slot. */
+    synchronized void acquireGlobComponentIdentity(RuntimeBase target) {
+        if (kind != Kind.GLOB_COMPONENT_SLOT) {
+            throw new IllegalStateException("glob component acquisition requires a glob-component slot");
+        }
+        Objects.requireNonNull(target, "target");
+        if (legacyCaptureCount != 0) {
+            throw new IllegalStateException("glob component slot has pending legacy releases");
+        }
+        transferWithoutRuntimeRoot(target, false);
+    }
+
+    /** Record one scalar value's edge to a detached glob snapshot. */
+    synchronized void acquireGlobValueIdentity(RuntimeGlob target) {
+        if (kind != Kind.GLOB_VALUE) {
+            throw new IllegalStateException("glob-value acquisition requires a glob-value slot");
+        }
+        Objects.requireNonNull(target, "target");
+        if (legacyCaptureCount != 0) {
+            throw new IllegalStateException("glob-value slot has pending legacy releases");
+        }
+        transferWithoutRuntimeRoot(target, false);
     }
 
     /** Record one active lexical pad entry that owns an aggregate. */
