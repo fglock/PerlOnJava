@@ -371,39 +371,45 @@ Run on JVM and interpreter backends with `timeout` and complete output logs:
 
 ## Progress Tracking
 
-### Current Status: owner-source migration continues; tested runtime checkpoint `320651865`
+### Current Status: owner-source migration continues; tested runtime checkpoint `2cc19ab4d`
 
 On 2026-11-02, branch `wip/detached-glob-owner-20261102-064229` passed the
-full no-sweeps `make` on `320651865` in 11m13s. HTML::Tree 5.07 passes 989/989
-tests across 23 files on each backend, including `t/refloop.t` 8/8. The focused
-acceptance matrix passes 65/65 tests on each backend for controller, long-poll,
-WebSocket, growing-output, strong-cycle, weak-reference, resurrection, and
-async-cancellation lifetimes; the closure, tied-handler, and resource-owner
-matrix passes 52/52 on each backend and under system Perl. Logs:
-`/private/tmp/issue-1649-owner-identity-coverage-fullmake-320651865.log`,
-`/private/tmp/issue-1649-owner-identity-html-tree-jvm-320651865.log`,
-`/private/tmp/issue-1649-owner-identity-html-tree-interpreter-320651865.log`,
-`/private/tmp/issue-1649-owner-acceptance-jvm-320651865.log`,
-`/private/tmp/issue-1649-owner-acceptance-interpreter-320651865.log`,
-`/private/tmp/issue-1649-owner-closure-jvm-320651865.log`,
-`/private/tmp/issue-1649-owner-closure-interpreter-320651865.log`,
-`/private/tmp/issue-1649-owner-closure-system-perl-320651865.log`, and
-`/private/tmp/issue-1649-owner-acceptance-system-perl-320651865.log`.
+full no-sweeps `make` on `2cc19ab4d` in 7m41s. The 18-file lifecycle matrix
+passes 117/117 tests on each backend, covering closure and tied captures,
+controller and WebSocket release (#1794), growing output (#1860), strong
+cycles, weak references, resurrection, and async cancellation. HTML::Tree
+5.07 passes 989/989 tests across 23 files on each backend, including
+`t/refloop.t` 8/8. Logs:
+`/private/tmp/issue-1649-legacy-capture-fullmake-2cc19ab4d.log`,
+`/private/tmp/issue-1649-owner-lifecycle-jvm-2cc19ab4d.log`,
+`/private/tmp/issue-1649-owner-lifecycle-interpreter-2cc19ab4d.log`,
+`/private/tmp/issue-1649-html-tree-jvm-2cc19ab4d.log`, and
+`/private/tmp/issue-1649-html-tree-interpreter-2cc19ab4d.log`.
 
 `CapturedAggregateWeakOwnerReleaseTest` verifies that a semantic
 `CLOSURE_PAD` owner preserves the weak-tracking sentinel and retries final
 cleanup only after its pending release marker retires. The new
 `ClearedAggregateNestedPackageOwnerNoRootWalkTest` verifies that a current
-nested package owner keeps its weak observer live without root queries. The
-external-root snapshot remains for zero-count candidates with no current
+nested package owner keeps its weak observer live without root queries.
+`LegacyClosureCaptureOwnerReleaseTest` verifies that a legacy semantic capture
+leaves `refCount` at zero, preserves its weak observer, and completes cleanup
+on final slot release with zero root queries. The first implementation used the
+weak-tracking sentinel for both capture variants and failed the existing
+`ViaLayerCountedOwnerLifecycleTest`, which requires zero; the final
+implementation stores the deferred-final-release obligation separately from
+the count. Evidence is in
+`/private/tmp/issue-1649-legacy-capture-owner-parent-7290144a8.log`,
+`/private/tmp/issue-1649-legacy-capture-fullmake-7290144a8.log`, and
+`/private/tmp/issue-1649-legacy-capture-focused-zero-count-7290144a8.log`.
+The external-root snapshot remains for zero-count candidates with no current
 owner identity: removing it fails the existing
 `ReachabilityQueryCostTest.repeatedAggregateScopeCleanupSharesExternalRootSnapshot`
 contract, which expects one shared snapshot while cleaning three ownerless
 legacy candidates. Keep that fallback until those producers are migrated or
 their ownership is explained. The full issue remains open. Deferred release,
 first weaken, legacy closure cleanup, and resurrection still have compatibility
-paths, and PR #1938 remains an open draft with a remote head that conflicts
-with current `master`. Next: trace each remaining fallback to its producer,
+paths, and PR #1938 remains an open draft at remote head `b2f44fc2d` against
+`master` `4a5c33753`. Next: trace each remaining fallback to its producer,
 transfer, and final release before removing it.
 
 ### Ownership fallback audit (2026-11-02)
@@ -419,7 +425,7 @@ transfer, and final release before removing it.
 | Async localized package aggregates | `DynamicVariableManager` acquires a `SUSPENDED_FRAME` owner before `dynamicSuspendState()` detaches the active aggregate; resume reinstalls the same array/hash and releases that frame owner afterward. | `issue_1649_localized_global_aggregate_async_owner.t` verifies localized array/hash element lifetime across suspension, resume, and cancellation on both backends. The suspend path preserves the original aggregate and its element identities; no root-snapshot fallback is used here. |
 | Thread snapshot roots | `RuntimeGraphCloner` assigns a `TEMPORARY_ROOT` identity to each top-level snapshot root and to the direct referent of a strong scalar root. `RootSnapshot` owns these identities through clone hooks and entry setup; thread cleanup and runtime close/reset retire them. | `WeakRefRegistry.weaken()` no longer walks the cloned root graph or writes a synthetic positive count. `ThreadSnapshotTemporaryRootOwnerTest` checks `WEAKLY_TRACKED` state and weak-observer cleanup at lease release. |
 | Cleared aggregates | Scope-exit cleanup checks current Perl owner identities and pending releases before destruction. `ClearedAggregateNestedPackageOwnerNoRootWalkTest` verifies that a live nested package slot preserves its weak observer with zero root queries. | `finalizeClearedAggregateOwnerAfterScopeExit()` still consults a cached external-root snapshot for zero-count candidates with no current owner identity. `ReachabilityQueryCostTest.repeatedAggregateScopeCleanupSharesExternalRootSnapshot` asserts one shared snapshot for this legacy path. |
-| Closure cleanup | Parser, JVM, and interpreter closure producers install explicit `SCALAR_CAPTURE` / `CLOSURE_PAD` slots tied to the owning CODE. Semantic capture slots preserve the weak sentinel and finalize after the last pending capture release. Full HTML::Tree 5.07 passes 23/23 files and 989/989 tests on both backends with sweeps disabled. | Legacy captures without complete CODE-owner identity still use END-root and scalar-root snapshots; deferred cleanup retains a positive-count bridge when native capture slots are absent. Existing Java coverage constructs these states directly. |
+| Closure cleanup | Parser, JVM, and interpreter closure producers install explicit `SCALAR_CAPTURE` / `CLOSURE_PAD` slots tied to the owning CODE. Native and legacy semantic capture identities now defer zero-count cleanup without changing `refCount`; final slot release dispatches cleanup and clears weak observers. `LegacyClosureCaptureOwnerReleaseTest` verifies zero root queries. Full HTML::Tree 5.07 passes 23/23 files and 989/989 tests on both backends with sweeps disabled. | Legacy captures without complete CODE-owner identity still use END-root and scalar-root snapshots. Classify the pre-END traversal separately from ordinary lifecycle repair, then audit its remaining producers. |
 | Destruction / resurrection | Global destruction compares newly installed slots; ordinary destruction validates current owner slots and semantic captures. | Objects with no owner slots and no activated legacy owner set still use positive `refCount` as the compatibility resurrection proof. |
 
 The remaining snapshot and compatibility paths are not yet proven unnecessary
@@ -687,6 +693,13 @@ that remote work and reconcile only after the ownership candidate is complete.
   with zero root queries, while the shared snapshot remains for legacy
   ownerless candidates. The no-sweeps `make` and both ownership matrices pass
   on `320651865`; logs are recorded in Current Status.
+- [x] On 2026-11-02, legacy semantic closure-pad cleanup now stores its
+  deferred-final-release obligation independently of `refCount`, preserving
+  zero while a capture remains and dispatching cleanup when its final owner
+  slot leaves. `LegacyClosureCaptureOwnerReleaseTest` and the existing
+  `ViaLayerCountedOwnerLifecycleTest` pass; the no-sweeps full `make`, 117-test
+  lifecycle matrix, and HTML::Tree 5.07 989-test suite pass on both backends.
+  Evidence is recorded in Current Status for `2cc19ab4d`.
 
 ### Historical handoff: issue #1132 / PR #1204
 
