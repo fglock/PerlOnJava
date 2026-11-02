@@ -27,6 +27,8 @@ public final class PerlOwnerSlot {
         CODE_PAD_CONSTANT,
         /** Executable regex callback retaining its closure CODE object. */
         REGEX_CALLBACK,
+        /** PerlIO::via layer retaining the object returned by PUSHED. */
+        IO_VIA_LAYER,
         ARRAY_ELEMENT,
         HASH_ELEMENT,
         ARGUMENT_VALUE,
@@ -87,6 +89,8 @@ public final class PerlOwnerSlot {
     private boolean registeredInOwnerLedger;
     /** True only for the direct, counted hold created for one method invocant. */
     private boolean methodInvocantOwner;
+    /** Whether an IO_VIA_LAYER identity contributes its paired direct count. */
+    private boolean countedNativeOwner;
     private int legacyCaptureCount;
     private volatile boolean nativeOwner;
     private long nextReleaseSequence;
@@ -179,6 +183,20 @@ public final class PerlOwnerSlot {
     /** True while this active slot is counted directly by the semantic owner ledger. */
     public boolean isNativeOwner() {
         return nativeOwner && referent != null;
+    }
+
+    /** Mark a direct count paired with a PerlIO::via owner identity. */
+    public synchronized void markCountedNativeOwner() {
+        if (kind != Kind.IO_VIA_LAYER || referent == null || !nativeOwner
+                || countedNativeOwner) {
+            throw new IllegalStateException("counted native owner requires an active PerlIO::via slot");
+        }
+        countedNativeOwner = true;
+    }
+
+    /** Whether this active PerlIO::via slot contributes one direct count. */
+    public synchronized boolean isCountedNativeOwner() {
+        return kind == Kind.IO_VIA_LAYER && referent != null && countedNativeOwner;
     }
 
     /** True if this slot uses native-ledger release semantics, including after release. */
@@ -893,6 +911,7 @@ public final class PerlOwnerSlot {
         LifecycleRuntimeState previousState = ownerRuntimeState;
         referent = null;
         methodInvocantOwner = false;
+        countedNativeOwner = false;
         countedScalarOwner = null;
         captureOwner = null;
         scalarReferenceCell = null;
