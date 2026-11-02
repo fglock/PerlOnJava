@@ -105,6 +105,7 @@ priorities and future plans.
 - Recognize weak-slot resurrection from durable storage identities and rebuild the post-`DESTROY` count, so final release redispatches `DESTROY` and clears weak observers (#1649).
 - Queue zero-count void-context result cleanup as explicit lifecycle work instead of raising a synthetic positive reference count (#1649).
 - Track cloned thread snapshot roots with temporary owner identities and retire them at entry cleanup or runtime teardown, removing the cloned-root reachability fallback from first weaken (#1649).
+- Preserve captured weak referents through semantic closure-pad owner identities and finalize them after the last capture release, without a synthetic positive count (#1649).
 
 
 
