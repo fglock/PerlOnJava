@@ -15,7 +15,8 @@ public class RuntimeStash extends RuntimeHash {
     // Map to store the elements of the hash
     public Map<String, RuntimeScalar> elements;
     public String namespace;
-    RuntimeGlob.NamespaceMove savedNamespaceMove;
+    RuntimeGlob savedNamespaceMove;
+    private PerlOwnerSlot savedNamespaceMoveOwnerSlot;
     // Iterator for traversing the hash elements
     Iterator<RuntimeScalar> hashIterator;
 
@@ -31,6 +32,66 @@ public class RuntimeStash extends RuntimeHash {
         // RuntimeHash operations (e.g. setFromList used by `%{Pkg::} = ()`) operate
         // on RuntimeHash.elements.
         super.elements = this.elements;
+    }
+
+    void saveNamespaceMove(RuntimeGlob moveOwner) {
+        PerlOwnerSlot nextOwner = null;
+        if (moveOwner != null) {
+            if (moveOwner.namespaceMove == null) {
+                throw new IllegalArgumentException("saved namespace move has no captured slots");
+            }
+            nextOwner = new PerlOwnerSlot(PerlOwnerSlot.Kind.STASH_NAMESPACE_MOVE);
+            nextOwner.acquireStashNamespaceMoveIdentity(moveOwner);
+        }
+
+        RuntimeGlob previousMove = savedNamespaceMove;
+        PerlOwnerSlot previousOwner = savedNamespaceMoveOwnerSlot;
+        savedNamespaceMove = moveOwner;
+        savedNamespaceMoveOwnerSlot = nextOwner;
+        if (previousOwner != null) previousOwner.release();
+        if (previousMove != null && previousMove != moveOwner) {
+            previousMove.releaseDetachedComponentsIfUnowned();
+        }
+    }
+
+    void installSavedNamespaceMove(String destinationNamespace) {
+        RuntimeGlob moveOwner = savedNamespaceMove;
+        if (moveOwner == null) return;
+        RuntimeGlob.NamespaceMove move = moveOwner.namespaceMove;
+        if (move == null) {
+            releaseSavedNamespaceMove();
+            return;
+        }
+        GlobalVariable.installNamespaceMove(move, destinationNamespace);
+        rebindNamespace(destinationNamespace);
+        releaseSavedNamespaceMove();
+    }
+
+    void installDetachedNamespaceMove(RuntimeGlob moveOwner, String destinationNamespace) {
+        try {
+            GlobalVariable.installNamespaceMove(moveOwner.namespaceMove, destinationNamespace);
+            rebindNamespace(destinationNamespace);
+        } finally {
+            moveOwner.releaseDetachedComponentsIfUnowned();
+        }
+    }
+
+    void releaseSavedNamespaceMove() {
+        RuntimeGlob moveOwner = savedNamespaceMove;
+        PerlOwnerSlot ownerSlot = savedNamespaceMoveOwnerSlot;
+        savedNamespaceMove = null;
+        savedNamespaceMoveOwnerSlot = null;
+        if (ownerSlot != null) ownerSlot.release();
+        if (moveOwner != null) moveOwner.releaseDetachedComponentsIfUnowned();
+    }
+
+    void rebindNamespace(String destinationNamespace) {
+        String nextNamespace = destinationNamespace.endsWith("::")
+                ? destinationNamespace : destinationNamespace + "::";
+        if (nextNamespace.equals(namespace)) return;
+        namespace = nextNamespace;
+        elements = new HashSpecialVariable(HashSpecialVariable.Id.STASH, namespace);
+        super.elements = elements;
     }
 
     /**
@@ -521,6 +582,7 @@ public class RuntimeStash extends RuntimeHash {
      * @return The current RuntimeStash instance after undefining its elements.
      */
     public RuntimeStash undefine() {
+        releaseSavedNamespaceMove();
         // Perl: undef %pkg:: clears the package symbol table and makes the stash anonymous.
         // We must remove all slots from the GlobalVariable maps, not just clear the view.
         String prefix = this.namespace;

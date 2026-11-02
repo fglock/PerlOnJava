@@ -568,6 +568,9 @@ public class MortalList {
         // A live reference keeps the container and its IO element slots alive.
         if (!finalRelease && (hash.refCount > 0 || hash.hasOwnerSlots()
                 || temporaryRootDirectlyReferences(hash))) return;
+        if (hash instanceof RuntimeStash stash) {
+            stash.releaseSavedNamespaceMove();
+        }
         for (RuntimeScalar val : hash.elements.values()) {
             RuntimeScalar.releaseIoOwner(val);
             if (val != null) val.releaseContainerOwner(hash);

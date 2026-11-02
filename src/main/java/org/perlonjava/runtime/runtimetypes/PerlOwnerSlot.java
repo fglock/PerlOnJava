@@ -42,6 +42,8 @@ public final class PerlOwnerSlot {
         PACKAGE_GLOB_SLOT,
         /** Detached typeglob slot retaining one scalar, aggregate, or CODE cell. */
         GLOB_COMPONENT_SLOT,
+        /** RuntimeStash field retaining a deferred namespace move. */
+        STASH_NAMESPACE_MOVE,
         /** Scalar value retaining a detached typeglob snapshot. */
         GLOB_VALUE,
         /** Active lexical frame or top-level pad entry owning an aggregate. */
@@ -380,6 +382,18 @@ public final class PerlOwnerSlot {
             throw new IllegalStateException("glob component slot has pending legacy releases");
         }
         transferWithoutRuntimeRoot(target, false);
+    }
+
+    /** Record a stash field's strong edge to its deferred namespace move. */
+    synchronized void acquireStashNamespaceMoveIdentity(RuntimeGlob target) {
+        if (kind != Kind.STASH_NAMESPACE_MOVE) {
+            throw new IllegalStateException("stash namespace-move acquisition requires a stash-move slot");
+        }
+        Objects.requireNonNull(target, "target");
+        if (legacyCaptureCount != 0) {
+            throw new IllegalStateException("stash namespace-move slot has pending legacy releases");
+        }
+        transferWithoutRuntimeRoot(target, true);
     }
 
     /** Record one scalar value's edge to a detached glob snapshot. */
