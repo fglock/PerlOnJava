@@ -1602,11 +1602,10 @@ public class MortalList {
             if (base instanceof RuntimeCode code && code.hasActiveCodeOwner()) {
                 code.deferFinalReleaseToActiveCode();
             } else if (base.hasSemanticCaptureOwner()) {
-                // Native scalar and aggregate capture slots do not add to the
-                // selective count. Keep zero while one is active; its final
-                // owner release will perform the lifecycle transition. Preserve
-                // the sentinel only for any legacy capture slot still in flight.
-                if (base.nativeCaptureOwnerCount() == 0) base.refCount = 1;
+                // Both native and legacy closure-pad slots identify the Perl
+                // edge that keeps this referent alive. Defer final cleanup to
+                // that slot's release while keeping refCount at zero.
+                base.deferZeroCountFinalReleaseToUncountedOwnerSlots();
             } else if (base.localBindingExists) {
                 if (base instanceof RuntimeScalar scalar
                         && scalar.referencedByScalarReference

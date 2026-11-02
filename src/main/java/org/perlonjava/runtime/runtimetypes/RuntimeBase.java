@@ -639,6 +639,15 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         deferredFinalReleaseForUncountedOwners = true;
     }
 
+    /** Defer a zero-count lifecycle transition without encoding it as a count. */
+    void deferZeroCountFinalReleaseToUncountedOwnerSlots() {
+        if (refCount != 0) {
+            throw new IllegalStateException("zero-count owner release requires refCount=0");
+        }
+        if (!hasUncountedPerlOwnerSlotIdentity()) return;
+        deferredFinalReleaseForUncountedOwners = true;
+    }
+
     /** Check whether a live owner identity besides the slot being replaced remains. */
     boolean hasOwnerSlotsOtherThan(PerlOwnerSlot excluded) {
         for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
