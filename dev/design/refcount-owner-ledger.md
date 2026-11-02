@@ -371,7 +371,7 @@ Run on JVM and interpreter backends with `timeout` and complete output logs:
 
 ## Progress Tracking
 
-### Current Status: owner-source migration continues; tested runtime checkpoint `253b3cde9`
+### Current Status: owner-source migration continues; tested runtime checkpoint `549924991`
 
 The END queue now keeps a real owner identity across dequeue and callback
 execution. `SpecialBlock.hasPendingEndBlock()` accepts only a current queue cell
@@ -413,6 +413,18 @@ because `Internals` is unavailable. Logs:
 `/private/tmp/issue-1649-tailcall-owner-fullmake-253b3cde9.log`,
 `/private/tmp/issue-1649-tailcall-jvm-253b3cde9.log`, and
 `/private/tmp/issue-1649-tailcall-interpreter-253b3cde9.log`.
+
+On 2026-11-02, deferred count restoration now recognizes a counted scalar cell
+that remains stored in a current array or hash slot. The counted identity stays
+attached to that scalar cell across storage; `isCurrentCountedScalarOwner()`
+checks the container's live membership instead of retagging the identity and
+disturbing pending release or resurrection state. `CountedOwnerStorageTransferTest`
+failed on parent `0b0ba7f27` and passes on `549924991`; the full no-sweeps
+`make` passes in 7m17s. The legacy package-root snapshot remains for
+provenance-free bare deferred decrements; trace their producers before removing
+that compatibility path. Logs:
+`/private/tmp/issue-1649-storage-transfer-parent-make-0b0ba7f27-extended.log`
+and `/private/tmp/issue-1649-storage-transfer-fullmake-549924991.log`.
 
 On 2026-11-02, branch `wip/detached-glob-owner-20261102-064229` passed the
 full no-sweeps `make` on `2cc19ab4d` in 7m41s. The 18-file lifecycle matrix
@@ -486,7 +498,7 @@ all five unit shards, and launcher integration. Logs:
 
 | Path | Current strong edge and release | Remaining recovery or evidence |
 |---|---|---|
-| Deferred counted release | `RuntimeScalar.recordCountedOwner()` installs a stable slot; `queueOwnerRelease()` carries its pending-release identity to `processDeferredBase()`. Normal nested package-array storage releases with zero root queries even while 256 unrelated aggregates are live. | `restoreReachableOwnerCount()` still walks scalar roots when current-slot and untracked-slot proofs fail. `ReachabilityQueryCostTest.deferredOwnerChecksShareOneRootSnapshotPerDrain` deliberately counts before inserting into an array, leaving a scalar-cell identity without normal storage provenance. Audit other legacy and transfer producers before retiring this fallback. |
+| Deferred counted release | `RuntimeScalar.recordCountedOwner()` installs a stable scalar-cell slot; `queueOwnerRelease()` carries its pending-release identity to `processDeferredBase()`. `isCurrentCountedScalarOwner()` now verifies the scalar through its current array/hash storage. `DeferredOwnerLedgerProducerTest` confirms ordinary nested package-array cleanup uses zero root queries while 256 unrelated aggregates are live. | `restoreReachableOwnerCount()` still walks scalar roots for bare package-rooted deferred decrements without release provenance. `ReachabilityQueryCostTest.deferredOwnerChecksShareOneRootSnapshotPerDrain` preserves this compatibility path. Trace the raw `MortalList.deferDecrement()` producers and give each exact release provenance before retiring the walk. |
 | Void-context discard | `mortalizeForVoidDiscard()` queues the exact counted-slot release when present; a zero-count temporary uses a lifecycle completion token retained by the deferred queue. | The old zero-to-one count shim is removed. `VoidDiscardZeroCountLifecycleTest` checks the count remains zero while pending and finalizes once at drain; the Perl regression passes on system Perl, JVM, and interpreter. |
 | Scalar overwrite | `setLargeRefCounted()` acquires the replacement count/identity before releasing the previous referent; final release checks current slots. | No root walk remains in this immediate overwrite decision. Rescued-graph cleanup also checks current Perl owner identities. |
 | First weaken | `RuntimeScalar.updateUntrackedReferenceOwner()` acquires an `UNTRACKED_REFERENCE` identity for each durable strong scalar value. The containing array/hash slot and package aggregate stash slot provide the current-storage and root proofs. `WeakRefRegistry.weaken()` retires the weakened scalar's owner identity; final nested-slot release calls `onStrongOwnerSlotReleased()`. `issue_1649_package_nested_untracked_weak_owner.t` passes 7/7 on system Perl and both backends. | For package-rooted untracked aggregates, first weaken still installs `WEAKLY_TRACKED_COMPATIBILITY_PIN`, then releases it when the final nested scalar owner leaves. `unweaken()` restores a counted owner only when `refCount >= 0`; the pin currently supplies that count bridge. `PackageWeakCompatibilityPinOwnerSlotTest` asserts the count transitions. Migrate unweaken's sentinel-to-count transition before removing the pin. |
@@ -811,6 +823,10 @@ integration. Evidence:
   before the legacy binding marker, preserving the weak-tracking sentinel
   instead of synthesizing `refCount=1`. Parent failure, full no-sweeps `make`,
   and both-backend Perl evidence are recorded in Current Status.
+- [x] On 2026-11-02, deferred cleanup recognizes counted scalar-cell identities
+  through current array/hash membership without changing the identity or count.
+  Parent regression and full no-sweeps `make` evidence are recorded in Current
+  Status; raw bare-decrement producers remain under audit.
 
 ### Historical handoff: issue #1132 / PR #1204
 
