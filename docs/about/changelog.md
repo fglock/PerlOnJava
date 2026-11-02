@@ -56,6 +56,7 @@ priorities and future plans.
 - Acquire replacement counted owner slots before releasing prior referents, preserving slot identity across overwrite and deferred release (#1649).
 - Recognize weak-slot resurrection from durable storage identities and rebuild the post-`DESTROY` count, so final release redispatches `DESTROY` and clears weak observers (#1649).
 - Queue zero-count void-context result cleanup as explicit lifecycle work instead of raising a synthetic positive reference count (#1649).
+- Track cloned thread snapshot roots with temporary owner identities and retire them at entry cleanup or runtime teardown, removing the cloned-root reachability fallback from first weaken (#1649).
 
 - Bundle `Devel::Size` with JVM-based `size` and `total_size` estimates.
 
