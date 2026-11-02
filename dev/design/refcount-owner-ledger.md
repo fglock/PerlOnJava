@@ -371,26 +371,46 @@ Run on JVM and interpreter backends with `timeout` and complete output logs:
 
 ## Progress Tracking
 
-### Current Status: owner-source migration continues; no-sweeps checkpoint `b454cab08`
+### Current Status: owner-source migration continues; runtime checkpoint `b454cab08`
 
-On 2026-11-02, `wip/detached-glob-owner-20261102-064229` fixed a detached
-`LOAD_GLOB` snapshot that kept a stale package stash alive after typeglob
-rebinding. The snapshot now releases its component owner slots after the
-string alias assignment; `GLOB_VALUE` and namespace-move identities still
-protect components with surviving Perl owners. The permanent seven-assertion
-regression passes under system Perl and both PerlOnJava backends. The full
-no-sweeps `make` gate passed on `b454cab08` in 6m18s. Captured logs are under
-`/private/tmp/` with the prefix `stale-stash-detached-glob-`. HTML::Tree 5.07
-`t/refloop.t` also passes 8/8 under system Perl, JVM, and interpreter with
-corrective sweeps disabled.
+On 2026-11-02, branch `wip/detached-glob-owner-20261102-064229` fixed a
+detached `LOAD_GLOB` snapshot that kept a stale package stash alive after
+typeglob rebinding. Rebinding now releases the snapshot's component owner
+slots; `GLOB_VALUE` and namespace-move identities continue to protect values
+with surviving Perl owners. Its seven-assertion regression passes under system
+Perl and both PerlOnJava backends. The full no-sweeps `make` gate passed on
+`b454cab08` in 6m18s.
 
-The first fallback audit confirms `RuntimeScalar.setLargeRefCounted()` uses
-current owner slots for immediate overwrite cleanup. Deferred release still
-has `MortalList.restoreReachableOwnerCount()`, which validates counted scalar
-owners through a root query after direct slot repair fails. The synthetic
-`ReachabilityQueryCostTest.deferredOwnerChecksShareOneRootSnapshotPerDrain`
-exercises that recovery path; it remains until the producer/storage mismatch
-is traced and normal execution is shown not to need it.
+HTML::Tree 5.07 now passes from its extracted distribution root: system Perl
+passes 23 files / 969 tests, and JVM and interpreter each pass all 23 files
+with corrective sweeps disabled. `t/refloop.t` is 8/8 on all three runtimes.
+The `jcpan -t HTML::Tree` front end timed out while deserializing the local
+metadata cache before tests began; this is not a module-test result. Direct
+distribution runs and the CPAN timeout log are recorded under
+`/private/tmp/html-tree-full-*b454cab08.log`.
+
+The new `tied_handler_nested_weak_owner.t` regression stores a target in a
+tied handler before first weaken, then verifies weak-observer and single
+`DESTROY` behavior when the nested slot is removed. System Perl, JVM, and
+interpreter pass 4/4 with corrective sweeps disabled.
+
+### Ownership fallback audit (2026-11-02)
+
+| Path | Current strong edge and release | Remaining recovery or evidence |
+|---|---|---|
+| Deferred counted release | `RuntimeScalar.recordCountedOwner()` installs a stable slot; `queueOwnerRelease()` carries its pending-release identity to `processDeferredBase()`. | `restoreReachableOwnerCount()` still walks scalar roots if current-slot and untracked-slot proofs fail. `ReachabilityQueryCostTest.deferredOwnerChecksShareOneRootSnapshotPerDrain` deliberately increments before placing a scalar in an array, leaving a scalar-cell identity without normal storage provenance. Normal array/hash stores mark the cell's container before acquiring the count. Keep the fallback until all producer orderings are covered. |
+| Scalar overwrite | `setLargeRefCounted()` acquires the replacement count/identity before releasing the previous referent; final release checks current slots. | No root walk remains in this immediate overwrite decision. Rescued-graph cleanup also checks current Perl owner identities. |
+| First weaken | Counted slots are registered when stored, before weak tracking activates; first weaken then retires the weakened slot and checks surviving identities. Untracked values use `UNTRACKED_REFERENCE` slots. | Package-rooted untracked aggregates still install `WEAKLY_TRACKED_COMPATIBILITY_PIN`; `PackageWeakCompatibilityPinOwnerSlotTest` and `PackageNestedUntrackedAggregateReleaseTest` cover its final release. |
+| Tied handlers | The tie wrapper acquires a `TIE_HANDLER` slot; nested handler hashes/arrays own values through their ordinary element slots. | `tied_handler_nested_weak_owner.t` verifies store-before-weaken and final nested-slot release on system Perl and both backends. `possiblyStoredInTiedHandler` is propagated as a legacy marker and still needs a separate unused-state audit. |
+| Cleared aggregates | Scope-exit cleanup checks current Perl owner identities and pending releases before destruction. | `finalizeClearedAggregateOwnerAfterScopeExit()` still consults a cached external-root snapshot for zero-count aggregates when direct identities do not prove an owner. |
+| Closure cleanup | Explicit capture slots refer to their owning CODE and are released when that CODE has no Perl owner. | Legacy captures without complete CODE-owner identity still use END-root and scalar-root snapshots; `scopeExitedCaptureOwnersShareOneScalarRootSnapshot` covers the fallback. |
+| Destruction / resurrection | Global destruction compares newly installed slots; ordinary destruction validates current owner slots and semantic captures. | Objects with no owner slots and no activated legacy owner set still use positive `refCount` as the compatibility resurrection proof. |
+
+The remaining snapshot and compatibility paths are not yet proven unnecessary
+for normal execution. The local source is not reconciled with PR #1938: the
+draft remains open at remote head `b2f44fc2d`, GitHub reports a conflict with
+`master` at `4a5c33753`, and the remote head object is absent locally. Preserve
+that remote work and reconcile only after the ownership candidate is complete.
 
 ### Completed Work
 
