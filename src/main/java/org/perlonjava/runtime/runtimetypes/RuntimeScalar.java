@@ -5980,8 +5980,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (oldBase != null) {
             if (argumentAliasKeepsOldBase) {
                 if (oldBase.refCount == WeakRefRegistry.WEAKLY_TRACKED) {
-                    oldBase.refCount = 1;
-                    MortalList.deferDecrement(oldBase);
+                    // The active argument aliases are the owners that defer
+                    // this weakly tracked referent's cleanup. Preserve the
+                    // tracking sentinel and let their final slot release
+                    // complete the deferred lifecycle transition.
+                    oldBase.deferFinalReleaseToUncountedOwnerSlots();
                 } else if (this.refCountOwned && oldBase.refCount > 0) {
                     this.refCountOwned = false;
                     MortalList.deferDecrementFromArraySlot(
