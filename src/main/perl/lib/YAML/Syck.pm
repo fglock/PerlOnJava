@@ -102,7 +102,11 @@ sub DumpYAML {
 }
 
 sub LoadJSON {
-    return JSON::PP::decode_json($_[0]);
+    my $decoded;
+    return $decoded if eval { $decoded = JSON::PP::decode_json($_[0]); 1 };
+    # Syck accepts YAML-style mappings through its JSON entry point.  Keep the
+    # strict JSON fast path, then use the YAML parser for that compatibility.
+    return LoadYAML($_[0]);
 }
 
 sub DumpJSON {
