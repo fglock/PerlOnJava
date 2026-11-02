@@ -371,7 +371,7 @@ Run on JVM and interpreter backends with `timeout` and complete output logs:
 
 ## Progress Tracking
 
-### Current Status: owner-source migration continues; runtime checkpoint `0523be4ab`
+### Current Status: owner-source migration continues; tested checkpoint `741d59222`
 
 On 2026-11-02, branch `wip/detached-glob-owner-20261102-064229` extended
 explicit ownership through asynchronous suspension of localized package
@@ -381,9 +381,16 @@ reinstalled the same aggregate. Suspension preserves its element slots and
 skips final cleanup; ordinary unwind or cancellation then releases the values
 once. The regression's eight system-Perl oracle assertions and all 21 planned
 assertions on each PerlOnJava backend pass with sweeps disabled. Its unfixed
-parent produced four premature-release failures. The full no-sweeps `make`
-gate passed on `0523be4ab` in 6m37; the complete log is
-`/private/tmp/issue-1649-suspended-aggregate-owners-fullmake-0523be4ab.log`.
+parent produced four premature-release failures.
+
+The deferred-release audit now has a regular producer check as well as its
+legacy-state test. `issue_1649_deferred_owner_normal_store.t` passes 5/5 on
+system Perl and in the full JVM/interpreter unit run. The paired
+`DeferredOwnerLedgerProducerTest` executes a nested package-root store with 256
+unrelated live aggregates; both backends report zero root queries, scalar
+reachability queries, snapshots, and graph edges inspected. The full no-sweeps
+`make` gate passed on `741d59222` in 6m27; the complete log is
+`/private/tmp/issue-1649-deferred-owner-normal-store-fullmake-741d59222.log`.
 
 Earlier acceptance evidence remains useful but is not a final-candidate gate:
 HTML::Tree 5.07 passed 23 files / 969 tests on system Perl and all 23 files on
@@ -393,22 +400,26 @@ metadata before tests began; direct distribution results and that timeout log
 are recorded under `/private/tmp/html-tree-full-*b454cab08.log`.
 
 The audit remains incomplete. Deferred release still has a scalar-root repair
-fallback; first weaken retains a package compatibility pin; cleared aggregate
-cleanup can query an external-root snapshot; legacy closure cleanup can query
-END/scalar roots; and destruction can treat an unverified positive count as
-resurrection. The live issue #1649 remains open. PR #1938 remains open as a
-draft, but its remote head `b2f44fc2d` is on another branch and GitHub reports
-it conflicting with `master` at `4a5c33753`; preserve that work until the
-remaining owner paths are audited and the final candidate is ready to reconcile.
-Next: trace each remaining fallback to its producing, transfer, and cleanup
-operations, then add invariant checks and normal-execution regressions before
-removing recovery machinery.
+fallback for owner cells without verified current storage provenance; the
+existing `deferredOwnerChecksShareOneRootSnapshotPerDrain` test constructs
+that state by counting before inserting the scalar. The new normal-store test
+shows that ordinary nested package stores use owner identities without a
+reachability query. First weaken retains a package compatibility pin; cleared
+aggregate cleanup can query an external-root snapshot; legacy closure cleanup
+can query END/scalar roots; and destruction can treat an unverified positive
+count as resurrection. The live issue #1649 remains open. PR #1938 remains open
+as a draft, but its remote head `b2f44fc2d` is on another branch and GitHub
+reports it conflicting with `master` at `4a5c33753`; preserve that work until
+the remaining owner paths are audited and the final candidate is ready to
+reconcile. Next: trace legacy deferred producers and the remaining closure,
+first-weaken, cleared-aggregate, and destruction fallbacks to their acquisition,
+transfer, and cleanup operations before removing recovery machinery.
 
 ### Ownership fallback audit (2026-11-02)
 
 | Path | Current strong edge and release | Remaining recovery or evidence |
 |---|---|---|
-| Deferred counted release | `RuntimeScalar.recordCountedOwner()` installs a stable slot; `queueOwnerRelease()` carries its pending-release identity to `processDeferredBase()`. | `restoreReachableOwnerCount()` still walks scalar roots if current-slot and untracked-slot proofs fail. `ReachabilityQueryCostTest.deferredOwnerChecksShareOneRootSnapshotPerDrain` deliberately increments before placing a scalar in an array, leaving a scalar-cell identity without normal storage provenance. Normal array/hash stores mark the cell's container before acquiring the count. Keep the fallback until all producer orderings are covered. |
+| Deferred counted release | `RuntimeScalar.recordCountedOwner()` installs a stable slot; `queueOwnerRelease()` carries its pending-release identity to `processDeferredBase()`. Normal nested package-array storage releases with zero root queries even while 256 unrelated aggregates are live. | `restoreReachableOwnerCount()` still walks scalar roots when current-slot and untracked-slot proofs fail. `ReachabilityQueryCostTest.deferredOwnerChecksShareOneRootSnapshotPerDrain` deliberately counts before inserting into an array, leaving a scalar-cell identity without normal storage provenance. Audit other legacy and transfer producers before retiring this fallback. |
 | Scalar overwrite | `setLargeRefCounted()` acquires the replacement count/identity before releasing the previous referent; final release checks current slots. | No root walk remains in this immediate overwrite decision. Rescued-graph cleanup also checks current Perl owner identities. |
 | First weaken | Counted slots are registered when stored, before weak tracking activates; first weaken then retires the weakened slot and checks surviving identities. Untracked values use `UNTRACKED_REFERENCE` slots. | Package-rooted untracked aggregates still install `WEAKLY_TRACKED_COMPATIBILITY_PIN`; `PackageWeakCompatibilityPinOwnerSlotTest` and `PackageNestedUntrackedAggregateReleaseTest` cover its final release. |
 | Tied handlers | The tie wrapper acquires a `TIE_HANDLER` slot; nested handler hashes/arrays own values through their ordinary element slots. | `tied_handler_nested_weak_owner.t` verifies store-before-weaken and final nested-slot release on system Perl and both backends. `possiblyStoredInTiedHandler` is propagated as a legacy marker and still needs a separate unused-state audit. |
@@ -453,6 +464,9 @@ that remote work and reconcile only after the ownership candidate is complete.
   async frame is suspended. Resume reinstalls the same aggregate before
   releasing its `SUSPENDED_FRAME` owner; cancellation and repeated cancellation
   release values and run `DESTROY` exactly once.
+- [x] A regular nested package-array store preserves a weakly observed value
+  until its final owner leaves. Both backends report zero lifecycle root
+  queries, snapshots, and graph-edge visits with 256 unrelated live aggregates.
 - [x] Reproduced the remaining Net::Async::HTTP exact-count failures in the
   distribution's normal socket-enabled environment. `t/30timeout.t` reports
   3 rather than 1 references at EOF; after the script scope drains, the raw
