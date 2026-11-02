@@ -1696,11 +1696,14 @@ public class MortalList {
                 base.deferFinalReleaseToUncountedOwnerSlots();
             } else if (base.hasNonPackageAggregateUncountedOwnerSlotIdentity()
                     || (aggregateReferent
-                        ? base.hasUntrackedReferenceOwnerSlotIdentity()
+                        ? (base.blessId != 0 && !hasWeakRefs
+                            && base.hasUntrackedReferenceOwnerSlotIdentity())
                         : hasUntrackedReferenceOwner)) {
                 // Counted owner recovery is complete above. A surviving
-                // aggregate or untracked scalar slot is enough to defer cleanup
-                // until its release, even when no weak observer currently exists.
+                // non-package aggregate slot, or an untracked package owner of
+                // a blessed aggregate without direct weak observers, defers
+                // cleanup until its release. Blessed aggregates with direct
+                // weak observers still use the root proof below.
                 base.deferFinalReleaseToUncountedOwnerSlots();
             } else if (hasWeakRefs && restoreReachableOwnerCount(base)) {
                 // A counted owner that is still reachable through a real
