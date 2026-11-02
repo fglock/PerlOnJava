@@ -29,6 +29,19 @@ make` passed in 7m28. Evidence:
 `/private/tmp/issue-1649-closure-release-fixed-shard0-ab4569170.log`, and
 `/private/tmp/issue-1649-closure-release-fullmake-ab4569170.log`.
 
+The Perl-level scope-exit, explicit-return, weakly tracked `undef`, and
+self-retaining closure-cycle fixtures pass on system Perl, JVM, and
+interpreter (13 assertions per engine). Their logs are
+`/private/tmp/issue-1649-closure-release-system-perl.log`,
+`/private/tmp/issue-1649-closure-release-jvm-scope.log`,
+`/private/tmp/issue-1649-closure-release-jvm-explicit-return.log`,
+`/private/tmp/issue-1649-closure-release-interpreter-scope.log`,
+`/private/tmp/issue-1649-closure-release-interpreter-explicit-return.log`,
+`/private/tmp/issue-1649-argument-alias-system-perl-ab4569170.log`,
+`/private/tmp/issue-1649-argument-alias-jvm-ab4569170.log`,
+`/private/tmp/issue-1649-argument-alias-interpreter-ab4569170.log`, and
+`/private/tmp/issue-1649-closure-cycle-{system-perl,jvm,interpreter}-ab4569170.log`.
+
 Next, trace the remaining first-weaken package compatibility pin and deferred
 snapshot paths to their storage producers. Continue the audit of package roots,
 strong cycles, shared storage, resource owners, and exception/unwind cleanup;
