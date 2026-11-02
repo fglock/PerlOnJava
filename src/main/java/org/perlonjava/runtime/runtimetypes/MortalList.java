@@ -1150,13 +1150,19 @@ public class MortalList {
                         || base instanceof RuntimeHash
                         || base instanceof RuntimeArray
                         || base instanceof RuntimeCode)) {
-                    if (base.refCountTrace) {
-                        base.traceRefCount(+1, "MortalList.mortalizeForVoidDiscard (refCount=1 bump+queue)");
+                    RuntimeBase.PendingOwnerRelease ownerRelease;
+                    if (scalar.refCountOwned) {
+                        scalar.refCountOwned = false;
+                        ownerRelease = base.queueOwnerRelease(
+                                scalar, "MortalList.mortalizeForVoidDiscard zero-count owner");
+                        base.releaseActiveOwner(scalar);
+                    } else {
+                        ownerRelease = base.queueLifecycleOnlyAtZero(
+                                "MortalList.mortalizeForVoidDiscard zero-count temporary");
                     }
-                    base.refCount = 1;
                     LifecycleRuntimeState state = state();
                     markBoundaryWork(state);
-                    queueDeferredBase(state, base, null);
+                    queueDeferredBase(state, base, ownerRelease, null, scalar);
                 }
             }
         }
@@ -1576,10 +1582,18 @@ public class MortalList {
         base.releaseTransientTraceOwner(transientOwnerKind,
                 "MortalList.processDeferredBase");
         boolean hasWeakRefs = WeakRefRegistry.hasWeakRefsTo(base);
+        boolean finalRelease = false;
         if (base.refCount > 0) {
             base.traceRefCount(-1, "MortalList.flush (deferred decrement)");
+            finalRelease = --base.refCount == 0;
+        } else if (base.refCount == 0 && ownerRelease != null) {
+            // The queue token may represent a real edge released after a
+            // transient undercount, or an explicit zero-count temporary
+            // finalization request. Process that lifecycle boundary directly;
+            // do not manufacture a positive refCount just to enter this path.
+            finalRelease = true;
         }
-        if (base.refCount > 0 && --base.refCount == 0) {
+        if (finalRelease) {
             boolean aggregateReferent = base instanceof RuntimeArray || base instanceof RuntimeHash;
             // Aggregate owner slots have their own deferred-release rule below.
             // Refresh scalar-cell owners here for other referents before the

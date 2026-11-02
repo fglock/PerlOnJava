@@ -103,6 +103,7 @@ priorities and future plans.
 - Release materialized list-assignment owners and restore lexical cleanup when tied hash assignment throws from `STORE` (#1649).
 - Acquire replacement counted owner slots before releasing prior referents, preserving slot identity across overwrite and deferred release (#1649).
 - Recognize weak-slot resurrection from durable storage identities and rebuild the post-`DESTROY` count, so final release redispatches `DESTROY` and clears weak observers (#1649).
+- Queue zero-count void-context result cleanup as explicit lifecycle work instead of raising a synthetic positive reference count (#1649).
 
 
 

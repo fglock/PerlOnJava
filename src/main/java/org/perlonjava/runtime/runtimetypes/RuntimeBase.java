@@ -1045,6 +1045,14 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         return queueTracedOwnerRelease(owner, queueSite, slotRelease);
     }
 
+    /** Queue finalization for a zero-count temporary without fabricating an owner count. */
+    synchronized PendingOwnerRelease queueLifecycleOnlyAtZero(String queueSite) {
+        registerPendingOwnerRelease(null);
+        return new PendingOwnerRelease(0,
+                REFCOUNT_TRACE_ENV ? traceReferentGeneration(this) : 0,
+                "zero-count lifecycle", queueSite);
+    }
+
     private synchronized PendingOwnerRelease queueTracedOwnerRelease(
             RuntimeScalar owner, String queueSite, PerlOwnerSlot.PendingRelease slotRelease) {
         int scalarIdentity = System.identityHashCode(owner);
