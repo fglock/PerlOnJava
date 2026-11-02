@@ -216,8 +216,7 @@ public class WeakRefRegistry {
                     // No local binding: refCount==0 means truly no strong refs.
                     // Trigger DESTROY + clear weak refs.
                     base.refCount = Integer.MIN_VALUE;
-                    if (identifiedOwner && snapshotRoots.isEmpty()
-                            && MortalList.canTrustFinalCountedRelease(base)) {
+                    if (identifiedOwner && MortalList.canTrustFinalCountedRelease(base)) {
                         DestroyDispatch.callDestroyFromCountedOwner(base);
                     } else {
                         DestroyDispatch.callDestroy(base);
