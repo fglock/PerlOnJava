@@ -1799,12 +1799,17 @@ public class MortalList {
     private static boolean hasPackageRootedCurrentAggregateOwner(RuntimeBase base) {
         for (PerlOwnerSlot slot : base.ownerSlotSnapshot()) {
             if (!slot.isActive() || slot.referent() != base
-                    || (slot.kind() != PerlOwnerSlot.Kind.ARRAY_ELEMENT
+                    || (slot.kind() != PerlOwnerSlot.Kind.SCALAR_CELL
+                        && slot.kind() != PerlOwnerSlot.Kind.ARRAY_ELEMENT
                         && slot.kind() != PerlOwnerSlot.Kind.HASH_ELEMENT)) {
                 continue;
             }
             RuntimeScalar owner = slot.countedScalarOwner();
-            if (owner == null || !owner.isCurrentAggregateElementOwner(base, slot)) continue;
+            if (owner == null) continue;
+            boolean currentOwner = slot.kind() == PerlOwnerSlot.Kind.SCALAR_CELL
+                    ? owner.isCurrentCountedScalarOwner(base, slot)
+                    : owner.isCurrentAggregateElementOwner(base, slot);
+            if (!currentOwner) continue;
             RuntimeBase aggregate = owner.getContainerOwner();
             if (aggregate != null && (aggregate.storedInPackageGlobal
                     || GlobalVariable.isPackageRootedAggregate(aggregate))) {
