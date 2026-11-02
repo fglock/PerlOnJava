@@ -375,6 +375,10 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                 endPendingClosureCaptureRelease();
             }
             releaseClosureCapture(true, false);
+            // The owner-slot removal above runs while this capture release is
+            // marked pending, so its lifecycle callback correctly waits. Retry
+            // now that the capture count and pending marker have both retired.
+            WeakRefRegistry.onStrongOwnerSlotReleased(this);
             verifyClosureCaptureOwnerCount(PerlOwnerSlot.Kind.CLOSURE_PAD);
             return;
         }

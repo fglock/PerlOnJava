@@ -176,10 +176,10 @@ public class WeakRefRegistry {
                 } else if (base.hasSemanticCaptureOwner()) {
                     // A captured pad is an authoritative Perl owner even when
                     // the weak probe being weakened held the last ordinary
-                    // counted slot.  Keep the referent alive until the shared
-                    // pad cell is released; multiple closures share this one
-                    // owner and must not inflate refCount.
-                    base.refCount = 1;
+                    // counted slot. Retain the existing sentinel lifecycle
+                    // until the final shared pad owner leaves; multiple
+                    // closures share this edge and must not inflate refCount.
+                    base.deferFinalReleaseToUncountedOwnerSlots();
                 } else if (base.localBindingExists) {
                     // Named container (my %hash / my @array): the local variable
                     // slot holds a strong reference not counted in refCount.
