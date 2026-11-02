@@ -76,9 +76,15 @@ class StaleStashPackageOwnerReleaseTest {
             return "interpreter=" + interpreter + " weak stash already cleared";
         }
         String owners = stale.ownerSlotSnapshot().stream()
-                .map(slot -> slot.kind().name())
-                .sorted()
-                .toList().toString();
+                .map(slot -> {
+                    RuntimeGlob owner = slot.globComponentOwner();
+                    return slot.kind().name() + "#" + slot.identity() + " owner="
+                            + (owner == null ? "collected"
+                                    : System.identityHashCode(owner) + ":" + owner.globName
+                                            + ":snapshot=" + owner.isSlotSnapshot()
+                                            + ":move=" + (owner.namespaceMove != null));
+                })
+                .sorted().toList().toString();
         RuntimeGlob move = stale.savedNamespaceMove;
         String moveDescription = move == null ? "null"
                 : "id=" + System.identityHashCode(move)
