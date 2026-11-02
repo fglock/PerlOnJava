@@ -371,7 +371,7 @@ Run on JVM and interpreter backends with `timeout` and complete output logs:
 
 ## Progress Tracking
 
-### Current Status: owner-source migration continues; tested runtime checkpoint `2cc19ab4d`
+### Current Status: owner-source migration continues; tested runtime checkpoint `4b772241d`
 
 On 2026-11-02, branch `wip/detached-glob-owner-20261102-064229` passed the
 full no-sweeps `make` on `2cc19ab4d` in 7m41s. The 18-file lifecycle matrix
@@ -418,6 +418,16 @@ fallback also remains until every direct-count producer is traced to its
 owner-slot acquisition and release. PR #1938 remains an open draft at remote
 head `b2f44fc2d` against `master` `4a5c33753`.
 
+On 2026-11-02, `4b772241d` paired each tracked regex callback CODE increment
+with its `REGEX_CALLBACK` owner identity. Verified count restoration now
+includes that native slot, and callback release decrements only when that slot
+acquired the count. An initially uncounted callback therefore cannot consume a
+later count from another owner. `RuntimeRegexCallbackCountedOwnerTest` passes
+both cases; the focused Gradle test and full no-sweeps `make` pass on this
+commit. Logs:
+`/private/tmp/issue-1649-regex-callback-focused-4b772241d.log` and
+`/private/tmp/issue-1649-regex-callback-fullmake-4b772241d.log`.
+
 ### Ownership fallback audit (2026-11-02)
 
 | Path | Current strong edge and release | Remaining recovery or evidence |
@@ -428,11 +438,12 @@ head `b2f44fc2d` against `master` `4a5c33753`.
 | First weaken | `RuntimeScalar.updateUntrackedReferenceOwner()` acquires an `UNTRACKED_REFERENCE` identity for each durable strong scalar value. The containing array/hash slot and package aggregate stash slot provide the current-storage and root proofs. `WeakRefRegistry.weaken()` retires the weakened scalar's owner identity; final nested-slot release calls `onStrongOwnerSlotReleased()`. `issue_1649_package_nested_untracked_weak_owner.t` passes 7/7 on system Perl and both backends. | For package-rooted untracked aggregates, first weaken still installs `WEAKLY_TRACKED_COMPATIBILITY_PIN`, then releases it when the final nested scalar owner leaves. `unweaken()` restores a counted owner only when `refCount >= 0`; the pin currently supplies that count bridge. `PackageWeakCompatibilityPinOwnerSlotTest` asserts the count transitions. Migrate unweaken's sentinel-to-count transition before removing the pin. |
 | Tied handlers | The tie wrapper acquires a `TIE_HANDLER` slot; nested handler hashes/arrays own values through their ordinary element slots. | `tied_handler_nested_weak_owner.t` verifies store-before-weaken and final nested-slot release on system Perl and both backends. `possiblyStoredInTiedHandler` is propagated as a legacy marker and still needs a separate unused-state audit. |
 | PerlIO::via layer self | `ViaLayer` installs an `IO_VIA_LAYER` identity for the Java layer's retained `PUSHED` value. Counted values pair it with one direct increment; final release carries the slot token through `MortalList` and `DestroyDispatch`. | `perlio_via_self_owner_lifecycle.t` passes 3/3 on system Perl and both backends with sweeps disabled. `ViaLayerCountedOwnerLifecycleTest` preserves a live closure-pad owner, and `ViaLayerReleaseDuringDestroyTest` checks count balance during active destruction. |
+| Regex callback CODE | `RuntimeRegex.setExecutableCallbacks()` retains a `REGEX_CALLBACK` native slot. If CODE is tracked, that identity is marked as owning its paired count; final callback release decrements only that count. | `RuntimeRegexCallbackCountedOwnerTest` verifies tracked count pairing, shared callback owners, and that an initially uncounted callback does not decrement a later count. The slot participates in verified count repair and native-owner resurrection checks. |
 | Async localized package aggregates | `DynamicVariableManager` acquires a `SUSPENDED_FRAME` owner before `dynamicSuspendState()` detaches the active aggregate; resume reinstalls the same array/hash and releases that frame owner afterward. | `issue_1649_localized_global_aggregate_async_owner.t` verifies localized array/hash element lifetime across suspension, resume, and cancellation on both backends. The suspend path preserves the original aggregate and its element identities; no root-snapshot fallback is used here. |
 | Thread snapshot roots | `RuntimeGraphCloner` assigns a `TEMPORARY_ROOT` identity to each top-level snapshot root and to the direct referent of a strong scalar root. `RootSnapshot` owns these identities through clone hooks and entry setup; thread cleanup and runtime close/reset retire them. | `WeakRefRegistry.weaken()` no longer walks the cloned root graph or writes a synthetic positive count. `ThreadSnapshotTemporaryRootOwnerTest` checks `WEAKLY_TRACKED` state and weak-observer cleanup at lease release. |
 | Cleared aggregates | Scope-exit cleanup checks current Perl owner identities and pending releases before destruction. `ClearedAggregateNestedPackageOwnerNoRootWalkTest` verifies that a live nested package slot preserves its weak observer with zero root queries. | `finalizeClearedAggregateOwnerAfterScopeExit()` still consults a cached external-root snapshot for zero-count candidates with no current owner identity. `ReachabilityQueryCostTest.repeatedAggregateScopeCleanupSharesExternalRootSnapshot` asserts one shared snapshot for this legacy path. |
 | Closure cleanup | Parser, JVM, and interpreter closure producers install explicit `SCALAR_CAPTURE` / `CLOSURE_PAD` slots tied to the owning CODE. Native and legacy semantic capture identities now defer zero-count cleanup without changing `refCount`; final slot release dispatches cleanup and clears weak observers. `LegacyClosureCaptureOwnerReleaseTest` verifies zero root queries. Full HTML::Tree 5.07 passes 23/23 files and 989/989 tests on both backends with sweeps disabled. | Legacy captures without complete CODE-owner identity still use END-root and scalar-root snapshots. Classify the pre-END traversal separately from ordinary lifecycle repair, then audit its remaining producers. |
-| Destruction / resurrection | Global destruction compares newly installed owner slots; ordinary destruction validates current slots and semantic captures. Counted scalar stores install identities in `recordCountedOwner()`; method-invocant, PerlIO::via, and cloned-thread edges have explicit producers. `DestroyOwnerSlotResurrectionTest` covers counted, untracked, detached, and temporary-slot decisions with zero root queries. | `hasEscapedPerlOwner()` still treats `refCount > 0` as resurrection when the referent has no slots and `activeOwners` was never initialized. Audit every remaining direct `refCount` producer and pair it with acquisition/release evidence before removing this last count-only proof. |
+| Destruction / resurrection | Global destruction compares newly installed owner slots; ordinary destruction validates current slots and semantic captures. Counted scalar stores install identities in `recordCountedOwner()`; method-invocant, PerlIO::via, regex callback, and cloned-thread edges have explicit producers. `DestroyOwnerSlotResurrectionTest` covers counted, untracked, detached, and temporary-slot decisions with zero root queries. | `hasEscapedPerlOwner()` still treats `refCount > 0` as resurrection when the referent has no slots and `activeOwners` was never initialized. Audit every remaining direct `refCount` producer and pair it with acquisition/release evidence before removing this last count-only proof. |
 
 The remaining snapshot and compatibility paths are not yet proven unnecessary
 for normal execution. The local source is not reconciled with PR #1938: the
@@ -706,6 +717,11 @@ that remote work and reconcile only after the ownership candidate is complete.
   `ViaLayerCountedOwnerLifecycleTest` pass; the no-sweeps full `make`, 117-test
   lifecycle matrix, and HTML::Tree 5.07 989-test suite pass on both backends.
   Evidence is recorded in Current Status for `2cc19ab4d`.
+- [x] On 2026-11-02, regex callback identities now record whether they acquired
+  a paired CODE count. Final callback release only decrements that count, and
+  verified count restoration includes the native slot. The focused regression
+  and full no-sweeps `make` pass on `4b772241d`; logs are recorded in Current
+  Status.
 
 ### Historical handoff: issue #1132 / PR #1204
 
@@ -723,7 +739,10 @@ pass. Preserve both focused ownership regressions when evolving the ledger.
 
 1. Trace each remaining deferred-release, first-weaken, cleared-aggregate,
    closure, and destruction fallback to its strong-edge acquisition, transfer,
-   and release sites. Distinguish already-ledgered edges from true root walks.
+   and release sites. Continue the direct-count audit with tied-hash iterator
+   keys, whose current key uses a transient trace hold plus a direct count
+   rather than a `PerlOwnerSlot`. Distinguish already-ledgered edges from true
+   root walks.
 2. Add missing stable identities for tied-handler values, closure/CODE captures,
    package slots, cycles, scalar-reference contents, suspended frames, cloned
    storage, and resource owners; fix count disagreements at their producers.
