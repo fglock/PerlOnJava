@@ -531,6 +531,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && kind != PerlOwnerSlot.Kind.HASH_ELEMENT) {
             return;
         }
+        if (kind == PerlOwnerSlot.Kind.SCALAR_CELL
+                && (isPackageGlobalRoot || hasDirectScalarCellStorageOwner()
+                    || hasClosureCaptureOwner() || hasPendingReturnOwner()
+                    || (containerOwner != null && containerOwner.storedInPackageGlobal))) {
+            // Keep a scalar-cell identity when that Perl cell already has a
+            // durable owner. Only transfer a standalone counted value to the
+            // aggregate slot that newly becomes its storage.
+            return;
+        }
         slot.reclassifyCountedIdentity(countedOwnerKind());
     }
 
