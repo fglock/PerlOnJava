@@ -293,6 +293,13 @@ public class RuntimeStash extends RuntimeHash {
         Map<String, RuntimeHash> movedHashes = snapshotNamespace(GlobalVariable.globalHashes, childPrefix);
         Map<String, RuntimeScalar> movedCodes = snapshotNamespace(GlobalVariable.globalCodeRefs, childPrefix);
 
+        // Acquire detached-glob owners before removing the package-map owners
+        // below. The returned glob keeps each moved slot alive until its final
+        // Perl owner is released.
+        RuntimeGlob.NamespaceMove movedNamespace = new RuntimeGlob.NamespaceMove(
+                childPrefix, movedScalars, movedArrays, movedHashes, movedCodes);
+        RuntimeGlob detachedNamespace = RuntimeGlob.createDetachedNamespaceMove(movedNamespace);
+
         // Remove all symbols with this prefix from all global maps (prefix-based removal)
         GlobalVariable.globalCodeRefs.keySet().removeIf(key -> key.startsWith(childPrefix));
         GlobalVariable.globalCodeRefs.keySet().removeIf(key -> key.startsWith(mainQualifiedChildPrefix));
@@ -316,8 +323,6 @@ public class RuntimeStash extends RuntimeHash {
         // *one::`.  Deleting one:: must not empty the stash still reachable
         // as two::. Materialise the saved slots under each such alias before
         // discarding the obsolete source mapping.
-        RuntimeGlob.NamespaceMove movedNamespace = new RuntimeGlob.NamespaceMove(
-                childPrefix, movedScalars, movedArrays, movedHashes, movedCodes);
         for (Map.Entry<String, String> alias : new HashMap<>(GlobalVariable.stashAliases).entrySet()) {
             if (childPrefix.equals(alias.getValue())) {
                 GlobalVariable.installNamespaceMove(movedNamespace, alias.getKey());
@@ -352,7 +357,7 @@ public class RuntimeStash extends RuntimeHash {
         GlobalVariable.clearPackageCache();
         GlobalVariable.markStashPackageFreed(childPrefix);
 
-        return RuntimeGlob.createDetachedNamespaceMove(movedNamespace);
+        return detachedNamespace;
     }
 
     private static <T> Map<String, T> snapshotNamespace(Map<String, T> values, String prefix) {
