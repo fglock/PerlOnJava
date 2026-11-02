@@ -512,35 +512,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             if (owner != null) containerOwners.add(owner);
             this.containerOwner = owner;
         }
-        reclassifyCountedOwnerForCurrentStorage();
         refreshDetachedGlobValueOwner();
         propagateTiedHandlerMarkerToReferent();
-    }
-
-    /** Keep the counted edge identity aligned with the scalar's current storage. */
-    private void reclassifyCountedOwnerForCurrentStorage() {
-        PerlOwnerSlot slot = countedOwnerSlot;
-        if (!refCountOwned || slot == null || !slot.isActive()
-                || !(value instanceof RuntimeBase referent)
-                || slot.referent() != referent) {
-            return;
-        }
-        PerlOwnerSlot.Kind kind = slot.kind();
-        if (kind != PerlOwnerSlot.Kind.SCALAR_CELL
-                && kind != PerlOwnerSlot.Kind.ARRAY_ELEMENT
-                && kind != PerlOwnerSlot.Kind.HASH_ELEMENT) {
-            return;
-        }
-        if (kind == PerlOwnerSlot.Kind.SCALAR_CELL
-                && (isPackageGlobalRoot || hasDirectScalarCellStorageOwner()
-                    || hasClosureCaptureOwner() || hasPendingReturnOwner()
-                    || (containerOwner != null && containerOwner.storedInPackageGlobal))) {
-            // Keep a scalar-cell identity when that Perl cell already has a
-            // durable owner. Only transfer a standalone counted value to the
-            // aggregate slot that newly becomes its storage.
-            return;
-        }
-        slot.reclassifyCountedIdentity(countedOwnerKind());
     }
 
     private boolean isSharedImmutableLiteralWithoutOwnerTracking() {
@@ -577,7 +550,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 containerOwners.add(owner);
                 containerOwner = owner;
             }
-            reclassifyCountedOwnerForCurrentStorage();
             propagateTiedHandlerMarkerToReferent();
         } else {
             removeContainerOwnerTracking(owner);
@@ -1361,7 +1333,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 || hasDirectScalarCellStorageOwner() || activeArgumentAlias) {
             return true;
         }
-        return isCurrentCapturedScalarCellOwner(referent, slot);
+        return hasCurrentAggregateStorageOwner()
+                || isCurrentCapturedScalarCellOwner(referent, slot);
+    }
+
+    private boolean hasCurrentAggregateStorageOwner() {
+        for (RuntimeBase owner : containerOwnerSnapshot()) {
+            if (isStoredInAnyContainer(owner)) return true;
+        }
+        return false;
     }
 
     /**
