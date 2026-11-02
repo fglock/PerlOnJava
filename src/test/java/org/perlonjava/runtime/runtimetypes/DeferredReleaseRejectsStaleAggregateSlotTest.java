@@ -13,7 +13,10 @@ class DeferredReleaseRejectsStaleAggregateSlotTest {
     void detachedArrayElementIdentityDoesNotRestoreTheReferentCount() {
         RuntimeArray container = new RuntimeArray();
         assertDetachedElementDoesNotRestore(
-                owner -> container.push(owner),
+                owner -> {
+                    container.push(owner);
+                    owner.set(new RuntimeScalar());
+                },
                 owner -> container.elements.remove(0),
                 PerlOwnerSlot.Kind.ARRAY_ELEMENT);
     }
