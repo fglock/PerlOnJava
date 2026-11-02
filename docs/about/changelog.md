@@ -93,6 +93,7 @@ priorities and future plans.
 - Preserve moved scalar, array, hash, and CODE slots while deleting a whole namespace, and release them with the detached namespace glob (#1649).
 - Honor void context when deleting stash entries, releasing detached glob and namespace owners immediately (#1649).
 - Transfer package scalar, array, and hash owner identities while materializing stash aliases (#1649).
+- Track saved namespace moves with stash owner slots and release them when consumed or when the stale stash dies (#1649).
 - Acquire active lexical owner identities when aggregate registration follows the initial pad bind, and clear weak aggregate observers on normal scope exit (#1649).
 - Exclude weak glob aliases from strong-owner backfill; release their anonymous IO holder on weaken and restore it on unweaken (#1649).
 - Release displaced hash-element owners when multi-LHS list assignment replaces a hash tail, through the normal tied and package-root-aware store path (#1649).

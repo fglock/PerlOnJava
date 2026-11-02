@@ -337,7 +337,9 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
 
     /** Release snapshot slots when the final scalar value owner leaves this glob. */
     synchronized void releaseDetachedComponentsIfUnowned() {
-        if (!retainsDetachedComponents() || ownerSlotCount(PerlOwnerSlot.Kind.GLOB_VALUE) != 0) return;
+        if (!retainsDetachedComponents()
+                || ownerSlotCount(PerlOwnerSlot.Kind.GLOB_VALUE) != 0
+                || ownerSlotCount(PerlOwnerSlot.Kind.STASH_NAMESPACE_MOVE) != 0) return;
         List<PerlOwnerSlot> owners = detachedComponentOwnerSlots;
         detachedComponentOwnerSlots = null;
         namespaceMove = null;
@@ -963,14 +965,14 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                     // resolved through Outer:: for @ISA and method lookup.
                     if (isStashGlobName(this.globName) && hash instanceof RuntimeStash sourceStash) {
                         if (sourceStash.savedNamespaceMove != null) {
-                            GlobalVariable.installNamespaceMove(sourceStash.savedNamespaceMove, this.globName);
+                            sourceStash.installSavedNamespaceMove(this.globName);
                         } else if (GlobalVariable.globalHashes.get(sourceStash.namespace) != sourceStash) {
                             // A saved \%Pkg:: can outlive a rebind of *Pkg::.
                             // Move its old descendants under the new name
                             // instead of resolving through Pkg's replacement.
-                            RuntimeGlob.NamespaceMove move =
+                            RuntimeGlob moveOwner =
                                     GlobalVariable.detachNamespaceForStaleStash(sourceStash.namespace);
-                            GlobalVariable.installNamespaceMove(move, this.globName);
+                            sourceStash.installDetachedNamespaceMove(moveOwner, this.globName);
                         } else {
                             GlobalVariable.setStashAlias(this.globName, sourceStash.namespace);
                         }
@@ -1079,8 +1081,8 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 if (isStashGlobName(this.globName)) {
                     RuntimeHash oldStash = GlobalVariable.globalHashes.get(this.globName);
                     if (oldStash instanceof RuntimeStash oldRuntimeStash) {
-                        oldRuntimeStash.savedNamespaceMove =
-                                GlobalVariable.detachNamespaceForStaleStash(this.globName);
+                        oldRuntimeStash.saveNamespaceMove(
+                                GlobalVariable.detachNamespaceForStaleStash(this.globName));
                     }
                 }
                 this.set(GlobalVariable.getGlobalIO(aliasName));

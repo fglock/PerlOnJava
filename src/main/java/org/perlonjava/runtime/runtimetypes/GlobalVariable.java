@@ -1244,13 +1244,18 @@ public class GlobalVariable {
         return snapshot;
     }
 
-    static RuntimeGlob.NamespaceMove detachNamespaceForStaleStash(String namespace) {
+    static RuntimeGlob detachNamespaceForStaleStash(String namespace) {
         String prefix = normalizeStashNamespace(namespace);
         Map<String, RuntimeScalar> scalars = snapshotNamespace(globalVariables, prefix);
         Map<String, RuntimeArray> arrays = snapshotNamespace(globalArrays, prefix);
         Map<String, RuntimeHash> hashes = snapshotNamespace(globalHashes, prefix);
         hashes.remove(prefix);
         Map<String, RuntimeScalar> codes = snapshotNamespace(globalCodeRefs, prefix);
+        RuntimeGlob.NamespaceMove move = new RuntimeGlob.NamespaceMove(
+                prefix, scalars, arrays, hashes, codes);
+        // The saved move can outlive the package-map transaction. Give it
+        // component identities before removing any package-root identities.
+        RuntimeGlob moveOwner = RuntimeGlob.createDetachedNamespaceMove(move);
         globalVariables.keySet().removeIf(key -> key.startsWith(prefix));
         globalArrays.keySet().removeIf(key -> key.startsWith(prefix));
         globalHashes.keySet().removeIf(key -> key.startsWith(prefix) && !key.equals(prefix));
@@ -1260,7 +1265,7 @@ public class GlobalVariable {
         clearHiddenIORefsForNamespace(prefix);
         clearPinnedCodeRefsForNamespace(prefix);
         invalidateStashEnumerationCache();
-        return new RuntimeGlob.NamespaceMove(prefix, scalars, arrays, hashes, codes);
+        return moveOwner;
     }
 
     static void installNamespaceMove(RuntimeGlob.NamespaceMove move, String destinationPrefix) {
