@@ -337,13 +337,6 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
 
     /** Release snapshot slots when the final scalar value owner leaves this glob. */
     synchronized void releaseDetachedComponentsIfUnowned() {
-        boolean trace = "1".equals(System.getenv("PERLONJAVA_TRACE_NAMESPACE_OWNER"));
-        if (trace && namespaceMove != null) {
-            System.err.println("NSOWNER release attempt glob=" + globName
-                    + " components=" + (detachedComponentOwnerSlots == null
-                        ? -1 : detachedComponentOwnerSlots.size())
-                    + " globValues=" + ownerSlotCount(PerlOwnerSlot.Kind.GLOB_VALUE));
-        }
         if (!retainsDetachedComponents() || ownerSlotCount(PerlOwnerSlot.Kind.GLOB_VALUE) != 0) return;
         List<PerlOwnerSlot> owners = detachedComponentOwnerSlots;
         detachedComponentOwnerSlots = null;
@@ -355,45 +348,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             owner.release();
         }
         for (RuntimeBase component : components) {
-            if (trace && namespaceMove == null) {
-                System.err.println("NSOWNER released component=" + component.getClass().getSimpleName()
-                        + " refCount=" + component.refCount
-                        + " owners=" + component.hasPerlStrongOwnerIdentity()
-                        + " globSlots=" + component.ownerSlotCount(PerlOwnerSlot.Kind.GLOB_COMPONENT_SLOT)
-                        + " packageScalarSlots=" + component.ownerSlotCount(PerlOwnerSlot.Kind.PACKAGE_SCALAR_SLOT)
-                        + " packageAggregateSlots=" + component.ownerSlotCount(PerlOwnerSlot.Kind.PACKAGE_AGGREGATE_SLOT)
-                        + " localBinding=" + component.localBindingExists
-                        + (component instanceof RuntimeStash stash
-                            ? " stash=" + stash.namespace + " size=" + stash.size() : ""));
-            }
             if (component instanceof RuntimeScalar scalar) {
-                if (trace) {
-                    RuntimeBase value = scalar.value instanceof RuntimeBase base ? base : null;
-                    System.err.println("NSOWNER scalar slot before type=" + scalar.type
-                            + " valueClass=" + (value == null ? "<none>" : value.getClass().getSimpleName())
-                            + " valueRefCount=" + (value == null ? 0 : value.refCount)
-                            + " valueOwners=" + (value != null && value.hasPerlStrongOwnerIdentity())
-                            + " valueUntracked=" + (value == null ? 0
-                                : value.ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE)));
-                }
                 scalar.refreshUntrackedReferenceOwner();
                 if (!scalar.hasPerlStrongOwnerIdentity()
                         && !MyVarCleanupStack.isRegistered(scalar)) {
                     RuntimeScalar.scopeExitCleanup(scalar);
-                } else if (trace && scalar.getClass() == RuntimeScalar.class) {
-                    System.err.println("NSOWNER scalar cleanup skipped owners="
-                            + scalar.hasPerlStrongOwnerIdentity()
-                            + " registered=" + MyVarCleanupStack.isRegistered(scalar)
-                            + " refCount=" + scalar.refCount);
-                }
-                if (trace) {
-                    RuntimeBase value = scalar.value instanceof RuntimeBase base ? base : null;
-                    System.err.println("NSOWNER scalar slot after type=" + scalar.type
-                            + " valueClass=" + (value == null ? "<none>" : value.getClass().getSimpleName())
-                            + " valueRefCount=" + (value == null ? 0 : value.refCount)
-                            + " valueOwners=" + (value != null && value.hasPerlStrongOwnerIdentity())
-                            + " valueUntracked=" + (value == null ? 0
-                                : value.ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE)));
                 }
             } else if (!component.hasPerlStrongOwnerIdentity()
                     && !MyVarCleanupStack.isRegistered(component)) {
@@ -411,20 +370,6 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         RuntimeGlob glob = new RuntimeGlob(move.sourcePrefix);
         glob.slotSnapshot = true;
         glob.retainDetachedNamespaceComponents(move);
-        if ("1".equals(System.getenv("PERLONJAVA_TRACE_NAMESPACE_OWNER"))
-                && move.sourcePrefix.equals("NamespaceDeleteOwner::")) {
-            System.err.println("NSOWNER snapshot scalars=" + move.scalars.keySet()
-                    + " arrays=" + move.arrays.keySet()
-                    + " hashes=" + move.hashes.keySet()
-                    + " codes=" + move.codes.keySet());
-            for (Map.Entry<String, RuntimeScalar> entry : move.scalars.entrySet()) {
-                RuntimeScalar scalar = entry.getValue();
-                System.err.println("NSOWNER snapshot scalar key=" + entry.getKey()
-                        + " type=" + scalar.type
-                        + " value=" + (scalar.value == null ? "<none>"
-                            : scalar.value.getClass().getSimpleName()));
-            }
-        }
         return glob;
     }
 
@@ -2115,9 +2060,6 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
      */
     public RuntimeGlob undefine() {
         if (namespaceMove != null) {
-            if ("1".equals(System.getenv("PERLONJAVA_TRACE_NAMESPACE_OWNER"))) {
-                System.err.println("NSOWNER undef namespace glob=" + globName);
-            }
             releaseDetachedComponentsIfUnowned();
             return this;
         }
