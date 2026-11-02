@@ -1766,7 +1766,8 @@ public class MortalList {
                     && !(scalar instanceof RuntimeScalarReadOnly)
                     && !scalar.hasClosureCaptureOwner())
                 || (base instanceof RuntimeCode code
-                    && (code.hasCountedCodeSlots || (!code.hadStashRef && code.stashRefCount <= 0)));
+                    && (code.hasCountedCodeSlots || (!code.hadStashRef && code.stashRefCount <= 0))
+                    && !SpecialBlock.hasPendingEndBlock(code));
         return supportedReferent && !base.hasOwnerSlots();
     }
 

@@ -339,10 +339,10 @@ public class DestroyDispatch {
                     if (stats != null) stats.codeOwnerSlotRestorations++;
                     return;
                 }
-                if (code.hasPerlOwnerForCaptureOtherThan(null)) {
-                    // Current owner identities, including the END queue's
-                    // stored CODE slot, preserve its captures at zero without
-                    // inventing a counted reference.
+                if (SpecialBlock.hasPendingEndBlock(code)) {
+                    // The current END queue cell is a strong owner even if
+                    // its legacy count is unavailable. Defer cleanup until
+                    // that exact queue slot transfers or releases the code.
                     code.deferFinalReleaseToActiveCode();
                     return;
                 }

@@ -57,6 +57,30 @@ public class SpecialBlock {
         RuntimeArray.unshift(getEndBlocks(), codeRef);
     }
 
+    /** Return whether {@code code} still has a current strong slot in the END queue. */
+    static boolean hasPendingEndBlock(RuntimeCode code) {
+        if (code == null) return false;
+        RuntimeArray endBlocks = getEndBlocks();
+        for (RuntimeScalar block : endBlocks.elements) {
+            if (block == null || block.value != code || block.containerOwner != endBlocks
+                    || !endBlocks.elements.contains(block)) {
+                continue;
+            }
+            if (RuntimeArray.hasCurrentCountedArrayElementOwner(endBlocks, block)) {
+                return true;
+            }
+            PerlOwnerSlot untracked = block.untrackedReferenceOwnerSlot();
+            if (untracked != null
+                    && untracked.kind() == PerlOwnerSlot.Kind.UNTRACKED_REFERENCE
+                    && untracked.isActive()
+                    && untracked.referent() == code
+                    && untracked.untrackedScalarOwner() == block) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /**
      * Saves a code reference to the initBlocks array.
      * Blocks are added using `unshift`, meaning they will be executed in FIFO order.
