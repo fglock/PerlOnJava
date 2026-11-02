@@ -3,7 +3,7 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; hidden entries release that owner while retaining their lookup state. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-02):** #1649 Phase 2 continues on branch
-`wip/preflight-ownership-docs-20261101-211239` at source commit `94d3ae224`.
+`wip/preflight-ownership-docs-20261101-211239` at source commit `fcd70401e`.
 The local work is unpublished; draft PR #1938 remains open at its older remote
 head. Rescued-object cleanup uses live owner identities, direct method
 invocants carry producer-specific counted identities, and temporary closure
@@ -26,16 +26,32 @@ wrapper without an owned value still receives no alias. The new
 `TransientArgumentAliasOwnerTest` failed on test-only parent `c416f7af2` at the
 staging assertion and passes on `94d3ae224`; `ArgumentAliasOwnerSlotTest` also
 keeps the transient-expression case green. Tail-call release no longer uses
-raw counted-slot restoration; deferred release still has that bridge for
-unregistered-cell cases.
+raw counted-slot restoration.
+
+Deferred release retains only a narrow compatibility bridge for a standalone,
+unregistered `SCALAR_CELL`: the scalar must have the exact active counted
+identity, hold the referent strongly, and have no weak, exited-scope, capture,
+argument-alias, container, lexical, package, CODE, or proxy owner. Stale
+aggregate identities cannot use this bridge. `DeferredReleaseRejectsStaleAggregateSlotTest`
+covers detached array and hash slots; the hash case fails on parent
+`04b03e893` and both cases pass with `DeferredReleaseOwnerSlotFastPathTest`
+and the active argument ledger test on `fcd70401e` (4 tests total).
+
+The standalone-scalar fixture still deliberately undercounts a Java-created
+cell that has no registered Perl storage. It preserves that compatibility
+boundary, not a demonstrated normal Perl producer. Root-count recovery,
+including shared root snapshots and blessed root queries, still needs
+producer-level audit before removal.
 
 The focused argument, deferred-release, tail-call, and alias suite passes 15
 tests with zero failures at
-`/private/tmp/transient-argument-owner-candidate-94d3ae224.log`. The full
-`timeout 1800 nice -n 19 make` gate passes on immutable source `94d3ae224` in
-6m15 with exit 0 at
-`/private/tmp/transient-argument-owner-full-make-94d3ae224.log`. Capture test
-logs remain under `/private/tmp/ownership-capture-release-*`.
+`/private/tmp/transient-argument-owner-candidate-94d3ae224.log`. The narrowed
+deferred bridge and aggregate regressions pass the focused four-test gate at
+`/private/tmp/deferred-stale-owner-candidate-fcd70401e.log`. The full
+`timeout 1800 nice -n 19 make` gate passes on immutable source `fcd70401e` in
+6m16 with exit 0 at
+`/private/tmp/deferred-owner-full-make-fcd70401e.log`. Capture test logs remain
+under `/private/tmp/ownership-capture-release-*`.
 
 With corrective sweeps explicitly disabled, system Perl passes 25 checks
 across `splice_args_destroy.t`, `weaken_closure_argument.t`, and
@@ -45,13 +61,13 @@ each pass 30 checks across those files, including the five tail-call checks.
 Complete logs are `/private/tmp/transient-argument-owner-perl-oracle-94d3ae224.log`
 and `/private/tmp/transient-argument-owner-perlonjava-94d3ae224.log`.
 
-Next, trace the remaining deferred-release raw count and root-snapshot paths
-through normal producers. The deferred compatibility test still constructs
-unregistered Java scalar cells and forces a count underflow, so it does not
-yet establish that normal execution needs that bridge. Also open are the
-legacy scalar `captureCount` bridge, CODE-cycle/root walks, first-weaken's
-package compatibility pin, and compiler-template/CODE/glob cleanup. No
-blocker is known, and the rewrite is not complete.
+Next, trace remaining deferred-release root-count and snapshot paths through
+normal producers. The narrow deferred compatibility test still constructs an
+unregistered Java scalar cell and forces a count underflow, so it does not
+establish that normal execution needs the bridge. Also open are the legacy
+scalar `captureCount` bridge, CODE-cycle/root walks, first-weaken's package
+compatibility pin, and compiler-template/CODE/glob cleanup. No blocker is
+known, and the rewrite is not complete.
 
 **Sweep policy (2026-10-27):** Corrective sweeps are disabled by default, as
 requested. `JPERL_ENABLE_CORRECTIVE_SWEEPS=1` temporarily enables legacy
@@ -117,7 +133,7 @@ reachability. Explicit post-END teardown and diagnostic traversal are separate.
 
 | Lifecycle path | Remaining fallback | Strong edge and acquisition/release sites | Existing coverage and open boundary |
 |---|---|---|---|
-| Deferred release | `MortalList.processDeferredBase` tries verified current counted slots before raw count restoration, then may call `restoreReachableOwnerCount` or consult drain snapshots, live CODE captures, or package-root snapshots when exact proofs are empty. Direct method-invocant holds carry a producer-specific verified identity. Tail-call release now uses only verified current counted slots; the raw bridge remains in deferred processing, where unregistered-cell compatibility coverage still depends on it. The unblessed aggregate strong-cycle and CODE call-depth positive-count rescues have been removed. | Counted cells use `RuntimeScalar.setLargeRefCounted` or `incrementRefCountForContainerStore`; aggregate stores include array/hash mutation APIs. Each internal hash/array cycle edge has a `HASH_ELEMENT`/`ARRAY_ELEMENT` identity acquired by the store and released by mutation cleanup. Array pop/shift/delete and localized cleanup capture current slot proof before removal, while excluding active argument aliases. Multi-LHS array and hash tail replacement use the normal slot-aware assignment APIs. `CallArguments.add` and active `@_` now record `ARGUMENT_ALIAS` identities for borrowed scalar cells. Failed targets retire materialized RHS owners, restore the caller's flush state, and drain exception-created releases; explicit `die` registers lexical cells for unwind cleanup. Hash clear/delete, scalar overwrite, and other deferred container clear paths remain under producer audit. | `StrongCycleOwnerSlotTest`, `strong_cycle_owner_slots.t`, `DeferredReleaseOwnerSlotFastPathTest`, `RuntimeScalarCountedOwnerRepairTest`, `ClearedAggregateOwnerIdentityNoRootWalkTest`, the expanded localized-array regression, the three multi-LHS assignment regressions, `splice_args_destroy.t`, `goto_tailcall_args_cleanup.t`, `weaken_closure_argument.t`, `weak_shift_temporary.t`, Sub::Quote/Sub::Defer weak-lifecycle fixtures, and `MethodInvocantVerifiedOwnerRepairTest` cover migrated paths. System Perl passes 25 checks with one expected `Internals` skip; JVM and interpreter each pass 30 checks with sweeps disabled. `ForwardedArgumentAliasCurrentOwnerTest` and `TransientArgumentAliasOwnerTest` verify current cells through nested and staged argument frames. Synthetic raw-insertion cases still exercise the deferred compatibility bridge; normal producers need continued audit. |
+| Deferred release | `MortalList.processDeferredBase` first verifies current counted slots, then allows a narrow compatibility repair only for an active, unregistered standalone `SCALAR_CELL` with no storage metadata or aliases. Detached `ARRAY_ELEMENT`/`HASH_ELEMENT` identities cannot use it. It may still call `restoreReachableOwnerCount` or consult drain snapshots, live CODE captures, and package-root snapshots when exact proofs are empty. Direct method-invocant holds carry a producer-specific verified identity. Tail-call release uses only verified current counted slots. The unblessed aggregate strong-cycle and CODE call-depth positive-count rescues have been removed. | Counted cells use `RuntimeScalar.setLargeRefCounted` or `incrementRefCountForContainerStore`; aggregate stores include array/hash mutation APIs. Each internal hash/array cycle edge has a `HASH_ELEMENT`/`ARRAY_ELEMENT` identity acquired by the store and released by mutation cleanup. Array pop/shift/delete and localized cleanup capture current slot proof before removal, while excluding active argument aliases. Multi-LHS array and hash tail replacement use the normal slot-aware assignment APIs. `CallArguments.add` and active `@_` now record `ARGUMENT_ALIAS` identities for borrowed scalar cells. Failed targets retire materialized RHS owners, restore the caller's flush state, and drain exception-created releases; explicit `die` registers lexical cells for unwind cleanup. Hash clear/delete, scalar overwrite, and other deferred container clear paths remain under producer audit. | `StrongCycleOwnerSlotTest`, `strong_cycle_owner_slots.t`, `DeferredReleaseOwnerSlotFastPathTest`, `DeferredReleaseRejectsStaleAggregateSlotTest`, `RuntimeScalarCountedOwnerRepairTest`, `ClearedAggregateOwnerIdentityNoRootWalkTest`, the expanded localized-array regression, the three multi-LHS assignment regressions, `splice_args_destroy.t`, `goto_tailcall_args_cleanup.t`, `weaken_closure_argument.t`, `weak_shift_temporary.t`, Sub::Quote/Sub::Defer weak-lifecycle fixtures, and `MethodInvocantVerifiedOwnerRepairTest` cover migrated paths. System Perl passes 25 checks with one expected `Internals` skip; JVM and interpreter each pass 30 checks with sweeps disabled. `ForwardedArgumentAliasCurrentOwnerTest` and `TransientArgumentAliasOwnerTest` verify current cells through nested and staged argument frames. The standalone-cell fixture still synthesizes an undercount; the parent failure for stale hash storage is recorded at `/private/tmp/deferred-stale-owner-parent-04b03e893.log`. Remaining root/snapshot paths and normal deferred producers need continued audit. |
 | Scalar overwrite | `RuntimeScalar.setLargeRefCounted` no longer queries external roots/live CODE captures, restores counts from unverified counted slots, or defers based on nested call depth. | Scalar cells acquire counted or untracked identities in `setLargeRefCounted`; package scalar, aggregate, CODE, active lexical, and closure slots identify their respective edges. Overwrite acquires the replacement counted slot before retiring the previous edge while preserving slot identity for queued-release provenance. Active forwarded argument aliases are accepted as proof for their current scalar cell. | `PackageRootOwnerSlotFastPathTest`, `PerlOwnerSlotReplacementOrderTest`, counted/untracked owner repair tests, `ForwardedArgumentAliasCurrentOwnerTest`, `weak_localized_cache_lifetime.t`, `weak_return_handoff_assignment.t`, nested weak-parent, recursive-builder, and sliding-window fixtures cover current-owner and nested release lifetimes. The full no-sweeps gate passes on `27e877e19`. |
 | First weaken | Ordinary tracked referents no longer query live CODE captures or general strong-root graphs. The cloned-thread snapshot root and direct CODE pad-constant check remain; package-nested untracked aggregates still use `hasLiveUntrackedOwnerSlot` and a `WEAKLY_TRACKED_COMPATIBILITY_PIN`. | Strong scalar cells carry `SCALAR_CELL` or `UNTRACKED_REFERENCE`; package scalar/aggregate slots, closure pads, active CODE slots, and tied-handler values have separate identities. Weakening retires the weakened cell's strong edge. | `FirstWeakenUsesCurrentPackageOwnerTest`, `UntrackedReferenceOwnerSlotTest`, and `UntrackedAggregateOwnerSlotTest` cover current owner identities. `tied_handler_nested_value_owner_before_weaken.t` passes 2/2 on system Perl and both backends: the nested hash value was stored before the handler was tied and before the first weaken, and untie releases its final owner. `PackageNestedUntrackedAggregateReleaseTest` still expects the package compatibility query and pin, so that boundary is not migrated. |
 | Cleared aggregate | Scope-exit finalization can consult cached external-root snapshots when the aggregate count is already zero; deferred cleanup still has capture and nested-call recovery branches. | Container elements acquire `ARRAY_ELEMENT`/`HASH_ELEMENT` identities; active lexical and suspended-frame owners have dedicated slots. Registration backfills active lexical slots when it follows the first pad bind, and scope cleanup retires that identity before testing whether children still have owners. Clear and scope-exit paths queue displaced element releases. | `ClearedAggregateOwnerIdentityNoRootWalkTest`, `ClearedAggregateOwnerIdentityFinalizationTest`, `active_lexical_aggregate_owner_release.t`, and the no-sweeps lifecycle batch cover explicit slots. Incomplete producer coverage still reaches the cached-root boundary. |
@@ -2279,11 +2295,10 @@ count bridge, and corrective-sweep scheduling still have unmigrated producers.
 
 ### Next steps
 
-1. Audit remaining capture reconciliation and blessed root snapshots at their
-   producer and release sites; add source-level invariants for remaining
-   count/owner disagreements.
-2. Continue through argument aliases, returned and mortal values, package
-   aggregate roots, strong cycles, thread cloning/shared storage, and resources.
+1. Audit remaining deferred root-count and snapshot paths at their producer and
+   release sites; add source-level invariants for count/owner disagreements.
+2. Continue through scalar capture counts, first-weaken package compatibility,
+   CODE cycles, compiler-template/CODE/glob cleanup, and remaining roots.
 3. Remove reachability fallbacks, compatibility pins, and corrective scheduling
    only after their producer regressions and final lifecycle, #1794, #1860, and
    HTML-Tree acceptance gates pass on both backends.
