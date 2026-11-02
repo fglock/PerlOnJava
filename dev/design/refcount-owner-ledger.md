@@ -402,6 +402,17 @@ passes 23 files / 969 tests, including `t/refloop.t` 8/8. Complete logs are
 `/private/tmp/issue-1649-html-tree-refloop-system-perl-741d59222.log`. The two
 PerlOnJava runs used the same immutable built JAR and one serialized worker.
 
+The `PerlIO::via` layer now records its retained `PUSHED` value as an
+`IO_VIA_LAYER` owner identity. Counted referents pair that identity with one
+direct count, and the final release uses the deferred owner-release path so
+remaining capture owners and active `DESTROY` frames retain the common
+lifecycle handling. The Perl regression passes 3/3 on system Perl, JVM, and
+interpreter; both PerlOnJava runs disable corrective sweeps. Full no-sweeps
+`make` passes on immutable candidate `77196bc57` in 23m08s. The complete log
+is `/private/tmp/issue-1649-perlio-via-final-fullmake-77196bc57.log`; focused
+reports are `/private/tmp/issue-1649-perlio-via-final-jvm-77196bc57.log` and
+`/private/tmp/issue-1649-perlio-via-final-interpreter-77196bc57.log`.
+
 The audit remains incomplete. Deferred release still has a scalar-root repair
 fallback for owner cells without verified current storage provenance; the
 existing `deferredOwnerChecksShareOneRootSnapshotPerDrain` fixture directly
@@ -429,6 +440,7 @@ longer depend on it.
 | Scalar overwrite | `setLargeRefCounted()` acquires the replacement count/identity before releasing the previous referent; final release checks current slots. | No root walk remains in this immediate overwrite decision. Rescued-graph cleanup also checks current Perl owner identities. |
 | First weaken | Counted slots are registered when stored, before weak tracking activates; first weaken then retires the weakened slot and checks surviving identities. Untracked values use `UNTRACKED_REFERENCE` slots. | Package-rooted untracked aggregates still install `WEAKLY_TRACKED_COMPATIBILITY_PIN`; `PackageWeakCompatibilityPinOwnerSlotTest` and `PackageNestedUntrackedAggregateReleaseTest` cover its final release. |
 | Tied handlers | The tie wrapper acquires a `TIE_HANDLER` slot; nested handler hashes/arrays own values through their ordinary element slots. | `tied_handler_nested_weak_owner.t` verifies store-before-weaken and final nested-slot release on system Perl and both backends. `possiblyStoredInTiedHandler` is propagated as a legacy marker and still needs a separate unused-state audit. |
+| PerlIO::via layer self | `ViaLayer` installs an `IO_VIA_LAYER` identity for the Java layer's retained `PUSHED` value. Counted values pair it with one direct increment; final release carries the slot token through `MortalList` and `DestroyDispatch`. | `perlio_via_self_owner_lifecycle.t` passes 3/3 on system Perl and both backends with sweeps disabled. `ViaLayerCountedOwnerLifecycleTest` preserves a live closure-pad owner, and `ViaLayerReleaseDuringDestroyTest` checks count balance during active destruction. |
 | Async localized package aggregates | `DynamicVariableManager` acquires a `SUSPENDED_FRAME` owner before `dynamicSuspendState()` detaches the active aggregate; resume reinstalls the same array/hash and releases that frame owner afterward. | `issue_1649_localized_global_aggregate_async_owner.t` verifies localized array/hash element lifetime across suspension, resume, and cancellation on both backends. The suspend path preserves the original aggregate and its element identities; no root-snapshot fallback is used here. |
 | Cleared aggregates | Scope-exit cleanup checks current Perl owner identities and pending releases before destruction. | `finalizeClearedAggregateOwnerAfterScopeExit()` still consults a cached external-root snapshot for zero-count aggregates when direct identities do not prove an owner. |
 | Closure cleanup | Parser, JVM, and interpreter closure producers install explicit `SCALAR_CAPTURE` / `CLOSURE_PAD` slots tied to the owning CODE. Full HTML::Tree 5.07 passes 23/23 files and 989/989 tests on both backends with sweeps disabled. | Legacy captures without complete CODE-owner identity still use END-root and scalar-root snapshots; existing Java coverage constructs this state directly in `scopeExitedCaptureOwnersShareOneScalarRootSnapshot`. |
