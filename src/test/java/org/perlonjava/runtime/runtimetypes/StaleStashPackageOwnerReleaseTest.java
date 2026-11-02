@@ -81,11 +81,19 @@ class StaleStashPackageOwnerReleaseTest {
                 .toList().toString();
         RuntimeGlob move = stale.savedNamespaceMove;
         String moveDescription = move == null ? "null"
-                : "slots=" + move.ownerSlotSnapshot().stream()
-                        .map(slot -> slot.kind().name()).sorted().toList()
+                : "id=" + System.identityHashCode(move)
+                        + " slots=" + move.ownerSlotSnapshot().stream()
+                                .map(slot -> slot.kind().name()).sorted().toList()
                         + " scalars=" + (move.namespaceMove == null
-                                ? "null" : move.namespaceMove.scalars.keySet());
-        return "interpreter=" + interpreter + " stale.refCount=" + stale.refCount
+                                ? "null" : move.namespaceMove.scalars.keySet())
+                        + " hashes=" + (move.namespaceMove == null ? "null"
+                                : move.namespaceMove.hashes.entrySet().stream()
+                                        .map(entry -> entry.getKey() + "#"
+                                                + System.identityHashCode(entry.getValue())
+                                                + (entry.getValue() == stale ? "=STALE" : ""))
+                                        .toList());
+        return "interpreter=" + interpreter + " stale.id=" + System.identityHashCode(stale)
+                + " stale.namespace=" + stale.namespace + " stale.refCount=" + stale.refCount
                 + " stale.localBinding=" + stale.localBindingExists
                 + " stale.owners=" + owners + " move=" + moveDescription;
     }
