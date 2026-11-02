@@ -127,13 +127,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 throw new IllegalStateException("too many call arguments");
             }
             values[size++] = value;
-            // Later argument expressions and callee cleanup may drain a
-            // scalar return's mortal owner. Keep a separate argument owner
-            // through the call; persistent caller cells remain aliased borrows.
+            // The staging frame retains this scalar cell through argument
+            // evaluation and the call. Record that cell alias even when it has
+            // no lexical or container marker yet; the alias does not add a
+            // referent count. Mortal returns also get a separate staged value
+            // owner below when their original temporary could otherwise drain.
             if (value instanceof RuntimeScalar scalar) {
-                if (hasPersistentArgumentCell(scalar)) {
-                    argumentAliasOwners.add(scalar.retainArgumentAliasOwner());
-                }
+                argumentAliasOwners.add(scalar.retainArgumentAliasOwner());
                 if ((scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
                         && scalar.value instanceof RuntimeBase
                         && !WeakRefRegistry.isweak(scalar)
