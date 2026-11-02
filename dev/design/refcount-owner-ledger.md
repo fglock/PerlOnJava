@@ -371,7 +371,7 @@ Run on JVM and interpreter backends with `timeout` and complete output logs:
 
 ## Progress Tracking
 
-### Current Status: owner-source migration continues; tested checkpoint `741d59222`
+### Current Status: owner-source migration continues; tested runtime checkpoint `741d59222`
 
 On 2026-11-02, branch `wip/detached-glob-owner-20261102-064229` extended
 explicit ownership through asynchronous suspension of localized package
@@ -392,28 +392,34 @@ reachability queries, snapshots, and graph edges inspected. The full no-sweeps
 `make` gate passed on `741d59222` in 6m27; the complete log is
 `/private/tmp/issue-1649-deferred-owner-normal-store-fullmake-741d59222.log`.
 
-Earlier acceptance evidence remains useful but is not a final-candidate gate:
-HTML::Tree 5.07 passed 23 files / 969 tests on system Perl and all 23 files on
-both backends at `b454cab08`; `t/refloop.t` passed 8/8 on all three runtimes.
-The `jcpan -t HTML::Tree` front end timed out while deserializing local
-metadata before tests began; direct distribution results and that timeout log
-are recorded under `/private/tmp/html-tree-full-*b454cab08.log`.
+HTML::Tree 5.07 now passes its full 23-file suite with corrective sweeps
+disabled on both PerlOnJava backends at runtime candidate `741d59222`: JVM
+989/989 and interpreter 989/989, with `t/refloop.t` 8/8 on each. System Perl
+passes 23 files / 969 tests, including `t/refloop.t` 8/8. Complete logs are
+`/private/tmp/issue-1649-html-tree-full-jvm-741d59222-corrected.log`,
+`/private/tmp/issue-1649-html-tree-full-interpreter-741d59222.log`,
+`/private/tmp/issue-1649-html-tree-full-system-perl-741d59222.log`, and
+`/private/tmp/issue-1649-html-tree-refloop-system-perl-741d59222.log`. The two
+PerlOnJava runs used the same immutable built JAR and one serialized worker.
 
 The audit remains incomplete. Deferred release still has a scalar-root repair
 fallback for owner cells without verified current storage provenance; the
-existing `deferredOwnerChecksShareOneRootSnapshotPerDrain` test constructs
-that state by counting before inserting the scalar. The new normal-store test
-shows that ordinary nested package stores use owner identities without a
-reachability query. First weaken retains a package compatibility pin; cleared
-aggregate cleanup can query an external-root snapshot; legacy closure cleanup
-can query END/scalar roots; and destruction can treat an unverified positive
-count as resurrection. The live issue #1649 remains open. PR #1938 remains open
-as a draft, but its remote head `b2f44fc2d` is on another branch and GitHub
-reports it conflicting with `master` at `4a5c33753`; preserve that work until
-the remaining owner paths are audited and the final candidate is ready to
-reconcile. Next: trace legacy deferred producers and the remaining closure,
-first-weaken, cleared-aggregate, and destruction fallbacks to their acquisition,
-transfer, and cleanup operations before removing recovery machinery.
+existing `deferredOwnerChecksShareOneRootSnapshotPerDrain` fixture directly
+adds a scalar after recording its count, while the new regular nested-store
+test shows the ordinary producer uses owner identities without a reachability
+query. Normal closure producers in the parser and both execution backends
+install CODE-owned capture slots; the END/scalar-root path is reached only for
+legacy captures, which existing Java tests construct directly. First weaken
+retains a package compatibility pin, also asserted directly by existing Java
+tests. Cleared aggregate cleanup can query an external-root snapshot, and
+destruction can treat an unverified positive count as resurrection. The live
+issue #1649 remains open. PR #1938 remains open as a draft, but its remote head
+`b2f44fc2d` is on another branch and GitHub reports it conflicting with
+`master` at `4a5c33753`; preserve that work until the remaining owner paths are
+audited and the final candidate is ready to reconcile. Next: trace scalar,
+aggregate, and resource owner producers against final release decisions, then
+remove each fallback only after regular producers and regression coverage no
+longer depend on it.
 
 ### Ownership fallback audit (2026-11-02)
 
@@ -425,7 +431,7 @@ transfer, and cleanup operations before removing recovery machinery.
 | Tied handlers | The tie wrapper acquires a `TIE_HANDLER` slot; nested handler hashes/arrays own values through their ordinary element slots. | `tied_handler_nested_weak_owner.t` verifies store-before-weaken and final nested-slot release on system Perl and both backends. `possiblyStoredInTiedHandler` is propagated as a legacy marker and still needs a separate unused-state audit. |
 | Async localized package aggregates | `DynamicVariableManager` acquires a `SUSPENDED_FRAME` owner before `dynamicSuspendState()` detaches the active aggregate; resume reinstalls the same array/hash and releases that frame owner afterward. | `issue_1649_localized_global_aggregate_async_owner.t` verifies localized array/hash element lifetime across suspension, resume, and cancellation on both backends. The suspend path preserves the original aggregate and its element identities; no root-snapshot fallback is used here. |
 | Cleared aggregates | Scope-exit cleanup checks current Perl owner identities and pending releases before destruction. | `finalizeClearedAggregateOwnerAfterScopeExit()` still consults a cached external-root snapshot for zero-count aggregates when direct identities do not prove an owner. |
-| Closure cleanup | Explicit capture slots refer to their owning CODE and are released when that CODE has no Perl owner. | Legacy captures without complete CODE-owner identity still use END-root and scalar-root snapshots; `scopeExitedCaptureOwnersShareOneScalarRootSnapshot` covers the fallback. |
+| Closure cleanup | Parser, JVM, and interpreter closure producers install explicit `SCALAR_CAPTURE` / `CLOSURE_PAD` slots tied to the owning CODE. Full HTML::Tree 5.07 passes 23/23 files and 989/989 tests on both backends with sweeps disabled. | Legacy captures without complete CODE-owner identity still use END-root and scalar-root snapshots; existing Java coverage constructs this state directly in `scopeExitedCaptureOwnersShareOneScalarRootSnapshot`. |
 | Destruction / resurrection | Global destruction compares newly installed slots; ordinary destruction validates current owner slots and semantic captures. | Objects with no owner slots and no activated legacy owner set still use positive `refCount` as the compatibility resurrection proof. |
 
 The remaining snapshot and compatibility paths are not yet proven unnecessary
