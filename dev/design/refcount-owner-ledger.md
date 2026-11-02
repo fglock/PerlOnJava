@@ -371,14 +371,16 @@ Run on JVM and interpreter backends with `timeout` and complete output logs:
 
 ## Progress Tracking
 
-### Current Status: sweep scheduling removed; owner-source migration continues
+### Current Status: owner-source migration continues; no-sweeps checkpoint `b454cab08`
 
-The designated issue branch, `fix/issue-1132-closure-lifetime`, includes the
-handoff commits below. On 2026-09-01, the required pre-change `make` rebuilt
-the classes and JAR but its four unit-test workers were SIGKILLed (exit 137)
-while concurrent PerlOnJava worktrees exhausted host resources. This is an
-invalid gate, not a test assertion failure; rerun a clean full gate after the
-external workload has drained before changing runtime source.
+On 2026-11-02, `wip/detached-glob-owner-20261102-064229` fixed a detached
+`LOAD_GLOB` snapshot that kept a stale package stash alive after typeglob
+rebinding. The snapshot now releases its component owner slots after the
+string alias assignment; `GLOB_VALUE` and namespace-move identities still
+protect components with surviving Perl owners. The permanent seven-assertion
+regression passes under system Perl and both PerlOnJava backends. The full
+no-sweeps `make` gate passed on `b454cab08` in 6m18s. Captured logs are under
+`/private/tmp/` with the prefix `stale-stash-detached-glob-`.
 
 ### Completed Work
 
@@ -601,16 +603,19 @@ external workload has drained before changing runtime source.
   duplicate scalar reachability query. `MortalizeRegisteredCodeOwnerFastPathTest`
   verifies zero scalar queries and root walks; the no-sweeps full `make` passed
   in 21m18s.
+- [x] On 2026-11-02, detached glob snapshots release stale package components
+  after namespace rebinding while preserving live glob-value and namespace-move
+  owners. `stale_stash_saved_move_owner.t` passes 7/7 under system Perl, JVM,
+  and interpreter; `StaleStashPackageOwnerReleaseTest` covers both compiled
+  backends. The no-sweeps full `make` passed on `b454cab08` in 6m18s.
 
-### Handoff: issue #1132 / PR #1204
+### Historical handoff: issue #1132 / PR #1204
 
-This work must be continued on the issue-linked PR
-[#1204](https://github.com/fglock/PerlOnJava/pull/1204), branch
-`fix/issue-1132-closure-lifetime` (not on a new owner-ledger PR). The commits
-to retain are `5b693177f`, `1702edb70`, `4832540d6`, `9fcab6e81`, and
-`87b4fdee3`. The receiving worker must run a clean full `make` before further
-source changes or PR completion; the prior full gate was invalidated only by
-an external concurrent workload and timed out after test shards completed.
+This section records the earlier issue-linked PR
+[#1204](https://github.com/PerlOnJava/pull/1204) handoff. Its branch was
+`fix/issue-1132-closure-lifetime`; retained commits were `5b693177f`,
+`1702edb70`, `4832540d6`, `9fcab6e81`, and `87b4fdee3`. These historical
+branch instructions do not define the current continuation.
 
 The Net::Async::HTTP 0.50 distribution is installed through `jcpan` in the
 local CPAN cache. JVM and interpreter `t/30timeout.t` and `t/32remove.t` now
@@ -618,17 +623,20 @@ pass. Preserve both focused ownership regressions when evolving the ledger.
 
 ### Next Steps
 
-1. Audit remaining `RuntimeScalar` and `MortalList` reachability fallbacks; add
-   explicit slot identities where ownership is missing, then remove each
-   fallback only after system Perl and both backends pass.
-2. Remove the legacy package-root rescue pin after every final-slot release
-   path has direct coverage.
-3. Migrate real weak CODE captures to capture-owner identities while retaining
-   compatibility behavior for unrecorded legacy captures.
-4. Requalify HTML-Tree's 8/8 and the full suite after remaining owner changes;
-   remove compatibility APIs after all gates pass.
-5. Keep Cookie2 formatting and content-coding exception handling separate from
-   this ownership work.
+1. Trace each remaining deferred-release, first-weaken, cleared-aggregate,
+   closure, and destruction fallback to its strong-edge acquisition, transfer,
+   and release sites. Distinguish already-ledgered edges from true root walks.
+2. Add missing stable identities for tied-handler values, closure/CODE captures,
+   package slots, cycles, scalar-reference contents, suspended frames, cloned
+   storage, and resource owners; fix count disagreements at their producers.
+3. Replace lifecycle decisions based on root snapshots, call depth, and
+   fabricated counts with current owner identities and pending-release state.
+4. Remove compatibility pins, corrective-sweep hooks, and unused recovery
+   caches only after their normal-execution producers and release paths are
+   covered.
+5. Run the no-sweeps closure, weak/DESTROY/resurrection/cycle, HTML-Tree 8/8,
+   async-lifetime, and full integration gates on the final immutable candidate;
+   then reconcile and validate PR #1938 before publication.
 
 ### Open Questions
 

@@ -9,6 +9,7 @@ priorities and future plans.
 - Disable corrective sweeps by default while migrating to explicit reference ownership; retain temporary scalar call and mortal return values through their caller boundaries, and balance argument, scalar-cell, closure, aggregate, package scalar/array/hash roots, tied-handler, shared-view, named CODE, persistent state, and destructor lifetimes (#1649).
 - Track persistent CV scalar, array, hash, and refalias state bindings with `CODE_STATE` owner identities, including replacement and cloning; remove deferred live/global CODE capture recovery traversal (#1649).
 - Use live scalar-owner slots to preserve nested untracked aggregates on first weaken, avoid package-root walks, and clear weak observers at final release (#1649).
+- Release detached typeglob snapshot owners after namespace rebinding so stale stash values finalize with their last Perl owner (#1649).
 - Release tail-call arguments from explicit owner slots without a root-graph fallback (#1649).
 - Record uncounted value ownership for tracked referents held in package scalar cells (#1649).
 - Give borrowed scalar cells in live lexical aggregates owner identities for their strong values (#1649).
