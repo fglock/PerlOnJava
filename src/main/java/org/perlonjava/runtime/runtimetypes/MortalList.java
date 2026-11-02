@@ -1325,11 +1325,9 @@ public class MortalList {
         // queue drains. Let that exact release decide finalization instead of
         // racing it with scope-exit cleanup.
         if (base.hasPendingOwnerRelease()) return;
-        // The exact Perl owners are represented by current owner slots. A
-        // positive selective count alone is stale bookkeeping after this
-        // cleared-element callback; do not rebuild roots to validate it. Keep
-        // the cached compatibility proof for zero-count objects whose owner
-        // family has not yet migrated to slot identities.
+        // Legacy owner families without a current slot identity still need
+        // this compatibility proof. Migrated paths return above from their
+        // exact Perl owner identities and do not build this snapshot.
         if (base.refCount <= 0 && isReachableFromExternalRootCached(base)) return;
         base.refCount = Integer.MIN_VALUE;
         DestroyDispatch.callDestroy(base);
