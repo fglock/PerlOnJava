@@ -1647,13 +1647,9 @@ public class MortalList {
                 // a cached root snapshot must not invent a replacement owner.
                 base.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroyFromCountedOwner(base);
-            } else if ((ownerRelease != null || transientOwnerKind != null)
-                    && base.restoreVerifiedCurrentCountedOwnerSlotRefCount()) {
+            } else if (base.restoreVerifiedCurrentCountedOwnerSlotRefCount()) {
                 // Verified current scalar cells and array/hash elements jointly
-                // restore the surviving owner count without a root walk when
-                // this drain carries provenance for the edge being released.
-                // Bare legacy decrements retain their compatibility root proof
-                // until their producers provide that provenance.
+                // restore the surviving owner count without a root walk.
             } else if (base.blessId != 0
                     && base.restoreUnregisteredScalarCellOwnerRefCount()) {
                 // Last compatibility bridge: an unregistered standalone
