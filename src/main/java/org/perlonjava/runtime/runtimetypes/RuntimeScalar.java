@@ -512,8 +512,26 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             if (owner != null) containerOwners.add(owner);
             this.containerOwner = owner;
         }
+        reclassifyCountedOwnerForCurrentStorage();
         refreshDetachedGlobValueOwner();
         propagateTiedHandlerMarkerToReferent();
+    }
+
+    /** Keep the counted edge identity aligned with the scalar's current storage. */
+    private void reclassifyCountedOwnerForCurrentStorage() {
+        PerlOwnerSlot slot = countedOwnerSlot;
+        if (!refCountOwned || slot == null || !slot.isActive()
+                || !(value instanceof RuntimeBase referent)
+                || slot.referent() != referent) {
+            return;
+        }
+        PerlOwnerSlot.Kind kind = slot.kind();
+        if (kind != PerlOwnerSlot.Kind.SCALAR_CELL
+                && kind != PerlOwnerSlot.Kind.ARRAY_ELEMENT
+                && kind != PerlOwnerSlot.Kind.HASH_ELEMENT) {
+            return;
+        }
+        slot.reclassifyCountedIdentity(countedOwnerKind());
     }
 
     private boolean isSharedImmutableLiteralWithoutOwnerTracking() {
@@ -550,6 +568,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 containerOwners.add(owner);
                 containerOwner = owner;
             }
+            reclassifyCountedOwnerForCurrentStorage();
             propagateTiedHandlerMarkerToReferent();
         } else {
             removeContainerOwnerTracking(owner);
@@ -574,6 +593,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 if (containerOwner == null) containerOwner = replacement;
             }
         }
+        reclassifyCountedOwnerForCurrentStorage();
     }
 
     /** Reconcile the fast owner hint with all currently stored container edges. */
