@@ -45,6 +45,7 @@ priorities and future plans.
 - Carry exact array-element owner identities through pop, shift, delete, and localized unwind while preserving borrowed `@_` aliases, so removed references release despite stale array ownership summaries (#1649).
 - Track visible named package IO globs with per-stash owner identities, excluding anonymous `Symbol::gensym` handles from package ownership (#1649).
 - Track the Perl object retained by each `PerlIO::via` layer through `POPPED`, pairing its owner identity with the selective count when applicable (#1649).
+- Track the current tied-hash iterator key by owner identity, pair its direct count when tracked, and release it on `NEXTKEY`, exhaustion, and iterator resets (#1649).
 - Preserve moved scalar, array, hash, and CODE slots while deleting a whole namespace, and release them with the detached namespace glob (#1649).
 - Honor void context when deleting stash entries, releasing detached glob and namespace owners immediately (#1649).
 - Transfer package scalar, array, and hash owner identities while materializing stash aliases (#1649).
