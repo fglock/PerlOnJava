@@ -437,6 +437,7 @@ longer depend on it.
 | Path | Current strong edge and release | Remaining recovery or evidence |
 |---|---|---|
 | Deferred counted release | `RuntimeScalar.recordCountedOwner()` installs a stable slot; `queueOwnerRelease()` carries its pending-release identity to `processDeferredBase()`. Normal nested package-array storage releases with zero root queries even while 256 unrelated aggregates are live. | `restoreReachableOwnerCount()` still walks scalar roots when current-slot and untracked-slot proofs fail. `ReachabilityQueryCostTest.deferredOwnerChecksShareOneRootSnapshotPerDrain` deliberately counts before inserting into an array, leaving a scalar-cell identity without normal storage provenance. Audit other legacy and transfer producers before retiring this fallback. |
+| Void-context discard | `mortalizeForVoidDiscard()` queues the exact counted-slot release when present; a zero-count temporary uses a lifecycle completion token retained by the deferred queue. | The old zero-to-one count shim is removed. `VoidDiscardZeroCountLifecycleTest` checks the count remains zero while pending and finalizes once at drain; the Perl regression passes on system Perl, JVM, and interpreter. |
 | Scalar overwrite | `setLargeRefCounted()` acquires the replacement count/identity before releasing the previous referent; final release checks current slots. | No root walk remains in this immediate overwrite decision. Rescued-graph cleanup also checks current Perl owner identities. |
 | First weaken | Counted slots are registered when stored, before weak tracking activates; first weaken then retires the weakened slot and checks surviving identities. Untracked values use `UNTRACKED_REFERENCE` slots. | Package-rooted untracked aggregates still install `WEAKLY_TRACKED_COMPATIBILITY_PIN`; `PackageWeakCompatibilityPinOwnerSlotTest` and `PackageNestedUntrackedAggregateReleaseTest` cover its final release. |
 | Tied handlers | The tie wrapper acquires a `TIE_HANDLER` slot; nested handler hashes/arrays own values through their ordinary element slots. | `tied_handler_nested_weak_owner.t` verifies store-before-weaken and final nested-slot release on system Perl and both backends. `possiblyStoredInTiedHandler` is propagated as a legacy marker and still needs a separate unused-state audit. |
@@ -685,6 +686,15 @@ that remote work and reconcile only after the ownership candidate is complete.
   owners. `stale_stash_saved_move_owner.t` passes 7/7 under system Perl, JVM,
   and interpreter; `StaleStashPackageOwnerReleaseTest` covers both compiled
   backends. The no-sweeps full `make` passed on `b454cab08` in 6m18s.
+- [x] On 2026-11-02, zero-count void-context results now queue explicit
+  lifecycle work instead of temporarily setting `refCount=1`. A remaining
+  counted scalar queues its exact owner release. The new Java lifecycle test
+  passes in the no-sweeps full `make` on `2b5c771a4` (10m32s); the Perl
+  regression passes 1/1 on system Perl, JVM, and interpreter. Logs:
+  `/private/tmp/issue-1649-void-discard-fullmake-2b5c771a4.log`,
+  `/private/tmp/issue-1649-void-discard-zero-count-system-perl.log`,
+  `/private/tmp/issue-1649-void-discard-zero-count-jvm-2b5c771a4.log`, and
+  `/private/tmp/issue-1649-void-discard-zero-count-interpreter-2b5c771a4.log`.
 
 ### Historical handoff: issue #1132 / PR #1204
 
