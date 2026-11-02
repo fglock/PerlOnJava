@@ -343,6 +343,15 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                         + " packageScalarSlots=" + component.ownerSlotCount(PerlOwnerSlot.Kind.PACKAGE_SCALAR_SLOT));
             }
             if (component instanceof RuntimeScalar scalar) {
+                if (trace) {
+                    RuntimeBase value = scalar.value instanceof RuntimeBase base ? base : null;
+                    System.err.println("NSOWNER scalar slot before type=" + scalar.type
+                            + " valueClass=" + (value == null ? "<none>" : value.getClass().getSimpleName())
+                            + " valueRefCount=" + (value == null ? 0 : value.refCount)
+                            + " valueOwners=" + (value != null && value.hasPerlStrongOwnerIdentity())
+                            + " valueUntracked=" + (value == null ? 0
+                                : value.ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE)));
+                }
                 scalar.refreshUntrackedReferenceOwner();
                 if (!scalar.hasPerlStrongOwnerIdentity()
                         && !MyVarCleanupStack.isRegistered(scalar)) {
@@ -352,6 +361,15 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                             + scalar.hasPerlStrongOwnerIdentity()
                             + " registered=" + MyVarCleanupStack.isRegistered(scalar)
                             + " refCount=" + scalar.refCount);
+                }
+                if (trace) {
+                    RuntimeBase value = scalar.value instanceof RuntimeBase base ? base : null;
+                    System.err.println("NSOWNER scalar slot after type=" + scalar.type
+                            + " valueClass=" + (value == null ? "<none>" : value.getClass().getSimpleName())
+                            + " valueRefCount=" + (value == null ? 0 : value.refCount)
+                            + " valueOwners=" + (value != null && value.hasPerlStrongOwnerIdentity())
+                            + " valueUntracked=" + (value == null ? 0
+                                : value.ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE)));
                 }
             } else if (!component.hasPerlStrongOwnerIdentity()
                     && !MyVarCleanupStack.isRegistered(component)) {
