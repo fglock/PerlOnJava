@@ -2952,6 +2952,11 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         this.blessId = 0;
     }
 
+    @Override
+    public RuntimeBase suspendedOwnerValue() {
+        return this;
+    }
+
     /**
      * Restores the most recently saved state of the RuntimeArray instance.
      *
@@ -2960,6 +2965,10 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      */
     @Override
     public void dynamicRestoreState() {
+        restoreDynamicState(false);
+    }
+
+    private void restoreDynamicState(boolean preserveSuspendedValues) {
         Stack<RuntimeArray> dynamicStateStack = dynamicStateStack();
         if (!dynamicStateStack.isEmpty()) {
             // Pop the most recent saved state from the stack
@@ -2968,13 +2977,13 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             // that temporary AV and become orphaned at restoration.  Keep
             // proxies that predate the local scope attached to the restored
             // outer array.
-            orphanLocalArraySizeLvalues();
+            if (!preserveSuspendedValues) orphanLocalArraySizeLvalues();
             // Before discarding the current (local scope's) elements, defer
             // refCount decrements for any tracked blessed references they own.
             // Without this, `local @_ = ($obj)` where $obj is tracked would
             // leak refCounts because the local elements are replaced without
             // ever going through scopeExitCleanup.
-            this.deferOwnedElementReleases();
+            if (!preserveSuspendedValues) this.deferOwnedElementReleases();
             // Real Perl semantics: `local @arr` creates a fresh temporary AV
             // for the scope; `bless \@arr, 'X'` blesses that temporary; at
             // local-restore, the temporary is freed and DESTROY fires for
@@ -2983,7 +2992,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             // was blessed but the previous state was not (or vice-versa
             // changed bless class). Test: postfixderef.t #38 "no stooges
             // outlast their scope".
-            if (this.blessId != 0 && this.blessId != previousState.blessId) {
+            if (!preserveSuspendedValues
+                    && this.blessId != 0 && this.blessId != previousState.blessId) {
                 int savedBlessId = this.blessId;
                 int savedRefCount = this.refCount;
                 int savedType = this.type;
@@ -3023,7 +3033,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         activeState.blessId = this.blessId;
         activeState.scalarContextSize = this.scalarContextSize;
         activeState.elements.addAll(this.elements);
-        dynamicRestoreState();
+        restoreDynamicState(true);
         return activeState;
     }
 
