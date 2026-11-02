@@ -443,6 +443,7 @@ longer depend on it.
 | Tied handlers | The tie wrapper acquires a `TIE_HANDLER` slot; nested handler hashes/arrays own values through their ordinary element slots. | `tied_handler_nested_weak_owner.t` verifies store-before-weaken and final nested-slot release on system Perl and both backends. `possiblyStoredInTiedHandler` is propagated as a legacy marker and still needs a separate unused-state audit. |
 | PerlIO::via layer self | `ViaLayer` installs an `IO_VIA_LAYER` identity for the Java layer's retained `PUSHED` value. Counted values pair it with one direct increment; final release carries the slot token through `MortalList` and `DestroyDispatch`. | `perlio_via_self_owner_lifecycle.t` passes 3/3 on system Perl and both backends with sweeps disabled. `ViaLayerCountedOwnerLifecycleTest` preserves a live closure-pad owner, and `ViaLayerReleaseDuringDestroyTest` checks count balance during active destruction. |
 | Async localized package aggregates | `DynamicVariableManager` acquires a `SUSPENDED_FRAME` owner before `dynamicSuspendState()` detaches the active aggregate; resume reinstalls the same array/hash and releases that frame owner afterward. | `issue_1649_localized_global_aggregate_async_owner.t` verifies localized array/hash element lifetime across suspension, resume, and cancellation on both backends. The suspend path preserves the original aggregate and its element identities; no root-snapshot fallback is used here. |
+| Thread snapshot roots | `RuntimeGraphCloner` assigns a `TEMPORARY_ROOT` identity to each top-level snapshot root and to the direct referent of a strong scalar root. `RootSnapshot` owns these identities through clone hooks and entry setup; thread cleanup and runtime close/reset retire them. | `WeakRefRegistry.weaken()` no longer walks the cloned root graph or writes a synthetic positive count. `ThreadSnapshotTemporaryRootOwnerTest` checks `WEAKLY_TRACKED` state and weak-observer cleanup at lease release. |
 | Cleared aggregates | Scope-exit cleanup checks current Perl owner identities and pending releases before destruction. | `finalizeClearedAggregateOwnerAfterScopeExit()` still consults a cached external-root snapshot for zero-count aggregates when direct identities do not prove an owner. |
 | Closure cleanup | Parser, JVM, and interpreter closure producers install explicit `SCALAR_CAPTURE` / `CLOSURE_PAD` slots tied to the owning CODE. Full HTML::Tree 5.07 passes 23/23 files and 989/989 tests on both backends with sweeps disabled. | Legacy captures without complete CODE-owner identity still use END-root and scalar-root snapshots; existing Java coverage constructs this state directly in `scopeExitedCaptureOwnersShareOneScalarRootSnapshot`. |
 | Destruction / resurrection | Global destruction compares newly installed slots; ordinary destruction validates current owner slots and semantic captures. | Objects with no owner slots and no activated legacy owner set still use positive `refCount` as the compatibility resurrection proof. |
@@ -695,6 +696,12 @@ that remote work and reconcile only after the ownership candidate is complete.
   `/private/tmp/issue-1649-void-discard-zero-count-system-perl.log`,
   `/private/tmp/issue-1649-void-discard-zero-count-jvm-85d16946b.log`, and
   `/private/tmp/issue-1649-void-discard-zero-count-interpreter-85d16946b.log`.
+- [x] On 2026-11-02, cloned thread roots now use explicit temporary owner
+  identities instead of a root-graph query and positive-count fallback during
+  first weaken. The lease ends after entry argument/CODE cleanup or at runtime
+  close/reset. `ThreadSnapshotTemporaryRootOwnerTest` passes; the full no-sweeps
+  `make` passes on `95be7ae91` in 7m29s. Log:
+  `/private/tmp/issue-1649-snapshot-owner-make-95be7ae91.log`.
 
 ### Historical handoff: issue #1132 / PR #1204
 
