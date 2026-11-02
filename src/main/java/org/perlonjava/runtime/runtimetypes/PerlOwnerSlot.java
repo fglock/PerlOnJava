@@ -185,18 +185,20 @@ public final class PerlOwnerSlot {
         return nativeOwner && referent != null;
     }
 
-    /** Mark a direct count paired with a PerlIO::via owner identity. */
+    /** Mark a direct count paired with a native owner identity. */
     public synchronized void markCountedNativeOwner() {
-        if (kind != Kind.IO_VIA_LAYER || referent == null || !nativeOwner
+        if ((kind != Kind.IO_VIA_LAYER && kind != Kind.REGEX_CALLBACK)
+                || referent == null || !nativeOwner
                 || countedNativeOwner) {
-            throw new IllegalStateException("counted native owner requires an active PerlIO::via slot");
+            throw new IllegalStateException("counted native owner requires an active supported slot");
         }
         countedNativeOwner = true;
     }
 
-    /** Whether this active PerlIO::via slot contributes one direct count. */
+    /** Whether this active native slot contributes one direct count. */
     public synchronized boolean isCountedNativeOwner() {
-        return kind == Kind.IO_VIA_LAYER && referent != null && countedNativeOwner;
+        return (kind == Kind.IO_VIA_LAYER || kind == Kind.REGEX_CALLBACK)
+                && referent != null && countedNativeOwner;
     }
 
     /** True if this slot uses native-ledger release semantics, including after release. */
@@ -841,7 +843,7 @@ public final class PerlOwnerSlot {
         return release;
     }
 
-    /** Retire a PerlIO::via native owner together with its paired direct count. */
+    /** Retire a counted native owner together with its paired direct count. */
     public synchronized PendingRelease releaseCountedNativeIdentity() {
         if (!isCountedNativeOwner()) return null;
         PendingRelease release = new PendingRelease(identity, ++nextReleaseSequence, kind);
