@@ -324,7 +324,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     private void retainDetachedComponentOwner(RuntimeBase component) {
         if (component == null) return;
         PerlOwnerSlot ownerSlot = new PerlOwnerSlot(PerlOwnerSlot.Kind.GLOB_COMPONENT_SLOT);
-        ownerSlot.acquireGlobComponentIdentity(component);
+        ownerSlot.acquireGlobComponentIdentity(this, component);
         if (detachedComponentOwnerSlots == null) detachedComponentOwnerSlots = new java.util.ArrayList<>();
         detachedComponentOwnerSlots.add(ownerSlot);
     }

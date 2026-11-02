@@ -80,6 +80,8 @@ public final class PerlOwnerSlot {
     private WeakReference<RuntimeScalar> scalarContentsOwner;
     /** Lexical cell whose current value is retained by a suspended frame. */
     private WeakReference<RuntimeScalar> suspendedScalarOwner;
+    /** Weak provenance for a detached glob's component edge. */
+    private WeakReference<RuntimeGlob> globComponentOwner;
     private PerlRuntime ownerRuntime;
     private LifecycleRuntimeState ownerRuntimeState;
     private boolean registeredInOwnerLedger;
@@ -373,15 +375,21 @@ public final class PerlOwnerSlot {
     }
 
     /** Record one detached typeglob's strong edge to a component slot. */
-    synchronized void acquireGlobComponentIdentity(RuntimeBase target) {
+    synchronized void acquireGlobComponentIdentity(RuntimeGlob owner, RuntimeBase target) {
         if (kind != Kind.GLOB_COMPONENT_SLOT) {
             throw new IllegalStateException("glob component acquisition requires a glob-component slot");
         }
+        Objects.requireNonNull(owner, "owner");
         Objects.requireNonNull(target, "target");
         if (legacyCaptureCount != 0) {
             throw new IllegalStateException("glob component slot has pending legacy releases");
         }
+        globComponentOwner = new WeakReference<>(owner);
         transferWithoutRuntimeRoot(target, false);
+    }
+
+    synchronized RuntimeGlob globComponentOwner() {
+        return globComponentOwner == null ? null : globComponentOwner.get();
     }
 
     /** Record a stash field's strong edge to its deferred namespace move. */
@@ -890,6 +898,7 @@ public final class PerlOwnerSlot {
         scalarReferenceCell = null;
         scalarContentsOwner = null;
         suspendedScalarOwner = null;
+        globComponentOwner = null;
         ownerRuntime = null;
         ownerRuntimeState = null;
         if (previous != null && registeredInOwnerLedger) previous.removeOwnerSlot(this);
