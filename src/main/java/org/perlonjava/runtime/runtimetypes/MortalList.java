@@ -218,6 +218,34 @@ public class MortalList {
         queueDeferredBase(state, base, null, transientOwnerKind);
     }
 
+    /**
+     * Acquire and queue the mortal reference created by the first bless of a
+     * referent. Unlike an ordinary removed storage edge, this temporary stays
+     * live until the deferred boundary processes its release.
+     */
+    public static void deferBlessTemporary(RuntimeBase base, boolean strongPerlOwner) {
+        if (base == null) return;
+        if (base.refCount == Integer.MIN_VALUE) {
+            throw new IllegalStateException("cannot bless a destroyed referent");
+        }
+        PerlOwnerSlot temporaryOwner = new PerlOwnerSlot(PerlOwnerSlot.Kind.SCALAR_CELL);
+        temporaryOwner.acquireCountedIdentity(base);
+        base.traceRefCount(+1, "ReferenceOperators.bless mortal temporary");
+        base.refCount++;
+        base.hadCountedReference = true;
+        base.acquireTransientTraceOwner("bless mortal temporary",
+                "ReferenceOperators.bless");
+        PerlOwnerSlot.PendingRelease slotRelease = strongPerlOwner
+                ? temporaryOwner.releaseCountedIdentityAtCompletion()
+                : temporaryOwner.releaseCountedIdentity();
+
+        LifecycleRuntimeState state = state();
+        markBoundaryWork(state);
+        RuntimeBase.PendingOwnerRelease ownerRelease =
+                base.queueOwnerSlotRelease(slotRelease);
+        queueDeferredBase(state, base, ownerRelease, "bless mortal temporary");
+    }
+
     /** Queue the deferred release together with the array scalar that owned it. */
     public static void deferDecrementFromArraySlot(
             RuntimeBase base, RuntimeScalar ownerScalar, String releaseSite) {
