@@ -1,6 +1,6 @@
 # Reviewed issue queues
 
-Snapshot: 2026-10-30, from live open issues, PRs and the #1649 phase contract.
+Snapshot: 2026-11-02, from live open issues, PRs and the #1649 phase contract.
 This is a bounded selection aid, not the complete backlog or fresh runtime
 validation. Follow the [triage and claim protocol](../../docs/guides/issue-triage.md)
 and recheck live issue comments/PRs before starting. Unlisted work is unreviewed
@@ -34,6 +34,7 @@ resolved before implementation. No new pass or failure is asserted here.
 | Frontend constants/quoting | [#1481](https://github.com/fglock/PerlOnJava/issues/1481) Literal control characters | Normal / Ready | One upstream failure on both backends, Perl passes. Reduce literal `qw` operands before choosing frontend versus regex code; require focused and upstream acceptance. |
 | Frontend constants/quoting | [#1376](https://github.com/fglock/PerlOnJava/issues/1376) Constant hash-reference dereference | High / Investigate | Both-backend suite failures are reported. Minimize constant folding/dereference behavior and establish a failing current parent before selecting the fix. |
 | Parser syntax | [#1427](https://github.com/fglock/PerlOnJava/issues/1427) Test::Unit / Error.pm | Normal / Investigate | Separate catch-syntax behavior from example-path normalization; retain the full passing Perl comparison and identify independently fixable causes. |
+| Print filehandles | [#1948](https://github.com/fglock/PerlOnJava/issues/1948) Bareword handle at block close | Normal / Active | System Perl accepts `while (<$input_fh>) { print F }`; both PerlOnJava backends rejected `F` under strict subs because print's filehandle lookahead did not accept `}`. The parser fix and focused regression are in `fix/print-filehandle-block-end`; validate both backends and the SVN::Notify 2.87 CPAN case. |
 | Calls and value operations | [#1448](https://github.com/fglock/PerlOnJava/issues/1448) Audit-wrapper recursion | High / Investigate | Runaway recursion on both backends with a passing Perl suite. Trace captured original coderef identity and wrapper replacement under a timeout; no proven #1649 dependency. |
 | Calls and value operations | [#1342](https://github.com/fglock/PerlOnJava/issues/1342) Relational overload dispatch | Normal / Ready | Report identifies an unwanted `cmp` dispatch. Add direct relational-overload coverage and require Morpheus acceptance on both backends. |
 | Calls and value operations | [#1428](https://github.com/fglock/PerlOnJava/issues/1428) Decimal stringification | Normal / Ready | One DateTime::Format::Epoch mismatch with passing Perl suite. Reduce the numeric conversion and cover large integral results without scientific notation. |
