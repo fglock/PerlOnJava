@@ -371,30 +371,38 @@ Run on JVM and interpreter backends with `timeout` and complete output logs:
 
 ## Progress Tracking
 
-### Current Status: owner-source migration continues; runtime checkpoint `b454cab08`
+### Current Status: owner-source migration continues; runtime checkpoint `0523be4ab`
 
-On 2026-11-02, branch `wip/detached-glob-owner-20261102-064229` fixed a
-detached `LOAD_GLOB` snapshot that kept a stale package stash alive after
-typeglob rebinding. Rebinding now releases the snapshot's component owner
-slots; `GLOB_VALUE` and namespace-move identities continue to protect values
-with surviving Perl owners. Its seven-assertion regression passes under system
-Perl and both PerlOnJava backends. The full no-sweeps `make` gate passed on
-`b454cab08` in 6m18s.
+On 2026-11-02, branch `wip/detached-glob-owner-20261102-064229` extended
+explicit ownership through asynchronous suspension of localized package
+arrays and hashes. `DynamicVariableManager` acquires a `SUSPENDED_FRAME` owner
+before detaching each active aggregate and releases it only after resume has
+reinstalled the same aggregate. Suspension preserves its element slots and
+skips final cleanup; ordinary unwind or cancellation then releases the values
+once. The regression's eight system-Perl oracle assertions and all 21 planned
+assertions on each PerlOnJava backend pass with sweeps disabled. Its unfixed
+parent produced four premature-release failures. The full no-sweeps `make`
+gate passed on `0523be4ab` in 6m37; the complete log is
+`/private/tmp/issue-1649-suspended-aggregate-owners-fullmake-0523be4ab.log`.
 
-HTML::Tree 5.07 now passes from its extracted distribution root: system Perl
-passes 23 files / 969 tests, and JVM and interpreter each pass all 23 files
-with corrective sweeps disabled. `t/refloop.t` is 8/8 on all three runtimes.
-The `jcpan -t HTML::Tree` front end timed out while deserializing the local
-metadata cache before tests began; this is not a module-test result. Direct
-distribution runs and the CPAN timeout log are recorded under
-`/private/tmp/html-tree-full-*b454cab08.log`.
+Earlier acceptance evidence remains useful but is not a final-candidate gate:
+HTML::Tree 5.07 passed 23 files / 969 tests on system Perl and all 23 files on
+both backends at `b454cab08`; `t/refloop.t` passed 8/8 on all three runtimes.
+The `jcpan -t HTML::Tree` front end timed out while deserializing local
+metadata before tests began; direct distribution results and that timeout log
+are recorded under `/private/tmp/html-tree-full-*b454cab08.log`.
 
-The new `tied_handler_nested_weak_owner.t` regression stores a target in a
-tied handler before first weaken, then verifies weak-observer and single
-`DESTROY` behavior when the nested slot is removed. System Perl, JVM, and
-interpreter pass 4/4 with corrective sweeps disabled. Regression and audit
-checkpoint commit `4bd9ae9d5` passes the full no-sweeps `make` in 6m21s; the
-complete log is `/private/tmp/ownership-tied-handler-fullmake-4bd9ae9d5.log`.
+The audit remains incomplete. Deferred release still has a scalar-root repair
+fallback; first weaken retains a package compatibility pin; cleared aggregate
+cleanup can query an external-root snapshot; legacy closure cleanup can query
+END/scalar roots; and destruction can treat an unverified positive count as
+resurrection. The live issue #1649 remains open. PR #1938 remains open as a
+draft, but its remote head `b2f44fc2d` is on another branch and GitHub reports
+it conflicting with `master` at `4a5c33753`; preserve that work until the
+remaining owner paths are audited and the final candidate is ready to reconcile.
+Next: trace each remaining fallback to its producing, transfer, and cleanup
+operations, then add invariant checks and normal-execution regressions before
+removing recovery machinery.
 
 ### Ownership fallback audit (2026-11-02)
 
@@ -404,6 +412,7 @@ complete log is `/private/tmp/ownership-tied-handler-fullmake-4bd9ae9d5.log`.
 | Scalar overwrite | `setLargeRefCounted()` acquires the replacement count/identity before releasing the previous referent; final release checks current slots. | No root walk remains in this immediate overwrite decision. Rescued-graph cleanup also checks current Perl owner identities. |
 | First weaken | Counted slots are registered when stored, before weak tracking activates; first weaken then retires the weakened slot and checks surviving identities. Untracked values use `UNTRACKED_REFERENCE` slots. | Package-rooted untracked aggregates still install `WEAKLY_TRACKED_COMPATIBILITY_PIN`; `PackageWeakCompatibilityPinOwnerSlotTest` and `PackageNestedUntrackedAggregateReleaseTest` cover its final release. |
 | Tied handlers | The tie wrapper acquires a `TIE_HANDLER` slot; nested handler hashes/arrays own values through their ordinary element slots. | `tied_handler_nested_weak_owner.t` verifies store-before-weaken and final nested-slot release on system Perl and both backends. `possiblyStoredInTiedHandler` is propagated as a legacy marker and still needs a separate unused-state audit. |
+| Async localized package aggregates | `DynamicVariableManager` acquires a `SUSPENDED_FRAME` owner before `dynamicSuspendState()` detaches the active aggregate; resume reinstalls the same array/hash and releases that frame owner afterward. | `issue_1649_localized_global_aggregate_async_owner.t` verifies localized array/hash element lifetime across suspension, resume, and cancellation on both backends. The suspend path preserves the original aggregate and its element identities; no root-snapshot fallback is used here. |
 | Cleared aggregates | Scope-exit cleanup checks current Perl owner identities and pending releases before destruction. | `finalizeClearedAggregateOwnerAfterScopeExit()` still consults a cached external-root snapshot for zero-count aggregates when direct identities do not prove an owner. |
 | Closure cleanup | Explicit capture slots refer to their owning CODE and are released when that CODE has no Perl owner. | Legacy captures without complete CODE-owner identity still use END-root and scalar-root snapshots; `scopeExitedCaptureOwnersShareOneScalarRootSnapshot` covers the fallback. |
 | Destruction / resurrection | Global destruction compares newly installed slots; ordinary destruction validates current owner slots and semantic captures. | Objects with no owner slots and no activated legacy owner set still use positive `refCount` as the compatibility resurrection proof. |
@@ -440,6 +449,10 @@ that remote work and reconcile only after the ownership candidate is complete.
   `12needs_all`, `13needs_any`, and `25retain` now pass on the JVM.
 - [x] `Internals::jperl_refstate` reports active scalar-store and semantic
   captured-pad owner counts for focused ownership diagnosis.
+- [x] Localized package arrays and hashes keep their element owners while an
+  async frame is suspended. Resume reinstalls the same aggregate before
+  releasing its `SUSPENDED_FRAME` owner; cancellation and repeated cancellation
+  release values and run `DESTROY` exactly once.
 - [x] Reproduced the remaining Net::Async::HTTP exact-count failures in the
   distribution's normal socket-enabled environment. `t/30timeout.t` reports
   3 rather than 1 references at EOF; after the script scope drains, the raw

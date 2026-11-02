@@ -80,6 +80,7 @@ priorities and future plans.
 - Detect global `DESTROY` resurrection from current owner-slot identities instead of walking Perl roots, while excluding temporary call owners (#1649).
 - Detect non-global `DESTROY` resurrection from validated owner slots, avoiding repeated root walks and stale detached-cell retention (#1649, #1860).
 - Give mutable scalar-reference contents stable owner-slot identities, share the contents count across aliases, and carry slot identity through localization and deferred release (#1649).
+- Preserve localized package array and hash element owners across async suspension, resume, and cancellation with explicit suspended-frame identities (#1649).
 - Clear nested weak observers after explicit undef from validated Perl owner identities, without treating rescued or temporary roots as owners (#1649).
 - Keep async lexical values owned while interpreter frames are suspended, then finalize cleared aggregate weak observers from current slots without stale-count root walks (#1649, #1860).
 - Give each awaited Future a `SUSPENDED_FRAME` owner identity and remove its separate reachability-root registry (#1649).
