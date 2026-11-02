@@ -374,7 +374,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             } finally {
                 endPendingClosureCaptureRelease();
             }
-            releaseClosureCapture(true, false);
+            releaseClosureCapture(false);
             // The owner-slot removal above runs while this capture release is
             // marked pending, so its lifecycle callback correctly waits. Retry
             // now that the capture count and pending marker have both retired.
@@ -384,7 +384,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         }
         ownerSlot.deferLegacyCaptureRelease(this);
         try {
-            releaseClosureCapture(false, false);
+            releaseClosureCapture(false);
         } finally {
             ownerSlot.release();
         }
@@ -414,11 +414,11 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             }
             return;
         }
-        releaseClosureCapture(false, true);
+        releaseClosureCapture(true);
         verifyClosureCaptureOwnerCount(PerlOwnerSlot.Kind.CLOSURE_PAD);
     }
 
-    private void releaseClosureCapture(boolean nativeOwnerSlot, boolean legacyOwner) {
+    private void releaseClosureCapture(boolean legacyOwner) {
         releaseClosureCaptureCount(legacyOwner);
         if (!hasClosureCaptureOwner() && scopeExited) {
             scopeExited = false;
@@ -427,13 +427,12 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             } else if (this instanceof RuntimeArray array) {
                 MortalList.scopeExitCleanupArray(array);
             }
+            // A closure pad capture is not a counted RV edge. Any positive
+            // count belongs to scalar or container slots, which retire their
+            // own count when those slots are released.
             if (blessId != 0 && refCount <= 0) {
                 refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroy(this);
-            } else if (!nativeOwnerSlot && refCount > 0
-                    && (blessId != 0 || this instanceof RuntimeCode)
-                    && !hasSemanticCaptureOwner()) {
-                MortalList.deferDecrement(this, "closure aggregate release");
             }
         }
     }
