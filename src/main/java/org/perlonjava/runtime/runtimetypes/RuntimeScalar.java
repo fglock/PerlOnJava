@@ -531,13 +531,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && kind != PerlOwnerSlot.Kind.HASH_ELEMENT) {
             return;
         }
-        if (kind == PerlOwnerSlot.Kind.SCALAR_CELL
-                && containerOwner != null && containerOwner.storedInPackageGlobal) {
-            // Keep the legacy proof for a scalar that was counted before it
-            // entered a nested package aggregate. Its package-root transfer
-            // path still needs explicit producer provenance.
-            return;
-        }
         slot.reclassifyCountedIdentity(countedOwnerKind());
     }
 

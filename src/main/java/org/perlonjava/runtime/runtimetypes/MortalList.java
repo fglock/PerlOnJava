@@ -1647,7 +1647,9 @@ public class MortalList {
                 // a cached root snapshot must not invent a replacement owner.
                 base.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroyFromCountedOwner(base);
-            } else if (base.restoreVerifiedCurrentCountedOwnerSlotRefCount()) {
+            } else if (!(ownerRelease == null && transientOwnerKind == null
+                            && hasPackageRootedCurrentAggregateOwner(base))
+                    && base.restoreVerifiedCurrentCountedOwnerSlotRefCount()) {
                 // Verified current scalar cells and array/hash elements jointly
                 // restore the surviving owner count without a root walk.
             } else if (base.blessId != 0
@@ -1792,6 +1794,24 @@ public class MortalList {
         if (ownerCount == 0) return false;
         base.refCount = ownerCount;
         return true;
+    }
+
+    private static boolean hasPackageRootedCurrentAggregateOwner(RuntimeBase base) {
+        for (PerlOwnerSlot slot : base.ownerSlotSnapshot()) {
+            if (!slot.isActive() || slot.referent() != base
+                    || (slot.kind() != PerlOwnerSlot.Kind.ARRAY_ELEMENT
+                        && slot.kind() != PerlOwnerSlot.Kind.HASH_ELEMENT)) {
+                continue;
+            }
+            RuntimeScalar owner = slot.countedScalarOwner();
+            if (owner == null || !owner.isCurrentAggregateElementOwner(base, slot)) continue;
+            RuntimeBase aggregate = owner.getContainerOwner();
+            if (aggregate != null && (aggregate.storedInPackageGlobal
+                    || GlobalVariable.isPackageRootedAggregate(aggregate))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public static void flush() {
