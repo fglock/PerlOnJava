@@ -1142,42 +1142,96 @@ public class GlobalVariable {
         RuntimeGlob.NamespaceMove move = new RuntimeGlob.NamespaceMove(
                 sourcePrefix, scalars, arrays, hashes, codes);
 
-        globalCodeRefs.keySet().removeIf(key -> key.startsWith(sourcePrefix));
-        clearGlobalPseudoConstantsForNamespace(sourcePrefix);
-        globalVariables.keySet().removeIf(key -> key.startsWith(sourcePrefix));
-        globalArrays.keySet().removeIf(key -> key.startsWith(sourcePrefix));
-        globalHashes.keySet().removeIf(key -> key.startsWith(sourcePrefix));
-        removeGlobalIORefsForNamespace(sourcePrefix);
-        globalFormatRefs.keySet().removeIf(key -> key.startsWith(sourcePrefix));
-        clearHiddenIORefsForNamespace(sourcePrefix);
-        clearPinnedCodeRefsForNamespace(sourcePrefix);
-        invalidateStashEnumerationCache();
+        // Keep the snapshot alive while the source package owners are removed
+        // and the destination roots are installed. The raw maps in
+        // NamespaceMove are transport data, not Perl owners.
+        RuntimeGlob moveOwner = RuntimeGlob.createDetachedNamespaceMove(move);
+        try {
+            // The source package-slot identities follow the moved roots to one
+            // destination. Additional aliases acquire independent identities
+            // when their package entries are installed below.
+            transferPackageRootOwners(move, destinations.get(0));
 
-        for (String destination : destinations) {
-            installNamespaceMove(move, destination);
-            clearStashAlias(destination);
-        }
+            globalCodeRefs.keySet().removeIf(key -> key.startsWith(sourcePrefix));
+            clearGlobalPseudoConstantsForNamespace(sourcePrefix);
+            globalVariables.keySet().removeIf(key -> key.startsWith(sourcePrefix));
+            globalArrays.keySet().removeIf(key -> key.startsWith(sourcePrefix));
+            globalHashes.keySet().removeIf(key -> key.startsWith(sourcePrefix));
+            removeGlobalIORefsForNamespace(sourcePrefix);
+            globalFormatRefs.keySet().removeIf(key -> key.startsWith(sourcePrefix));
+            clearHiddenIORefsForNamespace(sourcePrefix);
+            clearPinnedCodeRefsForNamespace(sourcePrefix);
+            invalidateStashEnumerationCache();
 
-        // Aliases below a destination may have pointed into the old source
-        // subtree (e.g. Alias::Nested:: -> Source::Inner::). Keep them attached
-        // to the materialised subtree instead of following Source's new binding.
-        for (Map.Entry<String, String> alias : new HashMap<>(stashAliases).entrySet()) {
-            if (!alias.getValue().startsWith(sourcePrefix)) {
-                continue;
+            for (String destination : destinations) {
+                installNamespaceMove(move, destination);
+                clearStashAlias(destination);
             }
-            String destination = null;
-            for (String candidate : destinations) {
-                if (alias.getKey().startsWith(candidate)
-                        && (destination == null || candidate.length() > destination.length())) {
-                    destination = candidate;
+
+            // Aliases below a destination may have pointed into the old source
+            // subtree (e.g. Alias::Nested:: -> Source::Inner::). Keep them attached
+            // to the materialised subtree instead of following Source's new binding.
+            for (Map.Entry<String, String> alias : new HashMap<>(stashAliases).entrySet()) {
+                if (!alias.getValue().startsWith(sourcePrefix)) {
+                    continue;
+                }
+                String destination = null;
+                for (String candidate : destinations) {
+                    if (alias.getKey().startsWith(candidate)
+                            && (destination == null || candidate.length() > destination.length())) {
+                        destination = candidate;
+                    }
+                }
+                if (destination != null) {
+                    stashAliases.put(alias.getKey(),
+                            destination + alias.getValue().substring(sourcePrefix.length()));
                 }
             }
-            if (destination != null) {
-                stashAliases.put(alias.getKey(),
-                        destination + alias.getValue().substring(sourcePrefix.length()));
+            resolvedStashAliasCache.clear();
+        } finally {
+            moveOwner.releaseDetachedComponentsIfUnowned();
+        }
+    }
+
+    private static void transferPackageRootOwners(
+            RuntimeGlob.NamespaceMove move, String destinationPrefix) {
+        GlobalRuntimeState state = globalState();
+        transferPackageRootOwners(
+                state.packageScalarOwnerSlots(), move.scalars,
+                move.sourcePrefix, destinationPrefix);
+        transferPackageRootOwners(
+                state.packageArrayOwnerSlots(), move.arrays,
+                move.sourcePrefix, destinationPrefix);
+        transferPackageRootOwners(
+                state.packageHashOwnerSlots(), move.hashes,
+                move.sourcePrefix, destinationPrefix);
+    }
+
+    private static void transferPackageRootOwners(
+            Map<String, PerlOwnerSlot> ownerSlots,
+            Map<String, ? extends RuntimeBase> movedValues,
+            String sourcePrefix, String destinationPrefix) {
+        for (Map.Entry<String, ? extends RuntimeBase> entry : movedValues.entrySet()) {
+            String sourceKey = entry.getKey();
+            String destinationKey = destinationPrefix
+                    + sourceKey.substring(sourcePrefix.length());
+            if (sourceKey.equals(destinationKey)) continue;
+            PerlOwnerSlot sourceOwner = ownerSlots.get(sourceKey);
+            if (sourceOwner == null) continue;
+            if (sourceOwner.referent() != entry.getValue()) {
+                throw new IllegalStateException(
+                        "package root owner does not match moved namespace slot: " + sourceKey);
+            }
+            ownerSlots.remove(sourceKey, sourceOwner);
+            PerlOwnerSlot displacedOwner = ownerSlots.put(destinationKey, sourceOwner);
+            if (displacedOwner != null && displacedOwner != sourceOwner) {
+                RuntimeBase displacedReferent = displacedOwner.referent();
+                displacedOwner.release();
+                if (displacedReferent instanceof RuntimeScalar scalar) {
+                    scalar.refreshUntrackedReferenceOwner();
+                }
             }
         }
-        resolvedStashAliasCache.clear();
     }
 
     private static <T> Map<String, T> snapshotNamespace(Map<String, T> values, String prefix) {

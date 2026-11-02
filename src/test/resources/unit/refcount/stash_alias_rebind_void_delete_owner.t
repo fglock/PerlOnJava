@@ -22,10 +22,10 @@ my ($source_stash, $alias_stash);
     ${'StashAliasRebindVoidDeleteOwnerSource::item'} = $object;
     $source_stash = \%StashAliasRebindVoidDeleteOwnerSource::;
     *StashAliasRebindVoidDeleteOwnerCopy:: = $source_stash;
+    undef $object;
     *StashAliasRebindVoidDeleteOwnerSource:: = \%StashAliasRebindVoidDeleteOwnerOther::;
     $alias_stash = \%StashAliasRebindVoidDeleteOwnerCopy::;
 }
-undef $object;
 
 ok(defined $weak, 'the preserved alias retains the source value after rebinding');
 ok(exists $alias_stash->{item}, 'the alias stash retains the moved symbol');
