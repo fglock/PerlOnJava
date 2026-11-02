@@ -59,9 +59,10 @@ class RuntimeTiedHashIteratorOwnerSlotTest {
             hash.hashIterator = iterator;
 
             RuntimeArray referent = new RuntimeArray();
-            referent.refCount = 0;
+            referent.refCount = -1;
             RuntimeScalar weak = referenceTo(referent);
             WeakRefRegistry.weaken(weak);
+            assertEquals(WeakRefRegistry.WEAKLY_TRACKED, referent.refCount);
             assertTrue(WeakRefRegistry.isweak(weak));
 
             RuntimeScalar currentKey = referenceTo(referent);
