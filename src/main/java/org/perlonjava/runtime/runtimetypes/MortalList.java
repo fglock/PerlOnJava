@@ -998,16 +998,17 @@ public class MortalList {
                     markBoundaryWork(state);
                     queueDeferredBase(state, base, ownerRelease, null, s);
                 } else if (base.refCount == 0) {
-                    if (base.refCountTrace) {
-                        base.traceRefCount(+1, "MortalList.deferDecrementRecursive (blessed never-stored bump+queue)");
-                    }
-                    base.refCount = 1;
                     LifecycleRuntimeState state = state();
                     markBoundaryWork(state);
-                    queueDeferredBase(state, base, null, null, s);
+                    RuntimeBase.PendingOwnerRelease ownerRelease =
+                            base.queueLifecycleOnlyAtZero(
+                                    "MortalList.deferDecrementRecursive zero-count temporary");
+                    queueDeferredBase(state, base, ownerRelease, null, s);
                     // A zero-count blessed container returned from a helper
                     // has no counted owner to release, but its fields still
-                    // disappear when this temporary dies.
+                    // disappear when this temporary dies. The lifecycle token
+                    // schedules that boundary without inventing a positive
+                    // refCount; current owner slots are checked when it drains.
                     releasingLastOwner = true;
                 }
                 // A blessed hash/array is still a container.  When this slot
