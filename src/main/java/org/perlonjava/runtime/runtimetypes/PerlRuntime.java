@@ -21,10 +21,14 @@ import org.perlonjava.runtime.nativ.ExtendedNativeUtils;
 
 import java.lang.ref.WeakReference;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -94,6 +98,8 @@ public final class PerlRuntime implements AutoCloseable {
     public boolean storableLastOpInNetorder;
     public final Set<String> xsShimLoadingInProgress = new HashSet<>();
     private final Map<Long, WeakReference<RuntimeBase>> referenceAddresses = new ConcurrentHashMap<>();
+    private final Set<RootSnapshot> retainedRootSnapshots = Collections.synchronizedSet(
+            Collections.newSetFromMap(new IdentityHashMap<>()));
 
     RuntimeIO ioStdout;
     RuntimeIO ioStderr;
@@ -219,6 +225,37 @@ public final class PerlRuntime implements AutoCloseable {
             else state.positiveOwnerReferents.put(referent, count - 1);
         }
         MortalList.invalidateAllRootSnapshots();
+    }
+
+    private void retainRootSnapshot(RootSnapshot snapshot) {
+        retainedRootSnapshots.add(snapshot);
+    }
+
+    private void releaseRootSnapshot(RootSnapshot snapshot) {
+        executionLock.lock();
+        try {
+            if (snapshot.ownersReleased()) return;
+            retainedRootSnapshots.remove(snapshot);
+            if (closed) {
+                snapshot.releaseOwnerSlots();
+                return;
+            }
+            try (Binding ignored = bind()) {
+                snapshot.releaseOwnerSlots();
+            }
+        } finally {
+            executionLock.unlock();
+        }
+    }
+
+    /** Release every external root lease before clearing or replacing this runtime. */
+    private void releaseRetainedRootSnapshots() {
+        List<RootSnapshot> snapshots;
+        synchronized (retainedRootSnapshots) {
+            snapshots = new ArrayList<>(retainedRootSnapshots);
+            retainedRootSnapshots.clear();
+        }
+        for (RootSnapshot snapshot : snapshots) snapshot.releaseOwnerSlots();
     }
 
     int positiveOwnerSlotReferentCount(RuntimeBase referent) {
@@ -444,6 +481,7 @@ public final class PerlRuntime implements AutoCloseable {
             try {
                 try (Binding ignored = bind()) {
                     releaseResettableResources();
+                    releaseRetainedRootSnapshots();
                 }
                 replaceRuntimeState();
                 initialized = false;
@@ -480,7 +518,38 @@ public final class PerlRuntime implements AutoCloseable {
         return snapshotCloneInternal(new PerlThreadRegistry(), 0, roots);
     }
 
-    public record RootSnapshot(PerlRuntime runtime, java.util.List<RuntimeBase> roots) {}
+    /** A runtime snapshot and the explicit temporary owner slots for its external roots. */
+    public static final class RootSnapshot implements AutoCloseable {
+        private final PerlRuntime runtime;
+        private final List<RuntimeBase> roots;
+        private final List<PerlOwnerSlot> ownerSlots;
+        private final java.util.concurrent.atomic.AtomicBoolean ownersReleased =
+                new java.util.concurrent.atomic.AtomicBoolean();
+
+        private RootSnapshot(
+                PerlRuntime runtime, List<RuntimeBase> roots, List<PerlOwnerSlot> ownerSlots) {
+            this.runtime = Objects.requireNonNull(runtime, "runtime");
+            this.roots = Collections.unmodifiableList(new ArrayList<>(roots));
+            this.ownerSlots = List.copyOf(ownerSlots);
+            runtime.retainRootSnapshot(this);
+        }
+
+        public PerlRuntime runtime() { return runtime; }
+        public List<RuntimeBase> roots() { return roots; }
+
+        private boolean ownersReleased() { return ownersReleased.get(); }
+
+        private void releaseOwnerSlots() {
+            if (!ownersReleased.compareAndSet(false, true)) return;
+            for (PerlOwnerSlot ownerSlot : ownerSlots) ownerSlot.release();
+        }
+
+        /** Release this snapshot's external root identities before the runtime closes. */
+        @Override
+        public void close() {
+            runtime.releaseRootSnapshot(this);
+        }
+    }
 
     RootSnapshot snapshotCloneForThread(
             PerlThreadRegistry registry, long threadId,
@@ -544,17 +613,27 @@ public final class PerlRuntime implements AutoCloseable {
                     child.globalState.rebuildPackageAggregateOwnerSlots();
                     child.globalState.rebuildPackageIoGlobOwnerSlots();
                 }
-                java.util.List<RuntimeBase> clonedRoots = cloner.cloneSnapshotRoots(roots);
-                cloner.finishSnapshot();
+                RuntimeGraphCloner.SnapshotRoots clonedRoots = cloner.cloneSnapshotRoots(roots);
+                snapshot = new RootSnapshot(child, clonedRoots.roots(), clonedRoots.ownerSlots());
+                try {
+                    cloner.finishSnapshot();
+                } catch (RuntimeException | Error failure) {
+                    snapshot.close();
+                    child.close();
+                    throw failure;
+                }
                 child.currentDirectory = currentDirectory;
                 child.initialized = true;
-                snapshot = new RootSnapshot(child, clonedRoots);
             } finally {
                 org.perlonjava.app.scriptengine.PerlLanguageProvider.COMPILE_LOCK.unlock();
             }
 
             try (Binding ignored = snapshot.runtime().bind()) {
                 snapshot.runtime().runCloneHooks();
+            } catch (RuntimeException | Error failure) {
+                snapshot.close();
+                snapshot.runtime().close();
+                throw failure;
             }
             return snapshot;
         } finally {
@@ -660,6 +739,7 @@ public final class PerlRuntime implements AutoCloseable {
                 PerlSignalQueue.clearSignals();
                 RuntimeIO.closeAllHandles();
                 NetSSLeay.resetState();
+                releaseRetainedRootSnapshots();
                 MortalList.clearCurrentRuntimeState();
                 stateVariableInitialized.clear();
                 ioRegistryState.clear();
