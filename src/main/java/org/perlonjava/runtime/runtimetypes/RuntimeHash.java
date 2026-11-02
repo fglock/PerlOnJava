@@ -2364,12 +2364,21 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         this.type = PLAIN_HASH;
     }
 
+    @Override
+    public RuntimeBase suspendedOwnerValue() {
+        return this;
+    }
+
     /**
      * Restores the hash to the last saved state.
      * This method pops the most recent state from the dynamic state stack and restores it.
      */
     @Override
     public void dynamicRestoreState() {
+        restoreDynamicState(false);
+    }
+
+    private void restoreDynamicState(boolean preserveSuspendedValues) {
         Stack<RuntimeHash> dynamicStateStack = dynamicStateStack();
         if (!dynamicStateStack.isEmpty()) {
             // Restore the elements map and blessId from the most recent saved state
@@ -2379,13 +2388,16 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             // Without this, `local %hash = (key => $obj)` where $obj is tracked
             // would leak refCounts because the local elements are replaced without
             // ever going through scopeExitCleanup.
-            MortalList.deferDestroyForContainerClear(this.elements.values());
+            if (!preserveSuspendedValues) {
+                MortalList.deferDestroyForContainerClear(this.elements.values());
+            }
             // Real Perl semantics: a `local %h` that gets `bless`ed during the
             // local scope must fire DESTROY when restored — the local'd
             // temporary is conceptually freed. PerlOnJava reuses the same HV,
             // so we fire DESTROY explicitly. See RuntimeArray.dynamicRestoreState
             // for the equivalent fix for arrays.
-            if (this.blessId != 0 && this.blessId != previousState.blessId) {
+            if (!preserveSuspendedValues
+                    && this.blessId != 0 && this.blessId != previousState.blessId) {
                 int savedBlessId = this.blessId;
                 int savedRefCount = this.refCount;
                 boolean savedDestroyFired = this.destroyFired;
@@ -2420,7 +2432,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         activeState.blessId = this.blessId;
         activeState.byteKeys = this.byteKeys != null ? new HashSet<>(this.byteKeys) : null;
         activeState.elements.putAll(this.elements);
-        dynamicRestoreState();
+        restoreDynamicState(true);
         return activeState;
     }
 

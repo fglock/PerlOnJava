@@ -18,7 +18,8 @@ public class DynamicVariableManager {
     private static final ThreadLocal<Integer> DEFER_EXECUTION_DEPTH =
             ThreadLocal.withInitial(() -> 0);
 
-    public record SuspendedState(DynamicState state, Object token) {}
+    public record SuspendedState(
+            DynamicState state, Object token, List<PerlOwnerSlot> ownerSlots) {}
     public record CapturedFrame<T>(T result, List<SuspendedState> states) {}
 
     static final class FrameCapture {
@@ -267,9 +268,36 @@ public class DynamicVariableManager {
         List<SuspendedState> result = new ArrayList<>();
         while (variableStack.size() > targetLocalLevel) {
             DynamicState state = variableStack.removeLast();
-            result.add(0, new SuspendedState(state, state.dynamicSuspendState()));
+            List<PerlOwnerSlot> ownerSlots = new ArrayList<>(2);
+            RuntimeBase currentOwner = state.suspendedOwnerValue();
+            retainSuspendedOwner(currentOwner, ownerSlots);
+            Object token;
+            try {
+                token = state.dynamicSuspendState();
+                if (token instanceof RuntimeBase tokenOwner && tokenOwner != currentOwner) {
+                    retainSuspendedOwner(tokenOwner, ownerSlots);
+                }
+            } catch (RuntimeException | Error failure) {
+                releaseSuspendedOwners(ownerSlots);
+                throw failure;
+            }
+            result.add(0, new SuspendedState(state, token, List.copyOf(ownerSlots)));
         }
         return result;
+    }
+
+    private static void retainSuspendedOwner(
+            RuntimeBase referent, List<PerlOwnerSlot> ownerSlots) {
+        if (referent == null) return;
+        PerlOwnerSlot owner = new PerlOwnerSlot(PerlOwnerSlot.Kind.SUSPENDED_FRAME);
+        owner.acquireSuspendedFrameIdentity(referent);
+        ownerSlots.add(owner);
+    }
+
+    private static void releaseSuspendedOwners(List<PerlOwnerSlot> ownerSlots) {
+        for (int i = ownerSlots.size() - 1; i >= 0; i--) {
+            ownerSlots.get(i).release();
+        }
     }
 
     /** Reinstall detached states in their original stack order. */
@@ -278,6 +306,7 @@ public class DynamicVariableManager {
         Deque<DynamicState> variableStack = variableStack();
         for (SuspendedState suspended : states) {
             suspended.state().dynamicResumeState(suspended.token());
+            releaseSuspendedOwners(suspended.ownerSlots());
             variableStack.addLast(suspended.state());
         }
     }

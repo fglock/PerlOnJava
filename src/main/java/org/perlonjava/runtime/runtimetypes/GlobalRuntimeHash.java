@@ -60,7 +60,16 @@ public class GlobalRuntimeHash implements DynamicState {
     }
 
     @Override
+    public RuntimeBase suspendedOwnerValue() {
+        return GlobalVariable.getGlobalHash(fullName);
+    }
+
+    @Override
     public void dynamicRestoreState() {
+        restoreState(false);
+    }
+
+    private void restoreState(boolean preserveSuspendedHash) {
         Stack<SavedGlobalHashState> localizedStack = localizedStack();
         if (!localizedStack.isEmpty()) {
             SavedGlobalHashState saved = localizedStack.peek();
@@ -70,7 +79,7 @@ public class GlobalRuntimeHash implements DynamicState {
                 // Fire DESTROY if the local hash was blessed during the scope.
                 // Test: postfixderef.t #38 "no stooges outlast their scope".
                 RuntimeHash localHash = GlobalVariable.globalHashes.get(saved.fullName);
-                if (localHash != null && localHash.blessId != 0
+                if (!preserveSuspendedHash && localHash != null && localHash.blessId != 0
                         && !localHash.destroyFired
                         && (saved.originalHash == null || localHash != saved.originalHash)) {
                     localHash.refCount = Integer.MIN_VALUE;
@@ -83,7 +92,8 @@ public class GlobalRuntimeHash implements DynamicState {
                 // local %hash (notably Test::Deep's %WrapCache) can retain
                 // weakly-referenced arguments past the scope that localized
                 // it.
-                if (localHash != null && localHash != saved.originalHash) {
+                if (!preserveSuspendedHash && localHash != null
+                        && localHash != saved.originalHash) {
                     MortalList.deferDestroyForContainerClear(localHash.elements.values());
                 }
                 GlobalVariable.globalHashes.put(saved.fullName, saved.originalHash);
@@ -102,28 +112,20 @@ public class GlobalRuntimeHash implements DynamicState {
     @Override
     public Object dynamicSuspendState() {
         RuntimeHash activeVariable = GlobalVariable.getGlobalHash(fullName);
-        RuntimeHash activeState = new RuntimeHash();
-        if (activeVariable != null) {
-            activeState.type = activeVariable.type;
-            activeState.blessId = activeVariable.blessId;
-            activeState.byteKeys = activeVariable.byteKeys != null
-                    ? new java.util.HashSet<>(activeVariable.byteKeys) : null;
-            activeState.elements.putAll(activeVariable.elements);
-        }
-        dynamicRestoreState();
-        return activeState;
+        restoreState(true);
+        return activeVariable;
     }
 
     @Override
     public void dynamicResumeState(Object token) {
         dynamicSaveState();
-        if (token instanceof RuntimeHash activeState) {
-            RuntimeHash activeVariable = GlobalVariable.getGlobalHash(fullName);
-            activeVariable.type = activeState.type;
-            activeVariable.blessId = activeState.blessId;
-            activeVariable.byteKeys = activeState.byteKeys != null
-                    ? new java.util.HashSet<>(activeState.byteKeys) : null;
-            activeVariable.elements.putAll(activeState.elements);
+        if (token instanceof RuntimeHash activeVariable) {
+            GlobalVariable.globalHashes.put(fullName, activeVariable);
+            for (String alias : GlobalVariable.getGlobAliasGroup(fullName)) {
+                if (!alias.equals(fullName)) {
+                    GlobalVariable.globalHashes.put(alias, activeVariable);
+                }
+            }
         }
     }
 
