@@ -707,8 +707,8 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                 continue;
             }
             if (slot.isCountedNativeOwner()) {
-                // Native wrappers such as PerlIO::via layers and regex
-                // callbacks contribute a direct count paired with this slot.
+                // Native wrappers such as PerlIO::via layers, regex callbacks,
+                // and tied-hash iterators pair their direct count with this slot.
                 count++;
                 continue;
             }

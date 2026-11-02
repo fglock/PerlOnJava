@@ -29,6 +29,8 @@ public final class PerlOwnerSlot {
         REGEX_CALLBACK,
         /** PerlIO::via layer retaining the object returned by PUSHED. */
         IO_VIA_LAYER,
+        /** Tied-hash iterator retaining a key between FIRSTKEY/NEXTKEY calls. */
+        TIED_HASH_ITERATOR_KEY,
         ARRAY_ELEMENT,
         HASH_ELEMENT,
         ARGUMENT_VALUE,
@@ -187,7 +189,8 @@ public final class PerlOwnerSlot {
 
     /** Mark a direct count paired with a native owner identity. */
     public synchronized void markCountedNativeOwner() {
-        if ((kind != Kind.IO_VIA_LAYER && kind != Kind.REGEX_CALLBACK)
+        if ((kind != Kind.IO_VIA_LAYER && kind != Kind.REGEX_CALLBACK
+                    && kind != Kind.TIED_HASH_ITERATOR_KEY)
                 || referent == null || !nativeOwner
                 || countedNativeOwner) {
             throw new IllegalStateException("counted native owner requires an active supported slot");
@@ -197,7 +200,8 @@ public final class PerlOwnerSlot {
 
     /** Whether this active native slot contributes one direct count. */
     public synchronized boolean isCountedNativeOwner() {
-        return (kind == Kind.IO_VIA_LAYER || kind == Kind.REGEX_CALLBACK)
+        return (kind == Kind.IO_VIA_LAYER || kind == Kind.REGEX_CALLBACK
+                    || kind == Kind.TIED_HASH_ITERATOR_KEY)
                 && referent != null && countedNativeOwner;
     }
 
