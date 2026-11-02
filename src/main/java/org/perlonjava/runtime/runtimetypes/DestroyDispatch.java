@@ -333,24 +333,17 @@ public class DestroyDispatch {
         // %DEFERRED hash), causing infinite recursion in Moo/DBIx::Class.
         if (referent instanceof RuntimeCode code) {
             if (code.hasCountedCodeSlots || code.stashRefCount <= 0) {
-                // A queued END block is an owning CV slot even though it is
-                // not installed in a stash. Selective refCount can transiently
-                // reach zero while an assertion or callback releases another
-                // capture of the same lexical pad. Keep the queued CV's capture
-                // edges until the END queue consumes that owner.
-                if (SpecialBlock.hasPendingEndBlock(code)) {
-                    code.refCount = 1;
-                    return;
-                }
-                if (code.activeEndBlockExecutions > 0) {
-                    code.refCount = 1;
-                    code.rescuedActiveEndBlockOwner = true;
-                    return;
-                }
                 if (!finalCountedOwner
                         && code.restoreVerifiedCurrentCountedOwnerSlotRefCount()) {
                     ReachabilityQueryStats stats = MortalList.activeReachabilityQueryStats();
                     if (stats != null) stats.codeOwnerSlotRestorations++;
+                    return;
+                }
+                if (code.hasPerlOwnerForCaptureOtherThan(null)) {
+                    // Current owner identities, including the END queue's
+                    // stored CODE slot, preserve its captures at zero without
+                    // inventing a counted reference.
+                    code.deferFinalReleaseToActiveCode();
                     return;
                 }
                 code.releaseCaptures();
