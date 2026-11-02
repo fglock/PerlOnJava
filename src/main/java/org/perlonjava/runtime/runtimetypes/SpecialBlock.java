@@ -57,15 +57,6 @@ public class SpecialBlock {
         RuntimeArray.unshift(getEndBlocks(), codeRef);
     }
 
-    /** Return whether {@code code} still has an owning slot in the END queue. */
-    static boolean hasPendingEndBlock(RuntimeCode code) {
-        if (code == null) return false;
-        for (RuntimeScalar block : getEndBlocks().elements) {
-            if (block != null && block.value == code) return true;
-        }
-        return false;
-    }
-
     /**
      * Saves a code reference to the initBlocks array.
      * Blocks are added using `unshift`, meaning they will be executed in FIFO order.
@@ -102,25 +93,35 @@ public class SpecialBlock {
         Throwable firstFailure = null;
         RuntimeArray endBlocks = getEndBlocks();
         while (!endBlocks.isEmpty()) {
-            RuntimeScalar block = RuntimeArray.shift(endBlocks);
-            if (block.getDefinedBoolean()) {
-                RuntimeCode code = block.value instanceof RuntimeCode runtimeCode ? runtimeCode : null;
-                if (code != null) code.beginEndBlockExecution();
-                try {
+            RuntimeScalar queuedBlock = endBlocks.elements.getFirst();
+            RuntimeCode queuedCode = queuedBlock != null
+                    && queuedBlock.value instanceof RuntimeCode runtimeCode
+                    ? runtimeCode : null;
+            // Transfer lifetime across shift: releasing the array-element
+            // owner can run deferred CODE cleanup before RuntimeCode.apply()
+            // installs its ordinary active-frame identity.
+            PerlOwnerSlot executionOwner = null;
+            if (queuedCode != null) {
+                executionOwner = new PerlOwnerSlot(PerlOwnerSlot.Kind.ACTIVE_CODE);
+                executionOwner.acquireActiveCodeIdentity(queuedCode);
+            }
+            try {
+                RuntimeScalar block = RuntimeArray.shift(endBlocks);
+                if (block.getDefinedBoolean()) {
                     RuntimeCode.apply(block, new RuntimeArray(), RuntimeContextType.VOID);
-                } catch (PerlExitException exit) {
-                    // exit() recursively drains the remaining queue. It is a
-                    // control signal, not a failing END callback.
-                    throw exit;
-                } catch (Throwable failure) {
-                    if (firstFailure == null) firstFailure = failure;
-                    String message = ErrorMessageUtil.stringifyException(failure);
-                    System.err.print(message);
-                    if (!message.endsWith("\n")) System.err.println();
-                    System.err.println("END failed--call queue aborted.");
-                } finally {
-                    if (code != null) code.endEndBlockExecution();
                 }
+            } catch (PerlExitException exit) {
+                // exit() recursively drains the remaining queue. It is a
+                // control signal, not a failing END callback.
+                throw exit;
+            } catch (Throwable failure) {
+                if (firstFailure == null) firstFailure = failure;
+                String message = ErrorMessageUtil.stringifyException(failure);
+                System.err.print(message);
+                if (!message.endsWith("\n")) System.err.println();
+                System.err.println("END failed--call queue aborted.");
+            } finally {
+                if (executionOwner != null) executionOwner.release();
             }
         }
         return firstFailure;
