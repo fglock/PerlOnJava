@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Test;
 import org.perlonjava.runtime.runtimetypes.PerlOwnerSlot;
 import org.perlonjava.runtime.runtimetypes.PerlRuntime;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -48,8 +50,11 @@ class ViaLayerSelfOwnerSlotTest {
         try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
             RuntimeArray referent = new RuntimeArray();
             referent.refCount = -1;
+            RuntimeScalar untrackedReference = new RuntimeScalar();
+            untrackedReference.type = RuntimeScalarType.ARRAYREFERENCE;
+            untrackedReference.value = referent;
             ViaLayer.SelfReferenceOwner owner =
-                    ViaLayer.SelfReferenceOwner.retain(referent.createReference());
+                    ViaLayer.SelfReferenceOwner.retain(untrackedReference);
 
             assertNotNull(owner);
             assertEquals(-1, referent.refCount);
