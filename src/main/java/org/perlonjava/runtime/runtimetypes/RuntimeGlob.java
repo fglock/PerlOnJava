@@ -1069,11 +1069,6 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                     if (currentGlob == null) currentGlob = this;
                     currentGlob.nameOverride = value.toString();
                 }
-                // LOAD_GLOB may provide a detached snapshot as the lvalue.
-                // Once this assignment has rebound the named GV, that
-                // temporary snapshot must release its old component slots;
-                // a surviving Perl scalar owner keeps them through GLOB_VALUE.
-                if (slotSnapshot) releaseDetachedComponentsIfUnowned();
                 return value;
             case STRING:
             case BYTE_STRING:
@@ -1113,6 +1108,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                     if (currentGlob == null) currentGlob = this;
                     currentGlob.nameOverride = value.toString();
                 }
+                // LOAD_GLOB may provide a detached snapshot as the lvalue.
+                // Once this assignment has rebound the named GV, that
+                // temporary snapshot must release its old component slots;
+                // a surviving Perl scalar owner keeps them through GLOB_VALUE.
+                if (slotSnapshot) releaseDetachedComponentsIfUnowned();
                 return value;
             case FORMAT:
                 // Handle format assignments to typeglobs
