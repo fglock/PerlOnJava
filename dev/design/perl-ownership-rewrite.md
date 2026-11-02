@@ -2,11 +2,12 @@
 
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
-**Current checkpoint (2026-11-02):** #1649 Phase 2 continues on branch
-`wip/detached-glob-owner-20261102-064229` at candidate `dc1603047`. Local work
-is unpublished. PR #1938 remains an open draft at head
+**Current checkpoint (2026-11-03):** #1649 Phase 2 continues on branch
+`wip/detached-glob-owner-20261102-064229` at runtime candidate `03ae1f1a1`.
+Local work is unpublished. PR #1938 remains an open draft at head
 `b2f44fc2d36b8f0a1bc7067790e1731a604cba45`, based on
-`4a5c33753f1da3f9838c44567bbba878e8f567e0`; GitHub last reported `DIRTY`.
+`4a5c33753f1da3f9838c44567bbba878e8f567e0`; GitHub last reported `DIRTY`
+(2026-11-02 23:18 UTC).
 
 `ab4569170` removed the raw closure-release decrement that could consume
 another scalar's count; production aggregate captures in `SubroutineParser`,
@@ -16,6 +17,19 @@ cleanup for a blessed zero-count temporary: it queues a zero-count lifecycle
 token instead of manufacturing `refCount = 1`. `RecursiveZeroCountLifecycleTest`
 checks that the count stays zero until the deferred boundary and that final
 destruction completes exactly once.
+
+`03ae1f1a1` fixes package-rooted blessed-parent cleanup. Recursive child
+cleanup now waits until no current Perl owner identity remains, and deferred
+aggregate finalization recognizes untracked array/hash-reference owners. The
+new `BlessedPackageOwnerRecursiveReleaseTest` proves the nested child stays
+alive after the outer counted edge leaves, then clears when the final package
+owner is removed. Its focused JVM test passes; the post-commit full no-sweeps
+gate is pending. Parent evidence: the regression fails on `dafb62d40`; the
+full serial unit gate reports 3,398 tests, 6 skipped, and this single failure
+in 21m42. Logs:
+`/private/tmp/issue-1649-blessed-package-owner-focused-parent-dafb62d40.log`,
+`/private/tmp/issue-1649-blessed-package-owner-parent-dafb62d40.log`, and
+`/private/tmp/issue-1649-blessed-package-owner-focused-dafb62d40-final.log`.
 
 With corrective sweeps disabled, `nice -n 19 timeout 3600 make` passes on
 `dc1603047` in 6m56 at
@@ -39,7 +53,10 @@ and `/private/tmp/issue-1860-*-dc1603047.log`.
 The deferred-release audit found no main-source callers of
 `MortalList.deferDecrement(RuntimeBase)`; direct callers are JUnit fixtures.
 Production paths queue scalar or owner-slot release tokens. The zero-count
-recursive branch now carries a lifecycle token, while `restoreReachableOwnerCount`
+recursive branch now carries a lifecycle token. A package-rooted
+`UNTRACKED_REFERENCE` can outlive the final counted edge to a blessed aggregate;
+child traversal now consults current owner identities, and deferred aggregate
+finalization accepts every aggregate reference type. `restoreReachableOwnerCount`
 and other root/snapshot recovery branches remain pending exact producer audits.
 `hasLiveUntrackedOwnerSlot` checks active `UNTRACKED_REFERENCE` identities,
 although it still increments the legacy `rootQueries` metric. The package
@@ -47,10 +64,9 @@ first-weaken pin remains because the existing test asserts the compatibility
 count and pin. No blocker is known.
 
 Next, trace each production path that can reach `restoreReachableOwnerCount`,
-then map package-nested untracked aggregate stores and releases. Continue the
-producer audit across package roots, cycles, shared storage, resource owners,
-and exception/unwind cleanup; remove recovery only when owner identities and
-acceptance coverage prove the ordinary path is complete.
+then continue the producer audit across package roots, cycles, shared storage,
+resource owners, and exception/unwind cleanup. Remove recovery only when owner
+identities and acceptance coverage prove the ordinary path is complete.
 
 **Sweep policy (2026-10-27):** Corrective sweeps are disabled by default, as
 requested. `JPERL_ENABLE_CORRECTIVE_SWEEPS=1` temporarily enables legacy
@@ -117,10 +133,15 @@ edge identity and release provenance needed while those paths are migrated;
 it is not a second Perl reference count. Once all strong edges participate in
 an authoritative count, reassess which identity records remain necessary.
 
-## Remaining lifecycle fallback audit (2026-10-31)
+## Remaining lifecycle fallback audit (updated 2026-11-03)
 
 The ordinary lifecycle decision sites below still use recovery or graph
 reachability. Explicit post-END teardown and diagnostic traversal are separate.
+The package-rooted blessed aggregate boundary is covered by
+`BlessedPackageOwnerRecursiveReleaseTest`: live owner identities gate recursive
+field traversal, and deferred finalization checks untracked aggregate owners
+without assuming a generic `REFERENCE` scalar type. Other root/snapshot
+fallbacks in the deferred-release row still need producer audits.
 
 | Lifecycle path | Remaining fallback | Strong edge and acquisition/release sites | Existing coverage and open boundary |
 |---|---|---|---|
@@ -2304,15 +2325,34 @@ candidate logs are listed in the current checkpoint above. This removes one
 raw deferred-release producer; it does not complete the broader closure,
 first-weaken, or lifecycle-fallback audit.
 
+### Package-rooted blessed parents retain nested owners (2026-11-03)
+
+`BlessedPackageOwnerRecursiveReleaseTest` models a blessed hash with an
+untracked package-root owner and one counted outer-hash owner. The parent
+contained a child observed through a weak scalar. On `dafb62d40`, clearing the
+outer hash both prewalked the child's field and destroyed the parent: recursive
+cleanup used `refCount == 1` as its last-owner proof, while deferred aggregate
+cleanup checked for an untracked `REFERENCE` scalar and missed the parent's
+`HASHREFERENCE` owner. The regression failed on that parent in the focused run
+and was the sole failure in the 3,398-test serial unit gate (six skipped).
+
+The fix makes recursive field cleanup depend on the absence of current Perl
+owner identities and checks every untracked aggregate reference type before
+final destruction. The regression verifies the child remains live while the
+package edge owns the parent, then that removing the last package edge destroys
+the parent and clears the child weak observer. The focused test passes on the
+fixed source. Post-commit full no-sweeps validation remains pending; evidence
+logs are recorded in the current checkpoint above.
+
 ### Next steps
 
-1. Trace the first-weaken package compatibility pin and remaining deferred
-   snapshot paths to their storage producers and final release sites.
-2. Continue through package roots, strong cycles, shared storage, resource
-   owners, pad capture bookkeeping, and exception/unwind cleanup; add producer
-   invariants where counts and active owner identities disagree.
-3. Remove remaining reachability fallbacks and corrective scheduling only
-   after their producer regressions and final lifecycle, #1794, #1860, and
-   HTML-Tree acceptance gates pass on both backends.
+1. Run the immutable no-sweeps full gate on the fixed runtime candidate, then
+   rerun the final weak-reference, `DESTROY`, resurrection, cycle, cancellation,
+   #1794, #1860, and HTML-Tree acceptance matrix after remaining fixes land.
+2. Trace every path to `restoreReachableOwnerCount` and remaining root/snapshot
+   fallbacks; continue package-root, cycle, shared-storage, resource-owner,
+   pad bookkeeping, and exception/unwind producer audits.
+3. Remove corrective recovery only after normal acquisition, transfer, and
+   cleanup paths preserve owner identities and their regression coverage passes.
 4. Reconcile the tested candidate with current master and PR #1938; verify its
    open state and intended diff before declaring readiness.
