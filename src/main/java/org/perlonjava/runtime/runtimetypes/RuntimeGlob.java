@@ -971,7 +971,8 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                             // Move its old descendants under the new name
                             // instead of resolving through Pkg's replacement.
                             RuntimeGlob moveOwner =
-                                    GlobalVariable.detachNamespaceForStaleStash(sourceStash.namespace);
+                                    GlobalVariable.detachNamespaceForStaleStash(
+                                            sourceStash.namespace, sourceStash);
                             sourceStash.installDetachedNamespaceMove(moveOwner, this.globName);
                         } else {
                             GlobalVariable.setStashAlias(this.globName, sourceStash.namespace);
@@ -1084,7 +1085,8 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                     if (oldStash instanceof RuntimeStash oldRuntimeStash) {
                         detachedStash = oldRuntimeStash;
                         oldRuntimeStash.saveNamespaceMove(
-                                GlobalVariable.detachNamespaceForStaleStash(this.globName));
+                                GlobalVariable.detachNamespaceForStaleStash(
+                                        this.globName, oldRuntimeStash));
                     }
                 }
                 this.set(GlobalVariable.getGlobalIO(aliasName));
