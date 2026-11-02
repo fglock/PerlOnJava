@@ -990,10 +990,13 @@ public class MortalList {
                     RuntimeBase.PendingOwnerRelease ownerRelease = base.queueOwnerRelease(
                             s, "MortalList.deferDecrementRecursive blessed");
                     base.releaseActiveOwner(s);
-                    // refCount is the authoritative ownership count here.
-                    // activeOwners is diagnostic and can retain a stale
-                    // call-frame alias until the enclosing sub returns.
-                    releasingLastOwner = base.refCount == 1;
+                    // The selective count only covers counted edges. A live
+                    // package, lexical, closure, or other explicit owner can
+                    // still keep this container and its fields in use after
+                    // this counted edge leaves. Walk the fields only when no
+                    // current Perl owner identity remains.
+                    releasingLastOwner = base.refCount == 1
+                            && !base.hasPerlStrongOwnerIdentity();
                     LifecycleRuntimeState state = state();
                     markBoundaryWork(state);
                     queueDeferredBase(state, base, ownerRelease, null, s);
@@ -1004,12 +1007,11 @@ public class MortalList {
                             base.queueLifecycleOnlyAtZero(
                                     "MortalList.deferDecrementRecursive zero-count temporary");
                     queueDeferredBase(state, base, ownerRelease, null, s);
-                    // A zero-count blessed container returned from a helper
-                    // has no counted owner to release, but its fields still
-                    // disappear when this temporary dies. The lifecycle token
-                    // schedules that boundary without inventing a positive
-                    // refCount; current owner slots are checked when it drains.
-                    releasingLastOwner = true;
+                    // A zero-count temporary's fields disappear with it only
+                    // when no separate Perl owner still retains the container.
+                    // Keep recursive cleanup aligned with the lifecycle token
+                    // that will check those same owner identities at drain.
+                    releasingLastOwner = !base.hasPerlStrongOwnerIdentity();
                 }
                 // A blessed hash/array is still a container.  When this slot
                 // releases its final counted owner, its fields disappear with
@@ -1694,8 +1696,7 @@ public class MortalList {
                 base.deferFinalReleaseToUncountedOwnerSlots();
             } else if (base.hasNonPackageAggregateUncountedOwnerSlotIdentity()
                     || (aggregateReferent
-                        ? base.hasUntrackedReferenceOwnerSlotIdentity(
-                                RuntimeScalarType.REFERENCE)
+                        ? base.hasUntrackedReferenceOwnerSlotIdentity()
                         : hasUntrackedReferenceOwner)) {
                 // Counted owner recovery is complete above. A surviving
                 // aggregate or untracked scalar slot is enough to defer cleanup
