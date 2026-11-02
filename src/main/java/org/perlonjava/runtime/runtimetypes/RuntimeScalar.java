@@ -1288,6 +1288,28 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return isCurrentCapturedScalarCellOwner(referent, slot);
     }
 
+    /**
+     * Narrow compatibility proof for a standalone scalar cell whose storage
+     * has not yet been registered with a lexical, package, code, or container
+     * owner. This does not accept stale container associations or aliases.
+     */
+    boolean isUnregisteredCountedScalarCellOwner(RuntimeBase referent, PerlOwnerSlot slot) {
+        if (slot.kind() != PerlOwnerSlot.Kind.SCALAR_CELL
+                || countedOwnerSlot != slot || slot.countedScalarOwner() != this
+                || !refCountOwned || value != referent
+                || ((type & RuntimeScalarType.REFERENCE_BIT) == 0
+                    && type != RuntimeScalarType.GLOB
+                    && type != RuntimeScalarType.CODE)
+                || WeakRefRegistry.isweak(this) || scopeExited
+                || !slot.isActive() || slot.referent() != referent
+                || hasClosureCaptureOwner() || hasActiveArgumentAliasOwner(referent)
+                || !containerOwnerSnapshot().isEmpty()
+                || hasDirectScalarCellStorageOwner()) {
+            return false;
+        }
+        return true;
+    }
+
     boolean isCurrentCapturedScalarCellOwner(RuntimeBase referent, PerlOwnerSlot slot) {
         if (slot.kind() != PerlOwnerSlot.Kind.SCALAR_CELL
                 || countedOwnerSlot != slot || !refCountOwned || value != referent

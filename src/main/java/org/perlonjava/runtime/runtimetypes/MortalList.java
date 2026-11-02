@@ -1613,9 +1613,10 @@ public class MortalList {
             } else if (base.restoreVerifiedCurrentCountedOwnerSlotRefCount()) {
                 // Verified current scalar cells and array/hash elements jointly
                 // restore the surviving owner count without a root walk.
-            } else if (base.blessId != 0 && base.restoreCountedOwnerSlotRefCount()) {
-                // Retain the compatibility bridge for counted slots whose
-                // current Perl storage has not yet been identified.
+            } else if (base.blessId != 0
+                    && base.restoreUnregisteredScalarCellOwnerRefCount()) {
+                // Last compatibility bridge: an unregistered standalone
+                // scalar cell has no storage registry to prove its edge.
             } else if (base instanceof RuntimeScalarReadOnly
                     && RuntimeCode.isInstalledPadConstant(base)) {
                 // A readonly scalar referenced through \("literal") has an
