@@ -805,6 +805,9 @@ public class DestroyDispatch {
             case CLOSURE_PAD -> {
                 return slot.isNativeCaptureOwner() || slot.legacyCaptureCount() > 0;
             }
+            case IO_VIA_LAYER -> {
+                return true;
+            }
             case CODE_PAD_CONSTANT -> {
                 return true;
             }

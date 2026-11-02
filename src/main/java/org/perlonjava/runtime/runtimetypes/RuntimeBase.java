@@ -693,6 +693,12 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                 count++;
                 continue;
             }
+            if (slot.isCountedNativeOwner()) {
+                // PerlIO::via contributes a direct counted hold while its
+                // Java layer retains the PUSHED object.
+                count++;
+                continue;
+            }
             RuntimeScalar owner = slot.countedScalarOwner();
             if (owner == null) continue;
             PerlOwnerSlot.Kind kind = slot.kind();
