@@ -689,12 +689,12 @@ that remote work and reconcile only after the ownership candidate is complete.
 - [x] On 2026-11-02, zero-count void-context results now queue explicit
   lifecycle work instead of temporarily setting `refCount=1`. A remaining
   counted scalar queues its exact owner release. The new Java lifecycle test
-  passes in the no-sweeps full `make` on `2b5c771a4` (10m32s); the Perl
+  passes in the no-sweeps full `make` on `85d16946b` (7m01s); the Perl
   regression passes 1/1 on system Perl, JVM, and interpreter. Logs:
-  `/private/tmp/issue-1649-void-discard-fullmake-2b5c771a4.log`,
+  `/private/tmp/issue-1649-void-discard-fullmake-85d16946b.log`,
   `/private/tmp/issue-1649-void-discard-zero-count-system-perl.log`,
-  `/private/tmp/issue-1649-void-discard-zero-count-jvm-2b5c771a4.log`, and
-  `/private/tmp/issue-1649-void-discard-zero-count-interpreter-2b5c771a4.log`.
+  `/private/tmp/issue-1649-void-discard-zero-count-jvm-85d16946b.log`, and
+  `/private/tmp/issue-1649-void-discard-zero-count-interpreter-85d16946b.log`.
 
 ### Historical handoff: issue #1132 / PR #1204
 
