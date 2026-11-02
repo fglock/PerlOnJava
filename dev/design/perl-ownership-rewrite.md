@@ -1,53 +1,39 @@
 # Perl-compatible ownership rewrite
 
-**Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
+**Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-02):** #1649 Phase 2 continues on branch
-`wip/preflight-ownership-docs-20261101-211239` at tested source commit
-`d6f985960`. Local work remains unpublished; PR #1938 is open as a draft at
-remote head `b2f44fc2d36b8f0a1bc7067790e1731a604cba45`.
+`wip/detached-glob-owner-20261102-064229` at candidate `ab4569170`. Local work
+is unpublished. PR #1938 remains open as a draft at head
+`b2f44fc2d36b8f0a1bc7067790e1731a604cba45`, based on
+`4a5c33753f1da3f9838c44567bbba878e8f567e0`; GitHub reports `DIRTY`.
 
-Detached whole-namespace globs acquire one `GLOB_COMPONENT_SLOT` identity for
-each moved scalar, array, hash, and CODE slot before package roots are removed.
-Scalarizing a namespace result copies `NamespaceMove` and acquires the new
-identities before the temporary source releases its owners. `RuntimeStash`
-also now forwards delete context. When deletion runs in void context, it
-retires the temporary detached glob immediately; this covers both a symbol
-glob after stash alias rebinding and a whole-namespace result.
-`preserveAliasesBeforeStashRebind` now holds a temporary namespace-component
-lease while it removes source roots and installs aliases. The source scalar,
-array, and hash package-owner identities move to the first destination; other
-destinations acquire separate identities. The temporary lease is released once
-the destination roots are current.
-`stash_delete_namespace_owner.t` passes 4/4 and
-`stash_alias_rebind_void_delete_owner.t` passes 7/7 on system Perl, JVM, and
-interpreter. Both backend runs disable corrective sweeps. The alias-rebind
-Perl regression fails checks 4–7 on parent `cfe4b3053`; the Java owner-identity
-test fails on parent `9e43e929e` and passes on the candidate. The full no-sweeps
-`timeout 1800 nice -n 19 make` gate passes on immutable commit `d6f985960` in
-6m26. Evidence:
-`/private/tmp/stash-delete-namespace-system-perl-91b028417.log`,
-`/private/tmp/stash-delete-namespace-unfixed-jvm-91b028417.log`,
-`/private/tmp/stash-delete-namespace-unfixed-interpreter-91b028417.log`,
-`/private/tmp/ownership-namespace-full-make-e1c4bfaf3.log`,
-`/private/tmp/stash-alias-rebind-system-perl.log`,
-`/private/tmp/stash-alias-rebind-parent-jvm-cfe4b3053.log`,
-`/private/tmp/stash-alias-rebind-parent-interpreter-cfe4b3053.log`,
-`/private/tmp/namespace-alias-transfer-gap-system-perl.log`,
-`/private/tmp/namespace-alias-owner-transfer-parent-make-9e43e929e.log`,
-`/private/tmp/stash-alias-rebind-system-perl-transfer.log`,
-`/private/tmp/stash-alias-rebind-final-jvm-d6f985960.log`,
-`/private/tmp/stash-alias-rebind-final-interpreter-d6f985960.log`, and
-`/private/tmp/ownership-namespace-alias-transfer-immutable-make-d6f985960.log`.
+First bless now carries a counted temporary owner identity through the mortal
+queue, and weak-source bless preserves weak aliases. Weakly tracked `undef`
+defers final cleanup to current argument-alias identities. The full no-sweeps
+suite passed on `9addf278a` in 7m18; log:
+`/private/tmp/issue-1649-argument-alias-fullmake-9addf278a.log`.
 
-Earlier coverage remains in the producer-audit rows and phase notes below:
-closure scalar referents use native owner slots, shared scalar captures retain
-one edge through the final closure release, and detached single-glob snapshots
-release their component owners. Next, trace slot acquisition and release for
-CODE entries, IO and FORMAT roots, and the persistent `savedNamespaceMove`
-field, then continue deferred-release producer accounting, closure/CODE edges,
-package roots beyond these paths, cycles, shared storage, resource owners, and
-removal of ordinary lifecycle reachability fallbacks. No blocker is known.
+The closure audit found that production aggregate capture creation in
+`SubroutineParser`, `OpcodeHandlerExtended`, `RuntimeCode`, `RuntimeGraphCloner`,
+and `Internals` attaches `CLOSURE_PAD` identities. No main-source caller uses
+`RuntimeBase.retainClosureCapture()`. The raw closure-release decrement
+had no matching counted-edge acquisition and could consume another scalar's
+count. `LegacyClosureAggregateReleaseOwnerTest` failed on parent source
+`9addf278a` because it processed one synthetic deferred base while a counted
+owner remained. `ab4569170` removes the decrement and preserves pad cleanup.
+The focused shard passed in 6m15 and full no-sweeps `nice -n 19 timeout 3600
+make` passed in 7m28. Evidence:
+`/private/tmp/issue-1649-closure-release-parent-shard0-d026650de.log`,
+`/private/tmp/issue-1649-closure-release-parent-d026650de.xml`,
+`/private/tmp/issue-1649-closure-release-fixed-shard0-ab4569170.log`, and
+`/private/tmp/issue-1649-closure-release-fullmake-ab4569170.log`.
+
+Next, trace the remaining first-weaken package compatibility pin and deferred
+snapshot paths to their storage producers. Continue the audit of package roots,
+strong cycles, shared storage, resource owners, and exception/unwind cleanup;
+remove remaining recovery only after their current owner identities and final
+acceptance coverage are established. No blocker is known.
 
 **Sweep policy (2026-10-27):** Corrective sweeps are disabled by default, as
 requested. `JPERL_ENABLE_CORRECTIVE_SWEEPS=1` temporarily enables legacy
@@ -2184,7 +2170,7 @@ that currently protects it:
 | Deferred live/global CODE capture walk | Captured scalar cells, aggregate pads, and persistent CODE state | Persistent state cells and aggregates now carry `CODE_STATE` identities; closure captures use `SCALAR_CAPTURE` / `CLOSURE_PAD` slots. The deferred traversal and its unused live/global query helpers are removed. |
 | Nested-call depth pin | Active argument aliases and compiler temporaries | Borrowed aliases and owned argument/return values must remain distinct through unwind and async suspension. |
 | Blessed root snapshots and package cache | Package scalar, aggregate, glob, or CODE slots | Package scalar, array/hash, named IO glob, and CODE stash entries now have owner identities. Other glob components and compatibility writes still need producer audit before removing root snapshots. |
-| Closure cleanup (`RuntimeCode.releaseCaptures`) | `SCALAR_CAPTURE`, `CLOSURE_PAD`, and aggregate capture slots held by live CODE | Scalar and aggregate referents use native `CLOSURE_PAD` owner slots. Captured pad cells retain `SCALAR_CAPTURE` identities. The production scalar referent count bridge has been removed; direct legacy capture APIs and `captureCount` bookkeeping remain under audit. Exception, nested-CODE, transfer, cloning, and async cancellation paths still need end-to-end owner proofs before graph fallbacks are removed. |
+| Closure cleanup (`RuntimeCode.releaseCaptures`) | `SCALAR_CAPTURE`, `CLOSURE_PAD`, and aggregate capture slots held by live CODE | Scalar and aggregate referents use native `CLOSURE_PAD` owner slots. Captured pad cells retain `SCALAR_CAPTURE` identities. Closure release no longer queues a raw count decrement: counted cells and elements retire their own edges. Production aggregate capture builders attach owner slots; the public legacy capture API and `captureCount` bookkeeping remain under audit. Exception, nested-CODE, transfer, cloning, and async cancellation paths still need end-to-end owner proofs before graph fallbacks are removed. |
 | Final destruction and resurrection (`DestroyDispatch`) | Current durable Perl owner slots, active CODE, and actual internal cycle edges | `processRescuedObjects` now retains objects with current owner identities instead of treating a count of one as a rescue pin. A real weak-slot rescue redispatches `DESTROY` after its final owner leaves; marker-only rescue still completes once. CODE cycle retention uses verified counted owner slots instead of a graph walk. The rescue registry and remaining producer paths still need audit. `DestroyOwnerSlotResurrectionTest` plus the new weak aggregate regression cover current durable slots without root walks. |
 
 This is an inventory, not evidence that these compatibility paths are safe to
@@ -2274,14 +2260,34 @@ in the current checkpoint above. The full no-sweeps make passed on candidate
 This retires one deferred reachability path. Blessed root snapshots, the raw
 count bridge, and corrective-sweep scheduling still have unmigrated producers.
 
+### Closure aggregate release preserves current owner counts (2026-11-02)
+
+Every production aggregate-capture builder found in `SubroutineParser`,
+`OpcodeHandlerExtended`, `RuntimeCode`, `RuntimeGraphCloner`, and `Internals`
+records a `CLOSURE_PAD` owner slot. `RuntimeBase.retainClosureCapture()` has no
+main-source caller. Its release path nevertheless queued a raw decrement when
+the pad scope ended and a positive count remained, without identifying which
+scalar or element had acquired that count. `LegacyClosureAggregateReleaseOwnerTest`
+keeps a counted scalar owner live while a legacy capture exits and requires
+closure cleanup to leave that count untouched. The test failed on the
+unmodified runtime: the release processed one deferred base.
+
+The closure release now cleans the pad but leaves positive counts to their
+acquiring slots. The focused shard passes on `ab4569170` in 6m15s, and the
+full no-sweeps `nice -n 19 timeout 3600 make` passes in 7m28s. Parent and
+candidate logs are listed in the current checkpoint above. This removes one
+raw deferred-release producer; it does not complete the broader closure,
+first-weaken, or lifecycle-fallback audit.
+
 ### Next steps
 
-1. Audit remaining deferred root-count and snapshot paths at their producer and
-   release sites; add source-level invariants for count/owner disagreements.
-2. Continue through pad capture bookkeeping, first-weaken package compatibility,
-   CODE cycles, compiler-template/CODE/glob cleanup, and remaining roots.
-3. Remove reachability fallbacks, compatibility pins, and corrective scheduling
-   only after their producer regressions and final lifecycle, #1794, #1860, and
+1. Trace the first-weaken package compatibility pin and remaining deferred
+   snapshot paths to their storage producers and final release sites.
+2. Continue through package roots, strong cycles, shared storage, resource
+   owners, pad capture bookkeeping, and exception/unwind cleanup; add producer
+   invariants where counts and active owner identities disagree.
+3. Remove remaining reachability fallbacks and corrective scheduling only
+   after their producer regressions and final lifecycle, #1794, #1860, and
    HTML-Tree acceptance gates pass on both backends.
 4. Reconcile the tested candidate with current master and PR #1938; verify its
    open state and intended diff before declaring readiness.
