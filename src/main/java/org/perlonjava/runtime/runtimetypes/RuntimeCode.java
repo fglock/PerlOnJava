@@ -131,7 +131,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // referent count. Mortal returns also get a separate staged value
             // owner below when their original temporary could otherwise drain.
             if (value instanceof RuntimeScalar scalar) {
-                argumentAliasOwners.add(scalar.retainArgumentAliasOwner());
+                if (hasPersistentArgumentCell(scalar)
+                        || hasCurrentCountedCellOwner(scalar)) {
+                    argumentAliasOwners.add(scalar.retainArgumentAliasOwner());
+                }
                 if ((scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
                         && scalar.value instanceof RuntimeBase
                         && !WeakRefRegistry.isweak(scalar)
@@ -225,6 +228,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     static boolean hasPersistentArgumentCell(RuntimeScalar scalar) {
         return scalar.hasPersistentArgumentStorageCell() || isCurrentArgumentAlias(scalar);
+    }
+
+    /** A staging frame may borrow a counted cell before its storage is registered. */
+    private static boolean hasCurrentCountedCellOwner(RuntimeScalar scalar) {
+        if (scalar == null || !scalar.refCountOwned || WeakRefRegistry.isweak(scalar)
+                || !(scalar.value instanceof RuntimeBase referent)) {
+            return false;
+        }
+        PerlOwnerSlot owner = scalar.countedOwnerSlot();
+        return owner != null && PerlOwnerSlot.isCountedKind(owner.kind())
+                && owner.isActive() && owner.referent() == referent;
     }
 
     public static CallArguments newCallArguments(int capacity) {
