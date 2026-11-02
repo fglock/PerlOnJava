@@ -27,6 +27,15 @@ HTML::Tree 5.07 `t/refloop.t` passes 8/8 on each backend; the full suite passes
 `/private/tmp/issue-1649-html-tree-full-jvm-dc1603047.log`, and
 `/private/tmp/issue-1649-html-tree-full-interpreter-dc1603047.log`.
 
+The #1794 controller lifetime fixture passes 3/3, its long-poll controller
+cleanup passes 5/5, the WebSocket controller lifetime passes 6/6, and #1860
+growing-output cleanup passes 4/4 on system Perl and both backends. The
+long-poll and WebSocket fixtures require local-loopback access. Logs:
+`/private/tmp/issue-1794-*-dc1603047.log`,
+`/private/tmp/mojolicious_controller_destroy_after_finish-*-dc1603047-extended.log`,
+`/private/tmp/mojolicious_websocket_controller_release-*-dc1603047-extended.log`,
+and `/private/tmp/issue-1860-*-dc1603047.log`.
+
 The deferred-release audit found no main-source callers of
 `MortalList.deferDecrement(RuntimeBase)`; direct callers are JUnit fixtures.
 Production paths queue scalar or owner-slot release tokens. The zero-count
