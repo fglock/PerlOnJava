@@ -392,7 +392,7 @@ public class WeakRefRegistry {
                 && MortalList.canTrustFinalCountedRelease(referent);
         if (referent != null
                 && ((referent.deferredFinalReleaseForUncountedOwners
-                        && referent.refCount == WEAKLY_TRACKED)
+                        && (referent.refCount == WEAKLY_TRACKED || referent.refCount == 0))
                     || zeroCountOwnerSlotsExhausted)
                 && !referent.hasOwnerSlots()
                 && PerlRuntime.currentOrNull() != null
