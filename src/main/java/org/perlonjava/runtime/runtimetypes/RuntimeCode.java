@@ -1662,7 +1662,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // CODE can reach refCount zero while a current Perl owner still
         // protects it. Recheck at each exact owner-release boundary; otherwise
         // closure captures could outlive their final owner.
-        if (hasPerlOwnerForCaptureOtherThan(null)) return;
+        if (hasPerlOwnerForCaptureOtherThan(null) || SpecialBlock.hasPendingEndBlock(this)) return;
         finalReleaseDeferredToActiveCode = false;
         refCount = Integer.MIN_VALUE;
         DestroyDispatch.callDestroyFromCountedOwner(this);
@@ -1678,6 +1678,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     private void finishRequestedCaptureRelease() {
         if (!captureReleaseRequested
                 || hasPerlOwnerForCaptureOtherThan(null)
+                || SpecialBlock.hasPendingEndBlock(this)
                 || hasPendingOwnerRelease()) {
             return;
         }
