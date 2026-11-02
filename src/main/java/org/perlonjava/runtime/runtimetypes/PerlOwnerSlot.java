@@ -841,6 +841,14 @@ public final class PerlOwnerSlot {
         return release;
     }
 
+    /** Retire a PerlIO::via native owner together with its paired direct count. */
+    public synchronized PendingRelease releaseCountedNativeIdentity() {
+        if (!isCountedNativeOwner()) return null;
+        PendingRelease release = new PendingRelease(identity, ++nextReleaseSequence, kind);
+        release();
+        return release;
+    }
+
     /** Replace this native slot's referent while retaining the slot identity. */
     public synchronized void replaceNativeOwner(RuntimeBase nextReferent) {
         if (!nativeOwner || referent == null) {

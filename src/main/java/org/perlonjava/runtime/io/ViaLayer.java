@@ -2,8 +2,8 @@ package org.perlonjava.runtime.io;
 
 import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.operators.ModuleOperators;
-import org.perlonjava.runtime.runtimetypes.DestroyDispatch;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
+import org.perlonjava.runtime.runtimetypes.MortalList;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
 import org.perlonjava.runtime.runtimetypes.PerlOwnerSlot;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
@@ -83,11 +83,8 @@ public class ViaLayer implements IOLayer {
         void release() {
             if (released) return;
             released = true;
-            ownerSlot.release();
-            if (counted && referent.refCount > 0 && --referent.refCount == 0) {
-                referent.refCount = Integer.MIN_VALUE;
-                DestroyDispatch.callDestroy(referent);
-            }
+            if (counted) MortalList.releaseCountedNativeOwner(referent, ownerSlot);
+            else ownerSlot.release();
         }
     }
 
