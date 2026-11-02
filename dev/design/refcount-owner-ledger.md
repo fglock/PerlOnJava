@@ -392,7 +392,9 @@ distribution runs and the CPAN timeout log are recorded under
 The new `tied_handler_nested_weak_owner.t` regression stores a target in a
 tied handler before first weaken, then verifies weak-observer and single
 `DESTROY` behavior when the nested slot is removed. System Perl, JVM, and
-interpreter pass 4/4 with corrective sweeps disabled.
+interpreter pass 4/4 with corrective sweeps disabled. Regression and audit
+checkpoint commit `4bd9ae9d5` passes the full no-sweeps `make` in 6m21s; the
+complete log is `/private/tmp/ownership-tied-handler-fullmake-4bd9ae9d5.log`.
 
 ### Ownership fallback audit (2026-11-02)
 
