@@ -878,12 +878,15 @@ public class MortalList {
         // tail-call handoff.
         if (base.restoreVerifiedCurrentCountedOwnerSlotRefCount()) return;
 
-        if (base.localBindingExists) {
-            base.refCount = 1;
+        if (base.hasUncountedPerlOwnerSlotIdentity()) {
+            // A live lexical or package slot owns the referent independently
+            // of the compatibility count. Keep the zero-count lifecycle
+            // obligation on that identity instead of pinning refCount to one.
+            base.deferFinalReleaseToUncountedOwnerSlots();
             return;
         }
-        if (base.hasUncountedPerlOwnerSlotIdentity()) {
-            base.deferFinalReleaseToUncountedOwnerSlots();
+        if (base.localBindingExists) {
+            base.refCount = 1;
             return;
         }
         base.refCount = Integer.MIN_VALUE;
