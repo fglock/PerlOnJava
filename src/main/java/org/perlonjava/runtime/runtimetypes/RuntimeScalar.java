@@ -344,6 +344,36 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     /** Identity of the scalar slot's anonymous IO resource owner, when present. */
     PerlOwnerSlot ioOwnerSlot;
+    /** Identity retaining a detached glob while this scalar stores its value. */
+    private PerlOwnerSlot detachedGlobValueOwnerSlot;
+
+    private void refreshDetachedGlobValueOwner() {
+        RuntimeGlob next = type == GLOB && value instanceof RuntimeGlob glob
+                && glob != this && glob.retainsDetachedComponents() ? glob : null;
+        RuntimeGlob previous = detachedGlobValueOwnerSlot != null
+                && detachedGlobValueOwnerSlot.referent() instanceof RuntimeGlob glob
+                ? glob : null;
+        if (previous == next) return;
+
+        PerlOwnerSlot nextSlot = null;
+        if (next != null) {
+            nextSlot = new PerlOwnerSlot(PerlOwnerSlot.Kind.GLOB_VALUE);
+            nextSlot.acquireGlobValueIdentity(next);
+        }
+        PerlOwnerSlot previousSlot = detachedGlobValueOwnerSlot;
+        detachedGlobValueOwnerSlot = nextSlot;
+        if (previousSlot != null) previousSlot.release();
+        if (previous != null) previous.releaseDetachedComponentsIfUnowned();
+    }
+
+    private void releaseDetachedGlobValueOwner() {
+        PerlOwnerSlot ownerSlot = detachedGlobValueOwnerSlot;
+        if (ownerSlot == null) return;
+        RuntimeGlob glob = ownerSlot.referent() instanceof RuntimeGlob target ? target : null;
+        detachedGlobValueOwnerSlot = null;
+        ownerSlot.release();
+        if (glob != null) glob.releaseDetachedComponentsIfUnowned();
+    }
 
     /** Whether this scalar currently owns an anonymous IO resource slot. */
     public boolean hasIoOwner() {
@@ -925,6 +955,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
         return liveOwningContainer
                 || ownerSlotCount(PerlOwnerSlot.Kind.PACKAGE_SCALAR_SLOT) != 0
+                || ownerSlotCount(PerlOwnerSlot.Kind.GLOB_COMPONENT_SLOT) != 0
                 || localBindingExists
                 || hasCodeSlotBinding()
                 || hasClosureCaptureOwner()
@@ -1738,6 +1769,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && !MyVarCleanupStack.isRegistered(scalar)) {
             transferIoOwner(scalar, this);
         }
+        refreshDetachedGlobValueOwner();
     }
 
     public RuntimeScalar(RuntimeCode value) {
@@ -1777,6 +1809,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
         this.value = value;
         this.scalarStoredGlob = value != null;
+        refreshDetachedGlobValueOwner();
     }
 
     public RuntimeScalar(byte[] bytes) {
@@ -3183,6 +3216,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         growingString = null;
         type = value.type;
         this.value = copyScalarPayload(value.type, value.value);
+        refreshDetachedGlobValueOwner();
         refreshArgumentAliasOwnerSlots();
         utf8UncheckedOctets = value.utf8UncheckedOctets;
         utf8MalformedWarning = value.utf8MalformedWarning;
@@ -3228,6 +3262,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             value = new MutableIntegerValue(result);
         }
         type = RuntimeScalarType.INTEGER;
+        refreshDetachedGlobValueOwner();
         refreshArgumentAliasOwnerSlots();
         utf8UncheckedOctets = false;
         utf8MalformedWarning = null;
@@ -3304,6 +3339,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             if (this != value) {
                 this.type = value.type;
                 this.value = copyScalarPayload(value.type, value.value);
+                refreshDetachedGlobValueOwner();
                 this.utf8UncheckedOctets = value.utf8UncheckedOctets;
                 this.utf8MalformedWarning = value.utf8MalformedWarning;
                 this.tainted = value.tainted;
@@ -3320,6 +3356,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             } else {
                 this.type = value.type;
                 this.value = copyScalarPayload(value.type, value.value);
+                refreshDetachedGlobValueOwner();
                 this.utf8UncheckedOctets = value.utf8UncheckedOctets;
                 this.utf8MalformedWarning = value.utf8MalformedWarning;
                 this.tainted = value.tainted;
@@ -3426,6 +3463,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             closeIOOnDrop();
             this.type = RuntimeScalarType.UNDEF;
             this.value = null;
+            refreshDetachedGlobValueOwner();
             refreshArgumentAliasOwnerSlots();
             this.tainted = false;
             this.numericLiteralText = null;
@@ -3479,6 +3517,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // so no refCount was incremented/decremented, and no mortal entries were added.
         this.type = value.type;
         this.value = copyScalarPayload(value.type, value.value);
+        refreshDetachedGlobValueOwner();
         refreshArgumentAliasOwnerSlots();
         this.utf8UncheckedOctets = value.utf8UncheckedOctets;
         this.utf8MalformedWarning = value.utf8MalformedWarning;
@@ -3548,6 +3587,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 } else {
                     this.type = value.type;
                     this.value = copyScalarPayload(value.type, value.value);
+                    refreshDetachedGlobValueOwner();
                     refreshArgumentAliasOwnerSlots();
                     this.utf8UncheckedOctets = value.utf8UncheckedOctets;
                     this.utf8MalformedWarning = value.utf8MalformedWarning;
@@ -3742,6 +3782,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // Do the assignment
         this.type = value.type;
         this.value = copyScalarPayload(value.type, value.value);
+        refreshDetachedGlobValueOwner();
         this.scalarReferenceContentsOwner = null;
         refreshArgumentAliasOwnerSlots();
         // An explicitly discarded closure can have an inflated CODE refcount,
@@ -5805,6 +5846,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     public RuntimeScalar undefine() {
+        releaseDetachedGlobValueOwner();
         if (isPackageGlobalRoot) {
             MortalList.invalidateExternalRootSnapshot();
         }
@@ -6011,6 +6053,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     private static void scopeExitCleanup(RuntimeScalar scalar, boolean finalRelease) {
         if (scalar == null) return;
         if (scalar.hasCodeSlotBinding()) return;
+        if (scalar instanceof RuntimeGlob glob) glob.releaseDetachedComponentsIfUnowned();
+        if (finalRelease || (!scalar.hasClosureCaptureOwner() && !scalar.hasOwnerSlots()
+                && !scalar.hasScalarCellOwner())) {
+            scalar.releaseDetachedGlobValueOwner();
+        }
         RuntimeBase untrackedValueAtScopeExit = scalar.untrackedReferenceOwnerSlot == null
                 ? null : scalar.untrackedReferenceOwnerSlot.referent();
         scalar.refreshUntrackedReferenceOwner();
