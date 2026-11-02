@@ -1659,12 +1659,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         releasePendingCaptureEdges();
         finishRequestedCaptureRelease();
         if (!finalReleaseDeferredToActiveCode) return;
-        // CODE can reach refCount zero while a transient call-frame, argument,
-        // or END-block owner still protects it. Recheck at each such owner
-        // release boundary; otherwise the count can stay at zero after its
-        // last real owner leaves and the closure captures never get released.
-        if (hasPerlOwnerForCaptureOtherThan(null)
-                || activeEndBlockExecutions > 0 || SpecialBlock.hasPendingEndBlock(this)) return;
+        // CODE can reach refCount zero while a current Perl owner still
+        // protects it. Recheck at each exact owner-release boundary; otherwise
+        // closure captures could outlive their final owner.
+        if (hasPerlOwnerForCaptureOtherThan(null)) return;
         finalReleaseDeferredToActiveCode = false;
         refCount = Integer.MIN_VALUE;
         DestroyDispatch.callDestroyFromCountedOwner(this);
@@ -1680,9 +1678,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     private void finishRequestedCaptureRelease() {
         if (!captureReleaseRequested
                 || hasPerlOwnerForCaptureOtherThan(null)
-                || hasPendingOwnerRelease()
-                || activeEndBlockExecutions > 0
-                || SpecialBlock.hasPendingEndBlock(this)) {
+                || hasPendingOwnerRelease()) {
             return;
         }
         captureReleaseRequested = false;
@@ -4143,26 +4139,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     // Conservative compatibility-index metadata survives ownership retirement
     // when embedding code still holds a CV descriptor. It retains no captures.
     boolean retiredOwnedEdges;
-
-    /** Number of queued phaser executions currently invoking this CV. */
-    int activeEndBlockExecutions;
-    /** The queue's last selective owner was rescued while this CV was running. */
-    boolean rescuedActiveEndBlockOwner;
-
-    void beginEndBlockExecution() {
-        activeEndBlockExecutions++;
-    }
-
-    void endEndBlockExecution() {
-        if (activeEndBlockExecutions > 0) activeEndBlockExecutions--;
-        if (activeEndBlockExecutions == 0) {
-            if (rescuedActiveEndBlockOwner) {
-                rescuedActiveEndBlockOwner = false;
-                MortalList.deferDecrement(this);
-            }
-            finishActiveCodeOwnerRelease();
-        }
-    }
 
     /** Cached scalar constants referenced via backslash inside this CV's optree. */
     public RuntimeBase[] padConstants;
