@@ -441,6 +441,17 @@ full no-sweeps `make` passes on immutable `3cbff31fb` in 9m37s. Logs:
 `RuntimeScalar.undefine()` and `RuntimeBase.releaseClosureCapture()` deferred
 decrement producers remain to be audited.
 
+The weakly tracked `RuntimeScalar.undefine()` path now leaves the sentinel in
+place when current argument-alias slots retain the referent. The final alias
+release carries the deferred lifecycle obligation and clears weak observers
+without a root query. `WeakArgumentAliasUndefOwnerTest` failed on test-only
+parent `47d4127f8` because undef changed the sentinel to `1`; the supported
+shard-0 gate passes on `9addf278a` in 5m56s. The full `make` is pending for
+this follow-up. Logs:
+`/private/tmp/issue-1649-argument-alias-parent-shard0-47d4127f8.log` and
+`/private/tmp/issue-1649-argument-alias-shard0-9addf278a.log`. This removes one
+raw decrement producer; `RuntimeBase.releaseClosureCapture()` remains.
+
 On 2026-11-02, branch `wip/detached-glob-owner-20261102-064229` passed the
 full no-sweeps `make` on `2cc19ab4d` in 7m41s. The 18-file lifecycle matrix
 passes 117/117 tests on each backend, covering closure and tied captures,

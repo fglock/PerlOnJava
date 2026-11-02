@@ -55,6 +55,7 @@ priorities and future plans.
 
 - Accept YAML-style mapping syntax in `YAML::Syck::LoadJSON`, matching Syck's JSON loader behavior (#1942).
 - Track first-bless mortal references with deferred owner identities while preserving weak-source behavior (#1649).
+- Defer weakly tracked `undef` cleanup to current argument-alias identities, preserving the tracking sentinel (#1649).
 - Disable corrective sweeps by default while migrating to explicit reference ownership; retain temporary scalar call and mortal return values through their caller boundaries, and balance argument, scalar-cell, closure, aggregate, package scalar/array/hash roots, tied-handler, shared-view, named CODE, persistent state, and destructor lifetimes (#1649).
 - Keep queued END callbacks live through their current queue owner and active-code handoff, without a synthetic positive count (#1649).
 - Validate counted scalar-cell owners through current array and hash storage during deferred cleanup, avoiding root snapshots for migrated edges (#1649).
