@@ -371,7 +371,7 @@ Run on JVM and interpreter backends with `timeout` and complete output logs:
 
 ## Progress Tracking
 
-### Current Status: owner-source migration continues; tested runtime checkpoint `549924991`
+### Current Status: owner-source migration continues; tested runtime checkpoint `3cbff31fb`
 
 The END queue now keeps a real owner identity across dequeue and callback
 execution. `SpecialBlock.hasPendingEndBlock()` accepts only a current queue cell
@@ -425,6 +425,21 @@ provenance-free bare deferred decrements; trace their producers before removing
 that compatibility path. Logs:
 `/private/tmp/issue-1649-storage-transfer-parent-make-0b0ba7f27-extended.log`
 and `/private/tmp/issue-1649-storage-transfer-fullmake-549924991.log`.
+
+On 2026-11-02, first bless now acquires a counted temporary owner identity and
+carries its release token through the mortal queue. Strong expression
+temporaries remain owners until their deferred boundary; a weak bless source
+keeps the existing weak-alias behavior and does not remain registered as a
+strong scalar owner. `BlessTemporaryOwnerProvenanceTest` failed on test-only
+parent `80bf83b3a`. The first full run exposed a weak-glob alias regression;
+the focused shard then passed after weak sources were handled separately. The
+full no-sweeps `make` passes on immutable `3cbff31fb` in 9m37s. Logs:
+`/private/tmp/issue-1649-bless-temp-parent-make-80bf83b3a.log`,
+`/private/tmp/issue-1649-bless-owner-fullmake-80bf83b3a.log`,
+`/private/tmp/issue-1649-bless-owner-shard0-80bf83b3a.log`, and
+`/private/tmp/issue-1649-bless-owner-fullmake-3cbff31fb.log`. The raw
+`RuntimeScalar.undefine()` and `RuntimeBase.releaseClosureCapture()` deferred
+decrement producers remain to be audited.
 
 On 2026-11-02, branch `wip/detached-glob-owner-20261102-064229` passed the
 full no-sweeps `make` on `2cc19ab4d` in 7m41s. The 18-file lifecycle matrix
@@ -827,6 +842,11 @@ integration. Evidence:
   through current array/hash membership without changing the identity or count.
   Parent regression and full no-sweeps `make` evidence are recorded in Current
   Status; raw bare-decrement producers remain under audit.
+- [x] On 2026-11-02, first-bless mortal references now carry a counted owner
+  identity through their deferred release. Weak bless sources preserve the
+  existing no-strong-alias behavior. The parent regression, focused shard, and
+  full no-sweeps `make` pass on `3cbff31fb`; the remaining raw producers are
+  `RuntimeScalar.undefine()` and `RuntimeBase.releaseClosureCapture()`.
 
 ### Historical handoff: issue #1132 / PR #1204
 
