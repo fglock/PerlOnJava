@@ -349,11 +349,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     private void refreshDetachedGlobValueOwner() {
         RuntimeGlob next = type == GLOB && value instanceof RuntimeGlob glob
-                && glob != this && glob.retainsDetachedComponents() ? glob : null;
+                && glob != this && glob.retainsDetachedComponents()
+                && hasDurableStrongValueSlot() ? glob : null;
         RuntimeGlob previous = detachedGlobValueOwnerSlot != null
                 && detachedGlobValueOwnerSlot.referent() instanceof RuntimeGlob glob
                 ? glob : null;
-        if (previous == next) return;
+        if (previous == next) {
+            releaseClearedDetachedGlobSelf();
+            return;
+        }
 
         PerlOwnerSlot nextSlot = null;
         if (next != null) {
@@ -364,19 +368,28 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         detachedGlobValueOwnerSlot = nextSlot;
         if (previousSlot != null) previousSlot.release();
         if (previous != null) previous.releaseDetachedComponentsIfUnowned();
-        if (this instanceof RuntimeGlob ownedGlob
-                && (type != GLOB || value != ownedGlob)) {
-            ownedGlob.releaseDetachedComponentsIfUnowned();
-        }
+        releaseClearedDetachedGlobSelf();
     }
 
     private void releaseDetachedGlobValueOwner() {
         PerlOwnerSlot ownerSlot = detachedGlobValueOwnerSlot;
-        if (ownerSlot == null) return;
-        RuntimeGlob glob = ownerSlot.referent() instanceof RuntimeGlob target ? target : null;
+        RuntimeGlob glob = ownerSlot != null
+                && ownerSlot.referent() instanceof RuntimeGlob target ? target : null;
+        if (glob == null && type == GLOB && value instanceof RuntimeGlob target
+                && target != this && target.retainsDetachedComponents()) {
+            glob = target;
+        }
         detachedGlobValueOwnerSlot = null;
-        ownerSlot.release();
+        if (ownerSlot != null) ownerSlot.release();
         if (glob != null) glob.releaseDetachedComponentsIfUnowned();
+        releaseClearedDetachedGlobSelf();
+    }
+
+    private void releaseClearedDetachedGlobSelf() {
+        if (this instanceof RuntimeGlob glob && glob.retainsDetachedComponents()
+                && (type != GLOB || value != glob)) {
+            glob.releaseDetachedComponentsIfUnowned();
+        }
     }
 
     /** Whether this scalar currently owns an anonymous IO resource slot. */
@@ -499,6 +512,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             if (owner != null) containerOwners.add(owner);
             this.containerOwner = owner;
         }
+        refreshDetachedGlobValueOwner();
         propagateTiedHandlerMarkerToReferent();
     }
 
@@ -1139,6 +1153,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         updateUntrackedReferenceOwner((type & RuntimeScalarType.REFERENCE_BIT) != 0
                 && value instanceof RuntimeBase referent ? referent : null);
         refreshSuspendedFrameOwnerSlots();
+        refreshDetachedGlobValueOwner();
     }
 
     static final class ArgumentAliasOwner {
