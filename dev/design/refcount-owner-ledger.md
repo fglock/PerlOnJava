@@ -371,7 +371,7 @@ Run on JVM and interpreter backends with `timeout` and complete output logs:
 
 ## Progress Tracking
 
-### Current Status: owner-source migration continues; tested runtime checkpoint `4b772241d`
+### Current Status: owner-source migration continues; tested runtime checkpoint `830c7690d`
 
 On 2026-11-02, branch `wip/detached-glob-owner-20261102-064229` passed the
 full no-sweeps `make` on `2cc19ab4d` in 7m41s. The 18-file lifecycle matrix
@@ -428,6 +428,18 @@ commit. Logs:
 `/private/tmp/issue-1649-regex-callback-focused-4b772241d.log` and
 `/private/tmp/issue-1649-regex-callback-fullmake-4b772241d.log`.
 
+On 2026-11-02, `RuntimeTiedHashIterator` gained a `TIED_HASH_ITERATOR_KEY`
+owner identity for the current reference key passed to `NEXTKEY`. It releases
+that identity on the next-key transition (including exceptions), exhaustion,
+and every iterator reset. Tracked referents pair the slot with exactly one
+count; weakly tracked referents retain the identity without a fabricated
+count. `pendingKey` continues to rely on the tied handler's return owner until
+the key is consumed. `RuntimeTiedHashIteratorOwnerSlotTest` passes 2/2, and the
+full no-sweeps `make` passes on immutable `830c7690d` in 7m50s, including Joni,
+all five unit shards, and launcher integration. Logs:
+`/private/tmp/issue-1649-tied-iterator-focused-setupfix.log` and
+`/private/tmp/issue-1649-tied-iterator-fullmake-830c7690d.log`.
+
 ### Ownership fallback audit (2026-11-02)
 
 | Path | Current strong edge and release | Remaining recovery or evidence |
@@ -439,6 +451,7 @@ commit. Logs:
 | Tied handlers | The tie wrapper acquires a `TIE_HANDLER` slot; nested handler hashes/arrays own values through their ordinary element slots. | `tied_handler_nested_weak_owner.t` verifies store-before-weaken and final nested-slot release on system Perl and both backends. `possiblyStoredInTiedHandler` is propagated as a legacy marker and still needs a separate unused-state audit. |
 | PerlIO::via layer self | `ViaLayer` installs an `IO_VIA_LAYER` identity for the Java layer's retained `PUSHED` value. Counted values pair it with one direct increment; final release carries the slot token through `MortalList` and `DestroyDispatch`. | `perlio_via_self_owner_lifecycle.t` passes 3/3 on system Perl and both backends with sweeps disabled. `ViaLayerCountedOwnerLifecycleTest` preserves a live closure-pad owner, and `ViaLayerReleaseDuringDestroyTest` checks count balance during active destruction. |
 | Regex callback CODE | `RuntimeRegex.setExecutableCallbacks()` retains a `REGEX_CALLBACK` native slot. If CODE is tracked, that identity is marked as owning its paired count; final callback release decrements only that count. | `RuntimeRegexCallbackCountedOwnerTest` verifies tracked count pairing, shared callback owners, and that an initially uncounted callback does not decrement a later count. The slot participates in verified count repair and native-owner resurrection checks. |
+| Tied-hash iterator key | `RuntimeTiedHashIterator` holds the current key passed to `NEXTKEY` through a `TIED_HASH_ITERATOR_KEY` identity. The slot pairs with a count only for tracked referents and is released on NEXTKEY, exceptions, exhaustion, and iterator reset. `pendingKey` remains under its tied-handler return owner until consumption. | `RuntimeTiedHashIteratorOwnerSlotTest` passes 2/2; the full no-sweeps `make` passes on `830c7690d`. |
 | Async localized package aggregates | `DynamicVariableManager` acquires a `SUSPENDED_FRAME` owner before `dynamicSuspendState()` detaches the active aggregate; resume reinstalls the same array/hash and releases that frame owner afterward. | `issue_1649_localized_global_aggregate_async_owner.t` verifies localized array/hash element lifetime across suspension, resume, and cancellation on both backends. The suspend path preserves the original aggregate and its element identities; no root-snapshot fallback is used here. |
 | Thread snapshot roots | `RuntimeGraphCloner` assigns a `TEMPORARY_ROOT` identity to each top-level snapshot root and to the direct referent of a strong scalar root. `RootSnapshot` owns these identities through clone hooks and entry setup; thread cleanup and runtime close/reset retire them. | `WeakRefRegistry.weaken()` no longer walks the cloned root graph or writes a synthetic positive count. `ThreadSnapshotTemporaryRootOwnerTest` checks `WEAKLY_TRACKED` state and weak-observer cleanup at lease release. |
 | Cleared aggregates | Scope-exit cleanup checks current Perl owner identities and pending releases before destruction. `ClearedAggregateNestedPackageOwnerNoRootWalkTest` verifies that a live nested package slot preserves its weak observer with zero root queries. | `finalizeClearedAggregateOwnerAfterScopeExit()` still consults a cached external-root snapshot for zero-count candidates with no current owner identity. `ReachabilityQueryCostTest.repeatedAggregateScopeCleanupSharesExternalRootSnapshot` asserts one shared snapshot for this legacy path. |
@@ -722,6 +735,10 @@ that remote work and reconcile only after the ownership candidate is complete.
   verified count restoration includes the native slot. The focused regression
   and full no-sweeps `make` pass on `4b772241d`; logs are recorded in Current
   Status.
+- [x] On 2026-11-02, tied-hash iteration now retains the current key through a
+  stable owner slot and releases it at NEXTKEY, exception, exhaustion, and
+  reset boundaries. Tracked and weakly tracked cases pass the focused test;
+  the full no-sweeps `make` passes on `830c7690d`.
 
 ### Historical handoff: issue #1132 / PR #1204
 
@@ -739,21 +756,16 @@ pass. Preserve both focused ownership regressions when evolving the ledger.
 
 1. Trace each remaining deferred-release, first-weaken, cleared-aggregate,
    closure, and destruction fallback to its strong-edge acquisition, transfer,
-   and release sites. Continue the direct-count audit with tied-hash iterator
-   keys, whose current key uses a transient trace hold plus a direct count
-   rather than a `PerlOwnerSlot`. Distinguish already-ledgered edges from true
-   root walks.
-2. Add missing stable identities for tied-handler values, closure/CODE captures,
-   package slots, cycles, scalar-reference contents, suspended frames, cloned
-   storage, and resource owners; fix count disagreements at their producers.
+   and release sites. Distinguish already-ledgered edges from true root walks.
+2. Continue the direct-count producer audit, including `unweaken()`, package
+   roots, cycles, scalar-reference contents, shared storage, and resource
+   owners. Trace each DESTROY resurrection count to its real owner slot.
 3. Replace lifecycle decisions based on root snapshots, call depth, and
    fabricated counts with current owner identities and pending-release state.
 4. Remove compatibility pins, corrective-sweep hooks, and unused recovery
    caches only after their normal-execution producers and release paths are
    covered.
-5. Migrate `unweaken()` from the package compatibility count bridge and audit
-   direct count producers used by DESTROY resurrection.
-6. Run the no-sweeps closure, weak/DESTROY/resurrection/cycle, HTML-Tree 8/8,
+5. Run the no-sweeps closure, weak/DESTROY/resurrection/cycle, HTML-Tree 8/8,
    async-lifetime, and full integration gates on the final immutable candidate;
    then reconcile and validate PR #1938 before publication.
 
