@@ -380,7 +380,17 @@ string alias assignment; `GLOB_VALUE` and namespace-move identities still
 protect components with surviving Perl owners. The permanent seven-assertion
 regression passes under system Perl and both PerlOnJava backends. The full
 no-sweeps `make` gate passed on `b454cab08` in 6m18s. Captured logs are under
-`/private/tmp/` with the prefix `stale-stash-detached-glob-`.
+`/private/tmp/` with the prefix `stale-stash-detached-glob-`. HTML::Tree 5.07
+`t/refloop.t` also passes 8/8 under system Perl, JVM, and interpreter with
+corrective sweeps disabled.
+
+The first fallback audit confirms `RuntimeScalar.setLargeRefCounted()` uses
+current owner slots for immediate overwrite cleanup. Deferred release still
+has `MortalList.restoreReachableOwnerCount()`, which validates counted scalar
+owners through a root query after direct slot repair fails. The synthetic
+`ReachabilityQueryCostTest.deferredOwnerChecksShareOneRootSnapshotPerDrain`
+exercises that recovery path; it remains until the producer/storage mismatch
+is traced and normal execution is shown not to need it.
 
 ### Completed Work
 
