@@ -371,7 +371,7 @@ Run on JVM and interpreter backends with `timeout` and complete output logs:
 
 ## Progress Tracking
 
-### Current Status: owner-source migration continues; tested runtime checkpoint `741d59222`
+### Current Status: owner-source migration continues; tested runtime checkpoint `7c44897fc`
 
 On 2026-11-02, branch `wip/detached-glob-owner-20261102-064229` extended
 explicit ownership through asynchronous suspension of localized package
@@ -419,12 +419,25 @@ existing `deferredOwnerChecksShareOneRootSnapshotPerDrain` fixture directly
 adds a scalar after recording its count, while the new regular nested-store
 test shows the ordinary producer uses owner identities without a reachability
 query. Normal closure producers in the parser and both execution backends
-install CODE-owned capture slots; the END/scalar-root path is reached only for
-legacy captures, which existing Java tests construct directly. First weaken
-retains a package compatibility pin, also asserted directly by existing Java
-tests. Cleared aggregate cleanup can query an external-root snapshot, and
-destruction can treat an unverified positive count as resurrection. The live
-issue #1649 remains open. PR #1938 remains open as a draft, but its remote head
+install CODE-owned capture slots. A tracked referent retained by a semantic
+capture now keeps its weak-tracking sentinel until the final `CLOSURE_PAD`
+owner leaves; that release retries cleanup after the pending-capture marker is
+retired. `CapturedAggregateWeakOwnerReleaseTest` and the full no-sweeps `make`
+pass on `7c44897fc` (10m52s). HTML::Tree 5.07 passes 989/989 tests across 23
+files on each backend, and `t/refloop.t` passes 8/8 on each. Logs:
+`/private/tmp/issue-1649-capture-sentinel-make-7c44897fc.log`,
+`/private/tmp/issue-1649-capture-sentinel-html-tree-jvm-7c44897fc.log`,
+`/private/tmp/issue-1649-capture-sentinel-html-tree-interpreter-7c44897fc.log`,
+`/private/tmp/issue-1649-capture-sentinel-refloop-jvm-7c44897fc.log`, and
+`/private/tmp/issue-1649-capture-sentinel-refloop-interpreter-7c44897fc.log`.
+Legacy captures without complete CODE-owner identity still use END-root and
+scalar-root snapshots, and deferred cleanup retains a positive-count bridge
+for some legacy capture state. Existing Java tests construct these paths
+directly. First weaken retains a package compatibility pin, also asserted by
+existing Java tests. Cleared aggregate cleanup can query an external-root
+snapshot, and destruction can treat an unverified positive count as
+resurrection. The live issue #1649 remains open. PR #1938 remains open as a
+draft, but its remote head
 `b2f44fc2d` is on another branch and GitHub reports it conflicting with
 `master` at `4a5c33753`; preserve that work until the remaining owner paths are
 audited and the final candidate is ready to reconcile. Next: trace scalar,
@@ -445,7 +458,7 @@ longer depend on it.
 | Async localized package aggregates | `DynamicVariableManager` acquires a `SUSPENDED_FRAME` owner before `dynamicSuspendState()` detaches the active aggregate; resume reinstalls the same array/hash and releases that frame owner afterward. | `issue_1649_localized_global_aggregate_async_owner.t` verifies localized array/hash element lifetime across suspension, resume, and cancellation on both backends. The suspend path preserves the original aggregate and its element identities; no root-snapshot fallback is used here. |
 | Thread snapshot roots | `RuntimeGraphCloner` assigns a `TEMPORARY_ROOT` identity to each top-level snapshot root and to the direct referent of a strong scalar root. `RootSnapshot` owns these identities through clone hooks and entry setup; thread cleanup and runtime close/reset retire them. | `WeakRefRegistry.weaken()` no longer walks the cloned root graph or writes a synthetic positive count. `ThreadSnapshotTemporaryRootOwnerTest` checks `WEAKLY_TRACKED` state and weak-observer cleanup at lease release. |
 | Cleared aggregates | Scope-exit cleanup checks current Perl owner identities and pending releases before destruction. | `finalizeClearedAggregateOwnerAfterScopeExit()` still consults a cached external-root snapshot for zero-count aggregates when direct identities do not prove an owner. |
-| Closure cleanup | Parser, JVM, and interpreter closure producers install explicit `SCALAR_CAPTURE` / `CLOSURE_PAD` slots tied to the owning CODE. Full HTML::Tree 5.07 passes 23/23 files and 989/989 tests on both backends with sweeps disabled. | Legacy captures without complete CODE-owner identity still use END-root and scalar-root snapshots; existing Java coverage constructs this state directly in `scopeExitedCaptureOwnersShareOneScalarRootSnapshot`. |
+| Closure cleanup | Parser, JVM, and interpreter closure producers install explicit `SCALAR_CAPTURE` / `CLOSURE_PAD` slots tied to the owning CODE. Semantic capture slots preserve the weak sentinel and finalize after the last pending capture release. Full HTML::Tree 5.07 passes 23/23 files and 989/989 tests on both backends with sweeps disabled. | Legacy captures without complete CODE-owner identity still use END-root and scalar-root snapshots; deferred cleanup retains a positive-count bridge when native capture slots are absent. Existing Java coverage constructs these states directly. |
 | Destruction / resurrection | Global destruction compares newly installed slots; ordinary destruction validates current owner slots and semantic captures. | Objects with no owner slots and no activated legacy owner set still use positive `refCount` as the compatibility resurrection proof. |
 
 The remaining snapshot and compatibility paths are not yet proven unnecessary
@@ -702,6 +715,12 @@ that remote work and reconcile only after the ownership candidate is complete.
   close/reset. `ThreadSnapshotTemporaryRootOwnerTest` passes; the full no-sweeps
   `make` passes on `95be7ae91` in 7m29s. Log:
   `/private/tmp/issue-1649-snapshot-owner-make-95be7ae91.log`.
+- [x] On 2026-11-02, semantic closure-pad owners now preserve weakly tracked
+  referents through owner identities, without setting a synthetic positive
+  count. Final capture release retries cleanup after the pending marker is
+  retired. `CapturedAggregateWeakOwnerReleaseTest`, the no-sweeps `make`, and
+  HTML::Tree 5.07 pass on `7c44897fc`; both backends pass 989/989 tests, with
+  `t/refloop.t` 8/8. Logs are recorded in Current Status.
 
 ### Historical handoff: issue #1132 / PR #1204
 
