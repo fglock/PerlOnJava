@@ -314,7 +314,17 @@ public class BytecodeCompiler implements Visitor {
     private final Map<String, List<GotoLabelTarget>> gotoLabelTargetsByName = new HashMap<>();
     final List<Object[]> pendingGotos = new ArrayList<>();  // [patchPc(Integer), GotoLabelTarget]
 
+    // Shared sentinel for blocks with no goto labels — avoids per-block LinkedHashMap allocation.
+    private static final Map<String, GotoLabelTarget> EMPTY_GOTO_SCOPE = Map.of();
+
     private void pushGotoLabelScope(BlockNode block) {
+        // Fast path: skip LinkedHashMap allocation when neither the running label table
+        // nor the block's own pre-declared labels have anything for this block.
+        if (gotoLabelTargetsByName.isEmpty() && block.labels.isEmpty()) {
+            gotoLabelScopes.push(EMPTY_GOTO_SCOPE);
+            gotoLabelBlockScopes.push(block);
+            return;
+        }
         Map<String, GotoLabelTarget> scope = new LinkedHashMap<>();
         // Reuse the predeclared targets, rather than inventing a second target
         // for the same source label.  Static goto resolution must first choose
@@ -397,7 +407,8 @@ public class BytecodeCompiler implements Visitor {
             boolean constructEntry = (expressionContext
                     || block.getBooleanAnnotation("blockIsDoBlock"))
                     && !block.getBooleanAnnotation("fieldInitializer");
-            Map<String, GotoLabelTarget> local = new HashMap<>();
+            // Lazily allocate `local` — most blocks have no labels so we skip the HashMap.
+            Map<String, GotoLabelTarget> local = null;
             // StatementParser keeps labels that prefix a statement in the
             // owning block's label table.  They have no LabelNode child, but
             // must still be visible to a forward goto outside that block.
@@ -405,6 +416,7 @@ public class BytecodeCompiler implements Visitor {
             // report the Perl diagnostic instead of falling through to
             // "Can't find label".
             for (String name : block.labels) {
+                if (local == null) local = new HashMap<>();
                 GotoLabelTarget created = new GotoLabelTarget(name, block.getIndex(),
                         constructEntry, insideLoopBody, conditionalContexts, simpleConditionalBranch, block);
                 local.put(name, created);
@@ -413,6 +425,7 @@ public class BytecodeCompiler implements Visitor {
             }
             for (Node child : block.elements) {
                 if (!(child instanceof LabelNode label)) continue;
+                if (local == null) local = new HashMap<>();
                 GotoLabelTarget target = local.computeIfAbsent(label.label, ignored -> {
                     GotoLabelTarget created = new GotoLabelTarget(label.label, label.getIndex(), constructEntry,
                             insideLoopBody, conditionalContexts, simpleConditionalBranch, block);
