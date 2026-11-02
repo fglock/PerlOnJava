@@ -43,6 +43,7 @@ priorities and future plans.
 - Carry exact array-element owner identities through pop, shift, delete, and localized unwind while preserving borrowed `@_` aliases, so removed references release despite stale array ownership summaries (#1649).
 - Track visible named package IO globs with per-stash owner identities, excluding anonymous `Symbol::gensym` handles from package ownership (#1649).
 - Preserve moved scalar, array, hash, and CODE slots while deleting a whole namespace, and release them with the detached namespace glob (#1649).
+- Honor void context when deleting stash entries, releasing detached glob and namespace owners immediately (#1649).
 - Acquire active lexical owner identities when aggregate registration follows the initial pad bind, and clear weak aggregate observers on normal scope exit (#1649).
 - Exclude weak glob aliases from strong-owner backfill; release their anonymous IO holder on weaken and restore it on unweaken (#1649).
 - Release displaced hash-element owners when multi-LHS list assignment replaces a hash tail, through the normal tied and package-root-aware store path (#1649).
