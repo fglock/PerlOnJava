@@ -105,16 +105,23 @@ public final class PerlOwnerSlot {
         private final AtomicBoolean completed = new AtomicBoolean();
         private final LifecycleRuntimeState retainedState;
         private final RuntimeBase retainedReferent;
+        private final PerlOwnerSlot releaseAtCompletion;
 
         private PendingRelease(long ownerSlotIdentity, long sequence, Kind kind) {
-            this(ownerSlotIdentity, sequence, kind, null);
+            this(ownerSlotIdentity, sequence, kind, null, null);
         }
 
         private PendingRelease(long ownerSlotIdentity, long sequence, Kind kind,
                                RuntimeBase referent) {
+            this(ownerSlotIdentity, sequence, kind, referent, null);
+        }
+
+        private PendingRelease(long ownerSlotIdentity, long sequence, Kind kind,
+                               RuntimeBase referent, PerlOwnerSlot releaseAtCompletion) {
             this.ownerSlotIdentity = ownerSlotIdentity;
             this.sequence = sequence;
             this.kind = kind;
+            this.releaseAtCompletion = releaseAtCompletion;
             PerlRuntime runtime = PerlRuntime.currentOrNull();
             boolean transfer = kind == Kind.ARGUMENT_VALUE || kind == Kind.RETURN_VALUE
                     || kind == Kind.CODE_SLOT;
@@ -141,6 +148,7 @@ public final class PerlOwnerSlot {
 
         void complete() {
             if (completed.compareAndSet(false, true)) {
+                if (releaseAtCompletion != null) releaseAtCompletion.release();
                 PerlRuntime.releaseOwnerSlotReferent(retainedState, retainedReferent);
             }
         }
@@ -845,6 +853,21 @@ public final class PerlOwnerSlot {
         PendingRelease release = new PendingRelease(identity, ++nextReleaseSequence, kind, referent);
         release();
         return release;
+    }
+
+    /**
+     * Queue a counted edge whose owner remains live until its deferred release
+     * is processed. The pending token retires this slot exactly once when
+     * completed; ordinary overwritten or removed slots should continue to use
+     * {@link #releaseCountedIdentity()} because their storage edge is already
+     * gone when the decrement is queued.
+     */
+    public synchronized PendingRelease releaseCountedIdentityAtCompletion() {
+        if (referent == null) return null;
+        if (nativeOwner || legacyCaptureCount != 0) {
+            throw new IllegalStateException("counted release requires a counted identity");
+        }
+        return new PendingRelease(identity, ++nextReleaseSequence, kind, referent, this);
     }
 
     /** Retire a counted native owner together with its paired direct count. */
