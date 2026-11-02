@@ -379,18 +379,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && target != this && target.retainsDetachedComponents()) {
             glob = target;
         }
-        if ("1".equals(System.getenv("PERLONJAVA_TRACE_NAMESPACE_OWNER"))
-                && (glob != null || type == GLOB && value instanceof RuntimeGlob)) {
-            RuntimeGlob candidate = glob != null ? glob : (RuntimeGlob) value;
-            System.err.println("NSOWNER scalar release cell=" + getClass().getSimpleName()
-                    + " type=" + type
-                    + " valueSelf=" + (candidate == this)
-                    + " glob=" + candidate.globName
-                    + " namespaceMove=" + (candidate.namespaceMove != null)
-                    + " componentOwners=" + candidate.ownerSlotCount(PerlOwnerSlot.Kind.GLOB_COMPONENT_SLOT)
-                    + " globValues=" + candidate.ownerSlotCount(PerlOwnerSlot.Kind.GLOB_VALUE)
-                    + " slot=" + (ownerSlot != null));
-        }
         detachedGlobValueOwnerSlot = null;
         if (ownerSlot != null) ownerSlot.release();
         if (glob != null) glob.releaseDetachedComponentsIfUnowned();
@@ -5867,16 +5855,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     public RuntimeScalar undefine() {
-        if ("1".equals(System.getenv("PERLONJAVA_TRACE_NAMESPACE_OWNER"))
-                && type == GLOB && value instanceof RuntimeGlob glob
-                && glob.retainsDetachedComponents()) {
-            System.err.println("NSOWNER scalar undef cell=" + getClass().getSimpleName()
-                    + " self=" + (glob == this)
-                    + " glob=" + glob.globName
-                    + " namespaceMove=" + (glob.namespaceMove != null)
-                    + " componentOwners=" + glob.ownerSlotCount(PerlOwnerSlot.Kind.GLOB_COMPONENT_SLOT)
-                    + " globValues=" + glob.ownerSlotCount(PerlOwnerSlot.Kind.GLOB_VALUE));
-        }
         releaseDetachedGlobValueOwner();
         if (isPackageGlobalRoot) {
             MortalList.invalidateExternalRootSnapshot();
