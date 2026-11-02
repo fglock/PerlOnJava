@@ -1047,14 +1047,24 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 // `local *data = "$mod\::DATA"`.
                 String aliasName = NameNormalizer.normalizeVariableName(
                         value.toString(), RuntimeCode.getCurrentPackage());
+                RuntimeStash detachedStash = null;
                 if (isStashGlobName(this.globName)) {
                     RuntimeHash oldStash = GlobalVariable.globalHashes.get(this.globName);
                     if (oldStash instanceof RuntimeStash oldRuntimeStash) {
+                        detachedStash = oldRuntimeStash;
                         oldRuntimeStash.saveNamespaceMove(
                                 GlobalVariable.detachNamespaceForStaleStash(this.globName));
                     }
                 }
                 this.set(GlobalVariable.getGlobalIO(aliasName));
+                if (detachedStash != null
+                        && GlobalVariable.globalHashes.get(this.globName) != detachedStash) {
+                    // The package name no longer supplies a local binding to
+                    // the old stash. A saved Perl hash reference may still own
+                    // it; that reference's final release will retire the move.
+                    detachedStash.localBindingExists = false;
+                    MortalList.scopeExitCleanupHash(detachedStash);
+                }
 
                 // Perl also uses `local *PKG::__ANON__ = 'name'` to provide a
                 // dynamic display name for anonymous subs.  Keep that metadata
