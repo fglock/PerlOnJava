@@ -23,14 +23,15 @@ class StaleStashPackageOwnerReleaseTest {
                 use warnings;
                 use Scalar::Util qw(weaken);
                 our @DESTROYED;
+                our ($weak_value, $weak_stash);
                 {
                     package StaleStashPackageOwnerPerlProbe::Value;
                     sub DESTROY { push @main::DESTROYED, 'value'; }
                 }
                 my $value = bless {}, 'StaleStashPackageOwnerPerlProbe::Value';
-                my $weak_value = $value;
+                $weak_value = $value;
                 weaken($weak_value);
-                my ($stash, $weak_stash);
+                my $stash;
                 {
                     no strict 'refs';
                     ${'StaleStashPackageOwnerPerlProbeAbandoned::item'} = $value;
@@ -47,6 +48,7 @@ class StaleStashPackageOwnerReleaseTest {
                 """;
 
         List<String> results = new ArrayList<>();
+        List<String> diagnostics = new ArrayList<>();
         for (boolean interpreter : new boolean[]{false, true}) {
             PerlRuntime runtime = new PerlRuntime();
             try (PerlRuntime.Binding ignored = runtime.bind()) {
@@ -59,11 +61,33 @@ class StaleStashPackageOwnerReleaseTest {
                         .scalar().toString();
 
                 results.add(result);
+                diagnostics.add(describeWeakStashState(interpreter));
             }
         }
 
         assertEquals(List.of("0:0:value", "0:0:value"), results,
-                "compiled Perl must release the saved namespace move on both backends");
+                "compiled Perl must release the saved namespace move on both backends: "
+                        + diagnostics);
+    }
+
+    private static String describeWeakStashState(boolean interpreter) {
+        RuntimeScalar weakStash = GlobalVariable.globalVariables.get("main::weak_stash");
+        if (weakStash == null || !(weakStash.value instanceof RuntimeStash stale)) {
+            return "interpreter=" + interpreter + " weak stash already cleared";
+        }
+        String owners = stale.ownerSlotSnapshot().stream()
+                .map(slot -> slot.kind().name())
+                .sorted()
+                .toList().toString();
+        RuntimeGlob move = stale.savedNamespaceMove;
+        String moveDescription = move == null ? "null"
+                : "slots=" + move.ownerSlotSnapshot().stream()
+                        .map(slot -> slot.kind().name()).sorted().toList()
+                        + " scalars=" + (move.namespaceMove == null
+                                ? "null" : move.namespaceMove.scalars.keySet());
+        return "interpreter=" + interpreter + " stale.refCount=" + stale.refCount
+                + " stale.localBinding=" + stale.localBindingExists
+                + " stale.owners=" + owners + " move=" + moveDescription;
     }
 
     @Test
