@@ -968,11 +968,12 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     }
 
     /**
-     * Release token retained between queueing and draining an owned decrement.
-     * It deliberately does not retain the scalar itself: source identity and
-     * acquisition site are enough for shutdown diagnosis, and a trace facility
-     * must not change Perl/JVM reachability. Completion is idempotent so the
-     * pending-release count and owner-slot token retire exactly once.
+     * Completion token retained between queueing and draining an owner release
+     * or zero-count lifecycle boundary. It deliberately does not retain the
+     * scalar itself: source identity and acquisition site are enough for
+     * shutdown diagnosis, and a trace facility must not change Perl/JVM
+     * reachability. Completion is idempotent so the pending count and optional
+     * owner-slot token retire exactly once.
      */
     static final class PendingOwnerRelease {
         final int scalarIdentity;
@@ -1045,7 +1046,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         return queueTracedOwnerRelease(owner, queueSite, slotRelease);
     }
 
-    /** Queue finalization for a zero-count temporary without fabricating an owner count. */
+    /** Queue a zero-count lifecycle boundary without fabricating an owner count. */
     synchronized PendingOwnerRelease queueLifecycleOnlyAtZero(String queueSite) {
         registerPendingOwnerRelease(null);
         return new PendingOwnerRelease(0,
