@@ -244,6 +244,27 @@ public class MortalList {
         queueDeferredBase(state, base, ownerRelease, transientOwnerKind);
     }
 
+    /** Release a counted native owner through the normal destruction transition. */
+    public static void releaseCountedNativeOwner(
+            RuntimeBase base, PerlOwnerSlot ownerSlot) {
+        if (base == null || ownerSlot == null || ownerSlot.referent() != base) return;
+        PerlOwnerSlot.PendingRelease release = ownerSlot.releaseCountedNativeIdentity();
+        if (release == null) return;
+        if (base.refCount <= 0 || base.currentlyDestroying) {
+            release.complete();
+            return;
+        }
+        if (base.refCount > 1) {
+            base.traceRefCount(-1, "MortalList.releaseCountedNativeOwner");
+            base.refCount--;
+            release.complete();
+            return;
+        }
+        int checkpoint = pendingSize();
+        deferOwnerSlotDecrement(base, null, release);
+        drainPendingSince(checkpoint);
+    }
+
     private static void queueDeferredBase(LifecycleRuntimeState state, RuntimeBase base,
                                           RuntimeBase.PendingOwnerRelease ownerRelease) {
         queueDeferredBase(state, base, ownerRelease, null);
@@ -1746,7 +1767,7 @@ public class MortalList {
                 || release == null || release.ownerSlotRelease == null) return false;
         return switch (release.ownerSlotRelease.kind()) {
             case SCALAR_CELL, CODE_SLOT, ARRAY_ELEMENT, HASH_ELEMENT, ARGUMENT_VALUE, RETURN_VALUE,
-                    TIE_HANDLER, SCALAR_REFERENCE_CONTENTS -> true;
+                    TIE_HANDLER, SCALAR_REFERENCE_CONTENTS, IO_VIA_LAYER -> true;
             default -> false;
         };
     }
