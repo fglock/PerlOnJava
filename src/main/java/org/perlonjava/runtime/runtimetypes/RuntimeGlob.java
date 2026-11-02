@@ -347,6 +347,18 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         RuntimeGlob glob = new RuntimeGlob(move.sourcePrefix);
         glob.slotSnapshot = true;
         glob.namespaceMove = move;
+        for (RuntimeScalar scalar : move.scalars.values()) {
+            glob.retainDetachedComponentOwner(scalar);
+        }
+        for (RuntimeArray array : move.arrays.values()) {
+            glob.retainDetachedComponentOwner(array);
+        }
+        for (RuntimeHash hash : move.hashes.values()) {
+            glob.retainDetachedComponentOwner(hash);
+        }
+        for (RuntimeScalar code : move.codes.values()) {
+            glob.retainDetachedComponentOwner(code);
+        }
         return glob;
     }
 
