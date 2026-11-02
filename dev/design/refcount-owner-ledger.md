@@ -371,7 +371,15 @@ Run on JVM and interpreter backends with `timeout` and complete output logs:
 
 ## Progress Tracking
 
-### Current Status: owner-source migration continues; tested runtime checkpoint `830c7690d`
+### Current Status: owner-source migration continues; tested runtime checkpoint `a1abf6818`
+
+The latest completed batch removes count-only proof from ordinary
+`DESTROY` resurrection decisions. Current owner identities and semantic capture
+owners now determine whether a reference escaped destruction; a stale positive
+count alone does not. The regression fails on the unfixed parent and passes on
+the fix, and the full no-sweeps build passes. The package compatibility pin,
+deferred-release snapshot, cleared-aggregate snapshot, and legacy closure
+cleanup remain under audit.
 
 On 2026-11-02, branch `wip/detached-glob-owner-20261102-064229` passed the
 full no-sweeps `make` on `2cc19ab4d` in 7m41s. The 18-file lifecycle matrix
@@ -414,9 +422,9 @@ logs are `/private/tmp/issue-1649-package-pin-system-perl.log`,
 still bridges legacy uncounted package owners through `unweaken()`, whose
 current count restoration requires a nonnegative count. Migrate that count
 transition before retiring the pin. The destruction count-only resurrection
-fallback also remains until every direct-count producer is traced to its
-owner-slot acquisition and release. PR #1938 remains an open draft at remote
-head `b2f44fc2d` against `master` `4a5c33753`.
+fallback was removed on `a1abf6818` after auditing current owner-slot producers;
+the focused and full no-sweeps gates are recorded below. PR #1938 remains an
+open draft at remote head `b2f44fc2d` against `master` `4a5c33753`.
 
 On 2026-11-02, `4b772241d` paired each tracked regex callback CODE increment
 with its `REGEX_CALLBACK` owner identity. Verified count restoration now
@@ -456,7 +464,7 @@ all five unit shards, and launcher integration. Logs:
 | Thread snapshot roots | `RuntimeGraphCloner` assigns a `TEMPORARY_ROOT` identity to each top-level snapshot root and to the direct referent of a strong scalar root. `RootSnapshot` owns these identities through clone hooks and entry setup; thread cleanup and runtime close/reset retire them. | `WeakRefRegistry.weaken()` no longer walks the cloned root graph or writes a synthetic positive count. `ThreadSnapshotTemporaryRootOwnerTest` checks `WEAKLY_TRACKED` state and weak-observer cleanup at lease release. |
 | Cleared aggregates | Scope-exit cleanup checks current Perl owner identities and pending releases before destruction. `ClearedAggregateNestedPackageOwnerNoRootWalkTest` verifies that a live nested package slot preserves its weak observer with zero root queries. | `finalizeClearedAggregateOwnerAfterScopeExit()` still consults a cached external-root snapshot for zero-count candidates with no current owner identity. `ReachabilityQueryCostTest.repeatedAggregateScopeCleanupSharesExternalRootSnapshot` asserts one shared snapshot for this legacy path. |
 | Closure cleanup | Parser, JVM, and interpreter closure producers install explicit `SCALAR_CAPTURE` / `CLOSURE_PAD` slots tied to the owning CODE. Native and legacy semantic capture identities now defer zero-count cleanup without changing `refCount`; final slot release dispatches cleanup and clears weak observers. `LegacyClosureCaptureOwnerReleaseTest` verifies zero root queries. Full HTML::Tree 5.07 passes 23/23 files and 989/989 tests on both backends with sweeps disabled. | Legacy captures without complete CODE-owner identity still use END-root and scalar-root snapshots. Classify the pre-END traversal separately from ordinary lifecycle repair, then audit its remaining producers. |
-| Destruction / resurrection | Global destruction compares newly installed owner slots; ordinary destruction validates current slots and semantic captures. Counted scalar stores install identities in `recordCountedOwner()`; method-invocant, PerlIO::via, regex callback, and cloned-thread edges have explicit producers. `DestroyOwnerSlotResurrectionTest` covers counted, untracked, detached, and temporary-slot decisions with zero root queries. | `hasEscapedPerlOwner()` still treats `refCount > 0` as resurrection when the referent has no slots and `activeOwners` was never initialized. Audit every remaining direct `refCount` producer and pair it with acquisition/release evidence before removing this last count-only proof. |
+| Destruction / resurrection | Global destruction compares newly installed owner slots; ordinary destruction validates current slots and semantic captures. Counted scalar stores install identities in `recordCountedOwner()`; method-invocant, PerlIO::via, regex callback, and cloned-thread edges have explicit producers. `DestroyOwnerSlotResurrectionTest` covers counted, untracked, detached, and temporary-slot decisions with zero root queries. | `hasEscapedPerlOwner()` now accepts current Perl owner identities and semantic captures only. `DestroyCountOnlyResurrectionTest` proves a fabricated positive count is not resurrection, while an active native slot is; it fails on parent `dba24b49b`. The focused DESTROY suite passes 10/10 on `a1abf6818`; the full no-sweeps `make` passes on the same immutable commit. Logs are listed in Current Status. Continue tracing other direct count producers at their acquisition, transfer, and release sites. |
 
 The remaining snapshot and compatibility paths are not yet proven unnecessary
 for normal execution. The local source is not reconciled with PR #1938: the
@@ -464,8 +472,25 @@ draft remains open at remote head `b2f44fc2d`, GitHub reports a conflict with
 `master` at `4a5c33753`, and the remote head object is absent locally. Preserve
 that remote work and reconcile only after the ownership candidate is complete.
 
+On 2026-11-02, `hasEscapedPerlOwner()` stopped treating a positive `refCount`
+without a current owner identity as resurrection. The new
+`DestroyCountOnlyResurrectionTest` fails on parent `dba24b49b` and passes after
+the fix; `DestroyOwnerSlotResurrectionTest`,
+`PerlReferentDestroyLifecycleTest`, and `PerlDestroyFailureOwnershipTest` also
+pass, for 10/10 focused tests total. The complete no-sweeps `make` passes on
+immutable `a1abf6818` in 7m30s, including Joni, all unit shards, and launcher
+integration. Evidence:
+`/private/tmp/issue-1649-destroy-count-only-parent-dba24b49b.log`,
+`/private/tmp/issue-1649-destroy-owner-focused-a1abf6818.log`, and
+`/private/tmp/issue-1649-destroy-owner-fullmake-a1abf6818.log`.
+
 ### Completed Work
 
+- [x] On 2026-11-02, `DESTROY` resurrection now requires current Perl owner
+  identities or semantic captures; a positive count without either is ignored.
+  `DestroyCountOnlyResurrectionTest` fails on parent `dba24b49b`; the focused
+  suite passes 10/10 and the full no-sweeps `make` passes on `a1abf6818`.
+  Logs are recorded in Current Status.
 - [x] Closure captures now retain tracked referents through captured pads, and
   weak callback targets with semantic capture owners are not cleared early.
   The focused Future regression is covered by
@@ -759,7 +784,9 @@ pass. Preserve both focused ownership regressions when evolving the ledger.
    and release sites. Distinguish already-ledgered edges from true root walks.
 2. Continue the direct-count producer audit, including `unweaken()`, package
    roots, cycles, scalar-reference contents, shared storage, and resource
-   owners. Trace each DESTROY resurrection count to its real owner slot.
+   owners. Trace count disagreements to the producer, transfer, or cleanup
+   operation that creates them; `DESTROY` resurrection now depends on owner
+   identities rather than a positive count.
 3. Replace lifecycle decisions based on root snapshots, call depth, and
    fabricated counts with current owner identities and pending-release state.
 4. Remove compatibility pins, corrective-sweep hooks, and unused recovery
