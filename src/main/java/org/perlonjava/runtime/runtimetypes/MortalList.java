@@ -1566,11 +1566,10 @@ public class MortalList {
             if (base instanceof RuntimeCode code && code.hasActiveCodeOwner()) {
                 code.deferFinalReleaseToActiveCode();
             } else if (base.hasSemanticCaptureOwner()) {
-                // Captured aggregate pads use native owner slots. Keep the
-                // legacy count at zero while one is active; its final release
-                // will perform the lifecycle transition. Scalar captures still
-                // have a legacy bridge count and retain the old compatibility
-                // sentinel behavior.
+                // Native scalar and aggregate capture slots do not add to the
+                // selective count. Keep zero while one is active; its final
+                // owner release will perform the lifecycle transition. Preserve
+                // the sentinel only for any legacy capture slot still in flight.
                 if (base.nativeCaptureOwnerCount() == 0) base.refCount = 1;
             } else if (base.localBindingExists) {
                 if (base instanceof RuntimeScalar scalar
