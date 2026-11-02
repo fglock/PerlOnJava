@@ -250,7 +250,7 @@ public class MortalList {
         if (base == null || ownerSlot == null || ownerSlot.referent() != base) return;
         PerlOwnerSlot.PendingRelease release = ownerSlot.releaseCountedNativeIdentity();
         if (release == null) return;
-        if (base.refCount <= 0 || base.currentlyDestroying) {
+        if (base.refCount <= 0) {
             release.complete();
             return;
         }
@@ -1763,11 +1763,13 @@ public class MortalList {
 
     private static boolean isFinalCountedReferentRelease(
             RuntimeBase base, RuntimeBase.PendingOwnerRelease release) {
-        if (!canTrustFinalCountedRelease(base)
-                || release == null || release.ownerSlotRelease == null) return false;
-        return switch (release.ownerSlotRelease.kind()) {
+        if (release == null || release.ownerSlotRelease == null) return false;
+        PerlOwnerSlot.Kind kind = release.ownerSlotRelease.kind();
+        if (kind == PerlOwnerSlot.Kind.IO_VIA_LAYER) return !base.hasOwnerSlots();
+        if (!canTrustFinalCountedRelease(base)) return false;
+        return switch (kind) {
             case SCALAR_CELL, CODE_SLOT, ARRAY_ELEMENT, HASH_ELEMENT, ARGUMENT_VALUE, RETURN_VALUE,
-                    TIE_HANDLER, SCALAR_REFERENCE_CONTENTS, IO_VIA_LAYER -> true;
+                    TIE_HANDLER, SCALAR_REFERENCE_CONTENTS -> true;
             default -> false;
         };
     }
