@@ -340,7 +340,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                         + " refCount=" + component.refCount
                         + " owners=" + component.hasPerlStrongOwnerIdentity()
                         + " globSlots=" + component.ownerSlotCount(PerlOwnerSlot.Kind.GLOB_COMPONENT_SLOT)
-                        + " packageScalarSlots=" + component.ownerSlotCount(PerlOwnerSlot.Kind.PACKAGE_SCALAR_SLOT));
+                        + " packageScalarSlots=" + component.ownerSlotCount(PerlOwnerSlot.Kind.PACKAGE_SCALAR_SLOT)
+                        + " packageAggregateSlots=" + component.ownerSlotCount(PerlOwnerSlot.Kind.PACKAGE_AGGREGATE_SLOT)
+                        + " localBinding=" + component.localBindingExists
+                        + (component instanceof RuntimeStash stash
+                            ? " stash=" + stash.namespace + " size=" + stash.size() : ""));
             }
             if (component instanceof RuntimeScalar scalar) {
                 if (trace) {
@@ -398,6 +402,20 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         }
         for (RuntimeScalar code : move.codes.values()) {
             glob.retainDetachedComponentOwner(code);
+        }
+        if ("1".equals(System.getenv("PERLONJAVA_TRACE_NAMESPACE_OWNER"))
+                && move.sourcePrefix.equals("NamespaceDeleteOwner::")) {
+            System.err.println("NSOWNER snapshot scalars=" + move.scalars.keySet()
+                    + " arrays=" + move.arrays.keySet()
+                    + " hashes=" + move.hashes.keySet()
+                    + " codes=" + move.codes.keySet());
+            for (Map.Entry<String, RuntimeScalar> entry : move.scalars.entrySet()) {
+                RuntimeScalar scalar = entry.getValue();
+                System.err.println("NSOWNER snapshot scalar key=" + entry.getKey()
+                        + " type=" + scalar.type
+                        + " value=" + (scalar.value == null ? "<none>"
+                            : scalar.value.getClass().getSimpleName()));
+            }
         }
         return glob;
     }
