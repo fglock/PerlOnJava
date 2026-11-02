@@ -185,22 +185,30 @@ public class RuntimeStash extends RuntimeHash {
      */
     @Override
     public RuntimeScalar delete(String key) {
-        return deleteGlob(key);
+        return deleteInContext(key, RuntimeContextType.LIST);
     }
 
     @Override
     public RuntimeScalar delete(RuntimeScalar key) {
-        return deleteGlob(key.toString());
+        return deleteInContext(key, RuntimeContextType.LIST);
     }
 
     @Override
     public RuntimeScalar deleteInContext(RuntimeScalar key, int callContext) {
-        return delete(key);
+        return deleteInContext(key.toString(), callContext);
     }
 
     @Override
     public RuntimeScalar deleteInContext(String key, int callContext) {
-        return delete(key);
+        RuntimeScalar deleted = deleteGlob(key);
+        if (callContext == RuntimeContextType.VOID) {
+            // Stash deletion returns a detached glob that owns its captured
+            // slots. In void context there is no Perl value owner to release
+            // that glob later, so retire the temporary result here.
+            RuntimeScalar.scopeExitCleanup(deleted);
+            return new RuntimeScalar();
+        }
+        return deleted;
     }
 
     private RuntimeScalar deleteGlob(String k) {
