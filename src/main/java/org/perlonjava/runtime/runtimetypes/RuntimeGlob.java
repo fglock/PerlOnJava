@@ -2005,6 +2005,10 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
      * @return The current RuntimeGlob instance after undefining its elements.
      */
     public RuntimeGlob undefine() {
+        if (globName == null && retainsDetachedComponents()) {
+            releaseDetachedComponentsIfUnowned();
+            return this;
+        }
         if (isHintsGlobName(this.globName)) {
             HintHashRegistry.clearCurrentHintHash();
         }
