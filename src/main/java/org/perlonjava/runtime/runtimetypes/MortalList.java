@@ -853,10 +853,6 @@ public class MortalList {
         // compatibility refcount transiently undercounts them during a
         // tail-call handoff.
         if (base.restoreVerifiedCurrentCountedOwnerSlotRefCount()) return;
-        // Keep the legacy bridge for counted owners that have no scalar storage
-        // cell proving their current lifetime. Direct method-invocant holds are
-        // handled by the verified path above.
-        if (base.restoreCountedOwnerSlotRefCount()) return;
 
         if (base.localBindingExists) {
             base.refCount = 1;
