@@ -371,15 +371,33 @@ Run on JVM and interpreter backends with `timeout` and complete output logs:
 
 ## Progress Tracking
 
-### Current Status: owner-source migration continues; tested runtime checkpoint `a1abf6818`
+### Current Status: owner-source migration continues; tested runtime checkpoint `7c1fef04b`
 
-The latest completed batch removes count-only proof from ordinary
-`DESTROY` resurrection decisions. Current owner identities and semantic capture
-owners now determine whether a reference escaped destruction; a stale positive
-count alone does not. The regression fails on the unfixed parent and passes on
-the fix, and the full no-sweeps build passes. The package compatibility pin,
-deferred-release snapshot, cleared-aggregate snapshot, and legacy closure
-cleanup remain under audit.
+The END queue now keeps a real owner identity across dequeue and callback
+execution. `SpecialBlock.hasPendingEndBlock()` accepts only a current queue cell
+whose counted or untracked owner identity points to that CODE object. The
+handoff uses an `ACTIVE_CODE` slot; it does not manufacture a positive count.
+`DestroyDispatch` defers capture cleanup only for that exact queued END owner,
+not for any CODE object that happens to have another owner slot. This narrowing
+also restores closure, tail-call, and WebSocket cleanup that regressed under the
+broader fallback.
+
+`EndBlockOwnerIdentityTest` verifies restoration from the two current counted
+cells, exact queue-edge release, active-owner transfer through invocation, and
+capture lifetime. It failed on parent `403ae7ab2` because the queued END owner
+was omitted from the restored count. The final no-sweeps `make` passes on
+immutable `7c1fef04b` in 7m07s. Seven END lifecycle regressions pass 35/35 on
+system Perl, JVM, and interpreter. Evidence:
+`/private/tmp/issue-1649-endblock-parent-make-403ae7ab2.log`,
+`/private/tmp/issue-1649-end-block-fullmake-dcc78bbe5.log`,
+`/private/tmp/issue-1649-endblock-owner-fullmake-7c1fef04b.log`,
+`/private/tmp/issue-1649-endblock-system-perl-7c1fef04b.log`,
+`/private/tmp/issue-1649-endblock-jvm-7c1fef04b.log`, and
+`/private/tmp/issue-1649-endblock-interpreter-7c1fef04b.log`.
+
+Earlier lifecycle acceptance evidence remains recorded below. The package
+compatibility pin, deferred-release snapshot, cleared-aggregate snapshot, and
+other legacy closure cleanup paths remain under audit.
 
 On 2026-11-02, branch `wip/detached-glob-owner-20261102-064229` passed the
 full no-sweeps `make` on `2cc19ab4d` in 7m41s. The 18-file lifecycle matrix
@@ -423,8 +441,9 @@ still bridges legacy uncounted package owners through `unweaken()`, whose
 current count restoration requires a nonnegative count. Migrate that count
 transition before retiring the pin. The destruction count-only resurrection
 fallback was removed on `a1abf6818` after auditing current owner-slot producers;
-the focused and full no-sweeps gates are recorded below. PR #1938 remains an
-open draft at remote head `b2f44fc2d` against `master` `4a5c33753`.
+the focused and full no-sweeps gates are recorded below. At that earlier
+checkpoint, PR #1938 was an open draft at remote head `b2f44fc2d` against
+`master` `4a5c33753`.
 
 On 2026-11-02, `4b772241d` paired each tracked regex callback CODE increment
 with its `REGEX_CALLBACK` owner identity. Verified count restoration now
@@ -464,13 +483,15 @@ all five unit shards, and launcher integration. Logs:
 | Thread snapshot roots | `RuntimeGraphCloner` assigns a `TEMPORARY_ROOT` identity to each top-level snapshot root and to the direct referent of a strong scalar root. `RootSnapshot` owns these identities through clone hooks and entry setup; thread cleanup and runtime close/reset retire them. | `WeakRefRegistry.weaken()` no longer walks the cloned root graph or writes a synthetic positive count. `ThreadSnapshotTemporaryRootOwnerTest` checks `WEAKLY_TRACKED` state and weak-observer cleanup at lease release. |
 | Cleared aggregates | Scope-exit cleanup checks current Perl owner identities and pending releases before destruction. `ClearedAggregateNestedPackageOwnerNoRootWalkTest` verifies that a live nested package slot preserves its weak observer with zero root queries. | `finalizeClearedAggregateOwnerAfterScopeExit()` still consults a cached external-root snapshot for zero-count candidates with no current owner identity. `ReachabilityQueryCostTest.repeatedAggregateScopeCleanupSharesExternalRootSnapshot` asserts one shared snapshot for this legacy path. |
 | Closure cleanup | Parser, JVM, and interpreter closure producers install explicit `SCALAR_CAPTURE` / `CLOSURE_PAD` slots tied to the owning CODE. Native and legacy semantic capture identities now defer zero-count cleanup without changing `refCount`; final slot release dispatches cleanup and clears weak observers. `LegacyClosureCaptureOwnerReleaseTest` verifies zero root queries. Full HTML::Tree 5.07 passes 23/23 files and 989/989 tests on both backends with sweeps disabled. | Legacy captures without complete CODE-owner identity still use END-root and scalar-root snapshots. Classify the pre-END traversal separately from ordinary lifecycle repair, then audit its remaining producers. |
+| END queue and invocation | Each queued callback's current queue cell has a counted or untracked owner identity. `runEndBlocks()` acquires an `ACTIVE_CODE` identity before `shift()` and releases it after invocation; the removed array edge carries its counted owner token through deferred release. | `EndBlockOwnerIdentityTest` and seven Perl lifecycle tests pass on system Perl and both backends. The pending-queue check verifies exact cell membership and an active counted or untracked identity. The old positive-count pin and broad CODE-owner fallback are removed from this path. |
 | Destruction / resurrection | Global destruction compares newly installed owner slots; ordinary destruction validates current slots and semantic captures. Counted scalar stores install identities in `recordCountedOwner()`; method-invocant, PerlIO::via, regex callback, and cloned-thread edges have explicit producers. `DestroyOwnerSlotResurrectionTest` covers counted, untracked, detached, and temporary-slot decisions with zero root queries. | `hasEscapedPerlOwner()` now accepts current Perl owner identities and semantic captures only. `DestroyCountOnlyResurrectionTest` proves a fabricated positive count is not resurrection, while an active native slot is; it fails on parent `dba24b49b`. The focused DESTROY suite passes 10/10 on `a1abf6818`; the full no-sweeps `make` passes on the same immutable commit. Logs are listed in Current Status. Continue tracing other direct count producers at their acquisition, transfer, and release sites. |
 
 The remaining snapshot and compatibility paths are not yet proven unnecessary
-for normal execution. The local source is not reconciled with PR #1938: the
-draft remains open at remote head `b2f44fc2d`, GitHub reports a conflict with
-`master` at `4a5c33753`, and the remote head object is absent locally. Preserve
-that remote work and reconcile only after the ownership candidate is complete.
+for normal execution. The local source is not reconciled with PR #1938: as of
+2026-11-02, the draft remains open at remote head `b2f44fc2d`, its base snapshot
+is `4a5c33753`, and current `master` is `d34aa038f3b738f81e89a8127bd802673e5cd2f6`.
+GitHub reports mergeability as `UNKNOWN`; preserve that remote work and
+reconcile only after the ownership candidate is complete.
 
 On 2026-11-02, `hasEscapedPerlOwner()` stopped treating a positive `refCount`
 without a current owner identity as resurrection. The new
@@ -764,6 +785,12 @@ integration. Evidence:
   stable owner slot and releases it at NEXTKEY, exception, exhaustion, and
   reset boundaries. Tracked and weakly tracked cases pass the focused test;
   the full no-sweeps `make` passes on `830c7690d`.
+- [x] On 2026-11-02, queued END callbacks now transfer ownership from the
+  current queue-cell identity to an `ACTIVE_CODE` identity spanning dequeue
+  and invocation. Final cleanup consults the exact pending END cell instead of
+  a generic CODE-owner fallback or synthetic positive count. The parent
+  regression, full no-sweeps `make`, and 35 END lifecycle assertions on system
+  Perl and both backends are recorded in Current Status.
 
 ### Historical handoff: issue #1132 / PR #1204
 
