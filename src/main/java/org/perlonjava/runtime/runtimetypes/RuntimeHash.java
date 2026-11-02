@@ -950,7 +950,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 if (this.byteKeys != null) this.byteKeys.clear();
                 // Reset each() iterator so it doesn't throw ConcurrentModificationException
                 // on the next each() call after this hash is re-populated.
-                hashIterator = null;
+                resetIterator();
 
                 // Populate the hash from the materialized list
                 iterator = materializedList.iterator();
@@ -1990,7 +1990,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 }
                 isKey = !isKey;
             }
-            hashIterator = null; // keys resets the iterator
+            resetIterator(); // keys resets the iterator
             // Set scalarContextSize so that keys() in scalar context returns the count
             list.scalarContextSize = list.elements.size();
             return list;
@@ -2001,7 +2001,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         }
 
         if (this.elements.isEmpty()) {
-            hashIterator = null;
+            resetIterator();
             return EMPTY_KEYS;
         }
 
@@ -2009,7 +2009,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         for (String key : elements.keySet()) {
             RuntimeArray.push(list, createKeyScalar(key));
         }
-        hashIterator = null; // keys resets the iterator
+        resetIterator(); // keys resets the iterator
         // Set scalarContextSize so that keys() in scalar context returns the count
         list.scalarContextSize = list.elements.size();
         return list;
@@ -2018,7 +2018,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     @Override
     public RuntimeBase keys(int ctx) {
         // keys() resets the iterator
-        hashIterator = null;
+        resetIterator();
 
         if (ctx == RuntimeContextType.SCALAR) {
             // In scalar context, return the key count without materializing the key list.
@@ -2077,7 +2077,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             for (RuntimeScalar tiedKey : keys) {
                 RuntimeArray.push(list, TieHash.tiedFetch(this, tiedKey));
             }
-            hashIterator = null; // values resets the iterator
+            resetIterator(); // values resets the iterator
             // Set scalarContextSize so that values() in scalar context returns the count.
             // Without this, when `values %h` is the last expression of a sub called in
             // scalar context, getList() copies the elements into a RuntimeList whose
@@ -2094,7 +2094,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         for (RuntimeScalar value : elements.values()) {
             list.elements.add(value); // push an alias to the value (direct reference, not a copy)
         }
-        hashIterator = null; // values resets the iterator
+        resetIterator(); // values resets the iterator
         // Mirror keys(): mark this array so scalar context returns the count, not the last value.
         list.scalarContextSize = list.elements.size();
         return list;
@@ -2123,7 +2123,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             }
             return new RuntimeList(hashIterator.next(), hashIterator.next());
         }
-        hashIterator = null;
+        resetIterator();
         return new RuntimeList();
     }
 
@@ -2237,7 +2237,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     public RuntimeHash undefine() {
         if (this.type == TIED_HASH) {
             TieHash.tiedClear(this);
-            hashIterator = null;
+            resetIterator();
             return this;
         }
         notePackageRootClear(this.elements.values());
@@ -2263,7 +2263,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 if (value != null) value.reconcileContainerOwnerAfterMutation(this);
             }
             this.byteKeys = null;
-            hashIterator = null;
+            resetIterator();
             MortalList.flush();
             return this;
         }
@@ -2293,7 +2293,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             this.elements = newElementMap();
         }
         this.byteKeys = null;
-        hashIterator = null;
+        resetIterator();
         return this;
     }
 
@@ -2545,7 +2545,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      */
     private class RuntimeTiedHashIterator implements Iterator<RuntimeScalar> {
         private RuntimeScalar currentKey;   // last key returned by FIRSTKEY/NEXTKEY (passed to next NEXTKEY)
-        private RuntimeBase currentKeyOwner; // explicit Perl lifetime hold for a reference key
+        private PerlOwnerSlot currentKeyOwnerSlot;
         private RuntimeScalar pendingKey;   // key fetched by hasNext() but not yet consumed by next()
         private boolean returnKey;          // true: next() returns a key; false: next() returns the value
         private boolean started;            // whether FIRSTKEY has been called
@@ -2557,7 +2557,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             this.returnKey = true;
             this.started = false;
             this.currentKey = null;
-            this.currentKeyOwner = null;
+            this.currentKeyOwnerSlot = null;
             this.pendingKey = null;
         }
 
@@ -2585,10 +2585,13 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                     pendingKey = TieHash.tiedFirstKey(RuntimeHash.this);
                     started = true;
                 } else {
-                    pendingKey = TieHash.tiedNextKey(RuntimeHash.this, currentKey);
-                    // NEXTKEY has consumed the previous key.  Its lifetime ends
-                    // before the newly returned key becomes the iterator state.
-                    releaseCurrentKey();
+                    try {
+                        pendingKey = TieHash.tiedNextKey(RuntimeHash.this, currentKey);
+                    } finally {
+                        // NEXTKEY consumes the previous key even when the tied
+                        // method throws. Release before retaining the replacement.
+                        releaseCurrentKey();
+                    }
                 }
             }
 
@@ -2609,7 +2612,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             if (returnKey) {
                 // Return the key and prepare to return its value next
                 currentKey = pendingKey;
-                retainCurrentKey();
+                currentKeyOwnerSlot = retainIteratorKey(currentKey);
                 pendingKey = null;
                 returnKey = false;
                 return new RuntimeScalar(currentKey);
@@ -2633,25 +2636,45 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             throw new UnsupportedOperationException("Remove not supported for tied hash iterator");
         }
 
-        private void retainCurrentKey() {
-            if ((currentKey.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                    && currentKey.value instanceof RuntimeBase base && base.refCount >= 0) {
-                base.traceRefCount(+1, "RuntimeTiedHashIterator current key");
-                base.refCount++;
-                base.acquireTransientTraceOwner("tied hash iterator key", "RuntimeHash.RuntimeTiedHashIterator");
-                currentKeyOwner = base;
+        private PerlOwnerSlot retainIteratorKey(RuntimeScalar key) {
+            if (key == null
+                    || (key.type & RuntimeScalarType.REFERENCE_BIT) == 0
+                    || !(key.value instanceof RuntimeBase base)
+                    || base.refCount == Integer.MIN_VALUE) {
+                return null;
             }
+            boolean counted = base.refCount >= 0;
+            if (counted && base.refCount == Integer.MAX_VALUE) {
+                throw new IllegalStateException("tied-hash iterator key count overflow");
+            }
+            PerlOwnerSlot slot = new PerlOwnerSlot(
+                    PerlOwnerSlot.Kind.TIED_HASH_ITERATOR_KEY);
+            slot.acquireNativeOwner(base);
+            if (counted) {
+                base.traceRefCount(+1, "RuntimeTiedHashIterator retains key");
+                base.refCount++;
+                base.hadCountedReference = true;
+                slot.markCountedNativeOwner();
+            }
+            return slot;
         }
 
         private void releaseCurrentKey() {
-            if (currentKeyOwner == null) return;
-            RuntimeBase base = currentKeyOwner;
-            currentKeyOwner = null;
-            base.traceRefCount(-1, "RuntimeTiedHashIterator current key release");
-            base.releaseTransientTraceOwner("tied hash iterator key", "RuntimeHash.RuntimeTiedHashIterator");
-            if (base.refCount > 0 && --base.refCount == 0) {
-                base.refCount = Integer.MIN_VALUE;
-                DestroyDispatch.callDestroy(base);
+            PerlOwnerSlot slot = currentKeyOwnerSlot;
+            currentKeyOwnerSlot = null;
+            currentKey = null;
+            releaseIteratorKey(slot);
+        }
+
+        private void releaseIteratorKey(PerlOwnerSlot slot) {
+            if (slot == null) return;
+            RuntimeBase base = slot.referent();
+            if (base == null) {
+                slot.release();
+            } else if (slot.isCountedNativeOwner()) {
+                MortalList.releaseCountedNativeOwner(base, slot);
+            } else {
+                slot.release();
             }
         }
     }
