@@ -102,6 +102,8 @@ my %MODULE_TIMEOUT_SECONDS = (
     # Holiday::US builds a combined recurrence set before emitting assertions;
     # the focused test takes about 318s on the JVM.
     'DateTime::Event::Holiday::US' => 420,
+    # DateTime::Set 0.3900's 23-test suite takes about 330s on the JVM.
+    'DateTime::Set'      => 420,
     'Excel::Writer::XLSX' => 7200,
     'Image::ExifTool'    => 3600,
     # local::lib's shell.t launches PerlOnJava repeatedly while testing
