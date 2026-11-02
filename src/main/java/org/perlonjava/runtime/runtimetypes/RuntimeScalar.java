@@ -424,12 +424,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     /** Explicit identity for this pad cell's closure owner edge. */
     private PerlOwnerSlot closureOwnerSlot;
 
-    /**
-     * Number of closure-capture owners currently retained on this scalar's
-     * referent. This is separate from {@link #captureCount}: a weak scalar, an
-     * untracked referent, or a scalar that already owns a normal refCount slot
-     * may be captured without adding an extra selective refCount owner.
-     */
+    /** Number of legacy capture-count increments retained for this cell's referent. */
     public int captureRefCountOwned() {
         return closureOwnerSlot == null ? 0 : closureOwnerSlot.legacyCaptureCount();
     }
@@ -723,7 +718,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         RuntimeBase base = closureCaptureReferent();
         if (base == null) return;
         updateClosureOwnerSlot(base, false);
-        closureOwnerSlot.acquireLegacyCapture(base);
+        // The explicit CLOSURE_PAD slot is the capture's strong edge. Do not
+        // mirror it with a selective-count increment; final slot release
+        // drives weak cleanup through the owner ledger.
+        closureOwnerSlot.acquireNativeOwner(base);
     }
 
     private void updateClosureOwnerSlot(RuntimeBase referent) {
