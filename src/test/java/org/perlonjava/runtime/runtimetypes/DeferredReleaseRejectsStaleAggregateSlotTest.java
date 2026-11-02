@@ -14,7 +14,7 @@ class DeferredReleaseRejectsStaleAggregateSlotTest {
         RuntimeArray container = new RuntimeArray();
         assertDetachedElementDoesNotRestore(
                 owner -> container.push(owner),
-                owner -> container.elements.remove(owner),
+                owner -> container.elements.remove(0),
                 PerlOwnerSlot.Kind.ARRAY_ELEMENT);
     }
 
