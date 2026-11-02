@@ -39,9 +39,10 @@ public class RuntimeGraphCloner {
     private final IdentityHashMap<IOHandle, InheritedHandlePair> inheritedHandles =
             new IdentityHashMap<>();
     private final List<RuntimeScalar> weakReferences = new ArrayList<>();
-    private final List<RuntimeBase> snapshotStrongRoots = new ArrayList<>();
     private final Set<String> skippedClasses;
     private int publicDepth;
+
+    record SnapshotRoots(List<RuntimeBase> roots, List<PerlOwnerSlot> ownerSlots) {}
 
     public RuntimeGraphCloner(PerlRuntime sourceRuntime, PerlRuntime targetRuntime) {
         this(sourceRuntime, targetRuntime, Set.of());
@@ -90,11 +91,30 @@ public class RuntimeGraphCloner {
      * Weak edges and observed-address publication are finalized only after the
      * package graph, entry CODE, and arguments all share this identity map.
      */
-    List<RuntimeBase> cloneSnapshotRoots(List<? extends RuntimeBase> roots) {
+    SnapshotRoots cloneSnapshotRoots(List<? extends RuntimeBase> roots) {
         List<RuntimeBase> result = new ArrayList<>(roots.size());
-        for (RuntimeBase root : roots) result.add(cloneValue(root));
-        snapshotStrongRoots.addAll(result);
-        return result;
+        List<PerlOwnerSlot> ownerSlots = new ArrayList<>(roots.size() * 2);
+        for (RuntimeBase root : roots) {
+            RuntimeBase clonedRoot = cloneValue(root);
+            result.add(clonedRoot);
+            retainSnapshotRoot(clonedRoot, ownerSlots);
+            if (clonedRoot instanceof RuntimeScalar scalar
+                    && RuntimeScalarType.isReference(scalar)
+                    && scalar.value instanceof RuntimeBase referent
+                    && referent != clonedRoot) {
+                retainSnapshotRoot(referent, ownerSlots);
+            }
+        }
+        return new SnapshotRoots(
+                java.util.Collections.unmodifiableList(new ArrayList<>(result)),
+                List.copyOf(ownerSlots));
+    }
+
+    private static void retainSnapshotRoot(
+            RuntimeBase root, List<PerlOwnerSlot> ownerSlots) {
+        PerlOwnerSlot owner = new PerlOwnerSlot(PerlOwnerSlot.Kind.TEMPORARY_ROOT);
+        owner.acquireTemporaryRootIdentity(root);
+        ownerSlots.add(owner);
     }
 
     /**
@@ -1034,7 +1054,7 @@ public class RuntimeGraphCloner {
         try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
             int pendingBeforeWeakEdges = MortalList.pendingSize();
             for (RuntimeScalar weakReference : weakReferences) {
-                WeakRefRegistry.weakenForSnapshot(weakReference, snapshotStrongRoots);
+                WeakRefRegistry.weaken(weakReference);
             }
             // Cloned captures can temporarily contribute a strong bridge until
             // their weak edges are installed. Retire those releases only after
@@ -1044,6 +1064,5 @@ public class RuntimeGraphCloner {
             MortalList.drainPendingSince(pendingBeforeWeakEdges);
         }
         weakReferences.clear();
-        snapshotStrongRoots.clear();
     }
 }

@@ -68,18 +68,10 @@ public class WeakRefRegistry {
      * deterministically (see Strategy A in weaken-destroy.md).
      */
     public static void weaken(RuntimeScalar ref) {
-        weaken(ref, java.util.List.of());
+        weakenInternal(ref);
     }
 
-    /** Install a cloned weak edge while treating the not-yet-running thread
-     * entry graph as a strong root. */
-    static void weakenForSnapshot(
-            RuntimeScalar ref, java.util.List<? extends RuntimeBase> snapshotRoots) {
-        weaken(ref, snapshotRoots);
-    }
-
-    private static void weaken(
-            RuntimeScalar ref, java.util.List<? extends RuntimeBase> snapshotRoots) {
+    private static void weakenInternal(RuntimeScalar ref) {
         if (ref.destroySelfArgument
                 || ref instanceof RuntimeScalarReadOnly
                 || ref.type == RuntimeScalarType.READONLY_SCALAR) {
@@ -198,7 +190,7 @@ public class WeakRefRegistry {
                     // owner only while its scalar still occupies the same storage
                     // slot. Repair from those current edges before considering a
                     // compatibility path.
-                } else if (!(identifiedOwner && snapshotRoots.isEmpty()
+                } else if (!(identifiedOwner
                         && MortalList.canTrustFinalCountedRelease(base))
                         && !(base instanceof RuntimeScalar scalar
                         && scalar.ephemeralScalarReferenceReferent)
@@ -210,19 +202,15 @@ public class WeakRefRegistry {
                     // not turn a final release into a WEAKLY_TRACKED referent
                     // that waits for a later sweep to clear its weak observers.
                     base.refCount = WEAKLY_TRACKED;
-                } else if (!(identifiedOwner && snapshotRoots.isEmpty()
+                } else if (!(identifiedOwner
                         && MortalList.canTrustFinalCountedRelease(base))
                         && !(base instanceof RuntimeScalar scalar
                         && scalar.ephemeralScalarReferenceReferent)
                         && hasWeakRefsTo(base)
-                        && ((!snapshotRoots.isEmpty()
-                            && ReachabilityWalker.isReachableFromStrongRoots(base, snapshotRoots))
-                        || RuntimeCode.isInstalledPadConstant(base))) {
-                    // A cloned thread entry graph is not installed in the child
-                    // runtime's ordinary owner ledger yet. Preserve its explicit
-                    // snapshot roots until the clone finishes installing owners.
-                    // Ordinary lexicals, package slots, captures, and containers
-                    // are handled above through their current owner identities.
+                        && RuntimeCode.isInstalledPadConstant(base)) {
+                    // Installed CODE constants have a direct runtime-owned slot;
+                    // keep their existing compatibility lifecycle until that
+                    // owner is migrated to the common owner ledger.
                     base.refCount = 1;
                 } else {
                     // No local binding: refCount==0 means truly no strong refs.
