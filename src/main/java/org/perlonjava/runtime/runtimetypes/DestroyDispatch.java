@@ -695,11 +695,9 @@ public class DestroyDispatch {
     }
 
     /**
-     * Decide resurrection from Perl owner slots when the owner ledger is
-     * active. During global destruction the legacy selective count can still
-     * include temporary argument aliases after their Perl owners have gone;
-     * those aliases are not resurrection. Objects which have not activated
-     * owner-slot identities retain the legacy count-based behavior.
+     * Decide resurrection from Perl owner slots. Counts include runtime
+     * temporaries and lifecycle bridges, so a positive value without a current
+     * Perl owner identity is not evidence that DESTROY installed a reference.
      */
     static boolean hasEscapedPerlOwner(RuntimeBase referent,
                                        boolean checkingGlobalOwnerDelta,
@@ -710,12 +708,7 @@ public class DestroyDispatch {
         Set<PerlOwnerSlot> ownerSlots = referent.ownerSlotSnapshot();
         if (hasCurrentPerlOwnerSlot(referent, ownerSlots)) return true;
         if (referent.hasSemanticCaptureOwner()) return true;
-        // Values that have not acquired owner identities retain the legacy
-        // count rule. Once identities exist, they are the authority: walking
-        // roots here repeatedly made non-global DESTROY proportional to the
-        // size of the live Perl graph and could count stale Java aliases.
-        return ownerSlots.isEmpty() && referent.activeOwners == null
-                && referent.refCount > 0;
+        return false;
     }
 
     static boolean hasNewPerlOwnerSlot(
