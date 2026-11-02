@@ -1835,7 +1835,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             // don't participate in local/global scope and we need to preserve
             // their local slots (e.g., from stash delete).
             if (value.globName != null && !value.isSlotSnapshot()) {
-                value = value.createDetachedCopy();
+                RuntimeGlob source = value;
+                value = source.createDetachedCopy();
+                if (source.namespaceMove != null) {
+                    source.releaseDetachedComponentsIfUnowned();
+                }
+            }
             }
         }
         this.value = value;

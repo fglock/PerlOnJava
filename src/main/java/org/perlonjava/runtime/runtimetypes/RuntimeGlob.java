@@ -223,6 +223,10 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         copy.symbolGensym = this.symbolGensym;
         copy.slotSnapshot = true;
         copy.IO = this.IO;  // Share the current IO reference
+        if (this.namespaceMove != null) {
+            copy.retainDetachedNamespaceComponents(this.namespaceMove);
+            return copy;
+        }
         // A copied typeglob retains the CODE slot that was visible when it was
         // copied.  This matters for `my $glob = *name; undef *name; &$glob`.
         // Snapshot the container as well as its CV. `undef *name` clears the
@@ -301,6 +305,22 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         retainDetachedComponentOwner(hashSlot);
         retainDetachedComponentOwner(codeSlot);
         if (IO != null && IO != this) retainDetachedComponentOwner(IO);
+    }
+
+    private void retainDetachedNamespaceComponents(NamespaceMove move) {
+        namespaceMove = move;
+        for (RuntimeScalar scalar : move.scalars.values()) {
+            retainDetachedComponentOwner(scalar);
+        }
+        for (RuntimeArray array : move.arrays.values()) {
+            retainDetachedComponentOwner(array);
+        }
+        for (RuntimeHash hash : move.hashes.values()) {
+            retainDetachedComponentOwner(hash);
+        }
+        for (RuntimeScalar code : move.codes.values()) {
+            retainDetachedComponentOwner(code);
+        }
     }
 
     private void retainDetachedComponentOwner(RuntimeBase component) {
@@ -390,19 +410,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     static RuntimeGlob createDetachedNamespaceMove(NamespaceMove move) {
         RuntimeGlob glob = new RuntimeGlob(move.sourcePrefix);
         glob.slotSnapshot = true;
-        glob.namespaceMove = move;
-        for (RuntimeScalar scalar : move.scalars.values()) {
-            glob.retainDetachedComponentOwner(scalar);
-        }
-        for (RuntimeArray array : move.arrays.values()) {
-            glob.retainDetachedComponentOwner(array);
-        }
-        for (RuntimeHash hash : move.hashes.values()) {
-            glob.retainDetachedComponentOwner(hash);
-        }
-        for (RuntimeScalar code : move.codes.values()) {
-            glob.retainDetachedComponentOwner(code);
-        }
+        glob.retainDetachedNamespaceComponents(move);
         if ("1".equals(System.getenv("PERLONJAVA_TRACE_NAMESPACE_OWNER"))
                 && move.sourcePrefix.equals("NamespaceDeleteOwner::")) {
             System.err.println("NSOWNER snapshot scalars=" + move.scalars.keySet()
