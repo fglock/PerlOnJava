@@ -2,9 +2,11 @@
 
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
-**Current checkpoint (2026-11-03 12:30 UTC):** #1649 continues on branch
-`wip/container-slot-transition-20261103-132517`, source `46437891b`, which
-contains remote `origin/master` `d34aa038f` through the earlier master merge.
+**Current checkpoint (2026-11-03 12:35 UTC):** #1649 continues on branch
+`wip/container-slot-transition-20261103-132517`, runtime source `46437891b`.
+The immutable focused gate is recorded on `3727b9980`; this documentation
+checkpoint follows that tested source. The branch contains remote
+`origin/master` `d34aa038f` through the earlier master merge.
 The scalar overwrite/undefine and localized-hash batch is recorded in the
 preceding claim. This batch centralizes array and hash container transitions in
 `RuntimeScalar.transitionContainerSlots`: acquire replacement edges, publish
@@ -16,15 +18,21 @@ durable IO retention still happen before publication.
 
 `ContainerSlotAcquisitionOrderTest` covers five acquire/publish/release
 invariants; all five fail on unfixed parent `72ddef771` and pass on the
-candidate. `hash_slot_replacement_visible_before_destroy.t` checks hash and
-array destructor ordering; standard Perl and both PerlOnJava backends pass
-6/6, with sweeps disabled on the candidate. The Perl-visible fixture also
-passes on the parent, so the parent failure evidence for this batch is the
-internal owner-order regression, not a claim that the fixture exposed a
-visible parent mismatch. The focused no-sweeps `make test-unit` gate passed
-before commit; rerun it on the final documented commit for immutable source
-evidence. Full no-sweeps `make`, the HTML::Tree and lifecycle acceptance
-matrices, and PR reconciliation remain outstanding.
+candidate. The parent `make test-unit` log reports 862 Java tests, five of
+these failures, and six skips. `hash_slot_replacement_visible_before_destroy.t`
+checks hash and array destructor ordering; system Perl and both PerlOnJava
+backends pass 6/6, with sweeps disabled on the candidate. The Perl-visible
+fixture also passes on the parent, so the parent failure evidence is the
+internal owner-order regression, not a claim that this fixture exposed a
+visible parent mismatch. The immutable no-sweeps `make test-unit` gate passes
+on checkpoint `3727b9980`; four adjacent array/hash mutation fixtures pass
+28/28 on both backends. Logs: `/private/tmp/issue1649-container-slot-transition-3727b9980.log`,
+`/private/tmp/issue1649-container-slot-transition-parent-72ddef771.log`,
+`/private/tmp/issue1649-container-slot-transition-system-perl.log`,
+`/private/tmp/issue1649-container-slot-transition-3727b9980-jvm.log`, and
+`/private/tmp/issue1649-container-slot-transition-3727b9980-interpreter.log`.
+Full no-sweeps `make`, the HTML::Tree and lifecycle acceptance matrices, and PR
+reconciliation remain outstanding.
 
 Next: audit every remaining array/hash removal and alias transfer, then batch
 tied-handler/pre-weaken values, closure and CODE owners, package roots, cycles,
