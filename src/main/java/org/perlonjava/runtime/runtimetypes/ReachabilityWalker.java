@@ -2020,17 +2020,6 @@ public class ReachabilityWalker {
     }
 
     /**
-     * Confirm ownership of an untracked referent through its exact strong
-     * scalar-owner slots, without falling back to a root-graph walk.
-     */
-    static boolean hasLiveUntrackedOwnerSlot(RuntimeBase target) {
-        if (target == null) return false;
-        ReachabilityQueryStats stats = MortalList.activeReachabilityQueryStats();
-        if (stats != null) stats.rootQueries++;
-        return target.hasUntrackedReferenceOwnerSlotIdentity();
-    }
-
-    /**
      * Return true when {@code target} is held by a live reference scalar other
      * than its own named my-variable slot. This is deliberately narrower than a
      * full root walk: scope cleanup calls it often, and DBIC can have thousands

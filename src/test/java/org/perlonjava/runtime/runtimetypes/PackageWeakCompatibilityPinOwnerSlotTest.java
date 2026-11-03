@@ -10,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Tag("unit")
 class PackageWeakCompatibilityPinOwnerSlotTest {
     @Test
-    void packageWeakPinHasIdentityAndReleasesAfterTheFinalScalarOwner() {
+    void packageWeakObserverFollowsTheFinalUntrackedScalarOwner() {
         try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
             RuntimeArray packageRoot = new RuntimeArray();
             String globalName = "PackageWeakCompatibilityPinOwnerSlotTest::packageRoot";
@@ -29,30 +29,21 @@ class PackageWeakCompatibilityPinOwnerSlotTest {
             try {
                 WeakRefRegistry.weaken(weakObserver);
 
-                PerlOwnerSlot compatibilityPin = target.packageRootRescueOwnerSlot;
-                assertTrue(target.packageRootRescuedUntrackedAggregate);
-                assertTrue(compatibilityPin.isActive());
-                assertEquals(1, target.ownerSlotCount(
-                        PerlOwnerSlot.Kind.WEAKLY_TRACKED_COMPATIBILITY_PIN));
+                assertEquals(WeakRefRegistry.WEAKLY_TRACKED, target.refCount,
+                        "weak tracking does not manufacture a positive count");
                 assertEquals(2, target.ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE));
 
                 firstOwner.undefine();
                 assertTrue(WeakRefRegistry.isweak(weakObserver));
-                assertTrue(compatibilityPin.isActive(),
-                        "the bridge remains while a scalar owner slot remains");
+                assertEquals(1, target.ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE));
 
                 secondOwner.undefine();
-                assertFalse(compatibilityPin.isActive(),
-                        "the compatibility owner identity releases exactly once");
-                assertFalse(target.packageRootRescuedUntrackedAggregate);
-                assertEquals(0, target.ownerSlotCount(
-                        PerlOwnerSlot.Kind.WEAKLY_TRACKED_COMPATIBILITY_PIN));
                 assertEquals(Integer.MIN_VALUE, target.refCount);
                 assertFalse(WeakRefRegistry.isweak(weakObserver));
-
-                compatibilityPin.release();
+                assertFalse(target.hasOwnerSlots());
+                secondOwner.undefine();
                 assertEquals(Integer.MIN_VALUE, target.refCount,
-                        "repeated slot release cannot revive or release the referent twice");
+                        "repeated owner release cannot revive or destroy the referent twice");
             } finally {
                 WeakRefRegistry.clearWeakRefsTo(target);
                 GlobalVariable.globalArrays.remove(globalName);
@@ -62,7 +53,7 @@ class PackageWeakCompatibilityPinOwnerSlotTest {
     }
 
     @Test
-    void unweakenedReferenceKeepsItsCountWhenPackageOwnersLeave() {
+    void unweakenedReferenceBecomesAnOrdinaryUntrackedOwner() {
         try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
             RuntimeArray packageRoot = new RuntimeArray();
             String globalName = "PackageWeakCompatibilityPinOwnerSlotTest::unweakenedRoot";
@@ -80,27 +71,31 @@ class PackageWeakCompatibilityPinOwnerSlotTest {
 
             try {
                 WeakRefRegistry.weaken(observer);
-                PerlOwnerSlot compatibilityPin = target.packageRootRescueOwnerSlot;
+                MyVarCleanupStack.register(observer);
                 WeakRefRegistry.unweaken(observer);
 
-                assertEquals(2, target.refCount,
-                        "the strong observer count includes its owner and the compatibility pin");
-                assertTrue(compatibilityPin.isActive());
+                assertFalse(WeakRefRegistry.isweak(observer));
+                assertEquals(3,
+                        target.ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE),
+                        "unweakening installs the observer's direct strong owner slot");
 
                 firstOwner.undefine();
-                secondOwner.undefine();
+                assertTrue(observer.value == target,
+                        "the unweakened observer remains a strong referent");
+                assertEquals(2,
+                        target.ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE));
 
-                assertFalse(compatibilityPin.isActive(),
-                        "the final package slot retires only the compatibility count");
-                assertEquals(1, target.refCount,
-                        "the unweakened scalar's real owner count remains");
-                assertEquals(0, target.ownerSlotCount(
-                        PerlOwnerSlot.Kind.WEAKLY_TRACKED_COMPATIBILITY_PIN));
+                secondOwner.undefine();
+                assertTrue(observer.value == target,
+                        "the observer alone now owns the referent");
+                assertEquals(1,
+                        target.ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE));
 
                 observer.undefine();
-                assertEquals(Integer.MIN_VALUE, target.refCount,
-                        "the unweakened scalar releases the remaining real count");
+                assertFalse(target.hasOwnerSlots(),
+                        "undef retires the final direct untracked owner");
             } finally {
+                MyVarCleanupStack.unregister(observer);
                 WeakRefRegistry.clearWeakRefsTo(target);
                 GlobalVariable.globalArrays.remove(globalName);
                 MortalList.invalidateAllRootSnapshots();
