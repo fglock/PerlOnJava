@@ -39,6 +39,11 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
         return lvalue == null ? null : lvalue.getContainerOwner();
     }
 
+    /** Acquire any magic owner that an active argument alias must retain. */
+    RuntimeScalar retainArgumentAliasHandlerOwner() {
+        return null;
+    }
+
     /**
      * "Blesses" a Perl reference into an object by associating it with a class name.
      * This method is used to convert a Perl reference into an object of a specified class.
