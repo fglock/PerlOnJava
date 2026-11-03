@@ -554,6 +554,21 @@ public class MortalList {
     }
 
     /**
+     * Scalarize a temporary RHS array whose elements are no longer needed.
+     * Reference-alias list assignment returns only its element count in scalar
+     * and void contexts; release the temporary reference wrappers after
+     * computing that count so they do not keep aliased scalar cells alive.
+     */
+    public static RuntimeScalar scalarAndDiscardTemporaryArray(RuntimeArray array) {
+        if (array == null) return new RuntimeScalar();
+        RuntimeScalar result = array.scalar();
+        deferDestroyForContainerClear(array.elements);
+        array.elements.clear();
+        array.elementsOwned = false;
+        return result;
+    }
+
+    /**
      * Scope-exit cleanup for a single JVM local variable of unknown type.
      * Used by the JVM backend's eval exception handler to clean up all
      * my-variables when die unwinds through eval, since the normal
