@@ -142,6 +142,12 @@ public class EmitVariable {
      * @param sigil          The variable sigil (@ or %)
      */
     private static void emitRuntimeContextConversion(EmitterVisitor emitterVisitor, String sigil) {
+        emitRuntimeContextConversion(emitterVisitor, sigil, false);
+    }
+
+    /** Convert an array result, optionally retiring a temporary's scalar-context elements. */
+    private static void emitRuntimeContextConversion(
+            EmitterVisitor emitterVisitor, String sigil, boolean discardTemporaryArrayElements) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
 
         // Stack has the array/hash. We need to check wantarray (slot 2) and decide:
@@ -172,8 +178,17 @@ public class EmitVariable {
 
         // Scalar context: load array/hash and call .scalar(), store to result
         mv.visitVarInsn(Opcodes.ALOAD, inputSlot);
-        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase", "scalar",
-                "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+        if (discardTemporaryArrayElements && sigil.equals("@")) {
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/MortalList",
+                    "scalarAndDiscardTemporaryArray",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+        } else {
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeBase", "scalar",
+                    "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+        }
         mv.visitVarInsn(Opcodes.ASTORE, resultSlot);
         mv.visitJumpInsn(Opcodes.GOTO, done);
 
@@ -2511,12 +2526,14 @@ public class EmitVariable {
         mv.visitInsn(Opcodes.POP);
         mv.visitVarInsn(Opcodes.ALOAD, rhsListSlot);
         if (ctx.contextType == RuntimeContextType.RUNTIME) {
-            emitRuntimeContextConversion(emitterVisitor, "@");
+            emitRuntimeContextConversion(emitterVisitor, "@", true);
         } else if (ctx.contextType != RuntimeContextType.LIST
                 && ctx.contextType != RuntimeContextType.LVALUE_LIST) {
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                    "org/perlonjava/runtime/runtimetypes/RuntimeArray", "scalar",
-                    "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/MortalList",
+                    "scalarAndDiscardTemporaryArray",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
         }
         if (pooledRhsList) ctx.javaClassInfo.releaseSpillSlot();
     }
