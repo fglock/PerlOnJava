@@ -54,6 +54,7 @@ priorities and future plans.
 - Recognize a bareword filehandle when `print`'s implicit `$_` list ends at a block close (#1948).
 
 - Accept YAML-style mapping syntax in `YAML::Syck::LoadJSON`, matching Syck's JSON loader behavior (#1942).
+- Release temporary JVM reference-alias RHS owners after scalar-context assignments so the final aliased cell can clean up (#1649).
 - Track first-bless mortal references with deferred owner identities while preserving weak-source behavior (#1649).
 - Defer weakly tracked `undef` cleanup to current argument-alias identities, preserving the tracking sentinel (#1649).
 - Release aggregate closure captures without decrementing another owner's counted edge (#1649).
