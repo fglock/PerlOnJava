@@ -65,9 +65,11 @@ public class TieHash extends HashMap<String, RuntimeScalar> {
      * Helper method to call methods on the tied object.
      */
     private static RuntimeScalar tieCall(RuntimeHash hash, String method, RuntimeBase... args) {
-        TieHash tieHash = (TieHash) hash.elements;
+        return tieCall((TieHash) hash.elements, method, args);
+    }
+
+    private static RuntimeScalar tieCall(TieHash tieHash, String method, RuntimeBase... args) {
         RuntimeScalar self = tieHash.getSelf();
-        String className = tieHash.getTiedPackage();
 
         // Call the Perl method
         return RuntimeCode.call(
@@ -121,11 +123,22 @@ public class TieHash extends HashMap<String, RuntimeScalar> {
         return tieCall(hash, "FETCH", key);
     }
 
+    /** Fetch through the tie magic captured by an element alias before untie. */
+    public static RuntimeScalar tiedFetch(TieHash tieHash, RuntimeScalar key) {
+        return tieCall(tieHash, "FETCH", key);
+    }
+
     /**
      * Stores a value into a tied hash (delegates to STORE).
      */
     public static RuntimeScalar tiedStore(RuntimeHash hash, RuntimeScalar key, RuntimeScalar value) {
         return tieCall(hash, "STORE", key, value);
+    }
+
+    /** Store through the tie magic captured by an element alias before untie. */
+    public static RuntimeScalar tiedStore(
+            TieHash tieHash, RuntimeScalar key, RuntimeScalar value) {
+        return tieCall(tieHash, "STORE", key, value);
     }
 
     /**
@@ -135,11 +148,23 @@ public class TieHash extends HashMap<String, RuntimeScalar> {
         return tieCall(hash, "DELETE", key);
     }
 
+    /** Delete through the tie magic captured by an element alias before untie. */
+    public static RuntimeScalar tiedDelete(TieHash tieHash, RuntimeScalar key) {
+        return tieCall(tieHash, "DELETE", key);
+    }
+
     /**
      * Checks if a key exists in a tied hash (delegates to EXISTS).
      */
     public static RuntimeScalar tiedExists(RuntimeHash hash, RuntimeScalar key) {
         return tieCall(hash, "EXISTS", key).getBoolean()
+                ? RuntimeScalarCache.scalarOne
+                : RuntimeScalarCache.scalarEmptyString;
+    }
+
+    /** Check a key through the tie magic captured by an element alias before untie. */
+    public static RuntimeScalar tiedExists(TieHash tieHash, RuntimeScalar key) {
+        return tieCall(tieHash, "EXISTS", key).getBoolean()
                 ? RuntimeScalarCache.scalarOne
                 : RuntimeScalarCache.scalarEmptyString;
     }
