@@ -2,44 +2,37 @@
 
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
-**Current checkpoint (2026-11-03 12:35 UTC):** #1649 continues on branch
-`wip/container-slot-transition-20261103-132517`, runtime source `46437891b`.
-The immutable focused gate is recorded on `3727b9980`; this documentation
-checkpoint follows that tested source. The branch contains remote
-`origin/master` `d34aa038f` through the earlier master merge.
-The scalar overwrite/undefine and localized-hash batch is recorded in the
-preceding claim. This batch centralizes array and hash container transitions in
-`RuntimeScalar.transitionContainerSlots`: acquire replacement edges, publish
-the new storage and its owner bookkeeping, then release displaced cells from
-the old storage snapshot. Same-cell transfers keep their existing identity.
-Array literal stores, `push`, single-value and list replacement, hash stores,
-and hash list assignment use that operation. Shared storage validation and
-durable IO retention still happen before publication.
+**Current checkpoint (2026-11-03):** #1649 continues on branch
+`wip/argument-alias-container-20261103-135737`; the latest runtime source is
+`0c8a46d2c`, after the preserved WIP snapshot `9d26d3a38`. The preceding batch
+centralized array and hash slot transitions: acquire replacement edges,
+publish storage and owner bookkeeping, then release displaced cells from the
+old storage snapshot. Same-cell transfers retain their identity.
 
-`ContainerSlotAcquisitionOrderTest` covers five acquire/publish/release
-invariants; all five fail on unfixed parent `72ddef771` and pass on the
-candidate. The parent `make test-unit` log reports 862 Java tests, five of
-these failures, and six skips. `hash_slot_replacement_visible_before_destroy.t`
-checks hash and array destructor ordering; system Perl and both PerlOnJava
-backends pass 6/6, with sweeps disabled on the candidate. The Perl-visible
-fixture also passes on the parent, so the parent failure evidence is the
-internal owner-order regression, not a claim that this fixture exposed a
-visible parent mismatch. The immutable no-sweeps `make test-unit` gate passes
-on checkpoint `3727b9980`; four adjacent array/hash mutation fixtures pass
-28/28 on both backends. Logs: `/private/tmp/issue1649-container-slot-transition-3727b9980.log`,
-`/private/tmp/issue1649-container-slot-transition-parent-72ddef771.log`,
-`/private/tmp/issue1649-container-slot-transition-system-perl.log`,
-`/private/tmp/issue1649-container-slot-transition-3727b9980-jvm.log`, and
-`/private/tmp/issue1649-container-slot-transition-3727b9980-interpreter.log`.
-Full no-sweeps `make`, the HTML::Tree and lifecycle acceptance matrices, and PR
-reconciliation remain outstanding.
+This batch implements Perl's hold on the containing aggregate when an array or
+hash element is passed as an aliased argument. `CallArguments` acquires an
+`ARGUMENT_CONTAINER` owner and the active callee frame releases it only when
+the frame exits, including after `shift @_`. Hash and array proxies expose the
+container for the alias. Existing negative selective counts are preserved by
+using an uncounted owner identity rather than changing the count. The permanent
+regression covers a missing hash key and array element, root removal inside the
+callee, and `shift @_`. It passes 4/4 on system Perl, JVM, and interpreter with
+corrective sweeps disabled. Both backends fail the visible lifetime checks on
+parent `3727b9980`; logs are under `/private/tmp/issue1649-argument-alias-`.
 
-Next: audit every remaining array/hash removal and alias transfer, then batch
+The focused no-sweeps `make test-unit` gate passed on the implementation tree
+before its source commit, but its injected build metadata predates
+`0c8a46d2c`. A final immutable-source gate is pending after this documentation
+update. Full no-sweeps `make`, HTML::Tree and lifecycle acceptance matrices, and
+PR reconciliation remain outstanding. Earlier evidence for the array/hash
+transition batch is recorded below.
+
+Next: audit remaining array/hash removals and alias transfers, then batch
 tied-handler/pre-weaken values, closure and CODE owners, package roots, cycles,
-suspended frames, and resource holders. Each Perl-visible operation remains
-measured against system Perl. Keep PR #1938 open as a draft; its remote head is
-still `b2f44fc2d36b8f0a1bc7067790e1731a604cba45` and its merge state is
-`DIRTY`.
+suspended frames, and resource holders. Trace each count-owner disagreement to
+its producer, transfer, or cleanup path before removing recovery behavior.
+Update the existing #1649 handoff after the immutable gate. Keep PR #1938 open
+as a draft until local work is reconciled with the live remote history.
 
 Standard Perl is the oracle for every Perl-visible reference edge and its
 lifetime behavior. A reference-slot transition should retain a new strong
