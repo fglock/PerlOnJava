@@ -975,6 +975,10 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             this.queueSite = queueSite;
             this.ownerSlotRelease = ownerSlotRelease;
         }
+
+        boolean identifiesReleasedOwnerEdge() {
+            return ownerSlotRelease != null;
+        }
     }
 
     private static long traceReferentGeneration(RuntimeBase base) {
