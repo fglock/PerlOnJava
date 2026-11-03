@@ -1387,10 +1387,9 @@ public class MortalList {
         // queue drains. Let that exact release decide finalization instead of
         // racing it with scope-exit cleanup.
         if (base.hasPendingOwnerRelease()) return;
-        // Legacy owner families without a current slot identity still need
-        // this compatibility proof. Migrated paths return above from their
-        // exact Perl owner identities and do not build this snapshot.
-        if (base.refCount <= 0 && isReachableFromExternalRootCached(base)) return;
+        // All live Perl roots for this async aggregate have explicit owner
+        // identities. Once those identities and any deferred release are
+        // empty, a root graph cannot supply a missing Perl owner.
         base.refCount = Integer.MIN_VALUE;
         DestroyDispatch.callDestroy(base);
     }
