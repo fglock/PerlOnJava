@@ -3,15 +3,23 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-03):** #1649 Phase 2 continues on branch
-`wip/detached-glob-owner-20261102-064229`. Runtime fix `0a8815582` is included
-in tested checkpoint `dd60a2682`. The no-sweeps `nice -n 19 timeout 3600 env
+`wip/detached-glob-owner-20261102-064229`. Runtime fix `0a8815582` and removal
+of the unused `isReachableThroughTiedHash` wrapper are included in tested
+checkpoint `6c285e880`. The no-sweeps `nice -n 19 timeout 3600 env
 JPERL_DISABLE_CORRECTIVE_SWEEPS=1 make` gate passes: 3,921 tests, 7 skipped,
-zero failures/errors, in 7m29. Full log:
-`/private/tmp/issue-1649-fullmake-no-sweeps-dd60a2682.log`.
+zero failures/errors, in 7m22. Full log:
+`/private/tmp/issue-1649-fullmake-no-sweeps-6c285e880.log`.
 Local work is unpublished. PR #1938 remains an open draft at head
 `b2f44fc2d36b8f0a1bc7067790e1731a604cba45`, based on
 `4a5c33753f1da3f9838c44567bbba878e8f567e0`; GitHub last reported `DIRTY`
 on 2026-11-03.
+
+`tied_handler_nested_value_owner_before_weaken.t` passes 2/2 on system Perl,
+JVM, and interpreter, proving nested values stored before tying and first
+weaken retain through the tie handler and release on `untie`. Logs:
+`/private/tmp/issue-1649-tied-handler-before-weaken-system-perl-1c080a387.log`,
+`/private/tmp/issue-1649-tied-handler-before-weaken-jvm-1c080a387.log`, and
+`/private/tmp/issue-1649-tied-handler-before-weaken-interpreter-1c080a387.log`.
 
 `ab4569170` removed the raw closure-release decrement that could consume
 another scalar's count; production aggregate captures in `SubroutineParser`,
@@ -31,8 +39,8 @@ alive after the outer counted edge leaves, then clears when the final package
 owner is removed. It passes with all affected root-snapshot tests: 19 tests,
 zero failures. The initial full gate on `1f0f02943` exposed four snapshot-cost
 regressions from the broader owner shortcut; narrowing it restored those checks.
-The refined full no-sweeps gate passes on `dd60a2682`: 3,921 tests, 7 skipped,
-zero failures/errors in 7m29. Log: `/private/tmp/issue-1649-fullmake-no-sweeps-dd60a2682.log`.
+The refined full no-sweeps gate passes on `6c285e880`: 3,921 tests, 7 skipped,
+zero failures/errors in 7m22. Log: `/private/tmp/issue-1649-fullmake-no-sweeps-6c285e880.log`.
 Parent evidence: the regression fails on `dafb62d40`; its full serial unit
 gate reports 3,398 tests, 6 skipped, and only this failure in 21m42. Logs:
 `/private/tmp/issue-1649-blessed-package-owner-focused-parent-dafb62d40.log`,
@@ -40,6 +48,8 @@ gate reports 3,398 tests, 6 skipped, and only this failure in 21m42. Logs:
 `/private/tmp/issue-1649-blessed-package-owner-focused-dafb62d40-final.log`,
 `/private/tmp/issue-1649-fullmake-no-sweeps-1f0f02943.log`, and
 `/private/tmp/issue-1649-owner-filter-compatibility-focused-1f0f02943.log`.
+The unused single-target tied-root wrapper had no callers and is removed in
+`6c285e880`; the tied snapshot remains for explicit diagnostics.
 
 With corrective sweeps disabled, `nice -n 19 timeout 3600 make` passes on
 `dc1603047` in 6m56 at
@@ -71,8 +81,9 @@ direct weak observers still use the root proof. Other `restoreReachableOwnerCoun
 and root/snapshot recovery branches remain pending exact producer audits.
 `hasLiveUntrackedOwnerSlot` checks active `UNTRACKED_REFERENCE` identities,
 although it still increments the legacy `rootQueries` metric. The package
-first-weaken pin remains; its tests assert the temporary count and pin, so the
-actual package edge producer must be migrated before removing that bridge.
+first-weaken pin remains; existing tests assert the temporary count and pin,
+while repository policy forbids modifying existing tests. Pin retirement is
+therefore a policy boundary; other owner and fallback audits continue.
 
 Next, trace each production path that can reach `restoreReachableOwnerCount`,
 then continue the producer audit across package roots, cycles, shared storage,
@@ -2356,16 +2367,17 @@ parent, then that removing the last package edge destroys the parent and clears
 the child weak observer. The focused group passes all 19 tests, including the
 existing snapshot-cost cases. The first full gate exposed four failures from
 the broader owner shortcut. After narrowing it, the full no-sweeps gate passes
-on immutable checkpoint `dd60a2682`: 3,921 tests, 7 skipped, zero failures or
-errors in 7m29. Log: `/private/tmp/issue-1649-fullmake-no-sweeps-dd60a2682.log`.
+on immutable checkpoint `6c285e880`: 3,921 tests, 7 skipped, zero failures or
+errors in 7m22. Log: `/private/tmp/issue-1649-fullmake-no-sweeps-6c285e880.log`.
 
 ### Next steps
 
-1. Trace the first-weaken package aggregate edge and replace the compatibility
-   pin with producer-owned identity plus regression coverage.
-2. Audit every path to `restoreReachableOwnerCount` and remaining root/snapshot
-   fallbacks; continue package-root, cycle, shared-storage, resource-owner,
-   pad bookkeeping, and exception/unwind producer audits.
+1. Continue tracing every path to `restoreReachableOwnerCount` and remaining
+   root/snapshot fallbacks; use producer-level evidence to separate real
+   acquisition gaps from synthetic stale-count coverage.
+2. Continue package-root, cycle, shared-storage, resource-owner, pad-bookkeeping,
+   and exception/unwind producer audits. Keep the first-weaken pin until its
+   existing-test policy conflict is resolved.
 3. Remove corrective recovery only after normal acquisition, transfer, and
    cleanup paths preserve owner identities and their regression coverage passes.
 4. Rerun the weak-reference, `DESTROY`, resurrection, cycle, cancellation,
