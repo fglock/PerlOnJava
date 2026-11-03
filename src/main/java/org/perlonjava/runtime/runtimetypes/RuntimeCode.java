@@ -1544,7 +1544,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     boolean hasPerlOwnerForCapture() {
         return refCount > 0
                 || stashRefCount > 0
-                || localBindingExists
                 || hasActiveCodeOwner()
                 || hasCallTransferOwner()
                 || hasOwnerSlots()
@@ -1571,7 +1570,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // whose compatibility count can remain positive after their last
         // real scalar owner has gone away.
         return stashRefCount > 0
-                || localBindingExists
                 || hasActiveCodeOwner()
                 || hasCallTransferOwner()
                 || hasOwnerSlotsOtherThan(excludedOwner)
