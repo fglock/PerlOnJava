@@ -907,11 +907,6 @@ public class MortalList {
             return;
         }
 
-        if (code.localBindingExists) {
-            code.refCount = 1;
-            return;
-        }
-
         code.refCount = Integer.MIN_VALUE;
         DestroyDispatch.callDestroy(code);
     }
