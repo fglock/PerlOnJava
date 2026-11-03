@@ -2,43 +2,42 @@
 
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
-**Current checkpoint (2026-11-03 06:14 UTC):** #1649 continues on branch
-`wip/ownership-handoff-20261103-053423`, source candidate `76002119c`. The
+**Current checkpoint (2026-11-03 06:28 UTC):** #1649 continues on branch
+`wip/ownership-handoff-20261103-053423`, validated source `4fc33accf`. The
 immutable sweeps-disabled `nice -n 19 timeout 3600 env
-JPERL_DISABLE_CORRECTIVE_SWEEPS=1 make` gate passes in 7m1:
-`/private/tmp/issue-1649-tailcall-code-no-sweeps-76002119c.log`. The new
-`TailCallCodeRefDoesNotPinFromLocalBindingFlagTest` passes 1/1 in shard 0
-(`build/test-results/testUnitShard0/TEST-org.perlonjava.runtime.runtimetypes.TailCallCodeRefDoesNotPinFromLocalBindingFlagTest.xml`).
+JPERL_DISABLE_CORRECTIVE_SWEEPS=1 make` gate passes in 7m28:
+`/private/tmp/issue-1649-code-owner-no-sweeps-4fc33accf.log`. It includes the
+new `RuntimeCodeOwnerIdentityTest` (1/1, shard 0) and
+`package_array_nested_weak_owner_release.t` (unit suite, shard 2 worker).
 
-`releaseTailCallCodeRef` no longer recreates `refCount = 1` from
-`RuntimeCode.localBindingExists`: the runtime has no acquisition path that
-sets that marker on a CODE referent. Final release now follows its counted
-CODE slot. The existing `stashRefCount` compatibility path remains separate;
-package CODE slot identities are already checked by `hasStashCodeSlotOwner`.
-The prior localization fix at `4109cc382` also passes the full no-sweeps gate
-and its localization/callback tests pass on both backends. The earlier e0
-callback failures remain at
-`/private/tmp/issue-1649-localization-owner-no-sweeps-e0f85c9cc-retry1.log`.
+`releaseTailCallCodeRef` no longer fabricates `refCount = 1` from
+`RuntimeCode.localBindingExists`; the runtime has no CODE producer for this
+inherited marker. `RuntimeCode.hasPerlOwnerForCapture` and its exclusion-aware
+variant now use CODE slots, active/call-transfer owners, bridge count, and
+constant state rather than that marker. The invariant test verifies a stale
+marker alone does not retain CODE. The package-array regression passes 4/4 on
+system Perl and both backends with sweeps disabled; logs:
+`/private/tmp/issue-1649-package-array-nested-weak-owner-system-perl.log` and
+`/private/tmp/issue-1649-package-array-nested-weak-owner-{jvm,interpreter}-76002119c.log`.
 
-The source audit confirms scalar/aggregate replacement normally acquires the
-destination slot before retiring the displaced slot; thread clones and native
-regex/tied/IO owners create explicit slots at their count producers. Some
-decrements are transfers whose destination edge already exists. The remaining
-deferred cleanup still has generic root-count restoration and three positive
-count reachability rescues. The package-nested untracked compatibility pin is
-still exercised by a low-level raw-container test fixture; normal array/hash
-stores use counted element slots. This test boundary and the real producer
-paths need separate treatment before deleting the pin.
+The source audit confirms current array/hash stores promote nested aggregate
+references into counted element slots; the remaining package-nested untracked
+pin test uses raw `.elements.add` without installing normal container metadata.
+Do not treat that fixture as proof that normal package stores need the pin.
+Production `queueDeferredBase` callers carry exact owner-release tokens; the
+bare `MortalList.deferDecrement(RuntimeBase)` API has no production call site
+and is used by low-level compatibility fixtures. This creates a boundary for
+testing whether lifecycle root recovery can be restricted without hiding a
+normal producer bug.
 
-`PerlOwnerSlot` remains edge identity and deferred-release provenance beside
-selective lifecycle counts. Whether the ledger can shrink after every count
-producer preserves its invariant remains open. Continue mapping each remaining
-rescue to its strong-edge acquire/release site, especially deferred cleanup,
-first weaken, cleared aggregates, closure/CODE cycles, shared storage, and
-resource holders. Work is unpublished. PR #1938 remains open as a draft at
-remote head `b2f44fc2d36b8f0a1bc7067790e1731a604cba45`, base
-`4a5c33753f1da3f9838c44567bbba878e8f567e0`; GitHub reports conflicts.
-Current-master reconciliation and final acceptance remain incomplete.
+Next: isolate root/count recovery to the unidentified-release compatibility
+path and run the no-sweeps suite. Any failure from a production slot-specific
+release must be traced to its producer and fixed before recovery is removed.
+Then continue the first-weaken, cleared-aggregate, closure/CODE cycle, shared
+storage, and resource-owner audit. Local work is unpublished; PR #1938 remains
+an open draft at remote head `b2f44fc2d36b8f0a1bc7067790e1731a604cba45`, base
+`4a5c33753f1da3f9838c44567bbba878e8f567e0`, merge state `DIRTY`. Current-master
+reconciliation, recovery removal, and final acceptance are incomplete.
 
 **Previous checkpoint (2026-11-03, superseded):** #1649 Phase 2 continues on branch
 `wip/ownership-doc-checkpoint-20261103-012032`. Runtime fix `0a8815582`,
