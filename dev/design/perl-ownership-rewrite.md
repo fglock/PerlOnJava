@@ -3,13 +3,15 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-03):** #1649 continues on local branch
-`wip/ownership-resume-20261103-192304` at `4d4ebf6fe`, preserving the prior
+`wip/ownership-resume-20261103-192304` at `f2bce0f28`, preserving the prior
 argument-alias work through `f3424c9cc`. `RuntimeCode.popArgs` now retires
 container-owner edges from a popped argument array only after its final active
 frame exits and only when the array is not shared or Perl-owned. This clears
 untracked referent slots left by temporary argument arrays without querying
 runtime roots. Compact method-argument removal also retires the matching
-`ARGUMENT_ALIAS` identity through the same hook as other array removals.
+`ARGUMENT_ALIAS` identity through the same hook. Hash scope-exit cleanup and
+recursive aggregate cleanup now use current owner identities instead of the
+removed root-reachability fallbacks.
 
 `mojolicious_controller_destroy_after_finish.t` failed before this change at
 the final controller-destruction assertion. It now passes 5/5 on system Perl,
@@ -25,15 +27,18 @@ A broader `scopeExitCleanupArray` attempt regressed async-await and Test::Builde
 context tests and was removed; evidence remains in
 `/private/tmp/issue1649-controller-frame-exit-cleanup-focused.log`.
 
-The full no-sweeps gate on immutable candidate `8e54632dd` completed in 7m24
-and failed three unit tests: `bless_tied_hash_reference.t`,
+Focused no-sweeps `make test-unit` gates passed after both aggregate-cleanup
+changes (1m23 and 1m11). The immutable full no-sweeps gate on `f2bce0f28`
+completed in 7m20 and failed only `bless_tied_hash_reference.t`,
 `substr_core_edge_semantics.t`, and `threads_shared_reference_validation.t`.
 All three also failed on earlier no-sweeps candidate `a058ee8df` and parent
 `850652c77`; the earlier run's other eight failures pass on this candidate,
 including `mojolicious_controller_destroy_after_finish.t`. Current log:
-`/private/tmp/issue1649-argument-container-release-full-no-sweeps-8e54632dd.log`;
+`/private/tmp/issue1649-aggregate-cleanup-owner-slots-full-no-sweeps-f2bce0f28.log`;
 earlier logs: `/private/tmp/issue1649-full-no-sweeps-a058ee8df.log` and
-`/private/tmp/issue1649-catalyst-parent850-test-unit.log`. Next, trace the
+`/private/tmp/issue1649-catalyst-parent850-test-unit.log`. Focused logs:
+`/private/tmp/issue1649-remove-hash-scope-root-fallback-focused.log` and
+`/private/tmp/issue1649-remove-recursive-root-proof-focused.log`. Next, trace the
 remaining `MortalList.processDeferredBase` root/snapshot decisions back to
 their release producers, then batch deferred-release and cleared-aggregate
 owner fixes. Closure/CODE, package-root, cycle, shared-storage, and resource
