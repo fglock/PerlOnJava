@@ -875,6 +875,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             if (previous != null) previous.reconcileContainerOwnerAfterMutation(owner);
             owner.notePackageRootMutation(previous, null);
             if (owner.isaArray) owner.validateIsaMutation();
+            RuntimeCode.argumentArraySlotRemoved(owner, previous);
             return previous;
         }
 
