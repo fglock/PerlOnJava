@@ -3767,6 +3767,17 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             releaseClosureOwnerSlot();
         }
 
+        // A scalar cell's counted owner slot is reused for its replacement.
+        // If active @_ aliases require the old release to be deferred, queue
+        // that exact edge before the replacement acquisition moves the slot.
+        boolean oldArgumentAliasReleaseQueued = false;
+        if (oldIdentifiedOwner && !thisWasWeak && oldBase.refCount > 0
+                && oldBase.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_ALIAS) != 0) {
+            MortalList.deferDecrementFromArraySlot(oldBase, this,
+                    "RuntimeScalar.setLargeRefCounted overwrite");
+            oldArgumentAliasReleaseQueued = true;
+        }
+
         // Increment new value's refCount for tracked stores, including a GLOB
         // whose open handle has already been blessed into an object. Hashes and
         // arrays at refCount==-1 are promoted to 0 here (aligned with
@@ -3942,8 +3953,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // and for scalars that didn't own a refCount increment).
         if (oldBase != null && !thisWasWeak
                 && (this.refCountOwned || oldOwnedByScalarReference)) {
-            boolean deferredOldBaseRelease = false;
-            if (oldBase.refCount > 0
+            boolean deferredOldBaseRelease = oldArgumentAliasReleaseQueued;
+            if (!deferredOldBaseRelease && this.refCountOwned && oldBase.refCount > 0
                     && oldBase.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_ALIAS) != 0) {
                 MortalList.deferDecrementFromArraySlot(
                         oldBase, this, "RuntimeScalar.setLargeRefCounted overwrite");
