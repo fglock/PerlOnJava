@@ -2,44 +2,40 @@
 
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
-**Current checkpoint (2026-11-03 08:06 UTC):** #1649 continues on branch
-`wip/ownership-handoff-20261103-053423`, current source `15ac947e0` (runtime
-change `d4f482d80`). The latest immutable sweeps-disabled
+**Current checkpoint (2026-11-03 08:40 UTC):** #1649 continues on branch
+`wip/ownership-handoff-20261103-053423`, HEAD `09a8ef926`; work is local and
+unpublished. The immutable sweeps-disabled
 `nice -n 19 timeout 3600 env JPERL_DISABLE_CORRECTIVE_SWEEPS=1 make` gate
-passes in 6m54:
-`/private/tmp/issue-1649-scope-exit-hash-owner-no-sweeps-15ac947e0.log`.
-`RecursiveCleanupCurrentOwnerIdentityTest` and `ScopeExitHashOwnerSlotTest`
-each pass 1/1 in shard 0. The first verifies a closure-pad owner prevents
-nested weak-value cleanup without an external-root snapshot, even with an
-unrelated growing package root; its positive legacy count is synthetic
-defensive coverage, so normal producer consistency remains open. The second
-models DBIC's escaped `source_registrations` hash assignment: the normal schema
-hash store acquires a `HASH_ELEMENT` identity, and lexical scope cleanup keeps
-the hash without building a root snapshot. The earlier package-array
-nested weak-owner Perl regression passes 4/4 on system Perl and both backends;
-logs are `/private/tmp/issue-1649-package-array-nested-weak-owner-system-perl.log`,
-`/private/tmp/issue-1649-package-array-nested-weak-owner-jvm-76002119c.log`, and
-`/private/tmp/issue-1649-package-array-nested-weak-owner-interpreter-76002119c.log`.
+passes in 7m15:
+`/private/tmp/issue-1649-signature-assignment-owner-no-sweeps-09a8ef926.log`.
+The new `issue_1649_list_declared_aggregate_weak_owner.t` regression passes
+16/16 on system Perl, JVM, and interpreter. The interpreter failure on parent
+`06eca3d5c` is preserved at
+`/private/tmp/issue-1649-list-aggregate-weak-owner-interpreter-06eca3d5c.log`.
 
-Recursive cleanup now checks `hasPerlStrongOwnerIdentity()` before its legacy
-external-root proof. That recognizes non-counted live owners such as closure
-pads; count-only fallback remains when no current identity proves the edge.
-Generated array/hash lexicals bind into the active pad after cleanup-stack
-registration and receive `ACTIVE_LEXICAL` identities. The DBIC-style escaped
-hash is retained by a normal `HASH_ELEMENT` slot, so that producer does not
-need `scopeExitCleanupHashBody`'s fallback. Direct test/runtime registrations
-without a pad-map binding remain a separate legacy boundary. The attempt to
-remove the cleared-aggregate proof at `a44ec12f8` failed the existing
-`ReachabilityQueryCostTest` snapshot-count assertion and was reverted; preserve
-its failure log at `/private/tmp/issue-1649-cleared-scope-exit-no-sweeps-a44ec12f8.log`.
+The failure came from a producer gap: `SignatureParser` lowers parameters to
+`my (...) = @_`, and signature declarations skip `APPLY_LEXICAL_ALIAS`.
+`CompileAssignment` now binds those scalar defaults and aggregate list
+parameters into the active pad after `REGISTER_MY_VAR`. This acquires the
+aggregate's `ACTIVE_LEXICAL` identity so frame exit releases weak observers.
+Ordinary list declarations retain their existing alias/backfill path. The
+earlier recursive-cleanup owner check and DBIC-style escaped hash proof remain
+valid: closure-pad owner identities short-circuit the recursive root proof,
+and a normal schema hash store acquires a `HASH_ELEMENT` identity. The
+cleared-aggregate fallback removal attempt at `a44ec12f8` still fails existing
+`ReachabilityQueryCostTest` coverage; preserve
+`/private/tmp/issue-1649-cleared-scope-exit-no-sweeps-a44ec12f8.log`.
 
-Remaining ordinary recovery sites include `scopeExitCleanupHashBody`,
-the no-identity cases in `deferDecrementRecursive`,
+Four fallback zones are explicitly inventoried: `scopeExitCleanupHashBody`,
+no-identity branches in `deferDecrementRecursive`,
 `finalizeClearedAggregateOwnerAfterScopeExit`, and first-weaken package-nested
-aggregate handling. Trace each to its strong-edge producer and release site
-before removal. The bare `MortalList.deferDecrement(RuntimeBase)` API has no
-production call site, but the owner-family audit is incomplete. Work remains
-local and unpublished. PR #1938 remains OPEN as a draft at remote head
+aggregate handling. `deferDecrementRecursive` contains several decisions, and
+the owner-family audit may find additional producers; the final special-case
+count is therefore not established yet. Next, batch the remaining acquisition,
+transfer, and release producer audits with focused regressions, then remove
+only recovery whose real owner edges are proven. The bare
+`MortalList.deferDecrement(RuntimeBase)` API has no production call site. PR
+#1938 remains OPEN as a draft at remote head
 `b2f44fc2d36b8f0a1bc7067790e1731a604cba45`, base
 `4a5c33753f1da3f9838c44567bbba878e8f567e0`, merge state `DIRTY`.
 Reconciliation, recovery removal, and final acceptance remain incomplete.
@@ -134,7 +130,7 @@ root/snapshot fallbacks in the deferred-release row need producer audits.
 | Suspended async frame | Awaited Future values formerly had a separate `suspendedRoots` map consumed by reachability snapshots. That supplemental root is removed. | `InterpreterSuspension` copies the await operand into a scalar cell and attaches a `SUSPENDED_FRAME` slot. Completion, cancellation, and exception cleanup detach the slot and notify weak cleanup. Lexical registers already use per-register `SUSPENDED_FRAME` identities. | `InterpreterSuspensionOwnerTest` verifies acquisition and final release; `issue_1649_cleared_aggregate_async_scope_exit.t` passes on both backends; `issue_1649_cancelled_async_scope_exit.t` verifies cancellation and exactly-once destruction 5/5 on both backends. Chained-await coverage remains in the final matrix. |
 | Resource holders | Each anonymous IO resource holder has a native `IO_RESOURCE_HOLDER` identity on its `RuntimeGlob`; `RuntimeScalar.ioOwnerSlot` carries that identity, and `RuntimeGlob.ioHolderCount()` derives the active count from the owner ledger. | `retainUnstashedIoForDurableSlot` acquires a slot for a strong scalar, while `releaseIoOwner` retires it exactly once. Weaken releases a weak scalar's holder after any final destructor dispatch; unweaken reacquires it for a live glob. Detached-value assignment, returned aliases, and localized-global suspension move the same identity. Replacement acquires the new edge before releasing the old one. Bulk clear still queues the owning scalar for release. Thread cloning drops nonportable IO ownership. | Existing IO coverage remains; `WeakGlobIoOwnerSlotTest` verifies weak and strong aliases, IO-holder release, and unweaken. The new blessed-glob regression passes 5/5 on both backends and system Perl. The eight-file Perl IO matrix passes on both backends and system Perl (74 checks; TCP loopback test skipped because the listener is unavailable). Socket return, exception unwind, localization, aggregate clear, selected-glob restoration, #1794, and #1860 remain covered. Non-socket handle close policy and broader resource-owner acquisition paths remain under audit. |
 
-### Active lexical aggregate registration backfill (2026-11-01)
+### Active lexical aggregate and signature pad owners (2026-11-03)
 
 `MyVarCleanupStack.register` can run after the compiler has already bound the
 aggregate cell into an active lexical pad. In that ordering, the registration
@@ -143,10 +139,18 @@ idempotent pad bind also returned before filling the missing slot. The
 registration hook now scans all active pad and top-level bindings for the exact
 cell and acquires the missing slot for every binding. Normal scope cleanup
 retires the slot, which clears final weak observers through the owner-release
-lifecycle callback. The permanent weak array/hash regression passes on system
-Perl and both backends, and records parent failure evidence for both backends.
-The unfiltered no-sweeps build passes on `c352f070e`; the latest immutable
-source result is recorded above.
+lifecycle callback. The original weak array/hash regression passes on system
+Perl and both backends, with parent failure evidence.
+
+The separate signature path lowers parameters to `my (...) = @_`; its
+`signatureParameterDeclaration` marker intentionally skips lexical alias
+resolution. The interpreter assignment compiler now emits an active-pad bind
+after registering each signature scalar or aggregate cell. The expanded
+`issue_1649_list_declared_aggregate_weak_owner.t` covers ordinary list
+declarations and slurpy array/hash parameters: system Perl, JVM, and interpreter
+pass 16/16, while the unfixed interpreter failed the two frame-exit assertions.
+The full sweeps-disabled gate passes on immutable source `09a8ef926` in 7m15;
+full and focused logs are listed in the current checkpoint above.
 
 ### Scalar overwrite removes root reachability fallback (2026-11-01)
 
@@ -599,17 +603,19 @@ batch is pending.
 
 ### Next steps
 
-1. Replace the remaining `refCount == 0` temporary-closure cleanup gates with
-   owner checks after reconciling interpreter cancellation and suspended-frame
-   release order. Then continue tied scalar/array/glob, package-root,
-   shared-storage, and resource producer/cleanup audits; trace each remaining
-   count mismatch to the operation that creates or retires its edge.
-2. Replace lifecycle reachability and count fallbacks with current owner-slot
-   identities, then remove obsolete corrective-sweep machinery and caches.
-3. Rerun the weak-reference, `DESTROY`, resurrection, cycle, cancellation,
-   #1794, #1860, and full HTML::Tree acceptance matrix with sweeps disabled.
-4. Reconcile the tested local history with open draft PR #1938, review required
-   CI, and leave merge to review.
+1. Batch a read-only producer/source audit for direct `MyVarCleanupStack`
+   registrations, `scopeExitCleanupHashBody`, no-identity deferred-release
+   branches, cleared aggregates, and first-weaken package-nested values.
+   Identify each strong edge's acquisition, transfer, and release operation
+   before changing cleanup decisions.
+2. Add the related owner-slot/invariant fixes and permanent focused regressions
+   as a coherent batch. Validate Perl-level tests with system Perl first, then
+   use one full no-sweeps gate per runtime batch.
+3. Once producers are covered, migrate lifecycle decisions to current owner
+   identities and remove obsolete recovery paths and unused sweep machinery.
+4. Run the final weak-reference, `DESTROY`, resurrection, cycle, cancellation,
+   #1794, #1860, and full HTML::Tree acceptance matrix on the immutable
+   candidate; reconcile it with draft PR #1938 and review CI before readiness.
 
 ### Open questions and blockers
 
