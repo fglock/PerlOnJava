@@ -2,43 +2,36 @@
 
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
-**Current checkpoint (2026-11-03 08:40 UTC):** #1649 continues on branch
-`wip/ownership-handoff-20261103-053423`, HEAD `09a8ef926`; work is local and
-unpublished. The immutable sweeps-disabled
+**Current checkpoint (2026-11-03 09:14 UTC):** #1649 continues on branch
+`wip/ownership-handoff-20261103-053423`, HEAD `f45623db6`, which merges the
+nine commits added to `master` since the old PR base. The branch is clean and
+zero commits behind `origin/master`. The immutable no-sweeps
 `nice -n 19 timeout 3600 env JPERL_DISABLE_CORRECTIVE_SWEEPS=1 make` gate
-passes in 7m15:
-`/private/tmp/issue-1649-signature-assignment-owner-no-sweeps-09a8ef926.log`.
-The new `issue_1649_list_declared_aggregate_weak_owner.t` regression passes
-16/16 on system Perl, JVM, and interpreter. The interpreter failure on parent
-`06eca3d5c` is preserved at
-`/private/tmp/issue-1649-list-aggregate-weak-owner-interpreter-06eca3d5c.log`.
+passes in 8m22:
+`/private/tmp/issue1649-master-merge-no-sweeps-f45623db6.log`.
+Six focused Perl regressions (25 checks) pass on JVM and interpreter;
+standard Perl passes the six-file oracle set (25 checks) at
+`/private/tmp/issue1649-master-merge-perl-oracle-f45623db6.log`.
 
-The failure came from a producer gap: `SignatureParser` lowers parameters to
-`my (...) = @_`, and signature declarations skip `APPLY_LEXICAL_ALIAS`.
-`CompileAssignment` now binds those scalar defaults and aggregate list
-parameters into the active pad after `REGISTER_MY_VAR`. This acquires the
-aggregate's `ACTIVE_LEXICAL` identity so frame exit releases weak observers.
-Ordinary list declarations retain their existing alias/backfill path. The
-earlier recursive-cleanup owner check and DBIC-style escaped hash proof remain
-valid: closure-pad owner identities short-circuit the recursive root proof,
-and a normal schema hash store acquires a `HASH_ELEMENT` identity. The
-cleared-aggregate fallback removal attempt at `a44ec12f8` still fails existing
-`ReachabilityQueryCostTest` coverage; preserve
-`/private/tmp/issue-1649-cleared-scope-exit-no-sweeps-a44ec12f8.log`.
+Standard Perl is the oracle for every Perl-visible reference edge and its
+lifetime behavior. A reference-slot transition should retain a new strong
+referent before publishing it, then release the old referent exactly once;
+copy, alias, weak, and transfer operations must remain distinct. Deferred
+work must carry the exact old referent and release obligation. `PerlOwnerSlot`
+identities are migration/provenance evidence, not a second count model or a
+basis for reconstructing counts; the target lifecycle decision follows the
+count after every Perl strong edge is represented or counted through an exact
+lifecycle token.
 
-Four fallback zones are explicitly inventoried: `scopeExitCleanupHashBody`,
-no-identity branches in `deferDecrementRecursive`,
-`finalizeClearedAggregateOwnerAfterScopeExit`, and first-weaken package-nested
-aggregate handling. `deferDecrementRecursive` contains several decisions, and
-the owner-family audit may find additional producers; the final special-case
-count is therefore not established yet. Next, batch the remaining acquisition,
-transfer, and release producer audits with focused regressions, then remove
-only recovery whose real owner edges are proven. The bare
-`MortalList.deferDecrement(RuntimeBase)` API has no production call site. PR
-#1938 remains OPEN as a draft at remote head
-`b2f44fc2d36b8f0a1bc7067790e1731a604cba45`, base
-`4a5c33753f1da3f9838c44567bbba878e8f567e0`, merge state `DIRTY`.
-Reconciliation, recovery removal, and final acceptance remain incomplete.
+Four broad fallback zones remain inventoried: hash scope-exit cleanup,
+recursive/deferred release (with several separate root/snapshot decisions),
+cleared-aggregate finalization, and first-weaken package-nested aggregates.
+Closure cleanup, package/CODE roots, destruction/resurrection, and resource
+owners also need producer-level audit before their recovery paths can be
+removed. The exact branch count is still open. PR #1938 remains OPEN as a
+draft at remote head `b2f44fc2d36b8f0a1bc7067790e1731a604cba45`, merge state
+`DIRTY`; its two unique remote commits still need reconciliation before any
+publication.
 
 **Sweep policy (2026-10-27):** Corrective sweeps are disabled by default, as
 requested. `JPERL_ENABLE_CORRECTIVE_SWEEPS=1` temporarily enables legacy
