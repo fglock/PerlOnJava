@@ -2,44 +2,48 @@
 
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
-**Current checkpoint (2026-11-03 04:17 UTC):** #1649 continues on branch
-`wip/refalias-cell-debug-20261103-042008`, source commit `96b326c86`.
-The prior immutable candidate `a36f7dc68` passes the full no-sweeps gate in
-7m13 at `/private/tmp/issue-1649-refalias-array-owner-make-a36f7dc68.log`.
-Its `refalias_array_cell_owner_release.t` passes 4/4 on both backends; the
-unfixed parent `2cc844dba` fails the final two assertions on both.
+**Current checkpoint (2026-11-03 04:32 UTC):** #1649 continues on branch
+`wip/ownership-handoff-20261103-053423`, validated source candidate
+`13bcb4007` (runtime fix `96b326c86`). The immutable sweeps-disabled
+`nice -n 19 timeout 3600 env JPERL_DISABLE_CORRECTIVE_SWEEPS=1 make` gate
+passes in 7m9:
+`/private/tmp/issue-1649-refalias-lexical-no-sweeps-13bcb4007-retry1.log`.
 
-Audit found that `refAliasScalarReference` granted every referenced cell
-permission to be reused by the next same-named lexical declaration. Two sibling
-blocks could make the second declaration overwrite a cell still held by the
-first array. The new `refalias_array_distinct_lexical_cells.t` passes 9/9 on
-system Perl; the unfixed JVM candidate fails 5/9 and the interpreter passes
-9/9. Evidence:
-`/private/tmp/issue-1649-refalias-distinct-lexical-cells-system-perl.log`,
-`/private/tmp/issue-1649-refalias-distinct-lexical-cells-jvm-parent-a36f7dc68.log`,
-and `/private/tmp/issue-1649-refalias-distinct-lexical-cells-interpreter-parent-a36f7dc68.log`.
-Commit `96b326c86` limits that reuse permit to cells materialized before their
-declaration. It also adds a 12-check mutation matrix for alias deletion,
-replacement, splice, and exactly-once destruction. The new code is not yet
-validated on JVM or interpreter; run the forward-goto refalias case too.
+The alias audit found that `refAliasScalarReference` granted every referenced
+cell permission to be reused by a later same-named lexical declaration. Two
+sibling blocks could therefore overwrite a cell still held by the first
+array. Commit `96b326c86` limits that one-shot reuse permit to cells
+materialized before declaration. The new
+`refalias_array_distinct_lexical_cells.t` passes 9/9 on system Perl, JVM, and
+interpreter; the unfixed JVM candidate failed 5/9. The new
+`refalias_array_cell_owner_mutations.t` passes 12/12 on system Perl and both
+backends, covering delete, replacement, splice, and exactly-once destruction.
+The original `refalias_array_cell_owner_release.t` passes 4/4 on both backends.
+The forward-goto `forward_refalias_list_declaration.t` passes 1/1 on system
+Perl and both backends, preserving the materialized-before-declaration case.
+Focused logs use the `/private/tmp/issue-1649-{distinct,mutations,release,forward}-`
+prefix with backend and `13bcb4007` suffix. Parent failures remain at
+`/private/tmp/issue-1649-refalias-distinct-lexical-cells-jvm-parent-a36f7dc68.log`
+and `/private/tmp/issue-1649-refalias-array-cell-mutations-jvm-a36f7dc68.log`.
 
 `PerlOwnerSlot` records strong-edge identity and deferred-release provenance;
 the selective integer count remains the lifecycle bridge during migration.
 Native Perl attaches its count directly to the SV cell; this runtime also has
 to preserve which Java-backed cell a Perl alias names. Whether the identity
-ledger can shrink after every count producer is correct remains open.
+ledger can shrink after all count producers are correct remains open.
 `MortalList.processDeferredBase` still has count-restoration, root-snapshot and
 fabricated-count branches. Its `restoreReachableOwnerCount` call is confined
 to deferred cleanup; direct `deferDecrement(RuntimeBase)` callers are unit
 fixtures, while production release APIs queue scalar- or slot-specific
-provenance. Continue auditing producers before removing recovery.
+provenance. Continue auditing all producers before removing recovery.
 
 Local work is unpublished. PR #1938 remains an open draft at remote head
 `b2f44fc2d36b8f0a1bc7067790e1731a604cba45`, based on
 `4a5c33753f1da3f9838c44567bbba878e8f567e0`; GitHub reports conflicts.
-Immediate next step: run the immutable sweeps-disabled full gate on
-`96b326c86`, then refresh this checkpoint with actual outcomes. Wider owner
-audit and final acceptance remain incomplete.
+Immediate next work is the remaining deferred-release, scalar-overwrite,
+first-weaken, cleared-aggregate, closure, package-root, cycle, shared-storage,
+and resource-owner audit. Broader acceptance and removal of obsolete recovery
+machinery remain incomplete.
 
 **Previous checkpoint (2026-11-03, superseded):** #1649 Phase 2 continues on branch
 `wip/ownership-doc-checkpoint-20261103-012032`. Runtime fix `0a8815582`,
