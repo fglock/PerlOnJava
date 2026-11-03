@@ -279,7 +279,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     private static RuntimeBase argumentAliasContainer(RuntimeBase value) {
-        if (value instanceof RuntimeBaseProxy proxy) {
+        RuntimeBaseProxy proxy = argumentAliasMagicProxy(value);
+        if (proxy != null) {
             RuntimeBase container = proxy.argumentAliasContainer();
             return container instanceof RuntimeArray || container instanceof RuntimeHash
                     ? container : null;
@@ -297,10 +298,20 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (container == null) return null;
         RuntimeScalar ownerValue = RuntimeScalar.retainArgumentContainerValue(container);
         if (ownerValue == null) return null;
-        RuntimeBaseProxy magicProxy = value instanceof RuntimeBaseProxy proxy ? proxy : null;
+        RuntimeBaseProxy magicProxy = argumentAliasMagicProxy(value);
         RuntimeScalar handlerOwner = magicProxy == null ? null
                 : magicProxy.retainArgumentAliasHandlerOwner();
         return new ArgumentContainerOwner(container, ownerValue, magicProxy, handlerOwner);
+    }
+
+    private static RuntimeBaseProxy argumentAliasMagicProxy(RuntimeBase value) {
+        if (value instanceof RuntimeBaseProxy proxy) return proxy;
+        if (value instanceof RuntimeScalar scalar
+                && scalar.type == RuntimeScalarType.TIED_SCALAR
+                && scalar.value instanceof RuntimeBaseProxy proxy) {
+            return proxy;
+        }
+        return null;
     }
 
     private static void retainArgumentContainerOwners(
