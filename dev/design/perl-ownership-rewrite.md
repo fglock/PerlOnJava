@@ -3,8 +3,9 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-03):** #1649 continues on local branch
-`wip/ownership-resume-20261103-192304` at `ca39728bb`, after the prior
-cleared-aggregate implementation candidate `401c3c919`. Argument-frame
+`wip/ownership-resume-20261103-192304`, with latest runtime commit
+`ca39728bb` after the cleared-aggregate implementation candidate
+`401c3c919`. Argument-frame
 release, hash scope-exit cleanup, and recursive aggregate cleanup now use owner
 identities instead of their removed reachability proofs. First weaken no longer
 pins package-nested aggregates with a fabricated count; it relies on current
@@ -25,9 +26,15 @@ delayed until the original is dropped. Evidence:
 `/private/tmp/issue1649-storable-dclone-return-owner-parent-49231be4a.log`,
 `/private/tmp/issue1649-storable-dclone-return-owner-jvm-fixed.log`, and
 `/private/tmp/issue1649-storable-dclone-return-owner-interpreter-fixed.log`.
-The first full gate on the unchanged working tree found only the three known
-baseline failures; rerun `make` on an immutable commit before using that as
-candidate evidence.
+The immutable `efa626049` no-sweeps `nice -n 19 make` gate completed in 7m27
+and failed only `bless_tied_hash_reference.t`,
+`threads_shared_reference_validation.t`, and
+`substr_core_edge_semantics.t`, the same baseline failures recorded on earlier
+candidates and parent `850652c77`. The new Perl regression passes in shard 3;
+its direct JVM and interpreter runs on the freshly built JAR each pass 3/3.
+Logs: `/private/tmp/issue1649-storable-dclone-return-owner-immutable-efa626049-make.log`,
+`/private/tmp/issue1649-storable-dclone-return-owner-jvm-efa626049.log`, and
+`/private/tmp/issue1649-storable-dclone-return-owner-interpreter-efa626049.log`.
 
 `deferred_capture_live_argument.t` passes 3/3 on system Perl, JVM, and
 interpreter and is green in the full unit suite. The package-nested weak-owner
