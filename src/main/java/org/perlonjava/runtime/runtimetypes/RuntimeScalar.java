@@ -3553,7 +3553,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // All reference types have REFERENCE_BIT (0x8000) set, so a single
         // bitwise OR + AND check covers both old and new values.
         if (((this.type | value.type) & REFERENCE_BIT) != 0) {
-            return setLargeRefCounted(value);
+            return transitionReferenceSlot(value, false);
         }
 
         // Simple non-reference assignment (no refCount tracking needed).
@@ -3578,11 +3578,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     /**
-     * RefCount-aware slow path for reference assignments.
-     * Called from setLarge() when either the old or new value involves a reference type.
-     * Separated to keep setLarge() small enough for JIT inlining of set().
+     * Apply one scalar-slot transition for reference assignment and explicit
+     * undef. The transition retains a replacement before publishing it and
+     * releases the previous referent against the already-updated scalar state.
+     *
+     * <p>Explicit undef shares this operation but keeps its Perl-specific weak
+     * observer and mortal-flush behavior. CODE slots with symbol-table semantics
+     * are handled by {@link #undefine()} before reaching this method.</p>
      */
-    private RuntimeScalar setLargeRefCounted(RuntimeScalar value) {
+    private RuntimeScalar transitionReferenceSlot(RuntimeScalar value, boolean explicitUndef) {
         prepareCodeSlotValue(value);
         String packageCodeRefName = isPackageGlobalRoot ? globalCodeRefFqn : null;
         if (isPackageGlobalRoot) {
@@ -3606,7 +3610,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && WeakRefRegistry.weakRefsExist()
                 && this.value instanceof RuntimeBase oldReferent
                 && (oldReferent instanceof RuntimeHash || oldReferent instanceof RuntimeArray);
-        if (!scalarRefContentTrackingNeeded
+        if (!explicitUndef
+                && !scalarRefContentTrackingNeeded
                 && !this.refCountOwned && !this.hasClosureCaptureOwner()
                 && this.captureRefCountOwned() == 0
                 && !WeakRefRegistry.isweak(this)
@@ -3840,6 +3845,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         refreshDetachedGlobValueOwner();
         this.scalarReferenceContentsOwner = null;
         refreshArgumentAliasOwnerSlots();
+        if (explicitUndef) {
+            // Explicit undef retires an uncounted scalar edge before deciding
+            // whether another Perl owner still keeps a WEAKLY_TRACKED value
+            // alive. Ordinary overwrite performs this refresh with the rest
+            // of its owner bookkeeping below.
+            refreshUntrackedReferenceOwner();
+        }
         // An explicitly discarded closure can have an inflated CODE refcount,
         // so waiting for callDestroy() leaves its captures alive indefinitely.
         // Release them only when the owner ledger shows no other Perl owner
@@ -3976,6 +3988,20 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
         }
 
+        if (explicitUndef && oldBase != null
+                && oldBase.refCount == WeakRefRegistry.WEAKLY_TRACKED) {
+            boolean argumentAliasKeepsOldBase =
+                    oldBase.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_ALIAS) != 0;
+            if (argumentAliasKeepsOldBase) {
+                // The deferred alias is the remaining strong edge. Keep the
+                // weak lifecycle obligation on that exact owner until it leaves.
+                oldBase.deferFinalReleaseToUncountedOwnerSlots();
+            } else if (!oldBase.hasPerlStrongOwner()) {
+                oldBase.refCount = Integer.MIN_VALUE;
+                DestroyDispatch.callDestroy(oldBase);
+            }
+        }
+
         // Decrement old value's refCount AFTER assignment (skip for weak refs
         // and for scalars that didn't own a refCount increment).
         if (oldBase != null && !thisWasWeak
@@ -3991,6 +4017,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 oldBase.releaseOwner(this, "setLargeRefCounted overwrite");
                 oldBase.releaseActiveOwner(this);
             }
+            if (explicitUndef) this.refCountOwned = false;
             if (!deferredOldBaseRelease && oldBase.refCount > 0 && --oldBase.refCount == 0) {
                 boolean liveScalarReferentBinding = oldBase.localBindingExists
                         && (!(oldBase instanceof RuntimeScalar scalarReferent)
@@ -4093,7 +4120,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         MortalList.pushTemporaryRoot(this);
         MortalList.pushTemporaryRoot(value);
         try {
-            MortalList.flushAboveMark();
+            if (explicitUndef) MortalList.flush();
+            else MortalList.flushAboveMark();
         } finally {
             MortalList.popTemporaryRoot(value);
             MortalList.popTemporaryRoot(this);
@@ -5973,84 +6001,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             return this;
         }
 
-        // Decrement refCount for blessed references with DESTROY or weakly-tracked refs
-        RuntimeBase oldBase = null;
-        if ((this.type & RuntimeScalarType.REFERENCE_BIT) != 0 && this.value instanceof RuntimeBase base
-                && base.refCount != -1 && base.refCount != Integer.MIN_VALUE) {
-            oldBase = base;
-        }
-        if (oldBase != null && this.captureRefCountOwned() > 0) {
-            releaseAllClosureCaptureReferents(oldBase);
-        }
-
-        // Close IO handles when dropping a glob reference.
-        // This mimics Perl's internal sv_clear behavior where IO handles are closed
-        // when the glob's reference count drops to zero (independent of DESTROY).
+        // Retire non-CODE values through the same reference-slot transition as
+        // assignment. Explicit undef closes the handle first and asks the shared
+        // operation to apply undef's weak-observer and full-mortal-flush rules.
         closeIOOnDrop();
-        // For all other types, set to undef
-        this.type = UNDEF;
-        this.value = null;
-        refreshArgumentAliasOwnerSlots();
-        refreshUntrackedReferenceOwner();
-        boolean argumentAliasKeepsOldBase = oldBase != null
-                && oldBase.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_ALIAS) != 0;
-        this.tainted = false;
-        this.numericLiteralText = null;
-        this.numericContextSeen = false;
-        this.firstClassRegexScalar = false;
-        this.formatPictureTainted = false;
-
-        // Decrement AFTER clearing (Perl 5 semantics: DESTROY sees the new state)
-        if (oldBase != null) {
-            if (argumentAliasKeepsOldBase) {
-                if (oldBase.refCount == WeakRefRegistry.WEAKLY_TRACKED) {
-                    // The active argument aliases are the owners that defer
-                    // this weakly tracked referent's cleanup. Preserve the
-                    // tracking sentinel and let their final slot release
-                    // complete the deferred lifecycle transition.
-                    oldBase.deferFinalReleaseToUncountedOwnerSlots();
-                } else if (this.refCountOwned && oldBase.refCount > 0) {
-                    this.refCountOwned = false;
-                    MortalList.deferDecrementFromArraySlot(
-                            oldBase, this, "RuntimeScalar.undefine");
-                }
-            } else if (oldBase.refCount == WeakRefRegistry.WEAKLY_TRACKED
-                    && oldBase.hasPerlStrongOwner()) {
-                // WEAKLY_TRACKED means the legacy count cannot identify which
-                // scalar cell is the final owner. The current cell's untracked
-                // identity was retired above; keep the weak observers while the
-                // ledger still names another Perl owner. Its final release will
-                // perform cleanup through onStrongOwnerSlotReleased().
-            } else if (oldBase.refCount == WeakRefRegistry.WEAKLY_TRACKED) {
-                // Weakly-tracked object (unblessed, birth-tracked, with weak refs):
-                // clear weak refs on explicit undef. These objects transitioned to
-                // WEAKLY_TRACKED in weaken() because their refCount was unreliable
-                // (closure captures bypass setLarge). Clearing on undef is a heuristic
-                // but safe since unblessed objects have no DESTROY.
-                oldBase.refCount = Integer.MIN_VALUE;
-                DestroyDispatch.callDestroy(oldBase);
-            } else if (this.refCountOwned && oldBase.refCount > 0) {
-                this.refCountOwned = false;
-                oldBase.releaseActiveOwner(this);
-                if (--oldBase.refCount == 0) {
-                    if (oldBase.localBindingExists) {
-                        // Named container: local variable may still exist. Skip callDestroy.
-                    } else {
-                        oldBase.refCount = Integer.MIN_VALUE;
-                        DestroyDispatch.callDestroy(oldBase);
-                    }
-                }
-            }
-        }
-
-        // Flush deferred mortal decrements. Without this, pending DECs from
-        // scope exit of locals (e.g., `my ($a,$b) = @_` inside a sub) would
-        // not be processed until the next setLarge/apply, making the refCount
-        // appear inflated at the point of `undef $ref`. This matches Perl 5
-        // where FREETMPS runs at statement boundaries.
-        MortalList.flush();
-
-        return this;
+        return transitionReferenceSlot(new RuntimeScalar(), true);
     }
 
     /**
