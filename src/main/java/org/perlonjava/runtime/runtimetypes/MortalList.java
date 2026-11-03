@@ -669,7 +669,6 @@ public class MortalList {
         // This allows subsequent refCount==0 events (from setLargeRefCounted
         // or flush) to correctly trigger callDestroy, since the local
         // variable no longer holds a strong reference.
-        boolean hadLocalBinding = hash.localBindingExists;
         hash.localBindingExists = false;
         if (!finalRelease) RuntimeCode.releaseActiveLexicalAggregateOwner(hash);
         hash.releaseUnownedClosureCaptures();
@@ -732,14 +731,6 @@ public class MortalList {
             }
         }
         if (!needsWalk) return;
-        // Refcount drift can miss an escaped hash reference. DBIC's
-        // source_registrations hash is assigned into the live schema while the
-        // original hash later exits; walking it here would destroy ResultSources
-        // still reachable through the schema.
-        if (!finalRelease && hadLocalBinding
-                && hash.refCount >= 0
-                && hash.hadCountedReference
-                && isReachableFromExternalRootCached(hash)) return;
         List<RuntimeScalar> valuesInDestructionOrder = new ArrayList<>(hash.elements.values());
         Collections.reverse(valuesInDestructionOrder);
         for (RuntimeScalar val : valuesInDestructionOrder) {
