@@ -751,6 +751,10 @@ public class DestroyDispatch {
                     ARGUMENT_ALIAS, ARGUMENT_VALUE, RETURN_VALUE, ACTIVE_CODE -> {
                 return false;
             }
+            case ARGUMENT_CONTAINER -> {
+                RuntimeScalar owner = slot.countedScalarOwner();
+                return owner != null && owner.isCurrentCountedScalarOwner(referent, slot);
+            }
             case ARRAY_ELEMENT, HASH_ELEMENT -> {
                 RuntimeScalar owner = slot.countedScalarOwner();
                 return owner != null && owner.isCurrentAggregateElementOwner(referent, slot);

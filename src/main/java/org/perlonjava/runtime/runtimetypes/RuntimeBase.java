@@ -461,7 +461,8 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     /** Explicit call-transfer owners remain authoritative during the legacy bridge. */
     synchronized boolean hasCallTransferOwner() {
         return pendingReturnOwners != 0
-                || ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_VALUE) != 0;
+                || ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_VALUE) != 0
+                || ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_CONTAINER) != 0;
     }
 
     /** A referenced scalar cell is owned by its lexical binding or capture slots. */
@@ -714,6 +715,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             } else if ((kind == PerlOwnerSlot.Kind.SCALAR_CELL
                     || kind == PerlOwnerSlot.Kind.CODE_SLOT
                     || kind == PerlOwnerSlot.Kind.ARGUMENT_VALUE
+                    || kind == PerlOwnerSlot.Kind.ARGUMENT_CONTAINER
                     || kind == PerlOwnerSlot.Kind.RETURN_VALUE
                     || kind == PerlOwnerSlot.Kind.TIE_HANDLER)
                     && owner.isCurrentCountedScalarOwner(this, slot)) {

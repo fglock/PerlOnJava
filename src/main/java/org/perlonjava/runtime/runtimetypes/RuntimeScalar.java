@@ -1320,6 +1320,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if ((kind != PerlOwnerSlot.Kind.SCALAR_CELL
                 && kind != PerlOwnerSlot.Kind.CODE_SLOT
                 && kind != PerlOwnerSlot.Kind.ARGUMENT_VALUE
+                && kind != PerlOwnerSlot.Kind.ARGUMENT_CONTAINER
                 && kind != PerlOwnerSlot.Kind.RETURN_VALUE
                 && kind != PerlOwnerSlot.Kind.TIE_HANDLER)
                 || countedOwnerSlot != slot || !refCountOwned || value != referent
@@ -1330,6 +1331,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 || slot.referent() != referent) {
             return false;
         }
+        if (kind == PerlOwnerSlot.Kind.ARGUMENT_CONTAINER) return stagedValueOwner;
         if (kind == PerlOwnerSlot.Kind.SCALAR_CELL
                 && hasStoredContainerOwnerWithoutCurrentOwnerMarker()
                 && !localBindingExists
@@ -1480,6 +1482,28 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             owner.countedOwnerSlot.reclassifyCountedIdentity(PerlOwnerSlot.Kind.ARGUMENT_VALUE);
         }
         return owner;
+    }
+
+    /** Acquire the containing aggregate edge for one active aliased argument. */
+    static RuntimeScalar retainArgumentContainerValue(RuntimeBase container) {
+        if (!(container instanceof RuntimeArray || container instanceof RuntimeHash)) return null;
+        RuntimeScalar owner = new RuntimeScalar();
+        owner.type = container instanceof RuntimeArray
+                ? RuntimeScalarType.ARRAYREFERENCE : RuntimeScalarType.HASHREFERENCE;
+        owner.value = container;
+        owner.stagedValueOwner = true;
+        incrementRefCountForContainerStore(owner, PerlOwnerSlot.Kind.ARGUMENT_CONTAINER);
+        if (!owner.refCountOwned) owner.refreshUntrackedReferenceOwner();
+        return owner;
+    }
+
+    /** Release one argument-container edge and complete its exact count transition now. */
+    static void releaseArgumentContainerValue(RuntimeScalar owner) {
+        if (owner == null || !owner.stagedValueOwner) return;
+        owner.stagedValueOwner = false;
+        owner.refreshUntrackedReferenceOwner();
+        MortalList.releaseCountedOwnerImmediately(
+                owner, "RuntimeCode argument-container alias release");
     }
 
     /** Release a temporary call/return owner after its boundary has drained. */
@@ -3066,6 +3090,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             return;
         }
         if (base.refCount == WeakRefRegistry.WEAKLY_TRACKED) {
+            scalar.refreshUntrackedReferenceOwner();
+            return;
+        }
+        if (base.refCount < 0 && intendedOwnerKind == PerlOwnerSlot.Kind.ARGUMENT_CONTAINER) {
+            // Selective counting has no ledger for the referent's pre-existing
+            // owners. Keep this real argument edge as an untracked owner rather
+            // than promoting a partial count that could reach zero too early.
             scalar.refreshUntrackedReferenceOwner();
             return;
         }

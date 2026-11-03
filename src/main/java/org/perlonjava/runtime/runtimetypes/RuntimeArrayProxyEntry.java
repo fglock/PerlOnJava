@@ -71,6 +71,11 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
     public RuntimeArray getParent() { return parent; }
 
     @Override
+    RuntimeBase argumentAliasContainer() {
+        return parent;
+    }
+
+    @Override
     public RuntimeScalar set(RuntimeScalar value) {
         if (parent.threadShared) SharedPerlStorage.validateStoredValue(value);
         vivify();
