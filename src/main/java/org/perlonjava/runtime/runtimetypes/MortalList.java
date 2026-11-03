@@ -1642,6 +1642,10 @@ public class MortalList {
         base.releaseTransientTraceOwner(transientOwnerKind,
                 "MortalList.processDeferredBase");
         boolean hasWeakRefs = WeakRefRegistry.hasWeakRefsTo(base);
+        // Production release producers carry an exact slot token. Root/count
+        // repair remains only for the legacy unproven RuntimeBase hook, whose
+        // callers are low-level compatibility fixtures rather than Perl stores.
+        boolean unidentifiedRelease = ownerRelease == null;
         boolean finalRelease = false;
         if (base.refCount > 0) {
             base.traceRefCount(-1, "MortalList.flush (deferred decrement)");
@@ -1740,12 +1744,14 @@ public class MortalList {
                 // cleanup until its release. Blessed aggregates with direct
                 // weak observers still use the root proof below.
                 base.deferFinalReleaseToUncountedOwnerSlots();
-            } else if (hasWeakRefs && restoreReachableOwnerCount(base)) {
+            } else if (unidentifiedRelease && hasWeakRefs
+                    && restoreReachableOwnerCount(base)) {
                 // A counted owner that is still reachable through a real
                 // Perl root is authoritative, including for classes with
                 // DESTROY. Unmigrated slots still need this compatibility
                 // fallback until their owner identities are complete.
-            } else if (base.blessId == 0
+            } else if (unidentifiedRelease
+                    && base.blessId == 0
                     && (base instanceof RuntimeArray || base instanceof RuntimeHash)
                     && isUnblessedAggregateReachableDuringDrain(base)) {
                 // Unblessed aggregates can reach zero while a parser is
@@ -1757,7 +1763,8 @@ public class MortalList {
                 // boundary can still reclaim a tree after its Perl root goes
                 // away.
                 base.refCount = 1;
-            } else if (base.blessId != 0
+            } else if (unidentifiedRelease
+                    && base.blessId != 0
                     && hasWeakRefs
                     && (isReachableFromExternalRootCached(base)
                     || isReachableFromFullRootSnapshot(base))) {
@@ -1775,7 +1782,8 @@ public class MortalList {
                 // live Perl root; final owner removal still destroys them at
                 // a later boundary.
                 base.refCount = 1;
-            } else if (base.blessId != 0
+            } else if (unidentifiedRelease
+                    && base.blessId != 0
                     && hasWeakRefs
                     && !blessedClassHasDestroy(base)
                     && (isReachableFromExternalRootCached(base)
@@ -1788,7 +1796,8 @@ public class MortalList {
                 // protect live objects. Classes with DESTROY keep the stricter
                 // path.
                 base.refCount = 1;
-            } else if (base.blessId != 0
+            } else if (unidentifiedRelease
+                    && base.blessId != 0
                     && base.storedInPackageGlobal
                     && hasWeakRefs
                     && isReachableCached(base)) {
