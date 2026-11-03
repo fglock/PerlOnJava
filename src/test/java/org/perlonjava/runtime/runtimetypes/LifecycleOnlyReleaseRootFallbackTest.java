@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("unit")
@@ -40,11 +41,19 @@ class LifecycleOnlyReleaseRootFallbackTest {
             try {
                 MortalList.setActive(true);
                 MortalList.invalidateAllRootSnapshots();
+                assertTrue(ReachabilityWalker.isReachableFromRoots(target),
+                        "the raw package value remains visible to Perl root traversal");
+                MortalList.invalidateAllRootSnapshots();
                 try (MortalList.ReachabilityQueryMeasurement measurement =
                              MortalList.measureReachabilityQueries()) {
                     MortalList.mortalizeForVoidDiscard(result);
+                    int targetIndex = runtime.lifecycleState.pending.indexOf(target);
+                    assertTrue(targetIndex >= 0, "the zero-count target queues a lifecycle boundary");
+                    assertSame(target, runtime.lifecycleState.pending.get(targetIndex));
+                    assertEquals(0, target.refCount,
+                            "the target enters the queue at the zero-count lifecycle boundary");
                     RuntimeBase.PendingOwnerRelease lifecycleToken =
-                            runtime.lifecycleState.pendingOwnerReleases.get(0);
+                            runtime.lifecycleState.pendingOwnerReleases.get(targetIndex);
                     assertNull(lifecycleToken.ownerSlotRelease,
                             "a lifecycle boundary has no edge-release identity");
 
@@ -52,10 +61,10 @@ class LifecycleOnlyReleaseRootFallbackTest {
 
                     assertTrue(WeakRefRegistry.isweak(weak),
                             "legacy root evidence keeps the live referent from finalizing");
-                    assertEquals(1, target.refCount,
-                            "the reachable legacy referent is restored while its package edge lives");
                     assertTrue(measurement.stats().rootQueries > 0,
                             "unidentified lifecycle work remains on the compatibility proof path");
+                    assertEquals(1, target.refCount,
+                            "the reachable legacy referent is restored while its package edge lives");
                 }
 
                 GlobalVariable.globalHashes.remove(rootName);
