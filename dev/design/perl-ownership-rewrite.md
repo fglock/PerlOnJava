@@ -6,14 +6,20 @@
 `wip/ownership-doc-checkpoint-20261103-012032`. Runtime fix `0a8815582`,
 removal of the unused `isReachableThroughTiedHash` wrapper, and migration of
 counted scalar-owner queries from the duplicate `activeOwners` set to
-`PerlOwnerSlot` identities are included in tested source `0ff00785a`. The
+`PerlOwnerSlot` identities are included in tested source `9d30a14f1`. The
 no-sweeps `nice -n 19 timeout 3600 env JPERL_DISABLE_CORRECTIVE_SWEEPS=1 make`
-gate passes: 3,941 tests, 7 skipped, zero failures/errors, in 7m27. Full log:
-`/private/tmp/issue-1649-owner-ledger-no-sweeps-0ff00785a.log`.
+gate passes: 3,942 tests, 7 skipped, zero failures/errors, in 7m07. Full log:
+`/private/tmp/issue-1649-tailcall-owner-no-sweeps-9d30a14f1.log`.
 The former activation hook is a compatibility no-op; production weaken and
 destructor paths no longer call it. The added
 `CountedOwnerSlotLedgerTest` verifies counted owners installed before first
-weaken are visible through the slot ledger.
+weaken are visible through the slot ledger. The new Perl-level
+`tailcall_code_owner_lifetime.t` verifies that a tail-called closure remains
+live while its caller lexical owns it and clears on the final lexical release;
+it passes 3/3 on system Perl, JVM and interpreter. Logs:
+`/private/tmp/issue-1649-tailcall-code-owner-system-perl-0ff00785a-tracked.log`,
+`/private/tmp/issue-1649-tailcall-code-owner-jvm-0ff00785a-tracked.log`, and
+`/private/tmp/issue-1649-tailcall-code-owner-interpreter-0ff00785a-tracked.log`.
 Local work is unpublished. PR #1938 remains an open draft at head
 `b2f44fc2d36b8f0a1bc7067790e1731a604cba45`, based on
 `4a5c33753f1da3f9838c44567bbba878e8f567e0`; GitHub last reported `DIRTY`
