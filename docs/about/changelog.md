@@ -6,6 +6,8 @@ priorities and future plans.
 
 ## Work in progress
 
+- Recognize boolean values as dual-valued in `Scalar::Util::isdual` (#1954).
+
 - Recognize a bareword filehandle when `print`'s implicit `$_` list ends at a block close (#1948).
 
 - Accept YAML-style mapping syntax in `YAML::Syck::LoadJSON`, matching Syck's JSON loader behavior (#1942).
