@@ -630,6 +630,7 @@ public class Dereference {
                         // Use strict version (throws error on symbolic references)
                         String methodName = switch (hashOperation) {
                             case "get" -> "hashDerefGet";
+                            case "getForLocal" -> "hashDerefGetForLocal";
                             case "delete" -> "hashDerefDeleteInContext";
                             case "exists" -> "hashDerefExists";
                             default ->
@@ -646,6 +647,7 @@ public class Dereference {
                         // Use non-strict version (allows symbolic references)
                         String methodName = switch (hashOperation) {
                             case "get" -> "hashDerefGetNonStrict";
+                            case "getForLocal" -> "hashDerefGetForLocalNonStrict";
                             case "delete" -> "hashDerefDeleteInContextNonStrict";
                             case "exists" -> "hashDerefExistsNonStrict";
                             default ->
@@ -673,6 +675,7 @@ public class Dereference {
                         // Use strict version (throws error on symbolic references)
                         String methodName = switch (hashOperation) {
                             case "get" -> "hashDerefGet";
+                            case "getForLocal" -> "hashDerefGetForLocal";
                             case "delete" -> "hashDerefDeleteInContext";
                             case "exists" -> "hashDerefExists";
                             default ->
@@ -689,6 +692,7 @@ public class Dereference {
                         // Use non-strict version (allows symbolic references)
                         String methodName = switch (hashOperation) {
                             case "get" -> "hashDerefGetNonStrict";
+                            case "getForLocal" -> "hashDerefGetForLocalNonStrict";
                             case "delete" -> "hashDerefDeleteInContextNonStrict";
                             case "exists" -> "hashDerefExistsNonStrict";
                             default ->
