@@ -1199,9 +1199,97 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                 } else {
                     result.append(pad.value.getClass().getSimpleName());
                 }
+                result.append(" capturedBy=[");
+                boolean firstCaptureOwner = true;
+                for (PerlOwnerSlot padOwner : pad.ownerSlotSnapshot()) {
+                    if (padOwner.kind() != PerlOwnerSlot.Kind.SCALAR_CAPTURE) continue;
+                    if (!firstCaptureOwner) result.append(", ");
+                    firstCaptureOwner = false;
+                    RuntimeCode code = padOwner.captureOwner();
+                    if (code == null) {
+                        result.append("unknown");
+                    } else {
+                        result.append(System.identityHashCode(code)).append(':')
+                                .append(code.packageName == null ? "" : code.packageName)
+                                .append("::").append(code.subName == null ? "" : code.subName)
+                                .append('@').append(code.cvStartFile == null ? "" : code.cvStartFile)
+                                .append(':').append(code.cvStartLine);
+                    }
+                }
+                result.append(']');
+                RuntimeCode captureOwner = slot.captureOwner();
+                if (captureOwner != null) {
+                    result.append(" ownerCode=").append(System.identityHashCode(captureOwner))
+                            .append(" name=")
+                            .append(captureOwner.packageName == null ? "" : captureOwner.packageName)
+                            .append("::")
+                            .append(captureOwner.subName == null ? "" : captureOwner.subName)
+                            .append(" source=")
+                            .append(captureOwner.cvStartFile == null ? "" : captureOwner.cvStartFile)
+                            .append(':').append(captureOwner.cvStartLine);
+                }
             }
             result.append(']');
         }
+        result.append(" ownerSlots=[");
+        boolean firstOwnerSlot = true;
+        for (PerlOwnerSlot ownerSlot : ownerSlotSnapshot()) {
+            if (!ownerSlot.isActive()) continue;
+            if (!firstOwnerSlot) result.append(", ");
+            firstOwnerSlot = false;
+            result.append(ownerSlot.kind()).append('#').append(ownerSlot.identity());
+            RuntimeScalar owner = ownerSlot.countedScalarOwner();
+            if (owner == null) owner = ownerSlot.untrackedScalarOwner();
+            if (owner == null) owner = ownerSlot.scalarContentsOwner();
+            if (owner == null) owner = ownerSlot.suspendedScalarOwner();
+            if (owner != null) {
+                result.append(" scalar=").append(System.identityHashCode(owner))
+                        .append(" type=").append(owner.type)
+                        .append(" scopeExited=").append(owner.scopeExited)
+                        .append(" owns=").append(owner.refCountOwned);
+                RuntimeBase container = owner.containerOwner;
+                if (container != null) {
+                    result.append(" container=").append(container.getClass().getSimpleName())
+                            .append('#').append(System.identityHashCode(container));
+                    if (container instanceof RuntimeArray array) {
+                        PerlRuntime runtime = PerlRuntime.currentOrNull();
+                        boolean activeArgs = runtime != null
+                                && runtime.executionState().argsStack.contains(array);
+                        result.append(" arraySize=").append(array.elements.size())
+                                .append(" aliased=").append(array.elementsAliased)
+                                .append(" owned=").append(array.elementsOwned)
+                                .append(" activeArgs=").append(activeArgs);
+                        for (int i = 0; i < array.elements.size(); i++) {
+                            if (array.elements.get(i) == owner) {
+                                result.append(" index=").append(i);
+                                break;
+                            }
+                        }
+                        result.append(" arrayRefCount=").append(array.refCount)
+                                .append(" arrayOwners=[");
+                        boolean firstArrayOwner = true;
+                        for (PerlOwnerSlot arrayOwner : array.ownerSlotSnapshot()) {
+                            if (!arrayOwner.isActive()) continue;
+                            if (!firstArrayOwner) result.append(", ");
+                            firstArrayOwner = false;
+                            result.append(arrayOwner.kind()).append('#').append(arrayOwner.identity());
+                            RuntimeScalar arrayOwnerCell = arrayOwner.countedScalarOwner();
+                            if (arrayOwnerCell == null) {
+                                arrayOwnerCell = arrayOwner.untrackedScalarOwner();
+                            }
+                            if (arrayOwnerCell != null) {
+                                result.append(" scalar=")
+                                        .append(System.identityHashCode(arrayOwnerCell));
+                            }
+                        }
+                        result.append(']');
+                    }
+                }
+                if (owner.isPackageGlobalRoot) result.append(" packageRoot");
+                if (owner.localBindingExists) result.append(" localBinding");
+            }
+        }
+        result.append(']');
         result.append(" pending=");
         java.util.ArrayList<PendingOwnerRelease> pending = pendingTraceOwnerReleases.get(this);
         if (pending == null || pending.isEmpty()) {
