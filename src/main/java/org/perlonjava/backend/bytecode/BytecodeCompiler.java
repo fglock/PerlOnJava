@@ -3261,7 +3261,7 @@ public class BytecodeCompiler implements Visitor {
         // local @hash{...} needs key-aware proxies so dynamic restore can
         // re-resolve entries after hash mutation and remove newly-created keys.
         int rdSlice = allocateRegister();
-        emit(shouldEmitHashFetchForLocal()
+        emit(shouldEmitHashSliceForLocal()
                 ? Opcodes.HASH_SLICE_FOR_LOCAL
                 : Opcodes.HASH_SLICE);
         emitReg(rdSlice);
@@ -7242,6 +7242,15 @@ public class BytecodeCompiler implements Visitor {
         return (currentCallContext == RuntimeContextType.LVALUE
                 || currentCallContext == RuntimeContextType.LVALUE_LIST
                 || localHashLvalueCompileDepth > 0 || compilingForeachList)
+                && suppressLocalHashFetchForLocal == 0;
+    }
+
+    private boolean shouldEmitHashSliceForLocal() {
+        // HASH_SLICE_FOR_LOCAL is specifically for Perl's local @hash{...}.
+        // Ordinary lvalue slices must keep their element cells and scalarize
+        // from the slice values; returning localization proxies changes both
+        // their postincrement value and their writeback behavior.
+        return (localHashLvalueCompileDepth > 0 || compilingForeachList)
                 && suppressLocalHashFetchForLocal == 0;
     }
 
