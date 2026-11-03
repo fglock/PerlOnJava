@@ -44,6 +44,15 @@ from the Perl-level regression set. Logs:
 and
 `/private/tmp/issue-1649-localized-array-existing-reference-interpreter-parent-fb5e40dd9.log`.
 
+`RuntimeArrayLiteralOwnerSlotTest` in `fb5e40dd9` positively verifies that a
+literal array element receives its `ARRAY_ELEMENT` owner identity and that the
+current stored slot supports counted-owner restoration. It passed shard 0
+(log: `/private/tmp/issue-1649-array-literal-owner-parent-shard0-fb5e40dd9.log`);
+the full no-sweeps gate on the test-only follow-up `f7b8ec408` also passes in 6m54.
+Across the five unit shards, Joni, and launcher-home integration, XML reports
+3,925 tests, 7 skipped, and zero failures/errors. The gate log is
+`/private/tmp/issue-1649-localized-array-owner-no-sweeps-f7b8ec408.log`.
+
 `ab4569170` removed the raw closure-release decrement that could consume
 another scalar's count; production aggregate captures in `SubroutineParser`,
 `OpcodeHandlerExtended`, `RuntimeCode`, `RuntimeGraphCloner`, and `Internals`
