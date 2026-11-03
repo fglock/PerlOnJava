@@ -2056,17 +2056,6 @@ public class ReachabilityWalker {
     }
 
     /**
-     * Return true when a strong path from a package or live lexical root to
-     * {@code target} crosses a tied hash handler.  This is intentionally more
-     * specific than the ordinary root queries: objects with DESTROY normally
-     * use strict selective-refcount handling, but a pure-Perl tie handler can
-     * hold a real owner that the count temporarily misses.
-     */
-    public static boolean isReachableThroughTiedHash(RuntimeBase target) {
-        return target != null && reachableThroughTiedHashes().contains(target);
-    }
-
-    /**
      * Return the objects reached after crossing a tied hash handler from a
      * live Perl root. A mortal drain can ask this question for many weak
      * referents, so collecting one bounded snapshot avoids an O(targets x
