@@ -39,7 +39,7 @@ public final class ExecutionRuntimeState {
     final Stack<Object> globalScalarStates = new Stack<>();
     final Stack<Object> globalArrayStates = new Stack<>();
     final Stack<Object> globalHashStates = new Stack<>();
-    final Stack<RuntimeScalar> hashProxyStates = new Stack<>();
+    final Stack<RuntimeHashProxyEntry.SavedHashElement> hashProxyStates = new Stack<>();
     final Stack<Integer> arrayProxyIndexStates = new Stack<>();
     final Stack<RuntimeScalar> arrayProxyStates = new Stack<>();
     final Stack<Integer> arrayProxySavedSizes = new Stack<>();

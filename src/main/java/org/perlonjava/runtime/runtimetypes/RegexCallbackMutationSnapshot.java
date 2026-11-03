@@ -69,16 +69,31 @@ public final class RegexCallbackMutationSnapshot {
     }
 
     public void restore() {
-        for (Map.Entry<RuntimeArray, Object> entry : arrays.entrySet()) {
-            entry.getKey().restoreRegexMutationState(entry.getValue());
+        try {
+            for (Map.Entry<RuntimeArray, Object> entry : arrays.entrySet()) {
+                entry.getKey().restoreRegexMutationState(entry.getValue());
+            }
+            for (Map.Entry<RuntimeHash, Object> entry : hashes.entrySet()) {
+                entry.getKey().restoreRegexMutationState(entry.getValue());
+            }
+            for (Map.Entry<RuntimeScalar, Object> entry : scalars.entrySet()) {
+                entry.getKey().restoreRegexMutationState(entry.getValue());
+            }
+            MortalList.flush();
+        } finally {
+            discard();
         }
+    }
+
+    /** Release rollback-only Perl owners when the callback's mutations commit. */
+    public void discard() {
         for (Map.Entry<RuntimeHash, Object> entry : hashes.entrySet()) {
-            entry.getKey().restoreRegexMutationState(entry.getValue());
+            entry.getKey().discardRegexMutationState(entry.getValue());
         }
-        for (Map.Entry<RuntimeScalar, Object> entry : scalars.entrySet()) {
-            entry.getKey().restoreRegexMutationState(entry.getValue());
-        }
-        MortalList.flush();
+        hashes.clear();
+        arrays.clear();
+        scalars.clear();
+        seen.clear();
     }
 
     private static void addAll(ArrayDeque<RuntimeBase> work,

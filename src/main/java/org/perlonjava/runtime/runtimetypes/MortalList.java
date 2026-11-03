@@ -549,6 +549,9 @@ public class MortalList {
         if (elements == null) return;
         boolean active = isActive();
         for (RuntimeScalar scalar : elements) {
+            boolean aliasedScalarCell = scalar != null
+                    && scalar.ownerSlotCount(PerlOwnerSlot.Kind.HASH_ALIAS_CELL) != 0;
+            if (aliasedScalarCell) continue;
             if (scalar != null && scalar.untrackedReferenceOwnerSlot() != null) {
                 scalar.refreshUntrackedReferenceOwner();
             }
@@ -1676,8 +1679,9 @@ public class MortalList {
                 base.deferZeroCountFinalReleaseToUncountedOwnerSlots();
             } else if (base instanceof RuntimeScalar scalar
                     && scalar.referencedByScalarReference
-                    && scalar.ownerSlotCount(PerlOwnerSlot.Kind.ARRAY_ALIAS_CELL) != 0) {
-                // Refalias array slots own scalar cells without adding a
+                    && (scalar.ownerSlotCount(PerlOwnerSlot.Kind.ARRAY_ALIAS_CELL) != 0
+                        || scalar.ownerSlotCount(PerlOwnerSlot.Kind.HASH_ALIAS_CELL) != 0)) {
+                // Refalias aggregate slots own scalar cells without adding a
                 // legacy reference count. Keep the zero-count cell alive
                 // until its last alias slot releases and runs scalar cleanup.
                 base.deferZeroCountFinalReleaseToUncountedOwnerSlots();
