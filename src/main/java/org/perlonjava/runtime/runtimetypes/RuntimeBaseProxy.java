@@ -34,6 +34,11 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
         return lvalue;
     }
 
+    /** Aggregate whose element this lvalue aliases, if it is an aggregate slot. */
+    RuntimeBase argumentAliasContainer() {
+        return lvalue == null ? null : lvalue.getContainerOwner();
+    }
+
     /**
      * "Blesses" a Perl reference into an object by associating it with a class name.
      * This method is used to convert a Perl reference into an object of a specified class.

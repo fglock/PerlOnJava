@@ -38,6 +38,8 @@ public final class PerlOwnerSlot {
         HASH_ALIAS_CELL,
         HASH_ELEMENT,
         ARGUMENT_VALUE,
+        /** Argument frame retaining the aggregate that contains an aliased lvalue. */
+        ARGUMENT_CONTAINER,
         ARGUMENT_ALIAS,
         RETURN_VALUE,
         ACTIVE_CODE,
@@ -885,7 +887,8 @@ public final class PerlOwnerSlot {
     static boolean isCountedKind(Kind kind) {
         return kind == Kind.SCALAR_CELL || kind == Kind.CODE_SLOT || kind == Kind.ARRAY_ELEMENT
                 || kind == Kind.HASH_ELEMENT || kind == Kind.ARGUMENT_VALUE
-                || kind == Kind.RETURN_VALUE || kind == Kind.TIE_HANDLER;
+                || kind == Kind.ARGUMENT_CONTAINER || kind == Kind.RETURN_VALUE
+                || kind == Kind.TIE_HANDLER;
     }
 
     /** Retire this edge and carry its identity through one deferred decrement. */

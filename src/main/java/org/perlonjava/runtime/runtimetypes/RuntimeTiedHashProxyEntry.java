@@ -40,6 +40,11 @@ public class RuntimeTiedHashProxyEntry extends TiedVariableBase {
         this.key = key;
     }
 
+    @Override
+    RuntimeBase argumentAliasContainer() {
+        return parent;
+    }
+
     /**
      * Vivifies the element by calling FETCH on the tied object.
      * This ensures lvalue is populated with the current value from the tied array.

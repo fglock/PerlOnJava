@@ -75,6 +75,9 @@ public final class ExecutionRuntimeState {
     public final Deque<RuntimeArray> argsStack = new ArrayDeque<>();
     final Deque<List<RuntimeScalar.ArgumentAliasOwner>> argumentAliasOwnerFrames =
             new ArrayDeque<>();
+    /** Counted owners for aggregates containing the active aliased argument slots. */
+    final Deque<List<RuntimeCode.ArgumentContainerOwner>> argumentContainerOwnerFrames =
+            new ArrayDeque<>();
     /** Explicit owners for staged arguments, retired by call completion or frame exit. */
     final ArrayList<RuntimeCode.CallArguments> callArgumentFrames =
             new ArrayList<>();
