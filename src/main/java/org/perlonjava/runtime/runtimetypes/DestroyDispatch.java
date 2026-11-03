@@ -431,18 +431,14 @@ public class DestroyDispatch {
             return;
         }
 
-        // A non-weak referent may not have activated the scalar-owner ledger
-        // yet. Turn it on before invoking DESTROY so temporary callback slots
-        // can be distinguished from real resurrection during teardown. There
-        // is intentionally no backfill: package roots are themselves being
-        // dismantled, while any new owner created by DESTROY is recorded.
+        // Snapshot explicit owner identities before invoking DESTROY so
+        // temporary callback slots can be distinguished from real resurrection.
         String globalPhase = GlobalVariable.getGlobalVariable(
                 GlobalContext.GLOBAL_PHASE).toString();
         boolean checkingGlobalOwnerDelta = "DESTRUCT".equals(globalPhase)
                 || MortalList.isDrainingTopLevelTemporary();
         Set<PerlOwnerSlot> ownerSlotsAtStart = null;
         if (checkingGlobalOwnerDelta) {
-            referent.activateOwnerTracking();
             ownerSlotsAtStart = referent.ownerSlotSnapshot();
         }
 
