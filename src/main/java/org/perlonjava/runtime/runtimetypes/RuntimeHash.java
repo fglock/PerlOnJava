@@ -1164,9 +1164,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                     }
                     // Create a new RuntimeScalar to properly handle aliasing and avoid read-only issues
                     RuntimeScalar val = iterator.hasNext() ? new RuntimeScalar(iterator.next()) : new RuntimeScalar();
-                    markPackageRootedValue(val);
-                    this.elements.put(key, val);
-                    RuntimeScalar.incrementRefCountForContainerStore(val);
+                    storeOwnedElement(key, null, val);
                 }
 
                 // Create a RuntimeArray that wraps this hash
@@ -1283,19 +1281,32 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
 
     private void storeOwnedElement(String key, RuntimeScalar previous, RuntimeScalar value) {
         RuntimeScalar stored = independentSlot(key, value);
-        elements.put(key, stored);
-        RuntimeScalar.incrementRefCountForContainerStore(stored);
-        if (previous != null && previous != stored) {
-            if (PerlRuntime.currentOrNull() != null) {
-                MortalList.deferDestroyForContainerClear(Collections.singletonList(previous));
-            } else if (previous.refCountOwned && previous.value instanceof RuntimeBase referent) {
-                // Host-side graph construction has no Perl callbacks or mortal
-                // queue, but replacing a field still retires its counted edge.
-                previous.refCountOwned = false;
-                referent.releaseActiveOwner(previous);
-                if (referent.refCount > 0) referent.refCount--;
-            }
+        if (threadShared) {
+            SharedPerlStorage.validateStoredValue(stored);
+            SharedPerlStorage.publishBlessing(stored);
         }
+        RuntimeScalar.transitionContainerSlots(
+                previous == null ? Collections.emptyList() : Collections.singletonList(previous),
+                Collections.singletonList(stored),
+                PerlOwnerSlot.Kind.HASH_ELEMENT,
+                () -> elements.put(key, stored),
+                displaced -> {
+                    if (PerlRuntime.currentOrNull() != null) {
+                        MortalList.deferDestroyForContainerClear(displaced);
+                    } else {
+                        for (RuntimeScalar old : displaced) {
+                            if (old.refCountOwned
+                                    && old.value instanceof RuntimeBase referent) {
+                                // Host-side graph construction has no Perl callbacks or
+                                // mortal queue, but replacing a field still retires its
+                                // counted edge.
+                                old.refCountOwned = false;
+                                referent.releaseActiveOwner(old);
+                                if (referent.refCount > 0) referent.refCount--;
+                            }
+                        }
+                    }
+                });
     }
 
     private void warnHashIteratorInsertion(RuntimeScalar existing) {
