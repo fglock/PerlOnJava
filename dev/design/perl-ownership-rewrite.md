@@ -2,7 +2,46 @@
 
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
-**Current checkpoint (2026-11-03):** #1649 Phase 2 continues on branch
+**Current checkpoint (2026-11-03 04:12 UTC):** #1649 Phase 2 continues on
+`wip/refalias-cell-debug-20261103-042008`. Candidate `a36f7dc68` passes the full
+no-sweeps gate in 7m13:
+`/private/tmp/issue-1649-refalias-array-owner-make-a36f7dc68.log`. Its
+`refalias_array_cell_owner_release.t` regression passes 4/4 on system Perl and
+both backends; the unfixed parent `2cc844dba` fails the final two checks on
+JVM and interpreter.
+
+The broader alias audit found a second production bug. `refAliasScalarReference`
+granted every referenced cell permission to be reused by the next same-named
+lexical declaration. Two sibling blocks could therefore make the second
+declaration overwrite a scalar cell still held by the first array. The new
+`refalias_array_distinct_lexical_cells.t` passes 9/9 on system Perl and the
+interpreter, while the current JVM candidate fails 5/9. Parent evidence:
+`/private/tmp/issue-1649-refalias-distinct-lexical-cells-jvm-parent-a36f7dc68.log`;
+system oracle:
+`/private/tmp/issue-1649-refalias-distinct-lexical-cells-system-perl.log`.
+The implementation now restricts that one-shot reuse permit to cells
+materialized before their declaration. The forward-goto refalias regression
+must remain passing. Full validation of this fix is pending.
+
+`PerlOwnerSlot` records strong-edge identity and deferred-release provenance;
+the selective integer count remains the lifecycle bridge during migration.
+Native Perl can attach its count directly to the SV cell, while this runtime
+must also represent which Java-backed cell a Perl alias names. Whether the
+identity ledger can shrink after all count producers are correct remains open.
+`MortalList.processDeferredBase` still has count-restoration, root-snapshot and
+fabricated-count branches. Its `restoreReachableOwnerCount` call is confined
+to deferred cleanup; direct `deferDecrement(RuntimeBase)` callers are unit
+fixtures, while production release APIs queue scalar- or slot-specific
+provenance. Continue auditing all producers before removing recovery.
+
+Local work is unpublished. PR #1938 remains an open draft at remote head
+`b2f44fc2d36b8f0a1bc7067790e1731a604cba45`, based on
+`4a5c33753f1da3f9838c44567bbba878e8f567e0`; GitHub reports conflicts.
+Immediate next step: commit this fix and regression, validate the focused
+forward-refalias case and mutation matrix, then run a full immutable no-sweeps
+gate. The wider owner audit and final acceptance remain incomplete.
+
+**Previous checkpoint (2026-11-03, superseded):** #1649 Phase 2 continues on branch
 `wip/ownership-doc-checkpoint-20261103-012032`. Runtime fix `0a8815582`,
 removal of the unused `isReachableThroughTiedHash` wrapper, and migration of
 counted scalar-owner queries from the duplicate `activeOwners` set to
