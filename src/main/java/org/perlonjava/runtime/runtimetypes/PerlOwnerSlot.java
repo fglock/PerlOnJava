@@ -512,6 +512,14 @@ public final class PerlOwnerSlot {
             throw new IllegalStateException("untracked identity cannot replace native or capture ownership");
         }
         transferWithoutRuntimeRoot(target, false);
+        if (target.refCountTrace && RuntimeBase.refCountTraceEnabled()) {
+            System.err.println("[REFCOUNT-UNTRACKED-ACQUIRE] base="
+                    + System.identityHashCode(target) + " slot=" + identity);
+            StackTraceElement[] stack = new Throwable().getStackTrace();
+            for (int i = 1; i < Math.min(stack.length, 14); i++) {
+                System.err.println("    at " + stack[i]);
+            }
+        }
     }
 
     /** Attach one scalar wrapper's identity to a referenced cell's contents. */
