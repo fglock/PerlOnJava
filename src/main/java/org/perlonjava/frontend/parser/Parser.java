@@ -242,6 +242,17 @@ public class Parser {
     // Set on parsers created for eval STRING. Nested async declarations still
     // set parsingFutureAsyncAwaitSub and may contain await normally.
     public boolean parsingEvalString = false;
+    // Flags set during parsing to let BytecodeCompiler skip unused analysis passes.
+    // Each is set at the creation site of the corresponding AST node type.
+    public boolean parsedGoto = false;
+    public boolean parsedLabels = false;
+    public boolean parsedDefer = false;
+    public boolean parsedGiven = false;
+    public boolean parsedEvalOrRegex = false;
+    // Set when a named subroutine definition is parsed inside an eval STRING.
+    // Used to trigger outer-variable aliasing after parsing (subs need aliases
+    // before they are called, not before the parse phase itself).
+    public boolean parsedNamedSub = false;
     // Warning scope captured for the subroutine currently being parsed.
     public boolean signatureArgsWarningsEnabled = true;
     // True while parsing a body nested inside a subroutine that has a Perl
@@ -345,7 +356,6 @@ public class Parser {
     public Parser(EmitterContext ctx, List<LexerToken> tokens) {
         this.ctx = ctx;
         this.tokens = tokens;
-        indexSourceLines();
         if (ctx != null && ctx.symbolTable != null) {
             setCurrentScope(ctx.symbolTable);
         }
@@ -356,7 +366,6 @@ public class Parser {
         this.ctx = ctx;
         this.tokens = tokens;
         this.tokenIndex = 0;
-        indexSourceLines();
         // Share the heredoc nodes list instead of creating a new one
         this.heredocNodes = sharedHeredocNodes;
         if (ctx != null && ctx.symbolTable != null) {
@@ -396,6 +405,9 @@ public class Parser {
     /** Return the source line at a token without repeatedly scanning the token list. */
     public int sourceLineAt(int tokenIndex) {
         int baseLine = baseLineNumber > 0 ? baseLineNumber : 1;
+        if (sourceLineOffsets == null) {
+            indexSourceLines();
+        }
         if (tokenIndex >= 0 && tokenIndex < sourceLineOffsetsTokenCount
                 && tokens.size() == sourceLineOffsetsTokenCount) {
             return baseLine + sourceLineOffsets[tokenIndex];

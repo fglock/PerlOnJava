@@ -1513,14 +1513,30 @@ public class BytecodeCompiler implements Visitor {
                 || node instanceof AbstractNode abstractNode
                 && abstractNode.getBooleanAnnotation("subroutineIsLvalue");
 
-        collectLoopBodyLabels(node, gotoLabelsInsideLoop, false);
-        collectDeferLabels(node, gotoLabelsInsideDefer, false);
-        collectConstructEntryLabels(node, gotoLabelsInsideConstruct, false);
-        collectGivenLabels(node, gotoLabelsInsideGiven, false);
-        predeclareGotoLabels(node, false, false, false, Set.of(), false);
-        markGotosInLoopConditions(node);
+        boolean hasGoto        = false;
+        boolean hasLabels      = false;
+        boolean hasDefer       = false;
+        boolean hasGiven       = false;
+        boolean hasEvalOrRegex = false;
+        if (isEvalString && node instanceof AbstractNode rootNode) {
+            hasGoto        = rootNode.getBooleanAnnotation("hasGoto");
+            hasLabels      = rootNode.getBooleanAnnotation("hasLabels");
+            hasDefer       = rootNode.getBooleanAnnotation("hasDefer");
+            hasGiven       = rootNode.getBooleanAnnotation("hasGiven");
+            hasEvalOrRegex = rootNode.getBooleanAnnotation("hasEvalOrRegex");
+        }
+        boolean needsGotoAnalysis = hasGoto || hasLabels;
 
-        if (node != null) {
+        if (needsGotoAnalysis || !isEvalString) {
+            collectLoopBodyLabels(node, gotoLabelsInsideLoop, false);
+            if (hasDefer || !isEvalString) collectDeferLabels(node, gotoLabelsInsideDefer, false);
+            collectConstructEntryLabels(node, gotoLabelsInsideConstruct, false);
+            if (hasGiven || !isEvalString) collectGivenLabels(node, gotoLabelsInsideGiven, false);
+            predeclareGotoLabels(node, false, false, false, Set.of(), false);
+            markGotosInLoopConditions(node);
+        }
+
+        if (node != null && (hasEvalOrRegex || !isEvalString)) {
             VariableCollectorVisitor runtimeSourceCollector =
                     new VariableCollectorVisitor(new HashSet<>());
             node.accept(runtimeSourceCollector);

@@ -11,6 +11,7 @@ import org.perlonjava.backend.jvm.EmitterMethodCreator;
 import org.perlonjava.backend.jvm.InterpreterFallbackException;
 import org.perlonjava.backend.jvm.JavaClassInfo;
 import org.perlonjava.frontend.analysis.ConstantFoldingVisitor;
+import org.perlonjava.frontend.astnode.AbstractNode;
 import org.perlonjava.frontend.astnode.Node;
 import org.perlonjava.frontend.astnode.OperatorNode;
 import org.perlonjava.frontend.lexer.Lexer;
@@ -5392,7 +5393,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     : topLevelMain ? runtimePackage : capturedSymbolTable.getCurrentPackage();
 
             try {
-                // Setup for BEGIN block support - create aliases for captured variables.
+                // Alias captured outer variables before parsing.
+                // BEGIN/use execute during parsing, so their aliases must be in place first.
+                // Named subs in eval also access outer lexicals via these aliases.
+                {
                 Map<Integer, SymbolTable.SymbolEntry> capturedVars = capturedSymbolTable.getAllVisibleVariables();
                 for (SymbolTable.SymbolEntry entry : capturedVars.values()) {
                     if (!entry.name().equals("@_") && !entry.decl().isEmpty() && !entry.name().startsWith("&")) {
@@ -5427,6 +5431,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         }
                     }
                 }
+                }
                 // Clone compiler options for compilation (deferred from cache-hit fast path)
                 evalCompilerOptions = ctx.compilerOptions.clone();
                 boolean isByteStringSource = !ctx.isEvalbytes
@@ -5450,7 +5455,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // Parse the eval string
                 Lexer lexer = new Lexer(evalString);
                 tokens = lexer.tokenize();
-
                 // Create parser context
                 ScopedSymbolTable parseSymbolTable = capturedSymbolTable.snapShot();
                 parseSymbolTable.setCurrentPackage(
@@ -5501,6 +5505,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 } finally {
                     RegexQuoteMeta.setParserWarningBits(savedRegexWarningBits);
                     BHooksEndOfScope.endFileLoad(evalCompilerOptions.fileName);
+                }
+
+                // Transfer parse-time flags to the AST root so BytecodeCompiler can
+                // skip analysis passes that aren't needed for this eval string.
+                if (ast instanceof AbstractNode astNode) {
+                    if (parser.parsedGoto)        astNode.setAnnotation("hasGoto", true);
+                    if (parser.parsedLabels)      astNode.setAnnotation("hasLabels", true);
+                    if (parser.parsedDefer)       astNode.setAnnotation("hasDefer", true);
+                    if (parser.parsedGiven)       astNode.setAnnotation("hasGiven", true);
+                    if (parser.parsedEvalOrRegex) astNode.setAnnotation("hasEvalOrRegex", true);
+                    if (parser.parsedNamedSub)    astNode.setAnnotation("hasNamedSub", true);
                 }
 
                 // Run UNITCHECK blocks
