@@ -1642,10 +1642,12 @@ public class MortalList {
         base.releaseTransientTraceOwner(transientOwnerKind,
                 "MortalList.processDeferredBase");
         boolean hasWeakRefs = WeakRefRegistry.hasWeakRefsTo(base);
-        // Production release producers carry an exact slot token. Root/count
-        // repair remains only for the legacy unproven RuntimeBase hook, whose
-        // callers are low-level compatibility fixtures rather than Perl stores.
-        boolean unidentifiedRelease = ownerRelease == null;
+        // Production edge releases carry an exact slot token. A lifecycle-only
+        // boundary is a completion token, not evidence that a Perl edge was
+        // released, so it remains on the unproven path until its surrounding
+        // owner identities establish that no compatibility recovery is needed.
+        boolean unidentifiedRelease = ownerRelease == null
+                || ownerRelease.ownerSlotRelease == null;
         boolean finalRelease = false;
         if (base.refCount > 0) {
             base.traceRefCount(-1, "MortalList.flush (deferred decrement)");
