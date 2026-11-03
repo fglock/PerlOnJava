@@ -1899,7 +1899,7 @@ public class MortalList {
         return switch (kind) {
             case SCALAR_CELL, CODE_SLOT, ARRAY_ELEMENT, HASH_ELEMENT, ARGUMENT_VALUE,
                     ARGUMENT_CONTAINER, RETURN_VALUE, TIE_HANDLER,
-                    SCALAR_REFERENCE_CONTENTS -> true;
+                    ARGUMENT_TIE_HANDLER, SCALAR_REFERENCE_CONTENTS -> true;
             default -> false;
         };
     }

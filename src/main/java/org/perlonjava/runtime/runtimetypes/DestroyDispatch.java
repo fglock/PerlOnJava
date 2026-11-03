@@ -759,7 +759,7 @@ public class DestroyDispatch {
                 RuntimeScalar owner = slot.countedScalarOwner();
                 return owner != null && owner.isCurrentAggregateElementOwner(referent, slot);
             }
-            case SCALAR_CELL, CODE_SLOT, TIE_HANDLER -> {
+            case SCALAR_CELL, CODE_SLOT, TIE_HANDLER, ARGUMENT_TIE_HANDLER -> {
                 RuntimeScalar owner = slot.countedScalarOwner();
                 return owner != null && owner.isCurrentCountedScalarOwner(referent, slot);
             }
