@@ -6,6 +6,8 @@ priorities and future plans.
 
 ## Work in progress
 
+- Acquire replacement ownership before publishing array and hash slots, then release displaced values against the updated storage state (#1649).
+
 - Release temporary JVM reference-alias RHS owners after scalar-context assignments so the final aliased cell can clean up (#1649).
 - Track first-bless mortal references with deferred owner identities while preserving weak-source behavior (#1649).
 - Defer weakly tracked `undef` cleanup to current argument-alias identities, preserving the tracking sentinel (#1649).
