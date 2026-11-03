@@ -200,9 +200,8 @@ public class MortalList {
     }
 
     /**
-     * Schedule a deferred refCount decrement for a tracked referent.
-     * Called from delete() when removing a tracked blessed reference
-     * from a container.
+     * Legacy unpaired decrement without scalar-slot release provenance.
+     * Production mutation paths must use the slot-aware release methods below.
      */
     public static void deferDecrement(RuntimeBase base) {
         deferDecrement(base, null);
@@ -1674,7 +1673,7 @@ public class MortalList {
         // decrement entry point. A lifecycle-only token is not a released Perl
         // edge and must not trigger reconstruction from a root walk; its
         // cleanup decision follows the current owner identities below.
-        boolean unidentifiedRelease = ownerRelease == null;
+        boolean legacyUnpairedDecrement = ownerRelease == null;
         boolean finalRelease = false;
         if (base.refCount > 0) {
             base.traceRefCount(-1, "MortalList.flush (deferred decrement)");
@@ -1774,33 +1773,27 @@ public class MortalList {
                 // cleanup until its release. Blessed aggregates with direct
                 // weak observers still use the root proof below.
                 base.deferFinalReleaseToUncountedOwnerSlots();
-            } else if (unidentifiedRelease && hasWeakRefs
+            } else if (legacyUnpairedDecrement && hasWeakRefs
                     && restoreReachableOwnerCount(base)) {
-                // A counted owner that is still reachable through a real
-                // Perl root is authoritative, including for classes with
-                // DESTROY. Unmigrated slots still need this compatibility
-                // fallback until their owner identities are complete.
-            } else if (unidentifiedRelease
+                // The legacy entry point carries no slot identity. Preserve
+                // its compatibility behavior for callers that cannot identify
+                // the released edge. Production releases never enter this path.
+            } else if (legacyUnpairedDecrement
                     && base.blessId == 0
                     && (base instanceof RuntimeArray || base instanceof RuntimeHash)
                     && isUnblessedAggregateReachableDuringDrain(base)) {
-                // Unblessed aggregates can reach zero while a parser is
-                // assembling a tree, before it installs the first weak parent
-                // edge. A temporary reference can make the selective count
-                // reach zero even though an enclosing live aggregate already
-                // owns the node. Consult the shared drain snapshot before a
-                // later weaken() sees a destroyed referent. The next cleanup
-                // boundary can still reclaim a tree after its Perl root goes
-                // away.
+                // Keep legacy unpaired decrements on the shared drain proof.
+                // Ordinary aggregate cleanup carries its owner-slot provenance
+                // and decides lifetime from current Perl owners instead.
                 base.refCount = 1;
-            } else if (unidentifiedRelease
+            } else if (legacyUnpairedDecrement
                     && base.blessId != 0
                     && hasWeakRefs
                     && (isReachableFromExternalRootCached(base)
                     || isReachableFromFullRootSnapshot(base))) {
-                // A nested request can temporarily consume the selective owner
-                // count of an object that is still retained below a package
-                // root. Mojolicious::Lite keeps its route tree in a package
+                // A legacy unpaired release may temporarily consume the
+                // selective count of an object retained below a package root.
+                // Mojolicious::Lite keeps its route tree in a package
                 // singleton; a mounted route also has a weak parent link from
                 // the embedded application's route root. When the request Match
                 // object is destroyed, its endpoint release can make that live
@@ -1812,21 +1805,18 @@ public class MortalList {
                 // live Perl root; final owner removal still destroys them at
                 // a later boundary.
                 base.refCount = 1;
-            } else if (unidentifiedRelease
+            } else if (legacyUnpairedDecrement
                     && base.blessId != 0
                     && hasWeakRefs
                     && !blessedClassHasDestroy(base)
                     && (isReachableFromExternalRootCached(base)
                     || isReachableFromFullRootSnapshot(base))) {
-                // A weakened probe copy can make the selective count reach
+                // A legacy unpaired release can make the selective count reach
                 // zero while an ordinary blessed object is still held by a
-                // live lexical. Test::Refcount exercises this shape; clearing
-                // weak refs here drops callback invocants that should remain
-                // valid. Real roots and explicit method-invocant holds still
-                // protect live objects. Classes with DESTROY keep the stricter
-                // path.
+                // live lexical. Test::Refcount exercises this shape; explicit
+                // production releases rely on current owner identities.
                 base.refCount = 1;
-            } else if (unidentifiedRelease
+            } else if (legacyUnpairedDecrement
                     && base.blessId != 0
                     && base.storedInPackageGlobal
                     && hasWeakRefs
