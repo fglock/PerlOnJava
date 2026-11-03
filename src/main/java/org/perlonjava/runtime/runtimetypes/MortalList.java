@@ -731,6 +731,10 @@ public class MortalList {
         // Alias arrays such as @_ do not own their original element slots.
         if (!finalRelease && (arr.refCount > 0 || arr.hasOwnerSlots()
                 || temporaryRootDirectlyReferences(arr) || directlyReferences(returned, arr))) return;
+        // A refalias list owns the scalar cells even though those cells are
+        // not ordinary copied array values. Retire those cell identities only
+        // when this RuntimeArray itself is no longer Perl-owned.
+        arr.releaseReferenceListAliasCellOwners();
         // \$#array creates a scalar proxy, not an array reference.  Once the
         // lexical AV exits, that proxy becomes an orphaned undef lvalue; it
         // must not retain this Java RuntimeArray merely through its backing
@@ -1639,6 +1643,13 @@ public class MortalList {
                 // Both native and legacy closure-pad slots identify the Perl
                 // edge that keeps this referent alive. Defer final cleanup to
                 // that slot's release while keeping refCount at zero.
+                base.deferZeroCountFinalReleaseToUncountedOwnerSlots();
+            } else if (base instanceof RuntimeScalar scalar
+                    && scalar.referencedByScalarReference
+                    && scalar.ownerSlotCount(PerlOwnerSlot.Kind.ARRAY_ALIAS_CELL) != 0) {
+                // Refalias array slots own scalar cells without adding a
+                // legacy reference count. Keep the zero-count cell alive
+                // until its last alias slot releases and runs scalar cleanup.
                 base.deferZeroCountFinalReleaseToUncountedOwnerSlots();
             } else if (base.localBindingExists) {
                 if (base instanceof RuntimeScalar scalar

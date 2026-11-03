@@ -32,6 +32,8 @@ public final class PerlOwnerSlot {
         /** Tied-hash iterator retaining a key between FIRSTKEY/NEXTKEY calls. */
         TIED_HASH_ITERATOR_KEY,
         ARRAY_ELEMENT,
+        /** RuntimeArray refalias binding retaining one scalar cell. */
+        ARRAY_ALIAS_CELL,
         HASH_ELEMENT,
         ARGUMENT_VALUE,
         ARGUMENT_ALIAS,
@@ -86,6 +88,8 @@ public final class PerlOwnerSlot {
     private WeakReference<RuntimeScalar> suspendedScalarOwner;
     /** Weak provenance for a detached glob's component edge. */
     private WeakReference<RuntimeGlob> globComponentOwner;
+    /** Array whose refalias slot owns a scalar-cell identity. */
+    private WeakReference<RuntimeArray> arrayAliasOwner;
     private PerlRuntime ownerRuntime;
     private LifecycleRuntimeState ownerRuntimeState;
     private boolean registeredInOwnerLedger;
@@ -743,6 +747,24 @@ public final class PerlOwnerSlot {
         target.addOwnerSlot(this);
     }
 
+    /** Record an array refalias edge to a scalar cell without a legacy count. */
+    synchronized void acquireArrayAliasCellIdentity(RuntimeScalar target, RuntimeArray owner) {
+        if (kind != Kind.ARRAY_ALIAS_CELL || referent != null || nativeOwner) {
+            throw new IllegalStateException("array alias-cell slot is not available");
+        }
+        Objects.requireNonNull(target, "target");
+        Objects.requireNonNull(owner, "owner");
+        if (target.refCount == Integer.MIN_VALUE) {
+            throw new IllegalStateException("cannot alias a destroyed scalar cell");
+        }
+        arrayAliasOwner = new WeakReference<>(owner);
+        transferWithoutRuntimeRoot(target, true);
+    }
+
+    RuntimeArray arrayAliasOwner() {
+        return arrayAliasOwner == null ? null : arrayAliasOwner.get();
+    }
+
     /** Identify a counted scalar or element edge without adding a global root. */
     public synchronized void acquireCountedIdentity(RuntimeBase target) {
         if (!isCountedKind(kind)) {
@@ -955,6 +977,7 @@ public final class PerlOwnerSlot {
         scalarContentsOwner = null;
         suspendedScalarOwner = null;
         globComponentOwner = null;
+        arrayAliasOwner = null;
         ownerRuntime = null;
         ownerRuntimeState = null;
         if (previous != null && registeredInOwnerLedger) previous.removeOwnerSlot(this);
