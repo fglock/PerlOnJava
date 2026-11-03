@@ -934,6 +934,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     private boolean mortalReturnValueOwner;
     private boolean tiedHandlerValueOwner;
     private boolean stagedValueOwner;
+    /** This snapshot temporarily carries a scalar's counted edge during local(). */
+    private boolean localizedSavedCountedOwner;
 
     boolean isMortalReturnSnapshot() {
         return mortalReturnSnapshot && !hasStorageOwnerForVoidDiscard()
@@ -1293,6 +1295,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 || !slot.isActive() || slot.referent() != referent) {
             return false;
         }
+        if (localizedSavedCountedOwner) {
+            return slot.kind() == PerlOwnerSlot.Kind.ARRAY_ELEMENT
+                    || slot.kind() == PerlOwnerSlot.Kind.HASH_ELEMENT;
+        }
         if (slot.kind() == PerlOwnerSlot.Kind.ARRAY_ELEMENT) {
             return containerOwner instanceof RuntimeArray array
                     && !array.elementsAliased && array.elements.contains(this);
@@ -1304,6 +1310,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     boolean isCurrentCountedScalarOwner(RuntimeBase referent, PerlOwnerSlot slot) {
         PerlOwnerSlot.Kind kind = slot.kind();
+        if (localizedSavedCountedOwner) {
+            return countedOwnerSlot == slot && refCountOwned && value == referent
+                    && slot.isActive() && slot.referent() == referent;
+        }
         boolean activeArgumentAlias = kind == PerlOwnerSlot.Kind.SCALAR_CELL
                 && hasActiveArgumentAliasOwner(referent);
         if ((kind != PerlOwnerSlot.Kind.SCALAR_CELL
@@ -1494,6 +1504,23 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (destination.countedOwnerSlot == null && destination.value instanceof RuntimeBase referent) {
             destination.recordCountedOwner(referent);
         }
+    }
+
+    /** Move a non-counted strong value edge with a localized scalar snapshot. */
+    private void transferUntrackedOwnerTo(RuntimeScalar destination) {
+        destination.untrackedReferenceOwnerSlot = untrackedReferenceOwnerSlot;
+        untrackedReferenceOwnerSlot = null;
+        if (destination.untrackedReferenceOwnerSlot != null) {
+            destination.untrackedReferenceOwnerSlot.associateUntrackedScalarOwner(destination);
+        }
+    }
+
+    private static void releaseDetachedUntrackedOwner(PerlOwnerSlot ownerSlot) {
+        if (ownerSlot == null) return;
+        RuntimeBase referent = ownerSlot.referent();
+        ownerSlot.associateUntrackedScalarOwner(null);
+        ownerSlot.release();
+        if (referent != null) WeakRefRegistry.onStrongOwnerSlotReleased(referent);
     }
 
 
@@ -7358,6 +7385,22 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         currentState.firstClassRegexReferent = this.firstClassRegexReferent;
         currentState.firstClassRegexValue = this.firstClassRegexValue;
         currentState.formatPictureTainted = this.formatPictureTainted;
+        if (refCountOwned && countedOwnerSlot != null
+                && countedOwnerSlot.isActive()
+                && countedOwnerSlot.referent() == currentState.value) {
+            // local() changes the value in this same scalar cell. Carry the
+            // old counted edge with the saved state before a store can reuse
+            // this scalar's slot for the localized replacement.
+            currentState.refCountOwned = true;
+            currentState.localizedSavedCountedOwner = true;
+            transferCountedOwnerTo(currentState);
+            refCountOwned = false;
+        }
+        if (untrackedReferenceOwnerSlot != null
+                && untrackedReferenceOwnerSlot.isActive()
+                && untrackedReferenceOwnerSlot.referent() == currentState.value) {
+            transferUntrackedOwnerTo(currentState);
+        }
         // Push the current state onto the stack
         dynamicStateStack().push(currentState);
         // Clear the current type and value
@@ -7372,6 +7415,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
        this.firstClassRegexReferent = null;
        this.firstClassRegexValue = null;
         this.formatPictureTainted = false;
+        refreshArgumentAliasOwnerSlots();
+        refreshUntrackedReferenceOwner();
     }
 
     /**
@@ -7396,7 +7441,20 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     if (i != ownerIndex && owner.elements.get(i) == this) {
                         // shift/unshift moved the localized SV. Detach the
                         // current localized value before restoring this SV.
-                        owner.elements.set(i, new RuntimeScalar(this));
+                        RuntimeScalar movedValue = new RuntimeScalar(this);
+                        if (refCountOwned && countedOwnerSlot != null
+                                && countedOwnerSlot.isActive()
+                                && countedOwnerSlot.referent() == value) {
+                            movedValue.refCountOwned = true;
+                            transferCountedOwnerTo(movedValue);
+                            refCountOwned = false;
+                        }
+                        if (untrackedReferenceOwnerSlot != null
+                                && untrackedReferenceOwnerSlot.isActive()
+                                && untrackedReferenceOwnerSlot.referent() == value) {
+                            transferUntrackedOwnerTo(movedValue);
+                        }
+                        owner.elements.set(i, movedValue);
                         break;
                     }
                 }
@@ -7404,16 +7462,38 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             boolean referencedDuringLocal = this.referencedByScalarReference;
 
             RuntimeBase displacedBase = null;
-            if ((this.type & RuntimeScalarType.REFERENCE_BIT) != 0
+            if (((this.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                        || this.type == RuntimeScalarType.GLOB
+                        || this.type == RuntimeScalarType.CODE)
                     && this.value instanceof RuntimeBase base) {
                 displacedBase = base;
             }
+            boolean deferredDisplacedCountedOwner = false;
+            if (displacedBase != null && refCountOwned) {
+                if (countedOwnerSlot == null || !countedOwnerSlot.isActive()
+                        || countedOwnerSlot.referent() != displacedBase) {
+                    throw new IllegalStateException(
+                            "localized scalar lost its counted owner before restore");
+                }
+                refCountOwned = false;
+                MortalList.deferDecrementFromScalarSlot(
+                        displacedBase, this, "RuntimeScalar.dynamicRestoreState");
+                deferredDisplacedCountedOwner = true;
+            }
+            PerlOwnerSlot displacedUntrackedOwner = this.untrackedReferenceOwnerSlot;
             PerlOwnerSlot displacedScalarReferenceContentsOwner =
                     this.scalarReferenceContentsOwner;
 
             // Restore the type, value from the saved state
             this.type = previousState.type;
             this.value = copyScalarPayload(previousState.type, previousState.value);
+            this.refCountOwned = previousState.refCountOwned;
+            if (previousState.refCountOwned && previousState.countedOwnerSlot != null) {
+                previousState.transferCountedOwnerTo(this);
+                previousState.localizedSavedCountedOwner = false;
+                previousState.refCountOwned = false;
+            }
+            previousState.transferUntrackedOwnerTo(this);
             this.blessId = previousState.blessId;
             this.scalarReferenceContentsOwner = previousState.scalarReferenceContentsOwner;
             previousState.scalarReferenceContentsOwner = null;
@@ -7429,6 +7509,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
            this.firstClassRegexReferent = previousState.firstClassRegexReferent;
            this.firstClassRegexValue = previousState.firstClassRegexValue;
             this.formatPictureTainted = previousState.formatPictureTainted;
+            refreshArgumentAliasOwnerSlots();
+            refreshUntrackedReferenceOwner();
             if (owner != null) {
                 if (owner.scalarLocalContainerCleared()) {
                     while (owner.elements.size() < ownerSize) owner.elements.add(null);
@@ -7447,21 +7529,39 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     && displacedScalarReferenceContentsOwner != this.scalarReferenceContentsOwner) {
                 displacedScalarReferenceContentsOwner.releaseScalarReferenceContents();
             }
+            if (displacedUntrackedOwner != null
+                    && displacedUntrackedOwner != this.untrackedReferenceOwnerSlot) {
+                releaseDetachedUntrackedOwner(displacedUntrackedOwner);
+            }
 
             // Decrement refCount of the value displaced by local restoration
             // after restoring the old scalar state, so DESTROY sees the restored
             // variable rather than the dying localized value.
-            if (displacedBase != null
+            if (!deferredDisplacedCountedOwner && displacedBase != null
                     && displacedBase.refCount > 0 && --displacedBase.refCount == 0) {
                 displacedBase.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroy(displacedBase);
             }
+            MortalList.flush();
         }
     }
 
     @Override
     public Object dynamicSuspendState() {
         RuntimeScalar activeState = new RuntimeScalar(this);
+        if (refCountOwned && countedOwnerSlot != null
+                && countedOwnerSlot.isActive()
+                && countedOwnerSlot.referent() == value) {
+            activeState.refCountOwned = true;
+            activeState.localizedSavedCountedOwner = true;
+            transferCountedOwnerTo(activeState);
+            refCountOwned = false;
+        }
+        if (untrackedReferenceOwnerSlot != null
+                && untrackedReferenceOwnerSlot.isActive()
+                && untrackedReferenceOwnerSlot.referent() == value) {
+            transferUntrackedOwnerTo(activeState);
+        }
         activeState.scalarReferenceContentsOwner = this.scalarReferenceContentsOwner;
         if (activeState.scalarReferenceContentsOwner != null) {
             activeState.scalarReferenceContentsOwner.transferScalarReferenceContentsOwner(activeState);
@@ -7477,6 +7577,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (token instanceof RuntimeScalar activeState) {
             this.type = activeState.type;
             this.value = copyScalarPayload(activeState.type, activeState.value);
+            this.refCountOwned = activeState.refCountOwned;
+            if (activeState.refCountOwned && activeState.countedOwnerSlot != null) {
+                activeState.transferCountedOwnerTo(this);
+                activeState.localizedSavedCountedOwner = false;
+                activeState.refCountOwned = false;
+            }
+            activeState.transferUntrackedOwnerTo(this);
             this.blessId = activeState.blessId;
             this.scalarReferenceContentsOwner = activeState.scalarReferenceContentsOwner;
             activeState.scalarReferenceContentsOwner = null;
@@ -7487,6 +7594,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             this.tainted = activeState.tainted;
             this.numericLiteralText = activeState.numericLiteralText;
             this.numericContextSeen = activeState.numericContextSeen;
+            refreshArgumentAliasOwnerSlots();
+            refreshUntrackedReferenceOwner();
         }
     }
 

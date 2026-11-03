@@ -252,6 +252,20 @@ public class MortalList {
         if (base.refCountTrace) {
             base.traceRefCount(0, releaseSite + " (array-slot decrement queued)");
         }
+        deferCountedSlotRelease(base, ownerScalar, releaseSite);
+    }
+
+    /** Queue a mutable scalar cell's counted release before its value is restored. */
+    public static void deferDecrementFromScalarSlot(
+            RuntimeBase base, RuntimeScalar ownerScalar, String releaseSite) {
+        if (base.refCountTrace) {
+            base.traceRefCount(0, releaseSite + " (scalar-slot decrement queued)");
+        }
+        deferCountedSlotRelease(base, ownerScalar, releaseSite);
+    }
+
+    private static void deferCountedSlotRelease(
+            RuntimeBase base, RuntimeScalar ownerScalar, String releaseSite) {
         LifecycleRuntimeState state = state();
         markBoundaryWork(state);
         RuntimeBase.PendingOwnerRelease ownerRelease =
