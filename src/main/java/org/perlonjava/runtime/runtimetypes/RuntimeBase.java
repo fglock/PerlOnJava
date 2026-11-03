@@ -438,16 +438,10 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // D-W6.13: production-grade ownership tracking.
-    // Active for blessed objects that have at least one weak reference
-    // (the only case where we care about precise refCount semantics).
-    // Stores the set of RuntimeScalars that hold a counted strong ref
-    // to this base (refCountOwned=true && value==this).
-    // At MortalList.flush() refCount→0, this is consulted: if non-empty,
-    // refCount is restored to the owner count and DESTROY is suppressed.
+    // D-W6.13: counted scalar owners are derived from the slot ledger below.
+    // Keep the legacy activation method as a no-op for Java callers while
+    // existing tests and integrations migrate away from it.
     // ─────────────────────────────────────────────────────────────────────
-    public java.util.Set<RuntimeScalar> activeOwners = null;
-
     /** Identity ledger for migrated slots; selective refCount remains the
      * lifecycle bridge while owner families move to this API. */
     private java.util.Set<PerlOwnerSlot> ownerSlots = null;
@@ -801,59 +795,37 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         }
     }
 
+    /** Compatibility no-op: counted owner identities are recorded eagerly. */
     public void activateOwnerTracking() {
-        if (activeOwners == null) {
-            activeOwners = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
-            // Note: backfilling from ScalarRefRegistry.snapshot() was
-            // observed to cause DBIC leak-test regressions due to
-            // WeakHashMap.expungeStaleEntries() side-effects on JVM GC
-            // observability. We rely on incremental population via
-            // recordActiveOwner() from setLargeRefCounted; objects that
-            // had setLarge incs BEFORE activation will be missed, but
-            // that's a known limitation — the activation should fire on
-            // first weaken(), which usually precedes the relevant stores.
-        }
     }
 
     public void recordActiveOwner(RuntimeScalar scalar) {
         scalar.recordCountedOwner(this);
-        if (activeOwners != null) {
-            activeOwners.add(scalar);
-        }
     }
 
     public void releaseActiveOwner(RuntimeScalar scalar) {
         scalar.releaseCountedOwner(this);
-        if (activeOwners != null) {
-            activeOwners.remove(scalar);
-        }
     }
 
     public int activeOwnerCount() {
-        if (activeOwners == null) return 0;
-        // Filter for actual still-owning scalars: refCountOwned=true and
-        // value==this. Stale entries (overwritten without going through a
-        // tracked release path, or scope-exited via untracked paths) are
-        // pruned and ignored.
-        int count = 0;
-        java.util.Iterator<RuntimeScalar> it = activeOwners.iterator();
-        while (it.hasNext()) {
-            RuntimeScalar sc = it.next();
-            if (sc != null && sc.refCountOwned && sc.value == this) {
-                count++;
-            } else {
-                it.remove();
-            }
-        }
-        return count;
+        return activeOwnerSnapshot().size();
     }
 
-    /** Snapshot the currently live scalar owner slots by identity. */
+    /** Snapshot current counted scalar owners by their authoritative slot identities. */
     public java.util.Set<RuntimeScalar> activeOwnerSnapshot() {
-        if (activeOwnerCount() == 0) return java.util.Collections.emptySet();
         java.util.Set<RuntimeScalar> snapshot = java.util.Collections.newSetFromMap(
                 new java.util.IdentityHashMap<>());
-        snapshot.addAll(activeOwners);
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (!slot.isActive() || slot.referent() != this
+                    || !PerlOwnerSlot.isCountedKind(slot.kind())) {
+                continue;
+            }
+            RuntimeScalar scalar = slot.countedScalarOwner();
+            if (scalar != null && scalar.countedOwnerSlot() == slot
+                    && scalar.refCountOwned && scalar.value == this) {
+                snapshot.add(scalar);
+            }
+        }
         return snapshot;
     }
 
@@ -894,21 +866,15 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     }
 
     /**
-     * Count owners that are reachable from package globals or live my-vars.
-     * This compatibility fallback remains for ownership sources that have not
-     * yet migrated to explicit slot identities.
+     * Count live counted scalar-cell slots reachable from package globals or
+     * live my-vars. This root-walk compatibility fallback remains only for
+     * slots whose current storage cannot yet be proven from owner identities.
      */
     public int reachableOwnerCount() {
-        if (activeOwners == null) return 0;
         int count = 0;
-        java.util.Iterator<RuntimeScalar> it = activeOwners.iterator();
-        while (it.hasNext()) {
-            RuntimeScalar sc = it.next();
-            if (sc != null && sc.refCountOwned && sc.value == this
-                    && ReachabilityWalker.isScalarReachable(sc)) {
+        for (RuntimeScalar scalar : activeOwnerSnapshot()) {
+            if (ReachabilityWalker.isScalarReachable(scalar)) {
                 count++;
-            } else if (sc == null || !sc.refCountOwned || sc.value != this) {
-                it.remove();
             }
         }
         return count;
