@@ -7468,81 +7468,79 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     && this.value instanceof RuntimeBase base) {
                 displacedBase = base;
             }
-            boolean deferredDisplacedCountedOwner = false;
-            if (displacedBase != null && refCountOwned) {
-                if (countedOwnerSlot == null || !countedOwnerSlot.isActive()
-                        || countedOwnerSlot.referent() != displacedBase) {
-                    throw new IllegalStateException(
-                            "localized scalar lost its counted owner before restore");
+            boolean releaseDisplacedCountedOwner = displacedBase != null && refCountOwned;
+            if (releaseDisplacedCountedOwner
+                    && (countedOwnerSlot == null || !countedOwnerSlot.isActive()
+                        || countedOwnerSlot.referent() != displacedBase)) {
+                throw new IllegalStateException(
+                        "localized scalar lost its counted owner before restore");
+            }
+            if (releaseDisplacedCountedOwner) MortalList.pushMark();
+            try {
+                if (releaseDisplacedCountedOwner) {
+                    refCountOwned = false;
+                    MortalList.deferDecrementFromScalarSlot(
+                            displacedBase, this, "RuntimeScalar.dynamicRestoreState");
                 }
-                refCountOwned = false;
-                MortalList.deferDecrementFromScalarSlot(
-                        displacedBase, this, "RuntimeScalar.dynamicRestoreState");
-                deferredDisplacedCountedOwner = true;
-            }
-            PerlOwnerSlot displacedUntrackedOwner = this.untrackedReferenceOwnerSlot;
-            PerlOwnerSlot displacedScalarReferenceContentsOwner =
-                    this.scalarReferenceContentsOwner;
+                PerlOwnerSlot displacedUntrackedOwner = this.untrackedReferenceOwnerSlot;
+                PerlOwnerSlot displacedScalarReferenceContentsOwner =
+                        this.scalarReferenceContentsOwner;
 
-            // Restore the type, value from the saved state
-            this.type = previousState.type;
-            this.value = copyScalarPayload(previousState.type, previousState.value);
-            this.refCountOwned = previousState.refCountOwned;
-            if (previousState.refCountOwned && previousState.countedOwnerSlot != null) {
-                previousState.transferCountedOwnerTo(this);
-                previousState.localizedSavedCountedOwner = false;
-                previousState.refCountOwned = false;
-            }
-            previousState.transferUntrackedOwnerTo(this);
-            this.blessId = previousState.blessId;
-            this.scalarReferenceContentsOwner = previousState.scalarReferenceContentsOwner;
-            previousState.scalarReferenceContentsOwner = null;
-            if (this.scalarReferenceContentsOwner != null) {
-                this.scalarReferenceContentsOwner.transferScalarReferenceContentsOwner(this);
-            }
-            this.referencedByScalarReference =
-                    previousState.referencedByScalarReference || referencedDuringLocal;
-            this.tainted = previousState.tainted;
-            this.numericLiteralText = previousState.numericLiteralText;
-            this.numericContextSeen = previousState.numericContextSeen;
-            this.firstClassRegexScalar = previousState.firstClassRegexScalar;
-           this.firstClassRegexReferent = previousState.firstClassRegexReferent;
-           this.firstClassRegexValue = previousState.firstClassRegexValue;
-            this.formatPictureTainted = previousState.formatPictureTainted;
-            refreshArgumentAliasOwnerSlots();
-            refreshUntrackedReferenceOwner();
-            if (owner != null) {
-                if (owner.scalarLocalContainerCleared()) {
-                    while (owner.elements.size() < ownerSize) owner.elements.add(null);
+                // Restore the type, value from the saved state
+                this.type = previousState.type;
+                this.value = copyScalarPayload(previousState.type, previousState.value);
+                this.refCountOwned = previousState.refCountOwned;
+                if (previousState.refCountOwned && previousState.countedOwnerSlot != null) {
+                    previousState.transferCountedOwnerTo(this);
+                    previousState.localizedSavedCountedOwner = false;
+                    previousState.refCountOwned = false;
                 }
-                if (ownerExisted && ownerIndex < owner.elements.size()
-                        && owner.elements.get(ownerIndex) != this) {
-                    // Array mutations such as shift move the localized SV;
-                    // restore its original slot while retaining the moved
-                    // localized value at its current position.
-                    owner.elements.set(ownerIndex, this);
+                previousState.transferUntrackedOwnerTo(this);
+                this.blessId = previousState.blessId;
+                this.scalarReferenceContentsOwner = previousState.scalarReferenceContentsOwner;
+                previousState.scalarReferenceContentsOwner = null;
+                if (this.scalarReferenceContentsOwner != null) {
+                    this.scalarReferenceContentsOwner.transferScalarReferenceContentsOwner(this);
                 }
-                owner.endScalarLocalElement();
-            }
+                this.referencedByScalarReference =
+                        previousState.referencedByScalarReference || referencedDuringLocal;
+                this.tainted = previousState.tainted;
+                this.numericLiteralText = previousState.numericLiteralText;
+                this.numericContextSeen = previousState.numericContextSeen;
+                this.firstClassRegexScalar = previousState.firstClassRegexScalar;
+                this.firstClassRegexReferent = previousState.firstClassRegexReferent;
+                this.firstClassRegexValue = previousState.firstClassRegexValue;
+                this.formatPictureTainted = previousState.formatPictureTainted;
+                refreshArgumentAliasOwnerSlots();
+                refreshUntrackedReferenceOwner();
+                if (owner != null) {
+                    if (owner.scalarLocalContainerCleared()) {
+                        while (owner.elements.size() < ownerSize) owner.elements.add(null);
+                    }
+                    if (ownerExisted && ownerIndex < owner.elements.size()
+                            && owner.elements.get(ownerIndex) != this) {
+                        // Array mutations such as shift move the localized SV;
+                        // restore its original slot while retaining the moved
+                        // localized value at its current position.
+                        owner.elements.set(ownerIndex, this);
+                    }
+                    owner.endScalarLocalElement();
+                }
 
-            if (displacedScalarReferenceContentsOwner != null
-                    && displacedScalarReferenceContentsOwner != this.scalarReferenceContentsOwner) {
-                displacedScalarReferenceContentsOwner.releaseScalarReferenceContents();
-            }
-            if (displacedUntrackedOwner != null
-                    && displacedUntrackedOwner != this.untrackedReferenceOwnerSlot) {
-                releaseDetachedUntrackedOwner(displacedUntrackedOwner);
-            }
+                if (displacedScalarReferenceContentsOwner != null
+                        && displacedScalarReferenceContentsOwner
+                            != this.scalarReferenceContentsOwner) {
+                    displacedScalarReferenceContentsOwner.releaseScalarReferenceContents();
+                }
+                if (displacedUntrackedOwner != null
+                        && displacedUntrackedOwner != this.untrackedReferenceOwnerSlot) {
+                    releaseDetachedUntrackedOwner(displacedUntrackedOwner);
+                }
 
-            // Decrement refCount of the value displaced by local restoration
-            // after restoring the old scalar state, so DESTROY sees the restored
-            // variable rather than the dying localized value.
-            if (!deferredDisplacedCountedOwner && displacedBase != null
-                    && displacedBase.refCount > 0 && --displacedBase.refCount == 0) {
-                displacedBase.refCount = Integer.MIN_VALUE;
-                DestroyDispatch.callDestroy(displacedBase);
+                if (releaseDisplacedCountedOwner) MortalList.flushAboveMark();
+            } finally {
+                if (releaseDisplacedCountedOwner) MortalList.popMark();
             }
-            MortalList.flush();
         }
     }
 
