@@ -2,34 +2,36 @@
 
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
-**Current checkpoint (2026-11-03 10:25 UTC):** #1649 continues on branch
-`wip/ownership-scalar-transition-20261103-continued`, HEAD `6786b8f65`, based
-on merged master candidate `f45623db6`. The scalar-slot batch routes reference
-overwrite and non-CODE `undefine()` through one transition method: it retains
-the replacement before publishing the new scalar state, then releases the
-displaced edge after publication. Explicit undef retains its weak-observer and
-full-mortal-flush behavior; CODE symbol-table undefinition remains on its
-special path. `issue_1649_scalar_slot_transition.t` covers copied-reference
-lifetime, destructor observation of replacement/undef state, and weak clearing.
+**Current checkpoint (2026-11-03 12:30 UTC):** #1649 continues on branch
+`wip/container-slot-transition-20261103-132517`, source `46437891b`, which
+contains remote `origin/master` `d34aa038f` through the earlier master merge.
+The scalar overwrite/undefine and localized-hash batch is recorded in the
+preceding claim. This batch centralizes array and hash container transitions in
+`RuntimeScalar.transitionContainerSlots`: acquire replacement edges, publish
+the new storage and its owner bookkeeping, then release displaced cells from
+the old storage snapshot. Same-cell transfers keep their existing identity.
+Array literal stores, `push`, single-value and list replacement, hash stores,
+and hash list assignment use that operation. Shared storage validation and
+durable IO retention still happen before publication.
 
-The localized-hash audit found that `RuntimeHashProxyEntry.dynamicRestoreState`
-directly decremented a referent after removing a temporarily localized missing
-key, leaving the displaced cell's counted-owner state active. Cleanup now
-retires that cell through `MortalList` with its owner identity and existing IO
-release. The Java invariant regression failed on parent `9a933dc6c`; the new
-Perl-level lifetime regressions pass on system Perl and both backends.
+`ContainerSlotAcquisitionOrderTest` covers five acquire/publish/release
+invariants; all five fail on unfixed parent `72ddef771` and pass on the
+candidate. `hash_slot_replacement_visible_before_destroy.t` checks hash and
+array destructor ordering; standard Perl and both PerlOnJava backends pass
+6/6, with sweeps disabled on the candidate. The Perl-visible fixture also
+passes on the parent, so the parent failure evidence for this batch is the
+internal owner-order regression, not a claim that the fixture exposed a
+visible parent mismatch. The focused no-sweeps `make test-unit` gate passed
+before commit; rerun it on the final documented commit for immutable source
+evidence. Full no-sweeps `make`, the HTML::Tree and lifecycle acceptance
+matrices, and PR reconciliation remain outstanding.
 
-The immutable no-sweeps `nice -n 19 timeout 3600 env
-JPERL_DISABLE_CORRECTIVE_SWEEPS=1 make` gate passes in 7m25 on `6786b8f65`:
-`/private/tmp/issue1649-scalar-and-localized-hash-no-sweeps-6786b8f65.log`.
-Scalar and localized-hash focused tests also pass on both backends. The full
-gate again spent its long interval in the existing 50,001-element root-budget
-fixture, whose insertion path scans the hash on every insertion.
-
-Next: map owned array/hash mutation producers and their removal paths, then
-centralize each slot transition without conflating copied cells, aliases,
-weak slots, cloned tied values, or transferred return values. Use system Perl
-to establish the observable destructor state before relying on each regression.
+Next: audit every remaining array/hash removal and alias transfer, then batch
+tied-handler/pre-weaken values, closure and CODE owners, package roots, cycles,
+suspended frames, and resource holders. Each Perl-visible operation remains
+measured against system Perl. Keep PR #1938 open as a draft; its remote head is
+still `b2f44fc2d36b8f0a1bc7067790e1731a604cba45` and its merge state is
+`DIRTY`.
 
 Standard Perl is the oracle for every Perl-visible reference edge and its
 lifetime behavior. A reference-slot transition should retain a new strong
