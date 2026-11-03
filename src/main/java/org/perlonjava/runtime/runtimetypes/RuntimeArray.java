@@ -1178,6 +1178,10 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 RuntimeScalar candidate = runtimeArray.elements.getLast();
                 boolean countedArraySlot =
                         hasCurrentCountedArrayElementOwner(runtimeArray, candidate);
+                if (candidate != null) {
+                    deferRemovedElementRelease(runtimeArray, candidate, "RuntimeArray.pop",
+                            countedArraySlot);
+                }
                 RuntimeScalar result = runtimeArray.elements.removeLast();
                 // Sparse arrays can have null elements - return undef in that case
                 if (result != null) {
@@ -1188,8 +1192,6 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                     // handles counted owners even when the legacy summary flag is
                     // stale; borrowed @_ cells have no ARRAY_ELEMENT owner and
                     // must not consume the caller's reference.
-                    deferRemovedElementRelease(runtimeArray, result, "RuntimeArray.pop",
-                            countedArraySlot);
                     yield result;
                 }
                 yield scalarUndef;
@@ -1220,13 +1222,15 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 RuntimeScalar candidate = runtimeArray.elements.getFirst();
                 boolean countedArraySlot =
                         hasCurrentCountedArrayElementOwner(runtimeArray, candidate);
+                if (candidate != null) {
+                    deferRemovedElementRelease(runtimeArray, candidate, "RuntimeArray.shift",
+                            countedArraySlot);
+                }
                 RuntimeScalar result = runtimeArray.elements.removeFirst();
                 // Sparse arrays can have null elements - return undef in that case
                 if (result != null) {
                     // If this element owned a refCount, defer the decrement.
                     // See pop() for the owner identity rationale.
-                    deferRemovedElementRelease(runtimeArray, result, "RuntimeArray.shift",
-                            countedArraySlot);
                     yield result;
                 }
                 yield scalarUndef;
@@ -1577,9 +1581,11 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 boolean countedArraySlot =
                         hasCurrentCountedArrayElementOwner(this, ownerScalar);
                 RuntimeScalar previous = this.get(index);
+                if (ownerScalar != null) {
+                    deferRemovedElementRelease(this, ownerScalar, "RuntimeArray.delete",
+                            countedArraySlot);
+                }
                 this.elements.set(index, null);
-                deferRemovedElementRelease(this, ownerScalar, "RuntimeArray.delete",
-                        countedArraySlot);
                 yield previous;
             }
             case AUTOVIVIFY_ARRAY -> scalarUndef;
@@ -1784,11 +1790,13 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                         RuntimeScalar candidate = self.elements.getLast();
                         boolean countedArraySlot =
                                 hasCurrentCountedArrayElementOwner(self, candidate);
+                        if (candidate != null) {
+                            MortalList.deferIoOwnerRelease(candidate);
+                            deferRemovedElementRelease(self, candidate,
+                                    "RuntimeArray.deleteLocal", countedArraySlot);
+                        }
                         RuntimeScalar removed = self.elements.removeLast();
                         if (removed != null) {
-                            MortalList.deferIoOwnerRelease(removed);
-                            deferRemovedElementRelease(self, removed,
-                                    "RuntimeArray.deleteLocal", countedArraySlot);
                             releasedLocalizedOwner = true;
                         }
                     }
@@ -1806,25 +1814,25 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                         RuntimeScalar displaced = self.elements.get(idx);
                         boolean countedArraySlot =
                                 hasCurrentCountedArrayElementOwner(self, displaced);
-                        self.elements.set(idx, savedValue);
                         if (displaced != null && displaced != savedValue) {
                             MortalList.deferIoOwnerRelease(displaced);
                             deferRemovedElementRelease(self, displaced,
                                     "RuntimeArray.deleteLocal", countedArraySlot);
                             releasedLocalizedOwner = true;
                         }
+                        self.elements.set(idx, savedValue);
                     }
                 } else if (idx >= 0 && idx < self.elements.size()) {
                     RuntimeScalar displaced = self.elements.get(idx);
                     boolean countedArraySlot =
                             hasCurrentCountedArrayElementOwner(self, displaced);
-                    self.elements.set(idx, null);
                     if (displaced != null) {
                         MortalList.deferIoOwnerRelease(displaced);
                         deferRemovedElementRelease(self, displaced,
                                 "RuntimeArray.deleteLocal", countedArraySlot);
                         releasedLocalizedOwner = true;
                     }
+                    self.elements.set(idx, null);
                 }
                 if (releasedLocalizedOwner) MortalList.flush();
             }
