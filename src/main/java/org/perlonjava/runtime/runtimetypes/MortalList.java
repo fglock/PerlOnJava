@@ -1105,10 +1105,7 @@ public class MortalList {
                         continue;
                     }
                     if (!hasCleanupTargets
-                            || base.hasPerlStrongOwnerIdentity()
-                            || (base.refCount > 1
-                            && !hasDirectWeakElementRefs
-                            && isReachableFromExternalRootCached(base))) {
+                            || base.hasPerlStrongOwnerIdentity()) {
                         continue;
                     }
                 } else if (base.refCount > 0
@@ -1120,12 +1117,12 @@ public class MortalList {
                     continue;
                 } else if (base.refCount > 0
                         && (!hasCleanupTargets
-                        || base.hasPerlStrongOwnerIdentity()
-                        || (!hasDirectWeakElementRefs
-                        && isReachableFromExternalRootCached(base)))) {
+                        || base.hasPerlStrongOwnerIdentity())) {
                     // This scalar is a non-owning copy of a still-live container.
                     // Cleaning it up must not walk into the shared container and
-                    // release the original owner's children.
+                    // release the original owner's children. A live Perl edge
+                    // is identified by its owner slot; root reachability cannot
+                    // reconstruct a missing edge after the fact.
                     continue;
                 }
                 // A registered lexical aggregate owns its element slots even
