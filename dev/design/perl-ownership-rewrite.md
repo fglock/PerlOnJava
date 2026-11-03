@@ -32,6 +32,18 @@ weaken retain through the tie handler and release on `untie`. Logs:
 `/private/tmp/issue-1649-tied-handler-before-weaken-jvm-1c080a387.log`, and
 `/private/tmp/issue-1649-tied-handler-before-weaken-interpreter-1c080a387.log`.
 
+`localized_array_existing_reference_owner.t` adds coverage for localizing an
+array slot that already contains a reference, replacing it inside the dynamic
+scope, and then restoring and deleting the original value. It checks one
+strong owner at each boundary and exactly-once weak cleanup and `DESTROY`.
+The test passes 12/12 on system Perl, JVM, and interpreter, so this audit did
+not find a runtime defect in that producer; the existing-value case was missing
+from the Perl-level regression set. Logs:
+`/private/tmp/issue-1649-localized-array-existing-reference-system-perl-fb5e40dd9.log`,
+`/private/tmp/issue-1649-localized-array-existing-reference-jvm-parent-fb5e40dd9.log`,
+and
+`/private/tmp/issue-1649-localized-array-existing-reference-interpreter-parent-fb5e40dd9.log`.
+
 `ab4569170` removed the raw closure-release decrement that could consume
 another scalar's count; production aggregate captures in `SubroutineParser`,
 `OpcodeHandlerExtended`, `RuntimeCode`, `RuntimeGraphCloner`, and `Internals`
