@@ -3,69 +3,53 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-03):** #1649 continues on local branch
-`wip/ownership-resume-20261103-192304`, with latest runtime commit
-`ca39728bb` after the cleared-aggregate implementation candidate
-`401c3c919`. Argument-frame
-release, hash scope-exit cleanup, and recursive aggregate cleanup now use owner
-identities instead of their removed reachability proofs. First weaken no longer
-pins package-nested aggregates with a fabricated count; it relies on current
-`UNTRACKED_REFERENCE` owners. Cleared-aggregate scope exit now finalizes from
-live owner identities, temporary roots, and pending-release state. An external
-root walk cannot preserve an aggregate with no owner slot; a measured diagnostic
-walk remains for the synthetic query-cost fixture and its result is ignored.
-`deferred_capture_live_argument.t` is already committed locally and on PR #1938.
+`wip/ownership-resume-20261103-192304`, now at `5434cc163` after rebasing onto
+current `master` `b43a65250`. The pre-rebase tip is preserved at
+`backup/issue1649-pre-master-b43a6525-20261103`. The merge replay retained the
+ownership changelog and the new upstream `Scalar::Util::isdual` entry. The
+rebased candidate has not yet had a full build or test gate.
 
-The `Storable::dclone` return path had one extra counted helper scalar: the
-runtime copied the result into a return slot but never released the helper's
-counted edge. It now passes a deferred `RETURN_VALUE` owner through weak-edge
-restoration and the normal call boundary. The new
-`storable_dclone_return_owner_release.t` passes on system Perl, JVM, and
-interpreter; it fails on parent `49231be4a` because the clone's `DESTROY` is
-delayed until the original is dropped. Evidence:
-`/private/tmp/issue1649-storable-dclone-return-owner-system-perl.log`,
-`/private/tmp/issue1649-storable-dclone-return-owner-parent-49231be4a.log`,
-`/private/tmp/issue1649-storable-dclone-return-owner-jvm-fixed.log`, and
-`/private/tmp/issue1649-storable-dclone-return-owner-interpreter-fixed.log`.
-The immutable `efa626049` no-sweeps `nice -n 19 make` gate completed in 7m27
-and failed only `bless_tied_hash_reference.t`,
-`threads_shared_reference_validation.t`, and
-`substr_core_edge_semantics.t`, the same baseline failures recorded on earlier
-candidates and parent `850652c77`. The new Perl regression passes in shard 3;
-its direct JVM and interpreter runs on the freshly built JAR each pass 3/3.
-Logs: `/private/tmp/issue1649-storable-dclone-return-owner-immutable-efa626049-make.log`,
-`/private/tmp/issue1649-storable-dclone-return-owner-jvm-efa626049.log`, and
-`/private/tmp/issue1649-storable-dclone-return-owner-interpreter-efa626049.log`.
+Argument-frame release, hash scope-exit cleanup, and recursive aggregate
+cleanup use owner identities instead of their removed reachability proofs.
+First weaken no longer pins package-nested aggregates with a fabricated count;
+it relies on current `UNTRACKED_REFERENCE` owners. Cleared-aggregate scope
+exit finalizes from live owner identities, temporary roots, and pending-release
+state. An external root walk cannot preserve an aggregate with no owner slot.
+`deferred_capture_live_argument.t` is already on PR #1938 and passes 3/3 on
+system Perl, JVM, and interpreter.
 
-`deferred_capture_live_argument.t` passes 3/3 on system Perl, JVM, and
-interpreter and is green in the full unit suite. The package-nested weak-owner
-regression passes 7/7 on system Perl, with matching JVM and interpreter probes.
-The new `ClearedAggregateReachabilityNotOwnerTest` confirms a raw graph path can
-still reach a referent after lexical cleanup, while that path no longer
-preserves its weak observer; it passes in the focused no-sweeps shard. Logs:
-`/private/tmp/issue1649-cleared-aggregate-owner-focused-401c3c919.log`,
-`/private/tmp/issue1649-deferred-capture-live-argument-jvm.log`,
-`/private/tmp/issue1649-deferred-capture-live-argument-interpreter.log`, and
-`/private/tmp/issue1649-package-nested-weak-owner-system-perl-after-pin-removal.log`.
+The `Storable::dclone` return path now passes a deferred `RETURN_VALUE` owner
+through weak-edge restoration and the normal call boundary. Its regression
+passes on system Perl and both backends; it fails on parent `49231be4a` because
+the clone's `DESTROY` is delayed until the original is dropped. The immutable
+`efa626049` no-sweeps `nice -n 19 make` gate completed in 7m27 with only the
+three known baseline failures: `bless_tied_hash_reference.t`,
+`threads_shared_reference_validation.t`, and `substr_core_edge_semantics.t`.
+Evidence is recorded in `/private/tmp/issue1649-storable-dclone-return-owner-*`.
 
-The full no-sweeps gate on immutable `401c3c919` completed in 7m24 and failed
-only `bless_tied_hash_reference.t`, `substr_core_edge_semantics.t`, and
-`threads_shared_reference_validation.t`. The same three failures were recorded
-on `06914b44e`, `f2bce0f28`, `a058ee8df`, and parent `850652c77`; this candidate
-adds no new failures. The new Java regression passes 1/1. Full log:
-`/private/tmp/issue1649-cleared-aggregate-owner-full-no-sweeps-401c3c919.log`.
-The call-site audit found that production deferred-release producers pass an
-owner-release token; the root-repair branches in `processDeferredBase` are
-reachable only through legacy unpaired `deferDecrement`, which has no
-production callers here. Current-slot count restoration still appears in
-deferred release, overwrite, weaken, tail-call, and destruction paths. Existing
-tests for most such restorations directly manufacture an undercount, so the
-next audit must trace normal producers before treating those tests as evidence
-of a normal invariant failure. The #1649 handoff comment was refreshed at
-21:10 UTC.
-Continue closure/CODE, package-root, cycle, shared-storage, and resource-owner
-producer audits, then run final acceptance and reconcile PR history. PR #1938
-is OPEN/draft at
-`95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05`; local history remains divergent.
+The hash `values`/`each` audit found no mismatch: standard Perl, JVM, and
+interpreter agree on copied values, weakening a returned value without
+weakening the hash slot, and destruction timing when the source hash is
+cleared inside a loop. These probes ran against the `efa626049` JAR; logs are
+under `/private/tmp/issue1649_hash_values-*`. Closure acquisition in compiler
+and thread-clone paths uses explicit capture slots, and no production caller
+of the legacy `retainClosureCapture()` helper was found. PadWalker still has a
+fallback `releaseClosureCapture()` when its capture-slot mapping is absent;
+trace whether that can arise in normal execution before retiring the bridge.
+
+Production deferred-release producers carry `PendingOwnerRelease`; root and
+snapshot recovery in `processDeferredBase` remains behind legacy unpaired
+`deferDecrement`, with no production caller found. Corrective sweep entry
+points have no production callers. Current-slot count restoration remains in
+deferred release, overwrite, weaken, tail-call, and destruction; synthetic
+undercount tests do not identify a normal producer mismatch. Next: finish the
+PadWalker/CODE clone and shared-storage audit, then package roots, cycles,
+resource owners, and async/unwind paths. Run final no-sweeps and integration
+acceptance only after the producer audit and related fixes are bundled.
+
+PR #1938 remains OPEN/draft at remote head
+`95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05`; local history still needs
+reconciliation before publication.
 
 Standard Perl is the oracle for every Perl-visible reference edge and its
 lifetime behavior. A reference-slot transition should retain a new strong
