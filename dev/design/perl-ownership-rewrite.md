@@ -25,15 +25,21 @@ A broader `scopeExitCleanupArray` attempt regressed async-await and Test::Builde
 context tests and was removed; evidence remains in
 `/private/tmp/issue1649-controller-frame-exit-cleanup-focused.log`.
 
-The full no-sweeps gate on `a058ee8df` failed 11 unit tests; the pre-alias
-parent `850652c77` failed the same names. Logs:
-`/private/tmp/issue1649-full-no-sweeps-a058ee8df.log` and
-`/private/tmp/issue1649-catalyst-parent850-test-unit.log`. Next, run the full
-gate with `JPERL_DISABLE_CORRECTIVE_SWEEPS=1` on this immutable candidate, then
-continue the deferred-release, cleared-aggregate, closure, package-root, cycle,
-shared-storage, and resource-owner producer audit. Final HTML::Tree/lifecycle
-acceptance and PR reconciliation remain open. PR #1938 is still OPEN/draft at
-head `95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05`; this local fix is unpublished.
+The full no-sweeps gate on immutable candidate `8e54632dd` completed in 7m24
+and failed three unit tests: `bless_tied_hash_reference.t`,
+`substr_core_edge_semantics.t`, and `threads_shared_reference_validation.t`.
+All three also failed on earlier no-sweeps candidate `a058ee8df` and parent
+`850652c77`; the earlier run's other eight failures pass on this candidate,
+including `mojolicious_controller_destroy_after_finish.t`. Current log:
+`/private/tmp/issue1649-argument-container-release-full-no-sweeps-8e54632dd.log`;
+earlier logs: `/private/tmp/issue1649-full-no-sweeps-a058ee8df.log` and
+`/private/tmp/issue1649-catalyst-parent850-test-unit.log`. Next, trace the
+remaining `MortalList.processDeferredBase` root/snapshot decisions back to
+their release producers, then batch deferred-release and cleared-aggregate
+owner fixes. Closure/CODE, package-root, cycle, shared-storage, and resource
+owner producer audits, final HTML::Tree/lifecycle acceptance, and PR
+reconciliation remain open. PR #1938 is still OPEN/draft at head
+`95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05`; this local fix is unpublished.
 
 Standard Perl is the oracle for every Perl-visible reference edge and its
 lifetime behavior. A reference-slot transition should retain a new strong
