@@ -1668,11 +1668,13 @@ public class MortalList {
                 "MortalList.processDeferredBase");
         boolean hasWeakRefs = WeakRefRegistry.hasWeakRefsTo(base);
         // Production edge releases carry an exact slot token. A lifecycle-only
-        // boundary is a completion token, not evidence that a Perl edge was
-        // released, so it remains on the unproven path until its surrounding
-        // owner identities establish that no compatibility recovery is needed.
-        boolean unidentifiedRelease = ownerRelease == null
-                || !ownerRelease.identifiesReleasedOwnerEdge();
+        // boundary carries completion provenance but no released edge; its
+        // cleanup decision must follow current owner identities, not a root walk.
+        // Reachability repair remains available only to the legacy unpaired
+        // decrement entry point. A lifecycle-only token is not a released Perl
+        // edge and must not trigger reconstruction from a root walk; its
+        // cleanup decision follows the current owner identities below.
+        boolean unidentifiedRelease = ownerRelease == null;
         boolean finalRelease = false;
         if (base.refCount > 0) {
             base.traceRefCount(-1, "MortalList.flush (deferred decrement)");
