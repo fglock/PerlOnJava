@@ -439,8 +439,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
 
     // ─────────────────────────────────────────────────────────────────────
     // D-W6.13: counted scalar owners are derived from the slot ledger below.
-    // Keep the legacy activation method as a no-op for Java callers while
-    // existing tests and integrations migrate away from it.
+    // Keep the legacy activation method as a no-op for callers that still use it.
     // ─────────────────────────────────────────────────────────────────────
     /** Identity ledger for migrated slots; selective refCount remains the
      * lifecycle bridge while owner families move to this API. */

@@ -1443,8 +1443,8 @@ public class ReachabilityWalker {
     /**
      * D-W6.14: check if a specific RuntimeScalar instance is reachable
      * from package globals or live lexical roots. Used at refCount→0
-     * transitions to verify that surviving "owner" scalars in the
-     * activeOwners set are actually live (not phantoms).
+     * transitions to verify that counted owner slots whose current storage
+     * is not otherwise proven still belong to live Perl roots.
      *
      * Walks containers and verifies whether the specific scalar
      * identity can be reached. Critical: walks INTO scalars (so
@@ -3259,7 +3259,7 @@ public class ReachabilityWalker {
                 + " refCount=" + referent.refCount
                 + " live=" + live
                 + " cycleProtected=" + cycleProtected
-                + " activeOwners=" + referent.activeOwnerCount()
+                + " countedScalarOwners=" + referent.activeOwnerCount()
                 + " ownerSlots=" + referent.ownerSlotSnapshot().size()
                 + " ownerSlotDetails=" + ownerSlots
                 + " semanticCapture=" + referent.hasSemanticCaptureOwner()
