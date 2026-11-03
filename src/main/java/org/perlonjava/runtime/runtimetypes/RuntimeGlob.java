@@ -1106,13 +1106,12 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             return value.scalar();
         }
 
-        // A whole-glob assignment inside `local *name` fills the temporary
-        // GV installed for that name. It must not change the stable identity
-        // followed by aliases to the outer GV (for example, a saved alias to
-        // STDERR must not start following a localized tied replacement).
-        if (!isLocalizedGlob(this.globName)) {
-            GlobalVariable.setGlobAlias(this.globName, value.globName);
-        }
+        // Keep the slot alias relationship during `local *name = *other` too:
+        // later assignments through the localized glob (for example,
+        // `*SYM = \$value`) must reach the source GV's slots. dynamicSaveState
+        // preserves the outer GV identity and dynamicRestoreState restores the
+        // prior name relationship when this localized scope ends.
+        GlobalVariable.setGlobAlias(this.globName, value.globName);
 
         // Retrieve the RuntimeScalar value associated with the provided RuntimeGlob.
         RuntimeScalar result = value.scalar();
