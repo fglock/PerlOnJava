@@ -6,10 +6,10 @@
 `wip/ownership-doc-checkpoint-20261103-012032`. Runtime fix `0a8815582`,
 removal of the unused `isReachableThroughTiedHash` wrapper, and migration of
 counted scalar-owner queries from the duplicate `activeOwners` set to
-`PerlOwnerSlot` identities are included in tested source `e93b73a16`. The
+`PerlOwnerSlot` identities are included in tested source `0ff00785a`. The
 no-sweeps `nice -n 19 timeout 3600 env JPERL_DISABLE_CORRECTIVE_SWEEPS=1 make`
 gate passes: 3,941 tests, 7 skipped, zero failures/errors, in 7m27. Full log:
-`/private/tmp/issue-1649-owner-ledger-no-sweeps-e93b73a16-escalated.log`.
+`/private/tmp/issue-1649-owner-ledger-no-sweeps-0ff00785a.log`.
 The former activation hook is a compatibility no-op; production weaken and
 destructor paths no longer call it. The added
 `CountedOwnerSlotLedgerTest` verifies counted owners installed before first
@@ -2386,10 +2386,12 @@ first weaken. `WeakRefRegistry` and `DestroyDispatch` no longer activate a
 separate registry; `activateOwnerTracking()` remains a Java compatibility
 no-op because existing tests call it.
 
-`CountedOwnerSlotLedgerTest` covers two scalar owners installed before any
-weaken call. The complete no-sweeps `make` gate passes on immutable `e93b73a16`:
-3,941 tests, 7 skipped, zero failures/errors in 7m27. Log:
-`/private/tmp/issue-1649-owner-ledger-no-sweeps-e93b73a16-escalated.log`.
+`0ff00785a` also updates reachability diagnostics to report counted slots
+instead of the removed set. `CountedOwnerSlotLedgerTest` covers two scalar
+owners installed before any weaken call. The complete no-sweeps `make` gate
+passes on immutable `0ff00785a`: 3,941 tests, 7 skipped, zero failures/errors
+in 7m27. Log:
+`/private/tmp/issue-1649-owner-ledger-no-sweeps-0ff00785a.log`.
 The ordinary `restoreReachableOwnerCount` root fallback remains; its producers
 and final use cases still require audit before removal.
 
