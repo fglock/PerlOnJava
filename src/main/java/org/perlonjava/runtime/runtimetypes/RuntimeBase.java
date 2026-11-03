@@ -1014,10 +1014,12 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
 
     /** Move an active owner trace into the deferred-decrement queue. */
     public PendingOwnerRelease queueOwnerRelease(RuntimeScalar owner, String queueSite) {
+        PerlOwnerSlot currentSlot = owner.countedOwnerSlot();
         PerlOwnerSlot.PendingRelease slotRelease = owner.deferCountedOwnerRelease(this);
-        if (slotRelease == null) {
+        if (slotRelease == null
+                && (currentSlot != null || (owner.refCountOwned && hadCountedReference))) {
             throw new IllegalStateException(
-                    "counted owner release has no active PerlOwnerSlot: "
+                    "counted owner release lost its PerlOwnerSlot before queueing: "
                             + owner.getClass().getSimpleName() + " -> "
                             + getClass().getSimpleName() + " at " + queueSite);
         }

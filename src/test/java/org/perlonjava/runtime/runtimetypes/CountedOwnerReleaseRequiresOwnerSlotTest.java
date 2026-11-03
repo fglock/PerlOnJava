@@ -13,11 +13,16 @@ class CountedOwnerReleaseRequiresOwnerSlotTest {
         try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
             RuntimeArray referent = new RuntimeArray();
             referent.refCount = 1;
+            referent.hadCountedReference = true;
+
+            RuntimeArray replacement = new RuntimeArray();
+            replacement.refCount = 1;
 
             RuntimeScalar owner = new RuntimeScalar();
             owner.type = RuntimeScalarType.ARRAYREFERENCE;
-            owner.value = referent;
+            owner.value = replacement;
             owner.refCountOwned = true;
+            owner.recordCountedOwner(replacement);
 
             IllegalStateException failure = assertThrows(IllegalStateException.class,
                     () -> referent.queueOwnerRelease(owner, "invariant regression"));
@@ -25,7 +30,7 @@ class CountedOwnerReleaseRequiresOwnerSlotTest {
             assertEquals(1, referent.refCount,
                     "a rejected queue leaves the counted referent unchanged");
             org.junit.jupiter.api.Assertions.assertTrue(
-                    failure.getMessage().contains("no active PerlOwnerSlot"));
+                    failure.getMessage().contains("lost its PerlOwnerSlot"));
         }
     }
 }
