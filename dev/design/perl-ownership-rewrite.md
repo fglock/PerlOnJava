@@ -3,36 +3,44 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-03):** #1649 continues on branch
-`wip/argument-alias-container-20261103-135737`; the latest runtime source is
-`0c8a46d2c`, after the preserved WIP snapshot `9d26d3a38`. The preceding batch
-centralized array and hash slot transitions: acquire replacement edges,
-publish storage and owner bookkeeping, then release displaced cells from the
-old storage snapshot. Same-cell transfers retain their identity.
+`wip/argument-alias-container-20261103-135737`; latest tested runtime source is
+`8649cd1b7`. The preceding batch centralized array and hash slot transitions:
+acquire replacement edges, publish storage and owner bookkeeping, then release
+displaced cells from the old storage snapshot. Same-cell transfers retain
+their identity.
 
-This batch implements Perl's hold on the containing aggregate when an array or
-hash element is passed as an aliased argument. `CallArguments` acquires an
-`ARGUMENT_CONTAINER` owner and the active callee frame releases it only when
-the frame exits, including after `shift @_`. Hash and array proxies expose the
-container for the alias. Existing negative selective counts are preserved by
-using an uncounted owner identity rather than changing the count. The permanent
-regression covers a missing hash key and array element, root removal inside the
-callee, and `shift @_`. It passes 4/4 on system Perl, JVM, and interpreter with
-corrective sweeps disabled. Both backends fail the visible lifetime checks on
-parent `3727b9980`; logs are under `/private/tmp/issue1649-argument-alias-`.
+This batch matches Perl's aggregate lifetime for element aliases in `@_`.
+`ARGUMENT_CONTAINER` owners hold plain hash/array parents until the callee frame
+exits, even after `shift @_`. Tied element proxies preserve the tie magic view
+captured before `untie`; an `ARGUMENT_TIE_HANDLER` counted edge keeps the handler
+alive through `FETCH` and releases it at frame exit. `untie` warning accounting
+excludes that internal magic edge. New regressions cover plain and tied hash
+and array elements, root removal or `untie` inside the callee, shifted aliases,
+exact `DESTROY` order, and absence of false warnings.
 
-The focused no-sweeps `make test-unit` gate passed on the implementation tree
-before its source commit, but its injected build metadata predates
-`0c8a46d2c`. A final immutable-source gate is pending after this documentation
-update. Full no-sweeps `make`, HTML::Tree and lifecycle acceptance matrices, and
-PR reconciliation remain outstanding. Earlier evidence for the array/hash
-transition batch is recorded below.
+The plain alias regression passes 4/4 on system Perl, JVM, and interpreter on
+`8649cd1b7`; the tied alias regression passes 3/3 on all three. Corrective
+sweeps are disabled on both PerlOnJava backends. The immutable focused
+`make test-unit` gate passes in 1m04, with the regression reported as 1 test,
+zero failures, zero errors, and no captured warnings. Logs:
+`/private/tmp/issue1649-tied-argument-alias-focused-8649cd1b7.log`,
+`/private/tmp/issue1649-argument-alias-final-8649-system-perl.log`,
+`/private/tmp/issue1649-argument-alias-final-8649-jvm.log`,
+`/private/tmp/issue1649-argument-alias-final-8649-interpreter.log`, and files
+with the `/private/tmp/issue1649-tied-argument-alias-final-` prefix. Parent
+`850652c77` fails the tied lifetime case on both backends; the intermediate
+candidate `0b63b459f` retained handlers but emitted false `untie` warnings.
+Evidence is in `/private/tmp/issue1649-tied-argument-alias-parent-850652c77-`
+and `/private/tmp/issue1649-tied-argument-alias-focused-0b63b459f.log`.
 
-Next: audit remaining array/hash removals and alias transfers, then batch
-tied-handler/pre-weaken values, closure and CODE owners, package roots, cycles,
-suspended frames, and resource holders. Trace each count-owner disagreement to
-its producer, transfer, or cleanup path before removing recovery behavior.
-Update the existing #1649 handoff after the immutable gate. Keep PR #1938 open
-as a draft until local work is reconciled with the live remote history.
+The full no-sweeps `make`, HTML::Tree and lifecycle acceptance matrices, and PR
+reconciliation remain outstanding. Next, trace the remaining array/hash
+deferred-release and cleared-aggregate recovery paths to their normal producer
+and cleanup operations, then batch fixes that share those transitions. Closure
+and CODE, package roots, cycles, suspended frames, and resource holders still
+need producer-level audit before recovery behavior can be removed. Refresh the
+existing #1649 handoff after the final immutable gate; keep PR #1938 open as a
+draft until local work is reconciled with live remote history.
 
 Standard Perl is the oracle for every Perl-visible reference edge and its
 lifetime behavior. A reference-slot transition should retain a new strong
