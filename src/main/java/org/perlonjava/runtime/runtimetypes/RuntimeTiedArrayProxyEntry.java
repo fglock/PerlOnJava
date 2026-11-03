@@ -24,6 +24,11 @@ public class RuntimeTiedArrayProxyEntry extends TiedVariableBase {
         this(parent, key, null);
     }
 
+    @Override
+    RuntimeBase argumentAliasContainer() {
+        return parent;
+    }
+
     /**
      * Constructs a proxy that represents an out-of-range (still-negative after
      * normalization) subscript. Reads return undef without touching the tie

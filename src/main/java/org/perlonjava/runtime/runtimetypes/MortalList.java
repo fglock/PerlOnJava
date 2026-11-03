@@ -307,6 +307,37 @@ public class MortalList {
         drainPendingSince(checkpoint);
     }
 
+    /** Release one exact scalar-backed owner at the operation that drops its Perl edge. */
+    static void releaseCountedOwnerImmediately(RuntimeScalar owner, String releaseSite) {
+        if (owner == null || !owner.refCountOwned
+                || !(owner.value instanceof RuntimeBase base)) return;
+        PerlOwnerSlot ownerSlot = owner.countedOwnerSlot();
+        if (ownerSlot == null || !ownerSlot.isActive() || ownerSlot.referent() != base
+                || !PerlOwnerSlot.isCountedKind(ownerSlot.kind())) {
+            throw new IllegalStateException(
+                    "counted argument owner lost its active slot at " + releaseSite);
+        }
+        owner.refCountOwned = false;
+        PerlOwnerSlot.PendingRelease release = ownerSlot.releaseCountedIdentity();
+        if (release == null) {
+            throw new IllegalStateException(
+                    "counted argument owner lost its release token at " + releaseSite);
+        }
+        if (base.refCount <= 0 || base.currentlyDestroying) {
+            release.complete();
+            return;
+        }
+        if (base.refCount > 1) {
+            base.traceRefCount(-1, releaseSite);
+            base.refCount--;
+            release.complete();
+            return;
+        }
+        int checkpoint = pendingSize();
+        deferOwnerSlotDecrement(base, null, release);
+        drainPendingSince(checkpoint);
+    }
+
     private static void queueDeferredBase(LifecycleRuntimeState state, RuntimeBase base,
                                           RuntimeBase.PendingOwnerRelease ownerRelease) {
         queueDeferredBase(state, base, ownerRelease, null);
@@ -1866,8 +1897,9 @@ public class MortalList {
         if (kind == PerlOwnerSlot.Kind.IO_VIA_LAYER) return !base.hasOwnerSlots();
         if (!canTrustFinalCountedRelease(base)) return false;
         return switch (kind) {
-            case SCALAR_CELL, CODE_SLOT, ARRAY_ELEMENT, HASH_ELEMENT, ARGUMENT_VALUE, RETURN_VALUE,
-                    TIE_HANDLER, SCALAR_REFERENCE_CONTENTS -> true;
+            case SCALAR_CELL, CODE_SLOT, ARRAY_ELEMENT, HASH_ELEMENT, ARGUMENT_VALUE,
+                    ARGUMENT_CONTAINER, RETURN_VALUE, TIE_HANDLER,
+                    SCALAR_REFERENCE_CONTENTS -> true;
             default -> false;
         };
     }

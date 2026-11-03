@@ -36,6 +36,11 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
         return parent;
     }
 
+    @Override
+    RuntimeBase argumentAliasContainer() {
+        return parent;
+    }
+
     /**
      * Constructs a RuntimeHashProxyEntry with key type tracking.
      *

@@ -110,6 +110,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         private final java.util.ArrayList<RuntimeScalar> stagedScalarOwners = new java.util.ArrayList<>();
         private final java.util.ArrayList<RuntimeScalar.ArgumentAliasOwner> argumentAliasOwners =
                 new java.util.ArrayList<>();
+        private final java.util.ArrayList<ArgumentContainerOwner> argumentContainerOwners =
+                new java.util.ArrayList<>();
         private int size;
         private final ExecutionRuntimeState ownerState;
         private final int argumentDepth;
@@ -127,6 +129,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 throw new IllegalStateException("too many call arguments");
             }
             values[size++] = value;
+            retainArgumentContainerOwners(value, argumentContainerOwners);
             // The staging frame retains this scalar cell through argument
             // evaluation and the call. Record that cell alias even when it has
             // no lexical or container marker yet; the alias does not add a
@@ -213,7 +216,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 owner.release();
             }
             argumentAliasOwners.clear();
+            for (ArgumentContainerOwner owner : argumentContainerOwners) {
+                owner.release();
+            }
+            argumentContainerOwners.clear();
             MortalList.drainDeferredArgumentOwnerReleases();
+        }
+
+        private List<ArgumentContainerOwner> transferArgumentContainerOwners(
+                RuntimeArray arguments) {
+            if (materializedArguments != arguments) return null;
+            ArrayList<ArgumentContainerOwner> transferred = new ArrayList<>(argumentContainerOwners);
+            argumentContainerOwners.clear();
+            return transferred;
         }
 
         /** Release a partially evaluated call that will never enter its callee. */
@@ -225,6 +240,72 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 MortalList.flushAboveMark();
             }
             return failure;
+        }
+    }
+
+    /** One counted edge from an active argument alias to its containing aggregate. */
+    static final class ArgumentContainerOwner {
+        private final RuntimeBase container;
+        private final RuntimeScalar ownerValue;
+        private boolean active = true;
+
+        private ArgumentContainerOwner(RuntimeBase container, RuntimeScalar ownerValue) {
+            this.container = container;
+            this.ownerValue = ownerValue;
+        }
+
+        void release() {
+            if (!active) return;
+            if (ownerValue.value != container) {
+                throw new IllegalStateException(
+                        "argument-container owner changed its referent before release");
+            }
+            active = false;
+            RuntimeScalar.releaseArgumentContainerValue(ownerValue);
+        }
+    }
+
+    private static RuntimeBase argumentAliasContainer(RuntimeBase value) {
+        if (value instanceof RuntimeBaseProxy proxy) {
+            RuntimeBase container = proxy.argumentAliasContainer();
+            return container instanceof RuntimeArray || container instanceof RuntimeHash
+                    ? container : null;
+        }
+        if (value instanceof RuntimeScalar scalar) {
+            RuntimeBase container = scalar.getContainerOwner();
+            return container instanceof RuntimeArray || container instanceof RuntimeHash
+                    ? container : null;
+        }
+        return null;
+    }
+
+    private static ArgumentContainerOwner retainArgumentContainerOwner(RuntimeBase value) {
+        RuntimeBase container = argumentAliasContainer(value);
+        if (container == null) return null;
+        RuntimeScalar ownerValue = RuntimeScalar.retainArgumentContainerValue(container);
+        return ownerValue == null ? null : new ArgumentContainerOwner(container, ownerValue);
+    }
+
+    private static void retainArgumentContainerOwners(
+            RuntimeBase value, List<ArgumentContainerOwner> owners) {
+        if (value instanceof RuntimeScalar) {
+            ArgumentContainerOwner owner = retainArgumentContainerOwner(value);
+            if (owner != null) owners.add(owner);
+        } else if (value instanceof RuntimeList list) {
+            for (RuntimeBase element : list.elements) {
+                if (element != null) retainArgumentContainerOwners(element, owners);
+            }
+        } else if (value instanceof RuntimeArray array) {
+            for (RuntimeScalar element : array.elements) {
+                if (element != null) {
+                    retainArgumentContainerOwners(element, owners);
+                } else {
+                    RuntimeScalar ownerValue = RuntimeScalar.retainArgumentContainerValue(array);
+                    if (ownerValue != null) {
+                        owners.add(new ArgumentContainerOwner(array, ownerValue));
+                    }
+                }
+            }
         }
     }
 
@@ -2100,6 +2181,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             ExecutionRuntimeState executionState) {
         executionState.argsStack.push(args);
         executionState.argumentAliasOwnerFrames.push(retainArgumentAliasOwners(args));
+        List<ArgumentContainerOwner> stagedContainerOwners =
+                takeStagedArgumentContainerOwners(args, executionState);
+        executionState.argumentContainerOwnerFrames.push(stagedContainerOwners != null
+                ? stagedContainerOwners : retainArgumentContainerOwners(args));
         // Snapshot the args list so @DB::args stays pristine even if the sub
         // later shifts/pops from @_.
         if (args == null || args.elements.isEmpty()) {
@@ -2122,6 +2207,27 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return owners;
     }
 
+    private static List<ArgumentContainerOwner> takeStagedArgumentContainerOwners(
+            RuntimeArray args, ExecutionRuntimeState executionState) {
+        for (int i = executionState.callArgumentFrames.size() - 1; i >= 0; i--) {
+            CallArguments frame = executionState.callArgumentFrames.get(i);
+            List<ArgumentContainerOwner> owners = frame.transferArgumentContainerOwners(args);
+            if (owners != null) return owners;
+        }
+        return null;
+    }
+
+    private static List<ArgumentContainerOwner> retainArgumentContainerOwners(RuntimeArray args) {
+        ArrayList<ArgumentContainerOwner> owners = new ArrayList<>();
+        if (args == null) return owners;
+        for (RuntimeScalar scalar : args.elements) {
+            if (scalar == null) continue;
+            ArgumentContainerOwner owner = retainArgumentContainerOwner(scalar);
+            if (owner != null) owners.add(owner);
+        }
+        return owners;
+    }
+
     /** Retire the active {@code @_} alias identity for one removed argument slot. */
     static void argumentArraySlotRemoved(RuntimeArray args, RuntimeScalar scalar) {
         if (args == null || scalar == null) return;
@@ -2135,15 +2241,20 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             RuntimeArray activeArgs = argumentFrames.next();
             List<RuntimeScalar.ArgumentAliasOwner> owners = ownerFrames.next();
             if (activeArgs != args) continue;
+            RuntimeScalar.ArgumentAliasOwner aliasOwnerToRelease = null;
             for (Iterator<RuntimeScalar.ArgumentAliasOwner> iterator = owners.iterator();
                     iterator.hasNext();) {
                 RuntimeScalar.ArgumentAliasOwner owner = iterator.next();
                 if (owner.matches(scalar)) {
                     iterator.remove();
-                    owner.release();
-                    return;
+                    aliasOwnerToRelease = owner;
+                    break;
                 }
             }
+            if (aliasOwnerToRelease != null) aliasOwnerToRelease.release();
+            // Perl keeps the containing aggregate through the entire active
+            // argument frame, even after the alias is shifted out of @_ .
+            return;
         }
     }
 
@@ -2180,6 +2291,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             if (!executionState.argumentAliasOwnerFrames.isEmpty()) {
                 for (RuntimeScalar.ArgumentAliasOwner owner :
                         executionState.argumentAliasOwnerFrames.pop()) {
+                    owner.release();
+                }
+            }
+            if (!executionState.argumentContainerOwnerFrames.isEmpty()) {
+                for (ArgumentContainerOwner owner :
+                        executionState.argumentContainerOwnerFrames.pop()) {
                     owner.release();
                 }
             }
