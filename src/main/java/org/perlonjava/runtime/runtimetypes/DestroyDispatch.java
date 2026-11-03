@@ -737,18 +737,17 @@ public class DestroyDispatch {
 
     /**
      * Check one newly installed slot as an owner after DESTROY. Call and
-     * return transfer slots, argument aliases, active frames, temporary roots,
-     * and the weak-tracking compatibility pin are runtime scaffolding at this
-     * boundary. Durable counted slots are checked against their current scalar
-     * or container storage; identity-only slots are already tied to their
+     * return transfer slots, argument aliases, active frames, and temporary
+     * roots are runtime scaffolding at this boundary. Durable counted slots
+     * are checked against their current scalar or container storage;
+     * identity-only slots are already tied to their
      * owning storage lifecycle.
      */
     static boolean isCurrentPerlOwnerSlot(RuntimeBase referent, PerlOwnerSlot slot) {
         if (slot == null || !slot.isActive() || slot.referent() != referent) return false;
         PerlOwnerSlot.Kind kind = slot.kind();
         switch (kind) {
-            case TEMPORARY_ROOT, WEAKLY_TRACKED_COMPATIBILITY_PIN,
-                    ARGUMENT_ALIAS, ARGUMENT_VALUE, RETURN_VALUE, ACTIVE_CODE -> {
+            case TEMPORARY_ROOT, ARGUMENT_ALIAS, ARGUMENT_VALUE, RETURN_VALUE, ACTIVE_CODE -> {
                 return false;
             }
             case ARGUMENT_CONTAINER -> {

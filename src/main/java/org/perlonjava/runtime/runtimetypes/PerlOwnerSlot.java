@@ -66,8 +66,6 @@ public final class PerlOwnerSlot {
         UNTRACKED_REFERENCE,
         /** Scalar slot retaining an anonymous IO glob's live resource. */
         IO_RESOURCE_HOLDER,
-        /** Temporary legacy count pin for a package-rooted weak aggregate. */
-        WEAKLY_TRACKED_COMPATIBILITY_PIN,
         /** Runtime-owned temporary value retained across a cleanup drain. */
         TEMPORARY_ROOT,
         /** Persistent scalar or aggregate state binding retained by a CODE object. */
@@ -652,21 +650,6 @@ public final class PerlOwnerSlot {
             target.refCount = Integer.MIN_VALUE;
             DestroyDispatch.callDestroyFromCountedOwner(target);
         }
-    }
-
-    /** Identify one temporary compatibility count installed for weak tracking. */
-    synchronized void acquireWeaklyTrackedCompatibilityPin(RuntimeBase target) {
-        if (kind != Kind.WEAKLY_TRACKED_COMPATIBILITY_PIN) {
-            throw new IllegalStateException("compatibility pin requires its dedicated owner-slot kind");
-        }
-        Objects.requireNonNull(target, "target");
-        if (target.refCount == Integer.MIN_VALUE) {
-            throw new IllegalStateException("cannot pin a destroyed referent");
-        }
-        if (referent != null || nativeOwner || legacyCaptureCount != 0) {
-            throw new IllegalStateException("compatibility pin is already active");
-        }
-        transferWithoutRuntimeRoot(target, false);
     }
 
     /** Record one direct value retained by a runtime temporary root. */
