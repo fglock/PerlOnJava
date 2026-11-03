@@ -19,6 +19,7 @@ import java.math.BigInteger;
 import java.lang.ref.WeakReference;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeArray.*;
@@ -1404,9 +1405,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     private void recordContainerCountedOwner() {
+        recordContainerCountedOwner(null);
+    }
+
+    private void recordContainerCountedOwner(PerlOwnerSlot.Kind intendedOwnerKind) {
         if (!refCountOwned || !(value instanceof RuntimeBase referent)) return;
         recordCountedOwner(referent);
-        countedOwnerSlot.reclassifyCountedIdentity(countedOwnerKind());
+        countedOwnerSlot.reclassifyCountedIdentity(
+                intendedOwnerKind == null ? countedOwnerKind() : intendedOwnerKind);
     }
 
     static RuntimeScalar copyToMortalReturnSlot(RuntimeScalar source) {
@@ -3027,7 +3033,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      * constructor, and their refCount was already incremented at creation time.
      */
     public static void incrementRefCountForContainerStore(RuntimeScalar scalar) {
+        incrementRefCountForContainerStore(scalar, null);
+    }
+
+    /** Acquire a counted edge for a destination slot before publishing that slot. */
+    static void incrementRefCountForContainerStore(
+            RuntimeScalar scalar, PerlOwnerSlot.Kind intendedOwnerKind) {
         if (scalar == null) return;
+        if (intendedOwnerKind != null && !PerlOwnerSlot.isCountedKind(intendedOwnerKind)) {
+            throw new IllegalArgumentException("container stores require a counted owner kind");
+        }
         if (scalar.type == REFERENCE
                 && scalar.value instanceof RuntimeScalar
                 && !scalar.hasScalarReferenceContentsOwner()) {
@@ -3035,7 +3050,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
         if (PerlRuntime.currentOrNull() != null && WeakRefRegistry.isweak(scalar)) return;
         if (scalar.refCountOwned) {
-            scalar.recordContainerCountedOwner();
+            scalar.recordContainerCountedOwner(intendedOwnerKind);
             if (scalar.untrackedReferenceOwnerSlot != null) {
                 scalar.releaseUntrackedReferenceOwner(
                         scalar.untrackedReferenceOwnerSlot.referent());
@@ -3074,7 +3089,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         base.recordOwner(scalar, "incrementRefCountForContainerStore");
         base.recordActiveOwner(scalar);
         scalar.refCountOwned = true;
-        scalar.recordContainerCountedOwner();
+        scalar.recordContainerCountedOwner(intendedOwnerKind);
         if (scalar.untrackedReferenceOwnerSlot != null) {
             scalar.releaseUntrackedReferenceOwner(
                     scalar.untrackedReferenceOwnerSlot.referent());
@@ -3083,6 +3098,39 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // container element so ReachabilityWalker can see it via
         // ScalarRefRegistry.
         if (PerlRuntime.currentOrNull() != null) ScalarRefRegistry.registerRef(scalar);
+    }
+
+    /**
+     * Change container slots in Perl assignment order: acquire replacement
+     * edges, publish the new slots, then release displaced edges. A scalar
+     * cell that remains in the destination keeps its existing owner identity.
+     * The publisher must perform only storage and owner bookkeeping; Perl
+     * callbacks belong in the release operation after publication.
+     */
+    static void transitionContainerSlots(
+            Collection<RuntimeScalar> displaced,
+            Collection<RuntimeScalar> replacements,
+            PerlOwnerSlot.Kind ownerKind,
+            Runnable publish,
+            Consumer<Collection<RuntimeScalar>> releaseDisplaced) {
+        Set<RuntimeScalar> retained = Collections.newSetFromMap(new IdentityHashMap<>());
+        if (replacements != null) {
+            for (RuntimeScalar replacement : replacements) {
+                incrementRefCountForContainerStore(replacement, ownerKind);
+                if (replacement != null) retained.add(replacement);
+            }
+        }
+        publish.run();
+        if (displaced == null || displaced.isEmpty() || releaseDisplaced == null) return;
+
+        Set<RuntimeScalar> alreadyReleased = Collections.newSetFromMap(new IdentityHashMap<>());
+        List<RuntimeScalar> retired = new ArrayList<>();
+        for (RuntimeScalar scalar : displaced) {
+            if (scalar != null && !retained.contains(scalar) && alreadyReleased.add(scalar)) {
+                retired.add(scalar);
+            }
+        }
+        if (!retired.isEmpty()) releaseDisplaced.accept(retired);
     }
 
     private record IoOwnerRelease(RuntimeGlob glob, int remainingHolders) {}

@@ -1107,6 +1107,12 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         }
     }
 
+    private List<RuntimeScalar> ownedElementReleaseSnapshot() {
+        if (!elementsAliased) return new ArrayList<>(elements);
+        if (ownedAliasElements == null || ownedAliasElements.isEmpty()) return List.of();
+        return new ArrayList<>(ownedAliasElements);
+    }
+
     public void forgetOwnedAliasElement(RuntimeScalar scalar) {
         if (ownedAliasElements == null || scalar == null) return;
         ownedAliasElements.remove(scalar);
@@ -1271,29 +1277,42 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 int sizeBefore = runtimeArray.elements.size();
                 boolean wasAliased = runtimeArray.elementsAliased;
                 runtimeArray.notePackageRootMutation();
-                value.addToArray(runtimeArray);
-                runtimeArray.markPackageRootedValues(sizeBefore);
-                // Increment refCount for tracked references stored by push.
-                // addToArray creates copies via copy constructor (no refCount increment),
-                // so we must account for the container store here, matching the behavior
-                // of array assignment (setFromList) which also calls this.
-                for (int i = sizeBefore; i < runtimeArray.elements.size(); i++) {
-                    RuntimeScalar elem = runtimeArray.elements.get(i);
+                RuntimeArray staged = new RuntimeArray();
+                value.addToArray(staged);
+                for (RuntimeScalar elem : staged.elements) {
+                    if (runtimeArray.threadShared) {
+                        SharedPerlStorage.validateStoredValue(elem);
+                        SharedPerlStorage.publishBlessing(elem);
+                    }
                     if (!wasAliased && runtimeArray.hasDurableElementLifetime()) {
                         RuntimeScalar.retainUnstashedIoForDurableSlot(elem);
                     }
-                    RuntimeScalar.incrementRefCountForContainerStore(elem);
-                    if (wasAliased) {
-                        runtimeArray.markOwnedAliasElement(elem);
-                    }
                 }
-                if (wasAliased) {
-                    runtimeArray.elementsAliased = true;
-                } else {
-                    runtimeArray.elementsOwned = true;
-                    runtimeArray.elementsAliased = false;
-                    runtimeArray.ownedAliasElements = null;
-                }
+                PerlOwnerSlot.Kind ownerKind = wasAliased
+                        ? PerlOwnerSlot.Kind.SCALAR_CELL
+                        : PerlOwnerSlot.Kind.ARRAY_ELEMENT;
+                RuntimeScalar.transitionContainerSlots(
+                        List.of(), staged.elements, ownerKind,
+                        () -> {
+                            runtimeArray.elements.addAll(staged.elements);
+                            runtimeArray.markPackageRootedValues(sizeBefore);
+                            for (int index = sizeBefore;
+                                    index < runtimeArray.elements.size(); index++) {
+                                if (wasAliased) {
+                                    runtimeArray.markOwnedAliasElement(
+                                            runtimeArray.elements.get(index));
+                                }
+                            }
+                            staged.elements.clear();
+                            if (wasAliased) {
+                                runtimeArray.elementsAliased = true;
+                            } else {
+                                runtimeArray.elementsOwned = true;
+                                runtimeArray.elementsAliased = false;
+                                runtimeArray.ownedAliasElements = null;
+                            }
+                        },
+                        null);
                 yield getScalarInt(runtimeArray.elements.size());
             }
             case AUTOVIVIFY_ARRAY -> {
@@ -1437,8 +1456,13 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         // {@link RuntimeScalar#addToArray} for the full analysis and
         // minimal repro.
         RuntimeScalar copy = new RuntimeScalar(value);
-        elements.add(copy);
-        RuntimeScalar.incrementRefCountForContainerStore(copy);
+        if (threadShared) {
+            SharedPerlStorage.validateStoredValue(copy);
+            SharedPerlStorage.publishBlessing(copy);
+        }
+        RuntimeScalar.transitionContainerSlots(
+                List.of(), Collections.singletonList(copy), PerlOwnerSlot.Kind.ARRAY_ELEMENT,
+                () -> elements.add(copy), null);
     }
 
     /**
@@ -1448,14 +1472,19 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      * array slot.
      */
     public void addClonedElement(RuntimeScalar value) {
-        elements.add(value);
         if (value != null) {
-            value.markContainerOwner(this);
+            if (threadShared) {
+                SharedPerlStorage.validateStoredValue(value);
+                SharedPerlStorage.publishBlessing(value);
+            }
             if (hasDurableElementLifetime()) {
                 RuntimeScalar.retainUnstashedIoForDurableSlot(value);
             }
-            RuntimeScalar.incrementRefCountForContainerStore(value);
         }
+        RuntimeScalar.transitionContainerSlots(
+                List.of(), value == null ? List.of() : Collections.singletonList(value),
+                PerlOwnerSlot.Kind.ARRAY_ELEMENT,
+                () -> elements.add(value), null);
     }
 
     public void add(RuntimeArray value) {
@@ -2118,24 +2147,26 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         }
         this.eachIteratorIndex = null;
         notePackageRootMutation();
-        this.deferOwnedElementReleases();
-        this.elements.clear();
-        releaseReferenceListAliasCellOwners();
-        this.ownedAliasElements = null;
-        this.elementsAliased = false;
-        this.elements.add(value);
         if (value != null) {
             if (hasDurableElementLifetime()) {
                 RuntimeScalar.retainUnstashedIoForDurableSlot(value);
             }
-            // This store transfers the supplied scalar cell into an owned
-            // array element. Existing counted cells keep their slot identity
-            // and are reclassified by this call; uncounted cells acquire the
-            // element's count only after the destination storage is current.
-            RuntimeScalar.incrementRefCountForContainerStore(value);
         }
-        elementsOwned = true;
-        markPackageRootedValue(value);
+        List<RuntimeScalar> displaced = ownedElementReleaseSnapshot();
+        Collection<RuntimeScalar> replacements = value == null
+                ? List.of() : Collections.singletonList(value);
+        RuntimeScalar.transitionContainerSlots(
+                displaced, replacements, PerlOwnerSlot.Kind.ARRAY_ELEMENT,
+                () -> {
+                    this.elements.clear();
+                    releaseReferenceListAliasCellOwners();
+                    this.ownedAliasElements = null;
+                    this.elementsAliased = false;
+                    this.elements.add(value);
+                    elementsOwned = true;
+                    markPackageRootedValue(value);
+                },
+                MortalList::deferDestroyForContainerClear);
         MortalList.flush();
         return this;
     }
@@ -2162,10 +2193,10 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                     }
                 }
 
-                int originalSize = this.elements.size();
-                this.deferOwnedElementReleases();
+                RuntimeList source = list;
                 if (needsCopy) {
-                    // Make a defensive copy of the list before clearing
+                    // Make a defensive source copy before materializing the
+                    // replacement, since the RHS may include this array.
                     RuntimeList listCopy = new RuntimeList();
                     for (RuntimeBase elem : list.elements) {
                         if (elem instanceof RuntimeArray && elem == this) {
@@ -2177,28 +2208,39 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                             listCopy.elements.add(elem);
                         }
                     }
-                this.elements.clear();
-                    releaseReferenceListAliasCellOwners();
-                    listCopy.addToArray(this);
-                } else {
-                    this.elements.clear();
-                    releaseReferenceListAliasCellOwners();
-                    list.addToArray(this);
+                    source = listCopy;
                 }
 
-                // Increment refCount for tracked references stored in the array.
-                // addToArray creates copies via the copy constructor (which doesn't
-                // increment refCount), so we do it here for the final container store.
-                for (RuntimeScalar elem : this.elements) {
-                    markPackageRootedValue(elem);
+                // Materialize the RHS and acquire each destination edge before
+                // replacing the current elements. This keeps the replacement
+                // alive throughout publication and gives each copied scalar an
+                // owner identity for this array slot.
+                RuntimeArray staged = new RuntimeArray();
+                source.addToArray(staged);
+                for (RuntimeScalar elem : staged.elements) {
+                    if (threadShared) {
+                        SharedPerlStorage.validateStoredValue(elem);
+                        SharedPerlStorage.publishBlessing(elem);
+                    }
                     if (hasDurableElementLifetime()) {
                         RuntimeScalar.retainUnstashedIoForDurableSlot(elem);
                     }
-                    RuntimeScalar.incrementRefCountForContainerStore(elem);
                 }
-                this.elementsOwned = true;
-                this.elementsAliased = false;
-                this.ownedAliasElements = null;
+
+                List<RuntimeScalar> displaced = ownedElementReleaseSnapshot();
+                RuntimeScalar.transitionContainerSlots(
+                        displaced, staged.elements, PerlOwnerSlot.Kind.ARRAY_ELEMENT,
+                        () -> {
+                            this.elements.clear();
+                            releaseReferenceListAliasCellOwners();
+                            this.elements.addAll(staged.elements);
+                            this.markPackageRootedValues(0);
+                            staged.elements.clear();
+                            this.elementsOwned = true;
+                            this.elementsAliased = false;
+                            this.ownedAliasElements = null;
+                        },
+                        MortalList::deferDestroyForContainerClear);
 
                 // Create a new array with scalarContextSize set for assignment return value
                 // This is needed for eval context where assignment should return element count
