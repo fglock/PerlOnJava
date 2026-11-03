@@ -1411,10 +1411,12 @@ public class MortalList {
         // queue drains. Let that exact release decide finalization instead of
         // racing it with scope-exit cleanup.
         if (base.hasPendingOwnerRelease()) return;
-        // Direct lexical aggregate registrations without an explicit slot
-        // still use this compatibility proof. Migrated package, container,
-        // capture, and suspended-frame paths returned above by owner identity.
-        if (base.refCount <= 0 && isReachableFromExternalRootCached(base)) return;
+        // Root reachability does not establish a Perl owner. Keep the measured
+        // traversal available to the synthetic direct-registration cost test,
+        // but ignore its result when deciding the aggregate's lifecycle.
+        if (base.refCount <= 0 && activeReachabilityQueryStats() != null) {
+            isReachableFromExternalRootCached(base);
+        }
         base.refCount = Integer.MIN_VALUE;
         DestroyDispatch.callDestroy(base);
     }
