@@ -222,13 +222,6 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
                 // Re-fetch from parent in case hash was reassigned (setFromList clears elements).
                 parent.notePackageRootMutation();
                 RuntimeScalar current = parent.elements.remove(key);
-                if (current != null
-                        && (current.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                        && current.value instanceof RuntimeBase displacedBase
-                        && displacedBase.refCount > 0 && --displacedBase.refCount == 0) {
-                    displacedBase.refCount = Integer.MIN_VALUE;
-                    DestroyDispatch.callDestroy(displacedBase);
-                }
                 if (current != null) {
                     // The key was created only inside the localized scope.
                     // Removing its temporary scalar must also retire any
@@ -236,6 +229,12 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
                     // Hint hashes already queue full slot cleanup in their
                     // map's remove hook.
                     if (!parent.isHintHash) {
+                        // Release the exact counted slot owner. Directly
+                        // decrementing the referent here left refCountOwned and
+                        // the HASH_ELEMENT identity active when another scalar
+                        // still owned the referent, so the removed slot could
+                        // appear live during a later final release.
+                        MortalList.deferDecrementIfTracked(current);
                         MortalList.deferIoOwnerRelease(current);
                     }
                     MortalList.flush();
