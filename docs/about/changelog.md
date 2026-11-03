@@ -6,6 +6,7 @@ priorities and future plans.
 
 ## Work in progress
 
+- Finalize cleared aggregates from current owner identities; root reachability no longer preserves an ownerless referent (#1649).
 - Hold an array or hash container through the lifetime of an aliased element argument, including after `shift @_` (#1649).
 - Preserve tied hash and array magic through aliased element arguments, including `untie` during the callee, and release the handler at frame exit (#1649).
 - Acquire replacement ownership before publishing array and hash slots, then release displaced values against the updated storage state (#1649).
