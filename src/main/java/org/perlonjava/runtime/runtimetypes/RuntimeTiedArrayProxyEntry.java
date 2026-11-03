@@ -48,7 +48,8 @@ public class RuntimeTiedArrayProxyEntry extends TiedVariableBase {
     @Override
     RuntimeScalar retainArgumentAliasHandlerOwner() {
         return tieHandle == null ? null
-                : RuntimeScalar.retainTiedHandlerValue(tieHandle.getSelf());
+                : RuntimeScalar.retainTiedHandlerValue(tieHandle.getSelf(),
+                        PerlOwnerSlot.Kind.ARGUMENT_TIE_HANDLER);
     }
 
     /**

@@ -362,7 +362,10 @@ public class TieOperators {
         if (self == null || !(self.value instanceof RuntimeBase base)) {
             return;
         }
-        int externalReferences = Math.max(0, base.refCount - 1);
+        int argumentAliasReferences = base.ownerSlotCount(
+                PerlOwnerSlot.Kind.ARGUMENT_TIE_HANDLER);
+        int externalReferences = Math.max(0,
+                base.refCount - 1 - argumentAliasReferences);
         if (externalReferences != 0) {
             WarnDie.warnWithCategory(new RuntimeScalar("untie attempted while " + externalReferences
                     + " inner references still exist"), RuntimeScalarCache.scalarEmptyString, "untie");

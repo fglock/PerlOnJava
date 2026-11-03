@@ -44,6 +44,8 @@ public final class PerlOwnerSlot {
         RETURN_VALUE,
         ACTIVE_CODE,
         TIE_HANDLER,
+        /** Tied-element magic retained only for an active argument alias. */
+        ARGUMENT_TIE_HANDLER,
         /** Package scalar table entry owning one scalar cell. */
         PACKAGE_SCALAR_SLOT,
         /** Package array or hash table entry owning one aggregate. */
@@ -888,7 +890,7 @@ public final class PerlOwnerSlot {
         return kind == Kind.SCALAR_CELL || kind == Kind.CODE_SLOT || kind == Kind.ARRAY_ELEMENT
                 || kind == Kind.HASH_ELEMENT || kind == Kind.ARGUMENT_VALUE
                 || kind == Kind.ARGUMENT_CONTAINER || kind == Kind.RETURN_VALUE
-                || kind == Kind.TIE_HANDLER;
+                || kind == Kind.TIE_HANDLER || kind == Kind.ARGUMENT_TIE_HANDLER;
     }
 
     /** Retire this edge and carry its identity through one deferred decrement. */
