@@ -7239,7 +7239,9 @@ public class BytecodeCompiler implements Visitor {
     }
 
     private boolean shouldEmitHashFetchForLocal() {
-        return (localHashLvalueCompileDepth > 0 || compilingForeachList)
+        return (currentCallContext == RuntimeContextType.LVALUE
+                || currentCallContext == RuntimeContextType.LVALUE_LIST
+                || localHashLvalueCompileDepth > 0 || compilingForeachList)
                 && suppressLocalHashFetchForLocal == 0;
     }
 

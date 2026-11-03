@@ -448,6 +448,11 @@ public class Dereference {
      */
     public static void handleHashElementOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node, String hashOperation) {
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("handleHashElementOperator " + node + " in context " + emitterVisitor.ctx.contextType);
+        if ("get".equals(hashOperation)
+                && (emitterVisitor.ctx.contextType == RuntimeContextType.LVALUE
+                    || emitterVisitor.ctx.contextType == RuntimeContextType.LVALUE_LIST)) {
+            hashOperation = "getForLocal";
+        }
         EmitterVisitor scalarVisitor =
                 emitterVisitor.with(RuntimeContextType.SCALAR); // execute operands in scalar context
 

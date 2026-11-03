@@ -799,8 +799,12 @@ public class RuntimeGraphCloner {
         } else {
             try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
                 for (Map.Entry<String, RuntimeScalar> entry : source.elements.entrySet()) {
-                    target.putClonedElement(entry.getKey(),
-                            (RuntimeScalar) cloneValue(entry.getValue()));
+                    RuntimeScalar clonedValue = (RuntimeScalar) cloneValue(entry.getValue());
+                    if (source.ownsHashAliasCell(entry.getKey(), entry.getValue())) {
+                        target.putClonedAliasElement(entry.getKey(), clonedValue);
+                    } else {
+                        target.putClonedElement(entry.getKey(), clonedValue);
+                    }
                 }
             }
         }
