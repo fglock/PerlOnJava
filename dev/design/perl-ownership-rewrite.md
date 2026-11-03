@@ -2,162 +2,35 @@
 
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
-**Current checkpoint (2026-11-03 06:28 UTC):** #1649 continues on branch
-`wip/ownership-handoff-20261103-053423`, validated source `4fc33accf`. The
-immutable sweeps-disabled `nice -n 19 timeout 3600 env
-JPERL_DISABLE_CORRECTIVE_SWEEPS=1 make` gate passes in 7m28:
-`/private/tmp/issue-1649-code-owner-no-sweeps-4fc33accf.log`. It includes the
-new `RuntimeCodeOwnerIdentityTest` (1/1, shard 0) and
-`package_array_nested_weak_owner_release.t` (unit suite, shard 2 worker).
+**Current checkpoint (2026-11-03 07:17 UTC):** #1649 continues on branch
+`wip/ownership-handoff-20261103-053423`, validated source `46f2eb944`. The
+immutable full gate with corrective sweeps disabled passes in 7m44:
+`/private/tmp/issue-1649-lifecycle-provenance-no-sweeps-46f2eb944.log`.
+`PendingOwnerReleaseIdentityTest` passes 1/1 in shard 0. The package-array
+nested weak-owner Perl regression passes 4/4 on system Perl and both backends;
+its logs are `/private/tmp/issue-1649-package-array-nested-weak-owner-system-perl.log`,
+`/private/tmp/issue-1649-package-array-nested-weak-owner-jvm-76002119c.log`, and
+`/private/tmp/issue-1649-package-array-nested-weak-owner-interpreter-76002119c.log`.
 
-`releaseTailCallCodeRef` no longer fabricates `refCount = 1` from
-`RuntimeCode.localBindingExists`; the runtime has no CODE producer for this
-inherited marker. `RuntimeCode.hasPerlOwnerForCapture` and its exclusion-aware
-variant now use CODE slots, active/call-transfer owners, bridge count, and
-constant state rather than that marker. The invariant test verifies a stale
-marker alone does not retain CODE. The package-array regression passes 4/4 on
-system Perl and both backends with sweeps disabled; logs:
-`/private/tmp/issue-1649-package-array-nested-weak-owner-system-perl.log` and
-`/private/tmp/issue-1649-package-array-nested-weak-owner-{jvm,interpreter}-76002119c.log`.
+A queued release is identified only when its token contains a released
+`PerlOwnerSlot`. A lifecycle-only token from `queueLifecycleOnlyAtZero` marks a
+boundary but does not identify an edge; it remains eligible for the legacy
+compatibility proof while its surrounding owner paths are audited. Ordinary
+counted releases carry exact slot provenance. Current array/hash stores promote
+nested aggregate values into counted element slots. Raw `.elements.add` test
+fixtures without container metadata are not evidence that normal stores need
+the package compatibility pin.
 
-The source audit confirms current array/hash stores promote nested aggregate
-references into counted element slots; the remaining package-nested untracked
-pin test uses raw `.elements.add` without installing normal container metadata.
-Do not treat that fixture as proof that normal package stores need the pin.
-Production `queueDeferredBase` callers carry exact owner-release tokens; the
-bare `MortalList.deferDecrement(RuntimeBase)` API has no production call site
-and is used by low-level compatibility fixtures. This creates a boundary for
-testing whether lifecycle root recovery can be restricted without hiding a
-normal producer bug.
-
-Next: isolate root/count recovery to the unidentified-release compatibility
-path and run the no-sweeps suite. Any failure from a production slot-specific
-release must be traced to its producer and fixed before recovery is removed.
-Then continue the first-weaken, cleared-aggregate, closure/CODE cycle, shared
-storage, and resource-owner audit. Local work is unpublished; PR #1938 remains
-an open draft at remote head `b2f44fc2d36b8f0a1bc7067790e1731a604cba45`, base
-`4a5c33753f1da3f9838c44567bbba878e8f567e0`, merge state `DIRTY`. Current-master
-reconciliation, recovery removal, and final acceptance are incomplete.
-
-**Previous checkpoint (2026-11-03, superseded):** #1649 Phase 2 continues on branch
-`wip/ownership-doc-checkpoint-20261103-012032`. Runtime fix `0a8815582`,
-removal of the unused `isReachableThroughTiedHash` wrapper, and migration of
-counted scalar-owner queries from the duplicate `activeOwners` set to
-`PerlOwnerSlot` identities are included in tested source `9d30a14f1`. The
-no-sweeps `nice -n 19 timeout 3600 env JPERL_DISABLE_CORRECTIVE_SWEEPS=1 make`
-gate passes: 3,942 tests, 7 skipped, zero failures/errors, in 7m07. Full log:
-`/private/tmp/issue-1649-tailcall-owner-no-sweeps-9d30a14f1.log`.
-The former activation hook is a compatibility no-op; production weaken and
-destructor paths no longer call it. The added
-`CountedOwnerSlotLedgerTest` verifies counted owners installed before first
-weaken are visible through the slot ledger. The new Perl-level
-`tailcall_code_owner_lifetime.t` verifies that a tail-called closure remains
-live while its caller lexical owns it and clears on the final lexical release;
-it passes 3/3 on system Perl, JVM and interpreter. Logs:
-`/private/tmp/issue-1649-tailcall-code-owner-system-perl-0ff00785a-tracked.log`,
-`/private/tmp/issue-1649-tailcall-code-owner-jvm-0ff00785a-tracked.log`, and
-`/private/tmp/issue-1649-tailcall-code-owner-interpreter-0ff00785a-tracked.log`.
-Local work is unpublished. PR #1938 remains an open draft at head
-`b2f44fc2d36b8f0a1bc7067790e1731a604cba45`, based on
-`4a5c33753f1da3f9838c44567bbba878e8f567e0`; GitHub last reported `DIRTY`
-on 2026-11-03.
-
-`tied_handler_nested_value_owner_before_weaken.t` passes 2/2 on system Perl,
-JVM, and interpreter, proving nested values stored before tying and first
-weaken retain through the tie handler and release on `untie`. Logs:
-`/private/tmp/issue-1649-tied-handler-before-weaken-system-perl-1c080a387.log`,
-`/private/tmp/issue-1649-tied-handler-before-weaken-jvm-1c080a387.log`, and
-`/private/tmp/issue-1649-tied-handler-before-weaken-interpreter-1c080a387.log`.
-
-`localized_array_existing_reference_owner.t` adds coverage for localizing an
-array slot that already contains a reference, replacing it inside the dynamic
-scope, and then restoring and deleting the original value. It checks one
-strong owner at each boundary and exactly-once weak cleanup and `DESTROY`.
-The test passes 12/12 on system Perl, JVM, and interpreter, so this audit did
-not find a runtime defect in that producer; the existing-value case was missing
-from the Perl-level regression set. Logs:
-`/private/tmp/issue-1649-localized-array-existing-reference-system-perl-fb5e40dd9.log`,
-`/private/tmp/issue-1649-localized-array-existing-reference-jvm-parent-fb5e40dd9.log`,
-and
-`/private/tmp/issue-1649-localized-array-existing-reference-interpreter-parent-fb5e40dd9.log`.
-
-`RuntimeArrayLiteralOwnerSlotTest` in `fb5e40dd9` positively verifies that a
-literal array element receives its `ARRAY_ELEMENT` owner identity and that the
-current stored slot supports counted-owner restoration. It passed shard 0
-(log: `/private/tmp/issue-1649-array-literal-owner-parent-shard0-fb5e40dd9.log`);
-the full no-sweeps gate on the test-only follow-up `f7b8ec408` also passes in 6m54.
-Across the five unit shards, Joni, and launcher-home integration, XML reports
-3,925 tests, 7 skipped, and zero failures/errors. The gate log is
-`/private/tmp/issue-1649-localized-array-owner-no-sweeps-f7b8ec408.log`.
-
-`ab4569170` removed the raw closure-release decrement that could consume
-another scalar's count; production aggregate captures in `SubroutineParser`,
-`OpcodeHandlerExtended`, `RuntimeCode`, `RuntimeGraphCloner`, and `Internals`
-use `CLOSURE_PAD` identities. `dc1603047` also changes recursive container
-cleanup for a blessed zero-count temporary: it queues a zero-count lifecycle
-token instead of manufacturing `refCount = 1`. `RecursiveZeroCountLifecycleTest`
-checks that the count stays zero until the deferred boundary and that final
-destruction completes exactly once.
-
-`03ae1f1a1` fixes package-rooted blessed-parent cleanup. Recursive child
-cleanup now waits until no current Perl owner identity remains. `0a8815582`
-limits deferred package-owner cleanup to blessed aggregates without direct
-weak observers; direct weak observers retain their existing root proof. The
-new `BlessedPackageOwnerRecursiveReleaseTest` proves the nested child stays
-alive after the outer counted edge leaves, then clears when the final package
-owner is removed. It passes with all affected root-snapshot tests: 19 tests,
-zero failures. The initial full gate on `1f0f02943` exposed four snapshot-cost
-regressions from the broader owner shortcut; narrowing it restored those checks.
-The refined full no-sweeps gate passes on `6c285e880`: 3,921 tests, 7 skipped,
-zero failures/errors in 7m22. Log: `/private/tmp/issue-1649-fullmake-no-sweeps-6c285e880.log`.
-Parent evidence: the regression fails on `dafb62d40`; its full serial unit
-gate reports 3,398 tests, 6 skipped, and only this failure in 21m42. Logs:
-`/private/tmp/issue-1649-blessed-package-owner-focused-parent-dafb62d40.log`,
-`/private/tmp/issue-1649-blessed-package-owner-parent-dafb62d40.log`, and
-`/private/tmp/issue-1649-blessed-package-owner-focused-dafb62d40-final.log`,
-`/private/tmp/issue-1649-fullmake-no-sweeps-1f0f02943.log`, and
-`/private/tmp/issue-1649-owner-filter-compatibility-focused-1f0f02943.log`.
-The unused single-target tied-root wrapper had no callers and is removed in
-`6c285e880`; the tied snapshot remains for explicit diagnostics.
-
-With corrective sweeps disabled, `nice -n 19 timeout 3600 make` passes on
-`dc1603047` in 6m56 at
-`/private/tmp/issue-1649-zero-count-recursive-fullmake-dc1603047.log`.
-HTML::Tree 5.07 `t/refloop.t` passes 8/8 on each backend; the full suite passes
-23/23 files and 989/989 checks on JVM and interpreter. Logs:
-`/private/tmp/issue-1649-refloop-jvm-dc1603047.log`,
-`/private/tmp/issue-1649-refloop-interpreter-dc1603047.log`,
-`/private/tmp/issue-1649-html-tree-full-jvm-dc1603047.log`, and
-`/private/tmp/issue-1649-html-tree-full-interpreter-dc1603047.log`.
-
-The #1794 controller lifetime fixture passes 3/3, its long-poll controller
-cleanup passes 5/5, the WebSocket controller lifetime passes 6/6, and #1860
-growing-output cleanup passes 4/4 on system Perl and both backends. The
-long-poll and WebSocket fixtures require local-loopback access. Logs:
-`/private/tmp/issue-1794-*-dc1603047.log`,
-`/private/tmp/mojolicious_controller_destroy_after_finish-*-dc1603047-extended.log`,
-`/private/tmp/mojolicious_websocket_controller_release-*-dc1603047-extended.log`,
-and `/private/tmp/issue-1860-*-dc1603047.log`.
-
-The deferred-release audit found no main-source callers of
-`MortalList.deferDecrement(RuntimeBase)`; direct callers are JUnit fixtures.
-Production paths queue scalar or owner-slot release tokens. The zero-count
-recursive branch now carries a lifecycle token. A package-rooted
-`UNTRACKED_REFERENCE` can outlive the final counted edge to a blessed aggregate;
-child traversal now consults current owner identities. Deferred finalization
-uses package owners for blessed aggregates without direct weak observers;
-direct weak observers still use the root proof. Other `restoreReachableOwnerCount`
-and root/snapshot recovery branches remain pending exact producer audits.
-`hasLiveUntrackedOwnerSlot` checks active `UNTRACKED_REFERENCE` identities,
-although it still increments the legacy `rootQueries` metric. The package
-first-weaken pin remains; existing tests assert the temporary count and pin,
-while repository policy forbids modifying existing tests. Pin retirement is
-therefore a policy boundary; other owner and fallback audits continue.
-
-Next, trace each production path that can reach `restoreReachableOwnerCount`,
-then continue the producer audit across package roots, cycles, shared storage,
-resource owners, and exception/unwind cleanup. Remove recovery only when owner
-identities and acceptance coverage prove the ordinary path is complete.
+Remaining ordinary recovery sites include `scopeExitCleanupHashBody`,
+`deferDecrementRecursive`, `finalizeClearedAggregateOwnerAfterScopeExit`, and
+first-weaken package-nested aggregate handling. Trace each to its strong-edge
+producer and release site before removing it. The bare
+`MortalList.deferDecrement(RuntimeBase)` API has no production call site, but
+this does not complete the remaining owner-family audit. Local changes are
+unpublished. PR #1938 remains an open draft at remote head
+`b2f44fc2d36b8f0a1bc7067790e1731a604cba45`, base
+`4a5c33753f1da3f9838c44567bbba878e8f567e0`, merge state `DIRTY`.
+Reconciliation, recovery removal, and final acceptance remain incomplete.
 
 **Sweep policy (2026-10-27):** Corrective sweeps are disabled by default, as
 requested. `JPERL_ENABLE_CORRECTIVE_SWEEPS=1` temporarily enables legacy
@@ -216,13 +89,15 @@ slots, closure pads, and mortal temporaries have different ownership rules.
 Every path must state whether it creates an owner, borrows a cell, transfers an
 owner, or creates a deferred mortal owner.
 
-Perl does not need a token object for each edge because its SV reference count
-is updated by the ownership operations that install and remove strong SV
-references. PerlOnJava's current `refCount` is selective, so some Perl-visible
-strong edges do not contribute a matching count. `PerlOwnerSlot` records the
-edge identity and release provenance needed while those paths are migrated;
-it is not a second Perl reference count. Once all strong edges participate in
-an authoritative count, reassess which identity records remain necessary.
+Perl does not need a sidecar token for each edge because its interpreter
+updates SV reference counts at the operations that install and remove strong
+SV references. Java garbage collection tracks Java reachability, not Perl
+ownership, and PerlOnJava's current `refCount` is selective. Deferred cleanup
+also needs to know which exact Perl edge was released. `PerlOwnerSlot` supplies
+that stable identity and release provenance alongside the count; it is not a
+second reference count or a temporary shim. It can be replaced only by an
+owner mechanism that preserves the same per-edge identity across every
+acquisition, transfer, replacement, and release path.
 
 ## Remaining lifecycle fallback audit (updated 2026-11-03)
 
