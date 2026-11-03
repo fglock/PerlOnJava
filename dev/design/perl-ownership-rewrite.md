@@ -2,59 +2,38 @@
 
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
-**Current checkpoint (2026-11-03):** #1649 continues on branch
-`wip/argument-alias-container-20261103-135737`; latest source is `a058ee8df`
-(runtime code last changed in `8649cd1b7`). The preceding batch centralized array and hash slot transitions:
-acquire replacement edges, publish storage and owner bookkeeping, then release
-displaced cells from the old storage snapshot. Same-cell transfers retain
-their identity.
+**Current checkpoint (2026-11-03):** #1649 continues on local branch
+`wip/ownership-resume-20261103-192304` at `4d4ebf6fe`, preserving the prior
+argument-alias work through `f3424c9cc`. `RuntimeCode.popArgs` now retires
+container-owner edges from a popped argument array only after its final active
+frame exits and only when the array is not shared or Perl-owned. This clears
+untracked referent slots left by temporary argument arrays without querying
+runtime roots. Compact method-argument removal also retires the matching
+`ARGUMENT_ALIAS` identity through the same hook as other array removals.
 
-This batch matches Perl's aggregate lifetime for element aliases in `@_`.
-`ARGUMENT_CONTAINER` owners hold plain hash/array parents until the callee frame
-exits, even after `shift @_`. Tied element proxies preserve the tie magic view
-captured before `untie`; an `ARGUMENT_TIE_HANDLER` counted edge keeps the handler
-alive through `FETCH` and releases it at frame exit. `untie` warning accounting
-excludes that internal magic edge. New regressions cover plain and tied hash
-and array elements, root removal or `untie` inside the callee, shifted aliases,
-exact `DESTROY` order, and absence of false warnings.
+`mojolicious_controller_destroy_after_finish.t` failed before this change at
+the final controller-destruction assertion. It now passes 5/5 on system Perl,
+JVM, and interpreter. `deferred_capture_live_argument.t` passes 3/3 on all
+three engines. The focused `nice -n 19 make test-unit` gate passed in 1m23;
+the direct backend traces show the temporary transaction owner slot released
+before `DESTROY`. Evidence: `/private/tmp/issue1649-controller-system-perl-oracle.log`,
+`/private/tmp/issue1649-controller-argument-container-release-focused.log`,
+`/private/tmp/issue1649-controller-argument-container-release-jvm.log`,
+`/private/tmp/issue1649-controller-argument-container-release-interpreter.log`,
+and `/private/tmp/issue1649-deferred-capture-current-{system-perl,jvm,interpreter}.log`.
+A broader `scopeExitCleanupArray` attempt regressed async-await and Test::Builder
+context tests and was removed; evidence remains in
+`/private/tmp/issue1649-controller-frame-exit-cleanup-focused.log`.
 
-The plain alias regression passes 4/4 on system Perl, JVM, and interpreter on
-`8649cd1b7`; the tied alias regression passes 3/3 on all three. Corrective
-sweeps are disabled on both PerlOnJava backends. The immutable focused
-`make test-unit` gate passes in 1m04, with the regression reported as 1 test,
-zero failures, zero errors, and no captured warnings. Logs:
-`/private/tmp/issue1649-tied-argument-alias-focused-8649cd1b7.log`,
-`/private/tmp/issue1649-argument-alias-final-8649-system-perl.log`,
-`/private/tmp/issue1649-argument-alias-final-8649-jvm.log`,
-`/private/tmp/issue1649-argument-alias-final-8649-interpreter.log`, and files
-with the `/private/tmp/issue1649-tied-argument-alias-final-` prefix. Parent
-`850652c77` fails the tied lifetime case on both backends; the intermediate
-candidate `0b63b459f` retained handlers but emitted false `untie` warnings.
-Evidence is in `/private/tmp/issue1649-tied-argument-alias-parent-850652c77-`
-and `/private/tmp/issue1649-tied-argument-alias-focused-0b63b459f.log`.
-
-The full no-sweeps `make` gate completed on `a058ee8df` and failed 11 unit tests
-in 8m09. A focused no-sweeps gate on the pre-alias parent `850652c77` failed the
-same 11 test names in 8m08; the candidate adds three passing tests and no new
-failing test names. Full logs are `/private/tmp/issue1649-full-no-sweeps-a058ee8df.log`
-and `/private/tmp/issue1649-catalyst-parent850-test-unit.log`; shard XML is under
-the corresponding `build/test-results/testUnitShard*` directories. The failed
-names include the Catalyst tempfile lifetime test and ten other existing unit
-tests. The Catalyst test also fails with sweeps enabled on `a058ee8df`, skips on
-system Perl because its dependencies are unavailable, and passes on the
-PerlOnJava3 baseline; it therefore predates the alias batch and is not evidence
-against that change.
-
-The plain and tied argument-alias focused regressions pass on system Perl, JVM,
-and interpreter; the exact production-directory reproducer now prints
-`inside after undef` before `DESTROY`. HTML::Tree and lifecycle acceptance
-matrices remain outstanding, as does PR reconciliation. Next, trace the
-remaining array/hash deferred-release and cleared-aggregate recovery paths to
-their normal producer and cleanup operations, then batch fixes that share
-those transitions. Closure and CODE, package roots, cycles, suspended frames,
-and resource holders still need producer-level audit before recovery behavior
-can be removed. PR #1938 remains a draft until local work is reconciled with
-live remote history.
+The full no-sweeps gate on `a058ee8df` failed 11 unit tests; the pre-alias
+parent `850652c77` failed the same names. Logs:
+`/private/tmp/issue1649-full-no-sweeps-a058ee8df.log` and
+`/private/tmp/issue1649-catalyst-parent850-test-unit.log`. Next, run the full
+gate with `JPERL_DISABLE_CORRECTIVE_SWEEPS=1` on this immutable candidate, then
+continue the deferred-release, cleared-aggregate, closure, package-root, cycle,
+shared-storage, and resource-owner producer audit. Final HTML::Tree/lifecycle
+acceptance and PR reconciliation remain open. PR #1938 is still OPEN/draft at
+head `95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05`; this local fix is unpublished.
 
 Standard Perl is the oracle for every Perl-visible reference edge and its
 lifetime behavior. A reference-slot transition should retain a new strong
@@ -71,10 +50,9 @@ recursive/deferred release (with several separate root/snapshot decisions),
 cleared-aggregate finalization, and first-weaken package-nested aggregates.
 Closure cleanup, package/CODE roots, destruction/resurrection, and resource
 owners also need producer-level audit before their recovery paths can be
-removed. The exact branch count is still open. PR #1938 remains OPEN as a
-draft at remote head `b2f44fc2d36b8f0a1bc7067790e1731a604cba45`, merge state
-`DIRTY`; its two unique remote commits still need reconciliation before any
-publication.
+removed. The exact branch count is still open. PR #1938 remains OPEN as a draft
+at remote head `95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05`; local work still
+needs reconciliation before publication.
 
 **Sweep policy (2026-10-27):** Corrective sweeps are disabled by default, as
 requested. `JPERL_ENABLE_CORRECTIVE_SWEEPS=1` temporarily enables legacy
