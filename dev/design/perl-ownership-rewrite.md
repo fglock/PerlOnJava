@@ -3,12 +3,17 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-03):** #1649 Phase 2 continues on branch
-`wip/detached-glob-owner-20261102-064229`. Runtime fix `0a8815582` and removal
-of the unused `isReachableThroughTiedHash` wrapper are included in tested
-checkpoint `6c285e880`. The no-sweeps `nice -n 19 timeout 3600 env
-JPERL_DISABLE_CORRECTIVE_SWEEPS=1 make` gate passes: 3,921 tests, 7 skipped,
-zero failures/errors, in 7m22. Full log:
-`/private/tmp/issue-1649-fullmake-no-sweeps-6c285e880.log`.
+`wip/ownership-doc-checkpoint-20261103-012032`. Runtime fix `0a8815582`,
+removal of the unused `isReachableThroughTiedHash` wrapper, and migration of
+counted scalar-owner queries from the duplicate `activeOwners` set to
+`PerlOwnerSlot` identities are included in tested source `e93b73a16`. The
+no-sweeps `nice -n 19 timeout 3600 env JPERL_DISABLE_CORRECTIVE_SWEEPS=1 make`
+gate passes: 3,941 tests, 7 skipped, zero failures/errors, in 7m27. Full log:
+`/private/tmp/issue-1649-owner-ledger-no-sweeps-e93b73a16-escalated.log`.
+The former activation hook is a compatibility no-op; production weaken and
+destructor paths no longer call it. The added
+`CountedOwnerSlotLedgerTest` verifies counted owners installed before first
+weaken are visible through the slot ledger.
 Local work is unpublished. PR #1938 remains an open draft at head
 `b2f44fc2d36b8f0a1bc7067790e1731a604cba45`, based on
 `4a5c33753f1da3f9838c44567bbba878e8f567e0`; GitHub last reported `DIRTY`
@@ -2230,7 +2235,7 @@ that currently protects it:
 
 | Recovery path | Semantic strong edge | Remaining gap before removal |
 |---|---|---|
-| `restoreReachableOwnerCount` | Scalar cells in `activeOwners`, including nested package-array cells | The audited array and hash mutation wrappers mark current storage; their main count-acquiring APIs do so after insertion. The remaining root-snapshot tests exercise earlier count acquisition: `ReachabilityQueryCostTest.deferredOwnerChecksShareOneRootSnapshotPerDrain` calls `incrementRefCountForContainerStore` before adding the scalar to the nested package array, leaving a `SCALAR_CELL` identity; `UnblessedAggregateReachabilitySnapshotTest.repeatedOwnerScalarChecksShareOneRootSnapshotPerDrain` also clears `containerOwner` directly. No production caller with this exact ordering has been identified in the call-site audit so far. These tests preserve the bridge for synthetic/out-of-order states and do not establish a normal store-path defect. |
+| `restoreReachableOwnerCount` | Counted scalar-cell owner slots, formerly mirrored by `activeOwners`, including nested package-array cells | The audited array and hash mutation wrappers mark current storage; their main count-acquiring APIs do so after insertion. The remaining root-snapshot tests exercise earlier count acquisition: `ReachabilityQueryCostTest.deferredOwnerChecksShareOneRootSnapshotPerDrain` calls `incrementRefCountForContainerStore` before adding the scalar to the nested package array, leaving a `SCALAR_CELL` identity; `UnblessedAggregateReachabilitySnapshotTest.repeatedOwnerScalarChecksShareOneRootSnapshotPerDrain` also clears `containerOwner` directly. No production caller with this exact ordering has been identified in the call-site audit so far. These tests preserve the bridge for synthetic/out-of-order states and do not establish a normal store-path defect. |
 | Scalar overwrite (`RuntimeScalar.setLargeRefCounted`) | The scalar cell's old referent edge; new edge is acquired before old release | Counted scalar/aggregate slots repair identified undercounts. The remaining external-root and live-CODE queries and the blessed weak-referent raw-count bridge run for aggregate referents with incomplete owner proof. Their unmigrated producers and final release need explicit identities. `RuntimeScalarOwnerSlotTest` covers identified final element release without a stale snapshot. |
 | First weaken (`WeakRefRegistry.weaken`) | The scalar cell being weakened and any other current scalar, aggregate, or capture owners | Ordinary tracked owners use current counted-slot identities; general live-CODE and strong-root walks were removed from this path. Clone snapshot roots and the package-nested untracked compatibility query/pin remain. `PackageNestedUntrackedAggregateReleaseTest` explicitly asserts both the query and fabricated positive count; this is a compatibility test boundary, not evidence that `UNTRACKED_REFERENCE` release is absent. Retiring the pin still requires replacing that test's contract with lifecycle-state assertions, which repository test policy currently forbids. `FirstWeakenUsesCurrentPackageOwnerTest` and `WeakeningCountedOwnerSlotTest` cover current counted cells with zero root queries. |
 | Unblessed aggregate root snapshot | Array/hash elements reachable through lexical or package storage | Normal slots have identities; parser assembly and compatibility mutation paths still need producer-level invariant coverage. `UnblessedAggregateReachabilitySnapshotTest` deliberately exercises the remaining fallback. |
@@ -2370,11 +2375,29 @@ the broader owner shortcut. After narrowing it, the full no-sweeps gate passes
 on immutable checkpoint `6c285e880`: 3,921 tests, 7 skipped, zero failures or
 errors in 7m22. Log: `/private/tmp/issue-1649-fullmake-no-sweeps-6c285e880.log`.
 
+### Counted scalar-owner queries use the slot ledger (2026-11-03)
+
+`e93b73a16` removes `RuntimeBase.activeOwners`, the duplicate strong set of
+scalar wrappers. Counted owner snapshots and counts now derive from each
+referent's active counted `PerlOwnerSlot` identities, checking that the slot's
+scalar still owns the same referent. `reachableOwnerCount` applies its existing
+root proof to those same slot identities, including owners installed before
+first weaken. `WeakRefRegistry` and `DestroyDispatch` no longer activate a
+separate registry; `activateOwnerTracking()` remains a Java compatibility
+no-op because existing tests call it.
+
+`CountedOwnerSlotLedgerTest` covers two scalar owners installed before any
+weaken call. The complete no-sweeps `make` gate passes on immutable `e93b73a16`:
+3,941 tests, 7 skipped, zero failures/errors in 7m27. Log:
+`/private/tmp/issue-1649-owner-ledger-no-sweeps-e93b73a16-escalated.log`.
+The ordinary `restoreReachableOwnerCount` root fallback remains; its producers
+and final use cases still require audit before removal.
+
 ### Next steps
 
-1. Continue tracing every path to `restoreReachableOwnerCount` and remaining
-   root/snapshot fallbacks; use producer-level evidence to separate real
-   acquisition gaps from synthetic stale-count coverage.
+1. Trace every production path that reaches `restoreReachableOwnerCount` and
+   remaining root/snapshot fallbacks. Separate normal producer gaps from the
+   existing tests that directly construct out-of-order storage state.
 2. Continue package-root, cycle, shared-storage, resource-owner, pad-bookkeeping,
    and exception/unwind producer audits. Keep the first-weaken pin until its
    existing-test policy conflict is resolved.
