@@ -1094,40 +1094,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         } else if (untrackedReferenceOwnerSlot.referent() != referent) {
             releaseUntrackedReferenceOwner(untrackedReferenceOwnerSlot.referent());
         }
-        if (referent.refCountTrace && RuntimeBase.refCountTraceEnabled()) {
-            RuntimeBase container = containerOwner;
-            System.err.println("[REFCOUNT-UNTRACKED-DETAIL] action=acquire base="
-                    + System.identityHashCode(referent)
-                    + " slot=" + untrackedReferenceOwnerSlot.identity()
-                    + " scalar=" + System.identityHashCode(this)
-                    + " type=" + type
-                    + " refCountOwned=" + refCountOwned
-                    + " staged=" + stagedValueOwner
-                    + " mortalReturn=" + mortalReturnValueOwner
-                    + " scopeExited=" + scopeExited
-                    + " container=" + (container == null ? "null"
-                            : container.getClass().getSimpleName() + "#"
-                                    + System.identityHashCode(container))
-                    + " stored=" + (container != null && isStoredInContainer(container))
-                    + " packageRoot=" + isPackageGlobalRoot
-                    + " localBinding=" + localBindingExists);
-        }
         untrackedReferenceOwnerSlot.acquireUntrackedIdentity(referent);
     }
 
     void releaseUntrackedReferenceOwner(RuntimeBase expectedReferent) {
         if (untrackedReferenceOwnerSlot == null
                 || untrackedReferenceOwnerSlot.referent() != expectedReferent) return;
-        if (expectedReferent != null && expectedReferent.refCountTrace
-                && RuntimeBase.refCountTraceEnabled()) {
-            System.err.println("[REFCOUNT-UNTRACKED-DETAIL] action=release base="
-                    + System.identityHashCode(expectedReferent)
-                    + " slot=" + untrackedReferenceOwnerSlot.identity()
-                    + " scalar=" + System.identityHashCode(this)
-                    + " staged=" + stagedValueOwner
-                    + " mortalReturn=" + mortalReturnValueOwner
-                    + " scopeExited=" + scopeExited);
-        }
         untrackedReferenceOwnerSlot.release();
         WeakRefRegistry.onStrongOwnerSlotReleased(expectedReferent);
     }
