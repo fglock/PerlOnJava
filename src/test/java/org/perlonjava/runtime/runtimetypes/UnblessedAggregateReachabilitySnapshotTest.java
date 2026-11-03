@@ -41,7 +41,7 @@ class UnblessedAggregateReachabilitySnapshotTest {
     }
 
     @Test
-    void initialWeakParentRegistrationPreservesAnUntrackedRootedAggregate() {
+    void initialWeakParentRegistrationUsesItsScalarOwnerSlot() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeArray global = new RuntimeArray();
@@ -59,10 +59,12 @@ class UnblessedAggregateReachabilitySnapshotTest {
                 try {
                     WeakRefRegistry.weaken(weak);
                     assertTrue(WeakRefRegistry.isweak(weak));
-                    assertEquals(1, target.refCount,
-                            "the root proof protects an untracked aggregate before its first weak edge");
-                    assertEquals(1, measurement.stats().rootQueries,
-                            "the initial weak-parent transition checks the current live root");
+                    assertEquals(WeakRefRegistry.WEAKLY_TRACKED, target.refCount,
+                            "the exact untracked owner slot keeps the aggregate alive");
+                    assertEquals(1, target.ownerSlotCount(
+                            PerlOwnerSlot.Kind.UNTRACKED_REFERENCE));
+                    assertEquals(0, measurement.stats().rootQueries,
+                            "the first weak transition does not walk package roots");
                 } finally {
                     WeakRefRegistry.unweaken(weak);
                     GlobalVariable.globalArrays.remove(globalName);

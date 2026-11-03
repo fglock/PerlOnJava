@@ -49,9 +49,8 @@ class ClearedAggregateNestedPackageOwnerNoRootWalkTest {
                     assertEquals(0, measurement.stats().externalRootSnapshotsBuilt);
                 }
 
-                // Restore the compatibility count before exercising the real
-                // final owner-slot release path for this untracked fixture.
-                referent.refCount = 1;
+                assertEquals(0, referent.refCount,
+                        "the exact package owner remains authoritative despite the stale zero count");
                 strongOwner.undefine();
                 assertFalse(WeakRefRegistry.isweak(weakObserver));
                 assertEquals(Integer.MIN_VALUE, referent.refCount);

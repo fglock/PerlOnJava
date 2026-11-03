@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Tag("unit")
 class PackageNestedUntrackedAggregateReleaseTest {
     @Test
-    void firstWeakRootCheckUsesOwnerSlotWithoutWalkingPackageRoots() {
+    void firstWeakTransitionUsesUntrackedOwnerIdentityWithoutWalkingRoots() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeArray packageRoot = new RuntimeArray();
@@ -36,8 +36,8 @@ class PackageNestedUntrackedAggregateReleaseTest {
 
                     ReachabilityQueryStats stats = measurement.stats();
                     assertTrue(WeakRefRegistry.isweak(weak));
-                    assertEquals(1, stats.rootQueries,
-                            "the compatibility entry point still records its owner proof");
+                    assertEquals(0, stats.rootQueries,
+                            "the scalar owner identity needs no root query");
                     assertEquals(0, stats.edgesInspected,
                             "an active untracked owner slot avoids scanning package roots");
                     assertEquals(0, stats.nodesVisited);
@@ -77,9 +77,10 @@ class PackageNestedUntrackedAggregateReleaseTest {
                 WeakRefRegistry.weaken(weak);
 
                 assertTrue(WeakRefRegistry.isweak(weak));
-                assertEquals(1, target.refCount,
-                        "the package-root proof installs a temporary compatibility pin");
-                assertTrue(target.packageRootRescuedUntrackedAggregate);
+                assertEquals(WeakRefRegistry.WEAKLY_TRACKED, target.refCount,
+                        "weak tracking does not fabricate a positive owner count");
+                assertEquals(2, target.ownerSlotCount(
+                        PerlOwnerSlot.Kind.UNTRACKED_REFERENCE));
 
                 firstOwner.undefine();
                 assertTrue(WeakRefRegistry.isweak(weak),
@@ -93,7 +94,6 @@ class PackageNestedUntrackedAggregateReleaseTest {
                 assertNull(weak.value,
                         "the observer is cleared when the final untracked owner leaves");
                 assertEquals(Integer.MIN_VALUE, target.refCount);
-                assertFalse(target.packageRootRescuedUntrackedAggregate);
             } finally {
                 WeakRefRegistry.clearWeakRefsTo(target);
                 GlobalVariable.globalArrays.remove(globalName);
