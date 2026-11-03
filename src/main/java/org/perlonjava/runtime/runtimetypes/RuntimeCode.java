@@ -247,11 +247,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     static final class ArgumentContainerOwner {
         private final RuntimeBase container;
         private final RuntimeScalar ownerValue;
+        // A proxy may carry tie magic independently of the aggregate itself.
+        // Keep the proxy view and its handler owner until this argument frame
+        // exits, even if untie replaces the aggregate's current storage.
+        @SuppressWarnings("unused")
+        private final RuntimeBaseProxy magicProxy;
+        private final RuntimeScalar handlerOwner;
         private boolean active = true;
 
-        private ArgumentContainerOwner(RuntimeBase container, RuntimeScalar ownerValue) {
+        private ArgumentContainerOwner(RuntimeBase container, RuntimeScalar ownerValue,
+                                       RuntimeBaseProxy magicProxy,
+                                       RuntimeScalar handlerOwner) {
             this.container = container;
             this.ownerValue = ownerValue;
+            this.magicProxy = magicProxy;
+            this.handlerOwner = handlerOwner;
         }
 
         void release() {
@@ -261,7 +271,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         "argument-container owner changed its referent before release");
             }
             active = false;
-            RuntimeScalar.releaseArgumentContainerValue(ownerValue);
+            try {
+                RuntimeScalar.releaseTiedHandlerValue(handlerOwner);
+            } finally {
+                RuntimeScalar.releaseArgumentContainerValue(ownerValue);
+            }
         }
     }
 
@@ -283,7 +297,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         RuntimeBase container = argumentAliasContainer(value);
         if (container == null) return null;
         RuntimeScalar ownerValue = RuntimeScalar.retainArgumentContainerValue(container);
-        return ownerValue == null ? null : new ArgumentContainerOwner(container, ownerValue);
+        if (ownerValue == null) return null;
+        RuntimeBaseProxy magicProxy = value instanceof RuntimeBaseProxy proxy ? proxy : null;
+        RuntimeScalar handlerOwner = magicProxy == null ? null
+                : magicProxy.retainArgumentAliasHandlerOwner();
+        return new ArgumentContainerOwner(container, ownerValue, magicProxy, handlerOwner);
     }
 
     private static void retainArgumentContainerOwners(
@@ -302,7 +320,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 } else {
                     RuntimeScalar ownerValue = RuntimeScalar.retainArgumentContainerValue(array);
                     if (ownerValue != null) {
-                        owners.add(new ArgumentContainerOwner(array, ownerValue));
+                        owners.add(new ArgumentContainerOwner(array, ownerValue, null, null));
                     }
                 }
             }

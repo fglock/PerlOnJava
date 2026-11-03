@@ -71,13 +71,21 @@ public class TieArray extends ArrayList<RuntimeScalar> {
      * Helper method to call methods on the tied object.
      */
     private static RuntimeList tieCall(RuntimeArray array, String method, RuntimeBase... args) {
-        return tieCall(array, method, RuntimeContextType.SCALAR, args);
+        return tieCall((TieArray) array.elements, method, RuntimeContextType.SCALAR, args);
     }
 
     private static RuntimeList tieCall(RuntimeArray array, String method, int ctx, RuntimeBase... args) {
-        TieArray tieArray = (TieArray) array.elements;
+        return tieCall((TieArray) array.elements, method, ctx, args);
+    }
+
+    private static RuntimeList tieCall(
+            TieArray tieArray, String method, RuntimeBase... args) {
+        return tieCall(tieArray, method, RuntimeContextType.SCALAR, args);
+    }
+
+    private static RuntimeList tieCall(
+            TieArray tieArray, String method, int ctx, RuntimeBase... args) {
         RuntimeScalar self = tieArray.getSelf();
-        String className = tieArray.getTiedPackage();
 
         // Call the Perl method
         return RuntimeCode.call(
@@ -121,12 +129,23 @@ public class TieArray extends ArrayList<RuntimeScalar> {
         return tieCall(array, "FETCH", index).getFirst();
     }
 
+    /** Fetch through the tie magic captured by an element alias before untie. */
+    public static RuntimeScalar tiedFetch(TieArray tieArray, RuntimeScalar index) {
+        return tieCall(tieArray, "FETCH", index).getFirst();
+    }
+
     /**
      * Stores an element into a tied array (delegates to STORE).
      */
     public static RuntimeScalar tiedStore(RuntimeArray array, RuntimeScalar index, RuntimeScalar value) {
         array.clearTiedLocalSizeOverride();
         return tieCall(array, "STORE", index, value).getFirst();
+    }
+
+    /** Store through the tie magic captured by an element alias before untie. */
+    public static RuntimeScalar tiedStore(
+            TieArray tieArray, RuntimeScalar index, RuntimeScalar value) {
+        return tieCall(tieArray, "STORE", index, value).getFirst();
     }
 
     /**

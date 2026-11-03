@@ -7,6 +7,9 @@ package org.perlonjava.runtime.runtimetypes;
 public class RuntimeTiedArrayProxyEntry extends TiedVariableBase {
     // Reference to the parent RuntimeArray (which is tied)
     private final RuntimeArray parent;
+    // Preserve the magic view captured when this lvalue was formed. untie may
+    // replace parent.elements while this proxy remains active in @_ .
+    private final TieArray tieHandle;
     // Index associated with this proxy in the parent array (already normalized)
     private final RuntimeScalar key;
     // Original (unnormalized) negative index, when the normalized key would still be
@@ -37,8 +40,15 @@ public class RuntimeTiedArrayProxyEntry extends TiedVariableBase {
     public RuntimeTiedArrayProxyEntry(RuntimeArray parent, RuntimeScalar key, Integer outOfRangeOriginalIndex) {
         super(null, null);
         this.parent = parent;
+        this.tieHandle = parent.elements instanceof TieArray tieArray ? tieArray : null;
         this.key = key;
         this.outOfRangeOriginalIndex = outOfRangeOriginalIndex;
+    }
+
+    @Override
+    RuntimeScalar retainArgumentAliasHandlerOwner() {
+        return tieHandle == null ? null
+                : RuntimeScalar.retainTiedHandlerValue(tieHandle.getSelf());
     }
 
     /**
@@ -60,7 +70,7 @@ public class RuntimeTiedArrayProxyEntry extends TiedVariableBase {
             return;
         }
         // Always fetch the current value from the tied object
-        RuntimeScalar fetchedValue = TieArray.tiedFetch(parent, key);
+        RuntimeScalar fetchedValue = tiedFetchFromAlias();
         this.type = fetchedValue.type;
         this.value = fetchedValue.value;
     }
@@ -78,7 +88,7 @@ public class RuntimeTiedArrayProxyEntry extends TiedVariableBase {
                     "Modification of non-creatable array value attempted, subscript "
                             + outOfRangeOriginalIndex);
         }
-        return TieArray.tiedStore(parent, key, value);
+        return tiedStoreFromAlias(value);
     }
 
     @Override
@@ -86,6 +96,17 @@ public class RuntimeTiedArrayProxyEntry extends TiedVariableBase {
         if (outOfRangeOriginalIndex != null) {
             return new RuntimeScalar();
         }
-        return TieArray.tiedFetch(parent, key);
+        return tiedFetchFromAlias();
+    }
+
+    private RuntimeScalar tiedFetchFromAlias() {
+        return tieHandle == null ? TieArray.tiedFetch(parent, key)
+                : TieArray.tiedFetch(tieHandle, key);
+    }
+
+    private RuntimeScalar tiedStoreFromAlias(RuntimeScalar value) {
+        parent.clearTiedLocalSizeOverride();
+        return tieHandle == null ? TieArray.tiedStore(parent, key, value)
+                : TieArray.tiedStore(tieHandle, key, value);
     }
 }
