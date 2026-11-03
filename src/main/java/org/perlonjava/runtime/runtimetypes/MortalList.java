@@ -1647,7 +1647,7 @@ public class MortalList {
         // released, so it remains on the unproven path until its surrounding
         // owner identities establish that no compatibility recovery is needed.
         boolean unidentifiedRelease = ownerRelease == null
-                || ownerRelease.ownerSlotRelease == null;
+                || !ownerRelease.identifiesReleasedOwnerEdge();
         boolean finalRelease = false;
         if (base.refCount > 0) {
             base.traceRefCount(-1, "MortalList.flush (deferred decrement)");
