@@ -114,6 +114,7 @@ priorities and future plans.
 - Track cloned thread snapshot roots with temporary owner identities and retire them at entry cleanup or runtime teardown, removing the cloned-root reachability fallback from first weaken (#1649).
 - Preserve captured weak referents through semantic closure-pad owner identities and finalize them after the last capture release, without a synthetic positive count (#1649).
 - Defer legacy semantic closure-pad cleanup to its owner-slot release, removing the final capture-path positive-count pin (#1649).
+- Bind signature parameter cells that skip lexical alias resolution into active pads so slurpy aggregates release weak observers at frame exit (#1649).
 
 
 
