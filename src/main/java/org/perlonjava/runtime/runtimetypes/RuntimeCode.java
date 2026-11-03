@@ -2236,6 +2236,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return owners;
     }
 
+    private static void releaseExitedArgumentArrayContainerOwners(
+            RuntimeArray args, ExecutionRuntimeState executionState) {
+        if (args == null || args.threadShared
+                || executionState.argsStack.contains(args)
+                || args.hasPerlStrongOwner()) {
+            return;
+        }
+        for (RuntimeScalar scalar : new ArrayList<>(args.elements)) {
+            if (scalar != null) scalar.releaseContainerOwner(args);
+        }
+    }
+
     private static List<ArgumentContainerOwner> takeStagedArgumentContainerOwners(
             RuntimeArray args, ExecutionRuntimeState executionState) {
         for (int i = executionState.callArgumentFrames.size() - 1; i >= 0; i--) {
@@ -2346,6 +2358,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         MortalList.drainDeferredArgumentOwnerReleases();
         cleanupOwnedArgumentAliases(exitedArgs);
+        releaseExitedArgumentArrayContainerOwners(exitedArgs, executionState);
         drainDeferredArgumentAggregateCleanup(executionState);
         Deque<Boolean> haStack = executionState.hasArgsStack;
         if (!haStack.isEmpty()) {
