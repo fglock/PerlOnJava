@@ -115,7 +115,6 @@ public class WeakRefRegistry {
         state.referentToWeakRefs
                 .computeIfAbsent(base, k -> Collections.newSetFromMap(new IdentityHashMap<>()))
                 .add(ref);
-        base.activateOwnerTracking();
         ref.releaseUntrackedReferenceOwner(base);
         // Releasing the final strong slot can synchronously run DESTROY and
         // clear this newly registered weak observer, as Perl does when the
