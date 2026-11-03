@@ -4628,9 +4628,11 @@ public class BytecodeCompiler implements Visitor {
 
                                 emit(Opcodes.REGISTER_MY_VAR);
                                 emitReg(reg);
-                                if (sigil.equals("$")) {
-                                    emitActiveLexicalBinding(reg, varName);
-                                }
+                                // Signature parameters skip EMIT_LEXICAL_ALIAS
+                                // because they bind fresh value cells. Bind all
+                                // sigils here so slurpy array/hash pads acquire
+                                // their ACTIVE_LEXICAL owner after registration.
+                                emitActiveLexicalBinding(reg, varName);
 
                                 // Runtime attribute dispatch for list variable declarations.
                                 // Attributes are stored on the parent my/state node, propagate to each element.
