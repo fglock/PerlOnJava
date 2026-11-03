@@ -1213,7 +1213,164 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                                 .append(code.packageName == null ? "" : code.packageName)
                                 .append("::").append(code.subName == null ? "" : code.subName)
                                 .append('@').append(code.cvStartFile == null ? "" : code.cvStartFile)
-                                .append(':').append(code.cvStartLine);
+                                .append(':').append(code.cvStartLine)
+                                .append(" codeRefCount=").append(code.refCount)
+                                .append(" codePerlOwned=")
+                                .append(code.hasPerlOwnerForCaptureOtherThan(null))
+                                .append(" codeSlots=[");
+                        boolean firstCodeOwner = true;
+                        for (PerlOwnerSlot codeOwner : code.ownerSlotSnapshot()) {
+                            if (!codeOwner.isActive()) continue;
+                            if (!firstCodeOwner) result.append(", ");
+                            firstCodeOwner = false;
+                            result.append(codeOwner.kind()).append('#').append(codeOwner.identity());
+                        RuntimeScalar codeCell = codeOwner.countedScalarOwner();
+                        if (codeCell != null) {
+                            result.append(" scalar=").append(System.identityHashCode(codeCell))
+                                    .append(" type=").append(codeCell.type)
+                                    .append(" owns=").append(codeCell.refCountOwned);
+                            RuntimeBase codeContainer = codeCell.containerOwner;
+                            if (codeContainer != null) {
+                                result.append(" container=")
+                                        .append(codeContainer.getClass().getSimpleName())
+                                        .append('#').append(System.identityHashCode(codeContainer));
+                                if (codeContainer instanceof RuntimeArray array) {
+                                    result.append(" size=").append(array.elements.size())
+                                            .append(" refCount=").append(array.refCount)
+                                            .append(" containsAt=").append(array.elements.indexOf(codeCell));
+                                    result.append(" arrayOwners=[");
+                                    boolean firstArrayOwner = true;
+                                    for (PerlOwnerSlot arrayOwner : array.ownerSlotSnapshot()) {
+                                        if (!arrayOwner.isActive()) continue;
+                                        if (!firstArrayOwner) result.append(", ");
+                                        firstArrayOwner = false;
+                                        result.append(arrayOwner.kind()).append('#')
+                                                .append(arrayOwner.identity());
+                                        RuntimeScalar parentCell = arrayOwner.countedScalarOwner();
+                                        if (parentCell == null) {
+                                            parentCell = arrayOwner.untrackedScalarOwner();
+                                        }
+                                        if (parentCell != null) {
+                                            result.append(" scalar=")
+                                                    .append(System.identityHashCode(parentCell));
+                                            RuntimeBase parent = parentCell.containerOwner;
+                                            if (parent != null) {
+                                                result.append(" parent=")
+                                                        .append(parent.getClass().getSimpleName())
+                                                        .append('#').append(System.identityHashCode(parent));
+                                                if (parent instanceof RuntimeHash hash) {
+                                                    result.append(" keysAt=[");
+                                                    boolean firstParentKey = true;
+                                                    for (java.util.Map.Entry<String, RuntimeScalar> entry
+                                                            : hash.elements.entrySet()) {
+                                                        if (entry.getValue() != parentCell) continue;
+                                                        if (!firstParentKey) result.append(", ");
+                                                        firstParentKey = false;
+                                                        result.append(entry.getKey());
+                                                    }
+                                                    result.append("] parentRefCount=")
+                                                            .append(hash.refCount)
+                                                            .append(" parentSlots=[");
+                                                    boolean firstHashOwner = true;
+                                                    for (PerlOwnerSlot hashOwner : hash.ownerSlotSnapshot()) {
+                                                        if (!hashOwner.isActive()) continue;
+                                                        if (!firstHashOwner) result.append(", ");
+                                                        firstHashOwner = false;
+                                                        result.append(hashOwner.kind()).append('#')
+                                                                .append(hashOwner.identity());
+                                                        RuntimeScalar hashOwnerCell = hashOwner.countedScalarOwner();
+                                                        if (hashOwnerCell == null) {
+                                                            hashOwnerCell = hashOwner.untrackedScalarOwner();
+                                                        }
+                                                        if (hashOwnerCell != null) {
+                                                            result.append(" scalar=")
+                                                                    .append(System.identityHashCode(hashOwnerCell));
+                                                            RuntimeBase outer = hashOwnerCell.containerOwner;
+                                                            if (outer != null) {
+                                                                result.append(" outer=")
+                                                                        .append(outer.getClass().getSimpleName())
+                                                                        .append('#').append(System.identityHashCode(outer));
+                                                                if (outer instanceof RuntimeHash outerHash) {
+                                                                    result.append(" keysAt=[");
+                                                                    boolean firstOuterKey = true;
+                                                                    for (java.util.Map.Entry<String, RuntimeScalar> entry
+                                                                            : outerHash.elements.entrySet()) {
+                                                                        if (entry.getValue() != hashOwnerCell) continue;
+                                                                        if (!firstOuterKey) result.append(", ");
+                                                                        firstOuterKey = false;
+                                                                        result.append(entry.getKey());
+                                                                    }
+                                                            result.append("] outerBless=")
+                                                                    .append(outerHash.blessId)
+                                                                    .append(" outerRefCount=").append(outerHash.refCount)
+                                                                    .append(" outerSlots=[");
+                                                            boolean firstOuterOwner = true;
+                                                            for (PerlOwnerSlot outerOwner : outerHash.ownerSlotSnapshot()) {
+                                                                if (!outerOwner.isActive()) continue;
+                                                                if (!firstOuterOwner) result.append(", ");
+                                                                firstOuterOwner = false;
+                                                                result.append(outerOwner.kind()).append('#')
+                                                                        .append(outerOwner.identity());
+                                                                RuntimeScalar outerOwnerCell = outerOwner.countedScalarOwner();
+                                                                if (outerOwnerCell == null) {
+                                                                    outerOwnerCell = outerOwner.untrackedScalarOwner();
+                                                                }
+                                                                if (outerOwnerCell != null) {
+                                                                    result.append(" scalar=")
+                                                                            .append(System.identityHashCode(outerOwnerCell));
+                                                                    RuntimeBase ownerContainer = outerOwnerCell.containerOwner;
+                                                                    if (ownerContainer != null) {
+                                                                        result.append(" container=")
+                                                                                .append(ownerContainer.getClass().getSimpleName())
+                                                                                .append('#')
+                                                                                .append(System.identityHashCode(ownerContainer));
+                                                                        if (ownerContainer instanceof RuntimeHash ownerHash) {
+                                                                            result.append(" keysAt=[");
+                                                                            boolean firstOwnerKey = true;
+                                                                            for (java.util.Map.Entry<String, RuntimeScalar> entry
+                                                                                    : ownerHash.elements.entrySet()) {
+                                                                                if (entry.getValue() != outerOwnerCell) continue;
+                                                                                if (!firstOwnerKey) result.append(", ");
+                                                                                firstOwnerKey = false;
+                                                                                result.append(entry.getKey());
+                                                                            }
+                                                                            result.append(']');
+                                                                        } else if (ownerContainer instanceof RuntimeArray ownerArray) {
+                                                                            result.append(" index=")
+                                                                                    .append(ownerArray.elements.indexOf(outerOwnerCell));
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                            result.append(']');
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                    result.append(']');
+                                                }
+                                            }
+                                        }
+                                    }
+                                    result.append(']');
+                                } else if (codeContainer instanceof RuntimeHash hash) {
+                                    result.append(" size=").append(hash.elements.size())
+                                            .append(" refCount=").append(hash.refCount)
+                                            .append(" keysAt=[");
+                                    boolean firstKey = true;
+                                    for (java.util.Map.Entry<String, RuntimeScalar> entry
+                                            : hash.elements.entrySet()) {
+                                        if (entry.getValue() != codeCell) continue;
+                                        if (!firstKey) result.append(", ");
+                                        firstKey = false;
+                                        result.append(entry.getKey());
+                                    }
+                                    result.append(']');
+                                }
+                            }
+                        }
+                        }
+                        result.append(']');
                     }
                 }
                 result.append(']');
@@ -1341,6 +1498,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                 + " blessId=" + b.blessId
                 + " refCount=" + b.refCount
                 + " owners=" + e.getValue().size());
+            System.err.println("    owner-state=" + b.ownerTraceSnapshot());
             for (java.util.Map.Entry<Integer, OwnerTrace> own : e.getValue().entrySet()) {
                 System.err.println("    owner=" + own.getKey() + " from " + own.getValue().acquireSite);
             }
