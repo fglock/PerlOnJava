@@ -1418,7 +1418,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 intendedOwnerKind == null ? countedOwnerKind() : intendedOwnerKind);
     }
 
-    static RuntimeScalar copyToMortalReturnSlot(RuntimeScalar source) {
+    /** Copy a reference into a return-owned scalar and defer its exact release. */
+    public static RuntimeScalar copyToMortalReturnSlot(RuntimeScalar source) {
         RuntimeScalar copy = new RuntimeScalar(source);
         copy.mortalReturnSnapshot = true;
         copy.copiedFromArgumentFrame = null;
