@@ -1322,7 +1322,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && kind != PerlOwnerSlot.Kind.ARGUMENT_VALUE
                 && kind != PerlOwnerSlot.Kind.ARGUMENT_CONTAINER
                 && kind != PerlOwnerSlot.Kind.RETURN_VALUE
-                && kind != PerlOwnerSlot.Kind.TIE_HANDLER)
+                && kind != PerlOwnerSlot.Kind.TIE_HANDLER
+                && kind != PerlOwnerSlot.Kind.ARGUMENT_TIE_HANDLER)
                 || countedOwnerSlot != slot || !refCountOwned || value != referent
                 || ((type & RuntimeScalarType.REFERENCE_BIT) == 0
                     && type != RuntimeScalarType.GLOB
@@ -1445,14 +1446,21 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     /** Snapshot one tie wrapper's strong handler edge independently of its source. */
     static RuntimeScalar retainTiedHandlerValue(RuntimeScalar source) {
+        return retainTiedHandlerValue(source, PerlOwnerSlot.Kind.TIE_HANDLER);
+    }
+
+    /** Retain a tie handler for an owner slot with its own Perl lifetime. */
+    static RuntimeScalar retainTiedHandlerValue(
+            RuntimeScalar source, PerlOwnerSlot.Kind ownerKind) {
         if (source == null) return null;
+        if (ownerKind != PerlOwnerSlot.Kind.TIE_HANDLER
+                && ownerKind != PerlOwnerSlot.Kind.ARGUMENT_TIE_HANDLER) {
+            throw new IllegalArgumentException("invalid tie-handler owner kind");
+        }
         RuntimeScalar owner = new RuntimeScalar(source);
-        incrementRefCountForContainerStore(owner);
+        incrementRefCountForContainerStore(owner, ownerKind);
         owner.tiedHandlerValueOwner = true;
         owner.refreshUntrackedReferenceOwner();
-        if (owner.refCountOwned) {
-            owner.countedOwnerSlot.reclassifyCountedIdentity(PerlOwnerSlot.Kind.TIE_HANDLER);
-        }
         return owner;
     }
 

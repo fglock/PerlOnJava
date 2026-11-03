@@ -1,8 +1,9 @@
 use strict;
 use warnings;
-use Test::More tests => 2;
+use Test::More tests => 3;
 
 our @events;
+my @warnings;
 
 {
     package AliasedTieHash;
@@ -23,6 +24,8 @@ our @events;
     sub DESTROY { push @main::events, 'DESTROY' }
 
     package main;
+
+    local $SIG{__WARN__} = sub { push @warnings, @_ };
 
     our %tied_hash;
     our @tied_array;
@@ -63,6 +66,8 @@ our @events;
         ],
         'a tied array handler survives untie through an aliased element argument',
     );
+
+    is_deeply(\@warnings, [], 'the argument magic owner does not cause an untie warning');
 }
 
 done_testing();
