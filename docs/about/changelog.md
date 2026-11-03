@@ -7,6 +7,7 @@ priorities and future plans.
 ## Work in progress
 
 - Hold an array or hash container through the lifetime of an aliased element argument, including after `shift @_` (#1649).
+- Preserve tied hash and array magic through aliased element arguments, including `untie` during the callee, and release the handler at frame exit (#1649).
 - Acquire replacement ownership before publishing array and hash slots, then release displaced values against the updated storage state (#1649).
 
 - Release temporary JVM reference-alias RHS owners after scalar-context assignments so the final aliased cell can clean up (#1649).
