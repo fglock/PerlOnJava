@@ -2,16 +2,33 @@
 
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
-**Current checkpoint (2026-11-03 09:14 UTC):** #1649 continues on branch
-`wip/ownership-handoff-20261103-053423`, HEAD `f45623db6`, which merges the
-nine commits added to `master` since the old PR base. The branch is clean and
-zero commits behind `origin/master`. The immutable no-sweeps
-`nice -n 19 timeout 3600 env JPERL_DISABLE_CORRECTIVE_SWEEPS=1 make` gate
-passes in 8m22:
-`/private/tmp/issue1649-master-merge-no-sweeps-f45623db6.log`.
-Six focused Perl regressions (25 checks) pass on JVM and interpreter;
-standard Perl passes the six-file oracle set (25 checks) at
-`/private/tmp/issue1649-master-merge-perl-oracle-f45623db6.log`.
+**Current checkpoint (2026-11-03 09:57 UTC):** #1649 continues on branch
+`wip/ownership-scalar-transition-20261103-continued`, HEAD `9a933dc6c`, based
+on merged master candidate `f45623db6`. The first scalar-slot batch routes
+reference overwrite and non-CODE `undefine()` through one transition method:
+it retains the replacement before publishing the new cell state, then releases
+the displaced edge after publication. Explicit undef retains its weak-observer
+and full-mortal-flush behavior; CODE symbol-table undefinition remains on its
+special path. The new five-check Perl regression verifies copied-reference
+lifetime, destructor observation of the replacement/undef state, and weak
+observer clearing.
+
+The immutable no-sweeps `nice -n 19 timeout 3600 env
+JPERL_DISABLE_CORRECTIVE_SWEEPS=1 make` gate passes in 13m15 on `9a933dc6c`:
+`/private/tmp/issue1649-scalar-slot-transition-no-sweeps-9a933dc6c.log`.
+The focused regression passes 5/5 on system Perl,
+`/private/tmp/issue1649-scalar-slot-transition-system-perl-continued.log`,
+JVM, `/private/tmp/issue1649-scalar-slot-transition-jvm-9a933dc6c.log`, and
+interpreter,
+`/private/tmp/issue1649-scalar-slot-transition-interpreter-9a933dc6c.log`.
+The full build spent most of its time in the existing 50,001-element root
+budget fixture, whose insertion path scans the hash on every insertion.
+
+Next: map aggregate slot acquisition, publication, replacement/removal, and
+deferred release across plain arrays and hashes. Use the same acquire-before-
+publish, release-after-publish contract and add standard-Perl regressions for
+the observable destructor state. No array/hash producer has been migrated by
+this scalar batch yet.
 
 Standard Perl is the oracle for every Perl-visible reference edge and its
 lifetime behavior. A reference-slot transition should retain a new strong
