@@ -286,7 +286,7 @@ public class ScalarUtil extends PerlModuleBase {
     }
 
     /**
-     * Placeholder for the isdual functionality.
+     * Check whether the scalar has Perl's dual-valued representation.
      *
      * @param args The arguments passed to the method.
      * @param ctx  The context in which the method is called.
@@ -298,7 +298,7 @@ public class ScalarUtil extends PerlModuleBase {
         }
         RuntimeScalar s = args.get(0);
         if (s.type == READONLY_SCALAR) s = (RuntimeScalar) s.value;
-        return new RuntimeScalar(s.type == DUALVAR).getList();
+        return new RuntimeScalar(s.type == DUALVAR || s.type == BOOLEAN).getList();
     }
 
     /**

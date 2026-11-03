@@ -81,6 +81,10 @@ public class BytecodeInterpreter {
         // interpreter's mutating opcodes must NOT silently strip it --
         // we want `for (3) { ++$_ }` to throw, not silently succeed.
         if (val instanceof ReadOnlyAlias) return false;
+        if (val instanceof ScalarSpecialVariable specialVariable
+                && specialVariable.hasSpecialAssignmentBehavior()) {
+            return false;
+        }
         return val instanceof RuntimeScalarReadOnly || val instanceof ScalarSpecialVariable;
     }
 

@@ -17,7 +17,7 @@
 #
 # Usage:
 #   perl dev/tools/cpan_random_tester.pl                   # Test 10 random modules
-#   perl dev/tools/cpan_random_tester.pl --count 50        # Test 50 random modules
+#   perl dev/tools/cpan_random_tester.pl --count 50        # Rolling window of 50 results
 #   perl dev/tools/cpan_random_tester.pl --modules Foo::Bar,Baz::Qux  # Test specific modules
 #   perl dev/tools/cpan_random_tester.pl --modules list.txt # Test modules from file
 #   perl dev/tools/cpan_random_tester.pl --report-only      # Regenerate .md from .dat
@@ -102,6 +102,8 @@ my %MODULE_TIMEOUT_SECONDS = (
     # Holiday::US builds a combined recurrence set before emitting assertions;
     # the focused test takes about 318s on the JVM.
     'DateTime::Event::Holiday::US' => 420,
+    # DateTime::Set 0.3900's 23-test suite takes about 330s on the JVM.
+    'DateTime::Set'      => 420,
     'Excel::Writer::XLSX' => 7200,
     'Image::ExifTool'    => 3600,
     # local::lib's shell.t launches PerlOnJava repeatedly while testing
@@ -168,6 +170,10 @@ die "--perl-oracle must be 'failures' or 'never'\n"
     unless $perl_oracle eq 'failures' || $perl_oracle eq 'never';
 die "--perl-oracle-timeout must be a positive integer\n"
     unless $perl_oracle_timeout > 0;
+
+# An explicit target count without --retest-age runs a rolling random sample.
+# The no-option default remains untested modules plus previous failures.
+my $sliding_window = $count_option_supplied && $retest_age <= 0 && !$modules_arg;
 
 sub effective_timeout_limits {
     my ($module, $default_soft, $idle_grace, $hard_cap, $overrides) = @_;
@@ -310,6 +316,10 @@ if ($modules_arg) {
         push @candidates, $mod if !$test_date || $test_date le $cutoff_date;
     }
     printf "Candidates at least %d days old: %d\n", $retest_age, scalar @candidates;
+} elsif ($sliding_window) {
+    # Sample both new and previously tested distributions from the full index.
+    @candidates = @all_modules;
+    printf "Candidates in sliding window: %d\n", scalar @candidates;
 } else {
     # Default: untested + failures (in case their deps got installed)
     for my $mod (@all_modules) {
@@ -374,7 +384,7 @@ my $new_skip     = 0;
 my $new_perl_fail = 0;
 my $upgraded     = 0;   # FAIL→PASS transitions
 my $regressed    = 0;   # PASS→FAIL transitions from explicit re-tests
-my $record_pass_regressions = ($retest_age > 0 || $modules_arg ne '');
+my $record_pass_regressions = ($retest_age > 0 || $modules_arg ne '' || $sliding_window);
 my @strict_failures;
 
 for my $module (@selected) {
@@ -1846,7 +1856,8 @@ sub finalize_report_state {
 
 sub trim_report_state {
     my ($limit) = @_;
-    my @entries;
+    my %entries_by_date;
+    my $entry_count = 0;
     my @categories = (
         [PASS      => \%pass_modules],
         [FAIL      => \%fail_modules],
@@ -1857,29 +1868,35 @@ sub trim_report_state {
     for my $category (@categories) {
         my ($status, $modules) = @$category;
         for my $module (keys %$modules) {
-            push @entries, {
-                status  => $status,
-                module  => $module,
-                date    => $modules->{$module}{date} // '',
-                modules => $modules,
-            };
+            my $date = $modules->{$module}{date} // '';
+            push @{$entries_by_date{$date}}, [$modules, $module];
+            $entry_count++;
         }
     }
 
-    my $excess = @entries - $limit;
+    my $excess = $entry_count - $limit;
     return 0 unless $excess > 0;
 
-    @entries = sort {
-        $a->{date} cmp $b->{date}
-            || $a->{module} cmp $b->{module}
-            || $a->{status} cmp $b->{status}
-    } @entries;
+    my $removed = 0;
+    for my $date (sort keys %entries_by_date) {
+        my @dated_entries = @{$entries_by_date{$date}};
+        my $remove_count = @dated_entries < $excess ? @dated_entries : $excess;
 
-    for my $entry (@entries[0 .. $excess - 1]) {
-        delete $entry->{modules}{$entry->{module}};
+        # Only the boundary date needs random selection. If all entries from
+        # this date are older than the boundary, remove them without shuffling.
+        for my $i (0 .. $remove_count - 1) {
+            my $j = $i + int(rand(@dated_entries - $i));
+            @dated_entries[$i, $j] = @dated_entries[$j, $i];
+            my ($modules, $module) = @{$dated_entries[$i]};
+            delete $modules->{$module};
+        }
+
+        $removed += $remove_count;
+        $excess -= $remove_count;
+        last unless $excess;
     }
 
-    return $excess;
+    return $removed;
 }
 
 sub persist_module_results {
@@ -1999,6 +2016,8 @@ sub persist_module_results {
             }
         }
 
+        # Add the target and dependency results, then keep the window capped.
+        trim_report_state($count) if $sliding_window;
         save_report_state();
     });
 
@@ -2107,6 +2126,7 @@ sub fail_event_line {
 sub should_skip_selected_module {
     my ($module) = @_;
     return (0, '') if $modules_arg ne '';
+    return (0, '') if $sliding_window;
 
     my $reason = '';
     with_report_lock(sub {
@@ -2396,6 +2416,8 @@ Usage:
 Options:
   --count N, -n N  Number of random target modules to test (default: 10)
                    Dependencies are tested too, so actual module count is higher.
+                   When explicitly supplied without --retest-age or --modules,
+                   samples all targets and keeps a rolling window of N results.
   --modules LIST   Test specific modules instead of random selection.
                    Can be:
                      - Comma-separated: --modules Foo::Bar,Baz::Qux
@@ -2436,8 +2458,11 @@ Options:
 
 Behavior:
   - Default: uses jcpan -t (always runs tests, even for installed modules).
-  - Targets are randomly chosen from modules that haven't passed yet
-    (or from --modules if specified).
+  - With no explicit -n or --retest-age, targets are chosen from modules that
+    haven't passed yet. With explicit -n alone, targets are sampled from the
+    full CPAN index, including previously tested modules.
+  - --retest-age keeps its age-based selection behavior. --modules selects only
+    the requested targets.
   - Dependencies discovered during a run are recorded too (PASS/FAIL).
   - A few heavy targets (e.g. DBIx::Class and Excel::Writer::XLSX) have a higher per-module timeout in the script.
     Their effective hard cap is also extended to include the configured idle
@@ -2458,20 +2483,21 @@ Behavior:
     isolated CPAN home. Failures reproduced there are listed separately as
     "Skipped because Perl failed" and excluded from the Pass/Fail percentage.
   - Results accumulate across runs (never discarded).
-  - When --count/-n is supplied, the oldest dated report entries are removed
-    before and after the run as needed to keep "Modules Tested" at that count.
+  - Explicit --count/-n caps report entries at that count. In sliding-window
+    mode, each target and its dependency results are recorded before the oldest
+    entries are expired; equal-date entries are expired randomly.
   - Multiple instances can run concurrently. Report updates are protected
     by a lock, reload the latest shared state before each write, and replace
     files atomically so results from parallel runs are not lost.
-  - Random/default runs re-check each selected target before starting it and
-    skip targets another instance has already marked PASS or SKIP.
+  - Default runs re-check each selected target before starting it and skip
+    targets another instance has already marked PASS or SKIP.
 
 Examples:
   perl dev/tools/cpan_random_tester.pl                   # 10 targets
-  perl dev/tools/cpan_random_tester.pl --count 50        # 50 targets
+  perl dev/tools/cpan_random_tester.pl --count 50        # rolling window of 50
   perl dev/tools/cpan_random_tester.pl --modules Foo::Bar,Baz::Qux  # Specific modules
   perl dev/tools/cpan_random_tester.pl --modules list.txt # From file
-  perl dev/tools/cpan_random_tester.pl --jobs 8 -n 20      # parallel test files
+  perl dev/tools/cpan_random_tester.pl --jobs 8 -n 20      # window of 20 results
   perl dev/tools/cpan_random_tester.pl --activity-grace 600 -n 20  # tolerate quiet phases
   perl dev/tools/cpan_random_tester.pl --seed 42 -n 20   # reproducible
   perl dev/tools/cpan_random_tester.pl --report-only     # regen report

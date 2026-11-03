@@ -68,11 +68,31 @@ priorities and future plans.
 - Defer legacy semantic closure-pad cleanup to its owner-slot release, removing the final capture-path positive-count pin (#1649).
 - Bind signature parameter cells that skip lexical alias resolution into active pads so slurpy aggregates release weak observers at frame exit (#1649).
 
+- Make an explicit `-n` run sample new and previously tested CPAN targets while maintaining a rolling window of target and dependency results.
+
+- Preserve callable CODE slots and captured values when copying stash globs returned by `each`.
+
+- Autovivify undefined hash references assigned through a hash dereference (#1958).
+
+- Dispatch bodyless `can` stubs through their class `AUTOLOAD` when present, preserving generated class introspection (#1959).
+
+- Preserve MakeMaker test rules when `MY::test` calls `SUPER::test` in scalar context.
+
+- Recognize boolean values as dual-valued in `Scalar::Util::isdual` (#1954).
+
+- Recognize a bareword filehandle when `print`'s implicit `$_` list ends at a block close (#1948).
+
+- Accept YAML-style mapping syntax in `YAML::Syck::LoadJSON`, matching Syck's JSON loader behavior (#1942).
+
 - Bundle `Devel::Size` with JVM-based `size` and `total_size` estimates.
+
+- Preserve scalar slot assignments through localized whole-glob aliases (#1939).
 
 - Accept `experimental::for_list` as Perl 5.44's no-op warning category, align bundled warning masks including `experimental::builtin`, and expose B start-op package identity for Sub::Import compatibility (#1208, #1219, #1206).
 
 - Preserve the input line number when a borrowed anonymous filehandle alias leaves a JVM subroutine scope (#1933).
+
+- Preserve filehandle line-counter assignments made through localized `$.` scopes (#1965).
 
 - Resolve glob-backed filehandles in `POSIX::isatty` without assuming the glob value is a `RuntimeIO` (#1932).
 
@@ -80,7 +100,7 @@ priorities and future plans.
 
 - Preserve named typeglob stringification when copying package stash entries (#1927).
 
-- Reduce repeated eval STRING overhead with lazy state and caching for context-free integer-literal evals (#1911).
+- Reduce eval STRING overhead with lazy goto collections, parser-set AST flags that skip unneeded BytecodeCompiler analysis passes, ScopedSymbolTable snapshot caching, per-thread eval caches without synchronization, cached constructor/class-field metadata, and a re-entrant fast-path in `PerlRuntime.bind()` (#1911).
 
 - Preserve arbitrary bytes in SQLite text columns across DBI fetches (#1923).
 
@@ -178,7 +198,7 @@ priorities and future plans.
 - Allow additional quiet time for `local::lib`, `Syntax::Kamelon`, and `DateTime::Event::Holiday::US` CPAN tests that exceed the default timeout during nested JVM launches, syntax highlighting, and recurrence-set construction (#1787, #1370, #1541).
 - Honor Perl's `-T` behavior by excluding `PERL5LIB` from `@INC` while preserving explicit `-I` paths (#1787).
 - Recover malformed HTML through Jsoup in `XML::LibXML`, decode HTML attribute entities by default, report `HTML::Parser` source positions, and allow nested `AUTOLOAD` tail calls from sort comparators (#1416, #1457, #1634).
-- Preserve anonymous and eval caller metadata, retain source-relative require paths, and deparse folded closure expressions; report the final initializer line for multiline imported DSL declarations (#1548, #1620).
+- Preserve anonymous and eval caller metadata, including numeric `0` for eval-frame `hasargs`; retain source-relative require paths and deparse folded closure expressions; report the final initializer line for multiline imported DSL declarations (#1548, #1620).
 - Preserve package-qualified anonymous caller names used by generated accessors (#1276).
 - Reuse live lexical reachability snapshots across cleanup drains while roots remain unchanged, reducing repeated graph walks in large CPAN workloads (#1797).
 - Implement `XML::LibXML::Dtd->parse_string` with a wrapped DTD node that serializes using XML::LibXML's node type and DTD syntax (#1348).

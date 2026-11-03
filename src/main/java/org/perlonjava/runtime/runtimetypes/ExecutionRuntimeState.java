@@ -114,8 +114,8 @@ public final class ExecutionRuntimeState {
     public final Deque<String> pendingCallerPackages = new ArrayDeque<>();
     public int evalDepth;
     /** Compact stash entries materialized by an eval-held CODE assignment. */
-    public final Deque<LinkedHashMap<String, RuntimeScalar>> evalPseudoConstantScopes =
-            new ArrayDeque<>();
+    public final ArrayList<LinkedHashMap<String, RuntimeScalar>> evalPseudoConstantScopes =
+            new ArrayList<>();
     public int tailCallTrampolineDepth;
     public final ArrayDeque<Runnable> futureResumeQueue = new ArrayDeque<>();
     public boolean futureResumeDraining;

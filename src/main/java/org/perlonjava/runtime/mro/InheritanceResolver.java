@@ -557,8 +557,7 @@ public class InheritanceResolver {
                     // before it has a body. AutoSplit relies on this: the stub
                     // in a parent class must win method lookup so invoking it
                     // reaches that package's AUTOLOAD and corresponding .al
-                    // file. Ignore only incidental undefined code slots that
-                    // were never declared.
+                    // file.
                     boolean isDeclaredForward = codeRef != null
                             && codeRef.value instanceof RuntimeCode code
                             && (code.isDeclared
@@ -567,6 +566,27 @@ public class InheritanceResolver {
                                             && code.stashInstallSub != null));
                     if (!RuntimeCode.isCodeDefined(codeRef) && !isDeclaredForward) {
                         continue;
+                    }
+                    if (!RuntimeCode.isCodeDefined(codeRef)
+                            && isDeclaredForward
+                            && "can".equals(methodName)
+                            && codeRef.value instanceof RuntimeCode code
+                            && !code.lexicalForwardGlobPlaceholder) {
+                        String autoloadName = (effectiveClassName.endsWith("::")
+                                ? effectiveClassName
+                                : effectiveClassName + "::") + "AUTOLOAD";
+                        RuntimeScalar autoload = GlobalVariable.existsGlobalCodeRef(autoloadName)
+                                ? GlobalVariable.getGlobalCodeRef(autoloadName)
+                                : null;
+                        if (RuntimeCode.isCodeDefined(autoload)) {
+                            RuntimeCode autoloadCode = (RuntimeCode) autoload.value;
+                            String cvStash = autoloadCode.packageName;
+                            autoloadCode.autoloadVariableName = cvStash != null && !cvStash.isEmpty()
+                                    ? cvStash + "::AUTOLOAD"
+                                    : autoloadName;
+                            methodCache.put(cacheKey, autoload);
+                            return autoload;
+                        }
                     }
                     methodCache.put(cacheKey, codeRef);
                     if (TRACE_METHOD_RESOLUTION) {

@@ -49,6 +49,11 @@ public class Lexer {
     // Array to mark operator characters
     public static boolean[] isOperator;
 
+    // ASCII fast-path tables for identifier character classification.
+    // Avoids ICU calls for the overwhelming common case of ASCII-only identifiers.
+    private static final boolean[] ASCII_IDENT_START = new boolean[128];
+    private static final boolean[] ASCII_IDENT_CONT  = new boolean[128];
+
     // Static block to initialize the isOperator array
     static {
         isOperator = new boolean[128];
@@ -56,6 +61,10 @@ public class Lexer {
         for (char c : "!\"#$%&'()*+,-./:;<=>?@[\\]^`{|}~".toCharArray()) {
             isOperator[c] = true;
         }
+        for (int c = 'a'; c <= 'z'; c++) { ASCII_IDENT_START[c] = ASCII_IDENT_CONT[c] = true; }
+        for (int c = 'A'; c <= 'Z'; c++) { ASCII_IDENT_START[c] = ASCII_IDENT_CONT[c] = true; }
+        for (int c = '0'; c <= '9'; c++) { ASCII_IDENT_CONT[c] = true; }
+        ASCII_IDENT_START['_'] = ASCII_IDENT_CONT['_'] = true;
     }
 
     // Input characters to be tokenized
@@ -73,7 +82,8 @@ public class Lexer {
     }
 
     private static boolean isPerlIdentifierStart(int codePoint) {
-        return codePoint == '_' || UCharacter.hasBinaryProperty(codePoint, UProperty.XID_START)
+        if (codePoint < 128) return ASCII_IDENT_START[codePoint];
+        return UCharacter.hasBinaryProperty(codePoint, UProperty.XID_START)
                 || isNewerPerlXidStart(codePoint);
     }
 
@@ -96,6 +106,7 @@ public class Lexer {
     }
 
     private static boolean isPerlIdentifierPart(int codePoint) {
+        if (codePoint < 128) return ASCII_IDENT_CONT[codePoint];
         return codePoint == '_' || UCharacter.hasBinaryProperty(codePoint, UProperty.XID_CONTINUE);
     }
 
@@ -151,7 +162,7 @@ public class Lexer {
 
     // Method to tokenize the input string into a list of tokens
     public List<LexerToken> tokenize() {
-        List<LexerToken> tokens = new ArrayList<>();
+        List<LexerToken> tokens = new ArrayList<>(length / 4 + 16);
         LexerToken token;
 
         while ((token = nextToken()) != null) {
@@ -327,7 +338,16 @@ public class Lexer {
         advanceCodePoint(cp); // Move past the initial character we already validated
 
         while (position < length) {
-            if (input.charAt(position) == 0xFE && position + 6 < length) {
+            char c = input.charAt(position);
+            if (c < 128) {
+                // ASCII fast path: avoid getCurrentCodePoint() and ICU call overhead
+                if (ASCII_IDENT_CONT[c]) {
+                    position++;
+                    continue;
+                }
+                break;
+            }
+            if (c == 0xFE && position + 6 < length) {
                 boolean extendedDelimiter = true;
                 for (int i = 1; i <= 6; i++) {
                     int continuation = input.charAt(position + i);

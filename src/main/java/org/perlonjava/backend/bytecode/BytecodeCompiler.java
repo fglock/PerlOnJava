@@ -180,7 +180,7 @@ public class BytecodeCompiler implements Visitor {
 
     /** Record every label physically nested in a loop body for dynamic goto. */
     private void registerLoopBodyLabels(Node node) {
-        if (node == null) return;
+        if (node == null || gotoLabelsInsideLoop == null) return;
         if (node instanceof LabelNode labelNode) {
             gotoLabelsInsideLoop.add(labelNode.label);
             return;
@@ -252,6 +252,7 @@ public class BytecodeCompiler implements Visitor {
     }
 
     private void registerGotoLoopRanges(int bodyStartPc, int bodyEndPc) {
+        if (gotoLabelPcs == null || gotoLabelPcs.isEmpty()) return;
         for (Map.Entry<String, Integer> label : gotoLabelPcs.entrySet()) {
             if (label.getValue() >= bodyStartPc && label.getValue() < bodyEndPc) {
                 gotoLabelLoopRanges.put(label.getKey(), new int[] { bodyStartPc, bodyEndPc });
@@ -269,11 +270,12 @@ public class BytecodeCompiler implements Visitor {
     final ScopedSymbolTable symbolTable = new ScopedSymbolTable();
     // Goto label support: maps label names to their PC addresses for intra-function goto.
     // pendingGotos tracks forward references (goto before label) needing patch-up.
-    final Map<String, Integer> gotoLabelPcs = new HashMap<>();
-    final Set<String> gotoLabelsInsideLoop = new HashSet<>();
-    final Set<String> gotoLabelsInsideDefer = new HashSet<>();
-    final Set<String> gotoLabelsInsideConstruct = new HashSet<>();
-    final Set<String> gotoLabelsInsideGiven = new HashSet<>();
+    // These are null by default; initialized lazily in compile() only when goto/labels are present.
+    Map<String, Integer> gotoLabelPcs;
+    Set<String> gotoLabelsInsideLoop;
+    Set<String> gotoLabelsInsideDefer;
+    Set<String> gotoLabelsInsideConstruct;
+    Set<String> gotoLabelsInsideGiven;
     private int givenBlockDepth;
     /** True while compiling the body of a {@code :lvalue} subroutine. */
     private boolean compilingLvalueSubroutine;
@@ -281,8 +283,8 @@ public class BytecodeCompiler implements Visitor {
     boolean isCompilingLvalueSubroutine() {
         return compilingLvalueSubroutine;
     }
-    final Map<String, int[]> gotoLabelLoopRanges = new HashMap<>();
-    final Map<Integer, String> gotoLabelPackages = new HashMap<>();
+    Map<String, int[]> gotoLabelLoopRanges;
+    Map<Integer, String> gotoLabelPackages;
     static final class GotoLabelTarget {
         final String name;
         final int tokenIndex;
@@ -309,12 +311,22 @@ public class BytecodeCompiler implements Visitor {
     // particular, op/goto.t deliberately reuses A in independent blocks.
     private final Deque<Map<String, GotoLabelTarget>> gotoLabelScopes = new ArrayDeque<>();
     private final Deque<BlockNode> gotoLabelBlockScopes = new ArrayDeque<>();
-    private final Map<Integer, GotoLabelTarget> gotoLabelTargetsByToken = new HashMap<>();
-    final Map<Integer, Set<Integer>> gotoConditionalContextsByToken = new HashMap<>();
-    private final Map<String, List<GotoLabelTarget>> gotoLabelTargetsByName = new HashMap<>();
-    final List<Object[]> pendingGotos = new ArrayList<>();  // [patchPc(Integer), GotoLabelTarget]
+    Map<Integer, GotoLabelTarget> gotoLabelTargetsByToken;
+    Map<Integer, Set<Integer>> gotoConditionalContextsByToken;
+    Map<String, List<GotoLabelTarget>> gotoLabelTargetsByName;
+    List<Object[]> pendingGotos;  // [patchPc(Integer), GotoLabelTarget]
+
+    // Shared sentinel for blocks with no goto labels — avoids per-block LinkedHashMap allocation.
+    private static final Map<String, GotoLabelTarget> EMPTY_GOTO_SCOPE = Map.of();
 
     private void pushGotoLabelScope(BlockNode block) {
+        // Fast path: skip LinkedHashMap allocation when neither the running label table
+        // nor the block's own pre-declared labels have anything for this block.
+        if ((gotoLabelTargetsByName == null || gotoLabelTargetsByName.isEmpty()) && block.labels.isEmpty()) {
+            gotoLabelScopes.push(EMPTY_GOTO_SCOPE);
+            gotoLabelBlockScopes.push(block);
+            return;
+        }
         Map<String, GotoLabelTarget> scope = new LinkedHashMap<>();
         // Reuse the predeclared targets, rather than inventing a second target
         // for the same source label.  Static goto resolution must first choose
@@ -397,7 +409,8 @@ public class BytecodeCompiler implements Visitor {
             boolean constructEntry = (expressionContext
                     || block.getBooleanAnnotation("blockIsDoBlock"))
                     && !block.getBooleanAnnotation("fieldInitializer");
-            Map<String, GotoLabelTarget> local = new HashMap<>();
+            // Lazily allocate `local` — most blocks have no labels so we skip the HashMap.
+            Map<String, GotoLabelTarget> local = null;
             // StatementParser keeps labels that prefix a statement in the
             // owning block's label table.  They have no LabelNode child, but
             // must still be visible to a forward goto outside that block.
@@ -405,6 +418,7 @@ public class BytecodeCompiler implements Visitor {
             // report the Perl diagnostic instead of falling through to
             // "Can't find label".
             for (String name : block.labels) {
+                if (local == null) local = new HashMap<>();
                 GotoLabelTarget created = new GotoLabelTarget(name, block.getIndex(),
                         constructEntry, insideLoopBody, conditionalContexts, simpleConditionalBranch, block);
                 local.put(name, created);
@@ -413,6 +427,7 @@ public class BytecodeCompiler implements Visitor {
             }
             for (Node child : block.elements) {
                 if (!(child instanceof LabelNode label)) continue;
+                if (local == null) local = new HashMap<>();
                 GotoLabelTarget target = local.computeIfAbsent(label.label, ignored -> {
                     GotoLabelTarget created = new GotoLabelTarget(label.label, label.getIndex(), constructEntry,
                             insideLoopBody, conditionalContexts, simpleConditionalBranch, block);
@@ -1556,14 +1571,43 @@ public class BytecodeCompiler implements Visitor {
                 || node instanceof AbstractNode abstractNode
                 && abstractNode.getBooleanAnnotation("subroutineIsLvalue");
 
-        collectLoopBodyLabels(node, gotoLabelsInsideLoop, false);
-        collectDeferLabels(node, gotoLabelsInsideDefer, false);
-        collectConstructEntryLabels(node, gotoLabelsInsideConstruct, false);
-        collectGivenLabels(node, gotoLabelsInsideGiven, false);
-        predeclareGotoLabels(node, false, false, false, Set.of(), false);
-        markGotosInLoopConditions(node);
+        boolean hasGoto        = false;
+        boolean hasLabels      = false;
+        boolean hasDefer       = false;
+        boolean hasGiven       = false;
+        boolean hasEvalOrRegex = false;
+        if (isEvalString && node instanceof AbstractNode rootNode) {
+            hasGoto        = rootNode.getBooleanAnnotation("hasGoto");
+            hasLabels      = rootNode.getBooleanAnnotation("hasLabels");
+            hasDefer       = rootNode.getBooleanAnnotation("hasDefer");
+            hasGiven       = rootNode.getBooleanAnnotation("hasGiven");
+            hasEvalOrRegex = rootNode.getBooleanAnnotation("hasEvalOrRegex");
+        }
+        boolean needsGotoAnalysis = hasGoto || hasLabels;
 
-        if (node != null) {
+        if (needsGotoAnalysis || !isEvalString) {
+            // Lazy-init goto collections: only allocated when analysis actually runs.
+            // For simple eval strings (no goto/labels), these stay null and are never used.
+            if (gotoLabelPcs == null)                  gotoLabelPcs                  = new HashMap<>();
+            if (gotoLabelsInsideLoop == null)          gotoLabelsInsideLoop          = new HashSet<>();
+            if (gotoLabelsInsideDefer == null)         gotoLabelsInsideDefer         = new HashSet<>();
+            if (gotoLabelsInsideConstruct == null)     gotoLabelsInsideConstruct     = new HashSet<>();
+            if (gotoLabelsInsideGiven == null)         gotoLabelsInsideGiven         = new HashSet<>();
+            if (gotoLabelLoopRanges == null)           gotoLabelLoopRanges           = new HashMap<>();
+            if (gotoLabelPackages == null)             gotoLabelPackages             = new HashMap<>();
+            if (gotoLabelTargetsByToken == null)       gotoLabelTargetsByToken       = new HashMap<>();
+            if (gotoConditionalContextsByToken == null) gotoConditionalContextsByToken = new HashMap<>();
+            if (gotoLabelTargetsByName == null)        gotoLabelTargetsByName        = new HashMap<>();
+            if (pendingGotos == null)                  pendingGotos                  = new ArrayList<>();
+            collectLoopBodyLabels(node, gotoLabelsInsideLoop, false);
+            if (hasDefer || !isEvalString) collectDeferLabels(node, gotoLabelsInsideDefer, false);
+            collectConstructEntryLabels(node, gotoLabelsInsideConstruct, false);
+            if (hasGiven || !isEvalString) collectGivenLabels(node, gotoLabelsInsideGiven, false);
+            predeclareGotoLabels(node, false, false, false, Set.of(), false);
+            markGotosInLoopConditions(node);
+        }
+
+        if (node != null && (hasEvalOrRegex || !isEvalString)) {
             VariableCollectorVisitor runtimeSourceCollector =
                     new VariableCollectorVisitor(new HashSet<>());
             node.accept(runtimeSourceCollector);
@@ -1726,25 +1770,25 @@ public class BytecodeCompiler implements Visitor {
         Map<String, String> declaredOurVariables = VariableCollectorVisitor.declaredOurVariables(node);
         code.declaredOurVariables = declaredOurVariables.isEmpty() ? null : declaredOurVariables;
         // Store goto label map for dynamic goto support (goto $variable)
-        if (!this.gotoLabelPcs.isEmpty()) {
+        if (this.gotoLabelPcs != null && !this.gotoLabelPcs.isEmpty()) {
             code.gotoLabelPcs = new HashMap<>(this.gotoLabelPcs);
         }
-        if (!this.gotoLabelsInsideLoop.isEmpty()) {
+        if (this.gotoLabelsInsideLoop != null && !this.gotoLabelsInsideLoop.isEmpty()) {
             code.gotoLabelsInsideLoop = new HashSet<>(this.gotoLabelsInsideLoop);
         }
-        if (!this.gotoLabelsInsideDefer.isEmpty()) {
+        if (this.gotoLabelsInsideDefer != null && !this.gotoLabelsInsideDefer.isEmpty()) {
             code.gotoLabelsInsideDefer = new HashSet<>(this.gotoLabelsInsideDefer);
         }
-        if (!this.gotoLabelsInsideConstruct.isEmpty()) {
+        if (this.gotoLabelsInsideConstruct != null && !this.gotoLabelsInsideConstruct.isEmpty()) {
             code.gotoLabelsInsideConstruct = new HashSet<>(this.gotoLabelsInsideConstruct);
         }
-        if (!this.gotoLabelsInsideGiven.isEmpty()) {
+        if (this.gotoLabelsInsideGiven != null && !this.gotoLabelsInsideGiven.isEmpty()) {
             code.gotoLabelsInsideGiven = new HashSet<>(this.gotoLabelsInsideGiven);
         }
-        if (!this.gotoLabelLoopRanges.isEmpty()) {
+        if (this.gotoLabelLoopRanges != null && !this.gotoLabelLoopRanges.isEmpty()) {
             code.gotoLabelLoopRanges = new HashMap<>(this.gotoLabelLoopRanges);
         }
-        if (!this.gotoLabelPackages.isEmpty()) {
+        if (this.gotoLabelPackages != null && !this.gotoLabelPackages.isEmpty()) {
             code.gotoLabelPackages = new HashMap<>(this.gotoLabelPackages);
         }
         return code;
@@ -2297,20 +2341,17 @@ public class BytecodeCompiler implements Visitor {
         // interpreter's runtime call-site hints through APPLY_COMPILER_FLAGS.
         // Restore the enclosing lexical hints at block exit, matching
         // EmitBlock.emitPostBlockStrictOptions() in the JVM backend.
-        Object postBlockStrictOptions = node.getAnnotation("postBlockStrictOptions");
-        if (postBlockStrictOptions instanceof Integer hints) {
+        if (node.postBlockStrictOptions != null) {
             if (!node.getBooleanAnnotation("blockIsSubroutine")) {
-                Object postBlockWarningBits = node.getAnnotation("postBlockWarningBits");
                 emit(Opcodes.SET_CALL_SITE_WARNING_BITS);
-                emit(addToStringPool(postBlockWarningBits instanceof String bits ? bits : ""));
+                emit(addToStringPool(node.postBlockWarningBits != null ? node.postBlockWarningBits : ""));
             }
             emit(Opcodes.SET_CALL_SITE_HINTS);
-            emit(hints);
+            emit(node.postBlockStrictOptions);
         }
-        Object postBlockFeatureFlags = node.getAnnotation("postBlockFeatureFlags");
-        if (postBlockFeatureFlags instanceof Integer featureFlags) {
+        if (node.postBlockFeatureFlags != null) {
             emit(Opcodes.SET_CALL_SITE_FEATURE_FLAGS);
-            emit(featureFlags);
+            emit(node.postBlockFeatureFlags);
         }
 
         if (needsLocalRestore) {
@@ -7367,7 +7408,9 @@ public class BytecodeCompiler implements Visitor {
                 collectVariableDeclarations(closureVarNames),
                 collectOurVariablePackages(closureVarNames)
         );
-        subCompiler.gotoLabelsInsideDefer.addAll(this.gotoLabelsInsideDefer);
+        if (this.gotoLabelsInsideDefer != null && !this.gotoLabelsInsideDefer.isEmpty()) {
+            subCompiler.gotoLabelsInsideDefer = new HashSet<>(this.gotoLabelsInsideDefer);
+        }
         // The parentRegistry constructor sets isEvalString=true (for eval STRING closures),
         // but named subs are NOT eval strings - clear the flag.
         subCompiler.isEvalString = false;
@@ -8272,9 +8315,11 @@ public class BytecodeCompiler implements Visitor {
             // initialized its iterator.
             int loopBodyEndPc = bytecode.size();
             registerGotoLoopRanges(bodyStartPc, loopBodyEndPc);
-            for (Map.Entry<String, Integer> label : gotoLabelPcs.entrySet()) {
-                if (label.getValue() >= bodyStartPc && label.getValue() < loopBodyEndPc) {
-                    gotoLabelsInsideLoop.add(label.getKey());
+            if (gotoLabelPcs != null) {
+                for (Map.Entry<String, Integer> label : gotoLabelPcs.entrySet()) {
+                    if (label.getValue() >= bodyStartPc && label.getValue() < loopBodyEndPc) {
+                        gotoLabelsInsideLoop.add(label.getKey());
+                    }
                 }
             }
         } finally {

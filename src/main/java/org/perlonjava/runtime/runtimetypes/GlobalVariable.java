@@ -2222,7 +2222,11 @@ public class GlobalVariable {
         if (scopes.isEmpty()) {
             return;
         }
-        var scope = scopes.peek();
+        var scope = scopes.get(scopes.size() - 1);
+        if (scope == null) {
+            scope = new java.util.LinkedHashMap<>();
+            scopes.set(scopes.size() - 1, scope);
+        }
         if (scope.putIfAbsent(key, compact) == null) {
             clearGlobalPseudoConstant(key);
             // The compact proxy has no physical glob entry.  Once an eval
@@ -2239,7 +2243,7 @@ public class GlobalVariable {
             return false;
         }
         for (var scope : PerlRuntime.current().executionState().evalPseudoConstantScopes) {
-            if (scope.containsKey(key)) {
+            if (scope != null && scope.containsKey(key)) {
                 return true;
             }
         }

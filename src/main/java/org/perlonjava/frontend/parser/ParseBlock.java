@@ -246,9 +246,9 @@ public class ParseBlock {
         BlockNode blockNode = new BlockNode(statements, currentIndex, parser);
         blockNode.labels = blockLabels; // Set the collected labels in the BlockNode
         if (postBlockStrictOptions != null) {
-            blockNode.setAnnotation("postBlockStrictOptions", postBlockStrictOptions);
-            blockNode.setAnnotation("postBlockFeatureFlags", postBlockFeatureFlags);
-            blockNode.setAnnotation("postBlockWarningBits", postBlockWarningBits);
+            blockNode.postBlockStrictOptions = postBlockStrictOptions;
+            blockNode.postBlockFeatureFlags = postBlockFeatureFlags;
+            blockNode.postBlockWarningBits = postBlockWarningBits;
         }
         return new BlockWithScope(blockNode, scopeIndex);
     }
@@ -280,6 +280,7 @@ public class ParseBlock {
             }
             statements.add(new LabelNode(id, currentIndexLabel));
             blockLabels.add(id); // Add each found label to our list
+            parser.parsedLabels = true;
             TokenUtils.consume(parser); // Consume the colon
             return id;
         }

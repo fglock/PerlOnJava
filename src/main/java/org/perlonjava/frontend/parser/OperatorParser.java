@@ -177,6 +177,7 @@ public class OperatorParser {
         if (usesDefaultTopic) {
             evalNode.setAnnotation("evalUsesDefaultTopic", true);
         }
+        parser.parsedEvalOrRegex = true;
         return evalNode;
     }
 
@@ -2005,6 +2006,7 @@ public class OperatorParser {
             operand = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
         }
         // Always return a goto operator - the emitter handles &sub vs LABEL distinction
+        parser.parsedGoto = true;
         return new OperatorNode("goto", operand, currentIndex);
     }
 

@@ -484,6 +484,35 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 && newCode.deparseSourceText != null;
     }
 
+    /** Install an existing CODE scalar as a typeglob-copy alias. */
+    public static void aliasCodeSlot(String globName, RuntimeScalar sourceCodeRef) {
+        if (globName == null || sourceCodeRef == null
+                || sourceCodeRef.type != CODE
+                || !(sourceCodeRef.value instanceof RuntimeCode newCode)) {
+            throw new IllegalArgumentException("A named CODE reference is required");
+        }
+        RuntimeScalar oldCodeRef = GlobalVariable.globalCodeRefs.get(globName);
+        if (oldCodeRef == sourceCodeRef) {
+            return;
+        }
+        if (oldCodeRef != null && oldCodeRef.value instanceof RuntimeCode oldCode
+                && oldCode.stashRefCount > 0) {
+            oldCode.stashRefCount--;
+        }
+        GlobalVariable.globalCodeRefs.put(globName, sourceCodeRef);
+        GlobalVariable.replacePinnedCodeRef(globName, sourceCodeRef);
+        newCode.hadStashRef = true;
+        newCode.stashRefCount++;
+        GlobalVariable.isSubs.put(globName, true);
+        GlobalVariable.invalidatePackageRootSnapshot();
+        InheritanceResolver.invalidateCache();
+        int lastColonIdx = globName.lastIndexOf("::");
+        if (lastColonIdx > 0) {
+            org.perlonjava.runtime.perlmodule.Mro.incrementPackageGeneration(
+                    globName.substring(0, lastColonIdx));
+        }
+    }
+
     protected static boolean fillForwardCodeRefInPlace(String globName, RuntimeScalar codeContainer, RuntimeScalar value) {
         if (codeContainer == null
                 || codeContainer.type != CODE
@@ -1215,13 +1244,12 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             return value.scalar();
         }
 
-        // A whole-glob assignment inside `local *name` fills the temporary
-        // GV installed for that name. It must not change the stable identity
-        // followed by aliases to the outer GV (for example, a saved alias to
-        // STDERR must not start following a localized tied replacement).
-        if (!isLocalizedGlob(this.globName)) {
-            GlobalVariable.setGlobAlias(this.globName, value.globName);
-        }
+        // Keep the slot alias relationship during `local *name = *other` too:
+        // later assignments through the localized glob (for example,
+        // `*SYM = \$value`) must reach the source GV's slots. dynamicSaveState
+        // preserves the outer GV identity and dynamicRestoreState restores the
+        // prior name relationship when this localized scope ends.
+        GlobalVariable.setGlobAlias(this.globName, value.globName);
 
         // Retrieve the RuntimeScalar value associated with the provided RuntimeGlob.
         RuntimeScalar result = value.scalar();
