@@ -452,6 +452,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     private WeakReference<RuntimeScalar> compiledDirectCallInitialSlot;
     private boolean compiledDirectCallSiteDescriptor;
     private boolean compiledDirectCallCompileTimePinned;
+    private boolean compiledDirectCallRetainTargetIfDeletedBeforeInstall;
     private boolean updatingCompiledDirectCallCache;
 
     /** Mark this scalar as metadata for a compiled direct named-call site. */
@@ -465,10 +466,21 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             int index,
             RuntimeScalar initialCodeRef,
             boolean compileTimePinned) {
+        configureCompiledDirectCallSite(
+                name, index, initialCodeRef, compileTimePinned, false);
+    }
+
+    public void configureCompiledDirectCallSite(
+            String name,
+            int index,
+            RuntimeScalar initialCodeRef,
+            boolean compileTimePinned,
+            boolean retainTargetIfDeletedBeforeInstall) {
         compiledDirectCallSiteName = name;
         compiledDirectCallSiteIndex = index;
         compiledDirectCallSiteDescriptor = true;
         compiledDirectCallCompileTimePinned = compileTimePinned;
+        compiledDirectCallRetainTargetIfDeletedBeforeInstall = retainTargetIfDeletedBeforeInstall;
         RuntimeCode target = initialCodeRef != null
                 && initialCodeRef.value instanceof RuntimeCode code ? code : null;
         compiledDirectCallInitialSlot = initialCodeRef == null
@@ -491,6 +503,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     boolean compiledDirectCallCompileTimePinned() {
         return compiledDirectCallCompileTimePinned;
+    }
+
+    boolean compiledDirectCallRetainTargetIfDeletedBeforeInstall() {
+        return compiledDirectCallRetainTargetIfDeletedBeforeInstall;
     }
 
     boolean isCompiledDirectCallSiteDescriptor() {

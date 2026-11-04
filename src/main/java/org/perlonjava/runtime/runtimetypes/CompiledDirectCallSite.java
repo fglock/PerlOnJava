@@ -11,12 +11,14 @@ final class CompiledDirectCallSite {
             String name,
             RuntimeScalar cachedRef,
             RuntimeCode initialTarget,
-            boolean compileTimePinned) {
+            boolean compileTimePinned,
+            boolean retainTargetIfDeletedBeforeInstall) {
         this.name = name;
         this.cachedRef = cachedRef;
         this.compileTimePinned = compileTimePinned;
         RuntimeScalar visible = GlobalVariable.getVisibleGlobalCodeRefForDirectCall(name);
-        boolean targetWasRemovedBeforeInstallation = initialTarget != null
+        boolean targetWasRemovedBeforeInstallation = retainTargetIfDeletedBeforeInstall
+                && initialTarget != null
                 && initialTarget.defined()
                 && !RuntimeCode.isCodeDefined(visible);
         RuntimeCode ownedTarget = compileTimePinned || targetWasRemovedBeforeInstallation
