@@ -4305,6 +4305,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public RuntimeBase[] padConstants;
     /** One identity for each strong constant edge held by this optree. */
     private final List<PerlOwnerSlot> padConstantOwnerSlots = new ArrayList<>();
+    /** Strong CV edges owned by this optree's compiled direct named-call sites. */
+    private final List<CompiledDirectCallSite> compiledDirectCallSiteOwners = new ArrayList<>();
+    private final Map<String, Map<Integer, CompiledDirectCallSite>>
+            compiledDirectCallSitesByClassName = new LinkedHashMap<>();
     /** Direct constants for this CV and embedded anonymous optrees. */
     private final Map<String, RuntimeBase[]> padConstantArraysByClassName = new LinkedHashMap<>();
     private final Map<String, Set<String>> padConstantDescendantsByClassName = new LinkedHashMap<>();
@@ -4324,8 +4328,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         RuntimeBase[] previousConstants = allPadConstantValues();
         Set<String> previousRegistryNames = new LinkedHashSet<>(padConstantRegistryClassNames);
         List<PerlOwnerSlot> previousSlots = new ArrayList<>(padConstantOwnerSlots);
+        List<CompiledDirectCallSite> previousCallSites =
+                new ArrayList<>(compiledDirectCallSiteOwners);
+        List<CompiledDirectCallSite> nextCallSites = new ArrayList<>();
+        Map<String, Map<Integer, CompiledDirectCallSite>> nextCallSitesByClassName =
+                new LinkedHashMap<>();
+        Map<Integer, CompiledDirectCallSite> directCallSitesByIndex = new LinkedHashMap<>();
 
-        padConstants = constants == null ? null : constants.clone();
+        padConstants = prepareCompiledDirectCallConstants(
+                constants, nextCallSites, directCallSitesByIndex);
+        if (!directCallSitesByIndex.isEmpty()) {
+            nextCallSitesByClassName.put(
+                    className == null ? "" : className, directCallSitesByIndex);
+        }
         padConstantClassName = className;
         padConstantArraysByClassName.clear();
         padConstantDescendantsByClassName.clear();
@@ -4342,9 +4357,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         if (embeddedConstants != null) {
             embeddedConstants.forEach((nestedClassName, nestedConstants) -> {
+                Map<Integer, CompiledDirectCallSite> nestedCallSites =
+                        new LinkedHashMap<>();
+                RuntimeBase[] preparedNestedConstants =
+                        prepareCompiledDirectCallConstants(
+                                nestedConstants, nextCallSites, nestedCallSites);
                 padConstantArraysByClassName.put(nestedClassName,
-                        nestedConstants == null ? new RuntimeBase[0] : nestedConstants.clone());
+                        preparedNestedConstants == null
+                                ? new RuntimeBase[0] : preparedNestedConstants);
                 padConstantRegistryClassNames.add(nestedClassName);
+                if (!nestedCallSites.isEmpty()) {
+                    nextCallSitesByClassName.put(nestedClassName, nestedCallSites);
+                }
             });
         }
         if (embeddedDescendants != null) {
@@ -4355,6 +4379,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                     : Collections.unmodifiableSet(
                                             new LinkedHashSet<>(descendants))));
         }
+        compiledDirectCallSiteOwners.clear();
+        compiledDirectCallSiteOwners.addAll(nextCallSites);
+        compiledDirectCallSitesByClassName.clear();
+        compiledDirectCallSitesByClassName.putAll(nextCallSitesByClassName);
         padConstantOwnerSlots.clear();
         if (padConstantArraysByClassName.isEmpty()) {
             acquirePadConstantOwners(padConstants);
@@ -4372,9 +4400,58 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
         }
 
+        // New call-site identities are acquired while the previous optree
+        // still owns its targets. Replacing a compiled body never creates a
+        // zero-owner interval for a CV that both bodies call.
+        for (CompiledDirectCallSite owner : previousCallSites) owner.release();
         for (PerlOwnerSlot owner : previousSlots) owner.release();
         clearUnownedPadConstantWeakRefs(previousConstants);
         removeUnownedPadConstantRegistryEntries(previousRegistryNames);
+    }
+
+    private RuntimeBase[] prepareCompiledDirectCallConstants(
+            RuntimeBase[] constants,
+            List<CompiledDirectCallSite> callSites,
+            Map<Integer, CompiledDirectCallSite> callSitesByIndex) {
+        if (constants == null) return null;
+        RuntimeBase[] prepared = constants.clone();
+        for (int index = 0; index < prepared.length; index++) {
+            if (!(prepared[index] instanceof RuntimeScalar descriptor)
+                    || descriptor.compiledDirectCallSiteName() == null) {
+                continue;
+            }
+            String name = descriptor.compiledDirectCallSiteName();
+            int siteIndex = descriptor.compiledDirectCallSiteIndex();
+            if (siteIndex < 0) siteIndex = index;
+            boolean compileTimePinned = descriptor.compiledDirectCallCompileTimePinned();
+            RuntimeCode initialTarget = descriptor.compiledDirectCallInitialTarget();
+            if (initialTarget == null && descriptor.value instanceof RuntimeCode code) {
+                initialTarget = code;
+            }
+            if (initialTarget == null) {
+                RuntimeScalar visible = GlobalVariable.getVisibleGlobalCodeRefForDirectCall(name);
+                if (visible != null && visible.value instanceof RuntimeCode code) {
+                    initialTarget = code;
+                }
+            }
+
+            RuntimeScalar cache = new RuntimeScalar();
+            cache.configureCompiledDirectCallSite(name, siteIndex, null, compileTimePinned);
+            CompiledDirectCallSite callSite =
+                    new CompiledDirectCallSite(name, cache, initialTarget, compileTimePinned);
+            prepared[index] = cache;
+            callSites.add(callSite);
+            callSitesByIndex.put(siteIndex, callSite);
+            // Transfer the compiler's temporary pin only after the owning
+            // RuntimeCode has acquired its callsite edge. RuntimeScalars that
+            // are already installed caches (for example when cloning a CV)
+            // keep their source callsite ownership untouched.
+            if (descriptor.isCompiledDirectCallSiteDescriptor()) {
+                descriptor.releaseCompiledDirectCallSiteDescriptorBinding();
+                GlobalVariable.releaseCompiledDirectCallPin(name, initialTarget);
+            }
+        }
+        return prepared;
     }
 
     private void acquirePadConstantOwners(RuntimeBase[] constants) {
@@ -4400,7 +4477,30 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     public RuntimeBase[] padConstantOwnerReferents() {
-        return allPadConstantValues();
+        return Arrays.stream(allPadConstantValues())
+                .filter(value -> !(value instanceof RuntimeScalar scalar)
+                        || scalar.compiledDirectCallSiteName() == null)
+                .toArray(RuntimeBase[]::new);
+    }
+
+    /** Resolve one named-call site from this optree's compiled owner table. */
+    public RuntimeScalar resolveCompiledDirectCallSite(
+            String className, int siteIndex, String name) {
+        Map<Integer, CompiledDirectCallSite> sites =
+                compiledDirectCallSitesByClassName.get(className == null ? "" : className);
+        CompiledDirectCallSite site = sites == null ? null : sites.get(siteIndex);
+        return site == null
+                ? GlobalVariable.getGlobalCodeRefForDirectCall(name)
+                : site.resolve();
+    }
+
+    /** JVM bytecode enters here with the currently executing CV at stack depth zero. */
+    public static RuntimeScalar resolveCompiledDirectCallForActive(
+            String name, String className, int siteIndex) {
+        RuntimeCode active = getActiveCodeAt(0);
+        return active == null
+                ? GlobalVariable.getGlobalCodeRefForDirectCall(name)
+                : active.resolveCompiledDirectCallSite(className, siteIndex, name);
     }
 
     static void copyPadConstantTree(
@@ -4435,12 +4535,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         RuntimeBase[] constants = allPadConstantValues();
         Set<String> registryNames = new LinkedHashSet<>(padConstantRegistryClassNames);
         List<PerlOwnerSlot> owners = new ArrayList<>(padConstantOwnerSlots);
+        List<CompiledDirectCallSite> callSites =
+                new ArrayList<>(compiledDirectCallSiteOwners);
         padConstants = null;
         padConstantClassName = null;
         padConstantArraysByClassName.clear();
         padConstantDescendantsByClassName.clear();
         padConstantRegistryClassNames.clear();
         padConstantOwnerSlots.clear();
+        compiledDirectCallSiteOwners.clear();
+        compiledDirectCallSitesByClassName.clear();
+        for (CompiledDirectCallSite callSite : callSites) callSite.release();
         for (PerlOwnerSlot owner : owners) owner.release();
         Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
         for (RuntimeBase constant : constants) {

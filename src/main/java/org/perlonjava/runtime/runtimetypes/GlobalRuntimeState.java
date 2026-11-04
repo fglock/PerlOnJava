@@ -2,6 +2,7 @@ package org.perlonjava.runtime.runtimetypes;
 
 import org.perlonjava.backend.jvm.CustomClassLoader;
 
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -44,6 +45,9 @@ public final class GlobalRuntimeState {
     private final Map<String, RuntimeScalar> pinnedCodeRefs = new HashMap<>();
     private final Set<String> deletedCodeRefPins = new HashSet<>();
     private final Map<Integer, RuntimeScalar> compiledCodeRefs = new HashMap<>();
+    /** Weak observers dispatch visible CODE-slot changes to their owning optrees. */
+    private final Map<String, ArrayList<WeakReference<CompiledDirectCallSite>>>
+            compiledDirectCallSites = new HashMap<>();
     private final Map<String, Integer> localizedCodeRefDepth = new HashMap<>();
     private final IdentityHashMap<RuntimeScalar, ArrayList<String>> displacedLocalizedCodeRefs =
             new IdentityHashMap<>();
@@ -220,6 +224,48 @@ public final class GlobalRuntimeState {
 
     synchronized RuntimeScalar getCompiledCodeRef(int id) {
         return compiledCodeRefs.get(id);
+    }
+
+    synchronized void registerCompiledDirectCallSite(
+            String key, CompiledDirectCallSite callSite) {
+        if (key == null || callSite == null) return;
+        ArrayList<WeakReference<CompiledDirectCallSite>> sites =
+                compiledDirectCallSites.computeIfAbsent(key, ignored -> new ArrayList<>());
+        for (WeakReference<CompiledDirectCallSite> reference : sites) {
+            if (reference.get() == callSite) return;
+        }
+        sites.add(new WeakReference<>(callSite));
+    }
+
+    synchronized void unregisterCompiledDirectCallSite(CompiledDirectCallSite callSite) {
+        if (callSite == null) return;
+        compiledDirectCallSites.values().removeIf(sites -> {
+            sites.removeIf(reference -> {
+                CompiledDirectCallSite value = reference.get();
+                return value == null || value == callSite;
+            });
+            return sites.isEmpty();
+        });
+    }
+
+    void notifyCompiledDirectCallSites(String key, RuntimeScalar replacement) {
+        if (key == null) return;
+        ArrayList<CompiledDirectCallSite> live = new ArrayList<>();
+        synchronized (this) {
+            ArrayList<WeakReference<CompiledDirectCallSite>> sites =
+                    compiledDirectCallSites.get(key);
+            if (sites == null) return;
+            sites.removeIf(reference -> {
+                CompiledDirectCallSite site = reference.get();
+                if (site == null) return true;
+                live.add(site);
+                return false;
+            });
+            if (sites.isEmpty()) compiledDirectCallSites.remove(key);
+        }
+        for (CompiledDirectCallSite site : live) {
+            site.visibleCodeSlotChanged(replacement);
+        }
     }
 
     Map<String, Integer> localizedCodeRefDepth() {
@@ -516,6 +562,7 @@ public final class GlobalRuntimeState {
             if (slot != null) slot.releaseCodeSlotBinding();
         }
         compiledCodeRefs.clear();
+        compiledDirectCallSites.clear();
         for (Map.Entry<RuntimeScalar, ArrayList<String>> entry : displacedLocalizedCodeRefs.entrySet()) {
             RuntimeScalar slot = entry.getKey();
             ArrayList<String> bindings = entry.getValue();

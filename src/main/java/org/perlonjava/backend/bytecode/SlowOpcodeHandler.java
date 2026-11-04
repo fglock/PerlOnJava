@@ -1673,9 +1673,12 @@ public class SlowOpcodeHandler {
         int cacheIdx = bytecode[pc++];
         int classNameIdx = bytecode[pc++];
         int labelIdx = bytecode[pc++];
-        RuntimeScalar cached = (RuntimeScalar) code.constants[cacheIdx];
+        RuntimeScalar descriptor = (RuntimeScalar) code.constants[cacheIdx];
         String name = code.stringPool[nameIdx];
-        RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRefForDirectCall(name, cached);
+        RuntimeScalar codeRef = descriptor.compiledDirectCallSiteName() == null
+                ? GlobalVariable.getGlobalCodeRefForDirectCall(name, descriptor)
+                : code.resolveCompiledDirectCallSite(
+                        null, descriptor.compiledDirectCallSiteIndex(), name);
         // The normal RuntimeCode.apply path owns ordinary direct-call errors.
         // Preflight only labelled statements, where the diagnostic needs the
         // parser-provided "close to label" hint.  A goto &name also reuses this

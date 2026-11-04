@@ -416,9 +416,8 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
                 return scalarUndef;
             }
 
-            // Remove only from the visible stash, not from pinned code refs:
-            // compiled call sites keep their CV, while future lookups must see
-            // the deletion and create an undefined slot.
+            // Removing the visible slot notifies compiled call sites first;
+            // each caller then owns its CV until that caller is released.
             RuntimeScalar code = GlobalVariable.removeGlobalCodeRefForStashDelete(fullKey);
             GlobalVariable.clearGlobalPseudoConstant(fullKey);
             RuntimeScalar scalar = GlobalVariable.scalarSlots().remove(fullKey);
