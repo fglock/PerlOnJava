@@ -278,6 +278,46 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
     }
 
+    /** Active {@code @_} value owners held while a {@code goto &sub} changes frames. */
+    static final class TailCallArgumentOwners {
+        private final RuntimeArray sourceArguments;
+        private final java.util.ArrayList<RuntimeScalar.ArgumentAliasOwner> owners;
+
+        private TailCallArgumentOwners(RuntimeArray sourceArguments,
+                java.util.List<RuntimeScalar.ArgumentAliasOwner> owners) {
+            this.sourceArguments = sourceArguments;
+            this.owners = new java.util.ArrayList<>(owners);
+        }
+
+        private boolean matches(RuntimeArray args) {
+            if (sourceArguments == args) return true;
+            for (RuntimeScalar scalar : args.elements) {
+                if (scalar != null && owners.stream().anyMatch(owner -> owner.matches(scalar))) {
+                    return true;
+                }
+            }
+            return owners.isEmpty();
+        }
+
+        private List<RuntimeScalar.ArgumentAliasOwner> takeMatching(RuntimeArray args) {
+            java.util.ArrayList<RuntimeScalar.ArgumentAliasOwner> adopted = new java.util.ArrayList<>();
+            for (java.util.Iterator<RuntimeScalar.ArgumentAliasOwner> it = owners.iterator();
+                    it.hasNext();) {
+                RuntimeScalar.ArgumentAliasOwner owner = it.next();
+                if (args.elements.stream().anyMatch(owner::matches)) {
+                    adopted.add(owner);
+                    it.remove();
+                }
+            }
+            return adopted;
+        }
+
+        void releaseRemaining() {
+            for (RuntimeScalar.ArgumentAliasOwner owner : owners) owner.release();
+            owners.clear();
+        }
+    }
+
     private static RuntimeBase argumentAliasContainer(RuntimeBase value) {
         RuntimeBaseProxy proxy = argumentAliasMagicProxy(value);
         if (proxy != null) {
@@ -2207,12 +2247,24 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     private static void pushArgs(
             RuntimeArray args, boolean snapshotRequired,
             ExecutionRuntimeState executionState) {
+        TailCallArgumentOwners tailCallOwners = null;
+        if (!executionState.pendingTailCallArgumentOwners.isEmpty()) {
+            TailCallArgumentOwners pending =
+                    executionState.pendingTailCallArgumentOwners.peek();
+            if (pending.matches(args)) {
+                tailCallOwners = executionState.pendingTailCallArgumentOwners.pop();
+            }
+        }
+        List<RuntimeScalar.ArgumentAliasOwner> argumentOwners = tailCallOwners == null
+                ? retainArgumentAliasOwners(args)
+                : retainMissingArgumentAliasOwners(args, tailCallOwners.takeMatching(args));
         executionState.argsStack.push(args);
-        executionState.argumentAliasOwnerFrames.push(retainArgumentAliasOwners(args));
+        executionState.argumentAliasOwnerFrames.push(argumentOwners);
         List<ArgumentContainerOwner> stagedContainerOwners =
                 takeStagedArgumentContainerOwners(args, executionState);
         executionState.argumentContainerOwnerFrames.push(stagedContainerOwners != null
                 ? stagedContainerOwners : retainArgumentContainerOwners(args));
+        if (tailCallOwners != null) tailCallOwners.releaseRemaining();
         // Snapshot the args list so @DB::args stays pristine even if the sub
         // later shifts/pops from @_.
         if (args == null || args.elements.isEmpty()) {
@@ -2233,6 +2285,66 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             owners.add(scalar.retainArgumentAliasOwner());
         }
         return owners;
+    }
+
+    private static boolean holdsStrongArgumentValue(RuntimeScalar scalar) {
+        return scalar != null
+                && (((scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0)
+                    || scalar.type == RuntimeScalarType.GLOB
+                    || scalar.type == RuntimeScalarType.CODE)
+                && scalar.value instanceof RuntimeBase
+                && !WeakRefRegistry.isweak(scalar);
+    }
+
+    private static List<RuntimeScalar.ArgumentAliasOwner> retainMissingArgumentAliasOwners(
+            RuntimeArray args, List<RuntimeScalar.ArgumentAliasOwner> adopted) {
+        java.util.IdentityHashMap<RuntimeScalar, Integer> adoptedCounts =
+                new java.util.IdentityHashMap<>();
+        for (RuntimeScalar.ArgumentAliasOwner owner : adopted) {
+            adoptedCounts.merge(owner.scalar(), 1, Integer::sum);
+        }
+        for (RuntimeScalar scalar : args.elements) {
+            if (scalar == null || (!hasPersistentArgumentCell(scalar)
+                    && !holdsStrongArgumentValue(scalar))) continue;
+            int count = adoptedCounts.getOrDefault(scalar, 0);
+            if (count > 0) {
+                adoptedCounts.put(scalar, count - 1);
+            } else {
+                adopted.add(scalar.retainArgumentAliasOwner());
+            }
+        }
+        return adopted;
+    }
+
+    /** Detach current {@code @_} value owners before source-frame cleanup. */
+    static TailCallArgumentOwners takeTailCallArgumentOwners(RuntimeArray args) {
+        if (args == null || PerlRuntime.currentOrNull() == null) {
+            return new TailCallArgumentOwners(args, List.of());
+        }
+        ExecutionRuntimeState state = PerlRuntime.current().executionState();
+        if (state.argsStack.isEmpty() || state.argumentAliasOwnerFrames.isEmpty()) {
+            return new TailCallArgumentOwners(args, List.of());
+        }
+        ArrayList<RuntimeScalar.ArgumentAliasOwner> transferred = new ArrayList<>();
+        List<RuntimeScalar.ArgumentAliasOwner> frame = state.argumentAliasOwnerFrames.peek();
+        for (java.util.Iterator<RuntimeScalar.ArgumentAliasOwner> it = frame.iterator();
+                it.hasNext();) {
+            RuntimeScalar.ArgumentAliasOwner owner = it.next();
+            if (args.elements.stream().anyMatch(owner::matches)) {
+                transferred.add(owner);
+                it.remove();
+            }
+        }
+        for (RuntimeScalar scalar : args.elements) {
+            if (scalar == null || !holdsStrongArgumentValue(scalar)
+                    || transferred.stream().anyMatch(owner -> owner.matches(scalar))) continue;
+            // A transient reference argument may not have received an alias
+            // identity at ordinary call entry. Establish the handoff owner
+            // while the source @_ cell is still active so its mortal release
+            // cannot run before the replacement frame adopts the cell.
+            transferred.add(scalar.retainArgumentAliasOwner());
+        }
+        return new TailCallArgumentOwners(args, transferred);
     }
 
     private static void releaseExitedArgumentArrayContainerOwners(
@@ -9594,6 +9706,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         RuntimeScalar curScalar = runtimeScalar;
         RuntimeArray curArgs = a;
         boolean curArgsFromTailCall = false;
+        TailCallArgumentOwners curTailCallArgumentOwners = null;
 
         while (true) {
         RuntimeScalar evalFilledLexicalForward = resolveEvalFilledLexicalForward(curScalar);
@@ -9789,6 +9902,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Java-stack growth on long `goto &func` chains.
             RuntimeScalar nextTailCode = null;
             RuntimeArray nextTailArgs = null;
+            TailCallArgumentOwners nextTailArgumentOwners = null;
             boolean returnedTailCall = false;
             boolean flushAfterScopeExit = false;
             boolean cleanupArgsAfterCall = curArgsFromTailCall;
@@ -9796,7 +9910,25 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             RuntimeArray argsForCall = curArgs;
             try {
                 // Cast the value to RuntimeCode and call apply()
-                RuntimeList result = code.apply(argsForCall, callContext);
+                RuntimeList result;
+                if (curTailCallArgumentOwners == null) {
+                    result = code.apply(argsForCall, callContext);
+                } else {
+                    ExecutionRuntimeState executionState =
+                            PerlRuntime.current().executionState();
+                    executionState.pendingTailCallArgumentOwners.push(
+                            curTailCallArgumentOwners);
+                    try {
+                        result = code.apply(argsForCall, callContext);
+                    } finally {
+                        if (!executionState.pendingTailCallArgumentOwners.isEmpty()
+                                && executionState.pendingTailCallArgumentOwners.peek()
+                                        == curTailCallArgumentOwners) {
+                            executionState.pendingTailCallArgumentOwners.pop();
+                        }
+                        curTailCallArgumentOwners.releaseRemaining();
+                    }
+                }
                 if (code.isSortComparator && result instanceof RuntimeControlFlowList flow) {
                     if (flow.getControlFlowType() == ControlFlowType.TAILCALL
                             && flow.marker.tailCallFromSortComparator) {
@@ -9817,6 +9949,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     nextTailCode = cfList.getTailCallCodeRef();
                     RuntimeArray tailArgs = cfList.getTailCallArgs();
                     nextTailArgs = tailArgs != null ? tailArgs : curArgs;
+                    nextTailArgumentOwners = cfList.marker.argumentOwners;
                     // Retire only deferred owners belonging to the source
                     // argument frame before its replacement runs.  The broad
                     // scope flush below deliberately cannot do this: it must
@@ -9979,6 +10112,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             curScalar = nextTailCode;
             curArgs = nextTailArgs;
             curArgsFromTailCall = true;
+            curTailCallArgumentOwners = nextTailArgumentOwners;
             continue;
         }
 
@@ -10841,7 +10975,20 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 if (cfList.marker.evalScope != null) {
                     throw new PerlCompilerException("Can't goto subroutine from an " + cfList.marker.evalScope);
                 }
-                result = apply(codeRef, "tailcall", tailArgs, callContext);
+                TailCallArgumentOwners argumentOwners = cfList.marker.argumentOwners;
+                ExecutionRuntimeState executionState =
+                        PerlRuntime.current().executionState();
+                executionState.pendingTailCallArgumentOwners.push(argumentOwners);
+                try {
+                    result = apply(codeRef, "tailcall", tailArgs, callContext);
+                } finally {
+                    if (!executionState.pendingTailCallArgumentOwners.isEmpty()
+                            && executionState.pendingTailCallArgumentOwners.peek()
+                                    == argumentOwners) {
+                        executionState.pendingTailCallArgumentOwners.pop();
+                    }
+                    argumentOwners.releaseRemaining();
+                }
             } catch (RuntimeException e) {
                 cleanupTailCallArgs(cfList.marker.ownedArgs);
                 cleanupTailCallCodeRef(cfList.getTailCallCodeRef());
