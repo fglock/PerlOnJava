@@ -41,6 +41,7 @@ public class EmitControlFlow {
     }
 
     static void emitSubroutineExitCleanup(EmitterContext ctx) {
+        emitAbandonedMethodInvocantHolds(ctx);
         java.util.List<Integer> scalarIndices =
                 EmitStatement.withoutCaptured(ctx, ctx.symbolTable.getMyScalarIndicesInScope(0));
         java.util.List<Integer> hashIndices =
@@ -71,6 +72,16 @@ public class EmitControlFlow {
                     "scopeExitCleanupArray",
                     "(Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;)V",
                     false);
+        }
+    }
+
+    static void emitAbandonedMethodInvocantHolds(EmitterContext ctx) {
+        for (int holdSlot : ctx.javaClassInfo.activeMethodInvocantHoldSlots) {
+            ctx.mv.visitVarInsn(Opcodes.ALOAD, holdSlot);
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "releaseAbandonedMethodInvocantHold",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)V", false);
         }
     }
 
@@ -244,9 +255,11 @@ public class EmitControlFlow {
             // bypass the cleanup at returnLabel, leaving `local` variables un-restored.
             if (ctx.javaClassInfo.returnLabel != null) {
                 ctx.mv.visitVarInsn(Opcodes.ASTORE, ctx.javaClassInfo.returnValueSlot);
+                emitAbandonedMethodInvocantHolds(ctx);
                 emitMortalFlushAboveMark(ctx);
                 ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
             } else {
+                emitAbandonedMethodInvocantHolds(ctx);
                 emitMortalFlushAboveMark(ctx);
                 ctx.mv.visitInsn(Opcodes.ARETURN);
             }
@@ -311,6 +324,7 @@ public class EmitControlFlow {
         Label label = operator.equals("next") ? loopLabels.nextLabel
                 : operator.equals("last") ? loopLabels.lastLabel
                 : loopLabels.redoLabel;
+        emitAbandonedMethodInvocantHolds(ctx);
         emitLoopControlScopeCleanup(ctx, loopLabels, operator.equals("last"));
         emitMortalFlushAboveMark(ctx);
         emitLoopRegexStateRestore(ctx, loopLabels);
@@ -541,6 +555,7 @@ public class EmitControlFlow {
             // Perl subroutine, not the synthetic expression wrapper. Save it,
             // run finally, then unwind through RuntimeCode's non-local-return
             // boundary.
+            emitAbandonedMethodInvocantHolds(ctx);
             ctx.mv.visitVarInsn(Opcodes.ASTORE, tryFinally.returnValueSlot);
             ctx.mv.visitInsn(Opcodes.ICONST_1);
             ctx.mv.visitVarInsn(Opcodes.ISTORE, tryFinally.returnPendingSlot);
@@ -630,6 +645,7 @@ public class EmitControlFlow {
             ctx.javaClassInfo.releaseSpillRef(spillRef);
         }
 
+        emitAbandonedMethodInvocantHolds(ctx);
         ctx.mv.visitVarInsn(Opcodes.ASTORE, ctx.javaClassInfo.returnValueSlot);
         ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
     }
@@ -1042,6 +1058,7 @@ public class EmitControlFlow {
             ctx.mv.visitTypeInsn(Opcodes.CHECKCAST,
                     "org/perlonjava/runtime/runtimetypes/RuntimeList");
             ctx.mv.visitVarInsn(Opcodes.ASTORE, ctx.javaClassInfo.returnValueSlot);
+            emitAbandonedMethodInvocantHolds(ctx);
             ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
             return;
         }
@@ -1133,6 +1150,7 @@ public class EmitControlFlow {
         // Local goto: use fast GOTO (existing code)
 
         // Emit the goto instruction
+        emitAbandonedMethodInvocantHolds(ctx);
         ctx.mv.visitJumpInsn(Opcodes.GOTO, targetLabel.gotoLabel);
     }
 

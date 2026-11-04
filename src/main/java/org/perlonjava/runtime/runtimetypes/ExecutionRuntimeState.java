@@ -84,6 +84,8 @@ public final class ExecutionRuntimeState {
     /** Explicit owners for staged arguments, retired by call completion or frame exit. */
     final ArrayList<RuntimeCode.CallArguments> callArgumentFrames =
             new ArrayList<>();
+    /** Temporary chained-method invocant owners active in the generated caller. */
+    final ArrayList<RuntimeBase> methodInvocantHolds = new ArrayList<>();
     public final Deque<RuntimeCode> activeCodeStack = new ArrayDeque<>();
     /** Perl source callsites aligned with the active Perl code frames. */
     public final Deque<CallerStack.CallerInfo> activeCodeCallSites = new ArrayDeque<>();
