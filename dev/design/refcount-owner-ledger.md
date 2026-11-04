@@ -371,124 +371,46 @@ Run on JVM and interpreter backends with `timeout` and complete output logs:
 
 ## Progress Tracking
 
-### Current Status: scalar-cell lexical release ordering; tested checkpoint `b49af5cc9` (2026-11-04)
+### Current Status: scalar-cell capture release; source commit `71056346a` (2026-11-04)
 
-Interpreter scope teardown now runs `SCOPE_EXIT_CLEANUP` before removing the
-active lexical pad binding. The prior order released the final pad identity
-while `localBindingExists` was still true; its callback deferred weak cleanup,
-and no callback retried after scalar cleanup cleared that state. The new
-`weak_scalar_cell_active_lexical_owner.t` regression failed on parent
-`b3ad73b0d` and passes 3/3 on system Perl, JVM, and interpreter. Existing
-`weaken_scalar_refs.t` passes 10/10 and `deferred_capture_live_argument.t`
-passes 3/3 on both PerlOnJava backends. The focused `make test-unit` gate with
-`JPERL_TEST_FILTER=weak_scalar_cell_active_lexical_owner` passes on immutable
-`b49af5cc9` in 3m27s. Evidence:
-`/tmp/weak-scalar-cell-active-lexical-parent-b3-interpreter-20261104.log`,
-`/tmp/weak-scalar-cell-active-lexical-owner-system-perl-final-20261104.log`,
-`/tmp/ownership-active-lexical-release-order-immutable-b49af5cc9.log`,
-`/tmp/weak-scalar-cell-active-lexical-owner-jvm-b49af5cc9.log`,
-`/tmp/weak-scalar-cell-active-lexical-owner-interpreter-b49af5cc9.log`,
-`/tmp/weaken-scalar-refs-jvm-b49af5cc9.log`,
-`/tmp/weaken-scalar-refs-interpreter-b49af5cc9.log`,
-`/tmp/deferred-capture-live-argument-jvm-b49af5cc9.log`, and
-`/tmp/deferred-capture-live-argument-interpreter-b49af5cc9.log`.
+The active lexical scope-order fix is in `b49af5cc9`: interpreter teardown
+cleans the lexical before removing its active-pad owner. This checkpoint closes
+the next scalar-cell path. `releaseClosureCaptureSlot()` removes its owner slot
+while a pending-capture marker is active, so the slot callback waits; scalar
+capture cleanup did not retry after the capture count reached zero. It now calls
+`WeakRefRegistry.onStrongOwnerSlotReleased()` after the final capture retires,
+matching aggregate capture release. The existing
+`scalar_cell_scope_owner_release.t` failed assertion 11 on both pre-fix
+backends and passes 11/11 on system Perl, JVM, and interpreter. The source commit
+is `71056346a`, on branch `wip/active-lexical-owner-20261104-112507`, based on
+master `b43a652507d836bfbd78e3e6c250021c0b3355aa`.
 
-This closes one active-lexical scalar release path only. The complete no-sweeps
-suite, HTML::Tree 8/8 matrix, and remaining owner-source audits are still open.
+| Completed batch | Evidence |
+| --- | --- |
+| Tied handlers, scalar slot replacement, first weaken, and named CODE owners | Prior focused Perl/JVM/interpreter runs recorded in commits `b49af5cc9` and `493afae73`. |
+| Active lexical scalar owner ordering | Parent `b3ad73b0d` failed; all three Perl implementations pass. |
+| Final scalar closure capture release | Four focused Perl tests pass 27 assertions per implementation; filtered `make test-unit` passes in 3m44. |
 
-On the same immutable candidate, the tied-handler batch passes 30 assertions
-under system Perl and on both PerlOnJava backends. Scalar replacement,
-deferred package release, closure capture, package nesting, and first-weaken
-coverage passes 25 assertions under system Perl and on both backends. The
-unpaired `MortalList.deferDecrement()` entry point has no production Java
-callers; its root-walk and fabricated-count branches in
-`processDeferredBase()` are exercised by synthetic Java tests. Production paths
-still call `restoreVerifiedCurrentCountedOwnerSlotRefCount()` during overwrite,
-deferred release, weakening, and destruction. Trace those count repairs back
-to their producer/transfer/cleanup sites before retiring that compatibility
-path or the synthetic tests. Logs: `/tmp/ownership-tied-batch-system-perl-b49af5cc9.log`,
-`/tmp/ownership-slot-first-weaken-system-perl-b49af5cc9.log`, and the tied and
-slot test `*-b49af5cc9.log` backend captures.
+Current evidence: `/tmp/scalar-cell-scope-owner-release-jvm-b49af5cc9.log`,
+`/tmp/scalar-cell-scope-owner-release-interpreter-b49af5cc9.log`,
+`/tmp/ownership-closure-capture-focused-system-perl-20261104.log`,
+`/tmp/scalar-cell-scope-owner-release-focused-make-20261104.log`, and the
+`*-closure-capture-20261104.log` JVM/interpreter runs. `make check-links` passes.
 
-The named-CODE batch now follows explicit slot identity through parser-side
-redefinition and interpreter undef. `SubroutineParser` replaces an installed CV
-through `RuntimeScalar.set()`, which acquires the replacement CODE_SLOT owner and
-releases the previous CV edge. `InterpretedCode.defined()` now respects
-`codeReferenceUndefined`. Compiled `defined(&name)` probes consult the live
-visible CODE slot when it exists and retain their captured CV behavior when
-compile-time stash deletion removed that slot.
-
-`StashCodeLifecycleUsesOwnerIdentityTest` verifies that replacement moves the
-stash owner and that slot deletion retires lifecycle state despite stale
-`stashRefCount`. The Perl regressions
-`named_undef_visible_code_slot.t` and
-`defined_code_slot_compile_time_stash_delete.t` pass on system Perl, JVM, and
-interpreter; both PerlOnJava backends were run with corrective sweeps disabled.
-`JPERL_TEST_FILTER=code_slot timeout 1200 nice -n 19 make test-unit` passes,
-including the Java owner test (2/2). Logs:
-`/private/tmp/ownership-code-slot-focused-final-8287.log`,
-`/private/tmp/named-undef-visible-code-slot-latest-jvm.log`,
-`/private/tmp/named-undef-visible-code-slot-latest-interpreter.log`,
-`/private/tmp/begin-jvm-code-slot-final-8287.log`, and
-`/private/tmp/begin-interpreter-code-slot-final-8287.log`. The system Perl
-oracle logs are `/private/tmp/named-undef-visible-code-slot-system-perl-20261104-final.log`
-and `/private/tmp/defined-code-slot-compile-time-delete-system-perl-20261104.log`.
-
-The related `deferred_capture_live_argument.t` regression is present and passes
-3/3 on system Perl, JVM, and interpreter. Logs are
-`/tmp/deferred-capture-live-argument-system-perl-20261104.log`,
-`/tmp/deferred-capture-live-argument-jvm-20261104.log`, and
-`/tmp/deferred-capture-live-argument-interpreter-20261104.log`. A source audit
-of deferred releases found no production Java caller of the legacy unpaired
-`MortalList.deferDecrement` hook; its current callers are Java tests. The
-reachability-based count-repair and lifecycle branches in `processDeferredBase`
-require a missing `PendingOwnerRelease`, while in-repository production release
-paths queue an exact release token. This narrows the ordinary lifecycle
-fallback surface but does not yet justify deleting the hook: its synthetic
-tests and the other producer families still need an identity-based audit.
-
-The first-`weaken()` audit shows that a counted weak slot retires its current
-counted owner identity and then checks active CODE, semantic capture, current
-uncounted slots, registered lexical compatibility state, and surviving counted
-slots before finalization. Untracked non-CODE referents still transition from
-`refCount == -1` to `WEAKLY_TRACKED`; the exact producer/release behavior for
-those edges remains part of the slot-transition batch. On the first weak
-registration, `MyVarCleanupStack.snapshotStackToLiveCounts()` backfills lexical
-roots and the installed-CODE edge cache is prepared for `ReachabilityWalker`.
-The CODE-edge cache is consumed by the walker; classify its explicit diagnostic
-or teardown use before removing that cache along with ordinary recovery.
-
-The parent `b3ad73b0d` passes the named-undef JVM test 4/4 but fails interpreter
-checks 1 and 4 (2/4); checkpoint `3a3d12213` passes 4/4 on both backends. The
-unfiltered unit gate exposed six failures. Five direct no-sweeps replays failed
-identically on parent `b3ad73b0d` and the candidate:
+Next, trace all production
+`restoreVerifiedCurrentCountedOwnerSlotRefCount()` callers back to the store,
+transfer, or cleanup operation that creates each mismatch, then batch fixes at
+those producers. The unpaired `MortalList.deferDecrement()` has no production
+Java caller; keep its synthetic defensive tests until all normal producers are
+audited. Corrective-sweep removal, zero-root-query lifecycle checks, full
+no-sweeps `make`, HTML::Tree `t/refloop.t` 8/8 on both backends, and the #1794 /
+#1860 acceptance checks remain open. Earlier unfiltered runs also exposed
 `bless_tied_hash_reference.t`,
 `mojolicious_promise_lifecycle_regressions.t`,
-`refcount/scalar_cell_scope_owner_release.t`,
 `substr_core_edge_semantics.t`, and
-`custom_warning_async_suspend_state.t` (the latter skips on system Perl because
-its optional Future dependencies are unavailable). These failures are not
-introduced by this CODE-slot batch, but remain to be classified before final
-acceptance. `threads_shared_reference_validation.t` failed in the unfiltered
-gate, then passed 15/15 on system Perl and in direct no-sweeps replays on both
-parent and candidate; its gate-only failure remains unexplained. The complete
-unfiltered unit gate and the full ownership/HTML::Tree acceptance matrix have
-not passed on this checkpoint. Parent logs for the named-undef regression are
-`/private/tmp/named-undef-visible-code-slot-parent-b3-jvm.log` and
-`/private/tmp/named-undef-visible-code-slot-parent-b3-interpreter.log`.
-
-Local work is on `wip/active-lexical-owner-20261104-112507`; the scalar-cell
-release fix is `b49af5cc9`, following WIP snapshot `31516b356`. The branch
-contains current master `b43a652507d836bfbd78e3e6c250021c0b3355aa`. PR #1938
-remains open as a draft at remote head `95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05`
-and reports base `4a5c33753f1da3f9838c44567bbba878e8f567e0`; local and remote
-history still need reconciliation before publication. This checkpoint is not
-published. Next, audit and migrate remaining count producers in batches:
-reference-slot transitions and tied/container mutation; call, closure, and
-deferred-release lifetimes; package/resource roots; then clone/shared storage
-and cycles. Retire ordinary reachability recovery only after these producer
-paths have explicit identities and focused coverage, then rebase/reconcile with
-the live base and run final acceptance on one immutable candidate.
+`custom_warning_async_suspend_state.t`; rerun and classify them on the final
+candidate. PR #1938 remains an open draft; reconcile its remote head and current
+master before publication.
 
 ### Previous checkpoint evidence: owner-source migration at `3cbff31fb` (2026-11-02)
 
