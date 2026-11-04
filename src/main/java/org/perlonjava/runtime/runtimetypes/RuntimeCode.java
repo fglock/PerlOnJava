@@ -4423,6 +4423,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             int siteIndex = descriptor.compiledDirectCallSiteIndex();
             if (siteIndex < 0) siteIndex = index;
             boolean compileTimePinned = descriptor.compiledDirectCallCompileTimePinned();
+            RuntimeScalar initialSlot = descriptor.compiledDirectCallInitialSlot();
             RuntimeCode initialTarget = descriptor.compiledDirectCallInitialTarget();
             if (initialTarget == null && descriptor.value instanceof RuntimeCode code) {
                 initialTarget = code;
@@ -4447,7 +4448,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // keep their source callsite ownership untouched.
             if (descriptor.isCompiledDirectCallSiteDescriptor()) {
                 descriptor.releaseCompiledDirectCallSiteDescriptorBinding();
-                GlobalVariable.releaseCompiledDirectCallPin(name, initialTarget);
+                GlobalVariable.releaseCompiledDirectCallPin(name, initialSlot);
             }
         }
         return prepared;
