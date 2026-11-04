@@ -36,6 +36,15 @@ public class RuntimeScalarType {
     private RuntimeScalarType() {
     } // Prevent instantiation
 
+    /** Return the value type stored under one or more runtime read-only wrappers. */
+    public static int effectiveType(RuntimeScalar runtimeScalar) {
+        while (runtimeScalar != null && runtimeScalar.type == READONLY_SCALAR
+                && runtimeScalar.value instanceof RuntimeScalar inner) {
+            runtimeScalar = inner;
+        }
+        return runtimeScalar == null ? UNDEF : runtimeScalar.type;
+    }
+
     // Get blessing ID as an integer
     public static int blessedId(RuntimeScalar runtimeScalar) {
         int type = runtimeScalar.type;

@@ -624,15 +624,15 @@ public class StringOperators {
                 || b.getClass() != RuntimeScalar.class
                 || (runtimeScalar.type != RuntimeScalarType.STRING
                     && runtimeScalar.type != RuntimeScalarType.BYTE_STRING)
-                || (b.type != RuntimeScalarType.STRING
-                    && b.type != RuntimeScalarType.BYTE_STRING)) {
+                || (RuntimeScalarType.effectiveType(b) != RuntimeScalarType.STRING
+                    && RuntimeScalarType.effectiveType(b) != RuntimeScalarType.BYTE_STRING)) {
             return stringConcat(runtimeScalar, b, false, true);
         }
 
         String bStr = b.toString();
         int resultType = runtimeScalar.type;
         if (resultType == RuntimeScalarType.BYTE_STRING
-                && (b.type == RuntimeScalarType.STRING || !isLatin1(bStr))) {
+                && (RuntimeScalarType.effectiveType(b) == RuntimeScalarType.STRING || !isLatin1(bStr))) {
             resultType = RuntimeScalarType.STRING;
         }
         return runtimeScalar.appendedStringAssignmentResult(bStr, resultType, b);
@@ -679,8 +679,8 @@ public class StringOperators {
         // In Perl, concatenation produces a UTF-8 string only if at least one
         // operand has the UTF-8 flag on (STRING type). Non-STRING types
         // (BYTE_STRING, INTEGER, DOUBLE, UNDEF) are all byte-compatible.
-        boolean aIsUtf8 = aResolved.type == RuntimeScalarType.STRING;
-        boolean bIsUtf8 = bResolved.type == RuntimeScalarType.STRING;
+        boolean aIsUtf8 = RuntimeScalarType.effectiveType(aResolved) == RuntimeScalarType.STRING;
+        boolean bIsUtf8 = RuntimeScalarType.effectiveType(bResolved) == RuntimeScalarType.STRING;
 
         if (aIsUtf8 || bIsUtf8) {
             return propagateTaint(new RuntimeScalar(aStr + bStr), aResolved, bResolved);
@@ -779,7 +779,8 @@ public class StringOperators {
         // scalars whose toString() delegates to the current capture; treating
         // every non-BYTE_STRING proxy as UTF-8 upgraded byte captures during
         // s///e replacement evaluation.
-        if (aResolved.type == RuntimeScalarType.STRING || bResolved.type == RuntimeScalarType.STRING) {
+        if (RuntimeScalarType.effectiveType(aResolved) == RuntimeScalarType.STRING
+                || RuntimeScalarType.effectiveType(bResolved) == RuntimeScalarType.STRING) {
             return propagateTaint(new RuntimeScalar(aStr + bStr), aResolved, bResolved);
         }
 
@@ -1100,7 +1101,7 @@ public class StringOperators {
             }
             resolved = stringifyForStringContext(resolved);
             RuntimeScalar res = new RuntimeScalar(resolved.toString());
-            if (resolved.type != RuntimeScalarType.STRING) {
+            if (RuntimeScalarType.effectiveType(resolved) != RuntimeScalarType.STRING) {
                 res.type = BYTE_STRING;
             }
             res.tainted = resolved.isTainted();
@@ -1120,7 +1121,7 @@ public class StringOperators {
         // In Perl, join produces a byte-string unless one of the inputs has
         // the UTF-8 flag on. Only STRING type has the flag; INTEGER, DOUBLE,
         // UNDEF, and BYTE_STRING are all byte-compatible.
-        boolean hasUtf8 = separatorResolved.type == RuntimeScalarType.STRING;
+        boolean hasUtf8 = RuntimeScalarType.effectiveType(separatorResolved) == RuntimeScalarType.STRING;
         boolean tainted = separatorResolved.isTainted();
 
         // Join the elements
@@ -1153,7 +1154,7 @@ public class StringOperators {
                 resolvedElements.add(materialized);
                 hasExecutableValue |= RuntimeRegexTemplate.hasExecutableValue(materialized);
             }
-            if (resolved.type == RuntimeScalarType.STRING) {
+            if (RuntimeScalarType.effectiveType(resolved) == RuntimeScalarType.STRING) {
                 hasUtf8 = true;
             }
             tainted |= resolved.isTainted();
@@ -1248,17 +1249,20 @@ public class StringOperators {
             return propagateTaint(stringConcatBytes(aStr, aResolved, bStr, bResolved), aResolved, bResolved);
         }
 
-        if (aResolved.type == RuntimeScalarType.STRING || bResolved.type == RuntimeScalarType.STRING) {
+        if (RuntimeScalarType.effectiveType(aResolved) == RuntimeScalarType.STRING
+                || RuntimeScalarType.effectiveType(bResolved) == RuntimeScalarType.STRING) {
             return propagateTaint(new RuntimeScalar(aStr + bStr), aResolved, bResolved);
         }
 
-        if (aResolved.type == BYTE_STRING || bResolved.type == BYTE_STRING) {
-            boolean aIsByte = aResolved.type == BYTE_STRING
-                    || aResolved.type == RuntimeScalarType.UNDEF
-                    || (aStr.isEmpty() && aResolved.type != RuntimeScalarType.STRING);
-            boolean bIsByte = bResolved.type == BYTE_STRING
-                    || bResolved.type == RuntimeScalarType.UNDEF
-                    || (bStr.isEmpty() && bResolved.type != RuntimeScalarType.STRING);
+        int aType = RuntimeScalarType.effectiveType(aResolved);
+        int bType = RuntimeScalarType.effectiveType(bResolved);
+        if (aType == BYTE_STRING || bType == BYTE_STRING) {
+            boolean aIsByte = aType == BYTE_STRING
+                    || aType == RuntimeScalarType.UNDEF
+                    || (aStr.isEmpty() && aType != RuntimeScalarType.STRING);
+            boolean bIsByte = bType == BYTE_STRING
+                    || bType == RuntimeScalarType.UNDEF
+                    || (bStr.isEmpty() && bType != RuntimeScalarType.STRING);
             if (aIsByte && bIsByte) {
                 boolean safe = true;
                 for (int i = 0; safe && i < aStr.length(); i++) {
@@ -1289,9 +1293,9 @@ public class StringOperators {
 
     private static RuntimeScalar stringConcatBytes(String aStr, RuntimeScalar a,
                                                   String bStr, RuntimeScalar b) {
-        byte[] aBytes = a.type == RuntimeScalarType.STRING
+        byte[] aBytes = RuntimeScalarType.effectiveType(a) == RuntimeScalarType.STRING
                 ? aStr.getBytes(StandardCharsets.UTF_8) : stringBytesForBytesPragma(aStr);
-        byte[] bBytes = b.type == RuntimeScalarType.STRING
+        byte[] bBytes = RuntimeScalarType.effectiveType(b) == RuntimeScalarType.STRING
                 ? bStr.getBytes(StandardCharsets.UTF_8) : stringBytesForBytesPragma(bStr);
         byte[] out = new byte[aBytes.length + bBytes.length];
         System.arraycopy(aBytes, 0, out, 0, aBytes.length);
