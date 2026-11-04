@@ -7498,11 +7498,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         Map<String, Set<String>> embeddedPadDescendants = activeCodeOwnsTree
                 ? activeCode.padConstantDescendantTreesForClass(internalClassName)
                 : runtimeCodeState.embeddedPadConstantDescendantsByClassName.get(internalClassName);
-        if (padConsts != null || embeddedPadConsts != null && !embeddedPadConsts.isEmpty()) {
-            code.installPadConstantTree(internalClassName, padConsts,
-                    embeddedPadConsts, embeddedPadDescendants);
-            GlobalVariable.invalidateGlobalCodeRefGraphRoots();
-        }
         Set<String> disabledWarnings = PerlRuntime.current().runtimeCodeState()
                 .disabledWarningsByClassName.get(internalClassName);
         code.setLexicalDisabledWarningCategories(disabledWarnings);
@@ -7574,6 +7569,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 code.refCount = 0;
                 registerJvmClosure(code);
             }
+        }
+
+        // Installing direct-call sites releases their compile-time CODE pins.
+        // That release can flush pending lifecycle work, so establish this CV's
+        // capture owners first. Otherwise a captured referent can reach zero
+        // owners between the pin release and the closure's first capture slot.
+        if (padConsts != null || embeddedPadConsts != null && !embeddedPadConsts.isEmpty()) {
+            code.installPadConstantTree(internalClassName, padConsts,
+                    embeddedPadConsts, embeddedPadDescendants);
+            GlobalVariable.invalidateGlobalCodeRefGraphRoots();
         }
         GlobalVariable.invalidateGlobalCodeRefGraphRoots();
 
