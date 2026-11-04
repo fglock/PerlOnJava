@@ -1806,6 +1806,13 @@ public class MortalList {
                     && base.restoreVerifiedCurrentCountedOwnerSlotRefCount()) {
                 // Verified current scalar cells and array/hash elements jointly
                 // restore the surviving owner count without a root walk.
+            } else if (ownerRelease != null && aggregateReferent
+                    && base.hasCurrentUncountedPerlOwnerSlotIdentity()) {
+                // A package array/hash slot is a direct strong edge even though
+                // it does not contribute to the legacy count. Keep the
+                // zero-count lifecycle pending on that exact slot so clearing
+                // the package variable later releases its elements normally.
+                base.deferZeroCountFinalReleaseToUncountedOwnerSlots();
             } else if (base.blessId != 0
                     && base.restoreUnregisteredScalarCellOwnerRefCount()) {
                 // Last compatibility bridge: an unregistered standalone
