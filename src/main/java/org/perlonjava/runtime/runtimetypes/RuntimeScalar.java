@@ -1015,11 +1015,20 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     void releaseCodeSlotBinding() {
+        releaseCodeSlotBinding(true);
+    }
+
+    /** Release a compiler-owned CODE edge without flushing unrelated temporaries. */
+    void releaseCodeSlotBindingWithoutFlush() {
+        releaseCodeSlotBinding(false);
+    }
+
+    private void releaseCodeSlotBinding(boolean flushPending) {
         if (codeSlotBindings <= 0) throw new IllegalStateException("unbalanced CODE slot binding");
         if (--codeSlotBindings != 0) return;
         refreshUntrackedReferenceOwner();
         MortalList.deferDecrementIfTracked(this);
-        MortalList.flushAboveMark();
+        if (flushPending) MortalList.flushAboveMark();
     }
 
     private void prepareCodeSlotValue(RuntimeScalar source) {
