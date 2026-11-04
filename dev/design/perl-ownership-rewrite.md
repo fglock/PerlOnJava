@@ -3,37 +3,36 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-04):** #1649 remains in Phase 2 on
-`wip/issue1649-preflight-20261104-152310`, rebased onto `origin/master`
-`0d6685bb1b003ad7144cef6d3daeacec05d30922`. Snapshot `ce5b0d1524` preserves
-the current scalar-overwrite reentrancy batch. It adds a mutation-generation
-guard so an outer overwrite cannot restore counted ownership after `DESTROY`
-weakens that same slot, plus a Java parity test and
-`reentrant_overwrite_weaken_keeps_other_owner.t`. The Perl regression passes
-5/5 at `/private/tmp/issue1649-reentrant-weak-owner-perl-oracle.log`. This
-snapshot has not been built or run on either PerlOnJava backend; no build is
-currently running in this checkout.
+`wip/ownership-batch-20261104-192548`, based on local merge commit
+`8367167b64` from master `289e34284d`; HEAD is `18f2cc1ac0`. The current
+uncommitted batch makes CODE-slot release drain only its own deferred token and
+removes the second outer `flushAboveMark()` after `RuntimeScalar` has completed
+a reference-slot transition. That second flush consumed older caller releases
+and destroyed a promise retained only by a closure.
 
-The producer audit still finds six calls to
-`restoreVerifiedCurrentCountedOwnerSlotRefCount` across first weaken, scalar
-overwrite, deferred release, and CODE/destructor cleanup. The deferred root
-walk remains reachable only through legacy unpaired `deferDecrement` in the
-current repository. Additional direct count mutations include blessed-glob
-alias acquisition, localized CODE restoration, graph cloning, method-invocant
-and tied-iterator holds, scalar-reference contents, and legacy closure capture
-bookkeeping. The method-invocant, clone, and iterator paths pair their count
-with an exact owner identity; the blessed-glob and localized-CODE paths need
-closer producer/release proof before they can be retired or migrated.
+`void_discard_preserves_closure_capture.t` passes 5/5 on system Perl, JVM, and
+interpreter; the existing `mojolicious_promise_lifecycle_regressions.t` passes
+on both backends. `CodeSlotReleaseBoundaryTest` and the focused Java ownership
+classes pass in `nice -n 19 make build` with the five-class filter recorded in
+`/private/tmp/ownership-exact-release-focused-make-18f2cc1ac0.log`. The first
+full make was run before removing the second setter flush and before correcting
+the Java test's expected destroyed-state sentinel. Its failure log is
+`/private/tmp/ownership-code-slot-exact-release-make-18f2cc1ac0.log`; it is not
+final-candidate validation. The failing-parent evidence is in
+`/private/tmp/promise-void-capture-parent-jvm.log` and the full parent unit
+output. The source/test batch is still uncommitted and needs the final no-sweeps
+gate after the remaining producer families are migrated.
 
-Batch the next source work around the shared scalar/array/hash slot and deferred
-release transition, including the reentrant setter fix and focused regressions.
-Group argument aliases, returns, closure/CODE captures, and unwind where they
-share frame ownership; audit package/glob, cloning/shared storage, and IO
-resource acquisition as separate producer families. Validate each new
-Perl-visible regression with system Perl, then run one serialized full
-`nice -n 19 make` after the combined candidate is immutable and reuse its JAR
-for the no-sweeps lifecycle and integration matrix. PR #1938 remains OPEN/DRAFT
-at remote head `95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05`; reconcile it with the
-rebased, validated local history before publication.
+Keep batching by shared transition boundary: finish scalar/array/hash slot
+replacement and removal with exact deferred release; then group argument
+aliases, returns, closure/CODE captures, and exception/unwind/async frame owners.
+Audit package/glob roots, cloned/shared storage, and IO resource owners by their
+actual acquisition and release sites. Remove corrective recovery only after
+those ordinary paths are explicit. Run focused builds once per coherent source
+batch, then one immutable full `nice -n 19 make` and the no-sweeps acceptance
+matrix. PR #1938 is still recorded as open/draft at remote head
+`95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05`; live PR and #1649 handoff state
+remain to be refreshed before publication.
 
 Standard Perl is the oracle for every Perl-visible reference edge and its
 lifetime behavior. A reference-slot transition should retain a new strong
@@ -2384,18 +2383,16 @@ and final use cases still require audit before removal.
 
 ### Next steps
 
-1. Finish the grouped slot-transition batch: trace remaining production paths
-   that reach `restoreReachableOwnerCount`, then cover scalar and aggregate
-   replacement/removal plus deferred release together where they share the
-   same acquisition and release helpers. Distinguish producer gaps from tests
-   that directly construct out-of-order state.
-2. Group frame-lifetime producers together: argument aliases, return and mortal
-   values, closure/CODE captures, exception unwind, and async cancellation.
-   Keep package roots, cloned/shared storage, and resource owners as separate
-   batches where their acquisition paths do not share the same transition.
-3. Remove corrective recovery only after normal acquisition, transfer, and
-   cleanup paths preserve owner identities and their regression coverage
-   passes. Run one focused build after each coherent batch, then the full
-   no-sweeps gate and acceptance matrix once on the final candidate.
-4. Recheck #1794, #1860, HTML-Tree, current master, and PR #1938; verify its
-   intended diff and leave merge to review.
+1. Finish the slot-transition audit across scalar, array, and hash replacement
+   and removal. Trace each producer into its exact pending-release token; keep
+   defensive synthetic undercount tests separate from normal producer fixes.
+2. Group argument aliases, returned/mortal values, closure/CODE captures, and
+   exception, unwind, and async cancellation around their shared frame-owner
+   transfer paths.
+3. Audit package scalar/aggregate/glob/CODE roots, cloned/shared storage, and IO
+   resource owners by acquisition and release site. Remove recovery paths only
+   after every ordinary strong edge is represented and covered.
+4. Run one focused build per coherent source batch, then the full no-sweeps
+   gate and acceptance matrix on the final immutable candidate. Recheck #1794,
+   #1860, HTML-Tree, current master, and PR #1938 before publication; leave
+   merging to review.
