@@ -215,12 +215,11 @@ public class GlobalVariable {
     }
 
     /** Release a compile-time compatibility pin after a callsite owns its CV. */
-    static void releaseCompiledDirectCallPin(String key, RuntimeCode expectedTarget) {
-        if (key == null || expectedTarget == null) return;
+    static void releaseCompiledDirectCallPin(String key, RuntimeScalar expectedSlot) {
+        if (key == null || expectedSlot == null) return;
         for (String related : compiledDirectCallSiteKeys(key)) {
             RuntimeScalar pinned = pinnedCodeRefs().get(related);
-            if (pinned != null && pinned.type == RuntimeScalarType.CODE
-                    && pinned.value == expectedTarget) {
+            if (pinned == expectedSlot) {
                 unpinCodeRef(related);
             }
         }

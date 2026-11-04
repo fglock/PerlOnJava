@@ -449,6 +449,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     private String compiledDirectCallSiteName;
     private int compiledDirectCallSiteIndex = -1;
     private WeakReference<RuntimeCode> compiledDirectCallInitialTarget;
+    private WeakReference<RuntimeScalar> compiledDirectCallInitialSlot;
     private boolean compiledDirectCallSiteDescriptor;
     private boolean compiledDirectCallCompileTimePinned;
     private boolean updatingCompiledDirectCallCache;
@@ -470,6 +471,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         compiledDirectCallCompileTimePinned = compileTimePinned;
         RuntimeCode target = initialCodeRef != null
                 && initialCodeRef.value instanceof RuntimeCode code ? code : null;
+        compiledDirectCallInitialSlot = initialCodeRef == null
+                ? null : new WeakReference<>(initialCodeRef);
         compiledDirectCallInitialTarget = target == null ? null : new WeakReference<>(target);
         if (target != null) {
             type = RuntimeScalarType.CODE;
@@ -508,6 +511,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 : compiledDirectCallInitialTarget.get();
     }
 
+    RuntimeScalar compiledDirectCallInitialSlot() {
+        return compiledDirectCallInitialSlot == null
+                ? null : compiledDirectCallInitialSlot.get();
+    }
+
     void updateCompiledDirectCallTarget(RuntimeCode target) {
         compiledDirectCallInitialTarget = target == null ? null : new WeakReference<>(target);
     }
@@ -518,6 +526,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         compiledDirectCallSiteIndex = index;
         compiledDirectCallSiteDescriptor = false;
         compiledDirectCallCompileTimePinned = compileTimePinned;
+        compiledDirectCallInitialSlot = null;
         compiledDirectCallInitialTarget = target == null ? null : new WeakReference<>(target);
         type = RuntimeScalarType.CODE;
         value = target;
