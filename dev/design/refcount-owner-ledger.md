@@ -416,6 +416,16 @@ PerlOnJava backends. Logs:
 `/tmp/issue1649-localized-global-jvm-20261104.log`, and
 `/tmp/issue1649-localized-global-interpreter-20261104.log`.
 
+The six production count-reconstruction sites are weakening, tail-call
+argument release, deferred release, pre-`DESTROY` CODE cleanup,
+post-`DESTROY` resurrection, and scalar overwrite. The existing focused repair
+tests set `refCount` directly to model undercounts; they verify defensive
+behavior, not a normal producer defect. In contrast,
+`TiedHandlerNestedOwnerCountInvariantTest` and `CodeSlotOwnerTest` exercise
+ordinary stores and assert counts against live slot identities. No ordinary
+producer responsible for a count mismatch has been isolated yet. Keep those
+synthetic tests, and fix the producer before retiring each repair callsite.
+
 Next, trace all production
 `restoreVerifiedCurrentCountedOwnerSlotRefCount()` callers back to the store,
 transfer, or cleanup operation that creates each mismatch, then batch fixes at
