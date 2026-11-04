@@ -3009,7 +3009,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                     || (element.type & RuntimeScalarType.REFERENCE_BIT) != 0) {
                 continue;
             }
-            if (elementSlotsAliasedIntoCallFrame
+            if (element.type == RuntimeScalarType.GLOB
+                    || elementSlotsAliasedIntoCallFrame
                     || element.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_ALIAS) != 0) {
                 // Undefining the AV clears any non-reference scalar cells
                 // borrowed by active @_ aliases before the array drops them.
