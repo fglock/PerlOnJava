@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
 @Tag("unit")
@@ -18,17 +19,30 @@ class UntrackedReferenceOwnerReplacementOrderTest {
             RecordingReferent previous = new RecordingReferent("previous", events);
             RecordingReferent replacement = new RecordingReferent("replacement", events);
             RuntimeArray storage = new RuntimeArray();
-            storage.addClonedElement(previous.createReference());
-            RuntimeScalar element = storage.elements.get(0);
-            PerlOwnerSlot owner = element.untrackedReferenceOwnerSlot();
-            events.clear();
+            int mark = MyVarCleanupStack.pushMark();
+            RuntimeScalar element = null;
+            try {
+                storage.addClonedElement(previous.createReference());
+                element = storage.elements.get(0);
+                MyVarCleanupStack.register(element);
+                PerlOwnerSlot owner = element.untrackedReferenceOwnerSlot();
+                assertNotNull(owner,
+                        "registering the scalar makes its uncounted value edge durable");
+                events.clear();
 
-            element.set(replacement.createReference());
+                element.set(replacement.createReference());
 
-            assertEquals(List.of("replacement:add", "previous:remove"), events);
-            assertSame(owner, element.untrackedReferenceOwnerSlot());
-            assertSame(replacement, owner.referent());
-            MortalList.scopeExitCleanupArray(storage);
+                assertEquals(List.of("replacement:add", "previous:remove"), events);
+                assertSame(owner, element.untrackedReferenceOwnerSlot());
+                assertSame(replacement, owner.referent());
+            } finally {
+                if (element != null) {
+                    RuntimeScalar.scopeExitCleanup(element);
+                    MyVarCleanupStack.unregister(element);
+                }
+                MortalList.scopeExitCleanupArray(storage);
+                MyVarCleanupStack.popMark(mark);
+            }
         }
     }
 
