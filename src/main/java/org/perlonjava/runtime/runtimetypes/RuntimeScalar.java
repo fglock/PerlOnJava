@@ -349,7 +349,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     private PerlOwnerSlot detachedGlobValueOwnerSlot;
 
     private void refreshDetachedGlobValueOwner() {
-        RuntimeGlob next = type == GLOB && value instanceof RuntimeGlob glob
+        prepareDetachedGlobValueOwner(type, value);
+    }
+
+    /**
+     * Move the scalar's detached-glob value edge before mutating the scalar
+     * payload. Perl releases a detached glob's component values while the
+     * scalar being overwritten still contains the old glob; a component's
+     * DESTROY can therefore inspect that old value. Acquire a replacement
+     * glob edge first, then retire the previous edge against that state.
+     */
+    private void prepareDetachedGlobValueOwner(int nextType, Object nextValue) {
+        RuntimeGlob next = nextType == GLOB && nextValue instanceof RuntimeGlob glob
                 && glob != this && glob.retainsDetachedComponents()
                 && hasDurableStrongValueSlot() ? glob : null;
         RuntimeGlob previous = detachedGlobValueOwnerSlot != null
@@ -411,6 +422,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     /** Clears a non-reference array slot after aggregate ownership is queued. */
     void clearForArraySlotRemoval() {
+        prepareDetachedGlobValueOwner(RuntimeScalarType.UNDEF, null);
         this.type = UNDEF;
         this.value = null;
         this.tainted = false;
@@ -3497,6 +3509,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (isPackageGlobalRoot || containerOwner != null) {
             clearLastReadlineHandleIfGlobValue();
         }
+        prepareDetachedGlobValueOwner(value.type, value.value);
         growingString = null;
         type = value.type;
         this.value = copyScalarPayload(value.type, value.value);
@@ -3536,6 +3549,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (isPackageGlobalRoot || containerOwner != null) {
             clearLastReadlineHandleIfGlobValue();
         }
+        prepareDetachedGlobValueOwner(RuntimeScalarType.INTEGER, null);
         growingString = null;
         transferableGrowingString = false;
         if (value instanceof MutableIntegerValue mutableInteger) {
@@ -3621,6 +3635,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // string hash, and refresh in place so existing PosLvalueScalar handles stay valid.
         if (value != null && this.type < TIED_SCALAR & value.type < TIED_SCALAR) {
             if (this != value) {
+                prepareDetachedGlobValueOwner(value.type, value.value);
                 this.type = value.type;
                 this.value = copyScalarPayload(value.type, value.value);
                 refreshDetachedGlobValueOwner();
@@ -3638,6 +3653,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.globalCodeRefFqn = value.globalCodeRefFqn;
                 RuntimePosLvalue.invalidatePos(this);
             } else {
+                prepareDetachedGlobValueOwner(value.type, value.value);
                 this.type = value.type;
                 this.value = copyScalarPayload(value.type, value.value);
                 refreshDetachedGlobValueOwner();
@@ -3745,6 +3761,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     private RuntimeScalar setLarge(RuntimeScalar value) {
         if (value == null) {
             closeIOOnDrop();
+            prepareDetachedGlobValueOwner(RuntimeScalarType.UNDEF, null);
             this.type = RuntimeScalarType.UNDEF;
             this.value = null;
             refreshDetachedGlobValueOwner();
@@ -3808,6 +3825,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // Simple non-reference assignment (no refCount tracking needed).
         // No MortalList.flush() here — neither old nor new value is a reference,
         // so no refCount was incremented/decremented, and no mortal entries were added.
+        prepareDetachedGlobValueOwner(value.type, value.value);
         this.type = value.type;
         this.value = copyScalarPayload(value.type, value.value);
         refreshDetachedGlobValueOwner();
@@ -3883,6 +3901,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                         && (nb instanceof RuntimeHash || nb instanceof RuntimeArray)) {
                     // fall through to full refCounted assignment
                 } else {
+                    prepareDetachedGlobValueOwner(value.type, value.value);
                     this.type = value.type;
                     this.value = copyScalarPayload(value.type, value.value);
                     refreshDetachedGlobValueOwner();
@@ -4085,6 +4104,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         int preAssignType = this.type;
         Object preAssignValue = this.value;
 
+        prepareDetachedGlobValueOwner(value.type, value.value);
         // Do the assignment
         this.type = value.type;
         this.value = copyScalarPayload(value.type, value.value);

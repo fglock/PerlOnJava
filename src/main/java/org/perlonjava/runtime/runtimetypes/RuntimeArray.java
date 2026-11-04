@@ -3004,12 +3004,18 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         notePackageRootMutation();
         markScalarLocalContainerCleared();
         this.deferOwnedElementReleases();
-        if (elementSlotsAliasedIntoCallFrame) {
-            for (RuntimeScalar element : this.elements) {
-                if (element != null
-                        && (element.type & RuntimeScalarType.REFERENCE_BIT) == 0) {
-                    element.clearForArraySlotRemoval();
-                }
+        for (RuntimeScalar element : this.elements) {
+            if (element == null
+                    || (element.type & RuntimeScalarType.REFERENCE_BIT) != 0) {
+                continue;
+            }
+            if (elementSlotsAliasedIntoCallFrame
+                    || element.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_ALIAS) != 0) {
+                // Undefining the AV clears any non-reference scalar cells
+                // borrowed by active @_ aliases before the array drops them.
+                // Their old values are released while the argument still sees
+                // the old cell, matching Perl's GV/component destruction order.
+                element.clearForArraySlotRemoval();
             }
         }
         this.elements.clear();
