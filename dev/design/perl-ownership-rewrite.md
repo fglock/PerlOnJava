@@ -25,12 +25,21 @@ covers array-element deletion while the scalar cell remains in scope.
 The WIP snapshot also adds `ScalarOverwriteRetiresOldCountedOwnerTest`, which
 checks that replacement retires the old slot and clears its weak observer; its
 focused unit gate passed before snapshotting.
+`TiedHandlerNestedOwnerCountInvariantTest` now checks the normal pre-weaken
+tied-handler path: the nested hash edge and one scalar edge match `refCount`,
+and untie releases the final edge without a root query.
 
 System Perl passes `active_lexical_scalar_referent_owner.t` 9/9 and
 `active_lexical_scalar_deferred_release.t` 6/6. The focused immutable
 `JPERL_TEST_FILTER=active_lexical_scalar_referent_owner nice -n 19 make test-unit`
 gate passed in 1m09 on `34a2c58be`. Sweeps-disabled JVM and interpreter runs
 pass both scalar lexical regressions and `deferred_capture_live_argument.t`.
+The `refcount/tied_handler_nested_value_owner_before_weaken.t` regression
+passes 2/2 on system Perl and both no-sweeps backends. The focused
+`JPERL_TEST_FILTER=deferred_capture_live_argument timeout 900 nice -n 19 make test-unit`
+gate passes on the tree committed as `04d7b8c54` in 1m03, including the new
+Java count invariant, all Java unit shards, and the live-argument Perl fixture.
+Log: `/private/tmp/ownership-focused-live-argument-and-java-test-final-20261104.log`.
 The Java owner-slot assertion fails on parent `95f85f10f`: it sees zero
 `ACTIVE_LEXICAL` identities where the candidate records one and releases it at
 scope exit. Evidence is in `/private/tmp/active-lexical-scalar-owner-perl.log`,
@@ -2223,7 +2232,10 @@ passed at that checkpoint. Full gate log:
 The Perl-level companion `refcount/tied_handler_nested_value_owner.t` covers
 the normal producer path: a tie handler's nested hash element owns the target
 until `untie` releases the handler. It passes on system Perl, the JVM, and the
-interpreter. The filtered `nice -n 19 make` gate passes in 1m15s; logs:
+interpreter. `TiedHandlerNestedOwnerCountInvariantTest` asserts the normal
+nested `HASH_ELEMENT` and scalar owner slots balance `refCount` before and
+after first weaken, then checks zero root queries at untie. The filtered
+`nice -n 19 make` gate passes in 1m15s; logs:
 `/private/tmp/tied-handler-nested-owner-system-perl.log`,
 `/private/tmp/tied-handler-nested-owner-jvm.log`,
 `/private/tmp/tied-handler-nested-owner-interpreter.log`, and
