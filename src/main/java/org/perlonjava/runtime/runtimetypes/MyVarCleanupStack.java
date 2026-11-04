@@ -33,14 +33,6 @@ public class MyVarCleanupStack {
         return PerlRuntime.current().executionState().myVarCleanupStack;
     }
 
-    // Phase I: parallel identity-counted set for O(1) `isLive(var)` check
-    // from the reachability walker. Maps var -> registration count
-    // (a single var can be registered multiple times if declared in
-    // nested scopes with the same slot reuse).
-    private static IdentityHashMap<Object, Integer> liveCounts() {
-        return PerlRuntime.current().executionState().liveMyVarCounts;
-    }
-
     private static IdentityHashMap<Object, Integer> registeredCounts() {
         return PerlRuntime.current().executionState().registeredMyVarCounts;
     }
@@ -54,8 +46,7 @@ public class MyVarCleanupStack {
      * their referents as reachable.
      */
     public static boolean isLive(Object var) {
-        if (var == null) return false;
-        return liveCounts().containsKey(var);
+        return isRegistered(var);
     }
 
     /**
@@ -79,7 +70,7 @@ public class MyVarCleanupStack {
      * RuntimeScalar / RuntimeArray / RuntimeHash instances.
      */
     public static java.util.List<Object> snapshotLiveVars() {
-        return new java.util.ArrayList<>(liveCounts().keySet());
+        return new java.util.ArrayList<>(registeredCounts().keySet());
     }
 
     /** Snapshot registered lexical slots without requiring weak-ref tracking. */
@@ -115,16 +106,8 @@ public class MyVarCleanupStack {
      */
     public static void register(Object var) {
         stack().add(var);
-        if (var != null) registeredCounts().merge(var, 1, Integer::sum);
-        // liveCounts is consulted by ReachabilityWalker.sweepWeakRefs and
-        // .isReachableFromRoots. We populate it lazily — only after the
-        // first weaken() call (which sets WeakRefRegistry.weakRefsExist).
-        // Tests that never weaken pay zero per-`my` cost; tests that do
-        // weaken trigger a one-time backfill via
-        // {@link #snapshotStackToLiveCounts()} from WeakRefRegistry,
-        // which seeds liveCounts with all already-registered my-vars.
-        if (var != null && WeakRefRegistry.weakRefsExist()) {
-            liveCounts().merge(var, 1, Integer::sum);
+        if (var != null) {
+            registeredCounts().merge(var, 1, Integer::sum);
             MortalList.invalidateLiveRootSnapshot();
         }
         if (var instanceof RuntimeScalar scalar) scalar.refreshUntrackedReferenceOwner();
@@ -134,17 +117,10 @@ public class MyVarCleanupStack {
     }
 
     /**
-     * Backfill the diagnostic live-count map before an explicit legacy root
-     * walk. Ordinary first-weaken lifecycle decisions use owner identities and
-     * must not populate this reachability cache.
+     * Compatibility hook for callers that used to seed a separate live-root
+     * cache. Root diagnostics now read the authoritative registration map.
      */
     public static synchronized void snapshotStackToLiveCounts() {
-        IdentityHashMap<Object, Integer> liveCounts = liveCounts();
-        for (Object var : stack()) {
-            if (var != null) {
-                liveCounts.merge(var, 1, Integer::sum);
-            }
-        }
         MortalList.invalidateLiveRootSnapshot();
     }
 
@@ -173,7 +149,7 @@ public class MyVarCleanupStack {
             if (stack.get(i) == var) {
                 stack.remove(i);
                 decRegisteredCount(var);
-                decLiveCount(var);
+                MortalList.invalidateLiveRootSnapshot();
                 if (var instanceof RuntimeBase base
                         && (base instanceof RuntimeArray || base instanceof RuntimeHash)
                         && !isRegistered(var)) {
@@ -199,19 +175,12 @@ public class MyVarCleanupStack {
         if (oldVar == null || newVar == null || oldVar == newVar) return;
         ArrayList<Object> stack = stack();
         IdentityHashMap<Object, Integer> registeredCounts = registeredCounts();
-        IdentityHashMap<Object, Integer> liveCounts = liveCounts();
         for (int i = stack.size() - 1; i >= 0; i--) {
             if (stack.get(i) == oldVar) {
                 stack.set(i, newVar);
                 decCount(registeredCounts, oldVar);
                 registeredCounts.merge(newVar, 1, Integer::sum);
-                Integer count = liveCounts.get(oldVar);
-                if (count != null) {
-                    if (count <= 1) liveCounts.remove(oldVar);
-                    else liveCounts.put(oldVar, count - 1);
-                    liveCounts.merge(newVar, 1, Integer::sum);
-                    MortalList.invalidateLiveRootSnapshot();
-                }
+                MortalList.invalidateLiveRootSnapshot();
                 if (oldVar instanceof RuntimeScalar scalar) {
                     scalar.refreshUntrackedReferenceOwner();
                 }
@@ -232,15 +201,6 @@ public class MyVarCleanupStack {
         if (count == null) return;
         if (count <= 1) counts.remove(var);
         else counts.put(var, count - 1);
-    }
-
-    private static void decLiveCount(Object var) {
-        IdentityHashMap<Object, Integer> liveCounts = liveCounts();
-        Integer c = liveCounts.get(var);
-        if (c == null) return;
-        if (c <= 1) liveCounts.remove(var);
-        else liveCounts.put(var, c - 1);
-        MortalList.invalidateLiveRootSnapshot();
     }
 
     private static void noteVarLeftScope(Object var) {
@@ -284,11 +244,11 @@ public class MyVarCleanupStack {
     }
 
     private static void unwindTo(int mark, ArrayList<Object> stack) {
+        if (stack.size() > mark) MortalList.invalidateLiveRootSnapshot();
         for (int i = stack.size() - 1; i >= mark; i--) {
             Object var = stack.removeLast();
             if (var != null) {
                 decRegisteredCount(var);
-                decLiveCount(var);
                 MortalList.evalExceptionScopeCleanup(var);
                 releaseActiveAggregateOwnerAfterCleanup(var);
                 noteVarLeftScope(var);
@@ -321,11 +281,11 @@ public class MyVarCleanupStack {
     }
 
     private static void popMark(int mark, ArrayList<Object> stack) {
+        if (stack.size() > mark) MortalList.invalidateLiveRootSnapshot();
         while (stack.size() > mark) {
             Object var = stack.removeLast();
             if (var != null) {
                 decRegisteredCount(var);
-                decLiveCount(var);
                 if (var instanceof RuntimeBase base
                         && (base instanceof RuntimeArray || base instanceof RuntimeHash)
                         && !isRegistered(var)) {
