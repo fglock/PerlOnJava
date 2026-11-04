@@ -3808,7 +3808,24 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // All reference types have REFERENCE_BIT (0x8000) set, so a single
         // bitwise OR + AND check covers both old and new values.
         if (((this.type | value.type) & REFERENCE_BIT) != 0) {
-            return transitionReferenceSlot(value, false);
+            // A nested lifecycle callback can flush pending return temporaries
+            // while this slot is being replaced (for example, resolving the
+            // old referent's DESTROY method can release a CODE slot). Keep the
+            // caller's RHS temporaries below this operation's boundary until
+            // the new slot is fully installed and the old edge is released.
+            boolean transitionCompleted = false;
+            MortalList.pushMark();
+            try {
+                RuntimeScalar result = transitionReferenceSlot(value, false);
+                transitionCompleted = true;
+                return result;
+            } finally {
+                MortalList.popMark();
+                // Run the usual setter boundary only after reentrant cleanup
+                // has finished. The transition's own flush cannot consume an
+                // RHS return owner that predates this nested operation mark.
+                if (transitionCompleted) MortalList.flushAboveMark();
+            }
         }
 
         // Simple non-reference assignment (no refCount tracking needed).
