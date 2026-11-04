@@ -4,39 +4,37 @@
 
 **Current checkpoint (2026-11-04):** #1649 remains in Phase 2 on
 `wip/ownership-batch-20261104-192548`, based on local merge commit
-`8367167b64` from master `289e34284d`; HEAD is `dcf30ebdc7`. The new JVM
-method-invocant hold keeps chained receivers alive while arguments are being
-evaluated, including the temporary IO handle in the App-Scaffolder report.
-The permanent `temporary_io_invocant_survives_nested_render.t` regression
-passes on system Perl, JVM, and interpreter. The existing
-`interpreter_chained_method_invocant_lifetime.t` passes 9/9 on the interpreter,
-but JVM tests 6 and 9 still fail: labeled `last` and eval exception unwinding
-leave the temporary hold unreleased. This batch is incomplete.
+`8367167b64` from master `289e34284d`; HEAD is `ae9b22a3bb`. The JVM now holds
+chained method invocants while their arguments run and releases them on normal
+return, labeled `last`, eval exception, and nonlocal control-flow exits. The
+temporary IO handle from the App-Scaffolder report survives nested template
+rendering. This completes the focused method-invocant batch.
 
-The filtered `nice -n 19 make build` passed on the source now committed as
-`dcf30ebdc7`; log: `/private/tmp/ownership-method-invocant-focused-make-b6597f9b38.log`.
-The temporary-IO system Perl/JVM/interpreter logs are
-`/private/tmp/io-temporary-invocant-regression-system-perl.log`,
-`/private/tmp/io-temporary-invocant-regression-jvm-fixed.log`, and
-`/private/tmp/io-temporary-invocant-regression-interpreter-fixed.log`. The
-chained-lifetime interpreter pass and JVM failures are in
-`/private/tmp/chained-method-invocant-interpreter-fixed.log` and
-`/private/tmp/chained-method-invocant-jvm-fixed.log`. The related
-`deferred_capture_live_argument.t` regression from #1957 is already on this
-branch and belongs in this batch's final backend run. No full gate has run on
-this candidate.
+The three Perl regressions pass on system Perl, JVM, and interpreter:
+`interpreter_chained_method_invocant_lifetime.t` 9/9,
+`deferred_capture_live_argument.t` 3/3, and
+`temporary_io_invocant_survives_nested_render.t` 1/1. The focused four-class
+`nice -n 19 make build` passes in 15s. Logs: `/private/tmp/ownership-method-invocant-focused-make-ae9b22a3bb.log`,
+`/private/tmp/chained-method-invocant-system-perl-resume.log`,
+`/private/tmp/chained-invocant-jvm-ae9b22a3bb.log`,
+`/private/tmp/chained-invocant-interpreter-ae9b22a3bb.log`,
+`/private/tmp/deferred-capture-live-argument-system-perl-resume.log`,
+`/private/tmp/deferred-capture-jvm-ae9b22a3bb.log`,
+`/private/tmp/deferred-capture-interpreter-ae9b22a3bb.log`,
+`/private/tmp/temporary-io-invocant-system-perl-resume.log`,
+`/private/tmp/temporary-io-jvm-ae9b22a3bb.log`, and
+`/private/tmp/temporary-io-interpreter-ae9b22a3bb.log`. No full gate has run
+on this candidate.
 
-Batching plan: finish method-invocant, staged-argument, eval-unwind, and
-nonlocal-control-flow cleanup together, then run one focused build with the
-temporary-IO, chained-lifetime, and live-argument regressions. Next combine
-scalar/array/hash slot replacement and removal with argument/return/closure
-owner transfers that use the same exact-release transition; run system Perl
-oracles first and one focused build for the group. Audit package/glob/CODE
-roots, tied values, cloned/shared storage, cycles, suspended frames, and IO
-resource owners by acquisition and release site; group fixes that share an
-owner producer before the next focused build. Remove corrective recovery only
-after those paths are explicit, then run one immutable full `nice -n 19 make`
-and the no-sweeps acceptance matrix. PR #1938 remains OPEN/DRAFT at remote head
+Batching plan: next group scalar/array/hash slot replacement and removal with
+argument/return/closure owner transfers that use the same exact-release
+transition; run system Perl oracles first and one focused build for the group.
+Then audit package/glob/CODE roots, tied values, cloned/shared storage, cycles,
+suspended frames, and IO resource owners by acquisition and release site;
+group fixes that share an owner producer before the next focused build. Remove
+corrective recovery only after those paths are explicit, then run one
+immutable full `nice -n 19 make` and the no-sweeps acceptance matrix. PR #1938
+remains OPEN/DRAFT at remote head
 `95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05`; it is not reconciled with this
 local batch.
 
@@ -2389,12 +2387,10 @@ and final use cases still require audit before removal.
 
 ### Next steps
 
-1. Finish the active JVM method-invocant batch, including staged arguments,
-   eval exceptions, and labeled control flow; require the three focused lifetime
-   regressions on both backends.
-2. Combine scalar/array/hash slot replacement and removal with argument,
-   return/mortal, and closure/CODE owner transfers where they use the same
-   exact-release operation. Verify changed Perl behavior on system Perl first.
+1. Audit scalar/array/hash slot replacement and removal producers; combine
+   fixes that share the exact deferred-release transition.
+2. Group argument, return/mortal, and closure/CODE owner transfers with those
+   slot transitions when they use the same acquisition and release operation.
 3. Finish the rooted storage/resource audit: tied values, package/glob/CODE
    slots, cloned/shared storage, strong cycles, suspended frames, and IO owners.
    Remove ordinary recovery machinery only after producer coverage is complete.
