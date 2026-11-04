@@ -371,7 +371,30 @@ Run on JVM and interpreter backends with `timeout` and complete output logs:
 
 ## Progress Tracking
 
-### Current Status: CODE-slot owner migration continues; tested checkpoint `3a3d12213` (2026-11-04)
+### Current Status: scalar-cell lexical release ordering; tested checkpoint `b49af5cc9` (2026-11-04)
+
+Interpreter scope teardown now runs `SCOPE_EXIT_CLEANUP` before removing the
+active lexical pad binding. The prior order released the final pad identity
+while `localBindingExists` was still true; its callback deferred weak cleanup,
+and no callback retried after scalar cleanup cleared that state. The new
+`weak_scalar_cell_active_lexical_owner.t` regression failed on parent
+`b3ad73b0d` and passes 3/3 on system Perl, JVM, and interpreter. Existing
+`weaken_scalar_refs.t` passes 10/10 and `deferred_capture_live_argument.t`
+passes 3/3 on both PerlOnJava backends. The focused `make test-unit` gate with
+`JPERL_TEST_FILTER=weak_scalar_cell_active_lexical_owner` passes on immutable
+`b49af5cc9` in 3m27s. Evidence:
+`/tmp/weak-scalar-cell-active-lexical-parent-b3-interpreter-20261104.log`,
+`/tmp/weak-scalar-cell-active-lexical-owner-system-perl-final-20261104.log`,
+`/tmp/ownership-active-lexical-release-order-immutable-b49af5cc9.log`,
+`/tmp/weak-scalar-cell-active-lexical-owner-jvm-b49af5cc9.log`,
+`/tmp/weak-scalar-cell-active-lexical-owner-interpreter-b49af5cc9.log`,
+`/tmp/weaken-scalar-refs-jvm-b49af5cc9.log`,
+`/tmp/weaken-scalar-refs-interpreter-b49af5cc9.log`,
+`/tmp/deferred-capture-live-argument-jvm-b49af5cc9.log`, and
+`/tmp/deferred-capture-live-argument-interpreter-b49af5cc9.log`.
+
+This closes one active-lexical scalar release path only. The complete no-sweeps
+suite, HTML::Tree 8/8 matrix, and remaining owner-source audits are still open.
 
 The named-CODE batch now follows explicit slot identity through parser-side
 redefinition and interpreter undef. `SubroutineParser` replaces an installed CV
@@ -440,12 +463,12 @@ not passed on this checkpoint. Parent logs for the named-undef regression are
 `/private/tmp/named-undef-visible-code-slot-parent-b3-jvm.log` and
 `/private/tmp/named-undef-visible-code-slot-parent-b3-interpreter.log`.
 
-Local work is on `wip/ownership-status-20261104-103529`; code checkpoint
-`3a3d12213` is followed by documentation/WIP checkpoint `5d964871b`. Local
-history contains master `b43a652507d836bfbd78e3e6c250021c0b3355aa`, but the live
-PR now reports base `4a5c33753f1da3f9838c44567bbba878e8f567e0`; ancestry to that
-new base has not yet been checked. PR #1938 remains open as a draft at remote
-head `95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05`, and this checkpoint is not
+Local work is on `wip/active-lexical-owner-20261104-112507`; the scalar-cell
+release fix is `b49af5cc9`, following WIP snapshot `31516b356`. The branch
+contains current master `b43a652507d836bfbd78e3e6c250021c0b3355aa`. PR #1938
+remains open as a draft at remote head `95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05`
+and reports base `4a5c33753f1da3f9838c44567bbba878e8f567e0`; local and remote
+history still need reconciliation before publication. This checkpoint is not
 published. Next, audit and migrate remaining count producers in batches:
 reference-slot transitions and tied/container mutation; call, closure, and
 deferred-release lifetimes; package/resource roots; then clone/shared storage
@@ -643,6 +666,12 @@ integration. Evidence:
 
 ### Completed Work
 
+- [x] On 2026-11-04, interpreter scalar scope cleanup now precedes active-pad
+  owner release, allowing the final lexical identity to clear a weak observer
+  after `localBindingExists` is reset. The regression fails on parent
+  `b3ad73b0d`; the immutable `b49af5cc9` focused make, system Perl oracle,
+  both backends, existing scalar weak-reference suite, and deferred live-
+  argument regression pass. Evidence is recorded in Current Status.
 - [x] On 2026-11-02, `DESTROY` resurrection now requires current Perl owner
   identities or semantic captures; a positive count without either is ignored.
   `DestroyCountOnlyResurrectionTest` fails on parent `dba24b49b`; the focused
