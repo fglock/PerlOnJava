@@ -3132,10 +3132,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             postfixReferenceOwnershipTransfer = false;
             if ((type & REFERENCE_BIT) != 0 && value instanceof RuntimeBase base
                     && base.refCount > 0) {
-                // set() acquired the destination owner; cancel the extra
-                // increment because this temporary's owner was transferred.
-                base.refCount--;
-                base.releaseActiveOwner(this);
+                // set() published and acquired the destination owner. Release
+                // this exact postfix temporary through the shared slot/count
+                // transition so final cleanup follows the installed state.
+                MortalList.releaseCountedOwnerImmediately(
+                        this, "RuntimeScalar.addToScalar postfix temporary transfer");
             }
         }
         return result;
