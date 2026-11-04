@@ -3209,11 +3209,7 @@ public class GlobalVariable {
             clearPackageCache();
             invalidatePackageRootSnapshot();
         }
-        // Decrement stashRefCount on the removed CODE ref
         if (deleted != null && deleted.value instanceof RuntimeCode removedCode) {
-            if (removedCode.stashRefCount > 0) {
-                removedCode.stashRefCount--;
-            }
             removedCode.noteStashOwnerReleased();
         }
         return deleted;

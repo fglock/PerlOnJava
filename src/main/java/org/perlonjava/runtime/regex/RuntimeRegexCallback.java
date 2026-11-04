@@ -78,7 +78,7 @@ public final class RuntimeRegexCallback {
             code.traceRefCount(-1, "RuntimeRegexCallback.releaseOwner");
             code.refCount--;
         }
-        if (code.refCount != Integer.MIN_VALUE && code.stashRefCount <= 0
+        if (code.refCount != Integer.MIN_VALUE
                 && !code.hasPerlOwnerForCaptureOtherThan(null)) {
             code.releaseCaptures();
         }

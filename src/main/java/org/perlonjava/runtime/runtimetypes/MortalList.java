@@ -976,7 +976,7 @@ public class MortalList {
 
         if (--code.refCount > 0) return;
 
-        if (code.stashRefCount > 0) {
+        if (code.hasStashCodeSlotOwner()) {
             code.refCount = 0;
             return;
         }
@@ -1904,7 +1904,6 @@ public class MortalList {
                 && !GlobalVariable.isPackageRootedAggregate(base)
                 && !(base instanceof RuntimeCode code
                     && (code.hasActiveCodeOwner()
-                        || code.stashRefCount > 0
                         || code.hasStashCodeSlotOwner()))) {
             base.refCount = Integer.MIN_VALUE;
             DestroyDispatch.callDestroyFromCountedOwner(base);
@@ -1926,7 +1925,7 @@ public class MortalList {
                     && !(scalar instanceof RuntimeScalarReadOnly)
                     && !scalar.hasClosureCaptureOwner())
                 || (base instanceof RuntimeCode code
-                    && (code.hasCountedCodeSlots || (!code.hadStashRef && code.stashRefCount <= 0))
+                    && (code.hasCountedCodeSlots || !code.hasStashCodeSlotOwner())
                     && !SpecialBlock.hasPendingEndBlock(code));
         return supportedReferent && !base.hasOwnerSlots();
     }
