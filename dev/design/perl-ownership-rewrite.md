@@ -4,10 +4,12 @@
 
 **Current checkpoint (2026-11-04):** #1649 remains in Phase 2 on
 `wip/ownership-batch-20261104-232418`, based on the earlier ownership branch;
-WIP snapshot `3b3303adbc` preserves the prior work and new regressions. One
-`RuntimeArray.java` edit is pending. The previous method-invocant batch is
-complete: the JVM retains chained method invocants through argument evaluation
-and releases them across normal return, `last`, exceptions, and nonlocal exits;
+local merge commit `8367167b64` from master `289e34284d`. WIP snapshot
+`3b3303adbc` preserves the prior work and new regressions; detached-glob fix
+`b48048802f` is the latest implementation commit. The previous
+method-invocant batch is complete: the JVM retains chained method invocants
+through argument evaluation and releases them across normal return, `last`,
+exceptions, and nonlocal exits;
 the App-Scaffolder temporary IO handle survives nested rendering. Its three
 Perl regressions passed on system Perl and both backends, with a focused build.
 
