@@ -525,6 +525,38 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         return false;
     }
 
+    /** Whether a current Perl owner identity other than one slot remains. */
+    boolean hasCurrentPerlOwnerIdentityOtherThan(PerlOwnerSlot excluded) {
+        if (localBindingExists || hasClosureCaptureOwner()
+                || hasPendingReturnOwner() || hasPendingOwnerRelease()) {
+            return true;
+        }
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (slot == excluded || !slot.isActive()
+                    || slot.kind() == PerlOwnerSlot.Kind.TEMPORARY_ROOT) {
+                continue;
+            }
+            if (slot.kind() == PerlOwnerSlot.Kind.ARGUMENT_ALIAS
+                    || slot.isMethodInvocantOwner(this)
+                    || slot.isCountedNativeOwner()) {
+                return true;
+            }
+            RuntimeScalar scalarOwner = slot.countedScalarOwner();
+            if (scalarOwner != null) {
+                PerlOwnerSlot.Kind kind = slot.kind();
+                boolean currentCountedOwner =
+                        (kind == PerlOwnerSlot.Kind.ARRAY_ELEMENT
+                                || kind == PerlOwnerSlot.Kind.HASH_ELEMENT)
+                        ? scalarOwner.isCurrentAggregateElementOwner(this, slot)
+                        : scalarOwner.isCurrentCountedScalarOwner(this, slot);
+                if (currentCountedOwner) return true;
+                continue;
+            }
+            if (DestroyDispatch.isCurrentPerlOwnerSlot(this, slot)) return true;
+        }
+        return false;
+    }
+
     /** Whether a non-counted owner slot proves Perl ownership of this value. */
     boolean hasUncountedPerlOwnerSlotIdentity() {
         for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
