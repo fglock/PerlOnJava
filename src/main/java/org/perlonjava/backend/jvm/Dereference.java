@@ -971,12 +971,16 @@ public class Dereference {
                 object = new StringNode(className, ((IdentifierNode) object).tokenIndex);
             }
 
-            // Wanted reports OBJECT when a method result is immediately used
-            // as the invocant of another method call ($obj->first->second).
-            if (object instanceof BinaryOperatorNode innerArrow
+            // A method result used as another method's invocant needs an
+            // explicit Perl owner while the outer method name and arguments
+            // are evaluated. The interpreter emits the matching hold/release
+            // opcodes; keep the JVM path on the same lifetime boundary.
+            boolean holdInvocantDuringArguments = object instanceof BinaryOperatorNode innerArrow
                     && "->".equals(innerArrow.operator)
                     && innerArrow.right instanceof BinaryOperatorNode innerCall
-                    && "(".equals(innerCall.operator)) {
+                    && "(".equals(innerCall.operator);
+            if (holdInvocantDuringArguments) {
+                BinaryOperatorNode innerArrow = (BinaryOperatorNode) object;
                 innerArrow.setAnnotation("wantedObjectContext", true);
             }
 
@@ -1004,6 +1008,34 @@ public class Dereference {
             }
 
             object.accept(scalarVisitor);
+            int objectSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+            boolean pooledObject = objectSlot >= 0;
+            if (!pooledObject) {
+                objectSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            }
+            mv.visitVarInsn(Opcodes.ASTORE, objectSlot);
+
+            int holdSlot = -1;
+            boolean pooledHold = false;
+            Label holdStart = null;
+            if (holdInvocantDuringArguments) {
+                holdSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+                pooledHold = holdSlot >= 0;
+                if (!pooledHold) {
+                    holdSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                }
+                mv.visitVarInsn(Opcodes.ALOAD, objectSlot);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                        "acquireMethodInvocantHold",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)"
+                                + "Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;",
+                        false);
+                mv.visitVarInsn(Opcodes.ASTORE, holdSlot);
+                holdStart = new Label();
+                mv.visitLabel(holdStart);
+            }
+
             method.accept(scalarVisitor);
 
             // Push __SUB__
@@ -1022,13 +1054,6 @@ public class Dereference {
                 methodSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
             }
             mv.visitVarInsn(Opcodes.ASTORE, methodSlot);
-
-            int objectSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
-            boolean pooledObject = objectSlot >= 0;
-            if (!pooledObject) {
-                objectSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
-            }
-            mv.visitVarInsn(Opcodes.ASTORE, objectSlot);
 
             // For small literal calls, keep values in JVM locals until every
             // expression has run, then build @_ directly. Other calls retain
@@ -1187,6 +1212,39 @@ public class Dereference {
                     "callCached",
                     "(ILorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;" + argsDescriptor + "I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
                     false); // generate a cached .call()
+
+            if (holdInvocantDuringArguments) {
+                // Keep the returned list on the operand stack while releasing
+                // the temporary owner, matching RELEASE_METHOD_INVOCANT in
+                // the interpreter. Exceptions from argument evaluation or
+                // dispatch abandon the hold immediately and rethrow unchanged.
+                Label holdEnd = new Label();
+                Label holdHandler = new Label();
+                Label afterHoldCleanup = new Label();
+                mv.visitLabel(holdEnd);
+                mv.visitVarInsn(Opcodes.ALOAD, holdSlot);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                        "releaseMethodInvocantHold",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)V",
+                        false);
+                mv.visitJumpInsn(Opcodes.GOTO, afterHoldCleanup);
+                mv.visitLabel(holdHandler);
+                int holdThrowableSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                mv.visitVarInsn(Opcodes.ASTORE, holdThrowableSlot);
+                mv.visitVarInsn(Opcodes.ALOAD, holdSlot);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                        "releaseAbandonedMethodInvocantHold",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)V",
+                        false);
+                mv.visitVarInsn(Opcodes.ALOAD, holdThrowableSlot);
+                mv.visitInsn(Opcodes.ATHROW);
+                mv.visitLabel(afterHoldCleanup);
+                // Register after argument-evaluation cleanup so that handler
+                // abandons the staged arguments before this owner is retired.
+                mv.visitTryCatchBlock(holdStart, holdEnd, holdHandler, null);
+            }
 
             // Tagged returns control-flow handling for method calls:
             // If RuntimeCode.callCached() returned a RuntimeControlFlowList marker (TAILCALL), handle it here.
@@ -1347,6 +1405,9 @@ public class Dereference {
                 emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
             }
             if (pooledMethod) {
+                emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+            }
+            if (pooledHold) {
                 emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
             }
             if (pooledObject) {
