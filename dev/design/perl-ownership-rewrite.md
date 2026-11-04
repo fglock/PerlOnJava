@@ -3,43 +3,47 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-04):** #1649 is on
-`wip/issue1649-preflight-20261104-152310`, at source commit
-`42314fbfa51e0e4d69b8f341a780755179536420`. The required preflight WIP
-snapshot is `c6d9d91d0`; full no-sweeps acceptance at `d551c9cdb` remains an
-ancestor. This batch protects caller return temporaries while a reference slot
-replacement releases the old value and runs nested lifecycle callbacks, then
-flushes them at the setter boundary. The regression covers package scalar,
-hash element, and array element slots when old `DESTROY` weakens the installed
-replacement.
+`wip/issue1649-preflight-20261104-152310`, at source commit `6227f5ed5`. The
+required preflight WIP snapshot is `c6d9d91d0`; the earlier full no-sweeps pass
+at `d551c9cdb` is not validation of this newer candidate.
 
-Evidence: the regression passes 8/8 on system Perl and both PerlOnJava
-backends. The unfixed parent JAR fails only the package-scalar ordering check
-on both backends; hash and array checks pass. Shard 0 of the filtered
-`nice -n 19 timeout 1800 make test-unit` passes in 3m10s, including the
-return-owner JUnit classes; this gate ran on the exact source diff before its
-commit, with build metadata still identifying `c6d9d91d0`. The immutable
-`42314fbfa` commit needs the final full `make` gate. The design link check
-passes (825 links, zero errors). Logs: `/tmp/issue1649-scalar-reentrant-
-overwrite-weaken-*` and `/tmp/issue1649-check-links-20261104.log`.
+Two source batches are now on the branch. `42314fbfa` protects caller return
+temporaries while a scalar slot replacement runs nested `DESTROY` callbacks.
+`6227f5ed5` routes compiler temporaries, list-assignment copies, refalias
+wrappers, hash-slice staging, and Storable hook arguments through the shared
+counted-owner release operation. That operation retires the exact slot and
+count together, then runs lifecycle cleanup if the release is final.
 
-Previous evidence remains: localized package-scalar restore passes 7/7 on
-system Perl and both backends, with ten neighboring tests passing 69 checks
-per backend, including `deferred_capture_live_argument.t`; registered lexical
-diagnostics pass shard 0 in 1m28. Logs are
-`/tmp/issue1649-localized-scalar-*`,
-`/tmp/issue1649-scalar-aggregate-batch-*`, and
-`/tmp/issue1649-registered-lexical-root-focused-20261104.log`.
+Evidence for `6227f5ed5`: eight related unit files pass 54/54 on system Perl,
+JVM, and interpreter. Filtered `nice -n 19 timeout 1800 make test-unit`
+passes shard 0 in 4m34s, including JUnit, Joni, and launcher integration. The
+isolated gate compiled the exact source diff with build metadata identifying
+`43556d5f7`; the shared branch commit contains the same source. Full `make` on
+the immutable branch candidate remains pending. Logs:
+`/private/tmp/issue1649-temp-release-{system-perl-final,jvm-runner,interpreter-runner}.log`
+and `/private/tmp/issue1649-temp-release-focused-make-final.log`.
 
-Next batch: continue the producer audit, grouping scalar overwrite/undef and
-aggregate replacement/removal/clear with deferred releases only where they
-share the same slot transition. Keep argument aliases, return/mortal values,
-closures, active CODE, unwind, and async cancellation together as a frame
-lifetime batch. The latest #1649 report adds a JVM-only temporary IO handle
-failure in nested `openw()->write(...)` arguments; carry it into the separate
-resource-owner batch with a permanent Perl regression. Package/shared storage
-and recovery removal remain later batches. Run system Perl first, assemble
-related edits before each focused build, and reserve the full no-sweeps gate,
-#1794/#1860, and HTML::Tree acceptance for the final immutable candidate.
+The producer audit still has six production count-restoration call sites
+covering weaken, scalar overwrite, deferred release, tail-call release, and
+CODE/destructor cleanup. The root-based recovery inside `processDeferredBase`
+is reachable only from the legacy unpaired-release hook in this repository;
+the remaining count restorations need source-level producer fixes before
+removal. Direct count operations in runtime-native owners and specialized
+transfers also remain under review.
+
+Next batch: finish tracing those direct count producers and exact release
+boundaries, then migrate the frame-lifetime group (argument aliases,
+return/mortal owners, closures, active CODE, unwind, and async cancellation).
+Keep IO resource ownership separate until the reported nested
+`openw()->write(...)` failure has an exact Perl regression. Package/shared
+storage and recovery removal remain open. After those batches, rebase against
+current `master` and run the final full no-sweeps, #1794/#1860, weak-reference,
+resurrection/cycle, and HTML::Tree gates on one immutable candidate.
+
+PR #1938 remains OPEN/DRAFT at remote head
+`95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05`; its diff includes
+`deferred_capture_live_argument.t`. Reconcile local history with current
+master and rerun validation before publication.
 
 PR #1938 remains OPEN/DRAFT at remote head
 `95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05`; its diff includes
