@@ -90,13 +90,11 @@ counter; it does not define this rewrite's phase boundaries.
 
 ## Contract
 
-Represent each Perl-visible strong owner as an explicit owner slot with a
-unique identity and an owner kind. Acquiring, transferring, and releasing a
-slot go through one API. Referent lifecycle state is separate from its
-nonnegative strong-owner count. Counted cycles remain retained for the owning
-runtime while their Perl owner count is positive. At an unmigrated boundary,
-an explicit legacy owner bridge accounts for the edge; no edge may be counted
-by both systems or by neither.
+The target model follows Perl: every strong SV edge changes the referent's
+ordinary reference count when its slot is acquired, transferred, replaced, or
+released. Final lifecycle work follows the count reaching zero. Cycles stay
+alive through their real internal edges. A deferred release carries the exact
+referent and one pending decrement, which completes once after publication.
 
 Java references and `RuntimeScalar` wrappers do not by themselves imply Perl
 owners. In particular, lexical aliases, borrowed call arguments, aggregate
@@ -104,15 +102,12 @@ slots, closure pads, and mortal temporaries have different ownership rules.
 Every path must state whether it creates an owner, borrows a cell, transfers an
 owner, or creates a deferred mortal owner.
 
-Perl does not need a sidecar token for each edge because its interpreter
-updates SV reference counts at the operations that install and remove strong
-SV references. Java garbage collection tracks Java reachability, not Perl
-ownership, and PerlOnJava's current `refCount` is selective. Deferred cleanup
-also needs to know which exact Perl edge was released. `PerlOwnerSlot` supplies
-that stable identity and release provenance alongside the count; it is not a
-second reference count or a temporary shim. It can be replaced only by an
-owner mechanism that preserves the same per-edge identity across every
-acquisition, transfer, replacement, and release path.
+PerlOnJava's current `refCount` is selective, so the migration uses
+`PerlOwnerSlot` as a temporary ledger to find missing producers, verify
+transfers, and keep exact provenance at deferred-release boundaries. It is not
+another reference count. Remove the persistent ledger when normal slot
+operations maintain the count directly; keep only the exact pending decrement
+while a release is deferred. Java reachability must not decide Perl ownership.
 
 ## Remaining lifecycle fallback audit (updated 2026-11-04)
 
