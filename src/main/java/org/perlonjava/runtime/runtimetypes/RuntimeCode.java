@@ -7329,6 +7329,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 //   - apply(String, RuntimeArray, int) pushes true  (fresh args / func())
                 // Fall back to the name-based heuristic for frames outside our tracking
                 // (e.g., top-level code, eval frames).
+                boolean evalCallerFrame = subName != null
+                        && (subName.equals("(eval)") || subName.endsWith("::(eval)"));
                 Boolean hasArgsFromStack = getHasArgsAt(trackedOriginalFrame);
                 if (calledFromDB && (hasArgsFromStack == null || !hasArgsFromStack)
                         && previousFrameSubName != null
@@ -7350,12 +7352,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     hasArgsFromStack = getHasArgsAt(trackedActiveCodeFrame);
                 }
                 if (hasArgsFromStack != null) {
-                    res.add(hasArgsFromStack ? RuntimeScalarCache.scalarTrue : RuntimeScalarCache.scalarUndef);
+                    res.add(hasArgsFromStack ? RuntimeScalarCache.scalarTrue
+                            : evalCallerFrame ? RuntimeScalarCache.scalarZero : RuntimeScalarCache.scalarUndef);
                 } else {
                     // Fallback: assume hasargs=true for named subs, false for eval
-                    boolean hasArgs = subName != null && !subName.isEmpty() && 
-                                      !subName.equals("(eval)") && !subName.endsWith("::(eval)");
-                    res.add(hasArgs ? RuntimeScalarCache.scalarTrue : RuntimeScalarCache.scalarUndef);
+                    boolean hasArgs = subName != null && !subName.isEmpty() && !evalCallerFrame;
+                    res.add(hasArgs ? RuntimeScalarCache.scalarTrue
+                            : evalCallerFrame ? RuntimeScalarCache.scalarZero : RuntimeScalarCache.scalarUndef);
                 }
 
                 // Add wantarray (element 5): undef for void, 0 for scalar, 1 for list.
