@@ -1711,7 +1711,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         ArrayList<RuntimeScalar.ArgumentAliasOwner> owners = new ArrayList<>();
         if (args == null) return owners;
         for (RuntimeScalar scalar : args.elements) {
-            if (scalar == null || !hasPersistentArgumentCell(scalar)) continue;
+            if (scalar == null || WeakRefRegistry.isweak(scalar)) continue;
+            // Filehandle objects are GLOBREFERENCE values. A temporary socket
+            // passed directly into a subroutine is a real Perl owner while its
+            // argument slot is active, even without a persistent caller cell;
+            // dropping its last counted slot runs IO::Handle::DESTROY and
+            // closes the socket in the middle of the call.
+            if (scalar.type != RuntimeScalarType.GLOBREFERENCE
+                    && !hasPersistentArgumentCell(scalar)) continue;
             owners.add(scalar.retainArgumentAliasOwner());
         }
         return owners;

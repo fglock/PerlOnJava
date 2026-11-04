@@ -40,11 +40,15 @@ sub read_response {
 
     # The active argument must retain the socket after this captured lexical
     # leaves scope. The first TLS read above also leaves body bytes buffered.
+    my $callback;
     {
         my $captured_socket = $_[0];
-        my $callback = sub { $captured_socket };
+        $callback = sub { $captured_socket };
     }
+    $main::KEEP_TLS_CALLBACK = $callback;
 
+    # Keep the closure alive until body consumption completes so its capture
+    # owns the aliased socket after the captured lexical leaves scope.
     my $body = '';
     while (1) {
         my $line_end = index($wire, "\r\n");
@@ -76,5 +80,7 @@ sub read_response {
         die 'missing chunk terminator' unless substr($wire, 0, 2, '') eq "\r\n";
     }
 
+    die 'captured socket was released' unless $main::KEEP_TLS_CALLBACK->();
+    undef $main::KEEP_TLS_CALLBACK;
     return $body;
 }
