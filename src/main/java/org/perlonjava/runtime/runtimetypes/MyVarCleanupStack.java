@@ -128,8 +128,8 @@ public class MyVarCleanupStack {
             MortalList.invalidateLiveRootSnapshot();
         }
         if (var instanceof RuntimeScalar scalar) scalar.refreshUntrackedReferenceOwner();
-        if (var instanceof RuntimeArray || var instanceof RuntimeHash) {
-            RuntimeCode.noteMyVarRegistered((RuntimeBase) var);
+        if (var instanceof RuntimeBase base) {
+            RuntimeCode.noteMyVarRegistered(base);
         }
     }
 
@@ -301,8 +301,10 @@ public class MyVarCleanupStack {
 
     private static void releaseActiveAggregateOwnerAfterCleanup(Object var) {
         if (!(var instanceof RuntimeBase base)
-                || (!(base instanceof RuntimeArray) && !(base instanceof RuntimeHash))) return;
-        RuntimeCode.releaseActiveLexicalAggregateOwner(base);
+                || (!(base instanceof RuntimeArray) && !(base instanceof RuntimeHash)
+                    && !(base instanceof RuntimeScalar scalar
+                        && scalar.referencedByScalarReference))) return;
+        RuntimeCode.releaseActiveLexicalOwner(base);
     }
 
     /**
