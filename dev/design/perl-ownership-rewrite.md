@@ -26,15 +26,20 @@ The three Perl regressions pass on system Perl, JVM, and interpreter:
 `/private/tmp/temporary-io-interpreter-ae9b22a3bb.log`. No full gate has run
 on this candidate.
 
-Batching plan: next group scalar/array/hash slot replacement and removal with
-argument/return/closure owner transfers that use the same exact-release
-transition; run system Perl oracles first and one focused build for the group.
-Then audit package/glob/CODE roots, tied values, cloned/shared storage, cycles,
-suspended frames, and IO resource owners by acquisition and release site;
-group fixes that share an owner producer before the next focused build. Remove
-corrective recovery only after those paths are explicit, then run one
-immutable full `nice -n 19 make` and the no-sweeps acceptance matrix. PR #1938
-remains OPEN/DRAFT at remote head
+Batching plan: `RuntimeScalar.transitionReferenceSlot` already handles scalar
+overwrite and `undefine()`, `RuntimeScalar.transitionContainerSlots` handles
+aggregate replacement, and common array removals preserve the removed slot's
+release token. The next batch audits mutation paths that bypass those helpers
+and the producers behind current-count repair in scalar overwrite, first
+weaken, and deferred release. Keep synthetic stale-count tests as defensive
+coverage; use normal Perl-visible operations to prove producer invariants.
+Bundle fixes from this audit into one focused build. Then group remaining
+package/glob/CODE roots, tied values, closure/CODE transfers, cloned/shared
+storage, cycles, suspended frames, and IO owners by their actual acquisition
+and release sites, with one focused build for that batch. Remove ordinary
+repair and reachability recovery only after the producers are explicit, then
+run one immutable full `nice -n 19 make` and the no-sweeps acceptance matrix.
+PR #1938 remains OPEN/DRAFT at remote head
 `95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05`; it is not reconciled with this
 local batch.
 
@@ -2387,13 +2392,12 @@ and final use cases still require audit before removal.
 
 ### Next steps
 
-1. Audit scalar/array/hash slot replacement and removal producers; combine
-   fixes that share the exact deferred-release transition.
-2. Group argument, return/mortal, and closure/CODE owner transfers with those
-   slot transitions when they use the same acquisition and release operation.
-3. Finish the rooted storage/resource audit: tied values, package/glob/CODE
-   slots, cloned/shared storage, strong cycles, suspended frames, and IO owners.
-   Remove ordinary recovery machinery only after producer coverage is complete.
-4. Run the final no-sweeps acceptance matrix and one immutable full
+1. Audit mutation paths that bypass `transitionReferenceSlot` and
+   `transitionContainerSlots`, then trace current-count repairs to normal
+   producers in scalar overwrite, first weaken, and deferred release.
+2. Group package/glob/CODE roots, tied values, closure/CODE transfers,
+   cloned/shared storage, cycles, suspended frames, and IO owners by acquisition
+   and release site. Remove ordinary recovery only after producer coverage.
+3. Run the final no-sweeps acceptance matrix and one immutable full
    `nice -n 19 make`; then recheck #1794, #1860, HTML-Tree, current master, and
    PR #1938 before publication. Leave merging to review.
