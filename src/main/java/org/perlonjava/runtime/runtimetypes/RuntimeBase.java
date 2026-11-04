@@ -537,6 +537,18 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         return false;
     }
 
+    /** Whether a current uncounted slot proves Perl ownership of this value. */
+    boolean hasCurrentUncountedPerlOwnerSlotIdentity() {
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (!PerlOwnerSlot.isCountedKind(slot.kind())
+                    && slot.kind() != PerlOwnerSlot.Kind.TEMPORARY_ROOT
+                    && DestroyDispatch.isCurrentPerlOwnerSlot(this, slot)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     boolean hasDirectOwnerSlotProofForReleasedWeakReferent() {
         for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
             if (!slot.isActive()) continue;

@@ -179,11 +179,15 @@ public class WeakRefRegistry {
                     // until the final shared pad owner leaves; multiple
                     // closures share this edge and must not inflate refCount.
                     base.deferFinalReleaseToUncountedOwnerSlots();
+                } else if (base.hasCurrentUncountedPerlOwnerSlotIdentity()) {
+                    // Lexical pads and package slots are direct owners even
+                    // when localBindingExists is absent or stale. Keep the
+                    // lifecycle attached to those exact identities until
+                    // their normal release callbacks run.
+                    base.deferFinalReleaseToUncountedOwnerSlots();
                 } else if (base.localBindingExists) {
-                    // Named container (my %hash / my @array): the local variable
-                    // slot holds a strong reference not counted in refCount.
-                    // Don't call callDestroy — the container is still alive.
-                    // Cleanup will happen at scope exit (scopeExitCleanupHash/Array).
+                    // Compatibility path for legacy named bindings that have
+                    // not yet been migrated to an explicit owner-slot producer.
                 } else if (base.restoreVerifiedCurrentCountedOwnerSlotRefCount()) {
                     // A surviving counted identity is direct evidence of a Perl
                     // owner only while its scalar still occupies the same storage
