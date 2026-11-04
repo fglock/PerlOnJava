@@ -220,7 +220,7 @@ public class GlobalVariable {
         for (String related : compiledDirectCallSiteKeys(key)) {
             RuntimeScalar pinned = pinnedCodeRefs().get(related);
             if (pinned == expectedSlot) {
-                unpinCodeRef(related);
+                unpinCodeRef(related, false);
             }
         }
     }
@@ -3016,8 +3016,17 @@ public class GlobalVariable {
     }
 
     private static void unpinCodeRef(String key) {
+        unpinCodeRef(key, true);
+    }
+
+    private static void unpinCodeRef(String key, boolean flushPending) {
         RuntimeScalar previous = pinnedCodeRefs().remove(key);
-        if (previous != null) previous.releaseCodeSlotBinding();
+        if (previous == null) return;
+        if (flushPending) {
+            previous.releaseCodeSlotBinding();
+        } else {
+            previous.releaseCodeSlotBindingWithoutFlush();
+        }
     }
 
     static void replacePinnedCodeRef(String key, RuntimeScalar codeRef) {
