@@ -4,7 +4,8 @@ package org.perlonjava.runtime.runtimetypes;
 final class CompiledDirectCallSite {
     private final String name;
     private final RuntimeScalar cachedRef;
-    private RuntimeCode target;
+    private final boolean compileTimePinned;
+    private boolean ownsRetiredTarget;
 
     CompiledDirectCallSite(
             String name,
@@ -13,11 +14,15 @@ final class CompiledDirectCallSite {
             boolean compileTimePinned) {
         this.name = name;
         this.cachedRef = cachedRef;
+        this.compileTimePinned = compileTimePinned;
+        RuntimeCode ownedTarget = compileTimePinned ? initialTarget : null;
         cachedRef.initializeCompiledDirectCallCache(
-                name, cachedRef.compiledDirectCallSiteIndex(), initialTarget,
+                name, cachedRef.compiledDirectCallSiteIndex(), ownedTarget,
                 compileTimePinned);
-        target = initialTarget;
-        cachedRef.retainCodeSlotBinding();
+        if (ownedTarget != null) {
+            cachedRef.retainCodeSlotBinding();
+            ownsRetiredTarget = true;
+        }
         GlobalVariable.registerCompiledDirectCallSite(name, this);
     }
 
@@ -26,43 +31,42 @@ final class CompiledDirectCallSite {
     }
 
     RuntimeScalar resolve() {
-        if (cachedRef.compiledDirectCallCompileTimePinned()) return cachedRef;
+        if (compileTimePinned || ownsRetiredTarget) return cachedRef;
         RuntimeScalar visible = GlobalVariable.getVisibleGlobalCodeRefForDirectCall(name);
-        if (visible != null) {
-            retarget(visible);
-            return cachedRef;
-        }
-        if (target != null) return cachedRef;
-
-        RuntimeScalar fresh = GlobalVariable.getGlobalCodeRefForFreshLookup(name);
-        retarget(fresh);
-        return cachedRef;
+        return visible != null ? visible : GlobalVariable.getGlobalCodeRefForDirectCall(name);
     }
 
-    /** A replacement or in-place CODE-slot mutation is visible to this call site. */
-    void visibleCodeSlotChanged(RuntimeScalar replacement) {
-        if (cachedRef.compiledDirectCallCompileTimePinned()) return;
-        if (replacement != null) retarget(replacement);
+    /** Transfer the callsite's lifetime to a CV only when its stash slot is removed. */
+    void visibleCodeSlotChanged(RuntimeScalar previous, RuntimeScalar replacement) {
+        if (compileTimePinned) return;
+        if (replacement != null) {
+            releaseRetiredTarget();
+            return;
+        }
+        if (ownsRetiredTarget || previous == null
+                || previous.type != RuntimeScalarType.CODE
+                || !(previous.value instanceof RuntimeCode removedTarget)) {
+            return;
+        }
+        cachedRef.initializeCompiledDirectCallCache(name,
+                cachedRef.compiledDirectCallSiteIndex(), removedTarget, false);
+        cachedRef.retainCodeSlotBinding();
+        ownsRetiredTarget = true;
     }
 
     void release() {
         GlobalVariable.unregisterCompiledDirectCallSite(name, this);
-        cachedRef.releaseCodeSlotBindingAtExactBoundary();
-        target = null;
+        releaseRetiredTarget();
         cachedRef.type = RuntimeScalarType.UNDEF;
         cachedRef.value = null;
         cachedRef.globalCodeRefFqn = null;
     }
 
-    private void retarget(RuntimeScalar ref) {
-        if (ref == null) return;
-        RuntimeCode next = ref.type == RuntimeScalarType.CODE
-                && ref.value instanceof RuntimeCode code ? code : null;
-        if (next == target && ref.type == cachedRef.type && ref.value == cachedRef.value) {
-            return;
-        }
-        cachedRef.setCompiledDirectCallTarget(ref);
-        target = next;
-        cachedRef.updateCompiledDirectCallTarget(next);
+    private void releaseRetiredTarget() {
+        if (!ownsRetiredTarget) return;
+        cachedRef.releaseCodeSlotBindingAtExactBoundary();
+        ownsRetiredTarget = false;
+        cachedRef.initializeCompiledDirectCallCache(name,
+                cachedRef.compiledDirectCallSiteIndex(), null, false);
     }
 }
