@@ -1220,18 +1220,20 @@ public class BytecodeCompiler implements Visitor {
         // 1. IO fd recycling for anonymous filehandle globs
         // 2. refCount decrement for blessed references with DESTROY
         for (int reg : scalarIndices) {
-            // Remove the active eval lexical binding while the register still
-            // contains its cell.  SCOPE_EXIT_CLEANUP clears it afterwards.
             String name = scalarNames.get(reg);
+            emit(preserveImplicitReturn
+                    ? Opcodes.RETURN_SCOPE_CLEANUP : Opcodes.SCOPE_EXIT_CLEANUP);
+            emitReg(reg);
+            if (preserveImplicitReturn) emitReg(lastResultReg);
+            // Keep the active pad slot through scalar cleanup. A scalar cell
+            // whose final owner is this lexical may need scopeExitCleanup to
+            // clear localBindingExists before releasing the pad identity can
+            // finish its weak-reference lifecycle.
             if (name != null && !preserveImplicitReturn) {
                 emit(Opcodes.UNBIND_ACTIVE_LEXICAL);
                 emitReg(reg);
                 emit(addToStringPool(name));
             }
-            emit(preserveImplicitReturn
-                    ? Opcodes.RETURN_SCOPE_CLEANUP : Opcodes.SCOPE_EXIT_CLEANUP);
-            emitReg(reg);
-            if (preserveImplicitReturn) emitReg(lastResultReg);
         }
 
         // Walk hash/array variables for nested blessed references.
