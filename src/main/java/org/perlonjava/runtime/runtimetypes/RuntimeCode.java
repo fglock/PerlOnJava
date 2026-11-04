@@ -135,8 +135,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // referent count. Mortal returns also get a separate staged value
             // owner below when their original temporary could otherwise drain.
             if (value instanceof RuntimeScalar scalar) {
+                boolean pendingStrongRelease = !WeakRefRegistry.isweak(scalar)
+                        && ((scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                            || scalar.type == RuntimeScalarType.GLOB
+                            || scalar.type == RuntimeScalarType.CODE)
+                        && scalar.value instanceof RuntimeBase referent
+                        && MortalList.hasPendingStrongReleaseFor(referent);
                 if (hasPersistentArgumentCell(scalar)
-                        || hasCurrentCountedCellOwner(scalar)) {
+                        || hasCurrentCountedCellOwner(scalar)
+                        || pendingStrongRelease) {
                     argumentAliasOwners.add(scalar.retainArgumentAliasOwner());
                 }
                 if ((scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
@@ -145,7 +152,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         && scalar.isMortalReturnSnapshot()) {
                     stagedScalarOwners.add(RuntimeScalar.retainStagedArgumentValue(scalar));
                 }
-            } else if (size < values.length && value instanceof RuntimeList) {
+            } else if (value instanceof RuntimeList) {
                 retainListResultOwners(value);
             }
         }
