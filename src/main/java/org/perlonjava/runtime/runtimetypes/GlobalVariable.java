@@ -165,6 +165,12 @@ public class GlobalVariable {
 
     private static void noteCodeRefMutation(
             String key, RuntimeScalar previous, RuntimeScalar replacement) {
+        if (key != null && key.contains("DeletedMethod")) {
+            System.err.println("G mutation " + key + " previous="
+                    + (previous == null ? "null" : previous.type + ":" + previous.value)
+                    + " replacement="
+                    + (replacement == null ? "null" : replacement.type + ":" + replacement.value));
+        }
         globalState().noteCodeRefMutation(previous, replacement);
         if (key == null) return;
         for (String related : compiledDirectCallSiteKeys(key)) {
@@ -179,6 +185,12 @@ public class GlobalVariable {
 
     /** Preserve the pre-mutation CV while dispatching an in-place slot change. */
     static void noteGlobalCodeRefSlotMutation(RuntimeScalar slot, RuntimeScalar previous) {
+        if (slot != null && slot.globalCodeRefFqn != null
+                && slot.globalCodeRefFqn.contains("DeletedMethod")) {
+            System.err.println("G in-place " + slot.globalCodeRefFqn + " previous="
+                    + (previous == null ? "null" : previous.type + ":" + previous.value)
+                    + " replacement=" + slot.type + ":" + slot.value);
+        }
         globalState().noteCodeRefMutation(slot, slot);
         if (slot != null && slot.globalCodeRefFqn != null) {
             for (String related : compiledDirectCallSiteKeys(slot.globalCodeRefFqn)) {
