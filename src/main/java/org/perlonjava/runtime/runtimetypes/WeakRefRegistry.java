@@ -132,23 +132,12 @@ public class WeakRefRegistry {
         // Flip the fast-path flag so scopeExit cascades don't bail out
         // via the !blessedObjectExists shortcut when unblessed data has
         // weak refs that need clearing.
-        // Phase D-W2b (perf): the very first weaken() also has to
-        // backfill `MyVarCleanupStack.liveCounts` so that already-live
-        // my-vars become visible to the walker. We gate the per-`my`
-        // merge cost on weakRefsExist; without backfill, my-vars
-        // declared before the first weaken would never appear in
-        // liveCounts and the walker would miss them.
         if (!state.weakRefsExist) {
             MortalList.noteBoundaryWork();
             state.weakRefsExist = true;
-            MyVarCleanupStack.snapshotStackToLiveCounts();
-            // Prepare the installed-CODE capture root index on the first
-            // weaken(), during setup, so the first callback-boundary sweep
-            // does not have to build it synchronously while dispatching work.
-            GlobalVariable.globalCodeRefEdgeRootsView();
         }
 
-        boolean weakenedLiveLexical = MyVarCleanupStack.isLive(ref);
+        boolean weakenedLiveLexical = MyVarCleanupStack.isRegistered(ref);
         boolean weakenedLiveCodeRef = base instanceof RuntimeCode && weakenedLiveLexical;
         if (base.refCount > 0 && ref.refCountOwned) {
             PerlOwnerSlot releasedSlot = ref.countedOwnerSlot();

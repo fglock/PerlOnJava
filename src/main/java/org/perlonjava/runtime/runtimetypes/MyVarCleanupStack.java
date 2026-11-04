@@ -60,9 +60,9 @@ public class MyVarCleanupStack {
 
     /**
      * True when {@code var} is currently registered as a lexical, regardless
-     * of whether weak-ref tracking has populated the live-count map. Used by
-     * first-bless paths that can run before the first {@code weaken()} call.
-     * The identity-counted registration map keeps this check O(1).
+     * of whether diagnostic weak-root tracking has populated the live-count
+     * map. Used by first-bless and first-weaken lifecycle checks. The
+     * identity-counted registration map keeps this check O(1).
      */
     public static boolean isRegistered(Object var) {
         if (var == null) return false;
@@ -134,12 +134,9 @@ public class MyVarCleanupStack {
     }
 
     /**
-     * Phase D-W2b (perf): one-time backfill of the live-count map with
-     * all currently registered my-vars. Called by
-     * {@link WeakRefRegistry#registerWeakRef} the first time
-     * {@code weakRefsExist} flips to true. Without this, my-vars
-     * declared before the first {@code weaken()} would never be
-     * inserted into {@code liveCounts} and the walker would miss them.
+     * Backfill the diagnostic live-count map before an explicit legacy root
+     * walk. Ordinary first-weaken lifecycle decisions use owner identities and
+     * must not populate this reachability cache.
      */
     public static synchronized void snapshotStackToLiveCounts() {
         IdentityHashMap<Object, Integer> liveCounts = liveCounts();
