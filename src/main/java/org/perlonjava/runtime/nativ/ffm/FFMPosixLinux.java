@@ -34,6 +34,7 @@ public class FFMPosixLinux implements FFMPosixInterface {
     // Method handles for simple functions (no errno capture needed)
     private static MethodHandle getuidHandle;
     private static MethodHandle geteuidHandle;
+    private static MethodHandle seteuidHandle;
     private static MethodHandle getgidHandle;
     private static MethodHandle getegidHandle;
     private static MethodHandle getgroupsHandle;
@@ -180,6 +181,12 @@ public class FFMPosixLinux implements FFMPosixInterface {
             geteuidHandle = linker.downcallHandle(
                 stdlib.find("geteuid").orElseThrow(),
                 FunctionDescriptor.of(ValueLayout.JAVA_INT)
+            );
+
+            seteuidHandle = linker.downcallHandle(
+                stdlib.find("seteuid").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT),
+                captureErrno
             );
             
             getgidHandle = linker.downcallHandle(
@@ -625,6 +632,22 @@ public class FFMPosixLinux implements FFMPosixInterface {
         try {
             return (int) geteuidHandle.invokeExact();
         } catch (Throwable e) {
+            return -1;
+        }
+    }
+
+    @Override
+    public int seteuid(int uid) {
+        ensureInitialized();
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment capturedState = arena.allocate(Linker.Option.captureStateLayout());
+            int result = (int) seteuidHandle.invokeExact(capturedState, uid);
+            if (result == -1) {
+                setErrno(capturedState.get(ValueLayout.JAVA_INT, errnoOffset));
+            }
+            return result;
+        } catch (Throwable e) {
+            setErrno(1); // EPERM
             return -1;
         }
     }

@@ -76,6 +76,7 @@ priorities and future plans.
 - Preserve captured weak referents through semantic closure-pad owner identities; release scalar cells after the last capture and retry weak cleanup after pending owner release (#1649).
 - Defer legacy semantic closure-pad cleanup to its owner-slot release, removing the final capture-path positive-count pin (#1649).
 - Bind signature parameter cells that skip lexical alias resolution into active pads so slurpy aggregates release weak observers at frame exit (#1649).
+- Preserve wide-string UTF-8 metadata through runtime read-only marking and string interpolation (#1970).
 
 - Make an explicit `-n` run sample new and previously tested CPAN targets while maintaining a rolling window of target and dependency results.
 
@@ -102,6 +103,8 @@ priorities and future plans.
 - Preserve the input line number when a borrowed anonymous filehandle alias leaves a JVM subroutine scope (#1933).
 
 - Preserve filehandle line-counter assignments made through localized `$.` scopes (#1965).
+
+- Allow assignment to `$>` to update the process effective user ID through the platform POSIX layer (#1972).
 
 - Resolve glob-backed filehandles in `POSIX::isatty` without assuming the glob value is a `RuntimeIO` (#1932).
 

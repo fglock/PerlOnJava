@@ -67,7 +67,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
     /** Whether assignments must reach this special scalar's setter. */
     public boolean hasSpecialAssignmentBehavior() {
         return switch (variableId) {
-            case INPUT_LINE_NUMBER, HINTS, WARNING_BITS, REMOVED_ENCODING -> true;
+            case INPUT_LINE_NUMBER, HINTS, WARNING_BITS, REMOVED_ENCODING, EFFECTIVE_UID -> true;
             default -> false;
         };
     }
@@ -154,6 +154,10 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
                 throw new PerlCompilerException("${^ENCODING} is no longer supported");
             }
             return scalarUndef;
+        }
+        if (variableId == Id.EFFECTIVE_UID) {
+            NativeUtils.seteuid(value.getInt());
+            return NativeUtils.geteuid(0);
         }
         return super.set(value);
     }

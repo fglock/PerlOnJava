@@ -104,6 +104,14 @@ public class NativeUtils {
         return new RuntimeScalar(posix.geteuid());
     }
 
+    public static int seteuid(int uid) {
+        int result = posix.seteuid(uid);
+        if (result == -1) {
+            GlobalVariable.getGlobalVariable("main::!").set(posix.strerror(posix.errno()));
+        }
+        return result;
+    }
+
     public static RuntimeScalar getgid(int ctx, RuntimeBase... args) {
         return new RuntimeScalar(posix.getgid());
     }
