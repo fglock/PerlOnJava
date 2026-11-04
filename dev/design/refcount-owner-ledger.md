@@ -399,21 +399,35 @@ and `/private/tmp/defined-code-slot-compile-time-delete-system-perl-20261104.log
 
 The parent `b3ad73b0d` passes the named-undef JVM test 4/4 but fails interpreter
 checks 1 and 4 (2/4); checkpoint `3a3d12213` passes 4/4 on both backends. The
-unfiltered unit gate exposed six unrelated failures; no-sweeps direct replay on
-both `b3ad73b0d` and the candidate reproduces the same results. A final
-unfiltered `make` and the full ownership/HTML::Tree acceptance matrix have not
-been run on this checkpoint. Parent logs for the named-undef regression are
+unfiltered unit gate exposed six failures. Five direct no-sweeps replays failed
+identically on parent `b3ad73b0d` and the candidate:
+`bless_tied_hash_reference.t`,
+`mojolicious_promise_lifecycle_regressions.t`,
+`refcount/scalar_cell_scope_owner_release.t`,
+`substr_core_edge_semantics.t`, and
+`custom_warning_async_suspend_state.t` (the latter skips on system Perl because
+its optional Future dependencies are unavailable). These failures are not
+introduced by this CODE-slot batch, but remain to be classified before final
+acceptance. `threads_shared_reference_validation.t` failed in the unfiltered
+gate, then passed 15/15 on system Perl and in direct no-sweeps replays on both
+parent and candidate; its gate-only failure remains unexplained. The complete
+unfiltered unit gate and the full ownership/HTML::Tree acceptance matrix have
+not passed on this checkpoint. Parent logs for the named-undef regression are
 `/private/tmp/named-undef-visible-code-slot-parent-b3-jvm.log` and
 `/private/tmp/named-undef-visible-code-slot-parent-b3-interpreter.log`.
 
-Local work is on `wip/ownership-codestash-20261104-093426`. Remote `master`
-`b43a652507d836bfbd78e3e6c250021c0b3355aa` is an ancestor; PR #1938 remains an
-open draft at remote head `95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05`. The
-checkpoint is not published. Next, continue tracing remaining count producers
-and migrate package/resource roots, closure and frame edges, deferred release,
-cloning/shared storage, and strong cycles. Retire ordinary reachability
-recovery only after their producer paths have explicit identities and focused
-coverage, then run final acceptance on one immutable candidate.
+Local work is on `wip/ownership-status-20261104-103529`; code checkpoint
+`3a3d12213` is followed by documentation/WIP checkpoint `5d964871b`. Local
+history contains master `b43a652507d836bfbd78e3e6c250021c0b3355aa`, but the live
+PR now reports base `4a5c33753f1da3f9838c44567bbba878e8f567e0`; ancestry to that
+new base has not yet been checked. PR #1938 remains open as a draft at remote
+head `95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05`, and this checkpoint is not
+published. Next, audit and migrate remaining count producers in batches:
+reference-slot transitions and tied/container mutation; call, closure, and
+deferred-release lifetimes; package/resource roots; then clone/shared storage
+and cycles. Retire ordinary reachability recovery only after these producer
+paths have explicit identities and focused coverage, then rebase/reconcile with
+the live base and run final acceptance on one immutable candidate.
 
 ### Previous checkpoint evidence: owner-source migration at `3cbff31fb` (2026-11-02)
 
