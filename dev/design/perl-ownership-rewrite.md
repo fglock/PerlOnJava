@@ -2,57 +2,38 @@
 
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
-**Current checkpoint (2026-11-04):** #1649 is on
-`wip/issue1649-preflight-20261104-152310`, cleanly rebased onto `origin/master`
-`0d6685bb1b003ad7144cef6d3daeacec05d30922`. The branch head is
-`9160c787f92bd0b5cb059c167d2414aac8b78827`; the latest runtime source is
-`a1bfab5f2576c2c45686e49145c2223a1edeab6e`. The pre-rebase tree remains
-recoverable at `backup/issue1649-before-master-rebase-20261104` (`d0c518180`).
-The required WIP snapshot is `c6d9d91d0`.
+**Current checkpoint (2026-11-04):** #1649 remains in Phase 2 on
+`wip/issue1649-preflight-20261104-152310`, rebased onto `origin/master`
+`0d6685bb1b003ad7144cef6d3daeacec05d30922`. Snapshot `ce5b0d1524` preserves
+the current scalar-overwrite reentrancy batch. It adds a mutation-generation
+guard so an outer overwrite cannot restore counted ownership after `DESTROY`
+weakens that same slot, plus a Java parity test and
+`reentrant_overwrite_weaken_keeps_other_owner.t`. The Perl regression passes
+5/5 at `/private/tmp/issue1649-reentrant-weak-owner-perl-oracle.log`. This
+snapshot has not been built or run on either PerlOnJava backend; no build is
+currently running in this checkout.
 
-The three newest source batches are now `21e40b81d9` (protect caller return
-temporaries through reentrant scalar cleanup), `da85065585` (release compiler,
-list-assignment, refalias, hash-slice, and Storable temporaries through counted
-slots), and `a1bfab5f25` (route postfix transfers and tail-call arguments
-through the shared release operation). Final counted release consults current
-counted and uncounted owner identities; it does not fabricate a positive count
-or run a reachability query. The rebase preserved current master changes and
-combined them with ownership handling in glob snapshots, closure metadata, and
-array/hash assignment. `deferred_capture_live_argument.t` and
-`postfix_reference_temporary_owner.t` remain present.
+The producer audit still finds six calls to
+`restoreVerifiedCurrentCountedOwnerSlotRefCount` across first weaken, scalar
+overwrite, deferred release, and CODE/destructor cleanup. The deferred root
+walk remains reachable only through legacy unpaired `deferDecrement` in the
+current repository. Additional direct count mutations include blessed-glob
+alias acquisition, localized CODE restoration, graph cloning, method-invocant
+and tied-iterator holds, scalar-reference contents, and legacy closure capture
+bookkeeping. The method-invocant, clone, and iterator paths pair their count
+with an exact owner identity; the blessed-glob and localized-CODE paths need
+closer producer/release proof before they can be retired or migrated.
 
-All runtime test evidence below predates the rebase and applies to source
-`ddbc52aaf`, not to current head `a1bfab5f25`. There, the postfix regression
-passed 6/6 on system Perl; eight related files passed 40/40 on both backends;
-six system-Perl files passed 32/32; and filtered `make test-unit` shard 0
-passed 1,041 tests with 6 skipped in 2m21s. The prior temporary-owner batch
-passed eight files 54/54 on both backends and system Perl. Logs remain under
-`/private/tmp/issue1649-*`. Run the next build only after the grouped source
-batch below, so it validates the rebased base and the combined producer fixes.
-
-The audit identifies six direct production calls to
-`restoreVerifiedCurrentCountedOwnerSlotRefCount` across weaken, scalar
-overwrite, counted temporary release, deferred cleanup, and CODE/destructor
-cleanup. This is a count of repair call sites, not a count of remaining special
-cases; direct count mutations and owner families are broader. Separately,
-`processDeferredBase` reaches `restoreReachableOwnerCount` only through the
-legacy unpaired-release hook in this repository. Production count repairs and
-direct runtime-owner transfers still need producer-level proofs.
-
-Next: finish the producer audit without a build, then group fixes that share
-the scalar/array/hash slot transition and deferred-release contract. Include
-replacement, deletion, tied exceptions, owner-count invariants, and related
-argument/return/frame owners where they use the same transition. Keep package
-and shared storage plus IO resource owners separate when their acquisition
-paths differ. Add regressions and validate their Perl semantics with system
-Perl first. After the producer and lifecycle recovery work is complete, run one
-full no-sweeps `nice -n 19 make` on an immutable candidate, then the #1794/#1860,
-weak-reference, resurrection/cycle, and HTML::Tree matrix from that build.
-
-PR #1938 is still OPEN/DRAFT at remote head
-`95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05`; it contains
-`deferred_capture_live_argument.t` but not the rebased local history. Reconcile
-and publish only after the new candidate is validated.
+Batch the next source work around the shared scalar/array/hash slot and deferred
+release transition, including the reentrant setter fix and focused regressions.
+Group argument aliases, returns, closure/CODE captures, and unwind where they
+share frame ownership; audit package/glob, cloning/shared storage, and IO
+resource acquisition as separate producer families. Validate each new
+Perl-visible regression with system Perl, then run one serialized full
+`nice -n 19 make` after the combined candidate is immutable and reuse its JAR
+for the no-sweeps lifecycle and integration matrix. PR #1938 remains OPEN/DRAFT
+at remote head `95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05`; reconcile it with the
+rebased, validated local history before publication.
 
 Standard Perl is the oracle for every Perl-visible reference edge and its
 lifetime behavior. A reference-slot transition should retain a new strong
