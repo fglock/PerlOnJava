@@ -64,6 +64,14 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
         return variableId == Id.CAPTURE;
     }
 
+    /** Whether assignments must reach this special scalar's setter. */
+    public boolean hasSpecialAssignmentBehavior() {
+        return switch (variableId) {
+            case INPUT_LINE_NUMBER, HINTS, WARNING_BITS, REMOVED_ENCODING -> true;
+            default -> false;
+        };
+    }
+
     /**
      * Throws an exception as this variable represents a constant item
      * and cannot be modified.
@@ -530,9 +538,10 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
             if (!inputLineStateStack.isEmpty()) {
                 InputLineState previous = inputLineStateStack.pop();
                 RuntimeIO.setLastAccessedHandle(previous.lastHandle);
-                if (previous.lastHandle != null) {
-                    previous.lastHandle.currentLineNumber = previous.lastLineNumber;
-                }
+                // $. localization restores which handle is current, but the
+                // line counter belongs to that handle. Assignments to $. (and
+                // reads from the handle) change its counter permanently, even
+                // when they happen inside a dynamically localized scope.
                 lvalue = previous.localValue;
                 // Do not sync this.type/value from lvalue here; $. reads always
                 // delegate to currentLineNumber via getValueAsScalar().
