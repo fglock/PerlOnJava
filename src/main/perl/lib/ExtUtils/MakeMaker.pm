@@ -1921,7 +1921,7 @@ sub clean     { '' }
 sub test {
     my ($self) = @_;
     my $rule = $self->{_perlonjava_test_rule} || '';
-    return split /(?<=\n)/, $rule;
+    return wantarray ? split(/(?<=\n)/, $rule) : $rule;
 }
 sub top_targets { '' }
 
