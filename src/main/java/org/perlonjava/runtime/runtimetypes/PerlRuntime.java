@@ -280,6 +280,16 @@ public final class PerlRuntime implements AutoCloseable {
 
     /** Bind this runtime until the returned scope is closed. */
     public Binding bind() {
+        // Fast path: already bound to this runtime on this thread (re-entrant eval etc.).
+        // Skip the synchronized lifecycle check — the outer bind validated the runtime is open.
+        // Still push a BindingFrame so LIFO-order close() checks remain intact.
+        BindingFrame existing = CURRENT_BINDING.get();
+        if (existing != null && existing.runtime == this) {
+            activeBindings.incrementAndGet();
+            BindingFrame frame = new BindingFrame(this, existing);
+            CURRENT_BINDING.set(frame);
+            return new Binding(frame, Thread.currentThread(), this);
+        }
         synchronized (lifecycleMonitor) {
             if (closed) {
                 throw new IllegalStateException("PerlRuntime is closed");
@@ -873,13 +883,13 @@ public final class PerlRuntime implements AutoCloseable {
             if (closed) {
                 return;
             }
+            closed = true;
             if (Thread.currentThread() != owner) {
                 throw new IllegalStateException("PerlRuntime binding must be closed by its owning thread");
             }
             if (CURRENT_BINDING.get() != frame) {
                 throw new IllegalStateException("PerlRuntime bindings must be closed in LIFO order");
             }
-            closed = true;
             if (frame.previous == null) {
                 CURRENT.remove();
                 CURRENT_BINDING.remove();

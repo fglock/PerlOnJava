@@ -26,6 +26,7 @@ public class GlobalContext {
     public static final String GLOBAL_PHASE = encodeSpecialVar("GLOBAL_PHASE"); // $^GLOBAL_PHASE
     public static final String OPEN = encodeSpecialVar("OPEN"); // $^OPEN
     public static final String WARNING_SCOPE = encodeSpecialVar("WARNING_SCOPE"); // ${^WARNING_SCOPE}
+    public static final String DEBUGGER_FLAGS = encodeSpecialVar("P"); // $^P
 
     /** Keep command-line taint mode isolated between concurrently executing scripts. */
     public static void setThreadTaintMode(boolean enabled) {

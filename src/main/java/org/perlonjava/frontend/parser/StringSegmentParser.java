@@ -875,6 +875,7 @@ public abstract class StringSegmentParser {
         flushCurrentSegment();
 
         if (needsStructuredRegexTemplate()) {
+            if (parser != null) parser.parsedEvalOrRegex = true;
             return new OperatorNode("regexTemplate", new ListNode(segments, tokenIndex), tokenIndex);
         }
 

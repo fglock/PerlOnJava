@@ -149,6 +149,10 @@ public class ScopedSymbolTable {
     private Map<Integer, SymbolTable.SymbolEntry> visibleVariablesCache;
     // Cache for getWarningBitsString(); null means stale
     private String cachedWarningBitsString;
+    // Pre-built snapshot SymbolTable for fast eval STRING snapshots.
+    // Volatile for visibility across threads that may share a compiled capturedSymbolTable.
+    // Cleared whenever visibleVariablesCache is cleared (variable set changes).
+    private volatile SymbolTable cachedSnapTable;
 
     /**
      * Constructs a ScopedSymbolTable.
@@ -815,6 +819,7 @@ public class ScopedSymbolTable {
      */
     public void clearVisibleVariablesCache() {
         visibleVariablesCache = null;
+        cachedSnapTable = null;
     }
 
     /**
@@ -992,22 +997,58 @@ public class ScopedSymbolTable {
     }
 
     /**
+     * Returns true when this symbol table's visible-variable set is stable (cached),
+     * meaning a pre-built snapshot SymbolTable computed previously is still valid.
+     */
+    public boolean isSnapshotStable() {
+        return visibleVariablesCache != null;
+    }
+
+    /**
+     * Builds a SymbolTable pre-loaded with all currently visible variables, assigning
+     * sequential indices 0, 1, 2, ... in original-index order (same as the snapShot()
+     * addVariable() loop produces). The returned table may be cached by the caller and
+     * passed to snapShotWithTable() to avoid repeating the iteration on each eval call.
+     */
+    public SymbolTable buildSnapShotTable() {
+        Map<Integer, SymbolTable.SymbolEntry> visible = this.getAllVisibleVariables();
+        SymbolTable table = new SymbolTable(0);
+        int idx = 0;
+        for (SymbolTable.SymbolEntry entry : visible.values()) {
+            table.variableIndex.put(entry.name(),
+                new SymbolTable.SymbolEntry(idx++, entry.name(), entry.decl(), entry.perlPackage(), entry.ast()));
+        }
+        table.index = idx;
+        return table;
+    }
+
+    /**
      * Clones the symbol table to be used at runtime - this is used by eval-string.
+     * If a pre-built SymbolTable from buildSnapShotTable() is provided, it is used
+     * directly (one HashMap copy) instead of rebuilding from addVariable() calls.
      *
+     * @param prebuiltTable cached SymbolTable from buildSnapShotTable(), or null
      * @return A cloned instance of ScopedSymbolTable.
      */
-    public ScopedSymbolTable snapShot() {
+    public ScopedSymbolTable snapShot(SymbolTable prebuiltTable) {
         ScopedSymbolTable st = new ScopedSymbolTable();
         st.enterScope();
 
-        // Clone visible variables (preserve the original `perlPackage` for
-        // `our` entries — otherwise eval STRING compiled against this snapshot
-        // would lose the caller's `our` aliases and resolve names against
-        // whatever package is active inside the eval body).
-        Map<Integer, SymbolTable.SymbolEntry> visibleVariables = this.getAllVisibleVariables();
-        for (Integer index : visibleVariables.keySet()) {
-            SymbolTable.SymbolEntry entry = visibleVariables.get(index);
-            st.addVariable(entry.name(), entry.decl(), entry.perlPackage(), entry.ast());
+        if (prebuiltTable != null) {
+            // Fast path: copy pre-built variable map directly, no addVariable() loop.
+            SymbolTable topTable = st.symbolTableStack.peek();
+            topTable.variableIndex.putAll(prebuiltTable.variableIndex);
+            topTable.index = prebuiltTable.index;
+        } else {
+            // Clone visible variables (preserve the original `perlPackage` for
+            // `our` entries — otherwise eval STRING compiled against this snapshot
+            // would lose the caller's `our` aliases and resolve names against
+            // whatever package is active inside the eval body).
+            Map<Integer, SymbolTable.SymbolEntry> visibleVariables = this.getAllVisibleVariables();
+            for (Integer index : visibleVariables.keySet()) {
+                SymbolTable.SymbolEntry entry = visibleVariables.get(index);
+                st.addVariable(entry.name(), entry.decl(), entry.perlPackage(), entry.ast());
+            }
         }
 
         // Clone the current package
@@ -1054,6 +1095,20 @@ public class ScopedSymbolTable {
         st.lexicalRegexPragmaChanged = this.lexicalRegexPragmaChanged;
 
         return st;
+    }
+
+    /**
+     * Convenience overload. Uses the per-site cached SymbolTable when the visible-variable
+     * set is stable (isSnapshotStable()), avoiding N addVariable() calls per eval invocation.
+     * Safe to call from multiple threads sharing the same capturedSymbolTable.
+     */
+    public ScopedSymbolTable snapShot() {
+        SymbolTable prebuilt = this.cachedSnapTable; // volatile read
+        if (prebuilt == null && isSnapshotStable()) {
+            prebuilt = buildSnapShotTable();
+            this.cachedSnapTable = prebuilt; // volatile write; benign race: both sides build identical table
+        }
+        return snapShot(prebuilt);
     }
 
     // Methods for managing warnings
