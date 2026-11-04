@@ -28,6 +28,43 @@ class PerlOwnerSlotReplacementOrderTest {
         assertEquals(1, replacement.ownerSlotCount(PerlOwnerSlot.Kind.SCALAR_CELL));
     }
 
+    @Test
+    void activeLexicalSlotAcquiresReplacementBeforeReleasingPreviousReferent() {
+        List<String> events = new ArrayList<>();
+        RecordingArray previous = new RecordingArray("previous", events);
+        RecordingArray replacement = new RecordingArray("replacement", events);
+        PerlOwnerSlot slot = new PerlOwnerSlot(PerlOwnerSlot.Kind.ACTIVE_LEXICAL);
+        slot.acquireActiveLexicalIdentity(previous);
+        events.clear();
+
+        slot.acquireActiveLexicalIdentity(replacement);
+
+        assertEquals(List.of("replacement:add", "previous:remove"), events);
+        assertSame(replacement, slot.referent());
+        assertEquals(0, previous.ownerSlotCount(PerlOwnerSlot.Kind.ACTIVE_LEXICAL));
+        assertEquals(1, replacement.ownerSlotCount(PerlOwnerSlot.Kind.ACTIVE_LEXICAL));
+    }
+
+    @Test
+    void runtimeRootedTransferRegistersReplacementBeforeReleasingPrevious() {
+        try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
+            List<String> events = new ArrayList<>();
+            RecordingArray previous = new RecordingArray("previous", events);
+            RecordingArray replacement = new RecordingArray("replacement", events);
+            PerlOwnerSlot slot = new PerlOwnerSlot(PerlOwnerSlot.Kind.ARGUMENT_VALUE);
+            slot.acquireCountedIdentity(previous);
+            events.clear();
+
+            slot.transferTo(replacement);
+
+            assertEquals(List.of("replacement:add", "previous:remove"), events);
+            assertSame(replacement, slot.referent());
+            assertEquals(0, previous.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_VALUE));
+            assertEquals(1, replacement.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_VALUE));
+            slot.release();
+        }
+    }
+
     private static final class RecordingArray extends RuntimeArray {
         private final String name;
         private final List<String> events;

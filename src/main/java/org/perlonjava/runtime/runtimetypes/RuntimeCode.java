@@ -1338,15 +1338,25 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 retainLexicalOwner(name, cell);
                 return;
             }
-            releaseLexicalOwner(name);
+            // Keep the slot identity stable across replacement. The slot
+            // acquires the new pad cell before its previous referent is
+            // released, so scope cleanup cannot observe an ownership gap.
             retainLexicalOwner(name, cell);
         }
 
         private void retainLexicalOwner(String name, RuntimeBase cell) {
-            boolean lexicalOwner = cell instanceof RuntimeArray || cell instanceof RuntimeHash
-                    || cell instanceof RuntimeScalar scalar && scalar.referencedByScalarReference;
-            if (!lexicalOwner || !MyVarCleanupStack.isRegistered(cell)
-                    || lexicalOwnerSlots != null && lexicalOwnerSlots.containsKey(name)) return;
+            boolean lexicalOwner = isActiveLexicalOwnerCell(cell)
+                    && MyVarCleanupStack.isRegistered(cell);
+            PerlOwnerSlot existing = lexicalOwnerSlots == null
+                    ? null : lexicalOwnerSlots.get(name);
+            if (!lexicalOwner) {
+                releaseLexicalOwner(name);
+                return;
+            }
+            if (existing != null) {
+                existing.acquireActiveLexicalIdentity(cell);
+                return;
+            }
             if (lexicalOwnerSlots == null) lexicalOwnerSlots = new HashMap<>();
             PerlOwnerSlot ownerSlot = new PerlOwnerSlot(PerlOwnerSlot.Kind.ACTIVE_LEXICAL);
             ownerSlot.acquireActiveLexicalIdentity(cell);
@@ -2147,21 +2157,33 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             retainTopLevelLexicalOwner(state, variableName, cell);
             return;
         }
-        PerlOwnerSlot previousSlot = state.topLevelLexicalOwnerSlots.remove(variableName);
-        if (previousSlot != null) previousSlot.release();
         retainTopLevelLexicalOwner(state, variableName, cell);
     }
 
     private static void retainTopLevelLexicalOwner(
             ExecutionRuntimeState state, String variableName, RuntimeBase cell) {
-        if ((cell instanceof RuntimeArray || cell instanceof RuntimeHash
-                || cell instanceof RuntimeScalar scalar && scalar.referencedByScalarReference)
-                && MyVarCleanupStack.isRegistered(cell)
-                && !state.topLevelLexicalOwnerSlots.containsKey(variableName)) {
-            PerlOwnerSlot ownerSlot = new PerlOwnerSlot(PerlOwnerSlot.Kind.ACTIVE_LEXICAL);
-            ownerSlot.acquireActiveLexicalIdentity(cell);
-            state.topLevelLexicalOwnerSlots.put(variableName, ownerSlot);
+        boolean lexicalOwner = isActiveLexicalOwnerCell(cell)
+                && MyVarCleanupStack.isRegistered(cell);
+        PerlOwnerSlot ownerSlot = state.topLevelLexicalOwnerSlots.get(variableName);
+        if (!lexicalOwner) {
+            if (ownerSlot != null) {
+                state.topLevelLexicalOwnerSlots.remove(variableName, ownerSlot);
+                ownerSlot.release();
+            }
+            return;
         }
+        if (ownerSlot != null) {
+            ownerSlot.acquireActiveLexicalIdentity(cell);
+            return;
+        }
+        ownerSlot = new PerlOwnerSlot(PerlOwnerSlot.Kind.ACTIVE_LEXICAL);
+        ownerSlot.acquireActiveLexicalIdentity(cell);
+        state.topLevelLexicalOwnerSlots.put(variableName, ownerSlot);
+    }
+
+    private static boolean isActiveLexicalOwnerCell(RuntimeBase cell) {
+        return cell instanceof RuntimeArray || cell instanceof RuntimeHash
+                || cell instanceof RuntimeScalar scalar && scalar.referencedByScalarReference;
     }
 
     /** Release pad-map owner identities when a lexical cell leaves scope. */
