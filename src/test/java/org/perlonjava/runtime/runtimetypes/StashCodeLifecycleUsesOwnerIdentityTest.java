@@ -10,6 +10,27 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Tag("unit")
 class StashCodeLifecycleUsesOwnerIdentityTest {
     @Test
+    void replacingNamedCodeRetargetsTheStashOwnerIdentity() {
+        try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
+            String name = "StashCodeLifecycleUsesOwnerIdentityTest::replaced";
+            RuntimeCode original = new RuntimeCode((args, context) -> new RuntimeList(), null);
+            RuntimeCode replacement = new RuntimeCode((args, context) -> new RuntimeList(), null);
+            RuntimeScalar stashSlot = new RuntimeScalar(original);
+            GlobalVariable.globalCodeRefs.put(name, stashSlot);
+
+            assertTrue(original.hasStashCodeSlotOwner());
+            assertFalse(replacement.hasStashCodeSlotOwner());
+
+            stashSlot.set(new RuntimeScalar(replacement));
+
+            assertFalse(original.hasStashCodeSlotOwner(),
+                    "redefinition releases the previous CV's stash edge");
+            assertTrue(replacement.hasStashCodeSlotOwner(),
+                    "redefinition gives the replacement CV the same stash slot owner");
+        }
+    }
+
+    @Test
     void releasedStashSlotRetiresCodeDespiteStaleCompatibilityCounter() {
         try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
             String name = "StashCodeLifecycleUsesOwnerIdentityTest::installed";

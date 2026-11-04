@@ -2148,8 +2148,10 @@ public class SubroutineParser {
         // would lose the fact that a body was already defined and incorrectly
         // let a late :lvalue declaration change that body.
         if (codeRef.value == null || (isRedefinition && block != null)) {
-            codeRef.type = RuntimeScalarType.CODE;
-            codeRef.value = new RuntimeCode(subName, attributes);
+            // Keep the stash scalar cell, but replace its referent through the
+            // ordinary slot transition. Directly assigning `value` leaves a
+            // CODE_SLOT owner attached to the previous CV after redefinition.
+            codeRef.set(new RuntimeScalar(new RuntimeCode(subName, attributes)));
         }
         // Mark as explicitly declared so *{glob}{CODE} returns this code ref.
         // In Perl 5, declared subs (even forward declarations) are visible via *{glob}{CODE}.
