@@ -1310,6 +1310,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             return scalar == candidate;
         }
 
+        RuntimeScalar scalar() {
+            return scalar;
+        }
+
         void release() {
             scalar.releaseArgumentAliasOwner(ownerSlot);
         }
