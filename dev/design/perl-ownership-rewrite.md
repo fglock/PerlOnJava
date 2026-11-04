@@ -4,35 +4,41 @@
 
 **Current checkpoint (2026-11-04):** #1649 remains in Phase 2 on
 `wip/ownership-batch-20261104-192548`, based on local merge commit
-`8367167b64` from master `289e34284d`; HEAD is `18f2cc1ac0`. The current
-uncommitted batch makes CODE-slot release drain only its own deferred token and
-removes the second outer `flushAboveMark()` after `RuntimeScalar` has completed
-a reference-slot transition. That second flush consumed older caller releases
-and destroyed a promise retained only by a closure.
+`8367167b64` from master `289e34284d`; HEAD is `dcf30ebdc7`. The new JVM
+method-invocant hold keeps chained receivers alive while arguments are being
+evaluated, including the temporary IO handle in the App-Scaffolder report.
+The permanent `temporary_io_invocant_survives_nested_render.t` regression
+passes on system Perl, JVM, and interpreter. The existing
+`interpreter_chained_method_invocant_lifetime.t` passes 9/9 on the interpreter,
+but JVM tests 6 and 9 still fail: labeled `last` and eval exception unwinding
+leave the temporary hold unreleased. This batch is incomplete.
 
-`void_discard_preserves_closure_capture.t` passes 5/5 on system Perl, JVM, and
-interpreter; the existing `mojolicious_promise_lifecycle_regressions.t` passes
-on both backends. `CodeSlotReleaseBoundaryTest` and the focused Java ownership
-classes pass in `nice -n 19 make build` with the five-class filter recorded in
-`/private/tmp/ownership-exact-release-focused-make-18f2cc1ac0.log`. The first
-full make was run before removing the second setter flush and before correcting
-the Java test's expected destroyed-state sentinel. Its failure log is
-`/private/tmp/ownership-code-slot-exact-release-make-18f2cc1ac0.log`; it is not
-final-candidate validation. The failing-parent evidence is in
-`/private/tmp/promise-void-capture-parent-jvm.log` and the full parent unit
-output. The source/test batch is still uncommitted and needs the final no-sweeps
-gate after the remaining producer families are migrated.
+The filtered `nice -n 19 make build` passed on the source now committed as
+`dcf30ebdc7`; log: `/private/tmp/ownership-method-invocant-focused-make-b6597f9b38.log`.
+The temporary-IO system Perl/JVM/interpreter logs are
+`/private/tmp/io-temporary-invocant-regression-system-perl.log`,
+`/private/tmp/io-temporary-invocant-regression-jvm-fixed.log`, and
+`/private/tmp/io-temporary-invocant-regression-interpreter-fixed.log`. The
+chained-lifetime interpreter pass and JVM failures are in
+`/private/tmp/chained-method-invocant-interpreter-fixed.log` and
+`/private/tmp/chained-method-invocant-jvm-fixed.log`. The related
+`deferred_capture_live_argument.t` regression from #1957 is already on this
+branch and belongs in this batch's final backend run. No full gate has run on
+this candidate.
 
-Keep batching by shared transition boundary: finish scalar/array/hash slot
-replacement and removal with exact deferred release; then group argument
-aliases, returns, closure/CODE captures, and exception/unwind/async frame owners.
-Audit package/glob roots, cloned/shared storage, and IO resource owners by their
-actual acquisition and release sites. Remove corrective recovery only after
-those ordinary paths are explicit. Run focused builds once per coherent source
-batch, then one immutable full `nice -n 19 make` and the no-sweeps acceptance
-matrix. PR #1938 is still recorded as open/draft at remote head
-`95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05`; live PR and #1649 handoff state
-remain to be refreshed before publication.
+Batching plan: finish method-invocant, staged-argument, eval-unwind, and
+nonlocal-control-flow cleanup together, then run one focused build with the
+temporary-IO, chained-lifetime, and live-argument regressions. Next combine
+scalar/array/hash slot replacement and removal with argument/return/closure
+owner transfers that use the same exact-release transition; run system Perl
+oracles first and one focused build for the group. Audit package/glob/CODE
+roots, tied values, cloned/shared storage, cycles, suspended frames, and IO
+resource owners by acquisition and release site; group fixes that share an
+owner producer before the next focused build. Remove corrective recovery only
+after those paths are explicit, then run one immutable full `nice -n 19 make`
+and the no-sweeps acceptance matrix. PR #1938 remains OPEN/DRAFT at remote head
+`95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05`; it is not reconciled with this
+local batch.
 
 Standard Perl is the oracle for every Perl-visible reference edge and its
 lifetime behavior. A reference-slot transition should retain a new strong
@@ -2383,16 +2389,15 @@ and final use cases still require audit before removal.
 
 ### Next steps
 
-1. Finish the slot-transition audit across scalar, array, and hash replacement
-   and removal. Trace each producer into its exact pending-release token; keep
-   defensive synthetic undercount tests separate from normal producer fixes.
-2. Group argument aliases, returned/mortal values, closure/CODE captures, and
-   exception, unwind, and async cancellation around their shared frame-owner
-   transfer paths.
-3. Audit package scalar/aggregate/glob/CODE roots, cloned/shared storage, and IO
-   resource owners by acquisition and release site. Remove recovery paths only
-   after every ordinary strong edge is represented and covered.
-4. Run one focused build per coherent source batch, then the full no-sweeps
-   gate and acceptance matrix on the final immutable candidate. Recheck #1794,
-   #1860, HTML-Tree, current master, and PR #1938 before publication; leave
-   merging to review.
+1. Finish the active JVM method-invocant batch, including staged arguments,
+   eval exceptions, and labeled control flow; require the three focused lifetime
+   regressions on both backends.
+2. Combine scalar/array/hash slot replacement and removal with argument,
+   return/mortal, and closure/CODE owner transfers where they use the same
+   exact-release operation. Verify changed Perl behavior on system Perl first.
+3. Finish the rooted storage/resource audit: tied values, package/glob/CODE
+   slots, cloned/shared storage, strong cycles, suspended frames, and IO owners.
+   Remove ordinary recovery machinery only after producer coverage is complete.
+4. Run the final no-sweeps acceptance matrix and one immutable full
+   `nice -n 19 make`; then recheck #1794, #1860, HTML-Tree, current master, and
+   PR #1938 before publication. Leave merging to review.

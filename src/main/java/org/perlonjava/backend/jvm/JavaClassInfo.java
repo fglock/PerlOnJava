@@ -292,6 +292,9 @@ public class JavaClassInfo {
      */
     public List<Integer> evalCleanupLocals;
 
+    /** Active chained-method invocant local slots for direct control-flow exits. */
+    public final Deque<Integer> activeMethodInvocantHoldSlots = new ArrayDeque<>();
+
     /**
      * A stack of loop labels for managing nested loops.
      */

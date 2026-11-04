@@ -1032,6 +1032,7 @@ public class Dereference {
                                 + "Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;",
                         false);
                 mv.visitVarInsn(Opcodes.ASTORE, holdSlot);
+                emitterVisitor.ctx.javaClassInfo.activeMethodInvocantHoldSlots.push(holdSlot);
                 holdStart = new Label();
                 mv.visitLabel(holdStart);
             }
@@ -1244,6 +1245,10 @@ public class Dereference {
                 // Register after argument-evaluation cleanup so that handler
                 // abandons the staged arguments before this owner is retired.
                 mv.visitTryCatchBlock(holdStart, holdEnd, holdHandler, null);
+                int activeHoldSlot = emitterVisitor.ctx.javaClassInfo.activeMethodInvocantHoldSlots.pop();
+                if (activeHoldSlot != holdSlot) {
+                    throw new IllegalStateException("method invocant hold stack is unbalanced");
+                }
             }
 
             // Tagged returns control-flow handling for method calls:
