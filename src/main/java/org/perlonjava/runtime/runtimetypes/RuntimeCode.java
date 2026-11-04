@@ -3340,25 +3340,29 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (base.refCount < 0) {
             return null;
         }
-        return new MethodInvocantHold(base);
+        return new MethodInvocantHold(base, PerlRuntime.current().executionState());
     }
 
     /** One call's invocant edge, kept separate from every other hold of the same value. */
     private static final class MethodInvocantHold extends RuntimeScalar {
         private final RuntimeBase referent;
+        private final ExecutionRuntimeState ownerState;
         private final PerlOwnerSlot owner = new PerlOwnerSlot(PerlOwnerSlot.Kind.ARGUMENT_VALUE);
 
-        MethodInvocantHold(RuntimeBase referent) {
+        MethodInvocantHold(RuntimeBase referent, ExecutionRuntimeState ownerState) {
             this.referent = referent;
+            this.ownerState = ownerState;
             owner.acquireMethodInvocantIdentity(referent);
             referent.traceRefCount(+1, "RuntimeCode.method invocant hold (+1)");
             referent.refCount++;
             referent.hadCountedReference = true;
             referent.acquireTransientTraceOwner("method invocant hold", "RuntimeCode.acquireMethodInvocantHold");
+            ownerState.methodInvocantHolds.add(this);
         }
 
         void release(boolean abandoned) {
             if (!owner.isActive()) return;
+            ownerState.methodInvocantHolds.remove(this);
             PerlOwnerSlot.PendingRelease release = owner.releaseCountedIdentity();
             referent.releaseTransientTraceOwner("method invocant hold", "RuntimeCode.MethodInvocantHold.release");
             if (referent.refCount <= 0 || referent.currentlyDestroying) {
@@ -3390,6 +3394,37 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     /** Retire an abandoned call's invocant edge without waiting for a result receiver. */
     public static void releaseAbandonedMethodInvocantHold(RuntimeBase hold) {
         if (hold != null) ((MethodInvocantHold) hold).release(true);
+    }
+
+    /** Current method-invocant owner depth, used to scope eval unwinding. */
+    public static int methodInvocantHoldDepth(ExecutionRuntimeState executionState) {
+        return executionState.methodInvocantHolds.size();
+    }
+
+    /** Current argument-staging depth, used to scope eval unwinding. */
+    public static int callArgumentFrameDepth(ExecutionRuntimeState executionState) {
+        return executionState.callArgumentFrames.size();
+    }
+
+    /**
+     * Finish only argument frames and method-invocant owners created inside an
+     * eval boundary. Argument aliases retire before the enclosing receiver hold,
+     * matching the interpreter's eval-unwind order.
+     */
+    public static void unwindEvalMethodInvocantHolds(
+            ExecutionRuntimeState executionState, int argumentDepth, int holdDepth) {
+        boolean releasedArguments = false;
+        while (executionState.callArgumentFrames.size() > argumentDepth) {
+            int last = executionState.callArgumentFrames.size() - 1;
+            executionState.callArgumentFrames.get(last).finish();
+            releasedArguments = true;
+        }
+        while (executionState.methodInvocantHolds.size() > holdDepth) {
+            RuntimeBase hold = executionState.methodInvocantHolds
+                    .get(executionState.methodInvocantHolds.size() - 1);
+            releaseAbandonedMethodInvocantHold(hold);
+        }
+        if (releasedArguments) MortalList.flushAboveMark();
     }
 
     private static boolean isReferenceToGlobInvocant(RuntimeScalar invocant) {
