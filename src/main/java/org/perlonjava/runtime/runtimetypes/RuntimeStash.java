@@ -730,7 +730,17 @@ public class RuntimeStash extends RuntimeHash {
                 return new RuntimeScalar(currentEntry.getKey());
             } else {
                 returnKey = true;
-                return currentEntry.getValue();
+                RuntimeScalar value = currentEntry.getValue();
+                if (value.value instanceof RuntimeStashEntry entry) {
+                    return new RuntimeScalar(entry.createStashIteratorCopy());
+                }
+                if (value.value instanceof RuntimeGlob glob
+                        && glob.globName != null && !glob.isSlotSnapshot()) {
+                    RuntimeGlob copy = glob.createDetachedCopy();
+                    copy.setStringificationName(glob.globName);
+                    return new RuntimeScalar(copy);
+                }
+                return value;
             }
         }
 

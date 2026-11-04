@@ -6,6 +6,8 @@ priorities and future plans.
 
 ## Work in progress
 
+- Preserve callable CODE slots and captured values when copying stash globs returned by `each`.
+
 - Autovivify undefined hash references assigned through a hash dereference (#1958).
 
 - Dispatch bodyless `can` stubs through their class `AUTOLOAD` when present, preserving generated class introspection (#1959).
