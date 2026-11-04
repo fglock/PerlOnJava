@@ -4423,6 +4423,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             int siteIndex = descriptor.compiledDirectCallSiteIndex();
             if (siteIndex < 0) siteIndex = index;
             boolean compileTimePinned = descriptor.compiledDirectCallCompileTimePinned();
+            boolean retainTargetIfDeletedBeforeInstall =
+                    descriptor.compiledDirectCallRetainTargetIfDeletedBeforeInstall();
             RuntimeScalar initialSlot = descriptor.compiledDirectCallInitialSlot();
             RuntimeCode initialTarget = descriptor.compiledDirectCallInitialTarget();
             if (initialTarget == null && descriptor.value instanceof RuntimeCode code) {
@@ -4436,9 +4438,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
 
             RuntimeScalar cache = new RuntimeScalar();
-            cache.configureCompiledDirectCallSite(name, siteIndex, null, compileTimePinned);
+            cache.configureCompiledDirectCallSite(
+                    name, siteIndex, null, compileTimePinned, retainTargetIfDeletedBeforeInstall);
             CompiledDirectCallSite callSite =
-                    new CompiledDirectCallSite(name, cache, initialTarget, compileTimePinned);
+                    new CompiledDirectCallSite(name, cache, initialTarget, compileTimePinned,
+                            retainTargetIfDeletedBeforeInstall);
             prepared[index] = cache;
             callSites.add(callSite);
             callSitesByIndex.put(siteIndex, callSite);

@@ -6485,10 +6485,13 @@ public class BytecodeCompiler implements Visitor {
                                     : GlobalVariable.getGlobalCodeRefForFreshLookup(subName);
                     boolean compileTimePinned = parseTimeCallRef != null
                             && emissionTimeCallRef != parseTimeCallRef;
+                    boolean retainTargetIfDeletedBeforeCallsiteInstall =
+                            node.getBooleanAnnotation("retainTargetIfDeletedBeforeCallsiteInstall");
                     RuntimeScalar cachedCallRef = new RuntimeScalar();
                     int siteIndex = padConstants.size();
                     cachedCallRef.configureCompiledDirectCallSite(
-                            subName, siteIndex, initialCallRef, compileTimePinned);
+                            subName, siteIndex, initialCallRef, compileTimePinned,
+                            retainTargetIfDeletedBeforeCallsiteInstall);
                     int cacheIdx = addToConstantPool(cachedCallRef);
                     padConstants.add(cachedCallRef);
                     Object classMethod = node.getAnnotation("directClassMethod");
