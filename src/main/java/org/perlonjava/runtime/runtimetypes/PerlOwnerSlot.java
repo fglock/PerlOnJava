@@ -58,7 +58,7 @@ public final class PerlOwnerSlot {
         STASH_NAMESPACE_MOVE,
         /** Scalar value retaining a detached typeglob snapshot. */
         GLOB_VALUE,
-        /** Active lexical frame or top-level pad entry owning an aggregate. */
+        /** Active lexical frame or top-level pad entry owning a scalar cell or aggregate. */
         ACTIVE_LEXICAL,
         /** Strong value held by a lexical register in a suspended interpreter frame. */
         SUSPENDED_FRAME,
@@ -458,14 +458,17 @@ public final class PerlOwnerSlot {
         transferWithoutRuntimeRoot(target, false);
     }
 
-    /** Record one active lexical pad entry that owns an aggregate. */
+    /** Record one active lexical pad entry that owns a scalar referent or aggregate. */
     synchronized void acquireActiveLexicalIdentity(RuntimeBase target) {
         if (kind != Kind.ACTIVE_LEXICAL) {
             throw new IllegalStateException("active lexical acquisition requires an active-lexical slot");
         }
         Objects.requireNonNull(target, "target");
-        if (!(target instanceof RuntimeArray || target instanceof RuntimeHash)) {
-            throw new IllegalArgumentException("active lexical owner slots are for aggregate pads");
+        if (!(target instanceof RuntimeArray || target instanceof RuntimeHash)
+                && !(target instanceof RuntimeScalar scalar
+                    && scalar.referencedByScalarReference)) {
+            throw new IllegalArgumentException(
+                    "active lexical owner slots require an aggregate or scalar reference cell");
         }
         if (legacyCaptureCount != 0) {
             throw new IllegalStateException("active lexical slot has pending legacy releases");

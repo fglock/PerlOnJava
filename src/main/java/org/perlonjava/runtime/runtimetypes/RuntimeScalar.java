@@ -6169,6 +6169,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             this.refCount = 0;
             this.ephemeralScalarReferenceReferent = true;
         }
+        if (MyVarCleanupStack.isRegistered(this)) {
+            RuntimeCode.noteMyVarRegistered(this);
+        }
         RuntimeScalar result = new RuntimeScalar();
         result.type = RuntimeScalarType.REFERENCE;
         result.value = this;
@@ -7835,7 +7838,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             return;
         }
         scalar.localBindingExists = false;
-        if (scalar.refCount == 0 && !scalar.hasScalarCellOwner()) {
+        if (scalar.refCount == 0 && !scalar.hasScalarCellOwner()
+                && !scalar.hasUncountedPerlOwnerSlotIdentity()) {
             scalar.refCount = Integer.MIN_VALUE;
             DestroyDispatch.callDestroy(scalar);
         }
