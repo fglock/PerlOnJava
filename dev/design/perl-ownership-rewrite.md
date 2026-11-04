@@ -3,8 +3,8 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-04):** #1649 is on local branch
-`wip/ownership-audit-20261104-075516` at `8f7c299d9`; the latest runtime change
-is `34a2c58be`. Current master `b43a652507d836bfbd78e3e6c250021c0b3355aa`
+`wip/ownership-audit-20261104-075516`; its latest runtime source commit is
+`fc30b9c05`. Current master `b43a652507d836bfbd78e3e6c250021c0b3355aa`
 is an ancestor, so no rebase was needed. Previous batches stage nonzero-argument generated JVM direct calls in
 a `RuntimeCode.CallArguments` frame before evaluating expressions, and carry
 `Storable::dclone` results through a deferred `RETURN_VALUE` owner. The scalar
@@ -28,6 +28,18 @@ focused unit gate passed before snapshotting.
 `TiedHandlerNestedOwnerCountInvariantTest` now checks the normal pre-weaken
 tied-handler path: the nested hash edge and one scalar edge match `refCount`,
 and untie releases the final edge without a root query.
+
+`WeakRefRegistry.weaken` now checks validated uncounted owner identities before
+falling back to `localBindingExists`. A current lexical/package slot carries
+the deferred lifecycle until its release; stale `UNTRACKED_REFERENCE` slots do
+not qualify. `ActiveLexicalAggregateWeakOwnerLifecycleTest` failed before this
+change at the missing deferred-owner assertion and now verifies final weak
+cleanup with zero root queries. The system Perl regression passes 16/16, and
+the focused `nice -n 19 make test-unit` gate passes all Java shards plus that
+Perl fixture. Direct JVM and interpreter runs each pass 16/16. Logs:
+`/private/tmp/active-lexical-aggregate-weak-owner-unfixed-20261104.log`,
+`/private/tmp/active-lexical-aggregate-weak-owner-final-20261104.log`, and
+`/private/tmp/issue-1649-active-aggregate-weak-{system-perl,jvm,interpreter}-20261104.log`.
 
 System Perl passes `active_lexical_scalar_referent_owner.t` 9/9 and
 `active_lexical_scalar_deferred_release.t` 6/6. The focused immutable
@@ -61,7 +73,8 @@ reproduction logs are `/private/tmp/ownership-parent-a777-bless.log` and
 
 The producer audit remains open. Production deferred-release producers carry
 `PendingOwnerRelease`; root/snapshot recovery in `processDeferredBase` remains
-behind legacy unpaired `deferDecrement`, with no production caller found.
+behind legacy unpaired `deferDecrement`, which repository search finds only in
+Java tests and design documentation, not production callers.
 PadWalker still has a fallback `releaseClosureCapture()` when its capture-slot
 mapping is absent. Capture creation in the parser and both backends builds
 parallel scalar/aggregate owner-slot arrays; runtime cloning reconstructs them,
