@@ -5,6 +5,7 @@ import org.perlonjava.app.scriptengine.PerlLanguageProvider;
 import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.backend.jvm.EmitterMethodCreator;
 import org.perlonjava.backend.jvm.JavaClassInfo;
+import org.perlonjava.frontend.astnode.AbstractNode;
 import org.perlonjava.frontend.astnode.Node;
 import org.perlonjava.frontend.astnode.OperatorNode;
 import org.perlonjava.frontend.lexer.Lexer;
@@ -626,6 +627,17 @@ public class EvalStringHandler {
                 BHooksEndOfScope.endFileLoad(evalFileName);
             }
 
+            // Transfer parse-time flags to the AST root so BytecodeCompiler can
+            // skip analysis passes that aren't needed for this eval string.
+            if (ast instanceof AbstractNode astNode) {
+                if (parser.parsedGoto)        astNode.setAnnotation("hasGoto", true);
+                if (parser.parsedLabels)      astNode.setAnnotation("hasLabels", true);
+                if (parser.parsedDefer)       astNode.setAnnotation("hasDefer", true);
+                if (parser.parsedGiven)       astNode.setAnnotation("hasGiven", true);
+                if (parser.parsedEvalOrRegex) astNode.setAnnotation("hasEvalOrRegex", true);
+                if (parser.parsedNamedSub)    astNode.setAnnotation("hasNamedSub", true);
+            }
+
             // UNITCHECK blocks registered by an eval STRING run as soon as
             // that compilation unit has finished, before the eval body runs.
             SpecialBlock.runUnitcheckBlocks(ctx.unitcheckBlocks);
@@ -868,6 +880,17 @@ public class EvalStringHandler {
                 ast = parser.parse();
             } finally {
                 BHooksEndOfScope.endFileLoad(evalFileName);
+            }
+
+            // Transfer parse-time flags to the AST root so BytecodeCompiler can
+            // skip analysis passes that aren't needed for this eval string.
+            if (ast instanceof AbstractNode astNode) {
+                if (parser.parsedGoto)        astNode.setAnnotation("hasGoto", true);
+                if (parser.parsedLabels)      astNode.setAnnotation("hasLabels", true);
+                if (parser.parsedDefer)       astNode.setAnnotation("hasDefer", true);
+                if (parser.parsedGiven)       astNode.setAnnotation("hasGiven", true);
+                if (parser.parsedEvalOrRegex) astNode.setAnnotation("hasEvalOrRegex", true);
+                if (parser.parsedNamedSub)    astNode.setAnnotation("hasNamedSub", true);
             }
 
             // Compile to bytecode.

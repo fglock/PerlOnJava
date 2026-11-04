@@ -31,6 +31,13 @@ public class BlockNode extends AbstractNode {
      */
     public List<String> labels;
 
+    // Pragma state to restore after this block exits (formerly annotations).
+    // Stored as direct fields to keep annotations == null for most blocks,
+    // preventing unnecessary HashMap lookups in BytecodeCompiler.visit().
+    public Integer postBlockStrictOptions;
+    public Integer postBlockFeatureFlags;
+    public String postBlockWarningBits;
+
     /**
      * Constructs a new BlockNode with the specified list of child nodes.
      * <p>

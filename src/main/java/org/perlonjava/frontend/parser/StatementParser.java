@@ -773,6 +773,7 @@ public class StatementParser {
         Node deferBlock = ParseBlock.parseBlock(parser);
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
 
+        parser.parsedDefer = true;
         return new DeferNode(deferBlock, index);
     }
 
@@ -785,6 +786,7 @@ public class StatementParser {
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
         DeferNode result = new DeferNode(cancelBlock, index);
         result.setAnnotation("futureAsyncAwaitCancel", true);
+        parser.parsedDefer = true;
         return result;
     }
 
@@ -1205,6 +1207,7 @@ public class StatementParser {
 
         BlockNode givenBlock = new BlockNode(statements, index, parser);
         givenBlock.setAnnotation("givenBlock", true);
+        parser.parsedGiven = true;
         // Mark as a loop block so that the implicit `last` emitted by each
         // when-clause breaks out of this given-block instead of escaping
         // to an outer loop or the program top level.

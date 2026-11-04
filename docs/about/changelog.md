@@ -8,6 +8,16 @@ priorities and future plans.
 
 - Make an explicit `-n` run sample new and previously tested CPAN targets while maintaining a rolling window of target and dependency results.
 
+- Preserve callable CODE slots and captured values when copying stash globs returned by `each`.
+
+- Autovivify undefined hash references assigned through a hash dereference (#1958).
+
+- Dispatch bodyless `can` stubs through their class `AUTOLOAD` when present, preserving generated class introspection (#1959).
+
+- Preserve MakeMaker test rules when `MY::test` calls `SUPER::test` in scalar context.
+
+- Recognize boolean values as dual-valued in `Scalar::Util::isdual` (#1954).
+
 - Recognize a bareword filehandle when `print`'s implicit `$_` list ends at a block close (#1948).
 
 - Accept YAML-style mapping syntax in `YAML::Syck::LoadJSON`, matching Syck's JSON loader behavior (#1942).
@@ -26,7 +36,7 @@ priorities and future plans.
 
 - Preserve named typeglob stringification when copying package stash entries (#1927).
 
-- Reduce repeated eval STRING overhead with lazy state and caching for context-free integer-literal evals (#1911).
+- Reduce eval STRING overhead with lazy goto collections, parser-set AST flags that skip unneeded BytecodeCompiler analysis passes, ScopedSymbolTable snapshot caching, per-thread eval caches without synchronization, cached constructor/class-field metadata, and a re-entrant fast-path in `PerlRuntime.bind()` (#1911).
 
 - Preserve arbitrary bytes in SQLite text columns across DBI fetches (#1923).
 

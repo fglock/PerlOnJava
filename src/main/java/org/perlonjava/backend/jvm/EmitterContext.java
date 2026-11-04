@@ -27,6 +27,15 @@ public class EmitterContext {
     private Map<Integer, EmitterContext> contextCache;
 
     /**
+     * Per-site hot-spot cache for evalStringHelper: avoids fastKey construction
+     * on repeated evals of the same string object in the same package.
+     * Stored on the per-thread EmitterContext so no synchronization is needed.
+     */
+    public String lastEvalStr;
+    public String lastEvalPackage;
+    public Class<?> lastEvalClass;
+
+    /**
      * CompilerOptions is a configuration class that holds various settings and flags
      * used by the compiler during the compilation process.
      */

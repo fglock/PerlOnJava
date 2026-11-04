@@ -11,6 +11,7 @@ import org.perlonjava.backend.jvm.EmitterMethodCreator;
 import org.perlonjava.backend.jvm.InterpreterFallbackException;
 import org.perlonjava.backend.jvm.JavaClassInfo;
 import org.perlonjava.frontend.analysis.ConstantFoldingVisitor;
+import org.perlonjava.frontend.astnode.AbstractNode;
 import org.perlonjava.frontend.astnode.Node;
 import org.perlonjava.frontend.astnode.OperatorNode;
 import org.perlonjava.frontend.lexer.Lexer;
@@ -1012,13 +1013,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public static void incrementEvalDepth() {
         ExecutionRuntimeState state = PerlRuntime.current().executionState();
         state.evalDepth++;
-        state.evalPseudoConstantScopes.push(new java.util.LinkedHashMap<>());
+        state.evalPseudoConstantScopes.add(null);  // lazy: allocate only when a sub is promoted
     }
 
     public static void decrementEvalDepth() {
         ExecutionRuntimeState state = PerlRuntime.current().executionState();
         java.util.LinkedHashMap<String, RuntimeScalar> promotions =
-                state.evalPseudoConstantScopes.isEmpty() ? null : state.evalPseudoConstantScopes.pop();
+                state.evalPseudoConstantScopes.isEmpty() ? null
+                        : state.evalPseudoConstantScopes.remove(state.evalPseudoConstantScopes.size() - 1);
         if (promotions != null) {
             for (var entry : promotions.entrySet()) {
                 GlobalVariable.clearGlobalPseudoConstant(entry.getKey());
@@ -4380,6 +4382,79 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return evalStringHelper(code, evalTag, new Object[0]);
     }
 
+    /** Shared empty-array sentinel to avoid allocation in no-capture evals. */
+    public static final Class<?>[] EMPTY_CLASSES = new Class<?>[0];
+
+    /** Per-class field metadata cached to avoid repeated getDeclaredFields() reflection. */
+    public static final class EvalClassMeta {
+        final java.lang.reflect.Field subField;
+        final java.lang.reflect.Field[] capturedScalarFields;
+        final java.lang.reflect.Field[] capturedAggregateFields;
+
+        EvalClassMeta(java.lang.reflect.Field subField,
+                      java.lang.reflect.Field[] capturedScalarFields,
+                      java.lang.reflect.Field[] capturedAggregateFields) {
+            this.subField = subField;
+            this.capturedScalarFields = capturedScalarFields;
+            this.capturedAggregateFields = capturedAggregateFields;
+        }
+
+        boolean hasCaptures() {
+            return capturedScalarFields.length > 0 || capturedAggregateFields.length > 0;
+        }
+    }
+
+    // Cached reference to $^P to avoid ConcurrentHashMap lookup on every eval STRING call.
+    // Safe to cache: $^P is rarely localized, and the fast-path check (== 0) is low-stakes.
+    // NOT caching $^{WARNING_SCOPE}: local ${^WARNING_SCOPE} REPLACES the scalar in the
+    // global slot on every subroutine entry, so a cached reference becomes stale immediately.
+    private static volatile RuntimeScalar cachedDebuggerFlagsScalar;
+    private static int getDebuggerFlagsInt() {
+        RuntimeScalar s = cachedDebuggerFlagsScalar;
+        if (s == null) {
+            s = GlobalVariable.getGlobalVariable(GlobalContext.DEBUGGER_FLAGS);
+            cachedDebuggerFlagsScalar = s;
+        }
+        return s.getInt();
+    }
+
+    /**
+     * Returns a cached {@link java.lang.reflect.Constructor} for the class produced by
+     * {@link #evalStringHelper}. Avoids the expensive reflection lookup on cache hits.
+     * No synchronization needed — cache is per-runtime (per-thread), accessed only by
+     * one thread.
+     */
+    @SuppressWarnings("unchecked")
+    public static java.lang.reflect.Constructor<?> evalGetCachedConstructor(
+            Class<?> clazz, Class<?>[] paramTypes) throws Exception {
+        Map<Class<?>, java.lang.reflect.Constructor<?>> ctorCache =
+                PerlRuntime.current().runtimeCodeState().evalConstructorCache;
+        java.lang.reflect.Constructor<?> ctor = ctorCache.get(clazz);
+        if (ctor != null) return ctor;
+        ctor = clazz.getDeclaredConstructor(paramTypes);
+        ctorCache.put(clazz, ctor);
+        return ctor;
+    }
+
+    /**
+     * For no-capture eval classes, cache and reuse the RuntimeScalar code ref.
+     * The eval class instance is stateless (no captures), so the same code ref
+     * is safe to reuse — avoids constructor.newInstance() and makeCodeObject()
+     * on every warm eval invocation.
+     * No synchronization needed — cache is per-runtime (per-thread).
+     */
+    public static RuntimeScalar evalGetOrMakeCachedCodeRef(Class<?> clazz) throws Exception {
+        Map<Class<?>, RuntimeScalar> codeRefCache =
+                PerlRuntime.current().runtimeCodeState().evalCodeRefCache;
+        RuntimeScalar cached = codeRefCache.get(clazz);
+        if (cached != null) return cached;
+        java.lang.reflect.Constructor<?> ctor = clazz.getDeclaredConstructor(EMPTY_CLASSES);
+        Object instance = ctor.newInstance((Object[]) null);
+        RuntimeScalar codeRef = makeCodeObject(instance);
+        codeRefCache.put(clazz, codeRef);
+        return codeRef;
+    }
+
     public static boolean shouldDecodeEvalbytesUtf8Source(String source) {
         if (source == null) {
             return false;
@@ -4485,6 +4560,58 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * @throws Exception if an error occurs during compilation
      */
     public static Class<?> evalStringHelper(RuntimeScalar code, String evalTag, Object[] runtimeValues) throws Exception {
+        // Fast-path: skip compilation lock, binding-frame, and all save/restore overhead
+        // for repeated evals of the same string. Only applies when:
+        //   - not in debugger mode ($^P == 0)
+        //   - source is a plain STRING (not BYTE_STRING, not evalbytes)
+        // On a cache hit the method returns without modifying any state, so no save/restore is needed.
+        // Per-thread cache: no synchronization needed (accessed only by one thread per PerlRuntime).
+        if (code.type == RuntimeScalarType.STRING) {
+            int debugFast = getDebuggerFlagsInt();
+            if (debugFast == 0) {
+                EmitterContext fastCtx = getEvalContext(evalTag);
+                if (fastCtx != null && !fastCtx.isEvalbytes) {
+                    String evalStr = code.toString();
+                    // Hot-spot cache: if the eval string is the same object (common for
+                    // compiled constants / interned strings) skip unicode scan, concat, and
+                    // map lookup entirely.
+                    if (fastCtx.lastEvalClass != null && evalStr == fastCtx.lastEvalStr) {
+                        String runtimePkgHot = InterpreterState.currentPackage.get().toString();
+                        String cssFast2 = fastCtx.symbolTable.getCurrentSubroutine();
+                        boolean tlmFast2 = cssFast2 == null || cssFast2.isEmpty() || "main".equals(cssFast2);
+                        String pkgFast2 = ClassRegistry.isClass(runtimePkgHot)
+                                ? runtimePkgHot : tlmFast2 ? runtimePkgHot
+                                : fastCtx.symbolTable.getCurrentPackage();
+                        if (pkgFast2.equals(fastCtx.lastEvalPackage)) {
+                            return fastCtx.lastEvalClass;
+                        }
+                    }
+                    boolean hasUnicode = false;
+                    for (int i = 0; i < evalStr.length(); i++) {
+                        if (evalStr.charAt(i) > 127) { hasUnicode = true; break; }
+                    }
+                    int featureFlags = fastCtx.symbolTable.featureFlagsStack.peek();
+                    String runtimePkg = InterpreterState.currentPackage.get().toString();
+                    String callsiteSubFast = fastCtx.symbolTable.getCurrentSubroutine();
+                    boolean topLevelMainFast = callsiteSubFast == null || callsiteSubFast.isEmpty()
+                            || "main".equals(callsiteSubFast);
+                    String currentPackageFast = ClassRegistry.isClass(runtimePkg)
+                            ? runtimePkg : topLevelMainFast ? runtimePkg
+                            : fastCtx.symbolTable.getCurrentPackage();
+                    // Key must exactly match the slow-path key (all byte-string booleans are false for STRING)
+                    String fastKey = evalStr + '\0' + evalTag + '\0' + hasUnicode
+                            + "\0false\0false\0false\0false\0" + featureFlags + '\0' + currentPackageFast;
+                    Map<String, Class<?>> fastCache = PerlRuntime.current().runtimeCodeState().evalCache;
+                    Class<?> hit = fastCache.get(fastKey);
+                    if (hit != null) {
+                        fastCtx.lastEvalStr = evalStr;
+                        fastCtx.lastEvalPackage = currentPackageFast;
+                        fastCtx.lastEvalClass = hit;
+                        return hit;
+                    }
+                }
+            }
+        }
 
         try (PerlRuntime.Binding runtimeBinding = PerlRuntime.current().bind();
              PerlLanguageProvider.CompilationLockGuard ignored =
@@ -4596,7 +4723,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // which caused source location info collisions when multiple evals had the same
             // tokenIndex (since each eval's tokenization starts from 0).
             // When debugging is enabled ($^P is set), we skip the cache entirely.
-            int debugFlags = GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("P")).getInt();
+            int debugFlags = GlobalVariable.getGlobalVariable(GlobalContext.DEBUGGER_FLAGS).getInt();
             boolean isDebugging = debugFlags != 0;
 
             // Always generate a unique filename for each eval to prevent source location collisions
@@ -4619,12 +4746,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             Class<?> cachedClass = null;
             if (!isDebugging) {
                 Map<String, Class<?>> runtimeEvalCache = evalCache();
-                synchronized (runtimeEvalCache) {
-                    if (runtimeEvalCache.containsKey(cacheKey)) {
-                        cachedClass = runtimeEvalCache.get(cacheKey);
-                    }
-                }
-
+                cachedClass = runtimeEvalCache.get(cacheKey);
                 if (cachedClass != null) {
                     return cachedClass;
                 }
@@ -4927,10 +5049,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
             // Cache the result (unless debugging is enabled)
             if (!isDebugging) {
-                Map<String, Class<?>> runtimeEvalCache = evalCache();
-                synchronized (runtimeEvalCache) {
-                    runtimeEvalCache.put(cacheKey, generatedClass);
-                }
+                evalCache().put(cacheKey, generatedClass);
             }
 
             return generatedClass;
@@ -4992,7 +5111,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public static void storeSourceLines(String evalString, String filename, Node ast,
                                         List<LexerToken> tokens, boolean compiledSuccessfully) {
         storeSourceLines(evalString, filename, ast, tokens, compiledSuccessfully,
-                GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("P")).getInt());
+                GlobalVariable.getGlobalVariable(GlobalContext.DEBUGGER_FLAGS).getInt());
     }
 
     /** Store eval source using the $^P value present when its compilation began. */
@@ -5217,7 +5336,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         boolean compiledSuccessfully = false;
         boolean sourceLinesStored = false;
         int debuggerFlagsAtEntry = GlobalVariable
-                .getGlobalVariable(GlobalContext.encodeSpecialVar("P")).getInt();
+                .getGlobalVariable(GlobalContext.DEBUGGER_FLAGS).getInt();
 
         // Save dynamic variable level to restore after eval.
         // IMPORTANT: Scope InterpreterState.currentPackage around eval execution.
@@ -5274,7 +5393,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     : topLevelMain ? runtimePackage : capturedSymbolTable.getCurrentPackage();
 
             try {
-                // Setup for BEGIN block support - create aliases for captured variables.
+                // Alias captured outer variables before parsing.
+                // BEGIN/use execute during parsing, so their aliases must be in place first.
+                // Named subs in eval also access outer lexicals via these aliases.
+                {
                 Map<Integer, SymbolTable.SymbolEntry> capturedVars = capturedSymbolTable.getAllVisibleVariables();
                 for (SymbolTable.SymbolEntry entry : capturedVars.values()) {
                     if (!entry.name().equals("@_") && !entry.decl().isEmpty() && !entry.name().startsWith("&")) {
@@ -5309,6 +5431,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         }
                     }
                 }
+                }
                 // Clone compiler options for compilation (deferred from cache-hit fast path)
                 evalCompilerOptions = ctx.compilerOptions.clone();
                 boolean isByteStringSource = !ctx.isEvalbytes
@@ -5332,7 +5455,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // Parse the eval string
                 Lexer lexer = new Lexer(evalString);
                 tokens = lexer.tokenize();
-
                 // Create parser context
                 ScopedSymbolTable parseSymbolTable = capturedSymbolTable.snapShot();
                 parseSymbolTable.setCurrentPackage(
@@ -5383,6 +5505,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 } finally {
                     RegexQuoteMeta.setParserWarningBits(savedRegexWarningBits);
                     BHooksEndOfScope.endFileLoad(evalCompilerOptions.fileName);
+                }
+
+                // Transfer parse-time flags to the AST root so BytecodeCompiler can
+                // skip analysis passes that aren't needed for this eval string.
+                if (ast instanceof AbstractNode astNode) {
+                    if (parser.parsedGoto)        astNode.setAnnotation("hasGoto", true);
+                    if (parser.parsedLabels)      astNode.setAnnotation("hasLabels", true);
+                    if (parser.parsedDefer)       astNode.setAnnotation("hasDefer", true);
+                    if (parser.parsedGiven)       astNode.setAnnotation("hasGiven", true);
+                    if (parser.parsedEvalOrRegex) astNode.setAnnotation("hasEvalOrRegex", true);
+                    if (parser.parsedNamedSub)    astNode.setAnnotation("hasNamedSub", true);
                 }
 
                 // Run UNITCHECK blocks
@@ -5724,7 +5857,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Store source lines in debugger symbol table if $^P flags are set
             // Do this on both success and failure paths when flags require retention
             // ast and tokens may be null if parsing failed early, but storeSourceLines handles that
-            int debugFlags = GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("P")).getInt();
+            int debugFlags = GlobalVariable.getGlobalVariable(GlobalContext.DEBUGGER_FLAGS).getInt();
             if (!sourceLinesStored && debugFlags != 0 && tokens != null && evalFilename != null) {
                 storeSourceLines(code.toString(), evalFilename, ast, tokens, compiledSuccessfully,
                         debuggerFlagsAtEntry);
@@ -5897,18 +6030,40 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 .disabledWarningsByClassName.get(internalClassName);
         code.setLexicalDisabledWarningCategories(disabledWarnings);
 
-        // Extract captured RuntimeScalar fields for closure DESTROY tracking.
-        // Each instance field of type RuntimeScalar (except __SUB__) is a
-        // captured lexical variable. We store them so that releaseCaptures()
-        // can decrement blessed ref refCounts when the closure is discarded.
-        Field[] allFields = clazz.getDeclaredFields();
-        List<RuntimeScalar> captured = new ArrayList<>();
-        List<RuntimeBase> capturedAggregates = new ArrayList<>();
-        List<PerlOwnerSlot> capturedAggregateOwnerSlots = new ArrayList<>();
-        Set<RuntimeScalar> seenScalars = Collections.newSetFromMap(new IdentityHashMap<>());
-        Set<RuntimeBase> seenAggregates = Collections.newSetFromMap(new IdentityHashMap<>());
-        for (Field f : allFields) {
-            if (f.getType() == RuntimeScalar.class && !"__SUB__".equals(f.getName())) {
+        // Get per-class field metadata from cache; build on first encounter.
+        // Avoids repeated getDeclaredFields() reflection on warm eval paths.
+        // No synchronization needed — cache is per-runtime (per-thread).
+        Map<Class<?>, EvalClassMeta> metaCache =
+                PerlRuntime.current().runtimeCodeState().evalClassMetaCache;
+        EvalClassMeta meta = metaCache.get(clazz);
+        if (meta == null) {
+            Field[] allFields = clazz.getDeclaredFields();
+            Field subF = null;
+            java.util.ArrayList<Field> scalarList = new java.util.ArrayList<>();
+            java.util.ArrayList<Field> aggList = new java.util.ArrayList<>();
+            for (Field f : allFields) {
+                if ("__SUB__".equals(f.getName())) {
+                    subF = f;
+                } else if (f.getType() == RuntimeScalar.class) {
+                    scalarList.add(f);
+                } else if (f.getType() == RuntimeArray.class || f.getType() == RuntimeHash.class) {
+                    aggList.add(f);
+                }
+            }
+            meta = new EvalClassMeta(subF,
+                    scalarList.toArray(new Field[0]),
+                    aggList.toArray(new Field[0]));
+            metaCache.put(clazz, meta);
+        }
+
+        code.captureFieldsRecorded = true;
+        if (meta.hasCaptures()) {
+            List<RuntimeScalar> captured = new ArrayList<>();
+            List<RuntimeBase> capturedAggregates = new ArrayList<>();
+            List<PerlOwnerSlot> capturedAggregateOwnerSlots = new ArrayList<>();
+            Set<RuntimeScalar> seenScalars = Collections.newSetFromMap(new IdentityHashMap<>());
+            Set<RuntimeBase> seenAggregates = Collections.newSetFromMap(new IdentityHashMap<>());
+            for (Field f : meta.capturedScalarFields) {
                 RuntimeScalar capturedVar = (RuntimeScalar) f.get(codeObject);
                 if (capturedVar != null) {
                     if (!seenScalars.add(capturedVar)) continue;
@@ -5916,7 +6071,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     captured.add(capturedVar);
                     capturedVar.retainClosureCapture();
                 }
-            } else if (f.getType() == RuntimeArray.class || f.getType() == RuntimeHash.class) {
+            }
+            for (Field f : meta.capturedAggregateFields) {
                 RuntimeBase capturedAggregate = (RuntimeBase) f.get(codeObject);
                 if (capturedAggregate != null) {
                     if (!seenAggregates.add(capturedAggregate)) continue;
@@ -5926,41 +6082,34 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     capturedAggregateOwnerSlots.add(ownerSlot);
                 }
             }
-        }
-        code.captureFieldsRecorded = true;
-        if (!captured.isEmpty()) {
-            code.capturedScalars = captured.toArray(new RuntimeScalar[0]);
-        }
-        if (!capturedAggregates.isEmpty()) {
-            code.capturedAggregates = capturedAggregates.toArray(new RuntimeBase[0]);
-            code.capturedAggregateOwnerSlots =
-                    capturedAggregateOwnerSlots.toArray(new PerlOwnerSlot[0]);
+            if (!captured.isEmpty()) {
+                code.capturedScalars = captured.toArray(new RuntimeScalar[0]);
+            }
+            if (!capturedAggregates.isEmpty()) {
+                code.capturedAggregates = capturedAggregates.toArray(new RuntimeBase[0]);
+                code.capturedAggregateOwnerSlots =
+                        capturedAggregateOwnerSlots.toArray(new PerlOwnerSlot[0]);
+            }
+            if (!captured.isEmpty() || !capturedAggregates.isEmpty()) {
+                code.refCount = 0;
+                registerJvmClosure(code);
+            }
         }
         GlobalVariable.invalidateGlobalCodeRefGraphRoots();
 
-        // A BEGIN-installed `sub () { $lexical }` is a Perl constant CV.  The
-        // JVM emitter does not retain the anonymous-sub AST here, but it does
-        // retain the exact source span; recognize only this side-effect-free
-        // shape and freeze it after its lexical captures have been attached.
+        // A BEGIN-installed `sub () { $lexical }` is a Perl constant CV.
         if ((deparseFlags & 0x40000000) != 0) {
             code.isConstantCv = true;
             code.isLexicalConstantCv = true;
             code.cacheConstantCvValue();
         }
-        if (!captured.isEmpty() || !capturedAggregates.isEmpty()) {
-            // Enable refCount tracking for closures with captures.
-            // When the CODE ref's refCount drops to 0, releaseCaptures()
-            // fires (via DestroyDispatch.callDestroy), letting captured
-            // blessed objects run DESTROY.
-            code.refCount = 0;
-            registerJvmClosure(code);
-        }
 
         RuntimeScalar codeRef = new RuntimeScalar(code);
 
-        // Set the __SUB__ instance field
-        Field field = clazz.getDeclaredField("__SUB__");
-        field.set(codeObject, codeRef);
+        // Set the __SUB__ instance field using cached Field reference
+        if (meta.subField != null) {
+            meta.subField.set(codeObject, codeRef);
+        }
 
         return codeRef;
     }

@@ -369,7 +369,7 @@ public class PerlLanguageProvider {
         // DEBUG emission after parsing has run those blocks rather than only
         // honoring the command-line -d switch.
         boolean debuggerEnabled = compilerOptions.runUnderDebugger;
-        int debugFlags = GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("P")).getInt();
+        int debugFlags = GlobalVariable.getGlobalVariable(GlobalContext.DEBUGGER_FLAGS).getInt();
         if (!debuggerEnabled && (debugFlags & 0x02) != 0) {
             DebugState.setDebugMode(true);
             DebugHooks.initializeDebugVariables();
