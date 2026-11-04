@@ -85,6 +85,8 @@ public class WeakRefRegistry {
         LifecycleRuntimeState state = state();
         if (state.weakScalars.contains(ref)) return;  // already weak
 
+        ref.noteReferenceSlotMutation();
+
         // Weakness changes the strong root graph even though the scalar's
         // referent field is unchanged.
         MortalList.invalidateAllRootSnapshots();
@@ -295,6 +297,7 @@ public class WeakRefRegistry {
         if (!state.weakScalars.contains(ref)) return;
         MortalList.invalidateAllRootSnapshots();
         if (!state.weakScalars.remove(ref)) return;
+        ref.noteReferenceSlotMutation();
         if (ref.value instanceof RuntimeBase base) {
             Set<RuntimeScalar> weakRefs = state.referentToWeakRefs.get(base);
             if (weakRefs != null) {
