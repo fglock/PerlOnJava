@@ -588,13 +588,14 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
     }
 
     /**
-     * Override RuntimeCode.defined() to return true for InterpretedCode.
-     * InterpretedCode doesn't use methodHandle, so the parent defined() check fails.
-     * But InterpretedCode instances are always "defined" - they contain executable bytecode.
+     * InterpretedCode has executable bytecode instead of a methodHandle, so an
+     * installed interpreted CV is defined while its CODE reference is valid.
+     * `undef &name` explicitly retires that callable definition even though
+     * the bytecode object remains available to existing Java references.
      */
     @Override
     public boolean defined() {
-        return true;
+        return !codeReferenceUndefined;
     }
 
     /**
