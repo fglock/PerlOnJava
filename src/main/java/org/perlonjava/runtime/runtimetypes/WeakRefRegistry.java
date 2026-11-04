@@ -263,7 +263,6 @@ public class WeakRefRegistry {
                 && state.weakRefsExist
                 && (shouldCheckLiveCodeRef
                 || (code.hadStashRef
-                && code.stashRefCount <= 0
                 && !isInstalledGlobalCodeRef(code)))) {
             // Keep this path targeted to the CODE referent. DBIC weakens
             // callback CODE refs in hot cursor paths; running a full
@@ -273,7 +272,6 @@ public class WeakRefRegistry {
             // while expired anonymous or former-stash CODE refs can still clear
             // their weak registry entries immediately.
             if (hasWeakRefsTo(code)
-                    && code.stashRefCount <= 0
                     && !isInstalledGlobalCodeRef(code)) {
                 // clearWeakRefsTo() makes the final decision from stash state,
                 // active frames, and explicit owner-slot identities. A scalar
@@ -507,13 +505,13 @@ public class WeakRefRegistry {
     private static boolean shouldKeepCodeWeakRefs(RuntimeCode code) {
         boolean installed = isInstalledGlobalCodeRef(code);
         boolean trace = System.getenv("PJ_WEAKCLEAR_TRACE") != null
-                && code.hadStashRef && code.stashRefCount <= 0 && !installed;
+                && code.hadStashRef && !installed;
         if (trace) {
             System.err.println("[WEAKCODE-CHECK] code=" + System.identityHashCode(code)
-                    + " refCount=" + code.refCount + " stashRefCount=" + code.stashRefCount
+                    + " refCount=" + code.refCount
                     + " installed=" + installed + " slots=" + code.ownerSlotSnapshot().size());
         }
-        if (code.stashRefCount > 0 || installed) return true;
+        if (installed) return true;
         // The active frame is already a definitive strong owner. Check it
         // before scanning the live scalar registries, which can be large and
         // sits on the callback dispatch path when a quiet sweep runs.

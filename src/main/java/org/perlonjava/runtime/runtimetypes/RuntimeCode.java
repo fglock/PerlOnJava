@@ -1684,7 +1684,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     /** Whether a current named package CODE slot still installs this CV. */
-    boolean hasStashCodeSlotOwner() {
+    public boolean hasStashCodeSlotOwner() {
         for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
             if (!slot.isActive() || slot.kind() != PerlOwnerSlot.Kind.CODE_SLOT
                     || slot.referent() != this) continue;
@@ -1703,7 +1703,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      */
     boolean hasPerlOwnerForCapture() {
         return refCount > 0
-                || stashRefCount > 0
                 || hasActiveCodeOwner()
                 || hasCallTransferOwner()
                 || hasOwnerSlots()
@@ -1729,7 +1728,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // Do not use refCount here: this release path handles CODE objects
         // whose compatibility count can remain positive after their last
         // real scalar owner has gone away.
-        return stashRefCount > 0
+        return hasStashCodeSlotOwner()
                 || hasActiveCodeOwner()
                 || hasCallTransferOwner()
                 || hasOwnerSlotsOtherThan(excludedOwner)
@@ -1740,7 +1739,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     /** A removed stash slot requests final state cleanup at the last owner boundary. */
     void noteStashOwnerReleased() {
         if (perlLifecycleState() == RuntimeBase.PerlLifecycleState.DESTROYED
-                || stashRefCount > 0
                 || ownerSlotCount(PerlOwnerSlot.Kind.CODE_SLOT) != 0) return;
         deferFinalReleaseToActiveCode();
         finishActiveCodeOwnerRelease();
@@ -4406,15 +4404,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     /**
-     * Tracks the number of stash (glob) entries that reference this CODE object.
-     * Stash entries created via {@code *Foo::bar = $coderef} are invisible to the
-     * selective refCount because glob assignments go through a container that
-     * may be overwritten independently.
-     * <p>
-     * When stashRefCount > 0, the CODE ref should NOT be considered dead even if
-     * the selective refCount reaches 0, because the stash still holds a live
-     * reference. This prevents premature {@code releaseCaptures()} which would
-     * cascade to clear weak references (e.g., in Sub::Defer's %DEFERRED hash).
+     * Legacy diagnostic field retained for Java source compatibility.
+     * Lifecycle decisions use the current CODE_SLOT owner identities instead.
      */
     public int stashRefCount = 0;
     /** All GP/CODE edges for this CV use counted slot identities. */
