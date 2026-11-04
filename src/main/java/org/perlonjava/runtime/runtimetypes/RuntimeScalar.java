@@ -1002,12 +1002,23 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      */
     public boolean refCountOwned;
 
+    /** Changes when a nested operation mutates this scalar's reference slot. */
+    private long referenceSlotMutationVersion;
+
     private PerlOwnerSlot countedOwnerSlot;
     /** Identity for this scalar cell's strong edge to a non-counted referent. */
     private PerlOwnerSlot untrackedReferenceOwnerSlot;
     private ArrayList<PerlOwnerSlot> argumentAliasOwnerSlots;
     /** Frame identities following this mutable scalar while async code is paused. */
     private Set<PerlOwnerSlot> suspendedFrameOwnerSlots;
+
+    long noteReferenceSlotMutation() {
+        return ++referenceSlotMutationVersion;
+    }
+
+    private boolean isCurrentReferenceSlotMutation(long version) {
+        return referenceSlotMutationVersion == version;
+    }
     // Package names, compiler pins, localized saved slots, and compiled
     // references can share one physical CV edge. Keep visible stash bindings
     // distinct so weak cleanup does not confuse them with compiler pins.
@@ -4032,7 +4043,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if ((this.type & RuntimeScalarType.REFERENCE_BIT) != 0 && this.value != null) {
             oldBase = (RuntimeBase) this.value;
         }
-        boolean oldIdentifiedOwner = oldBase != null && this.refCountOwned
+        boolean oldRefCountOwned = this.refCountOwned;
+        boolean oldIdentifiedOwner = oldBase != null && oldRefCountOwned
                 && countedOwnerSlot != null && countedOwnerSlot.isActive()
                 && countedOwnerSlot.referent() == oldBase;
         // A reference to this scalar keeps its current contents alive through
@@ -4115,6 +4127,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // Do the assignment
         this.type = value.type;
         this.value = copyScalarPayload(value.type, value.value);
+        long referenceSlotMutationVersion = noteReferenceSlotMutation();
+        // The counted owner identity for a tracked replacement was acquired
+        // with its increment above. Publish its matching flag before any
+        // cleanup can call Perl code, so a reentrant weaken() sees the new
+        // edge's ownership state rather than the displaced value's flag.
+        this.refCountOwned = newOwned;
         refreshDetachedGlobValueOwner();
         this.scalarReferenceContentsOwner = null;
         refreshArgumentAliasOwnerSlots();
@@ -4236,6 +4254,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             if (rescueNeedsCountedOwner) {
                 base.hadCountedReference = true;
                 base.recordOwner(this, "rescue from currentDestroyTarget");
+                this.refCountOwned = true;
                 base.recordActiveOwner(this);
                 newOwned = true;
             }
@@ -4279,9 +4298,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // Decrement old value's refCount AFTER assignment (skip for weak refs
         // and for scalars that didn't own a refCount increment).
         if (oldBase != null && !thisWasWeak
-                && (this.refCountOwned || oldOwnedByScalarReference)) {
+                && (oldRefCountOwned || oldOwnedByScalarReference)) {
             boolean deferredOldBaseRelease = oldArgumentAliasReleaseQueued;
-            if (!deferredOldBaseRelease && this.refCountOwned && oldBase.refCount > 0
+            if (!deferredOldBaseRelease && oldRefCountOwned && oldBase.refCount > 0
                     && oldBase.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_ALIAS) != 0) {
                 MortalList.deferDecrementFromArraySlot(
                         oldBase, this, "RuntimeScalar.setLargeRefCounted overwrite");
@@ -4291,7 +4310,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 oldBase.releaseOwner(this, "setLargeRefCounted overwrite");
                 oldBase.releaseActiveOwner(this);
             }
-            if (explicitUndef) this.refCountOwned = false;
+            if (explicitUndef && isCurrentReferenceSlotMutation(referenceSlotMutationVersion)) {
+                this.refCountOwned = false;
+            }
             if (!deferredOldBaseRelease && oldBase.refCount > 0 && --oldBase.refCount == 0) {
                 boolean liveScalarReferentBinding = oldBase.localBindingExists
                         && (!(oldBase instanceof RuntimeScalar scalarReferent)
@@ -4368,19 +4389,24 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // Final strong-owner release clears weak refs through the owner-slot
         // ledger; overwrite does not schedule a later reachability sweep.
 
-        // Update ownership: this scalar now owns a refCount iff we incremented.
-        this.refCountOwned = newOwned;
-        if (newOwned && this.value instanceof RuntimeBase ownedReferent) {
-            recordCountedOwner(ownedReferent);
-            if (untrackedReferenceOwnerSlot != null) {
-                releaseUntrackedReferenceOwner(untrackedReferenceOwnerSlot.referent());
+        // A reentrant setter or weaken() may already have completed the slot's
+        // ownership transition while old-value cleanup ran. Do not restore the
+        // outer assignment's stale bookkeeping over that newer state.
+        if (isCurrentReferenceSlotMutation(referenceSlotMutationVersion)) {
+            this.refCountOwned = newOwned;
+            if (newOwned && this.value instanceof RuntimeBase ownedReferent) {
+                recordCountedOwner(ownedReferent);
+                if (untrackedReferenceOwnerSlot != null) {
+                    releaseUntrackedReferenceOwner(untrackedReferenceOwnerSlot.referent());
+                }
+            } else {
+                updateUntrackedReferenceOwner(this.value instanceof RuntimeBase referent
+                        && (this.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                        ? referent : null);
             }
-        } else {
-            updateUntrackedReferenceOwner(this.value instanceof RuntimeBase referent
-                    && (this.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                    ? referent : null);
         }
-        if (!scalarContentsOwners.isEmpty()) {
+        if (isCurrentReferenceSlotMutation(referenceSlotMutationVersion)
+                && !scalarContentsOwners.isEmpty()) {
             RuntimeBase nextContents = (this.type & REFERENCE_BIT) != 0
                     && this.value instanceof RuntimeBase base
                     && !WeakRefRegistry.isweak(this) ? base : null;
@@ -4392,7 +4418,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 }
             }
         }
-        retainScalarReferenceContents(value);
+        if (isCurrentReferenceSlotMutation(referenceSlotMutationVersion)) {
+            retainScalarReferenceContents(value);
+        }
 
         // Flush deferred mortal decrements from the current function scope.
         // Entries below the current MortalList mark belong to the caller, and
