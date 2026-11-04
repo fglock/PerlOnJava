@@ -371,7 +371,51 @@ Run on JVM and interpreter backends with `timeout` and complete output logs:
 
 ## Progress Tracking
 
-### Current Status: owner-source migration continues; tested runtime checkpoint `3cbff31fb`
+### Current Status: CODE-slot owner migration continues; tested checkpoint `3a3d12213` (2026-11-04)
+
+The named-CODE batch now follows explicit slot identity through parser-side
+redefinition and interpreter undef. `SubroutineParser` replaces an installed CV
+through `RuntimeScalar.set()`, which acquires the replacement CODE_SLOT owner and
+releases the previous CV edge. `InterpretedCode.defined()` now respects
+`codeReferenceUndefined`. Compiled `defined(&name)` probes consult the live
+visible CODE slot when it exists and retain their captured CV behavior when
+compile-time stash deletion removed that slot.
+
+`StashCodeLifecycleUsesOwnerIdentityTest` verifies that replacement moves the
+stash owner and that slot deletion retires lifecycle state despite stale
+`stashRefCount`. The Perl regressions
+`named_undef_visible_code_slot.t` and
+`defined_code_slot_compile_time_stash_delete.t` pass on system Perl, JVM, and
+interpreter; both PerlOnJava backends were run with corrective sweeps disabled.
+`JPERL_TEST_FILTER=code_slot timeout 1200 nice -n 19 make test-unit` passes,
+including the Java owner test (2/2). Logs:
+`/private/tmp/ownership-code-slot-focused-final-8287.log`,
+`/private/tmp/named-undef-visible-code-slot-latest-jvm.log`,
+`/private/tmp/named-undef-visible-code-slot-latest-interpreter.log`,
+`/private/tmp/begin-jvm-code-slot-final-8287.log`, and
+`/private/tmp/begin-interpreter-code-slot-final-8287.log`. The system Perl
+oracle logs are `/private/tmp/named-undef-visible-code-slot-system-perl-20261104-final.log`
+and `/private/tmp/defined-code-slot-compile-time-delete-system-perl-20261104.log`.
+
+The parent `b3ad73b0d` passes the named-undef JVM test 4/4 but fails interpreter
+checks 1 and 4 (2/4); checkpoint `3a3d12213` passes 4/4 on both backends. The
+unfiltered unit gate exposed six unrelated failures; no-sweeps direct replay on
+both `b3ad73b0d` and the candidate reproduces the same results. A final
+unfiltered `make` and the full ownership/HTML::Tree acceptance matrix have not
+been run on this checkpoint. Parent logs for the named-undef regression are
+`/private/tmp/named-undef-visible-code-slot-parent-b3-jvm.log` and
+`/private/tmp/named-undef-visible-code-slot-parent-b3-interpreter.log`.
+
+Local work is on `wip/ownership-codestash-20261104-093426`. Remote `master`
+`b43a652507d836bfbd78e3e6c250021c0b3355aa` is an ancestor; PR #1938 remains an
+open draft at remote head `95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05`. The
+checkpoint is not published. Next, continue tracing remaining count producers
+and migrate package/resource roots, closure and frame edges, deferred release,
+cloning/shared storage, and strong cycles. Retire ordinary reachability
+recovery only after their producer paths have explicit identities and focused
+coverage, then run final acceptance on one immutable candidate.
+
+### Previous checkpoint evidence: owner-source migration at `3cbff31fb` (2026-11-02)
 
 The END queue now keeps a real owner identity across dequeue and callback
 execution. `SpecialBlock.hasPendingEndBlock()` accepts only a current queue cell
