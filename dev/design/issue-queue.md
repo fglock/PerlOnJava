@@ -1,6 +1,6 @@
 # Reviewed issue queues
 
-Snapshot: 2026-11-02, from live open issues, PRs and the #1649 phase contract.
+Snapshot: 2026-11-04, from live open issues, PRs and the #1649 phase contract.
 This is a bounded selection aid, not the complete backlog or fresh runtime
 validation. Follow the [triage and claim protocol](../../docs/guides/issue-triage.md)
 and recheck live issue comments/PRs before starting. Unlisted work is unreviewed
@@ -26,6 +26,7 @@ resolved before implementation. No new pass or failure is asserted here.
 
 | Code/test boundary | Issue | Priority / state | Evidence, next action and blocker |
 |---|---|---|---|
+| Scalar string metadata | [#1970](https://github.com/fglock/PerlOnJava/issues/1970) `Internals::SvREADONLY` UTF-8 flag | Normal / Active | Runtime read-only wrapping hides the underlying string type from UTF-8 queries and interpolation. The Encode-Wide 0.07 system-Perl oracle passes; PerlOnJava fails its sequential Unicode conversion integration case. [Current claim](https://github.com/fglock/PerlOnJava/issues/1970#issuecomment-6633863980). |
 | Hash dereference assignment | [#1958](https://github.com/fglock/PerlOnJava/issues/1958) Undefined-reference autovivification | Normal / Active | Shared-runtime fix and focused regression pass on both backends; full `make` passes in [PR #1960](https://github.com/fglock/PerlOnJava/pull/1960). [Current claim](https://github.com/fglock/PerlOnJava/issues/1958#issuecomment-6626463414). Object-Hybrid 0.07's follow-on generated `can` dispatch failure is also addressed in that PR under #1959. |
 | Dynamic class method lookup | [#1959](https://github.com/fglock/PerlOnJava/issues/1959) Object::Hybrid `tieable` promotion | Normal / Active | Generated `HASH_STATIC` declares a bodyless `can`; route it through that class's `AUTOLOAD` when present. Focused reproducer and full `make` pass on both backends. The full upstream suite advances beyond this failure but later exits at `IO::File::FILENO` (separate behavior). Candidate fix is in [PR #1960](https://github.com/fglock/PerlOnJava/pull/1960). |
 | Scalar introspection | [#1954](https://github.com/fglock/PerlOnJava/issues/1954) `Scalar::Util::isdual` booleans | Normal / Active | Mars 0.05 passes on system Perl and failed assertions 10–11 on both PerlOnJava backends (run `20261103-123832-91742`). [Draft PR #1956](https://github.com/fglock/PerlOnJava/pull/1956) recognizes BOOLEAN values; focused boolean, explicit-dualvar and plain-string coverage plus all 13 Mars assertions pass on both backends, and full `make` passes. |

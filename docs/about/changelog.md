@@ -6,6 +6,8 @@ priorities and future plans.
 
 ## Work in progress
 
+- Preserve wide-string UTF-8 metadata through runtime read-only marking and string interpolation (#1970).
+
 - Make an explicit `-n` run sample new and previously tested CPAN targets while maintaining a rolling window of target and dependency results.
 
 - Preserve callable CODE slots and captured values when copying stash globs returned by `each`.
