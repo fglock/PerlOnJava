@@ -71,7 +71,7 @@ final class CompiledDirectCallSite {
 
     private void releaseRetiredTarget() {
         if (!ownsRetiredTarget) return;
-        cachedRef.releaseCodeSlotBindingAtExactBoundary();
+        cachedRef.releaseCodeSlotBinding();
         ownsRetiredTarget = false;
         cachedRef.initializeCompiledDirectCallCache(name,
                 cachedRef.compiledDirectCallSiteIndex(), null, false);
