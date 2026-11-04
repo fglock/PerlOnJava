@@ -145,7 +145,6 @@ public final class ExecutionRuntimeState {
 
     final ArrayList<Object> myVarCleanupStack = new ArrayList<>();
     final IdentityHashMap<Object, Integer> registeredMyVarCounts = new IdentityHashMap<>();
-    final IdentityHashMap<Object, Integer> liveMyVarCounts = new IdentityHashMap<>();
 
     private final IdentityHashMap<RuntimeCode, CallDepthState> callDepths = new IdentityHashMap<>();
     private RuntimeCode lastCallDepthCode;
