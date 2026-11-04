@@ -445,6 +445,106 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      */
     public String globalCodeRefFqn;
 
+    /** Compile-time descriptor for one direct named-call site, or its runtime cache. */
+    private String compiledDirectCallSiteName;
+    private int compiledDirectCallSiteIndex = -1;
+    private WeakReference<RuntimeCode> compiledDirectCallInitialTarget;
+    private boolean compiledDirectCallSiteDescriptor;
+    private boolean compiledDirectCallCompileTimePinned;
+    private boolean updatingCompiledDirectCallCache;
+
+    /** Mark this scalar as metadata for a compiled direct named-call site. */
+    public void configureCompiledDirectCallSite(
+            String name, int index, RuntimeScalar initialCodeRef) {
+        configureCompiledDirectCallSite(name, index, initialCodeRef, false);
+    }
+
+    public void configureCompiledDirectCallSite(
+            String name,
+            int index,
+            RuntimeScalar initialCodeRef,
+            boolean compileTimePinned) {
+        compiledDirectCallSiteName = name;
+        compiledDirectCallSiteIndex = index;
+        compiledDirectCallSiteDescriptor = true;
+        compiledDirectCallCompileTimePinned = compileTimePinned;
+        RuntimeCode target = initialCodeRef != null
+                && initialCodeRef.value instanceof RuntimeCode code ? code : null;
+        compiledDirectCallInitialTarget = target == null ? null : new WeakReference<>(target);
+        if (target != null) {
+            type = RuntimeScalarType.CODE;
+            value = target;
+            retainCodeSlotBinding();
+        }
+    }
+
+    public String compiledDirectCallSiteName() {
+        return compiledDirectCallSiteName;
+    }
+
+    public int compiledDirectCallSiteIndex() {
+        return compiledDirectCallSiteIndex;
+    }
+
+    boolean compiledDirectCallCompileTimePinned() {
+        return compiledDirectCallCompileTimePinned;
+    }
+
+    boolean isCompiledDirectCallSiteDescriptor() {
+        return compiledDirectCallSiteDescriptor;
+    }
+
+    void releaseCompiledDirectCallSiteDescriptorBinding() {
+        if (!compiledDirectCallSiteDescriptor) return;
+        compiledDirectCallSiteDescriptor = false;
+        if (hasCodeSlotBinding()) releaseCodeSlotBinding();
+        type = RuntimeScalarType.UNDEF;
+        value = null;
+    }
+
+    RuntimeCode compiledDirectCallInitialTarget() {
+        return compiledDirectCallInitialTarget == null
+                ? (value instanceof RuntimeCode code ? code : null)
+                : compiledDirectCallInitialTarget.get();
+    }
+
+    void updateCompiledDirectCallTarget(RuntimeCode target) {
+        compiledDirectCallInitialTarget = target == null ? null : new WeakReference<>(target);
+    }
+
+    void initializeCompiledDirectCallCache(
+            String name, int index, RuntimeCode target, boolean compileTimePinned) {
+        compiledDirectCallSiteName = name;
+        compiledDirectCallSiteIndex = index;
+        compiledDirectCallSiteDescriptor = false;
+        compiledDirectCallCompileTimePinned = compileTimePinned;
+        compiledDirectCallInitialTarget = target == null ? null : new WeakReference<>(target);
+        type = RuntimeScalarType.CODE;
+        value = target;
+        globalCodeRefFqn = null;
+    }
+
+    void setCompiledDirectCallTarget(RuntimeScalar replacement) {
+        if (replacement == null) return;
+        updatingCompiledDirectCallCache = true;
+        try {
+            set(replacement);
+        } finally {
+            updatingCompiledDirectCallCache = false;
+        }
+        globalCodeRefFqn = null;
+        RuntimeCode target = replacement.type == RuntimeScalarType.CODE
+                && replacement.value instanceof RuntimeCode code ? code : null;
+        updateCompiledDirectCallTarget(target);
+    }
+
+    void setCompiledDirectCallTarget(RuntimeCode target) {
+        RuntimeScalar replacement = new RuntimeScalar();
+        replacement.type = RuntimeScalarType.CODE;
+        replacement.value = target;
+        setCompiledDirectCallTarget(replacement);
+    }
+
     /**
      * Source-level name for a generated lexical-sub storage scalar.  A
      * bodyless {@code my/state sub name;} is an undefined callable, not an
@@ -917,7 +1017,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (codeSlotBindings == 0 || source.type != RuntimeScalarType.CODE
                 || !(source.value instanceof RuntimeCode code)) return;
         code.hasCountedCodeSlots = true;
-        code.hadStashRef = true;
+        if (source.compiledDirectCallSiteName == null) code.hadStashRef = true;
         if (code.refCount == -1) code.refCount = 0;
     }
 
@@ -4000,7 +4100,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (this.globalCodeRefFqn != null && this.value instanceof RuntimeCode code) {
             code.hadStashRef = true;
         }
-        if ((packageCodeRefName != null || hasCodeSlotBinding())
+        if (!updatingCompiledDirectCallCache
+                && (packageCodeRefName != null || hasCodeSlotBinding())
                 && (preAssignType != this.type || preAssignValue != this.value)) {
             GlobalVariable.noteGlobalCodeRefSlotMutation(this);
         }

@@ -163,13 +163,67 @@ public class GlobalVariable {
         globalState().invalidateCodeRefs();
     }
 
-    private static void noteCodeRefMutation(RuntimeScalar previous, RuntimeScalar replacement) {
+    private static void noteCodeRefMutation(
+            String key, RuntimeScalar previous, RuntimeScalar replacement) {
         globalState().noteCodeRefMutation(previous, replacement);
+        if (key == null) return;
+        for (String related : compiledDirectCallSiteKeys(key)) {
+            globalState().notifyCompiledDirectCallSites(related, replacement);
+        }
     }
 
     /** Invalidate CODE-root caches after a stash CODE slot changes in place. */
     static void noteGlobalCodeRefSlotMutation(RuntimeScalar slot) {
         globalState().noteCodeRefMutation(slot, slot);
+        if (slot != null && slot.globalCodeRefFqn != null) {
+            for (String related : compiledDirectCallSiteKeys(slot.globalCodeRefFqn)) {
+                globalState().notifyCompiledDirectCallSites(related, slot);
+            }
+        }
+    }
+
+    static void registerCompiledDirectCallSite(String key, CompiledDirectCallSite site) {
+        if (key == null || site == null) return;
+        for (String related : compiledDirectCallSiteKeys(key)) {
+            globalState().registerCompiledDirectCallSite(related, site);
+        }
+    }
+
+    static void unregisterCompiledDirectCallSite(String key, CompiledDirectCallSite site) {
+        if (site != null) globalState().unregisterCompiledDirectCallSite(site);
+    }
+
+    private static Set<String> compiledDirectCallSiteKeys(String key) {
+        Set<String> keys = new java.util.LinkedHashSet<>();
+        if (key != null) {
+            keys.add(key);
+            String resolved = resolveAliasedFqn(key);
+            if (resolved != null) keys.add(resolved);
+        }
+        return keys;
+    }
+
+    /** Current visible CODE slot for an already compiled direct call, if any. */
+    public static RuntimeScalar getVisibleGlobalCodeRefForDirectCall(String key) {
+        if (key == null) return null;
+        String resolvedKey = resolveAliasedFqn(key);
+        RuntimeScalar current = globalCodeRefs.get(resolvedKey);
+        if (current == null && !resolvedKey.equals(key)) {
+            current = globalCodeRefs.get(key);
+        }
+        return current;
+    }
+
+    /** Release a compile-time compatibility pin after a callsite owns its CV. */
+    static void releaseCompiledDirectCallPin(String key, RuntimeCode expectedTarget) {
+        if (key == null || expectedTarget == null) return;
+        for (String related : compiledDirectCallSiteKeys(key)) {
+            RuntimeScalar pinned = pinnedCodeRefs().get(related);
+            if (pinned != null && pinned.type == RuntimeScalarType.CODE
+                    && pinned.value == expectedTarget) {
+                unpinCodeRef(related);
+            }
+        }
     }
 
     private static GlobalRuntimeState globalState() {
@@ -587,7 +641,7 @@ public class GlobalVariable {
             RuntimeScalar old = delegate().put(key, value);
             if (old != value) {
                 if (value != null) value.retainStashCodeSlotBinding();
-                noteCodeRefMutation(old, value);
+                noteCodeRefMutation(key, old, value);
             }
             if (newKey) {
                 invalidateStashEnumerationCache();
@@ -621,7 +675,7 @@ public class GlobalVariable {
         public RuntimeScalar remove(Object key) {
             RuntimeScalar prev = delegate().remove(key);
             if (prev != null) {
-                noteCodeRefMutation(prev, null);
+                noteCodeRefMutation(key instanceof String name ? name : null, prev, null);
                 invalidateStashEnumerationCache();
                 invalidatePackageRootSnapshot();
                 prev.globalCodeRefFqn = null;
@@ -692,7 +746,7 @@ public class GlobalVariable {
                             String key = current.getKey();
                             RuntimeScalar value = current.getValue();
                             iterator.remove();
-                            noteCodeRefMutation(value, null);
+                            noteCodeRefMutation(key, value, null);
                             canRemove = false;
                             if (value != null) value.globalCodeRefFqn = null;
                             invalidateStashEnumerationCache();
@@ -2959,6 +3013,11 @@ public class GlobalVariable {
         if (previous == codeRef) return;
         if (codeRef != null) codeRef.retainCodeSlotBinding();
         pinnedCodeRefs().put(key, codeRef);
+        if (previous != null) previous.releaseCodeSlotBinding();
+    }
+
+    private static void unpinCodeRef(String key) {
+        RuntimeScalar previous = pinnedCodeRefs().remove(key);
         if (previous != null) previous.releaseCodeSlotBinding();
     }
 
