@@ -37,9 +37,18 @@ destruction and resurrection, temporary roots, suspended frames, and resource
 holders. The source call-site audit found no production caller of the
 unpaired `MortalList.deferDecrement`; production deferred-release sites use
 slot-bearing APIs. `restoreReachableOwnerCount` is reachable only through that
-legacy unpaired hook. The count-repair batch should therefore trace the
-remaining verified-slot repair call sites to their producers instead of
-treating synthetic unpaired releases as evidence of a normal mismatch.
+legacy unpaired hook. The follow-up scan traced the production
+`restoreVerifiedCurrentCountedOwnerSlotRefCount` callers in scalar overwrite,
+first weaken, deferred and tail-call release, CODE cleanup, and destruction
+completion. The direct increment paths reviewed pair their count with a
+counted owner slot or a dedicated token (including method holds, scalar
+contents, and blessing temporaries); no normal producer mismatch has been
+confirmed yet. `RuntimeGlob.dynamicRestoreState` retains a manual CODE release
+for a slot with no counted CODE-slot owner, while the normal stash map retires
+that owner through its slot API. The next batch must finish producer-level
+invariant coverage and migrate remaining strong-edge families that still use
+uncounted identities, rather than treating synthetic undercounts as evidence
+of a normal mismatch.
 
 Bundle producer and invariant fixes into two focused build gates: first
 current-count repair, deferred-release producers, and mutation paths that
