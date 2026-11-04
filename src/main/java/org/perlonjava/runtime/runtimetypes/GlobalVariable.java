@@ -3190,6 +3190,23 @@ public class GlobalVariable {
             return definedGlobalCodeRefAsScalar(glob.globName);
         }
         if (key.type == RuntimeScalarType.CODE && key.value instanceof RuntimeCode runtimeCode) {
+            // A compiled `defined(&name)` probe carries the parse-time CODE
+            // slot scalar. The interpreter can execute that bytecode against
+            // a fresh runtime symbol table, so the scalar may still contain
+            // the parse-time CV after the visible slot has been redefined.
+            // Follow the live slot when it exists, but preserve the compiled
+            // CV behavior after stash deletion instead of vivifying or
+            // retargeting the name to a later unrelated slot.
+            if (key.globalCodeRefFqn != null) {
+                String resolvedName = resolveAliasedFqn(key.globalCodeRefFqn);
+                RuntimeScalar visible = globalCodeRefs.get(resolvedName);
+                if (visible == null && !resolvedName.equals(key.globalCodeRefFqn)) {
+                    visible = globalCodeRefs.get(key.globalCodeRefFqn);
+                }
+                if (visible != null) {
+                    return definedGlobalCodeRefAsScalar(visible);
+                }
+            }
             return runtimeCode.defined() ? scalarTrue : scalarFalse;
         }
 
