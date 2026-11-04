@@ -7498,6 +7498,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         code.captureFieldsRecorded = true;
         if (meta.hasCaptures()) {
             List<RuntimeScalar> captured = new ArrayList<>();
+            List<PerlOwnerSlot> capturedScalarOwnerSlots = new ArrayList<>();
             List<RuntimeBase> capturedAggregates = new ArrayList<>();
             List<PerlOwnerSlot> capturedAggregateOwnerSlots = new ArrayList<>();
             Set<RuntimeScalar> seenScalars = Collections.newSetFromMap(new IdentityHashMap<>());
