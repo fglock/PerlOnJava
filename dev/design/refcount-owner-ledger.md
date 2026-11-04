@@ -410,6 +410,17 @@ paths queue an exact release token. This narrows the ordinary lifecycle
 fallback surface but does not yet justify deleting the hook: its synthetic
 tests and the other producer families still need an identity-based audit.
 
+The first-`weaken()` audit shows that a counted weak slot retires its current
+counted owner identity and then checks active CODE, semantic capture, current
+uncounted slots, registered lexical compatibility state, and surviving counted
+slots before finalization. Untracked non-CODE referents still transition from
+`refCount == -1` to `WEAKLY_TRACKED`; the exact producer/release behavior for
+those edges remains part of the slot-transition batch. On the first weak
+registration, `MyVarCleanupStack.snapshotStackToLiveCounts()` backfills lexical
+roots and the installed-CODE edge cache is prepared for `ReachabilityWalker`.
+The CODE-edge cache is consumed by the walker; classify its explicit diagnostic
+or teardown use before removing that cache along with ordinary recovery.
+
 The parent `b3ad73b0d` passes the named-undef JVM test 4/4 but fails interpreter
 checks 1 and 4 (2/4); checkpoint `3a3d12213` passes 4/4 on both backends. The
 unfiltered unit gate exposed six failures. Five direct no-sweeps replays failed
