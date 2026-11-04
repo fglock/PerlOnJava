@@ -6,6 +6,10 @@ priorities and future plans.
 
 ## Work in progress
 
+- Autovivify undefined hash references assigned through a hash dereference (#1958).
+
+- Dispatch bodyless `can` stubs through their class `AUTOLOAD` when present, preserving generated class introspection (#1959).
+
 - Recognize boolean values as dual-valued in `Scalar::Util::isdual` (#1954).
 
 - Recognize a bareword filehandle when `print`'s implicit `$_` list ends at a block close (#1948).
