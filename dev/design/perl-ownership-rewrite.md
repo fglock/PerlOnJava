@@ -3,61 +3,56 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-04):** #1649 is on
-`wip/issue1649-preflight-20261104-152310`, at source commit `ddbc52aaf`. The
-required preflight WIP snapshot is `c6d9d91d0`; the earlier full no-sweeps pass
-at `d551c9cdb` is not validation of this newer candidate.
+`wip/issue1649-preflight-20261104-152310`, cleanly rebased onto `origin/master`
+`0d6685bb1b003ad7144cef6d3daeacec05d30922`. The branch head is
+`9160c787f92bd0b5cb059c167d2414aac8b78827`; the latest runtime source is
+`a1bfab5f2576c2c45686e49145c2223a1edeab6e`. The pre-rebase tree remains
+recoverable at `backup/issue1649-before-master-rebase-20261104` (`d0c518180`).
+The required WIP snapshot is `c6d9d91d0`.
 
-Three source batches are now on the branch. `42314fbfa` protects caller return
-temporaries while a scalar slot replacement runs nested `DESTROY` callbacks.
-`6227f5ed5` routes compiler temporaries, list-assignment copies, refalias
-wrappers, hash-slice staging, and Storable hook arguments through the shared
-counted-owner release operation. `ddbc52aaf` routes postfix reference
-transfers and tail-call argument cleanup through that same operation. At a
-final counted release, the helper checks current counted and uncounted owner
-identities so lexical/package storage can retain lifecycle ownership without a
-fabricated positive count or reachability query.
+The three newest source batches are now `21e40b81d9` (protect caller return
+temporaries through reentrant scalar cleanup), `da85065585` (release compiler,
+list-assignment, refalias, hash-slice, and Storable temporaries through counted
+slots), and `a1bfab5f25` (route postfix transfers and tail-call arguments
+through the shared release operation). Final counted release consults current
+counted and uncounted owner identities; it does not fabricate a positive count
+or run a reachability query. The rebase preserved current master changes and
+combined them with ownership handling in glob snapshots, closure metadata, and
+array/hash assignment. `deferred_capture_live_argument.t` and
+`postfix_reference_temporary_owner.t` remain present.
 
-Evidence for `ddbc52aaf`: the postfix regression passes 6/6 on system Perl.
-Eight related unit files pass 40/40 on both JVM and interpreter; six related
-system-Perl files pass 32/32. Filtered `nice -n 19 timeout 1800 make test-unit`
-passes shard 0 with 1,041 tests completed, 6 skipped, and no failures in 2m21s.
-The build metadata identifies `2638633fb`; its source diff is the exact tree
-later committed as `ddbc52aaf`. Logs:
-`/private/tmp/issue1649-postfix-reference-system-perl.log`,
-`/private/tmp/issue1649-frame-transfer-system-perl.log`,
-`/private/tmp/issue1649-postfix-tailcall-jvm.log`,
-`/private/tmp/issue1649-postfix-tailcall-interpreter.log`, and
-`/private/tmp/issue1649-postfix-tailcall-focused-make.log`.
+All runtime test evidence below predates the rebase and applies to source
+`ddbc52aaf`, not to current head `a1bfab5f25`. There, the postfix regression
+passed 6/6 on system Perl; eight related files passed 40/40 on both backends;
+six system-Perl files passed 32/32; and filtered `make test-unit` shard 0
+passed 1,041 tests with 6 skipped in 2m21s. The prior temporary-owner batch
+passed eight files 54/54 on both backends and system Perl. Logs remain under
+`/private/tmp/issue1649-*`. Run the next build only after the grouped source
+batch below, so it validates the rebased base and the combined producer fixes.
 
-The earlier `6227f5ed5` batch passed eight related files 54/54 on system Perl,
-JVM, and interpreter; its filtered make gate passed shard 0 in 4m34s. Its logs
-remain at `/private/tmp/issue1649-temp-release-{system-perl-final,jvm-runner,interpreter-runner}.log`
-and `/private/tmp/issue1649-temp-release-focused-make-final.log`.
+The audit identifies six direct production calls to
+`restoreVerifiedCurrentCountedOwnerSlotRefCount` across weaken, scalar
+overwrite, counted temporary release, deferred cleanup, and CODE/destructor
+cleanup. This is a count of repair call sites, not a count of remaining special
+cases; direct count mutations and owner families are broader. Separately,
+`processDeferredBase` reaches `restoreReachableOwnerCount` only through the
+legacy unpaired-release hook in this repository. Production count repairs and
+direct runtime-owner transfers still need producer-level proofs.
 
-The producer audit still has six production count-restoration call sites
-covering weaken, scalar overwrite, counted temporary release, deferred
-cleanup, and CODE/destructor cleanup. The root-based recovery inside
-`processDeferredBase` is reachable only from the legacy unpaired-release hook
-in this repository;
-the remaining count restorations need source-level producer fixes before
-removal. Direct count operations in runtime-native owners and specialized
-transfers also remain under review.
+Next: finish the producer audit without a build, then group fixes that share
+the scalar/array/hash slot transition and deferred-release contract. Include
+replacement, deletion, tied exceptions, owner-count invariants, and related
+argument/return/frame owners where they use the same transition. Keep package
+and shared storage plus IO resource owners separate when their acquisition
+paths differ. Add regressions and validate their Perl semantics with system
+Perl first. After the producer and lifecycle recovery work is complete, run one
+full no-sweeps `nice -n 19 make` on an immutable candidate, then the #1794/#1860,
+weak-reference, resurrection/cycle, and HTML::Tree matrix from that build.
 
-Next batch: finish tracing direct count producers, then migrate scalar and
-aggregate replacement/removal with deferred release where they share the slot
-transition and producer. Group argument aliases, return/mortal owners, closure
-and active CODE captures, unwind, and async cancellation as a separate
-frame-lifetime batch. Keep package/shared storage and IO resource ownership
-separate where their acquisition paths differ. Remove recovery machinery only
-after normal producers preserve their identities. Then rebase against current
-`master` and run the final full no-sweeps, #1794/#1860, weak-reference,
-resurrection/cycle, and HTML::Tree gates on one immutable candidate.
-
-PR #1938 remains OPEN/DRAFT at remote head
-`95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05`; its diff includes
-`deferred_capture_live_argument.t`. The live issue/PR lookup was unavailable on
-2026-11-04 due to GitHub API connectivity. Reconcile local history with current
-master and rerun validation before publication.
+PR #1938 is still OPEN/DRAFT at remote head
+`95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05`; it contains
+`deferred_capture_live_argument.t` but not the rebased local history. Reconcile
+and publish only after the new candidate is validated.
 
 Standard Perl is the oracle for every Perl-visible reference edge and its
 lifetime behavior. A reference-slot transition should retain a new strong
