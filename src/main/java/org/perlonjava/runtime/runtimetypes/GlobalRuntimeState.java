@@ -248,7 +248,8 @@ public final class GlobalRuntimeState {
         });
     }
 
-    void notifyCompiledDirectCallSites(String key, RuntimeScalar replacement) {
+    void notifyCompiledDirectCallSites(
+            String key, RuntimeScalar previous, RuntimeScalar replacement) {
         if (key == null) return;
         ArrayList<CompiledDirectCallSite> live = new ArrayList<>();
         synchronized (this) {
@@ -264,7 +265,7 @@ public final class GlobalRuntimeState {
             if (sites.isEmpty()) compiledDirectCallSites.remove(key);
         }
         for (CompiledDirectCallSite site : live) {
-            site.visibleCodeSlotChanged(replacement);
+            site.visibleCodeSlotChanged(previous, replacement);
         }
     }
 

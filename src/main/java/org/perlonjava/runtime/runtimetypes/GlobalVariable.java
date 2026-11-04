@@ -168,7 +168,7 @@ public class GlobalVariable {
         globalState().noteCodeRefMutation(previous, replacement);
         if (key == null) return;
         for (String related : compiledDirectCallSiteKeys(key)) {
-            globalState().notifyCompiledDirectCallSites(related, replacement);
+            globalState().notifyCompiledDirectCallSites(related, previous, replacement);
         }
     }
 
@@ -177,7 +177,7 @@ public class GlobalVariable {
         globalState().noteCodeRefMutation(slot, slot);
         if (slot != null && slot.globalCodeRefFqn != null) {
             for (String related : compiledDirectCallSiteKeys(slot.globalCodeRefFqn)) {
-                globalState().notifyCompiledDirectCallSites(related, slot);
+                globalState().notifyCompiledDirectCallSites(related, slot, slot);
             }
         }
     }
