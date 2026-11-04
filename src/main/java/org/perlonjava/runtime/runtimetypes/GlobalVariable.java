@@ -3034,7 +3034,7 @@ public class GlobalVariable {
         if (flushPending) {
             previous.releaseCodeSlotBinding();
         } else {
-            previous.releaseCodeSlotBindingWithoutFlush();
+            previous.releaseCodeSlotBindingAtExactBoundary();
         }
     }
 

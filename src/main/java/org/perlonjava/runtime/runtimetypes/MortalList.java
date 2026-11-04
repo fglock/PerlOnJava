@@ -539,6 +539,40 @@ public class MortalList {
         }
     }
 
+    /**
+     * Complete one compiler-owned CODE-slot release at an isolated mortal mark.
+     * Compiled optree retirement is an exact CV-owner transition, not a statement
+     * boundary for older temporary releases in the caller's scope.
+     */
+    public static void releaseTrackedCodeSlotAtExactBoundary(RuntimeScalar scalar) {
+        if (!isActive() || scalar == null || scalar.hasCodeSlotBinding()
+                || !scalar.refCountOwned || scalar.type != RuntimeScalarType.CODE
+                || !(scalar.value instanceof RuntimeCode code) || code.refCount <= 0) {
+            return;
+        }
+        LifecycleRuntimeState state = state();
+        if (state.flushing || state.reachabilityDrainDepth != 0) {
+            deferDecrementIfTracked(scalar);
+            return;
+        }
+
+        int pendingMark = state.pending.size();
+        int tiedMark = state.pendingTiedReleases.size();
+        int ioMark = state.pendingIoReleases.size();
+        int returnOwnerMark = state.pendingUntrackedReturnOwnerReleases.size();
+        pushMark(state);
+        deferDecrementIfTracked(scalar);
+        boolean queuedRelease = state.pending.size() > pendingMark
+                || state.pendingTiedReleases.size() > tiedMark
+                || state.pendingIoReleases.size() > ioMark
+                || state.pendingUntrackedReturnOwnerReleases.size() > returnOwnerMark;
+        if (queuedRelease) {
+            popAndFlush();
+        } else {
+            popMark(state);
+        }
+    }
+
     /** Release the tracked owner held by a scope-exited closure capture. */
     public static void releaseCapturedDecrement(RuntimeScalar scalar) {
         if (!isActive() || scalar == null) return;
