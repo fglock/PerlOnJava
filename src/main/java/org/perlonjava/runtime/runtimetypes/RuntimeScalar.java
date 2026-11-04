@@ -834,6 +834,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
         releaseClosureCapture(false);
         verifyClosureCaptureOwnerCount(PerlOwnerSlot.Kind.SCALAR_CAPTURE);
+        // Releasing the owner slot runs while the capture release is marked
+        // pending, so its lifecycle callback correctly waits. Retry after the
+        // capture count and pending marker have both retired, matching the
+        // aggregate capture path in RuntimeBase.releaseClosureCaptureOwner().
+        if (!hasClosureCaptureOwner()) {
+            WeakRefRegistry.onStrongOwnerSlotReleased(this);
+        }
     }
 
     /** Reconstruct capture ownership for an independent ithread snapshot. */
@@ -860,6 +867,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
         releaseClosureCapture(true);
         verifyClosureCaptureOwnerCount(PerlOwnerSlot.Kind.SCALAR_CAPTURE);
+        if (!hasClosureCaptureOwner()) {
+            WeakRefRegistry.onStrongOwnerSlotReleased(this);
+        }
     }
 
     private synchronized void releaseClosureCapture(boolean legacyOwner) {
