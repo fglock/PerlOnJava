@@ -397,6 +397,25 @@ Current evidence: `/tmp/scalar-cell-scope-owner-release-jvm-b49af5cc9.log`,
 `/tmp/scalar-cell-scope-owner-release-focused-make-20261104.log`, and the
 `*-closure-capture-20261104.log` JVM/interpreter runs. `make check-links` passes.
 
+Initial producer trace: localized package-scalar assignment increments the
+referent before publishing the value and records its `SCALAR_CELL` owner. Restore
+retires that exact slot, restores the package map, then applies the matching
+count decrement. The remaining `refCount == 1 && !localBindingExists` check
+still decides whether to recursively release aggregate contents, so this path
+is not yet fully owner-driven. Whole-glob CODE writes through
+`GlobalCodeRefMap.put/remove` acquire and release CODE-slot bindings; the raw
+decrement in `RuntimeGlob.dynamicRestoreState()` is limited to legacy direct
+stash writes without `hasCountedCodeSlots`. Its Java regression deliberately
+constructs that legacy case. Continue auditing normal CODE producers before
+retiring the bridge.
+
+The existing localized-global aggregate test passes its eight system-Perl
+assertions (13 frontend-only async assertions skip), and passes 21/21 on both
+PerlOnJava backends. Logs:
+`/tmp/issue1649-localized-global-system-perl-20261104.log`,
+`/tmp/issue1649-localized-global-jvm-20261104.log`, and
+`/tmp/issue1649-localized-global-interpreter-20261104.log`.
+
 Next, trace all production
 `restoreVerifiedCurrentCountedOwnerSlotRefCount()` callers back to the store,
 transfer, or cleanup operation that creates each mismatch, then batch fixes at
@@ -411,6 +430,12 @@ no-sweeps `make`, HTML::Tree `t/refloop.t` 8/8 on both backends, and the #1794 /
 `custom_warning_async_suspend_state.t`; rerun and classify them on the final
 candidate. PR #1938 remains an open draft; reconcile its remote head and current
 master before publication.
+
+The fetched `origin/master` is `724802049`; this branch's base `b43a65250` is
+19 commits behind it. PR #1938 is open at `95b7c0cd8`; it has 11 commits not in
+this local history. The pre-rebase tip is preserved at
+`backup/ownership-pre-rebase-20261104`. Reconcile the PR-only commits, then
+rebase the tested candidate onto current master before final validation.
 
 ### Previous checkpoint evidence: owner-source migration at `3cbff31fb` (2026-11-02)
 
