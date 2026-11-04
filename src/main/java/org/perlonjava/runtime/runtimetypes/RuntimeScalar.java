@@ -4140,7 +4140,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (!updatingCompiledDirectCallCache
                 && (packageCodeRefName != null || hasCodeSlotBinding())
                 && (preAssignType != this.type || preAssignValue != this.value)) {
-            GlobalVariable.noteGlobalCodeRefSlotMutation(this);
+            RuntimeScalar previousCodeRef = null;
+            if (preAssignType == RuntimeScalarType.CODE
+                    && preAssignValue instanceof RuntimeCode) {
+                previousCodeRef = new RuntimeScalar();
+                previousCodeRef.type = preAssignType;
+                previousCodeRef.value = preAssignValue;
+            }
+            GlobalVariable.noteGlobalCodeRefSlotMutation(this, previousCodeRef);
         }
 
         // DESTROY rescue detection for reference types.
