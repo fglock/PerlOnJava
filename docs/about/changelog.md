@@ -32,6 +32,8 @@ priorities and future plans.
 
 - Preserve filehandle line-counter assignments made through localized `$.` scopes (#1965).
 
+- Allow assignment to `$>` to update the process effective user ID through the platform POSIX layer (#1972).
+
 - Resolve glob-backed filehandles in `POSIX::isatty` without assuming the glob value is a `RuntimeIO` (#1932).
 
 - Add an initial CryptX Java XS bridge for binary/base64url helpers, functional digests, and HMAC using the existing JCA and Bouncy Castle providers (#1220).

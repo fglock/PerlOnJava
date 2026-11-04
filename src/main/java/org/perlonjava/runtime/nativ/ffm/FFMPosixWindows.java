@@ -240,6 +240,13 @@ public class FFMPosixWindows implements FFMPosixInterface {
     public int geteuid() {
         return CURRENT_UID;
     }
+
+    @Override
+    public int seteuid(int uid) {
+        if (uid == CURRENT_UID) return 0;
+        setErrno(1); // EPERM: Windows identity changes are not emulated.
+        return -1;
+    }
     
     @Override
     public int getgid() {

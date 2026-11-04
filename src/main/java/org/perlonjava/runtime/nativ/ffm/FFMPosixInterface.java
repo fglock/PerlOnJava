@@ -48,6 +48,9 @@ public interface FFMPosixInterface {
      * @return Effective user ID
      */
     int geteuid();
+
+    /** Set the effective user ID; return 0 on success and -1 on failure. */
+    int seteuid(int uid);
     
     /**
      * Get the real group ID.
