@@ -1250,9 +1250,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             untrackedReferenceOwnerSlot = new PerlOwnerSlot(
                     PerlOwnerSlot.Kind.UNTRACKED_REFERENCE);
             untrackedReferenceOwnerSlot.associateUntrackedScalarOwner(this);
-        } else if (untrackedReferenceOwnerSlot.referent() != referent) {
-            releaseUntrackedReferenceOwner(untrackedReferenceOwnerSlot.referent());
         }
+        // Transfer the existing identity in place. PerlOwnerSlot installs its
+        // new referent before releasing the previous one, so cleanup callbacks
+        // cannot observe a gap where this scalar's current value has no owner.
         untrackedReferenceOwnerSlot.acquireUntrackedIdentity(referent);
     }
 
@@ -4065,10 +4066,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (oldBase != null && this.captureRefCountOwned() > 0) {
             releaseAllClosureCaptureReferents(oldBase);
         }
-        if (oldBase != null && this.hasClosureCaptureOwner()) {
-            releaseClosureOwnerSlot();
-        }
-
         // A scalar cell's counted owner slot is reused for its replacement.
         // If active @_ aliases require the old release to be deferred, queue
         // that exact edge before the replacement acquisition moves the slot.
@@ -4118,15 +4115,82 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // cleanup can call Perl code, so a reentrant weaken() sees the new
         // edge's ownership state rather than the displaced value's flag.
         this.refCountOwned = newOwned;
-        refreshDetachedGlobValueOwner();
         this.scalarReferenceContentsOwner = null;
-        refreshArgumentAliasOwnerSlots();
-        if (explicitUndef) {
-            // Explicit undef retires an uncounted scalar edge before deciding
-            // whether another Perl owner still keeps a WEAKLY_TRACKED value
-            // alive. Ordinary overwrite performs this refresh with the rest
-            // of its owner bookkeeping below.
-            refreshUntrackedReferenceOwner();
+        if (isCurrentReferenceSlotMutation(referenceSlotMutationVersion)) {
+            // Hash-element slots remain durable owners when their existing
+            // scalar wrapper is assigned a new referent (the normal class-field
+            // ADJUST path). RuntimeHash's map hook covers slot replacement; this
+            // covers mutation of a slot that is already in the map.
+            if (containerOwner instanceof RuntimeHash && oldBase != this.value) {
+                if (oldBase != null && oldBase.hashSlotOwnerCount > 0) {
+                    oldBase.hashSlotOwnerCount--;
+                }
+                if (this.value instanceof RuntimeBase newBase) {
+                    newBase.hashSlotOwnerCount++;
+                }
+            }
+            this.utf8UncheckedOctets = value.utf8UncheckedOctets;
+            this.utf8MalformedWarning = value.utf8MalformedWarning;
+            this.tainted = value.tainted;
+            this.numericLiteralText = value.numericLiteralText;
+            this.numericContextSeen = value.numericContextSeen;
+            this.firstClassRegexScalar = value.firstClassRegexScalar;
+            this.firstClassRegexReferent = value.firstClassRegexReferent;
+            this.firstClassRegexValue = value.firstClassRegexValue;
+            this.formatPictureTainted = value.formatPictureTainted;
+            this.globalCodeRefFqn = packageCodeRefName != null
+                    ? packageCodeRefName : value.globalCodeRefFqn;
+            if (transferDetachedIoOwner) {
+                transferIoOwner(value, this);
+            } else if (replacementIoOwnerSlot != null) {
+                attachIoOwnerSlot(this, replacementIoOwnerSlot);
+            }
+            // Hash and array assignment normally preserves the aggregate's existing
+            // scalar slot. If that slot belongs to a tied-handler graph, propagate
+            // its conservative marker to the newly installed reference graph too.
+            propagateTiedHandlerMarkerToReferent();
+            if (this.globalCodeRefFqn != null && this.value instanceof RuntimeCode code) {
+                code.hadStashRef = true;
+            }
+            if (!updatingCompiledDirectCallCache
+                    && (packageCodeRefName != null || hasCodeSlotBinding())
+                    && (preAssignType != this.type || preAssignValue != this.value)) {
+                GlobalVariable.noteGlobalCodeRefSlotMutation(this);
+            }
+
+            // Transfer a captured cell's value owner after publishing the new
+            // contents. The slot transfer acquires the replacement first and
+            // then releases the previous referent, so callbacks see the updated
+            // cell and there is no ownership gap.
+            if (this.hasClosureCaptureOwner()) {
+                if ((this.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                        && this.value instanceof RuntimeBase capturedBase
+                        && !WeakRefRegistry.isweak(this)) {
+                    if (this.type == RuntimeScalarType.CODE) {
+                        // Capturing an undef cell precedes assignment in recursive
+                        // closures. The new CODE value needs the capture's own edge,
+                        // independently of the declaring lexical's store owner.
+                        retainClosureCaptureReferent();
+                    } else {
+                        updateClosureOwnerSlot(capturedBase);
+                    }
+                } else {
+                    updateClosureOwnerSlot(null);
+                }
+            }
+        }
+
+        if (isCurrentReferenceSlotMutation(referenceSlotMutationVersion)) {
+            RuntimeBase currentReferent =
+                    (this.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                            && this.value instanceof RuntimeBase referent ? referent : null;
+            updateUntrackedReferenceOwner(currentReferent);
+        }
+        if (isCurrentReferenceSlotMutation(referenceSlotMutationVersion)) {
+            refreshDetachedGlobValueOwner();
+        }
+        if (isCurrentReferenceSlotMutation(referenceSlotMutationVersion)) {
+            refreshArgumentAliasOwnerSlots();
         }
         // An explicitly discarded closure can have an inflated CODE refcount,
         // so waiting for callDestroy() leaves its captures alive indefinitely.
@@ -4140,59 +4204,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && !oldCode.hasPerlOwnerForCaptureOtherThan(countedOwnerSlot)) {
             oldCode.releaseCaptures();
         }
-        // Hash-element slots remain durable owners when their existing
-        // scalar wrapper is assigned a new referent (the normal class-field
-        // ADJUST path). RuntimeHash's map hook covers slot replacement; this
-        // covers mutation of a slot that is already in the map.
-        if (containerOwner instanceof RuntimeHash && oldBase != this.value) {
-            if (oldBase != null && oldBase.hashSlotOwnerCount > 0) {
-                oldBase.hashSlotOwnerCount--;
-            }
-            if (this.value instanceof RuntimeBase newBase) {
-                newBase.hashSlotOwnerCount++;
-            }
-        }
-        if (this.hasClosureCaptureOwner()
-                && (this.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                && this.value instanceof RuntimeBase capturedBase
-                && !WeakRefRegistry.isweak(this)) {
-            if (this.type == RuntimeScalarType.CODE) {
-                // Capturing an undef cell precedes assignment in recursive
-                // closures. The new CODE value needs the capture's own edge,
-                // independently of the declaring lexical's store owner.
-                retainClosureCaptureReferent();
-            } else {
-                updateClosureOwnerSlot(capturedBase);
-            }
-        }
-        this.utf8UncheckedOctets = value.utf8UncheckedOctets;
-        this.utf8MalformedWarning = value.utf8MalformedWarning;
-        this.tainted = value.tainted;
-        this.numericLiteralText = value.numericLiteralText;
-        this.numericContextSeen = value.numericContextSeen;
-        this.firstClassRegexScalar = value.firstClassRegexScalar;
-       this.firstClassRegexReferent = value.firstClassRegexReferent;
-       this.firstClassRegexValue = value.firstClassRegexValue;
-        this.formatPictureTainted = value.formatPictureTainted;
-        this.globalCodeRefFqn = packageCodeRefName != null
-                ? packageCodeRefName : value.globalCodeRefFqn;
-        if (transferDetachedIoOwner) {
-            transferIoOwner(value, this);
-        } else if (replacementIoOwnerSlot != null) {
-            attachIoOwnerSlot(this, replacementIoOwnerSlot);
-        }
-        // Hash and array assignment normally preserves the aggregate's existing
-        // scalar slot. If that slot belongs to a tied-handler graph, propagate
-        // its conservative marker to the newly installed reference graph too.
-        propagateTiedHandlerMarkerToReferent();
-        if (this.globalCodeRefFqn != null && this.value instanceof RuntimeCode code) {
-            code.hadStashRef = true;
-        }
-        if (!updatingCompiledDirectCallCache
-                && (packageCodeRefName != null || hasCodeSlotBinding())
-                && (preAssignType != this.type || preAssignValue != this.value)) {
-            GlobalVariable.noteGlobalCodeRefSlotMutation(this);
-        }
 
         // DESTROY rescue detection for reference types.
         // Only trigger when the OLD value was a reference to the DESTROY target
@@ -4201,7 +4212,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         //   $source->{schema} = $self  (overwriting weak ref with strong ref)
         // But avoids false positives from:
         //   my $self = shift  (new local variable, oldBase is null)
-        if (thisWasWeak
+        if (isCurrentReferenceSlotMutation(referenceSlotMutationVersion)
+                && thisWasWeak
                 && DestroyDispatch.currentDestroyTarget() != null
                 && oldBase == DestroyDispatch.currentDestroyTarget()
                 // The scalar must still occupy durable Perl storage after the
