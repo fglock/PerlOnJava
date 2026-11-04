@@ -4270,7 +4270,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                             || !scalarReferent.referencedByScalarReference
                             || scalarReferent.hasClosureCaptureOwner()
                             || MyVarCleanupStack.isRegistered(scalarReferent));
-                if (liveScalarReferentBinding) {
+                if (liveScalarReferentBinding
+                        && oldBase.hasUncountedPerlOwnerSlotIdentity()) {
+                    // The final counted edge left, but this referent is a live
+                    // lexical scalar cell. Carry its zero-count lifecycle
+                    // obligation on the exact storage identity until scope
+                    // cleanup releases that edge.
+                    oldBase.deferZeroCountFinalReleaseToUncountedOwnerSlots();
+                } else if (liveScalarReferentBinding) {
                     // Named container (my %hash / my @array): the local variable
                     // slot holds a strong reference not counted in refCount.
                     // Don't call callDestroy — the container is still alive.
