@@ -396,6 +396,20 @@ passes 3/3 on both PerlOnJava backends. The focused `make test-unit` gate with
 This closes one active-lexical scalar release path only. The complete no-sweeps
 suite, HTML::Tree 8/8 matrix, and remaining owner-source audits are still open.
 
+On the same immutable candidate, the tied-handler batch passes 30 assertions
+under system Perl and on both PerlOnJava backends. Scalar replacement,
+deferred package release, closure capture, package nesting, and first-weaken
+coverage passes 25 assertions under system Perl and on both backends. The
+unpaired `MortalList.deferDecrement()` entry point has no production Java
+callers; its root-walk and fabricated-count branches in
+`processDeferredBase()` are exercised by synthetic Java tests. Production paths
+still call `restoreVerifiedCurrentCountedOwnerSlotRefCount()` during overwrite,
+deferred release, weakening, and destruction. Trace those count repairs back
+to their producer/transfer/cleanup sites before retiring that compatibility
+path or the synthetic tests. Logs: `/tmp/ownership-tied-batch-system-perl-b49af5cc9.log`,
+`/tmp/ownership-slot-first-weaken-system-perl-b49af5cc9.log`, and the tied and
+slot test `*-b49af5cc9.log` backend captures.
+
 The named-CODE batch now follows explicit slot identity through parser-side
 redefinition and interpreter undef. `SubroutineParser` replaces an installed CV
 through `RuntimeScalar.set()`, which acquires the replacement CODE_SLOT owner and
