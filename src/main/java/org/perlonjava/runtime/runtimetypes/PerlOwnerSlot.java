@@ -682,16 +682,17 @@ public final class PerlOwnerSlot {
         }
         RuntimeBase previous = referent;
         LifecycleRuntimeState previousState = ownerRuntimeState;
+        boolean previousRegistered = registeredInOwnerLedger;
         referent = target;
         ownerRuntime = null;
         ownerRuntimeState = null;
         nativeOwner = nextNativeOwner;
-        if (previous != null && registeredInOwnerLedger) previous.removeOwnerSlot(this);
-        if (previous != null && registeredInOwnerLedger) {
-            PerlRuntime.releaseOwnerSlotReferent(previousState, previous);
-        }
         registeredInOwnerLedger = target != null;
         if (registeredInOwnerLedger) target.addOwnerSlot(this);
+        if (previous != null && previousRegistered) previous.removeOwnerSlot(this);
+        if (previous != null && previousRegistered) {
+            PerlRuntime.releaseOwnerSlotReferent(previousState, previous);
+        }
         finishDeferredCodeRelease(previous);
         finishDeferredScalarCellRelease(previous);
         WeakRefRegistry.onStrongOwnerSlotReleased(previous);
@@ -962,6 +963,7 @@ public final class PerlOwnerSlot {
         RuntimeBase previous = referent;
         PerlRuntime previousRuntime = ownerRuntime;
         LifecycleRuntimeState previousState = ownerRuntimeState;
+        boolean previousRegistered = registeredInOwnerLedger;
         PerlRuntime nextRuntime = nextReferent == null
                 ? null : PerlRuntime.currentOrNull();
         if (nextReferent != null && nextRuntime == null) nextRuntime = previousRuntime;
@@ -970,12 +972,12 @@ public final class PerlOwnerSlot {
         ownerRuntime = nextRuntime;
         ownerRuntimeState = nextRuntime == null || nextReferent == null
                 ? null : nextRuntime.retainOwnerSlotReferent(nextReferent);
-        if (previous != null && registeredInOwnerLedger) previous.removeOwnerSlot(this);
-        if (previous != null && registeredInOwnerLedger) {
-            PerlRuntime.releaseOwnerSlotReferent(previousState, previous);
-        }
         registeredInOwnerLedger = nextReferent != null;
         if (registeredInOwnerLedger) nextReferent.addOwnerSlot(this);
+        if (previous != null && previousRegistered) previous.removeOwnerSlot(this);
+        if (previous != null && previousRegistered) {
+            PerlRuntime.releaseOwnerSlotReferent(previousState, previous);
+        }
         finishDeferredCodeRelease(previous);
         finishDeferredScalarCellRelease(previous);
         WeakRefRegistry.onStrongOwnerSlotReleased(previous);
