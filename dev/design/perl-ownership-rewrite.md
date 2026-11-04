@@ -37,15 +37,15 @@ scope exit. Evidence is in `/private/tmp/active-lexical-scalar-owner-perl.log`,
 `/private/tmp/active-lexical-scalar-overwrite-immutable-20261104.log`, and
 `/private/tmp/overwrite-{active_lexical_scalar_referent_owner,active_lexical_scalar_deferred_release,deferred_capture_live_argument}-{jvm,interpreter}-20261104.log`.
 
-The full `nice -n 19 make` on `08e51a6f0` completed in 8m02 with Joni passing
-and five Perl unit tests failing. Each reproduces at parent `a777b4f42`:
+The full `nice -n 19 make` on immutable `a2b43aa84` completed in 7m40 with
+Joni passing and five Perl unit tests failing:
 `bless_tied_hash_reference.t`, `custom_warning_async_suspend_state.t`,
 `mojolicious_promise_lifecycle_regressions.t`, `substr_core_edge_semantics.t`,
-and `threads_shared_reference_validation.t`. Logs:
-`/private/tmp/ownership-full-make-20261104.log`,
-`/private/tmp/ownership-parent-a777-bless.log`, and
+and `threads_shared_reference_validation.t`. Each reproduces at parent
+`a777b4f42`; no failure was reported in the scalar-owner Java tests. Full log:
+`/private/tmp/ownership-scalar-overwrite-full-20261104.log`. Earlier parent
+reproduction logs are `/private/tmp/ownership-parent-a777-bless.log` and
 `/private/tmp/ownership-parent-{custom-warning,mojolicious,substr,threads-shared}.log`.
-No full gate has run on `34a2c58be` yet.
 
 The producer audit remains open. Production deferred-release producers carry
 `PendingOwnerRelease`; root/snapshot recovery in `processDeferredBase` remains
