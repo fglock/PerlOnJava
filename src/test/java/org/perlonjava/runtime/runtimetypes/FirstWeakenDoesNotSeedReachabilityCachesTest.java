@@ -4,7 +4,6 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("unit")
@@ -17,7 +16,7 @@ class FirstWeakenDoesNotSeedReachabilityCachesTest {
             MyVarCleanupStack.register(weak);
             try {
                 assertTrue(MyVarCleanupStack.isRegistered(weak));
-                assertFalse(MyVarCleanupStack.isLive(weak));
+                assertTrue(MyVarCleanupStack.isLive(weak));
 
                 try (MortalList.ReachabilityQueryMeasurement measurement =
                              MortalList.measureReachabilityQueries()) {
@@ -25,8 +24,8 @@ class FirstWeakenDoesNotSeedReachabilityCachesTest {
 
                     assertTrue(WeakRefRegistry.isweak(weak));
                     assertTrue(MyVarCleanupStack.isRegistered(weak));
-                    assertFalse(MyVarCleanupStack.isLive(weak),
-                            "ordinary first-weaken must not backfill the legacy walker cache");
+                    assertTrue(MyVarCleanupStack.isLive(weak),
+                            "the walker reads the active lexical registration directly");
                     assertEquals(0, measurement.stats().rootQueries);
                     assertEquals(0, measurement.stats().snapshotsBuilt);
                 }

@@ -37,23 +37,16 @@ public class MyVarCleanupStack {
         return PerlRuntime.current().executionState().registeredMyVarCounts;
     }
 
-    /**
-     * Phase I: O(1) check whether the given object is currently registered
-     * (its declaration scope hasn't exited). Used by the reachability
-     * walker to filter out stale ScalarRefRegistry entries — scalars
-     * whose scopes have exited but whose Java-level lifetime persists
-     * (e.g. via MortalList.deferredCaptures) were falsely marking
-     * their referents as reachable.
-     */
+    /** True when the declaration scope for this lexical has not exited. */
     public static boolean isLive(Object var) {
         return isRegistered(var);
     }
 
     /**
-     * True when {@code var} is currently registered as a lexical, regardless
-     * of whether diagnostic weak-root tracking has populated the live-count
-     * map. Used by first-bless and first-weaken lifecycle checks. The
-     * identity-counted registration map keeps this check O(1).
+     * True when {@code var} is currently registered as a lexical. Used by
+     * lifecycle checks that need to distinguish an active lexical from a
+     * stale Java reference. The identity-counted registration map keeps this
+     * check O(1).
      */
     public static boolean isRegistered(Object var) {
         if (var == null) return false;
@@ -66,8 +59,8 @@ public class MyVarCleanupStack {
      * ({@link ReachabilityWalker#isReachableFromRoots}) to seed from
      * still-in-scope lexical containers (e.g. {@code my %METAS}
      * declared at file scope of a still-loading module). The
-     * live-counts map keys are stable identity references to
-     * RuntimeScalar / RuntimeArray / RuntimeHash instances.
+     * returned objects are the active RuntimeScalar / RuntimeArray /
+     * RuntimeHash registrations, keyed by Java identity.
      */
     public static java.util.List<Object> snapshotLiveVars() {
         return new java.util.ArrayList<>(registeredCounts().keySet());
