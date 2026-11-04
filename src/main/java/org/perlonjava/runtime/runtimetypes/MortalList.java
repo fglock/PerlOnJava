@@ -345,6 +345,24 @@ public class MortalList {
             release.complete();
             return;
         }
+        if (base.refCount == 1) {
+            // Retire the counted edge first, then let current owner identities
+            // decide whether this was actually the final Perl lifetime edge.
+            // Lexical and package slots do not participate in the legacy
+            // count, but they must retain the lifecycle obligation without a
+            // fabricated positive count or a reachability query.
+            base.traceRefCount(-1, releaseSite);
+            base.refCount--;
+            if (base.restoreVerifiedCurrentCountedOwnerSlotRefCount()) {
+                release.complete();
+                return;
+            }
+            if (base.hasCurrentUncountedPerlOwnerSlotIdentity()) {
+                base.deferFinalReleaseToUncountedOwnerSlots();
+                release.complete();
+                return;
+            }
+        }
         int checkpoint = pendingSize();
         deferOwnerSlotDecrement(base, null, release);
         drainPendingSince(checkpoint);
@@ -993,35 +1011,7 @@ public class MortalList {
                 || base.refCount <= 0) {
             return;
         }
-
-        scalar.refCountOwned = false;
-        if (base.refCountTrace) {
-            base.traceRefCount(-1, "MortalList.releaseTailCallArgElement");
-            base.releaseOwner(scalar, "releaseTailCallArgElement");
-        }
-        base.releaseActiveOwner(scalar);
-
-        if (--base.refCount > 0) return;
-
-        // Current counted owner slots are authoritative even when the
-        // compatibility refcount transiently undercounts them during a
-        // tail-call handoff.
-        if (base.restoreVerifiedCurrentCountedOwnerSlotRefCount()) return;
-
-        if (base.hasUncountedPerlOwnerSlotIdentity()) {
-            // A live lexical or package slot owns the referent independently
-            // of the compatibility count. Keep the zero-count lifecycle
-            // obligation on that identity instead of pinning refCount to one.
-            base.deferFinalReleaseToUncountedOwnerSlots();
-            return;
-        }
-        if (base.localBindingExists) {
-            throw new IllegalStateException(
-                    "tail-call release found localBindingExists without a live Perl owner slot for "
-                            + base.getClass().getSimpleName());
-        }
-        base.refCount = Integer.MIN_VALUE;
-        DestroyDispatch.callDestroy(base);
+        releaseCountedOwnerImmediately(scalar, "MortalList.releaseTailCallArgElement");
     }
 
     /**
