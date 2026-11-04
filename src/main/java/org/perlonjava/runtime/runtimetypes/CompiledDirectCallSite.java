@@ -15,7 +15,12 @@ final class CompiledDirectCallSite {
         this.name = name;
         this.cachedRef = cachedRef;
         this.compileTimePinned = compileTimePinned;
-        RuntimeCode ownedTarget = compileTimePinned ? initialTarget : null;
+        RuntimeScalar visible = GlobalVariable.getVisibleGlobalCodeRefForDirectCall(name);
+        boolean targetWasRemovedBeforeInstallation = initialTarget != null
+                && initialTarget.defined()
+                && !RuntimeCode.isCodeDefined(visible);
+        RuntimeCode ownedTarget = compileTimePinned || targetWasRemovedBeforeInstallation
+                ? initialTarget : null;
         cachedRef.initializeCompiledDirectCallCache(
                 name, cachedRef.compiledDirectCallSiteIndex(), ownedTarget,
                 compileTimePinned);
@@ -24,10 +29,6 @@ final class CompiledDirectCallSite {
             ownsRetiredTarget = true;
         }
         GlobalVariable.registerCompiledDirectCallSite(name, this);
-        if (name.contains("DeletedMethod")) {
-            System.err.println("CDCS construct " + name + " pinned=" + compileTimePinned
-                    + " initial=" + (initialTarget != null));
-        }
     }
 
     String name() {
@@ -37,23 +38,11 @@ final class CompiledDirectCallSite {
     RuntimeScalar resolve() {
         if (compileTimePinned || ownsRetiredTarget) return cachedRef;
         RuntimeScalar visible = GlobalVariable.getVisibleGlobalCodeRefForDirectCall(name);
-        if (name.contains("DeletedMethod")) {
-            System.err.println("CDCS resolve " + name + " visible="
-                    + (visible == null ? "null" : visible.type + ":" + visible.value)
-                    + " retired=" + ownsRetiredTarget);
-        }
         return visible != null ? visible : GlobalVariable.getGlobalCodeRefForDirectCall(name);
     }
 
     /** Transfer the callsite's lifetime to a CV only when its stash slot is removed. */
     void visibleCodeSlotChanged(RuntimeScalar previous, RuntimeScalar replacement) {
-        if (name.contains("DeletedMethod")) {
-            System.err.println("CDCS notify " + name + " previous="
-                    + (previous == null ? "null" : previous.type + ":" + previous.value)
-                    + " replacement="
-                    + (replacement == null ? "null" : replacement.type + ":" + replacement.value)
-                    + " owns=" + ownsRetiredTarget);
-        }
         if (compileTimePinned) return;
         if (RuntimeCode.isCodeDefined(replacement)) {
             releaseRetiredTarget();
