@@ -890,10 +890,8 @@ public class RuntimeList extends RuntimeBase {
                 || base.refCount <= 0) {
             return;
         }
-        base.releaseOwner(scalar, "RuntimeList materialized-copy undo (" + target + ")");
-        base.releaseActiveOwner(scalar);
-        base.refCount--;
-        scalar.refCountOwned = false;
+        MortalList.releaseCountedOwnerImmediately(
+                scalar, "RuntimeList materialized-copy undo (" + target + ")");
     }
 
     /** Assign a simple scalar LHS from one RHS array when the expression is void. */

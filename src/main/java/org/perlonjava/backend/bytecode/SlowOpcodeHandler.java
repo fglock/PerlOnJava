@@ -1414,10 +1414,8 @@ public class SlowOpcodeHandler {
         if (value != null && value.refCountOwned
                 && RuntimeScalarType.isReference(value)
                 && value.value instanceof RuntimeBase base && base.refCount > 0) {
-            base.releaseOwner(value, "HASH_SLICE_SET temporary owner transfer");
-            base.releaseActiveOwner(value);
-            base.refCount--;
-            value.refCountOwned = false;
+            MortalList.releaseCountedOwnerImmediately(
+                    value, "HASH_SLICE_SET temporary owner transfer");
         }
     }
 
