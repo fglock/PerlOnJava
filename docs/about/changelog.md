@@ -26,7 +26,7 @@ priorities and future plans.
 
 - Preserve named typeglob stringification when copying package stash entries (#1927).
 
-- Reduce repeated eval STRING overhead with lazy state and caching for context-free integer-literal evals (#1911).
+- Reduce eval STRING overhead with lazy goto collections, parser-set AST flags that skip unneeded BytecodeCompiler analysis passes, ScopedSymbolTable snapshot caching, per-thread eval caches without synchronization, cached constructor/class-field metadata, and a re-entrant fast-path in `PerlRuntime.bind()` (#1911).
 
 - Preserve arbitrary bytes in SQLite text columns across DBI fetches (#1923).
 
