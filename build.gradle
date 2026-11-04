@@ -287,6 +287,7 @@ java {
 
 // Repository configuration
 repositories {
+    mavenLocal()
     mavenCentral()
 }
 
@@ -327,7 +328,7 @@ dependencies {
 testing {
     suites {
         test {
-            useJUnitJupiter()
+            useJUnitJupiter(libs.versions.junit.jupiter.get())
         }
     }
 }

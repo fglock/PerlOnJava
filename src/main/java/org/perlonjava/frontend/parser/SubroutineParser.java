@@ -1080,6 +1080,9 @@ public class SubroutineParser {
             // 'parseSubroutineIdentifier' is called to handle cases where the subroutine name might be complex
             // (e.g., namespaced, fully qualified names). It may return null if no valid name is found.
             subName = IdentifierParser.parseSubroutineIdentifier(parser);
+            if (subName != null) {
+                parser.parsedNamedSub = true;
+            }
 
             if (subName == null && peek(parser).text.equals("'")
                     && !parser.ctx.symbolTable.isFeatureCategoryEnabled("apostrophe_as_package_separator")) {

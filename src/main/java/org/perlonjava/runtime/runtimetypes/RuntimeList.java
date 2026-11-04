@@ -859,6 +859,10 @@ public class RuntimeList extends RuntimeBase {
                         : new ArrayList<>();
 
                 RuntimeHash hash = RuntimeHash.createHashForAssignment(remainingArr);
+                // Complete scalar-to-hash autovivification before replacing the
+                // deferred hash's elements. Otherwise this assignment discards
+                // the AutovivificationHash marker without updating the scalar.
+                AutovivificationHash.vivify(runtimeHash);
                 runtimeHash.elements = hash.elements;
                 // Add lvalue references to hash elements for list assignment
                 for (Map.Entry<String, RuntimeScalar> entry : hash.elements.entrySet()) {

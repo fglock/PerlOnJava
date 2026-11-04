@@ -60,6 +60,10 @@ public class DebugHooks {
     private static RuntimeList dispatchSubroutine(RuntimeScalar target, RuntimeArray args,
                                                    int context, String debuggerName) {
         DebugRuntimeState state = state();
+        // Fast path: no debugger active and not inside DB::sub dispatch.
+        if (!state.debugMode && !state.dispatchingDbSub) {
+            return null;
+        }
         RuntimeScalar selectedTarget = debuggerTargetCode(target);
         if (selectedTarget == null
                 && isCurrentDebuggerTarget(target, state.debuggerTargetCode)) {

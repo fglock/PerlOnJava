@@ -984,11 +984,10 @@ public class EmitBlock {
     }
 
     private static void emitPostBlockStrictOptions(MethodVisitor mv, AbstractNode node) {
-        Object strictOptionsObj = node.getAnnotation("postBlockStrictOptions");
-        if (strictOptionsObj instanceof Integer strictOptions) {
-            if (!node.getBooleanAnnotation("blockIsSubroutine")) {
-                Object warningBitsObj = node.getAnnotation("postBlockWarningBits");
-                String warningBits = warningBitsObj instanceof String bits ? bits : "";
+        if (!(node instanceof BlockNode blockNode)) return;
+        if (blockNode.postBlockStrictOptions != null) {
+            if (!blockNode.getBooleanAnnotation("blockIsSubroutine")) {
+                String warningBits = blockNode.postBlockWarningBits != null ? blockNode.postBlockWarningBits : "";
                 mv.visitLdcInsn(warningBits);
                 mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                         "org/perlonjava/runtime/WarningBitsRegistry",
@@ -1000,15 +999,14 @@ public class EmitBlock {
                         "setRuntimeWarningBits",
                         "(Ljava/lang/String;)V", false);
             }
-            mv.visitLdcInsn(strictOptions);
+            mv.visitLdcInsn(blockNode.postBlockStrictOptions);
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/WarningBitsRegistry",
                     "setCallSiteHints",
                     "(I)V", false);
         }
-        Object postBlockFeatureFlags = node.getAnnotation("postBlockFeatureFlags");
-        if (postBlockFeatureFlags instanceof Integer featureFlags) {
-            mv.visitLdcInsn(featureFlags);
+        if (blockNode.postBlockFeatureFlags != null) {
+            mv.visitLdcInsn(blockNode.postBlockFeatureFlags);
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/FeatureFlagsRegistry",
                     "setCallSiteFeatureFlags",
