@@ -6,6 +6,8 @@ priorities and future plans.
 
 ## Work in progress
 
+- Make an explicit `-n` run sample new and previously tested CPAN targets while maintaining a rolling window of target and dependency results.
+
 - Recognize a bareword filehandle when `print`'s implicit `$_` list ends at a block close (#1948).
 
 - Accept YAML-style mapping syntax in `YAML::Syck::LoadJSON`, matching Syck's JSON loader behavior (#1942).
