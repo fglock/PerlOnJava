@@ -6,6 +6,7 @@ priorities and future plans.
 
 ## Work in progress
 
+- Keep temporary glob-reference filehandles alive through their active `@_` frame, preventing premature TLS socket destruction (#1649, #1957).
 - Disable corrective sweeps by default while migrating to explicit reference ownership; retain temporary scalar call and mortal return values through their caller boundaries, and balance argument, scalar-cell, closure, aggregate, package scalar/array/hash roots, tied-handler, shared-view, named CODE, persistent state, and destructor lifetimes (#1649).
 - Use live scalar-owner slots to preserve nested untracked aggregates on first weaken, avoid package-root walks, and clear weak observers at final release (#1649).
 - Release tail-call arguments from explicit owner slots without a root-graph fallback (#1649).
