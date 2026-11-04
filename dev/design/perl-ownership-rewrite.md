@@ -3,8 +3,9 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-04):** #1649 remains in Phase 2 on
-`wip/ownership-batch-20261104-192548`, based on local merge commit
-`8367167b64` from master `289e34284d`; HEAD is `ae9b22a3bb`. The JVM now holds
+`wip/ownership-doc-batch-20261104-221343`, based on local merge commit
+`8367167b64` from master `289e34284d`. The latest code change is
+`ae9b22a3bb`; HEAD `1b4dfff0e9` is a WIP snapshot of this checkpoint. The JVM now holds
 chained method invocants while their arguments run and releases them on normal
 return, labeled `last`, eval exception, and nonlocal control-flow exits. The
 temporary IO handle from the App-Scaffolder report survives nested template
@@ -29,16 +30,26 @@ on this candidate.
 Batching plan: `RuntimeScalar.transitionReferenceSlot` already handles scalar
 overwrite and `undefine()`, `RuntimeScalar.transitionContainerSlots` handles
 aggregate replacement, and common array removals preserve the removed slot's
-release token. The next batch audits mutation paths that bypass those helpers
-and the producers behind current-count repair in scalar overwrite, first
-weaken, and deferred release. Keep synthetic stale-count tests as defensive
-coverage; use normal Perl-visible operations to prove producer invariants.
-Bundle fixes from this audit into one focused build. Then group remaining
-package/glob/CODE roots, tied values, closure/CODE transfers, cloned/shared
-storage, cycles, suspended frames, and IO owners by their actual acquisition
-and release sites, with one focused build for that batch. Remove ordinary
-repair and reachability recovery only after the producers are explicit, then
-run one immutable full `nice -n 19 make` and the no-sweeps acceptance matrix.
+release token. The open inventory groups into about nine overlapping owner
+families, not nine independent fixes: deferred/count repair, first weaken,
+aggregate roots and cycles, closure/CODE transfer, detached package/glob state,
+destruction and resurrection, temporary roots, suspended frames, and resource
+holders. The source call-site audit found no production caller of the
+unpaired `MortalList.deferDecrement`; production deferred-release sites use
+slot-bearing APIs. `restoreReachableOwnerCount` is reachable only through that
+legacy unpaired hook. The count-repair batch should therefore trace the
+remaining verified-slot repair call sites to their producers instead of
+treating synthetic unpaired releases as evidence of a normal mismatch.
+
+Bundle producer and invariant fixes into two focused build gates: first
+current-count repair, deferred-release producers, and mutation paths that
+bypass shared transitions; then remaining root, closure/clone, frame, and
+resource transfers. Run system Perl and focused backend regressions before
+each gate. Synthetic stale-count tests remain defensive coverage; normal
+Perl-visible operations must prove producer invariants. Remove ordinary
+recovery only after those producers are explicit, then run one immutable full
+`nice -n 19 make` and the no-sweeps acceptance matrix. This is an estimate;
+new producer defects found by the audit may add a focused gate.
 PR #1938 remains OPEN/DRAFT at remote head
 `95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05`; it is not reconciled with this
 local batch.
