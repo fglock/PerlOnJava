@@ -2,98 +2,40 @@
 
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
-**Current checkpoint (2026-11-04):** #1649 is on local branch
-`wip/ownership-audit-20261104-075516`; its latest runtime source commit is
-`fc30b9c05`. Current master `b43a652507d836bfbd78e3e6c250021c0b3355aa`
-is an ancestor, so no rebase was needed. Previous batches stage nonzero-argument generated JVM direct calls in
-a `RuntimeCode.CallArguments` frame before evaluating expressions, and carry
-`Storable::dclone` results through a deferred `RETURN_VALUE` owner. The scalar
-lexical batch adds `ACTIVE_LEXICAL` identities for registered scalar referent
-cells, alongside array and hash pads. Scalar-reference creation backfills the
-identity when registration came first; scope cleanup releases it. Tail-call
-cleanup no longer fabricates `refCount = 1` when `localBindingExists` has no
-owner identity.
+**Current checkpoint (2026-11-04):** #1649 is on
+`wip/issue1649-next-batch-20261104-ongoing`, at WIP snapshot
+`5c8c92c9df5ca033a5e202c8c148070dc6f0965a`; the tree is clean. Full no-sweeps
+acceptance at `d551c9cdb` remains an ancestor. The localized package-scalar
+restore fix is the current pending runtime batch: it releases the displaced
+scalar edge after restoring the package slot, and defers zero-count cleanup to
+the live package aggregate identity. Its Perl regression passes 7/7 on system
+Perl, JVM, and interpreter; the unfixed parent fails on both backends. The
+focused shard-0 `make test-unit` gate passes, and ten neighboring regressions
+pass 69 checks per backend, including `deferred_capture_live_argument.t`.
+Logs are `/tmp/issue1649-localized-scalar-*` and
+`/tmp/issue1649-scalar-aggregate-batch-*`. Full `make` has not yet run on this
+candidate.
 
-Deferred final release uses the exact uncounted identity for a scalar cell
-referenced by `\$cell`, keeping its zero-count lifecycle pending until that
-lexical/package owner leaves. Scalar overwrite now applies the same rule after
-releasing its final counted edge. Both paths defer lifecycle on the current
-owner identity rather than treating `localBindingExists` as proof. The new
-Java lifecycle tests cover scalar-reference registration order and weak
-observer lifetime through overwrite; the Perl deferred-release regression
-covers array-element deletion while the scalar cell remains in scope.
-The WIP snapshot also adds `ScalarOverwriteRetiresOldCountedOwnerTest`, which
-checks that replacement retires the old slot and clears its weak observer; its
-focused unit gate passed before snapshotting.
-`TiedHandlerNestedOwnerCountInvariantTest` now checks the normal pre-weaken
-tied-handler path: the nested hash edge and one scalar edge match `refCount`,
-and untie releases the final edge without a root query.
+The source audit confirms that scalar assignment/undef and aggregate stores
+already use `transitionReferenceSlot` and `transitionContainerSlots` as their
+main acquisition/publication paths. Production deferred-release producers
+carry `PendingOwnerRelease`; root/snapshot recovery in `processDeferredBase` is
+reachable through the legacy unpaired hook, which repository search finds in
+Java fixtures but not production callers. Verified count restoration and
+compatibility capture release still require producer audit. The next batch will
+group scalar overwrite/undef and localized restore with array/hash replacement,
+removal, clear, and deferred release, since they share the same slot-transition
+contract. Frame lifetimes (argument aliases, return/mortal values, closures,
+active CODE, exception/unwind, and async cancellation) form the next producer
+batch; package/shared-storage and resource owners remain separate. Run system
+Perl first, assemble related source changes before the focused build, then run
+both backends. Reserve the full no-sweeps gate and #1794/#1860/HTML::Tree
+acceptance for the final immutable candidate.
 
-`WeakRefRegistry.weaken` now checks validated uncounted owner identities before
-falling back to `localBindingExists`. A current lexical/package slot carries
-the deferred lifecycle until its release; stale `UNTRACKED_REFERENCE` slots do
-not qualify. `ActiveLexicalAggregateWeakOwnerLifecycleTest` failed before this
-change at the missing deferred-owner assertion and now verifies final weak
-cleanup with zero root queries. The system Perl regression passes 16/16, and
-the focused `nice -n 19 make test-unit` gate passes all Java shards plus that
-Perl fixture. Direct JVM and interpreter runs each pass 16/16. Logs:
-`/private/tmp/active-lexical-aggregate-weak-owner-unfixed-20261104.log`,
-`/private/tmp/active-lexical-aggregate-weak-owner-final-20261104.log`, and
-`/private/tmp/issue-1649-active-aggregate-weak-{system-perl,jvm,interpreter}-20261104.log`.
-
-System Perl passes `active_lexical_scalar_referent_owner.t` 9/9 and
-`active_lexical_scalar_deferred_release.t` 6/6. The focused immutable
-`JPERL_TEST_FILTER=active_lexical_scalar_referent_owner nice -n 19 make test-unit`
-gate passed in 1m09 on `34a2c58be`. Sweeps-disabled JVM and interpreter runs
-pass both scalar lexical regressions and `deferred_capture_live_argument.t`.
-The `refcount/tied_handler_nested_value_owner_before_weaken.t` regression
-passes 2/2 on system Perl and both no-sweeps backends. The focused
-`JPERL_TEST_FILTER=deferred_capture_live_argument timeout 900 nice -n 19 make test-unit`
-gate passes on the tree committed as `04d7b8c54` in 1m03, including the new
-Java count invariant, all Java unit shards, and the live-argument Perl fixture.
-Log: `/private/tmp/ownership-focused-live-argument-and-java-test-final-20261104.log`.
-The Java owner-slot assertion fails on parent `95f85f10f`: it sees zero
-`ACTIVE_LEXICAL` identities where the candidate records one and releases it at
-scope exit. Evidence is in `/private/tmp/active-lexical-scalar-owner-perl.log`,
-`/private/tmp/active-lexical-scalar-owner-parent-full-20261104.log`,
-`/private/tmp/active-lexical-scalar-deferred-perl.log`,
-`/private/tmp/active-lexical-scalar-deferred-immutable-20261104.log`,
-`/private/tmp/active-lexical-scalar-overwrite-immutable-20261104.log`, and
-`/private/tmp/overwrite-{active_lexical_scalar_referent_owner,active_lexical_scalar_deferred_release,deferred_capture_live_argument}-{jvm,interpreter}-20261104.log`.
-
-The full `nice -n 19 make` on immutable `a2b43aa84` completed in 7m40 with
-Joni passing and five Perl unit tests failing:
-`bless_tied_hash_reference.t`, `custom_warning_async_suspend_state.t`,
-`mojolicious_promise_lifecycle_regressions.t`, `substr_core_edge_semantics.t`,
-and `threads_shared_reference_validation.t`. Each reproduces at parent
-`a777b4f42`; no failure was reported in the scalar-owner Java tests. Full log:
-`/private/tmp/ownership-scalar-overwrite-full-20261104.log`. Earlier parent
-reproduction logs are `/private/tmp/ownership-parent-a777-bless.log` and
-`/private/tmp/ownership-parent-{custom-warning,mojolicious,substr,threads-shared}.log`.
-
-The producer audit remains open. Production deferred-release producers carry
-`PendingOwnerRelease`; root/snapshot recovery in `processDeferredBase` remains
-behind legacy unpaired `deferDecrement`, which repository search finds only in
-Java tests and design documentation, not production callers.
-PadWalker still has a fallback `releaseClosureCapture()` when its capture-slot
-mapping is absent. Capture creation in the parser and both backends builds
-parallel scalar/aggregate owner-slot arrays; runtime cloning reconstructs them,
-and bound methods retain explicit slots. The null-slot release remains reachable
-through compatibility capture metadata and needs producer-level audit before
-removal. Clone/shared-storage ownership, CODE pad constants, package and
-resource roots, exception/unwind, and remaining count-restoration sites still
-need review. Corrective-sweep entry points have no production callers, but the
-bridge and recovery machinery remain until these owner paths are complete.
-
-PR #1938 remains OPEN/draft at remote head
-`95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05`; its paginated diff includes
-`deferred_capture_live_argument.t`, matching the PerlOnJava6 copy. Local
-history still needs reconciliation before publication. Shallow current master
-`b43a652507d836bfbd78e3e6c250021c0b3355aa` is already an ancestor of the local
-branch, so no rebase was needed. The live-argument regression passes 3/3 on
-system Perl and both no-sweeps backends on the current checkout; logs are
-`/private/tmp/deferred_capture_live_argument-{system-perl,jvm,interpreter}-20261104-resume.log`.
-Final no-sweeps and integration acceptance remain outstanding.
+PR #1938 was last checked OPEN/draft at remote head
+`95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05`; its diff includes
+`deferred_capture_live_argument.t`. Reconcile the local history and recheck
+current master/PR state before publication.
 
 Standard Perl is the oracle for every Perl-visible reference edge and its
 lifetime behavior. A reference-slot transition should retain a new strong
