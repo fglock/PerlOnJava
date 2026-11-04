@@ -1921,11 +1921,10 @@ public class ReachabilityWalker {
                     }
                 }
             }
-            // Live regex lexicals own executable callback captures even when
-            // weak-ref tracking has not populated the optimized live-count
-            // snapshot. Seed only regex scalars from the actual cleanup stack
-            // so callback captures remain reachable without widening ordinary
-            // lexical reachability for the refcount walk.
+            // Live regex lexicals own executable callback captures. Seed only
+            // regex scalars from the actual cleanup stack so callback captures
+            // remain reachable without widening ordinary lexical reachability
+            // for the refcount walk.
             for (Object registeredVar : MyVarCleanupStack.snapshotRegisteredVars()) {
                 if (!budget.visitEdge()) return true;
                 if (!(registeredVar instanceof RuntimeScalar scalar)
