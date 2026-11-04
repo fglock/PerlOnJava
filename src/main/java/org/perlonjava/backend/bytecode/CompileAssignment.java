@@ -2405,12 +2405,11 @@ public class CompileAssignment {
                                 }
                                 bytecodeCompiler.emit(Opcodes.REGISTER_MY_VAR);
                                 bytecodeCompiler.emitReg(reg);
-                                // Keep the named lexical cell in the active pad
-                                // before it can become the target of a scalar
-                                // reference. createReference() can then acquire
-                                // its owner slot, and scope exit can retire that
-                                // exact binding on the interpreter backend.
-                                bytecodeCompiler.emitActiveLexicalBinding(reg, varName);
+                                if (leftOp.getBooleanAnnotation("signatureParameterDeclaration")) {
+                                    // Signature defaults bypass lexical-alias resolution,
+                                    // so bind their fresh scalar cell explicitly.
+                                    bytecodeCompiler.emitActiveLexicalBinding(reg, varName);
+                                }
                                 bytecodeCompiler.emitVarAttrsIfNeeded(leftOp, reg, "$");
                                 bytecodeCompiler.emit(Opcodes.SET_SCALAR);
                                 bytecodeCompiler.emitReg(reg);
@@ -2424,7 +2423,9 @@ public class CompileAssignment {
                                 }
                                 bytecodeCompiler.emit(Opcodes.REGISTER_MY_VAR);
                                 bytecodeCompiler.emitReg(reg);
-                                bytecodeCompiler.emitActiveLexicalBinding(reg, varName);
+                                if (leftOp.getBooleanAnnotation("signatureParameterDeclaration")) {
+                                    bytecodeCompiler.emitActiveLexicalBinding(reg, varName);
+                                }
                                 bytecodeCompiler.emit(Opcodes.SET_SCALAR);
                                 bytecodeCompiler.emitReg(reg);
                                 bytecodeCompiler.emitReg(valueReg);
