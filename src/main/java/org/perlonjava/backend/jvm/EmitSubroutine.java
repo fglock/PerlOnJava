@@ -1050,11 +1050,14 @@ public class EmitSubroutine {
                             : GlobalVariable.getGlobalCodeRefForFreshLookup(directName);
             boolean compileTimePinned = parseTimeCodeRef != null
                     && emissionTimeCodeRef != parseTimeCodeRef;
+            boolean retainTargetIfDeletedBeforeCallsiteInstall =
+                    operatorNode.getBooleanAnnotation("retainTargetIfDeletedBeforeCallsiteInstall");
             RuntimeScalar descriptor = new RuntimeScalar();
             String className = emitterVisitor.ctx.javaClassInfo.javaClassName;
             int siteIndex = emitterVisitor.ctx.javaClassInfo.addPadConstant(descriptor);
             descriptor.configureCompiledDirectCallSite(
-                    directName, siteIndex, initialCallRef, compileTimePinned);
+                    directName, siteIndex, initialCallRef, compileTimePinned,
+                    retainTargetIfDeletedBeforeCallsiteInstall);
             mv.visitLdcInsn(directName);
             mv.visitLdcInsn(className);
             mv.visitLdcInsn(siteIndex);

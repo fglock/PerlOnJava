@@ -1108,6 +1108,7 @@ public class Variable {
                 && operatorNode.operator.equals("&")
                 && operatorNode.operand instanceof IdentifierNode) {
             operatorNode.setAnnotation("directNamedCall", true);
+            operatorNode.setAnnotation("retainTargetIfDeletedBeforeCallsiteInstall", true);
         }
 
         Node list;
