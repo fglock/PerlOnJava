@@ -1062,15 +1062,18 @@ public class ScopedSymbolTable {
 
         // Clone warning flags
         st.warningFlagsStack.pop(); // Remove the initial value pushed by enterScope
-        st.warningFlagsStack.push((BitSet) this.warningFlagsStack.peek().clone());
+        BitSet wf = this.warningFlagsStack.peek();
+        st.warningFlagsStack.push(wf.isEmpty() ? new BitSet() : (BitSet) wf.clone());
 
         // Clone disabled warnings flags
         st.warningDisabledStack.pop(); // Remove the initial value pushed by enterScope
-        st.warningDisabledStack.push((BitSet) this.warningDisabledStack.peek().clone());
+        BitSet wd = this.warningDisabledStack.peek();
+        st.warningDisabledStack.push(wd.isEmpty() ? new BitSet() : (BitSet) wd.clone());
 
         // Clone fatal warnings flags
         st.warningFatalStack.pop(); // Remove the initial value pushed by enterScope
-        st.warningFatalStack.push((BitSet) this.warningFatalStack.peek().clone());
+        BitSet wft = this.warningFatalStack.peek();
+        st.warningFatalStack.push(wft.isEmpty() ? new BitSet() : (BitSet) wft.clone());
 
         // Clone feature flags
         st.featureFlagsStack.pop(); // Remove the initial value pushed by enterScope

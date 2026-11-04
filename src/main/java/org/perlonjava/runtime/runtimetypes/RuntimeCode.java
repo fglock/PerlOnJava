@@ -5393,10 +5393,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     : topLevelMain ? runtimePackage : capturedSymbolTable.getCurrentPackage();
 
             try {
+                // Parse the eval string (tokenize first so sawBegin is available for the alias gate below)
+                Lexer lexer = new Lexer(evalString);
+                tokens = lexer.tokenize();
                 // Alias captured outer variables before parsing.
                 // BEGIN/use execute during parsing, so their aliases must be in place first.
                 // Named subs in eval also access outer lexicals via these aliases.
-                {
+                // Skip this O(visible_vars) loop on the common path (no BEGIN or named sub).
+                if (lexer.sawBeginOrSub) {
                 Map<Integer, SymbolTable.SymbolEntry> capturedVars = capturedSymbolTable.getAllVisibleVariables();
                 for (SymbolTable.SymbolEntry entry : capturedVars.values()) {
                     if (!entry.name().equals("@_") && !entry.decl().isEmpty() && !entry.name().startsWith("&")) {
@@ -5452,9 +5456,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
                 evalCompilerOptions.fileName = evalFilename;
                 warnSignatureArgsInEval(evalString, evalFilename);
-                // Parse the eval string
-                Lexer lexer = new Lexer(evalString);
-                tokens = lexer.tokenize();
                 // Create parser context
                 ScopedSymbolTable parseSymbolTable = capturedSymbolTable.snapShot();
                 parseSymbolTable.setCurrentPackage(
