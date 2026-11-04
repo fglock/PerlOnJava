@@ -47,7 +47,7 @@ final class CompiledDirectCallSite {
 
     void release() {
         GlobalVariable.unregisterCompiledDirectCallSite(name, this);
-        cachedRef.releaseCodeSlotBinding();
+        cachedRef.releaseCodeSlotBindingWithoutFlush();
         target = null;
         cachedRef.type = RuntimeScalarType.UNDEF;
         cachedRef.value = null;
