@@ -22,7 +22,7 @@ class UntrackedReferenceOwnerReplacementOrderTest {
             int mark = MyVarCleanupStack.pushMark();
             RuntimeScalar element = null;
             try {
-                storage.addClonedElement(previous.createReference());
+                storage.addClonedElement(referenceTo(previous));
                 element = storage.elements.get(0);
                 MyVarCleanupStack.register(element);
                 PerlOwnerSlot owner = element.untrackedReferenceOwnerSlot();
@@ -30,7 +30,7 @@ class UntrackedReferenceOwnerReplacementOrderTest {
                         "registering the scalar makes its uncounted value edge durable");
                 events.clear();
 
-                element.set(replacement.createReference());
+                element.set(referenceTo(replacement));
 
                 assertEquals(List.of("replacement:add", "previous:remove"), events);
                 assertSame(owner, element.untrackedReferenceOwnerSlot());
@@ -66,5 +66,12 @@ class UntrackedReferenceOwnerReplacementOrderTest {
             events.add(name + ":remove");
             super.removeOwnerSlot(slot);
         }
+    }
+
+    private static RuntimeScalar referenceTo(RuntimeBase referent) {
+        RuntimeScalar reference = new RuntimeScalar();
+        reference.type = RuntimeScalarType.REFERENCE;
+        reference.value = referent;
+        return reference;
     }
 }
