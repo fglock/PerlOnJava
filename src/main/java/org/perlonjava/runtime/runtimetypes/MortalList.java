@@ -218,6 +218,19 @@ public class MortalList {
     }
 
     /**
+     * Whether a release for this exact referent is queued while a call argument
+     * is being staged. The staging scalar is a live argument alias, so it must
+     * acquire that identity before the queued temporary release can drain.
+     */
+    static boolean hasPendingStrongReleaseFor(RuntimeBase referent) {
+        if (referent == null) return false;
+        for (RuntimeBase pending : state().pending) {
+            if (pending == referent) return true;
+        }
+        return false;
+    }
+
+    /**
      * Acquire and queue the mortal reference created by the first bless of a
      * referent. Unlike an ordinary removed storage edge, this temporary stays
      * live until the deferred boundary processes its release.
