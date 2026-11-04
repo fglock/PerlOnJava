@@ -2080,10 +2080,10 @@ public class MortalList {
                         && args.elements.stream().anyMatch(argument -> argument != null
                                 && argument.value == pending);
                 // A CORE::GLOBAL wrapper can tail-call the bless override with
-                // a newly blessed argument and return that same reference.
-                // Its bless temporary is the return value's only owner until
-                // the caller materializes the result, so keep the pending
-                // decrement queued for the caller's normal scope cleanup.
+                // a newly blessed argument. Keep its mortal decrement queued
+                // while either the tail-call argument list or the completed
+                // result still carries that reference; the receiving call
+                // boundary will retire it after the handoff.
                 if (abandonedBirthTemporary && directlyReferences(returnedResult, pending)) {
                     continue;
                 }
