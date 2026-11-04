@@ -174,10 +174,15 @@ public class GlobalVariable {
 
     /** Invalidate CODE-root caches after a stash CODE slot changes in place. */
     static void noteGlobalCodeRefSlotMutation(RuntimeScalar slot) {
+        noteGlobalCodeRefSlotMutation(slot, slot);
+    }
+
+    /** Preserve the pre-mutation CV while dispatching an in-place slot change. */
+    static void noteGlobalCodeRefSlotMutation(RuntimeScalar slot, RuntimeScalar previous) {
         globalState().noteCodeRefMutation(slot, slot);
         if (slot != null && slot.globalCodeRefFqn != null) {
             for (String related : compiledDirectCallSiteKeys(slot.globalCodeRefFqn)) {
-                globalState().notifyCompiledDirectCallSites(related, slot, slot);
+                globalState().notifyCompiledDirectCallSites(related, previous, slot);
             }
         }
     }
