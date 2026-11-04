@@ -219,12 +219,16 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
                 // localized alias to a still-live request or cache must not
                 // release its fields while another Perl owner can still use
                 // them (Dancer2 uploads keep their File::Temp handle there).
+                PerlOwnerSlot localValueOwner = localVar == null
+                        ? null : localVar.countedOwnerSlot();
                 boolean releasesLastContainerOwner = localVar != null
                         && localVar.refCountOwned
                         && (localVar.type & RuntimeScalarType.REFERENCE_BIT) != 0
                         && localVar.value instanceof RuntimeBase localBase
-                        && localBase.refCount == 1
-                        && !localBase.localBindingExists;
+                        && localValueOwner != null
+                        && localValueOwner.isActive()
+                        && localValueOwner.referent() == localBase
+                        && !localBase.hasCurrentPerlOwnerIdentityOtherThan(localValueOwner);
                 if (releasesLastContainerOwner && localVar.value instanceof RuntimeHash localHash) {
                     MortalList.deferDestroyForContainerClear(localHash.elements.values());
                 } else if (releasesLastContainerOwner && localVar.value instanceof RuntimeArray localArray) {
