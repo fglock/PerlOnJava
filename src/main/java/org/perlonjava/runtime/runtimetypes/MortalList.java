@@ -1755,6 +1755,14 @@ public class MortalList {
                 // legacy reference count. Keep the zero-count cell alive
                 // until its last alias slot releases and runs scalar cleanup.
                 base.deferZeroCountFinalReleaseToUncountedOwnerSlots();
+            } else if (base instanceof RuntimeScalar scalar
+                    && scalar.referencedByScalarReference
+                    && base.hasUncountedPerlOwnerSlotIdentity()) {
+                // A registered lexical/package scalar cell is itself the
+                // referent of \$cell. Retain that lifetime at refCount zero
+                // through its exact storage identity; localBindingExists is
+                // metadata and cannot stand in for the Perl edge.
+                base.deferZeroCountFinalReleaseToUncountedOwnerSlots();
             } else if (base.localBindingExists) {
                 if (base instanceof RuntimeScalar scalar
                         && scalar.referencedByScalarReference
