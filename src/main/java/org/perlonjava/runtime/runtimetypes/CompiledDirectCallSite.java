@@ -46,7 +46,7 @@ final class CompiledDirectCallSite {
     /** Transfer the callsite's lifetime to a CV only when its stash slot is removed. */
     void visibleCodeSlotChanged(RuntimeScalar previous, RuntimeScalar replacement) {
         if (compileTimePinned) return;
-        if (RuntimeCode.isCodeDefined(replacement)) {
+        if (replacement != null) {
             releaseRetiredTarget();
             return;
         }
