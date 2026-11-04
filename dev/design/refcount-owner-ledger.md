@@ -397,6 +397,19 @@ including the Java owner test (2/2). Logs:
 oracle logs are `/private/tmp/named-undef-visible-code-slot-system-perl-20261104-final.log`
 and `/private/tmp/defined-code-slot-compile-time-delete-system-perl-20261104.log`.
 
+The related `deferred_capture_live_argument.t` regression is present and passes
+3/3 on system Perl, JVM, and interpreter. Logs are
+`/tmp/deferred-capture-live-argument-system-perl-20261104.log`,
+`/tmp/deferred-capture-live-argument-jvm-20261104.log`, and
+`/tmp/deferred-capture-live-argument-interpreter-20261104.log`. A source audit
+of deferred releases found no production Java caller of the legacy unpaired
+`MortalList.deferDecrement` hook; its current callers are Java tests. The
+reachability-based count-repair and lifecycle branches in `processDeferredBase`
+require a missing `PendingOwnerRelease`, while in-repository production release
+paths queue an exact release token. This narrows the ordinary lifecycle
+fallback surface but does not yet justify deleting the hook: its synthetic
+tests and the other producer families still need an identity-based audit.
+
 The parent `b3ad73b0d` passes the named-undef JVM test 4/4 but fails interpreter
 checks 1 and 4 (2/4); checkpoint `3a3d12213` passes 4/4 on both backends. The
 unfiltered unit gate exposed six failures. Five direct no-sweeps replays failed
