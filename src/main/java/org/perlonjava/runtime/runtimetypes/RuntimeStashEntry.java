@@ -61,6 +61,17 @@ public class RuntimeStashEntry extends RuntimeGlob {
         return this;
     }
 
+    /** Snapshot this named stash glob for a value returned by each(). */
+    public RuntimeGlob createStashIteratorCopy() {
+        RuntimeGlob copy = super.createDetachedCopy();
+        copy.setStringificationName(this.globName);
+        // Preserve the canonical CODE scalar identity: a glob copied through
+        // each() aliases the same CV slot, even though its other slots are a
+        // snapshot of the source glob.
+        copy.codeSlot = GlobalVariable.globalCodeRefs.get(this.globName);
+        return copy;
+    }
+
     /**
      * A constant.pm proxy is a scalar-reference value stored directly in the
      * stash hash, not a typeglob value. Taking a reference to that hash value
@@ -294,20 +305,18 @@ public class RuntimeStashEntry extends RuntimeGlob {
                     GlobalVariable.globalGlobs.put(this.globName, true);
                     GlobalVariable.markExplicitGlobAssignment(this.globName);
 
-                    if (sourceGlobName == null) {
-                        // Detached glob (e.g. returned by delete $stash->{name}):
-                        // its slot values live on the glob object itself, not in
-                        // GlobalVariable maps. Re-install those slots into the
-                        // destination's slot-indexed maps directly (do NOT route
-                        // through this.set(codeSlot), since that can self-assign
-                        // the pinned CODE ref back onto itself via
-                        // defineGlobalCodeRef -> getGlobalCodeRef returning the
-                        // very same RuntimeScalar, which breaks refCount
-                        // accounting for reference-type slots).
-                        //
-                        // This supports the common round-trip pattern:
-                        //   my $saved = delete $stash->{name};
-                        //   $stash->{name} = $saved;
+                    if (sourceGlob.isSlotSnapshot()) {
+                        // A typeglob snapshot preserves the source GV identity
+                        // and slots. Use normal whole-glob aliasing for its other
+                        // slots, then retain the exact captured CODE scalar.
+                        super.set(sourceGlob);
+                        RuntimeScalar sourceCode = sourceGlob.getSavedCodeSlot();
+                        if (sourceCode != null && sourceCode.type == CODE
+                                && sourceCode.value instanceof RuntimeCode) {
+                            RuntimeGlob.aliasCodeSlot(this.globName, sourceCode);
+                        }
+                    } else if (sourceGlobName == null) {
+                        // Detached glob values keep their captured slots locally.
                         if (sourceGlob.codeSlot != null) {
                             GlobalVariable.globalCodeRefs.put(this.globName, sourceGlob.codeSlot);
                             InheritanceResolver.invalidateCache();
@@ -325,7 +334,7 @@ public class RuntimeStashEntry extends RuntimeGlob {
                             GlobalVariable.scalarSlots().put(this.globName, sourceGlob.scalarSlot);
                         }
                     } else {
-                        // Copy all slots from source to destination
+                        // Live named glob values keep resolving through the source name.
                         this.set(GlobalVariable.getGlobalCodeRef(sourceGlobName));
                         this.set(GlobalVariable.getGlobalIO(sourceGlobName));
                         this.set(GlobalVariable.getGlobalArray(sourceGlobName).createReference());

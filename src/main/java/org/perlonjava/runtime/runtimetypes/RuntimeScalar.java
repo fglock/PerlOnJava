@@ -976,7 +976,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             // Skip detached copy for anonymous globs (null globName) since they
             // don't participate in local/global scope and we need to preserve
             // their local slots (e.g., from stash delete).
-            if (value.globName != null) {
+            if (value.globName != null && !value.isSlotSnapshot()) {
                 value = value.createDetachedCopy();
             }
         }
