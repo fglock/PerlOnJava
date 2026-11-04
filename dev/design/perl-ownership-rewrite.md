@@ -3,51 +3,52 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-04):** #1649 is on local branch
-`wip/ownership-tailcall-preflight-20261104-043558` at `08e51a6f0`. Argument
-frame release, hash scope-exit cleanup, recursive aggregate cleanup, first
-weaken, and cleared-aggregate finalization use owner identities rather than
-their retired reachability proofs. The `Storable::dclone` result carries a
-deferred `RETURN_VALUE` owner through weak-edge restoration and the normal call
-boundary. The hash `values`/`each` audit found no mismatch across system Perl,
-JVM, and interpreter. Earlier no-sweeps and HTML::Tree acceptance evidence is
-recorded in the completed implementation sections below.
+`wip/active-lexical-owner-20261104-063912` at `dc2b663d2`. Previous batches
+stage nonzero-argument generated JVM direct calls in a
+`RuntimeCode.CallArguments` frame before evaluating expressions, and carry
+`Storable::dclone` results through a deferred `RETURN_VALUE` owner. This batch
+adds `ACTIVE_LEXICAL` identities for registered scalar referent cells, alongside
+array and hash pads. Scalar-reference creation backfills the identity when
+registration came first; scope cleanup releases it. Tail-call cleanup no
+longer fabricates `refCount = 1` when `localBindingExists` has no owner identity.
 
-This checkpoint stages every nonzero-argument generated JVM direct call in a
-`RuntimeCode.CallArguments` frame before evaluating argument expressions. It
-keeps a mortal return alive while later arguments run and releases staged
-owners when the call returns or argument evaluation is abandoned. This fixes
-the JVM failure in `weak_sweep_keeps_current_args.t`; the regression passes
-1/1 on both backends. The requested `deferred_capture_live_argument.t` remains
-in PR #1938 and passes 3/3 on system Perl and both backends. The focused
-`JPERL_TEST_FILTER=weak_sweep_keeps_current_args nice -n 19 make test-unit`
-gate passed.
+System Perl passes `active_lexical_scalar_referent_owner.t` 9/9. The focused
+`JPERL_TEST_FILTER=active_lexical_scalar_referent_owner nice -n 19 make test-unit`
+gate passed in 1m06. Sweeps-disabled JVM and interpreter runs pass the new
+regression, tail-call cleanup, weak-sweep, and `deferred_capture_live_argument.t`
+tests. The new Java owner-slot assertion fails on parent `95f85f10f` because
+the scalar cell has zero `ACTIVE_LEXICAL` identities there; the candidate
+records one and releases it at scope exit. Evidence is in
+`/private/tmp/active-lexical-scalar-owner-perl.log`,
+`/private/tmp/active-lexical-scalar-owner-focused-20261104.log`,
+`/private/tmp/active-lexical-scalar-owner-parent-full-20261104.log`
+and `/private/tmp/{activelex,tailargs,tailcleanup,weaksweep,deferredcapture}-{jvm,int}-20261104.log`.
 
 The full `nice -n 19 make` on `08e51a6f0` completed in 8m02 with Joni passing
 and five Perl unit tests failing. Each reproduces at parent `a777b4f42`:
 `bless_tied_hash_reference.t`, `custom_warning_async_suspend_state.t`,
 `mojolicious_promise_lifecycle_regressions.t`, `substr_core_edge_semantics.t`,
-and `threads_shared_reference_validation.t`. Full log:
-`/private/tmp/ownership-full-make-20261104.log`; parent comparison logs:
-`/private/tmp/ownership-parent-a777-bless.log` and
+and `threads_shared_reference_validation.t`. Logs:
+`/private/tmp/ownership-full-make-20261104.log`,
+`/private/tmp/ownership-parent-a777-bless.log`, and
 `/private/tmp/ownership-parent-{custom-warning,mojolicious,substr,threads-shared}.log`.
-The focused candidate and direct JVM/interpreter regressions pass; the full
-gate is not green because these failures predate this batch.
+No full gate has run on the scalar-lexical batch yet.
 
 The producer audit remains open. Production deferred-release producers carry
 `PendingOwnerRelease`; root/snapshot recovery in `processDeferredBase` remains
-behind legacy unpaired `deferDecrement`, for which no production caller has
-been found. PadWalker has a fallback `releaseClosureCapture()` when its
-capture-slot mapping is absent. Clone/shared-storage ownership, CODE pad
-constants, package roots, resource owners, exception/unwind behavior, and the
-remaining count-restoration sites still need producer-level review. Corrective
-sweep entry points have no production callers, but legacy bridge and recovery
-machinery cannot be removed until those owner families are complete.
+behind legacy unpaired `deferDecrement`, with no production caller found.
+PadWalker still has a fallback `releaseClosureCapture()` when its capture-slot
+mapping is absent. Clone/shared-storage ownership, CODE pad constants, package
+and resource roots, exception/unwind, and remaining count-restoration sites
+need producer-level review. Corrective-sweep entry points have no production
+callers, but the bridge and recovery machinery remain until these owner paths
+are complete.
 
-PR #1938 remains OPEN/draft at head
-`95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05`; it includes
-`deferred_capture_live_argument.t`. Local history still needs reconciliation
-before publication. The overall no-sweeps acceptance gate and final integration
-matrix remain outstanding.
+PR #1938 remains OPEN/draft at remote head
+`95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05`; its paginated diff includes
+`deferred_capture_live_argument.t`, matching the PerlOnJava6 copy. Local
+history still needs reconciliation before publication. Final no-sweeps and
+integration acceptance remain outstanding.
 
 Standard Perl is the oracle for every Perl-visible reference edge and its
 lifetime behavior. A reference-slot transition should retain a new strong
@@ -58,15 +59,6 @@ identities are migration/provenance evidence, not a second count model or a
 basis for reconstructing counts; the target lifecycle decision follows the
 count after every Perl strong edge is represented or counted through an exact
 lifecycle token.
-
-The remaining reachability-recovery boundary is legacy unpaired deferred
-release; `deferDecrement` has no production callers in this repository.
-First-weaken cloned-thread and CODE pad-constant checks, closure/CODE roots,
-package roots, destruction/resurrection, cycles, shared storage, and resource
-owners still need producer-level audit. The exact branch count remains open.
-PR #1938 remains OPEN as a draft at remote head
-`95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05`; local work still needs
-reconciliation before publication.
 
 **Sweep policy (2026-10-27):** Corrective sweeps are disabled by default, as
 requested. `JPERL_ENABLE_CORRECTIVE_SWEEPS=1` temporarily enables legacy
