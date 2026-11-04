@@ -310,9 +310,8 @@ public class RuntimeStash extends RuntimeHash {
         RuntimeGlob detached = RuntimeGlob.createDetachedWithSlots(
                 savedScalar, savedArray, savedHash, savedIO, savedCode);
 
-        // Delete all slots from GlobalVariable. The CODE slot helper removes
-        // the visible stash entry while keeping already-pinned CVs alive for
-        // previously compiled call sites.
+        // Delete all slots from GlobalVariable. The CODE slot helper transfers
+        // surviving compiled-call edges to their owning RuntimeCode objects.
         GlobalVariable.removeGlobalCodeRefForStashDelete(fullKey);
         GlobalVariable.clearGlobalPseudoConstant(fullKey);
         GlobalVariable.scalarSlots().remove(fullKey);

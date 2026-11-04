@@ -1038,29 +1038,31 @@ public class EmitSubroutine {
                     : null;
             RuntimeScalar emissionTimeCodeRef = parseTimeCodeRef == null
                     ? null
-                    : GlobalVariable.getGlobalCodeRefForDirectCall(directName);
-            if (parseTimeCodeRef != null && emissionTimeCodeRef != parseTimeCodeRef) {
-                // A BEGIN block displaced this call site's original CV while
-                // the surrounding file was still compiling. Perl keeps that
-                // already-compiled call bound to the original CV.
-                int codeRefId = GlobalVariable.registerCompiledCodeRef(parseTimeCodeRef);
-                mv.visitLdcInsn(codeRefId);
-                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                        "org/perlonjava/runtime/runtimetypes/GlobalVariable",
-                        "getCompiledCodeRef",
-                        "(I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
-                        false);
-            } else {
-                if (parseTimeCodeRef == null) {
-                    GlobalVariable.getGlobalCodeRefForFreshLookup(directName);
-                }
-                mv.visitLdcInsn(directName);
-                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                        "org/perlonjava/runtime/runtimetypes/GlobalVariable",
-                        "getGlobalCodeRefForDirectCall",
-                        "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
-                        false);
-            }
+                    : GlobalVariable.getVisibleGlobalCodeRefForDirectCall(directName);
+            // Each generated CV owns one direct-call edge.  The callsite
+            // descriptor carries the parse-time target only as metadata; the
+            // RuntimeCode installs an owner identity when it receives this
+            // pad-constant tree.
+            RuntimeScalar initialCallRef = parseTimeCodeRef != null
+                    ? parseTimeCodeRef
+                    : emissionTimeCodeRef != null
+                            ? emissionTimeCodeRef
+                            : GlobalVariable.getGlobalCodeRefForFreshLookup(directName);
+            boolean compileTimePinned = parseTimeCodeRef != null
+                    && emissionTimeCodeRef != parseTimeCodeRef;
+            RuntimeScalar descriptor = new RuntimeScalar();
+            String className = emitterVisitor.ctx.javaClassInfo.javaClassName;
+            int siteIndex = emitterVisitor.ctx.javaClassInfo.addPadConstant(descriptor);
+            descriptor.configureCompiledDirectCallSite(
+                    directName, siteIndex, initialCallRef, compileTimePinned);
+            mv.visitLdcInsn(directName);
+            mv.visitLdcInsn(className);
+            mv.visitLdcInsn(siteIndex);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "resolveCompiledDirectCallForActive",
+                    "(Ljava/lang/String;Ljava/lang/String;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
         } else if (node.left instanceof OperatorNode operatorNode
                 && operatorNode.operator.equals("&")
                 && operatorNode.operand instanceof IdentifierNode identifierNode) {
