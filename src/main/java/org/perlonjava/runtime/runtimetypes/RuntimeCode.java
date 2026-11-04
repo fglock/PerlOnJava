@@ -1282,7 +1282,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         private final PerlOwnerSlot codeOwner = new PerlOwnerSlot(PerlOwnerSlot.Kind.ACTIVE_CODE);
         private RuntimeCode code;
         private Map<String, RuntimeBase> cells;
-        private Map<String, PerlOwnerSlot> aggregateOwnerSlots;
+        private Map<String, PerlOwnerSlot> lexicalOwnerSlots;
         private String previousCallerPackage;
         private String callSitePackage;
 
@@ -1313,12 +1313,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
         private void clearForReuse() {
             codeOwner.release();
-            if (aggregateOwnerSlots != null) {
-                for (PerlOwnerSlot ownerSlot : aggregateOwnerSlots.values()) {
+            if (lexicalOwnerSlots != null) {
+                for (PerlOwnerSlot ownerSlot : lexicalOwnerSlots.values()) {
                     if (ownerSlot != null) ownerSlot.release();
                 }
-                aggregateOwnerSlots.clear();
-                aggregateOwnerSlots = null;
+                lexicalOwnerSlots.clear();
+                lexicalOwnerSlots = null;
             }
             code = null;
             cells = null;
@@ -1334,40 +1334,41 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             if (cells == null) cells = new HashMap<>();
             RuntimeBase previous = cells.put(name, cell);
             if (previous == cell) {
-                retainAggregateOwner(name, cell);
+                retainLexicalOwner(name, cell);
                 return;
             }
-            releaseAggregateOwner(name);
-            retainAggregateOwner(name, cell);
+            releaseLexicalOwner(name);
+            retainLexicalOwner(name, cell);
         }
 
-        private void retainAggregateOwner(String name, RuntimeBase cell) {
-            if (!(cell instanceof RuntimeArray || cell instanceof RuntimeHash)
-                    || !MyVarCleanupStack.isRegistered(cell)
-                    || aggregateOwnerSlots != null && aggregateOwnerSlots.containsKey(name)) return;
-            if (aggregateOwnerSlots == null) aggregateOwnerSlots = new HashMap<>();
+        private void retainLexicalOwner(String name, RuntimeBase cell) {
+            boolean lexicalOwner = cell instanceof RuntimeArray || cell instanceof RuntimeHash
+                    || cell instanceof RuntimeScalar scalar && scalar.referencedByScalarReference;
+            if (!lexicalOwner || !MyVarCleanupStack.isRegistered(cell)
+                    || lexicalOwnerSlots != null && lexicalOwnerSlots.containsKey(name)) return;
+            if (lexicalOwnerSlots == null) lexicalOwnerSlots = new HashMap<>();
             PerlOwnerSlot ownerSlot = new PerlOwnerSlot(PerlOwnerSlot.Kind.ACTIVE_LEXICAL);
             ownerSlot.acquireActiveLexicalIdentity(cell);
-            aggregateOwnerSlots.put(name, ownerSlot);
+            lexicalOwnerSlots.put(name, ownerSlot);
         }
 
         private void remove(String name) {
             if (cells != null) cells.remove(name);
-            releaseAggregateOwner(name);
+            releaseLexicalOwner(name);
         }
 
-        private void releaseAggregateOwner(String name) {
-            if (aggregateOwnerSlots == null) return;
-            PerlOwnerSlot ownerSlot = aggregateOwnerSlots.remove(name);
+        private void releaseLexicalOwner(String name) {
+            if (lexicalOwnerSlots == null) return;
+            PerlOwnerSlot ownerSlot = lexicalOwnerSlots.remove(name);
             if (ownerSlot != null) ownerSlot.release();
-            if (aggregateOwnerSlots.isEmpty()) aggregateOwnerSlots = null;
+            if (lexicalOwnerSlots.isEmpty()) lexicalOwnerSlots = null;
         }
 
-        private int removeAggregateCell(RuntimeBase aggregate) {
-            if (cells == null || aggregateOwnerSlots == null) return 0;
+        private int removeLexicalCell(RuntimeBase cell) {
+            if (cells == null || lexicalOwnerSlots == null) return 0;
             for (Map.Entry<String, RuntimeBase> entry : new ArrayList<>(cells.entrySet())) {
-                if (entry.getValue() == aggregate
-                        && aggregateOwnerSlots.containsKey(entry.getKey())) {
+                if (entry.getValue() == cell
+                        && lexicalOwnerSlots.containsKey(entry.getKey())) {
                     remove(entry.getKey());
                     return 1;
                 }
@@ -2120,21 +2121,22 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
     }
 
-    /** Backfill aggregate owner identities when lexical registration follows its first pad bind. */
+    /** Backfill lexical owner identities when registration follows the first pad bind. */
     static void noteMyVarRegistered(RuntimeBase cell) {
-        if (!(cell instanceof RuntimeArray || cell instanceof RuntimeHash)
+        if (!(cell instanceof RuntimeArray || cell instanceof RuntimeHash
+                || cell instanceof RuntimeScalar scalar && scalar.referencedByScalarReference)
                 || PerlRuntime.currentOrNull() == null) return;
         ExecutionRuntimeState state = PerlRuntime.current().executionState();
         for (ActiveLexicalFrame frame : activeLexicalFrames(state)) {
             for (Map.Entry<String, RuntimeBase> entry : frame.cells().entrySet()) {
                 if (entry.getValue() == cell) {
-                    frame.retainAggregateOwner(entry.getKey(), cell);
+                    frame.retainLexicalOwner(entry.getKey(), cell);
                 }
             }
         }
         for (Map.Entry<String, RuntimeBase> entry : state.topLevelLexicals.entrySet()) {
             if (entry.getValue() == cell) {
-                retainTopLevelAggregateOwner(state, entry.getKey(), cell);
+                retainTopLevelLexicalOwner(state, entry.getKey(), cell);
             }
         }
     }
@@ -2143,17 +2145,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             ExecutionRuntimeState state, String variableName, RuntimeBase cell) {
         RuntimeBase previous = state.topLevelLexicals.put(variableName, cell);
         if (previous == cell) {
-            retainTopLevelAggregateOwner(state, variableName, cell);
+            retainTopLevelLexicalOwner(state, variableName, cell);
             return;
         }
         PerlOwnerSlot previousSlot = state.topLevelLexicalOwnerSlots.remove(variableName);
         if (previousSlot != null) previousSlot.release();
-        retainTopLevelAggregateOwner(state, variableName, cell);
+        retainTopLevelLexicalOwner(state, variableName, cell);
     }
 
-    private static void retainTopLevelAggregateOwner(
+    private static void retainTopLevelLexicalOwner(
             ExecutionRuntimeState state, String variableName, RuntimeBase cell) {
-        if ((cell instanceof RuntimeArray || cell instanceof RuntimeHash)
+        if ((cell instanceof RuntimeArray || cell instanceof RuntimeHash
+                || cell instanceof RuntimeScalar scalar && scalar.referencedByScalarReference)
                 && MyVarCleanupStack.isRegistered(cell)
                 && !state.topLevelLexicalOwnerSlots.containsKey(variableName)) {
             PerlOwnerSlot ownerSlot = new PerlOwnerSlot(PerlOwnerSlot.Kind.ACTIVE_LEXICAL);
@@ -2162,19 +2165,20 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
     }
 
-    /** Release pad-map owner identities when an aggregate lexical leaves scope. */
-    static boolean releaseActiveLexicalAggregateOwner(RuntimeBase aggregate) {
-        if (!(aggregate instanceof RuntimeArray || aggregate instanceof RuntimeHash)
+    /** Release pad-map owner identities when a lexical cell leaves scope. */
+    static boolean releaseActiveLexicalOwner(RuntimeBase cell) {
+        if (!(cell instanceof RuntimeArray || cell instanceof RuntimeHash
+                || cell instanceof RuntimeScalar scalar && scalar.referencedByScalarReference)
                 || PerlRuntime.currentOrNull() == null) return false;
         ExecutionRuntimeState state = PerlRuntime.current().executionState();
         Deque<ActiveLexicalFrame> frames = activeLexicalFrames(state);
         ActiveLexicalFrame currentFrame = frames.peek();
-        if (currentFrame != null && currentFrame.removeAggregateCell(aggregate) != 0) {
+        if (currentFrame != null && currentFrame.removeLexicalCell(cell) != 0) {
             return true;
         }
         for (Map.Entry<String, RuntimeBase> entry
                 : new ArrayList<>(state.topLevelLexicals.entrySet())) {
-            if (entry.getValue() != aggregate) continue;
+            if (entry.getValue() != cell) continue;
             state.topLevelLexicals.remove(entry.getKey());
             PerlOwnerSlot ownerSlot = state.topLevelLexicalOwnerSlots.remove(entry.getKey());
             if (ownerSlot != null) {

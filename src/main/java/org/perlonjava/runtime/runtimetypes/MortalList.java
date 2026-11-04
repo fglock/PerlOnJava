@@ -716,7 +716,7 @@ public class MortalList {
         // or flush) to correctly trigger callDestroy, since the local
         // variable no longer holds a strong reference.
         hash.localBindingExists = false;
-        if (!finalRelease) RuntimeCode.releaseActiveLexicalAggregateOwner(hash);
+        if (!finalRelease) RuntimeCode.releaseActiveLexicalOwner(hash);
         hash.releaseUnownedClosureCaptures();
         if (!finalRelease && hash.hasClosureCaptureOwner()) {
             hash.scopeExited = true;
@@ -822,7 +822,7 @@ public class MortalList {
         // or flush) to correctly trigger callDestroy, since the local
         // variable no longer holds a strong reference.
         arr.localBindingExists = false;
-        if (!finalRelease) RuntimeCode.releaseActiveLexicalAggregateOwner(arr);
+        if (!finalRelease) RuntimeCode.releaseActiveLexicalOwner(arr);
         arr.releaseUnownedClosureCaptures();
         if (!finalRelease && arr.hasClosureCaptureOwner()) {
             arr.scopeExited = true;
@@ -1013,8 +1013,9 @@ public class MortalList {
             return;
         }
         if (base.localBindingExists) {
-            base.refCount = 1;
-            return;
+            throw new IllegalStateException(
+                    "tail-call release found localBindingExists without a live Perl owner slot for "
+                            + base.getClass().getSimpleName());
         }
         base.refCount = Integer.MIN_VALUE;
         DestroyDispatch.callDestroy(base);
