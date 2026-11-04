@@ -221,7 +221,7 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
                 // them (Dancer2 uploads keep their File::Temp handle there).
                 PerlOwnerSlot localValueOwner = localVar == null
                         ? null : localVar.countedOwnerSlot();
-                boolean releasesLastContainerOwner = localVar != null
+                boolean releasesLastPerlOwner = localVar != null
                         && localVar.refCountOwned
                         && (localVar.type & RuntimeScalarType.REFERENCE_BIT) != 0
                         && localVar.value instanceof RuntimeBase localBase
@@ -229,82 +229,94 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
                         && localValueOwner.isActive()
                         && localValueOwner.referent() == localBase
                         && !localBase.hasCurrentPerlOwnerIdentityOtherThan(localValueOwner);
-                if (releasesLastContainerOwner && localVar.value instanceof RuntimeHash localHash) {
-                    MortalList.deferDestroyForContainerClear(localHash.elements.values());
-                } else if (releasesLastContainerOwner && localVar.value instanceof RuntimeArray localArray) {
-                    MortalList.deferDestroyForContainerClear(localArray.elements);
-                }
-                if (localVar != null
+                boolean releaseDisplacedCountedOwner = localVar != null
                         && localVar.refCountOwned
                         && (localVar.type & RuntimeScalarType.REFERENCE_BIT) != 0
                         && localVar.value instanceof RuntimeBase base
-                        && base.refCount > 0) {
-                    displacedBase = base;
+                        && localValueOwner != null
+                        && localValueOwner.isActive()
+                        && localValueOwner.referent() == base;
+                if (releaseDisplacedCountedOwner) {
+                    displacedBase = (RuntimeBase) localVar.value;
                     localVar.refCountOwned = false;
-                    displacedBase.releaseActiveOwner(localVar);
+                    MortalList.pushMark();
                 }
-                if (localVar != null
-                        && localVar.hasScalarReferenceContentsOwner()) {
-                    scalarContentsOwner = localVar.scalarReferenceContentsOwner;
-                }
-
-                // Restore the internal separator values if this was an output separator variable
-                if (saved.originalVariable instanceof OutputRecordSeparator) {
-                    OutputRecordSeparator.restoreInternalORS();
-                } else if (saved.originalVariable instanceof OutputFieldSeparator) {
-                    OutputFieldSeparator.restoreInternalOFS();
-                }
-
-                // Restore the original variable in the global symbol table
-                GlobalVariable.scalarSlots().put(saved.fullName, saved.originalVariable);
-
-                if (saved.fullName.equals(GlobalContext.WARNING_SCOPE)) {
-                    WarningBitsRegistry.setRuntimeWarningBits(saved.savedRuntimeWarningBits);
-                }
-
-                // Also restore all glob aliases to the original shared variable
-                java.util.List<String> aliasGroup = GlobalVariable.getGlobAliasGroup(saved.fullName);
-                for (String alias : aliasGroup) {
-                    if (!alias.equals(saved.fullName)) {
-                        GlobalVariable.scalarSlots().put(alias, saved.originalVariable);
+                try {
+                    boolean releasesLastContainerOwner = releasesLastPerlOwner
+                            && (localVar.value instanceof RuntimeArray
+                                || localVar.value instanceof RuntimeHash);
+                    if (releasesLastContainerOwner
+                            && localVar.value instanceof RuntimeHash localHash) {
+                        MortalList.deferDestroyForContainerClear(localHash.elements.values());
+                    } else if (releasesLastContainerOwner
+                            && localVar.value instanceof RuntimeArray localArray) {
+                        MortalList.deferDestroyForContainerClear(localArray.elements);
                     }
-                }
-
-                // Decrement refCount of the displaced local value after restoring
-                // the global slot, so DESTROY sees the restored variable state.
-                boolean displacedWillDestroy = false;
-                if (displacedBase != null && displacedBase.refCount == 1) {
-                    String className = NameNormalizer.getBlessStr(displacedBase.blessId);
-                    displacedWillDestroy = className != null && !className.isEmpty()
-                            && DestroyDispatch.classHasDestroy(displacedBase.blessId, className);
-                }
-                if ((displacedWillDestroy || scalarContentsOwner != null)
-                        && localVar != null && localVar != saved.originalVariable) {
-                    // Compiled code may still hold the localized scalar object
-                    // directly. Mirror the restored value into it just before
-                    // DESTROY so both lookup paths observe the restored state.
-                    if (saved.originalVariable == null) {
-                        localVar.type = RuntimeScalarType.UNDEF;
-                        localVar.value = null;
-                        localVar.blessId = 0;
-                    } else {
-                        localVar.type = saved.originalVariable.type;
-                        localVar.value = saved.originalVariable.value;
-                        localVar.blessId = saved.originalVariable.blessId;
+                    if (releaseDisplacedCountedOwner) {
+                        MortalList.deferDecrementFromScalarSlot(
+                                displacedBase, localVar, "GlobalRuntimeScalar.dynamicRestoreState");
                     }
-                    localVar.refCountOwned = false;
-                }
-                if (localVar != null) {
-                    localVar.scalarReferenceContentsOwner = null;
-                    localVar.isPackageGlobalRoot = false;
-                }
-                if (scalarContentsOwner != null) {
-                    scalarContentsOwner.releaseScalarReferenceContents();
-                }
-                if (displacedBase != null && displacedBase.refCount > 0
-                        && --displacedBase.refCount == 0) {
-                    displacedBase.refCount = Integer.MIN_VALUE;
-                    DestroyDispatch.callDestroy(displacedBase);
+                    if (localVar != null && localVar.hasScalarReferenceContentsOwner()) {
+                        scalarContentsOwner = localVar.scalarReferenceContentsOwner;
+                    }
+
+                    // Restore the internal separator values if this was an output separator variable
+                    if (saved.originalVariable instanceof OutputRecordSeparator) {
+                        OutputRecordSeparator.restoreInternalORS();
+                    } else if (saved.originalVariable instanceof OutputFieldSeparator) {
+                        OutputFieldSeparator.restoreInternalOFS();
+                    }
+
+                    // Restore the original variable in the global symbol table
+                    GlobalVariable.scalarSlots().put(saved.fullName, saved.originalVariable);
+
+                    if (saved.fullName.equals(GlobalContext.WARNING_SCOPE)) {
+                        WarningBitsRegistry.setRuntimeWarningBits(saved.savedRuntimeWarningBits);
+                    }
+
+                    // Also restore all glob aliases to the original shared variable
+                    java.util.List<String> aliasGroup = GlobalVariable.getGlobAliasGroup(saved.fullName);
+                    for (String alias : aliasGroup) {
+                        if (!alias.equals(saved.fullName)) {
+                            GlobalVariable.scalarSlots().put(alias, saved.originalVariable);
+                        }
+                    }
+
+                    // Decrement the displaced local value after restoring the
+                    // global slot, so DESTROY sees the restored variable state.
+                    boolean displacedWillDestroy = false;
+                    if (displacedBase != null && displacedBase.refCount == 1
+                            && releasesLastPerlOwner) {
+                        String className = NameNormalizer.getBlessStr(displacedBase.blessId);
+                        displacedWillDestroy = className != null && !className.isEmpty()
+                                && DestroyDispatch.classHasDestroy(displacedBase.blessId, className);
+                    }
+                    if ((displacedWillDestroy || scalarContentsOwner != null)
+                            && localVar != null && localVar != saved.originalVariable) {
+                        // Compiled code may still hold the localized scalar object
+                        // directly. Mirror the restored value into it just before
+                        // DESTROY so both lookup paths observe the restored state.
+                        if (saved.originalVariable == null) {
+                            localVar.type = RuntimeScalarType.UNDEF;
+                            localVar.value = null;
+                            localVar.blessId = 0;
+                        } else {
+                            localVar.type = saved.originalVariable.type;
+                            localVar.value = saved.originalVariable.value;
+                            localVar.blessId = saved.originalVariable.blessId;
+                        }
+                        localVar.refCountOwned = false;
+                    }
+                    if (localVar != null) {
+                        localVar.scalarReferenceContentsOwner = null;
+                        localVar.isPackageGlobalRoot = false;
+                    }
+                    if (scalarContentsOwner != null) {
+                        scalarContentsOwner.releaseScalarReferenceContents();
+                    }
+                    if (releaseDisplacedCountedOwner) MortalList.flushAboveMark();
+                } finally {
+                    if (releaseDisplacedCountedOwner) MortalList.popMark();
                 }
             }
         }
