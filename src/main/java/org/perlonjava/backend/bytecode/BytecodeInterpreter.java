@@ -133,13 +133,8 @@ public class BytecodeInterpreter {
             return false;
         }
 
-        tempScalar.refCountOwned = false;
-        if (base.refCountTrace) {
-            base.traceRefCount(-1, "BytecodeInterpreter.releaseConsumedTemp");
-            base.releaseOwner(tempScalar, "releaseConsumedTemp");
-        }
-        base.releaseActiveOwner(tempScalar);
-        base.refCount--;
+        MortalList.releaseCountedOwnerImmediately(
+                tempScalar, "BytecodeInterpreter.releaseConsumedTemp");
         return true;
     }
 

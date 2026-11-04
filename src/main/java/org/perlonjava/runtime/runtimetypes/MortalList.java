@@ -320,7 +320,7 @@ public class MortalList {
     }
 
     /** Release one exact scalar-backed owner at the operation that drops its Perl edge. */
-    static void releaseCountedOwnerImmediately(RuntimeScalar owner, String releaseSite) {
+    public static void releaseCountedOwnerImmediately(RuntimeScalar owner, String releaseSite) {
         if (owner == null || !owner.refCountOwned
                 || !(owner.value instanceof RuntimeBase base)) return;
         PerlOwnerSlot ownerSlot = owner.countedOwnerSlot();

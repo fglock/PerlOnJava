@@ -2397,9 +2397,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 if (reference != null && reference.refCountOwned
                         && reference.value instanceof RuntimeBase referent
                         && referent.refCount > 0) {
-                    reference.refCountOwned = false;
-                    referent.releaseActiveOwner(reference);
-                    referent.refCount--;
+                    MortalList.releaseCountedOwnerImmediately(
+                            reference, "RuntimeArray.setArrayOfAlias reference wrapper");
                 }
             }
         }
