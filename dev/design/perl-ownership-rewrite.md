@@ -3,35 +3,39 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-04):** #1649 is on local branch
-`wip/active-lexical-owner-20261104-063912` at `8073c424a`. Previous batches
-stage nonzero-argument generated JVM direct calls in a
-`RuntimeCode.CallArguments` frame before evaluating expressions, and carry
-`Storable::dclone` results through a deferred `RETURN_VALUE` owner. This batch
-adds `ACTIVE_LEXICAL` identities for registered scalar referent cells, alongside
-array and hash pads. Scalar-reference creation backfills the identity when
-registration came first; scope cleanup releases it. Tail-call cleanup no
-longer fabricates `refCount = 1` when `localBindingExists` has no owner identity.
+`wip/active-lexical-owner-20261104-063912` at `34a2c58be`. Current master
+`b43a652507d836bfbd78e3e6c250021c0b3355aa` is an ancestor, so no rebase was
+needed. Previous batches stage nonzero-argument generated JVM direct calls in
+a `RuntimeCode.CallArguments` frame before evaluating expressions, and carry
+`Storable::dclone` results through a deferred `RETURN_VALUE` owner. The scalar
+lexical batch adds `ACTIVE_LEXICAL` identities for registered scalar referent
+cells, alongside array and hash pads. Scalar-reference creation backfills the
+identity when registration came first; scope cleanup releases it. Tail-call
+cleanup no longer fabricates `refCount = 1` when `localBindingExists` has no
+owner identity.
 
-Deferred final release now uses the exact uncounted identity for a scalar cell
+Deferred final release uses the exact uncounted identity for a scalar cell
 referenced by `\$cell`, keeping its zero-count lifecycle pending until that
-lexical/package owner leaves. It does not use `localBindingExists` as the proof
-for this scalar-referent path. `active_lexical_scalar_deferred_release.t`
-reproduces array-element deletion while the scalar cell remains in scope.
+lexical/package owner leaves. Scalar overwrite now applies the same rule after
+releasing its final counted edge. Both paths defer lifecycle on the current
+owner identity rather than treating `localBindingExists` as proof. The new
+Java lifecycle tests cover scalar-reference registration order and weak
+observer lifetime through overwrite; the Perl deferred-release regression
+covers array-element deletion while the scalar cell remains in scope.
 
 System Perl passes `active_lexical_scalar_referent_owner.t` 9/9 and
 `active_lexical_scalar_deferred_release.t` 6/6. The focused immutable
-`JPERL_TEST_FILTER=active_lexical_scalar_deferred_release nice -n 19 make test-unit`
-gate passed in 1m03 on `8073c424a`. Sweeps-disabled JVM and interpreter runs
-pass both regressions, tail-call cleanup, weak-sweep, and
-`deferred_capture_live_argument.t`. The Java owner-slot assertion fails on
-parent `95f85f10f`: it sees zero `ACTIVE_LEXICAL` identities where the candidate
-records one and releases it at scope exit. Evidence is in
-`/private/tmp/active-lexical-scalar-owner-perl.log`,
-`/private/tmp/active-lexical-scalar-owner-focused-20261104.log`,
-`/private/tmp/active-lexical-scalar-owner-parent-full-20261104.log`
+`JPERL_TEST_FILTER=active_lexical_scalar_referent_owner nice -n 19 make test-unit`
+gate passed in 1m09 on `34a2c58be`. Sweeps-disabled JVM and interpreter runs
+pass both scalar lexical regressions and `deferred_capture_live_argument.t`.
+The Java owner-slot assertion fails on parent `95f85f10f`: it sees zero
+`ACTIVE_LEXICAL` identities where the candidate records one and releases it at
+scope exit. Evidence is in `/private/tmp/active-lexical-scalar-owner-perl.log`,
+`/private/tmp/active-lexical-scalar-owner-parent-full-20261104.log`,
 `/private/tmp/active-lexical-scalar-deferred-perl.log`,
-`/private/tmp/active-lexical-scalar-deferred-immutable-20261104.log`, and
-`/private/tmp/committed-{active_lexical_scalar_deferred_release,active_lexical_scalar_referent_owner}-{jvm,interpreter}-20261104.log`.
+`/private/tmp/active-lexical-scalar-deferred-immutable-20261104.log`,
+`/private/tmp/active-lexical-scalar-overwrite-immutable-20261104.log`, and
+`/private/tmp/overwrite-{active_lexical_scalar_referent_owner,active_lexical_scalar_deferred_release,deferred_capture_live_argument}-{jvm,interpreter}-20261104.log`.
 
 The full `nice -n 19 make` on `08e51a6f0` completed in 8m02 with Joni passing
 and five Perl unit tests failing. Each reproduces at parent `a777b4f42`:
@@ -41,7 +45,7 @@ and `threads_shared_reference_validation.t`. Logs:
 `/private/tmp/ownership-full-make-20261104.log`,
 `/private/tmp/ownership-parent-a777-bless.log`, and
 `/private/tmp/ownership-parent-{custom-warning,mojolicious,substr,threads-shared}.log`.
-No full gate has run on the scalar-lexical batch yet.
+No full gate has run on `34a2c58be` yet.
 
 The producer audit remains open. Production deferred-release producers carry
 `PendingOwnerRelease`; root/snapshot recovery in `processDeferredBase` remains
@@ -2227,7 +2231,7 @@ that currently protects it:
 | Recovery path | Semantic strong edge | Remaining gap before removal |
 |---|---|---|
 | `restoreReachableOwnerCount` | Counted scalar-cell owner slots, formerly mirrored by `activeOwners`, including nested package-array cells | The audited array and hash mutation wrappers mark current storage; their main count-acquiring APIs do so after insertion. The remaining root-snapshot tests exercise earlier count acquisition: `ReachabilityQueryCostTest.deferredOwnerChecksShareOneRootSnapshotPerDrain` calls `incrementRefCountForContainerStore` before adding the scalar to the nested package array, leaving a `SCALAR_CELL` identity; `UnblessedAggregateReachabilitySnapshotTest.repeatedOwnerScalarChecksShareOneRootSnapshotPerDrain` also clears `containerOwner` directly. No production caller with this exact ordering has been identified in the call-site audit so far. These tests preserve the bridge for synthetic/out-of-order states and do not establish a normal store-path defect. |
-| Scalar overwrite (`RuntimeScalar.setLargeRefCounted`) | The scalar cell's old referent edge; new edge is acquired before old release | Counted scalar/aggregate slots repair identified undercounts. The remaining external-root and live-CODE queries and the blessed weak-referent raw-count bridge run for aggregate referents with incomplete owner proof. Their unmigrated producers and final release need explicit identities. `RuntimeScalarOwnerSlotTest` covers identified final element release without a stale snapshot. |
+| Scalar overwrite (`RuntimeScalar.setLargeRefCounted`) | The scalar cell's old referent edge; new edge is acquired before old release | Scalar-referent cells with a live uncounted lexical/package identity now defer zero-count cleanup to that exact edge. Counted scalar/aggregate slots still repair identified undercounts. External-root/live-CODE checks and the blessed weak-referent raw-count bridge remain for aggregate referents; trace their producers and final release before removal. `ActiveLexicalScalarOwnerLifecycleTest` covers overwrite and observer lifetime. |
 | First weaken (`WeakRefRegistry.weaken`) | The scalar cell being weakened and any other current scalar, aggregate, or capture owners | Ordinary tracked owners use current counted-slot identities; general live-CODE and strong-root walks were removed from this path. Package-nested untracked aggregates now use exact `UNTRACKED_REFERENCE` identities without a compatibility pin or fabricated count. The cloned-thread snapshot root and direct CODE pad-constant check remain. `FirstWeakenUsesCurrentPackageOwnerTest`, `WeakeningCountedOwnerSlotTest`, and `PackageNestedUntrackedAggregateReleaseTest` cover current owner identities and weak-observer lifetime. |
 | Unblessed aggregate root snapshot | Array/hash elements reachable through lexical or package storage | Normal slots have identities; parser assembly and compatibility mutation paths still need producer-level invariant coverage. `UnblessedAggregateReachabilitySnapshotTest` deliberately exercises the remaining fallback. |
 | Strong-cycle graph walk | Internal scalar-reference and aggregate-element edges | The CODE weak-referent cycle walk has been removed; non-final CODE releases restore from verified current counted slots. Self-capture lifetime is covered on both backends. Audit uncounted cycle edge kinds and producer coverage before removing remaining cycle or cleanup recovery. |
