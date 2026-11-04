@@ -1253,7 +1253,8 @@ public class EmitSubroutine {
         mv.visitLdcInsn(subroutineName);
         mv.visitVarInsn(Opcodes.ASTORE, nameSlot);
 
-        // Generate native RuntimeBase[] array for parameters instead of RuntimeList
+        // Keep evaluated arguments in a staging frame. A returned temporary can
+        // otherwise be released before the generated call reaches applyAtLocation.
         ListNode paramList = ListNode.makeList(node.right);
         if (paramList.elements.size() >= 2
                 && unwrapScalarAnonymousInvocation(paramList.elements.get(0)) instanceof BinaryOperatorNode invocation
@@ -1274,14 +1275,23 @@ public class EmitSubroutine {
             argsArraySlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
         }
 
-        if (argCount <= 5) {
-            mv.visitInsn(Opcodes.ICONST_0 + argCount);
-        } else if (argCount <= 127) {
-            mv.visitIntInsn(Opcodes.BIPUSH, argCount);
+        boolean stagedArguments = argCount > 0;
+        if (stagedArguments) {
+            if (argCount <= 5) {
+                mv.visitInsn(Opcodes.ICONST_0 + argCount);
+            } else if (argCount <= 127) {
+                mv.visitIntInsn(Opcodes.BIPUSH, argCount);
+            } else {
+                mv.visitIntInsn(Opcodes.SIPUSH, argCount);
+            }
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode", "newCallArguments",
+                    "(I)Lorg/perlonjava/runtime/runtimetypes/RuntimeCode$CallArguments;", false);
         } else {
-            mv.visitIntInsn(Opcodes.SIPUSH, argCount);
+            mv.visitInsn(Opcodes.ICONST_0);
+            mv.visitTypeInsn(Opcodes.ANEWARRAY,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeBase");
         }
-        mv.visitTypeInsn(Opcodes.ANEWARRAY, "org/perlonjava/runtime/runtimetypes/RuntimeBase");
         mv.visitVarInsn(Opcodes.ASTORE, argsArraySlot);
 
         EmitterVisitor listVisitor = emitterVisitor.with(RuntimeContextType.LIST);
@@ -1291,6 +1301,11 @@ public class EmitSubroutine {
                 && node.left != null && node.left.getIndex() > 0) {
             emitterVisitor.ctx.javaClassInfo.callerLineTokenOverride = node.left.getIndex();
         }
+        Label argumentsStart = stagedArguments ? new Label() : null;
+        Label argumentsEnd = stagedArguments ? new Label() : null;
+        Label argumentsFailure = stagedArguments ? new Label() : null;
+        Label argumentsReady = stagedArguments ? new Label() : null;
+        if (stagedArguments) mv.visitLabel(argumentsStart);
         try {
             for (int index = 0; index < argCount; index++) {
                 int argSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
@@ -1312,16 +1327,12 @@ public class EmitSubroutine {
                     mv.visitVarInsn(Opcodes.ASTORE, argSlot);
                 }
 
-                mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
-                if (index <= 5) {
-                    mv.visitInsn(Opcodes.ICONST_0 + index);
-                } else if (index <= 127) {
-                    mv.visitIntInsn(Opcodes.BIPUSH, index);
-                } else {
-                    mv.visitIntInsn(Opcodes.SIPUSH, index);
-                }
                 mv.visitVarInsn(Opcodes.ALOAD, argSlot);
-                mv.visitInsn(Opcodes.AASTORE);
+                mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
+                mv.visitInsn(Opcodes.SWAP);
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeCode$CallArguments", "add",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)V", false);
 
                 if (pooledArg) {
                     emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
@@ -1330,6 +1341,19 @@ public class EmitSubroutine {
         } finally {
             emitterVisitor.ctx.javaClassInfo.callerLineTokenOverride =
                     savedArgumentCallerLineOverride;
+        }
+        if (stagedArguments) {
+            mv.visitLabel(argumentsEnd);
+            mv.visitJumpInsn(Opcodes.GOTO, argumentsReady);
+            mv.visitLabel(argumentsFailure);
+            mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
+            mv.visitInsn(Opcodes.SWAP);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode$CallArguments", "abandon",
+                    "(Ljava/lang/Throwable;)Ljava/lang/Throwable;", false);
+            mv.visitInsn(Opcodes.ATHROW);
+            mv.visitLabel(argumentsReady);
+            mv.visitTryCatchBlock(argumentsStart, argumentsEnd, argumentsFailure, null);
         }
 
         // Undefined direct-call diagnostics report the line containing the
@@ -1418,7 +1442,9 @@ public class EmitSubroutine {
                 Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                 "applyAtLocation",
-                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;ILjava/lang/String;Ljava/lang/String;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
+                stagedArguments
+                        ? "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;Lorg/perlonjava/runtime/runtimetypes/RuntimeCode$CallArguments;ILjava/lang/String;Ljava/lang/String;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;"
+                        : "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;ILjava/lang/String;Ljava/lang/String;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
                 false); // Generate an .apply() call
 
         if (pooledArgsArray) {

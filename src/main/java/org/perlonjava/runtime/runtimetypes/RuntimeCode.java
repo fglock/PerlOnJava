@@ -10667,9 +10667,37 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     // Method to apply (execute) a subroutine reference using native array for parameters
-    /** Invoke a generated direct call while retaining its Perl source callsite. */
+    private static RuntimeList applyDirectCallWithStagedArguments(
+            RuntimeScalar runtimeScalar, String subroutineName,
+            CallArguments stagedArguments, int callContext) {
+        try {
+            return apply(runtimeScalar, subroutineName,
+                    (RuntimeBase) stagedArguments.toRuntimeArray(), callContext);
+        } finally {
+            stagedArguments.finish();
+        }
+    }
+
+    /** Compatibility entry for callers which already evaluated a native argument array. */
     public static RuntimeList applyAtLocation(RuntimeScalar runtimeScalar, String subroutineName,
                                               RuntimeBase[] args, int callContext,
+                                              String callerPackage, String callerFile,
+                                              int callerLine) {
+        CallArguments stagedArguments = newCallArguments(args.length);
+        try {
+            for (RuntimeBase arg : args) {
+                stagedArguments.add(arg);
+            }
+            return applyAtLocation(runtimeScalar, subroutineName, stagedArguments,
+                    callContext, callerPackage, callerFile, callerLine);
+        } finally {
+            stagedArguments.finish();
+        }
+    }
+
+    /** Invoke a generated direct call while retaining its Perl source callsite. */
+    public static RuntimeList applyAtLocation(RuntimeScalar runtimeScalar, String subroutineName,
+                                              CallArguments args, int callContext,
                                               String callerPackage, String callerFile,
                                               int callerLine) {
         ExecutionRuntimeState executionState = PerlRuntime.current().executionState();
@@ -10689,7 +10717,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 || "%".equals(code.signatureSlurpySigil));
         if (!needsSignatureLocation) {
             try {
-                return apply(resolved, subroutineName, args, callContext);
+                return applyDirectCallWithStagedArguments(
+                        resolved, subroutineName, args, callContext);
             } finally {
                 if (executionState.pendingDirectCallSites.peek() == directCallSite) {
                     executionState.pendingDirectCallSites.pop();
@@ -10699,7 +10728,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
         pushSignatureValidationCallerFrame(pkg, callerFile, callerLine);
         try {
-            return apply(resolved, subroutineName, args, callContext);
+            return applyDirectCallWithStagedArguments(
+                    resolved, subroutineName, args, callContext);
         } finally {
             popSignatureValidationCallerFrame();
             if (executionState.pendingDirectCallSites.peek() == directCallSite) {
@@ -10732,7 +10762,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
         // Check if the type of this RuntimeScalar is CODE
         if (runtimeScalar.type == RuntimeScalarType.CODE) {
-
             // Transform the native array to RuntimeArray of aliases (Perl variable `@_`)
             RuntimeArray a = new RuntimeArray(args.length);
             for (RuntimeBase arg : args) {
