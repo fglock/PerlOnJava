@@ -107,7 +107,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public static final class CallArguments extends RuntimeScalar {
         private final RuntimeBase[] values;
         private final java.util.ArrayList<RuntimeScalar> listResultOwners = new java.util.ArrayList<>();
-        private final java.util.ArrayList<RuntimeScalar> stagedScalarOwners = new java.util.ArrayList<>();
         private final java.util.ArrayList<RuntimeScalar.ArgumentAliasOwner> argumentAliasOwners =
                 new java.util.ArrayList<>();
         private final java.util.ArrayList<ArgumentContainerOwner> argumentContainerOwners =
@@ -133,8 +132,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // The staging frame retains this scalar cell through argument
             // evaluation and the call. Record that cell alias even when it has
             // no lexical or container marker yet; the alias does not add a
-            // referent count. Mortal returns also get a separate staged value
-            // owner below when their original temporary could otherwise drain.
+            // referent count. A mortal return keeps its exact RETURN_VALUE
+            // release queued until this alias frame leaves.
             if (value instanceof RuntimeScalar scalar) {
                 boolean pendingStrongRelease = !WeakRefRegistry.isweak(scalar)
                         && ((scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
@@ -146,12 +145,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         || hasCurrentCountedCellOwner(scalar)
                         || pendingStrongRelease) {
                     argumentAliasOwners.add(scalar.retainArgumentAliasOwner());
-                }
-                if ((scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                        && scalar.value instanceof RuntimeBase
-                        && !WeakRefRegistry.isweak(scalar)
-                        && scalar.isMortalReturnSnapshot()) {
-                    stagedScalarOwners.add(RuntimeScalar.retainStagedArgumentValue(scalar));
                 }
             } else if (value instanceof RuntimeList) {
                 retainListResultOwners(value);
@@ -175,8 +168,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     && scalar.value instanceof RuntimeBase
                     && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
                     && !WeakRefRegistry.isweak(scalar)) {
-                RuntimeScalar owner = RuntimeScalar.retainStagedArgumentValue(scalar);
-                listResultOwners.add(owner);
+                if (scalar.isMortalReturnSnapshot()) {
+                    // The return slot already owns this referent. Keep the
+                    // scalar cell aliased and let its exact queued release
+                    // wait for this frame instead of adding a second count.
+                    argumentAliasOwners.add(scalar.retainArgumentAliasOwner());
+                } else {
+                    RuntimeScalar owner = RuntimeScalar.retainStagedArgumentValue(scalar);
+                    listResultOwners.add(owner);
+                }
             }
         }
 
@@ -215,7 +215,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
             }
             failure = releaseStagedArgumentOwners(listResultOwners, failure);
-            failure = releaseStagedArgumentOwners(stagedScalarOwners, failure);
             failure = releaseArgumentAliasOwners(argumentAliasOwners, failure);
             failure = releaseArgumentContainerOwners(argumentContainerOwners, failure);
             failure = attemptCleanup(failure, MortalList::drainDeferredArgumentOwnerReleases);

@@ -2094,7 +2094,6 @@ public class MortalList {
             state.sweepPendingAfterOuterDestroy = false;
             ReachabilityWalker.inspectWeakBackrefCapturesForDiagnostics();
         }
-        boolean topLevel = !state.hasMortalMarks();
         if (state.pending.isEmpty() && state.pendingTiedReleases.isEmpty()
                 && state.pendingIoReleases.isEmpty()
                 && state.pendingUntrackedReturnOwnerReleases.isEmpty()) {
@@ -2104,7 +2103,6 @@ public class MortalList {
         }
         invalidateDrainReachabilityCaches();
         state.flushing = true;
-        if (topLevel) state.topLevelFlushDepth++;
         try {
             processDeferredEntriesFrom(0, 0, 0, 0);
             state.pending.clear();
@@ -2117,7 +2115,6 @@ public class MortalList {
             state.pendingUntrackedReturnOwnerReleases.clear();
             state.markDepth = 0; // All entries drained; marks are meaningless now
         } finally {
-            if (topLevel) state.topLevelFlushDepth--;
             state.flushing = false;
             invalidateDrainReachabilityCaches();
         }
@@ -2290,7 +2287,6 @@ public class MortalList {
         LifecycleRuntimeState state = state();
         if (!state.mortalActive) return;
         if (state.flushing) return;
-        boolean topLevel = !state.hasMortalMarks();
         if (state.pending.isEmpty() && state.pendingTiedReleases.isEmpty()
                 && state.pendingIoReleases.isEmpty()
                 && state.pendingUntrackedReturnOwnerReleases.isEmpty()) {
@@ -2314,7 +2310,6 @@ public class MortalList {
         }
         invalidateDrainReachabilityCaches();
         state.flushing = true;
-        if (topLevel) state.topLevelFlushDepth++;
         try {
             processDeferredEntriesFrom(mark, tiedMark, ioMark, untrackedReturnOwnerMark);
             // Remove only entries above the mark
@@ -2335,22 +2330,11 @@ public class MortalList {
                 state.pendingUntrackedReturnOwnerReleases.removeLast();
             }
         } finally {
-            if (topLevel) state.topLevelFlushDepth--;
             state.flushing = false;
             invalidateDrainReachabilityCaches();
         }
         processReadyDeferredCaptures(state);
         refreshBoundaryWork(state);
-    }
-
-    /**
-     * Whether cleanup is currently running at a top-level Perl statement
-     * boundary.  A top-level temporary can be finalized immediately before
-     * {@code ${^GLOBAL_PHASE}} changes to {@code DESTRUCT}; Perl still treats
-     * a destructor resurrection there as global-destruction resurrection.
-     */
-    public static boolean isDrainingTopLevelTemporary() {
-        return state().topLevelFlushDepth > 0;
     }
 
     /**

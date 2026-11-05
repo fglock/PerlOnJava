@@ -2248,6 +2248,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      * variable still each call FETCH.</p>
      */
     public static RuntimeScalar fetchTiedOnce(RuntimeScalar scalar) {
+        if (scalar instanceof TiedVariableBase tiedVariable) {
+            return tiedVariable.tiedFetch();
+        }
         return scalar.type == TIED_SCALAR ? scalar.tiedFetch() : scalar;
     }
 

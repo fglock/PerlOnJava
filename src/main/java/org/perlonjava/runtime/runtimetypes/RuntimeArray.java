@@ -1280,40 +1280,68 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 runtimeArray.notePackageRootMutation();
                 RuntimeArray staged = new RuntimeArray();
                 value.addToArray(staged);
-                for (RuntimeScalar elem : staged.elements) {
-                    if (runtimeArray.threadShared) {
-                        SharedPerlStorage.validateStoredValue(elem);
-                        SharedPerlStorage.publishBlessing(elem);
-                    }
-                    if (!wasAliased && runtimeArray.hasDurableElementLifetime()) {
-                        RuntimeScalar.retainUnstashedIoForDurableSlot(elem);
-                    }
-                }
                 PerlOwnerSlot.Kind ownerKind = wasAliased
                         ? PerlOwnerSlot.Kind.SCALAR_CELL
                         : PerlOwnerSlot.Kind.ARRAY_ELEMENT;
-                RuntimeScalar.transitionContainerSlots(
-                        List.of(), staged.elements, ownerKind,
-                        () -> {
-                            runtimeArray.elements.addAll(staged.elements);
-                            runtimeArray.markPackageRootedValues(sizeBefore);
-                            for (int index = sizeBefore;
-                                    index < runtimeArray.elements.size(); index++) {
-                                if (wasAliased) {
-                                    runtimeArray.markOwnedAliasElement(
-                                            runtimeArray.elements.get(index));
+                if (runtimeArray.threadShared) {
+                    // Shared storage validates each STORE in order. Keep the
+                    // accepted prefix if a later value is rejected, as Perl
+                    // does for push(@shared, ...).
+                    for (RuntimeScalar elem : staged.elements) {
+                        SharedPerlStorage.validateStoredValue(elem);
+                        SharedPerlStorage.publishBlessing(elem);
+                        if (!wasAliased && runtimeArray.hasDurableElementLifetime()) {
+                            RuntimeScalar.retainUnstashedIoForDurableSlot(elem);
+                        }
+                        int index = runtimeArray.elements.size();
+                        RuntimeScalar.transitionContainerSlots(
+                                List.of(),
+                                elem == null ? List.of() : Collections.singletonList(elem),
+                                ownerKind,
+                                () -> {
+                                    runtimeArray.elements.add(elem);
+                                    runtimeArray.markPackageRootedValues(index);
+                                    if (wasAliased) {
+                                        runtimeArray.markOwnedAliasElement(elem);
+                                        runtimeArray.elementsAliased = true;
+                                    } else {
+                                        runtimeArray.elementsOwned = true;
+                                        runtimeArray.elementsAliased = false;
+                                        runtimeArray.ownedAliasElements = null;
+                                    }
+                                },
+                                null);
+                    }
+                    staged.elements.clear();
+                } else {
+                    for (RuntimeScalar elem : staged.elements) {
+                        if (!wasAliased && runtimeArray.hasDurableElementLifetime()) {
+                            RuntimeScalar.retainUnstashedIoForDurableSlot(elem);
+                        }
+                    }
+                    RuntimeScalar.transitionContainerSlots(
+                            List.of(), staged.elements, ownerKind,
+                            () -> {
+                                runtimeArray.elements.addAll(staged.elements);
+                                runtimeArray.markPackageRootedValues(sizeBefore);
+                                for (int index = sizeBefore;
+                                        index < runtimeArray.elements.size(); index++) {
+                                    if (wasAliased) {
+                                        runtimeArray.markOwnedAliasElement(
+                                                runtimeArray.elements.get(index));
+                                    }
                                 }
-                            }
-                            staged.elements.clear();
-                            if (wasAliased) {
-                                runtimeArray.elementsAliased = true;
-                            } else {
-                                runtimeArray.elementsOwned = true;
-                                runtimeArray.elementsAliased = false;
-                                runtimeArray.ownedAliasElements = null;
-                            }
-                        },
-                        null);
+                                staged.elements.clear();
+                                if (wasAliased) {
+                                    runtimeArray.elementsAliased = true;
+                                } else {
+                                    runtimeArray.elementsOwned = true;
+                                    runtimeArray.elementsAliased = false;
+                                    runtimeArray.ownedAliasElements = null;
+                                }
+                            },
+                            null);
+                }
                 yield getScalarInt(runtimeArray.elements.size());
             }
             case AUTOVIVIFY_ARRAY -> {
@@ -2218,11 +2246,51 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 // owner identity for this array slot.
                 RuntimeArray staged = new RuntimeArray();
                 source.addToArray(staged);
-                for (RuntimeScalar elem : staged.elements) {
-                    if (threadShared) {
+                if (threadShared) {
+                    // An array assignment to shared storage is a sequence of
+                    // validated slot stores. Publish each accepted edge before
+                    // validating the next one so a rejected value leaves the
+                    // same partial result as system Perl.
+                    List<RuntimeScalar> displaced = ownedElementReleaseSnapshot();
+                    RuntimeScalar.transitionContainerSlots(
+                            displaced, List.of(), PerlOwnerSlot.Kind.ARRAY_ELEMENT,
+                            () -> {
+                                this.elements.clear();
+                                releaseReferenceListAliasCellOwners();
+                                this.elementsOwned = true;
+                                this.elementsAliased = false;
+                                this.ownedAliasElements = null;
+                            },
+                            MortalList::deferDestroyForContainerClear);
+                    for (RuntimeScalar elem : staged.elements) {
                         SharedPerlStorage.validateStoredValue(elem);
                         SharedPerlStorage.publishBlessing(elem);
+                        if (hasDurableElementLifetime()) {
+                            RuntimeScalar.retainUnstashedIoForDurableSlot(elem);
+                        }
+                        int index = this.elements.size();
+                        RuntimeScalar.transitionContainerSlots(
+                                List.of(),
+                                elem == null ? List.of() : Collections.singletonList(elem),
+                                PerlOwnerSlot.Kind.ARRAY_ELEMENT,
+                                () -> {
+                                    this.elements.add(elem);
+                                    this.markPackageRootedValues(index);
+                                    this.elementsOwned = true;
+                                    this.elementsAliased = false;
+                                    this.ownedAliasElements = null;
+                                },
+                                null);
                     }
+                    staged.elements.clear();
+
+                    RuntimeArray result = new RuntimeArray();
+                    result.elements.addAll(this.elements);
+                    result.scalarContextSize = this.elements.size();
+                    MortalList.flushAboveMark();
+                    yield result;
+                }
+                for (RuntimeScalar elem : staged.elements) {
                     if (hasDurableElementLifetime()) {
                         RuntimeScalar.retainUnstashedIoForDurableSlot(elem);
                     }

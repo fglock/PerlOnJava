@@ -52,7 +52,6 @@ final class LifecycleRuntimeState {
     int markDepth;
     boolean flushing;
     int reachabilityDrainDepth;
-    int topLevelFlushDepth;
     /** Suppress sweeps while clone hooks and the first child entry build Perl roots. */
     int weakSweepSuppressionDepth;
     boolean immediateWeakSweepRequested;
@@ -155,7 +154,6 @@ final class LifecycleRuntimeState {
         markDepth = 0;
         flushing = false;
         reachabilityDrainDepth = 0;
-        topLevelFlushDepth = 0;
         fullRootSnapshot = null;
         unblessedAggregateRootSnapshot = null;
         weakSweepRootWitnesses.clear();
