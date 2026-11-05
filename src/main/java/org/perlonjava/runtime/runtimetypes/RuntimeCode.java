@@ -3407,6 +3407,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return executionState.callArgumentFrames.size();
     }
 
+    static boolean hasActiveCallArgumentFrame() {
+        PerlRuntime runtime = PerlRuntime.currentOrNull();
+        return runtime != null && !runtime.executionState().callArgumentFrames.isEmpty();
+    }
+
     /**
      * Finish only argument frames and method-invocant owners created inside an
      * eval boundary. Argument aliases retire before the enclosing receiver hold,
@@ -3414,6 +3419,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      */
     public static void unwindEvalMethodInvocantHolds(
             ExecutionRuntimeState executionState, int argumentDepth, int holdDepth) {
+        int pendingBefore = MortalList.pendingSize();
         boolean releasedArguments = false;
         while (executionState.callArgumentFrames.size() > argumentDepth) {
             int last = executionState.callArgumentFrames.size() - 1;
@@ -3425,7 +3431,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     .get(executionState.methodInvocantHolds.size() - 1);
             releaseAbandonedMethodInvocantHold(hold);
         }
-        if (releasedArguments) MortalList.flushAboveMark();
+        if (releasedArguments) {
+            // Argument-frame cleanup may queue releases above an outer mark.
+            // Drain only those new entries: flushAboveMark also consumes older
+            // caller-owned RETURN_VALUE entries that must survive this unwind
+            // until the receiving scalar acquires them.
+            MortalList.drainPendingSince(pendingBefore);
+        }
     }
 
     private static boolean isReferenceToGlobInvocant(RuntimeScalar invocant) {

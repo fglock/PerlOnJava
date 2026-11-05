@@ -36,6 +36,11 @@ public class MortalList {
         }
     }
 
+    private record PendingOwnerEntry(
+            RuntimeBase base,
+            RuntimeBase.PendingOwnerRelease ownerRelease,
+            String transientOwnerKind) {}
+
     static final class ReachabilityQueryMeasurement implements AutoCloseable {
         private final LifecycleRuntimeState state;
         private final ReachabilityQueryStats stats;
@@ -228,6 +233,113 @@ public class MortalList {
             if (pending == referent) return true;
         }
         return false;
+    }
+
+    /** Find the pending release for this exact scalar slot and referent. */
+    static PerlOwnerSlot.PendingRelease pendingCountedReleaseFor(
+            RuntimeScalar owner, RuntimeBase referent) {
+        if (owner == null || referent == null) return null;
+        LifecycleRuntimeState state = state();
+        for (int i = 0; i < state.pending.size(); i++) {
+            if (state.pending.get(i) != referent) continue;
+            java.lang.ref.WeakReference<RuntimeScalar> ownerReference =
+                    state.pendingOwnerScalars.get(i);
+            if (ownerReference == null || ownerReference.get() != owner) continue;
+            RuntimeBase.PendingOwnerRelease pendingRelease =
+                    state.pendingOwnerReleases.get(i);
+            if (pendingRelease != null && pendingRelease.ownerSlotRelease != null) {
+                return pendingRelease.ownerSlotRelease;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Complete the exact return and source releases after a receiving scalar
+     * has acquired the returned referent. Source provenance is a stable slot
+     * identity plus its release sequence; unrelated pending owners of the
+     * same object remain queued.
+     */
+    static void consumeMortalReturnValue(RuntimeScalar returned, RuntimeBase destinationReferent) {
+        if (!isActive() || returned == null || !returned.hasMortalReturnSnapshot()
+                || returned.value != destinationReferent || destinationReferent == null
+                || RuntimeCode.hasActiveCallArgumentFrame()) {
+            return;
+        }
+        LifecycleRuntimeState state = state();
+        if (state.flushing) return;
+
+        int returnIndex = -1;
+        int sourceIndex = -1;
+        for (int i = 0; i < state.pending.size(); i++) {
+            if (state.pending.get(i) != destinationReferent) continue;
+            RuntimeBase.PendingOwnerRelease ownerRelease =
+                    state.pendingOwnerReleases.get(i);
+            PerlOwnerSlot.PendingRelease slotRelease = ownerRelease == null
+                    ? null : ownerRelease.ownerSlotRelease;
+            if (slotRelease == null) continue;
+            if (slotRelease.kind() == PerlOwnerSlot.Kind.RETURN_VALUE) {
+                java.lang.ref.WeakReference<RuntimeScalar> ownerReference =
+                        state.pendingOwnerScalars.get(i);
+                if (ownerReference != null && ownerReference.get() == returned) {
+                    returnIndex = i;
+                    continue;
+                }
+            }
+            if (slotRelease.ownerSlotIdentity() == returned.mortalReturnSourceOwnerIdentity()
+                    && slotRelease.sequence() == returned.mortalReturnSourceReleaseSequence()
+                    && destinationReferent == returned.mortalReturnSourceReferent()) {
+                sourceIndex = i;
+            }
+        }
+
+        int untrackedReturnIndex = state.pendingUntrackedReturnOwnerReleases
+                .indexOf(returned);
+        PendingOwnerEntry returnEntry = null;
+        PendingOwnerEntry sourceEntry = null;
+        state.flushing = true;
+        invalidateDrainReachabilityCaches();
+        try {
+            if (returnIndex >= 0 && returnIndex == sourceIndex) {
+                sourceIndex = -1;
+            }
+            if (returnIndex > sourceIndex) {
+                returnEntry = removePendingOwnerEntry(state, returnIndex);
+                if (sourceIndex >= 0) sourceEntry = removePendingOwnerEntry(state, sourceIndex);
+            } else {
+                if (sourceIndex >= 0) sourceEntry = removePendingOwnerEntry(state, sourceIndex);
+                if (returnIndex >= 0) returnEntry = removePendingOwnerEntry(state, returnIndex);
+            }
+
+            if (sourceEntry != null) {
+                processDeferredBase(sourceEntry.base(), false,
+                        sourceEntry.ownerRelease(), sourceEntry.transientOwnerKind());
+            }
+            if (returnEntry != null) {
+                processDeferredBase(returnEntry.base(), false,
+                        returnEntry.ownerRelease(), returnEntry.transientOwnerKind());
+            }
+            if (untrackedReturnIndex >= 0) {
+                state.pendingUntrackedReturnOwnerReleases.remove(untrackedReturnIndex);
+                returned.releaseMortalReturnValueOwner();
+            }
+            returned.finishMortalReturnHandoff();
+        } finally {
+            state.flushing = false;
+            invalidateDrainReachabilityCaches();
+        }
+        refreshBoundaryWork(state);
+    }
+
+    private static PendingOwnerEntry removePendingOwnerEntry(
+            LifecycleRuntimeState state, int index) {
+        RuntimeBase base = state.pending.remove(index);
+        RuntimeBase.PendingOwnerRelease ownerRelease =
+                state.pendingOwnerReleases.remove(index);
+        state.pendingOwnerScalars.remove(index);
+        state.pendingArgumentFrames.remove(index);
+        String transientOwnerKind = state.pendingTransientOwnerKinds.remove(index);
+        return new PendingOwnerEntry(base, ownerRelease, transientOwnerKind);
     }
 
     /**
