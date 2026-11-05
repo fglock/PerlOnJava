@@ -94,20 +94,38 @@ public class RuntimeGraphCloner {
     SnapshotRoots cloneSnapshotRoots(List<? extends RuntimeBase> roots) {
         List<RuntimeBase> result = new ArrayList<>(roots.size());
         List<PerlOwnerSlot> ownerSlots = new ArrayList<>(roots.size() * 2);
-        for (RuntimeBase root : roots) {
-            RuntimeBase clonedRoot = cloneValue(root);
-            result.add(clonedRoot);
-            retainSnapshotRoot(clonedRoot, ownerSlots);
-            if (clonedRoot instanceof RuntimeScalar scalar
-                    && RuntimeScalarType.isReference(scalar)
-                    && scalar.value instanceof RuntimeBase referent
-                    && referent != clonedRoot) {
-                retainSnapshotRoot(referent, ownerSlots);
+        try {
+            for (RuntimeBase root : roots) {
+                RuntimeBase clonedRoot = cloneValue(root);
+                result.add(clonedRoot);
+                retainSnapshotRoot(clonedRoot, ownerSlots);
+                if (clonedRoot instanceof RuntimeScalar scalar
+                        && RuntimeScalarType.isReference(scalar)
+                        && scalar.value instanceof RuntimeBase referent
+                        && referent != clonedRoot) {
+                    retainSnapshotRoot(referent, ownerSlots);
+                }
             }
+        } catch (Throwable failure) {
+            Throwable pendingException = failure;
+            for (int i = 0; i < ownerSlots.size(); i++) {
+                try {
+                    ownerSlots.get(i).release();
+                } catch (Throwable cleanupFailure) {
+                    pendingException = cleanupFailure;
+                }
+            }
+            throw cleanupFailure(pendingException);
         }
         return new SnapshotRoots(
                 java.util.Collections.unmodifiableList(new ArrayList<>(result)),
                 List.copyOf(ownerSlots));
+    }
+
+    private static RuntimeException cleanupFailure(Throwable failure) {
+        if (failure instanceof RuntimeException runtimeException) return runtimeException;
+        if (failure instanceof Error error) throw error;
+        return new RuntimeException(failure);
     }
 
     private static void retainSnapshotRoot(

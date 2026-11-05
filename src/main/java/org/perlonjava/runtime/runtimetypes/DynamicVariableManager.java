@@ -269,17 +269,32 @@ public class DynamicVariableManager {
         while (variableStack.size() > targetLocalLevel) {
             DynamicState state = variableStack.removeLast();
             List<PerlOwnerSlot> ownerSlots = new ArrayList<>(2);
-            RuntimeBase currentOwner = state.suspendedOwnerValue();
-            retainSuspendedOwner(currentOwner, ownerSlots);
             Object token;
             try {
+                RuntimeBase currentOwner = state.suspendedOwnerValue();
+                retainSuspendedOwner(currentOwner, ownerSlots);
                 token = state.dynamicSuspendState();
                 if (token instanceof RuntimeBase tokenOwner && tokenOwner != currentOwner) {
                     retainSuspendedOwner(tokenOwner, ownerSlots);
                 }
-            } catch (RuntimeException | Error failure) {
-                releaseSuspendedOwners(ownerSlots);
-                throw failure;
+            } catch (Throwable failure) {
+                // A suspension callback may fail after earlier states have
+                // already been detached. Restore the current and remaining
+                // stack states, then retire every temporary owner acquired
+                // for this incomplete frame capture.
+                variableStack.addLast(state);
+                try {
+                    popToLocalLevel(executionState, targetLocalLevel);
+                } catch (Throwable cleanupFailure) {
+                    failure = cleanupFailure;
+                }
+                try {
+                    releaseSuspendedOwners(ownerSlots);
+                } catch (Throwable releaseFailure) {
+                    failure = releaseFailure;
+                }
+                rethrow(releaseSuspendedOwners(result, 0, failure));
+                return List.of();
             }
             result.add(0, new SuspendedState(state, token, List.copyOf(ownerSlots)));
         }
@@ -295,19 +310,79 @@ public class DynamicVariableManager {
     }
 
     private static void releaseSuspendedOwners(List<PerlOwnerSlot> ownerSlots) {
+        Throwable pendingException = null;
         for (int i = ownerSlots.size() - 1; i >= 0; i--) {
-            ownerSlots.get(i).release();
+            try {
+                ownerSlots.get(i).release();
+            } catch (Throwable failure) {
+                pendingException = failure;
+            }
         }
+        rethrow(pendingException);
     }
 
-    /** Reinstall detached states in their original stack order. */
+    private static Throwable releaseSuspendedOwners(
+            List<SuspendedState> states, int firstState, Throwable pendingException) {
+        for (int i = states.size() - 1; i >= firstState; i--) {
+            try {
+                releaseSuspendedOwners(states.get(i).ownerSlots());
+            } catch (Throwable failure) {
+                pendingException = failure;
+            }
+        }
+        return pendingException;
+    }
+
+    /**
+     * Reinstall detached states in their original stack order. A restore can
+     * invoke Perl callbacks, so a failure stops later restores, unwinds the
+     * current and already reattached states, and releases the remaining
+     * suspended owners before the failure is propagated.
+     */
     public static void resumeSuspended(List<SuspendedState> states) {
         if (states == null) return;
         Deque<DynamicState> variableStack = variableStack();
-        for (SuspendedState suspended : states) {
-            suspended.state().dynamicResumeState(suspended.token());
-            releaseSuspendedOwners(suspended.ownerSlots());
+        int originalLocalLevel = variableStack.size();
+        for (int i = 0; i < states.size(); i++) {
+            SuspendedState suspended = states.get(i);
+            try {
+                suspended.state().dynamicResumeState(suspended.token());
+            } catch (Throwable failure) {
+                // Implementations save the callback's current state before
+                // applying the suspended value, so include the failing state
+                // in the normal unwind as well.
+                variableStack.addLast(suspended.state());
+                try {
+                    popToLocalLevel(originalLocalLevel);
+                } catch (Throwable cleanupFailure) {
+                    failure = cleanupFailure;
+                }
+                rethrow(releaseSuspendedOwners(states, i, failure));
+                return;
+            }
             variableStack.addLast(suspended.state());
+            try {
+                releaseSuspendedOwners(suspended.ownerSlots());
+            } catch (Throwable failure) {
+                try {
+                    popToLocalLevel(originalLocalLevel);
+                } catch (Throwable cleanupFailure) {
+                    failure = cleanupFailure;
+                }
+                rethrow(releaseSuspendedOwners(states, i + 1, failure));
+                return;
+            }
         }
+    }
+
+    private static void rethrow(Throwable failure) {
+        if (failure == null) return;
+        if (failure instanceof RuntimeException runtimeException) {
+            throw runtimeException;
+        }
+        if (failure instanceof Error error) {
+            throw error;
+        }
+        throw new RuntimeException(failure);
     }
 }
