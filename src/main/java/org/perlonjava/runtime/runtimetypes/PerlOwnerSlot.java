@@ -181,6 +181,11 @@ public final class PerlOwnerSlot {
         return identity;
     }
 
+    /** Sequence the next deferred release of this stable storage identity will use. */
+    synchronized long nextReleaseSequenceValue() {
+        return nextReleaseSequence + 1;
+    }
+
     RuntimeScalar padCell() {
         return padCell;
     }
