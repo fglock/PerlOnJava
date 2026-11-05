@@ -431,6 +431,29 @@ public class MortalList {
         drainPendingSince(checkpoint);
     }
 
+    /** Release a direct method-invocant edge, deferring its final count to the result boundary. */
+    static void releaseCountedMethodInvocantOwner(
+            RuntimeBase base, PerlOwnerSlot ownerSlot, String releaseSite,
+            boolean abandoned) {
+        if (base == null || ownerSlot == null
+                || !ownerSlot.isMethodInvocantOwner(base)) return;
+        PerlOwnerSlot.PendingRelease release = ownerSlot.releaseCountedIdentity();
+        if (release == null) return;
+        if (base.refCount <= 0 || base.currentlyDestroying) {
+            release.complete();
+            return;
+        }
+        if (base.refCount > 1) {
+            base.traceRefCount(-1, releaseSite);
+            base.refCount--;
+            release.complete();
+            return;
+        }
+        int checkpoint = pendingSize();
+        deferOwnerSlotDecrement(base, null, release);
+        if (abandoned) drainPendingSince(checkpoint);
+    }
+
     /** Release one exact scalar-backed owner at the operation that drops its Perl edge. */
     public static void releaseCountedOwnerImmediately(RuntimeScalar owner, String releaseSite) {
         if (owner == null || !owner.refCountOwned
