@@ -3,31 +3,35 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-05):** #1649 remains in Phase 2 on
-`wip/ownership-bless-temp-20261105-102952`, WIP commit `90a0189c70`. The latest
-batch pairs scalar replacement's new count and slot identity, carries the
-displaced edge as an exact release token, and routes tracked weakening through
-the shared release path. `CountedScalarOwnerReplacementTest` covers changed and
-unchanged referents. System Perl passes 47 checks across the scalar-slot,
-reentrant-overwrite, and weaken oracles. The local Perl cannot parse
-`weaken_readonly_ref.t` because it does not recognize `experimental::builtin`.
-This candidate has not been built; the saved JAR `7721ba94ec` is stale.
+`wip/ownership-recovery-batch-20261105-114935`, source `63cb70bd23`. The
+preceding WIP snapshot `2ee46c7e0a` pairs host-side hash replacement and the
+synthetic `DESTROY` self argument with exact owner release. This batch routes
+tail-call CODE cleanup through the counted-slot release path and makes
+scalar-reference contents release/retarget carry a `PendingRelease` token
+through the shared drain. The existing
+`scalar_reference_localized_owner_lifetime.t` passes 6/6 on system Perl.
+`TailCallCodeRefDoesNotPinFromLocalBindingFlagTest` and
+`PerlOwnerSlotScalarReferenceContentsTest` cover the Java paths, but this
+candidate has not been built; saved JAR `7721ba94ec` is stale.
 
-No corrective reachability path has been removed. `restoreReachableOwnerCount`
-still has no production caller, while verified-count repair remains in scalar
-reference-content cleanup, deferred release, immediate owner release, and
-`DESTROY` entry/exit. The localized-glob decrement is a legacy direct stash-write
-path exercised by a Java fixture; normal code-map replacement uses stash
-CODE-slot release. It is not evidence of a missing normal producer.
+The producer audit confirms `restoreReachableOwnerCount` is reachable only
+through `MortalList.deferDecrement`, whose current callers are Java tests. Normal
+deferred scalar releases use `queueOwnerRelease` and require a slot token. The
+localized-glob raw decrement is likewise exercised by legacy direct-stash-write
+fixtures; `GlobalCodeRefMap` normally pairs replacement with stash CODE-slot
+release. Neither is evidence of a normal producer defect. Verified-count
+repair remains in scalar overwrite, immediate/deferred release, and `DESTROY`;
+no corrective recovery or sweep scheduling has been removed.
 
-Next, migrate array/hash mutation and removal together with tied-value and
-argument aliases; then handle closure/CODE, package roots, suspended frames,
-clone/shared storage, cycles, and resource-owner transfers. For each batch,
-finish producer and release coverage before building. Run system Perl for new
-Perl-level tests as they are added. To limit host cost, run one immutable full
-gate after ordinary producers are migrated, then remove recovery/sweep
-machinery and run one final full gate. Use the same final JAR for both backends,
-the no-sweeps, #1794, #1860, and HTML-Tree acceptance matrix. PR #1938 and its CI
-still need rechecking before publication.
+Still audit and migrate normal producers for scalar-reference contents,
+closure/CODE transfer, tied and argument aliases, package/glob roots, suspended
+frames, clone/shared storage, cycles, and resource-owner release. Then trace
+each verified-count repair to its producer before deleting it. Run one
+immutable full gate after producer migration and one after recovery/sweep
+removal; reuse the final JAR for both backends and the no-sweeps, #1794, #1860,
+and HTML-Tree acceptance matrix. PR #1938 remains an open draft at remote head
+`95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05`; recheck its current CI before
+publication.
 
 The eval-return/argument-unwind batch preserves a caller's pending
 `RETURN_VALUE` while retiring only releases created by the argument frames
