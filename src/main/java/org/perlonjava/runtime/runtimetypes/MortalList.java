@@ -433,11 +433,44 @@ public class MortalList {
             String transientOwnerKind, String releaseSite,
             boolean clearWeakRefsForLocalBinding) {
         if (base == null || slotRelease == null) return;
+        if (PerlRuntime.currentOrNull() == null) {
+            // A host-side owner transition can retire a non-final count without
+            // a Perl execution context. Keep this path limited to count-only
+            // releases and empty unblessed aggregates; any final Perl lifecycle
+            // work still requires the owning runtime to be bound.
+            if (base.currentlyDestroying || base.refCount < 0
+                    || base.refCount == Integer.MIN_VALUE) {
+                slotRelease.complete();
+                return;
+            }
+            if (base.refCount > 1) {
+                base.traceRefCount(-1, releaseSite);
+                base.refCount--;
+                slotRelease.complete();
+                return;
+            }
+            if (base.refCount == 1 && base.blessId == 0
+                    && !base.hasOwnerSlots() && isEmptyUnblessedAggregate(base)) {
+                base.traceRefCount(-1, releaseSite);
+                base.refCount = 0;
+                slotRelease.complete();
+                return;
+            }
+            throw new IllegalStateException(
+                    "final Perl owner release requires a bound PerlRuntime at " + releaseSite);
+        }
         int checkpoint = pendingSize();
         deferOwnerSlotDecrement(base, transientOwnerKind, slotRelease, releaseSite);
         // Scalar overwrite and weaken historically leave weak observers alone
         // when an unrelated local binding keeps the referent alive.
         drainPendingSince(checkpoint, clearWeakRefsForLocalBinding);
+    }
+
+    private static boolean isEmptyUnblessedAggregate(RuntimeBase base) {
+        return base instanceof RuntimeArray array
+                    && (array.elements == null || array.elements.isEmpty())
+                || base instanceof RuntimeHash hash
+                    && (hash.elements == null || hash.elements.isEmpty());
     }
 
     /** Release a counted native owner through the normal destruction transition. */
@@ -1876,7 +1909,11 @@ public class MortalList {
                 // Both native and legacy closure-pad slots identify the Perl
                 // edge that keeps this referent alive. Defer final cleanup to
                 // that slot's release while keeping refCount at zero.
-                base.deferZeroCountFinalReleaseToUncountedOwnerSlots();
+                if (ownerRelease != null) {
+                    base.deferFinalReleaseToUncountedOwnerSlots();
+                } else {
+                    base.deferZeroCountFinalReleaseToUncountedOwnerSlots();
+                }
             } else if (base instanceof RuntimeScalar scalar
                     && scalar.referencedByScalarReference
                     && (scalar.ownerSlotCount(PerlOwnerSlot.Kind.ARRAY_ALIAS_CELL) != 0
@@ -1893,6 +1930,13 @@ public class MortalList {
                 // through its exact storage identity; localBindingExists is
                 // metadata and cannot stand in for the Perl edge.
                 base.deferZeroCountFinalReleaseToUncountedOwnerSlots();
+            } else if (ownerRelease != null
+                    && base.hasCurrentUncountedPerlOwnerSlotIdentity()) {
+                // An exact counted edge left while a current lexical, package,
+                // alias, or resource slot still owns the value. Keep the weak
+                // lifecycle sentinel on that identity, including when legacy
+                // localBindingExists metadata is also set.
+                base.deferFinalReleaseToUncountedOwnerSlots();
             } else if (base.localBindingExists && !(base instanceof RuntimeCode)) {
                 if (base instanceof RuntimeScalar scalar
                         && scalar.referencedByScalarReference
@@ -1936,18 +1980,16 @@ public class MortalList {
                 // a cached root snapshot must not invent a replacement owner.
                 base.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroyFromCountedOwner(base);
+            } else if (legacyUnpairedDecrement && hasWeakRefs
+                    && restoreReachableOwnerCount(base)) {
+                // Preserve the legacy unpaired hook's diagnostic/recovery walk
+                // while its callers migrate. Production releases carry an
+                // exact owner-slot token and bypass this compatibility path.
             } else if (!(ownerRelease == null && transientOwnerKind == null
                             && hasPackageRootedCurrentAggregateOwner(base))
                     && base.restoreVerifiedCurrentCountedOwnerSlotRefCount()) {
                 // Verified current scalar cells and array/hash elements jointly
                 // restore the surviving owner count without a root walk.
-            } else if (ownerRelease != null && aggregateReferent
-                    && base.hasCurrentUncountedPerlOwnerSlotIdentity()) {
-                // A package array/hash slot is a direct strong edge even though
-                // it does not contribute to the legacy count. Keep the
-                // zero-count lifecycle pending on that exact slot so clearing
-                // the package variable later releases its elements normally.
-                base.deferZeroCountFinalReleaseToUncountedOwnerSlots();
             } else if (base.blessId != 0
                     && base.restoreUnregisteredScalarCellOwnerRefCount()) {
                 // Last compatibility bridge: an unregistered standalone
@@ -1970,11 +2012,6 @@ public class MortalList {
                 // cleanup until its release. Blessed aggregates with direct
                 // weak observers still use the root proof below.
                 base.deferFinalReleaseToUncountedOwnerSlots();
-            } else if (legacyUnpairedDecrement && hasWeakRefs
-                    && restoreReachableOwnerCount(base)) {
-                // The legacy entry point carries no slot identity. Preserve
-                // its compatibility behavior for callers that cannot identify
-                // the released edge. Production releases never enter this path.
             } else if (legacyUnpairedDecrement
                     && base.blessId == 0
                     && (base instanceof RuntimeArray || base instanceof RuntimeHash)

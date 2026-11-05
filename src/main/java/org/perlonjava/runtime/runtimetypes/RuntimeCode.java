@@ -2063,7 +2063,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     /** True when an interpreter-owned Future::AsyncAwait frame is active. */
     public static boolean hasActiveFutureAsyncAwaitSub() {
-        for (RuntimeCode active : activeCodeStack()) {
+        PerlRuntime runtime = PerlRuntime.currentOrNull();
+        if (runtime == null) return false;
+        for (RuntimeCode active : runtime.executionState().activeCodeStack) {
             if (active instanceof InterpretedCode interpreted
                     && interpreted.futureAsyncAwaitSub) {
                 return true;
