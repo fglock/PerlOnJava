@@ -46,6 +46,22 @@ owner gaps remain open across storage mutation, closure/CODE transfers,
 deferred cleanup, clone/shared state, cycles, suspended frames, and resource
 holders. No full gate has run on the current candidate.
 
+The existing `temporary_io_invocant_survives_nested_render.t` regression now
+runs locally with Template Toolkit 3.106 via `/Users/fglock/.perlonjava/lib`.
+System Perl passes 1/1. It fails on the unfixed parent `b6597f9b38` on the JVM
+with an empty output file, while the parent interpreter passes. The current
+pre-merge JAR from `ad830f5d9f` passes on both backends. Evidence:
+`/tmp/issue1649-temporary-io-template-system-perl.log`,
+`/tmp/issue1649-temporary-io-template-unfixed-parent-jvm.log`,
+`/tmp/issue1649-temporary-io-template-unfixed-parent-interpreter.log`,
+`/tmp/issue1649-temporary-io-template-current-jvm.log`, and
+`/tmp/issue1649-temporary-io-template-current-interpreter.log`. The isolated
+parent `make build` produced its JAR but failed the test shard on this
+regression plus four unrelated return-owner tests; the full log is
+`/tmp/issue1649-io-unfixed-parent-build.log`. The master merge changed only an
+upstream test and documentation, but the merged candidate still needs its own
+build and full gate.
+
 To limit expensive builds, finish the producer audit before rebuilding. Bundle
 confirmed scalar, array, hash, tied, package, glob, and CODE mutations that use
 the same slot-transition contract. Separately bundle transfers that use the
