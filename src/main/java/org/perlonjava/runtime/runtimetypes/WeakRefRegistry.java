@@ -145,77 +145,22 @@ public class WeakRefRegistry {
             PerlOwnerSlot releasedSlot = ref.countedOwnerSlot();
             boolean identifiedOwner = releasedSlot != null && releasedSlot.isActive()
                     && releasedSlot.referent() == base;
-            // Tracked object with a properly-counted reference:
-            // decrement strong count (weak ref doesn't count).
-            // Only decrement if refCountOwned=true, meaning the hash element
-            // or variable's creation incremented the referent's refCount via
-            // setLargeRefCounted or incrementRefCountForContainerStore.
-            // If refCountOwned=false (e.g., element in an untracked anonymous
-            // hash like `{ weakref => $target }`), the store never incremented
-            // refCount, so weaken must not decrement either — otherwise we
-            // get a double-decrement that causes premature destruction.
-            // Clear refCountOwned because weaken's DEC consumes the ownership —
-            // the weak scalar should not trigger another DEC on scope exit or overwrite.
-            ref.refCountOwned = false;
-            base.traceRefCount(-1, "WeakRefRegistry.weaken (decrement on weakening)");
-            base.releaseOwner(ref, "weaken");
-            base.releaseActiveOwner(ref);
-            if (--base.refCount == 0) {
-                if (base instanceof RuntimeCode code && code.hasActiveCodeOwner()) {
-                    code.deferFinalReleaseToActiveCode();
-                } else if (base.hasSemanticCaptureOwner()) {
-                    // A captured pad is an authoritative Perl owner even when
-                    // the weak probe being weakened held the last ordinary
-                    // counted slot. Retain the existing sentinel lifecycle
-                    // until the final shared pad owner leaves; multiple
-                    // closures share this edge and must not inflate refCount.
-                    base.deferFinalReleaseToUncountedOwnerSlots();
-                } else if (base.hasCurrentUncountedPerlOwnerSlotIdentity()) {
-                    // Lexical pads and package slots are direct owners even
-                    // when localBindingExists is absent or stale. Keep the
-                    // lifecycle attached to those exact identities until
-                    // their normal release callbacks run.
-                    base.deferFinalReleaseToUncountedOwnerSlots();
-                } else if (base.localBindingExists) {
-                    // Compatibility path for legacy named bindings that have
-                    // not yet been migrated to an explicit owner-slot producer.
-                } else if (base.restoreVerifiedCurrentCountedOwnerSlotRefCount()) {
-                    // A surviving counted identity is direct evidence of a Perl
-                    // owner only while its scalar still occupies the same storage
-                    // slot. Repair from those current edges before considering a
-                    // compatibility path.
-                } else if (!(identifiedOwner
-                        && MortalList.canTrustFinalCountedRelease(base))
-                        && !(base instanceof RuntimeScalar scalar
-                        && scalar.ephemeralScalarReferenceReferent)
-                        && hasWeakRefsTo(base)
-                        && (base.hasUntrackedReferenceOwnerSlotIdentity()
-                            || base.hasDirectOwnerSlotProofForReleasedWeakReferent())) {
-                    // Refresh each untracked scalar owner against its current
-                    // durable storage before accepting it. A stale slot must
-                    // not turn a final release into a WEAKLY_TRACKED referent
-                    // that waits for a later sweep to clear its weak observers.
-                    base.refCount = WEAKLY_TRACKED;
-                } else {
-                    // No local binding: refCount==0 means truly no strong refs.
-                    // Trigger DESTROY + clear weak refs.
-                    base.refCount = Integer.MIN_VALUE;
-                    if (identifiedOwner && MortalList.canTrustFinalCountedRelease(base)) {
-                        DestroyDispatch.callDestroyFromCountedOwner(base);
-                    } else {
-                        DestroyDispatch.callDestroy(base);
-                    }
-                }
+            if (!identifiedOwner) {
+                throw new IllegalStateException(
+                        "weakening a counted scalar requires its current owner slot");
             }
-            // Note: we do NOT transition unblessed tracked objects to WEAKLY_TRACKED
-            // here anymore. The previous transition (base.blessId == 0 → WEAKLY_TRACKED)
-            // caused premature clearing of weak refs when ANY strong ref exited scope,
-            // even though other strong refs still existed (e.g., Moo's CODE refs in
-            // glob slots). Birth-tracked objects maintain accurate refCounts through
-            // setLarge(), so we can trust the count. The concern about untracked copies
-            // (new RuntimeScalar(RuntimeScalar)) is mitigated by the fact that such
-            // copies don't decrement refCount on cleanup (refCountOwned=false), so
-            // they can't cause false-positive refCount==0 destruction.
+            // Weakening retires the exact strong edge. Queue its token through
+            // the same lifecycle path as overwrite and aggregate removal so
+            // the slot identity and count cannot drift apart.
+            ref.refCountOwned = false;
+            base.releaseOwner(ref, "weaken");
+            PerlOwnerSlot.PendingRelease release = releasedSlot.releaseCountedIdentity();
+            if (release == null) {
+                throw new IllegalStateException(
+                        "weakening a counted scalar lost its owner release token");
+            }
+            MortalList.releaseCountedOwnerSlotImmediately(
+                    base, release, "WeakRefRegistry.weaken");
         } else if (base.refCount == -1
                 && base instanceof RuntimeScalarReadOnly
                 && RuntimeCode.isInstalledPadConstant(base)) {

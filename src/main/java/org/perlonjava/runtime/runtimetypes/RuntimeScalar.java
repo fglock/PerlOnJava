@@ -4214,6 +4214,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // scalar. A new count and its slot identity are acquired together; the
         // old edge carries a separate release token through cleanup.
         boolean oldArgumentAliasReleaseQueued = false;
+        boolean retireOldCountedOwnerAfterPublish = false;
         PerlOwnerSlot.PendingRelease oldCountedOwnerRelease = null;
         boolean newOwned = false;
         RuntimeBase newReferent = null;
@@ -4257,12 +4258,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                                 oldBase, newReferent, this,
                                 "RuntimeScalar.setLargeRefCounted store");
             } else {
-                oldCountedOwnerRelease = countedOwnerSlot.releaseCountedIdentity();
-                if (oldCountedOwnerRelease == null) {
-                    throw new IllegalStateException(
-                            "counted scalar replacement lost its old release token");
-                }
-                this.refCountOwned = false;
+                retireOldCountedOwnerAfterPublish = true;
             }
         } else {
             if (thisWasWeak && oldIdentifiedOwner) {
@@ -4285,10 +4281,19 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.type = value.type;
         this.value = copyScalarPayload(value.type, value.value);
         long referenceSlotMutationVersion = noteReferenceSlotMutation();
-        // The replacement count and identity are already paired before any
-        // displaced-edge cleanup can call Perl code.
         this.refCountOwned = newOwned;
         this.scalarReferenceContentsOwner = null;
+        if (retireOldCountedOwnerAfterPublish) {
+            // The replacement is now visible. Retire the old slot only after
+            // publication, while carrying its exact count obligation forward.
+            oldCountedOwnerRelease = countedOwnerSlot.releaseCountedIdentity();
+            if (oldCountedOwnerRelease == null) {
+                throw new IllegalStateException(
+                        "published scalar replacement lost its old release token");
+            }
+        }
+        // The replacement count and identity are already paired before any
+        // displaced-edge cleanup can call Perl code.
         if (isCurrentReferenceSlotMutation(referenceSlotMutationVersion)) {
             // Hash-element slots remain durable owners when their existing
             // scalar wrapper is assigned a new referent (the normal class-field
@@ -4484,21 +4489,37 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // and for scalars that didn't own a refCount increment).
         if (oldBase != null && !thisWasWeak
                 && (oldRefCountOwned || oldOwnedByScalarReference)) {
-            boolean deferredOldBaseRelease = oldArgumentAliasReleaseQueued;
-            if (!deferredOldBaseRelease && oldRefCountOwned && oldBase.refCount > 0
-                    && oldBase.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_ALIAS) != 0) {
-                MortalList.deferDecrementFromArraySlot(
-                        oldBase, this, "RuntimeScalar.setLargeRefCounted overwrite");
-                deferredOldBaseRelease = true;
-            } else if (oldBase.refCount > 0) {
-                oldBase.traceRefCount(-1, "RuntimeScalar.setLargeRefCounted (decrement on overwrite)");
-                oldBase.releaseOwner(this, "setLargeRefCounted overwrite");
-                oldBase.releaseActiveOwner(this);
+            if (oldCountedOwnerRelease != null) {
+                // The slot now describes the replacement edge. Drain the exact
+                // displaced edge token so this release cannot retire or infer
+                // ownership from the scalar's newer value.
+                if (!newOwned || oldBase != newReferent) {
+                    oldBase.releaseOwner(this, "setLargeRefCounted overwrite");
+                }
+                MortalList.releaseCountedOwnerSlotImmediately(oldBase,
+                        oldCountedOwnerRelease,
+                        "RuntimeScalar.setLargeRefCounted overwrite");
+            } else if (oldArgumentAliasReleaseQueued) {
+                // The old edge was already queued before the active alias could
+                // observe the scalar's replacement.
+            } else {
+                // Scalar-reference contents without a direct counted slot still
+                // use their separate compatibility release until that edge is
+                // migrated to the shared transition contract.
+                if (oldBase.refCount > 0) {
+                    oldBase.traceRefCount(-1,
+                            "RuntimeScalar.setLargeRefCounted (decrement on overwrite)");
+                    if (oldOwnedByScalarReference) {
+                        oldBase.releaseOwner(this, "setLargeRefCounted overwrite");
+                    }
+                }
+                if (explicitUndef && isCurrentReferenceSlotMutation(referenceSlotMutationVersion)) {
+                    this.refCountOwned = false;
+                }
             }
-            if (explicitUndef && isCurrentReferenceSlotMutation(referenceSlotMutationVersion)) {
-                this.refCountOwned = false;
-            }
-            if (!deferredOldBaseRelease && oldBase.refCount > 0 && --oldBase.refCount == 0) {
+            boolean exactCountedRelease = oldCountedOwnerRelease != null
+                    || oldArgumentAliasReleaseQueued;
+            if (!exactCountedRelease && oldBase.refCount > 0 && --oldBase.refCount == 0) {
                 boolean liveScalarReferentBinding = oldBase.localBindingExists
                         && (!(oldBase instanceof RuntimeScalar scalarReferent)
                             || !scalarReferent.referencedByScalarReference
