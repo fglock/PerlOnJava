@@ -3,35 +3,43 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-05):** #1649 remains in Phase 2 on
-`wip/ownership-resume-20261105-093512`, source commit `b211ae00c9`. This is a
-WIP safety snapshot of the pending native-owner transition and design updates;
-the working tree is clean. The shared `PerlOwnerSlot` acquisition now pairs
-the native identity with its selective count for `:via` layers, regex
-callbacks, and tied-hash iterator keys. Regex release keeps its existing
-capture-cleanup semantics. Existing focused Java tests cover all three
-producers, but this commit has not been built or tested.
+`wip/ownership-resume-20261105-093512`, source commit `b9f2792424`. The current
+batch adds `RuntimeScalar.acquireCountedOwnerForCurrentValue`, used by ordinary
+container stores, `unweaken`, and blessed-glob aliases. It pairs the selective
+count with the active scalar slot and rejects a stale `refCountOwned` flag
+instead of repairing a missing identity. `CountedScalarOwnerAcquisitionTest`
+covers the count/slot pair and unweaken transition. The system-Perl oracle run
+passes four related files and 58 checks; log:
+`/tmp/ownership-counted-acquisition-perl-oracles.log`.
 
-The last saved full build and the current local JAR identify as `7721ba94ec`;
-that build predates `d1d111ee3b` and did not capture an immutable source tree,
-so it does not validate this candidate. Earlier system-Perl results remain
-valid for the fixtures they cover. PR #1938 was live-checked open as a draft at
-remote head `95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05`; issue comment
-6575277842 is the current #1649 handoff. No current-candidate full gate exists.
+The candidate has not been built. The saved full build and local JAR identify
+as `7721ba94ec`, predating `d1d111ee3b`, so they do not validate this branch.
+PR #1938 was live-checked open as a draft at remote head
+`95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05`; issue comment 6575277842 is the
+current #1649 handoff.
 
-To reduce rebuilds, finish and review related producers before starting the
-full gate. Batch A follows one exact acquire/transfer/release contract across
-argument aliases and returns, closure/CODE captures, suspended frames,
-cloning/shared storage, and deferred or exceptional cleanup. Batch B covers
-resource and root producers through IO/glob slots, aggregate clear, #1794
-controller/long-poll/WebSocket lifetimes, and #1860 growing output. For each
-batch, run system Perl first for new Perl regressions and use static or focused
-checks only where they resolve an implementation question; do not build
-between batches. After both groups have producer and release evidence, remove
-the remaining ordinary recovery machinery as one final source change. Then
-commit an immutable candidate and run one full `nice -n 19 make`, followed by
-the no-sweeps, #1794, #1860, and HTML-Tree matrix on that same JAR. If the gate
-finds a connected defect, finish that correction before rebuilding. Recheck
-master, PR #1938, and required CI after local validation.
+The current raw-count audit now separates ordinary counted edges from
+initialization, lifecycle sentinels, and runtime-owned IO counters. Counted
+scalar acquisition still needs the blessing and scalar-assignment producers;
+release auditing remains for weaken, scalar/CODE overwrite, method-invocant
+holds, localized CODE restore, DESTROY argument balancing, host-side cloned
+hash replacement, and deferred cleanup. `restoreReachableOwnerCount` remains
+behind the legacy unpaired-release API, which has no production caller in the
+repository; current-owner count repairs remain at weaken, overwrite, deferred
+release, and destruction boundaries. No ordinary recovery path has yet been
+removed.
+
+To accelerate the remaining work, finish one source inventory of every direct
+count producer and release, then migrate by three shared contracts: counted
+acquire, transfer without changing identity, and exact immediate/deferred
+release. Keep resource and uncounted root identities as a separate owner family
+with acquisition and final-release coverage. Use system Perl for new
+Perl-level regressions and focused checks only to resolve open implementation
+questions; do not run full builds between these batches. Once the inventory
+contains no uncovered production edge, remove ordinary recovery and sweep
+scheduling together. Build one immutable candidate with `nice -n 19 make`,
+then run no-sweeps, #1794, #1860, and HTML-Tree gates on that same JAR. Recheck
+master, PR #1938, and CI after validation.
 
 The eval-return/argument-unwind batch preserves a caller's pending
 `RETURN_VALUE` while retiring only releases created by the argument frames
