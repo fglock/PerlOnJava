@@ -519,6 +519,30 @@ public class MortalList {
         drainPendingSince(checkpoint);
     }
 
+    /** Balance DESTROY's synthetic $_[0] edge without re-entering destruction. */
+    static void releaseDestroySelfArgument(RuntimeScalar owner, String releaseSite) {
+        if (owner == null || !owner.refCountOwned
+                || !(owner.value instanceof RuntimeBase base)) return;
+        PerlOwnerSlot ownerSlot = owner.countedOwnerSlot();
+        if (!base.currentlyDestroying || base.refCount <= 0
+                || ownerSlot == null || !ownerSlot.isActive()
+                || ownerSlot.referent() != base || ownerSlot.countedScalarOwner() != owner
+                || !PerlOwnerSlot.isCountedKind(ownerSlot.kind())) {
+            throw new IllegalStateException(
+                    "DESTROY self argument lost its counted owner at " + releaseSite);
+        }
+        owner.refCountOwned = false;
+        base.releaseOwner(owner, releaseSite);
+        PerlOwnerSlot.PendingRelease release = ownerSlot.releaseCountedIdentity();
+        if (release == null) {
+            throw new IllegalStateException(
+                    "DESTROY self argument lost its release token at " + releaseSite);
+        }
+        base.traceRefCount(-1, releaseSite);
+        base.refCount--;
+        release.complete();
+    }
+
     private static void queueDeferredBase(LifecycleRuntimeState state, RuntimeBase base,
                                           RuntimeBase.PendingOwnerRelease ownerRelease) {
         queueDeferredBase(state, base, ownerRelease, null);
