@@ -6527,14 +6527,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
         if (type == RuntimeScalarType.CODE && value instanceof RuntimeCode code && globalCodeRefFqn != null) {
             releaseAllClosureCaptureReferents(code);
-            if (this.refCountOwned && code.refCount > 0) {
-                this.refCountOwned = false;
-                code.releaseActiveOwner(this);
-                if (--code.refCount == 0) {
-                    code.refCount = Integer.MIN_VALUE;
-                    DestroyDispatch.callDestroy(code);
-                }
-            }
             // Clear the body but keep a declared CODE slot. Perl preserves the
             // glob's CODE entry after both `undef &existing` and
             // `undef &previously_unknown`: exists(&name) remains true while
@@ -6549,12 +6541,38 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 undefinedCode.packageName = "main";
                 undefinedCode.subName = globalCodeRefFqn;
             }
+
+            PerlOwnerSlot.PendingRelease oldCodeRelease = null;
+            if (this.refCountOwned) {
+                if (code.refCount == Integer.MIN_VALUE) {
+                    throw new IllegalStateException(
+                            "counted global CODE slot refers to an already destroyed CV");
+                }
+                PerlOwnerSlot ownerSlot = this.countedOwnerSlot;
+                if (ownerSlot == null || !ownerSlot.isActive()
+                        || ownerSlot.referent() != code
+                        || ownerSlot.countedScalarOwner() != this) {
+                    throw new IllegalStateException(
+                            "global CODE undefine lost its counted stash owner slot");
+                }
+                undefinedCode.refCount = 0;
+                oldCodeRelease = ownerSlot.replaceCountedScalarOwnerAndAcquire(
+                        code, undefinedCode, this,
+                        "RuntimeScalar.undefine global CODE replacement");
+            }
+
             this.value = undefinedCode;
             this.tainted = false;
             this.numericLiteralText = null;
             this.numericContextSeen = false;
             this.firstClassRegexScalar = false;
             this.formatPictureTainted = false;
+            refreshCodeSlotOwner();
+            if (oldCodeRelease != null) {
+                MortalList.releaseCountedOwnerSlotImmediately(
+                        code, oldCodeRelease,
+                        "RuntimeScalar.undefine global CODE replacement");
+            }
             // Invalidate the method resolution cache
             InheritanceResolver.invalidateCache();
             return this;
