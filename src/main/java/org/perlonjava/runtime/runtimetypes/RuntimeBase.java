@@ -1389,6 +1389,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             for (java.util.Map.Entry<Integer, OwnerTrace> own : e.getValue().entrySet()) {
                 System.err.println("    owner=" + own.getKey() + " from " + own.getValue().acquireSite);
             }
+            System.err.println("    " + b.ownerTraceSnapshot());
         }
         for (java.util.Map.Entry<RuntimeBase, java.util.ArrayList<PendingOwnerRelease>> e
                 : pendingTraceOwnerReleases.entrySet()) {

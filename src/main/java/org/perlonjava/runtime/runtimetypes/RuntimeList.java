@@ -881,7 +881,13 @@ public class RuntimeList extends RuntimeBase {
     }
 
     private static void releaseMaterializedAssignmentCopy(RuntimeScalar scalar, String target) {
-        if (scalar == null || !scalar.refCountOwned
+        if (scalar == null) return;
+        // RuntimeScalar's copy constructor may transfer an anonymous IO holder
+        // into a detached materialized RHS cell.  These cells are retired here
+        // rather than by lexical scope cleanup, so release that exact resource
+        // owner alongside the counted edge below.
+        RuntimeScalar.releaseIoOwner(scalar);
+        if (!scalar.refCountOwned
                 || ((scalar.type & RuntimeScalarType.REFERENCE_BIT) == 0
                     && scalar.type != RuntimeScalarType.GLOB)
                 || !(scalar.value instanceof RuntimeBase base)
