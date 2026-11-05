@@ -1739,8 +1739,9 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 String k = key.toString();
                 RuntimeScalar value = elements.get(k);
                 boolean aliasCell = ownsHashAliasCell(k, value);
-                RuntimeScalar aliasResult = aliasCell && callContext != RuntimeContextType.VOID
-                        ? new RuntimeScalar(value) : null;
+                RuntimeScalar aliasReturnOwner = aliasCell
+                        && callContext != RuntimeContextType.VOID
+                        ? RuntimeScalar.retainEvalReturnValue(value) : null;
                 value = elements.remove(k);
                 if (byteKeys != null) byteKeys.remove(k);
                 if (value != null) {
@@ -1758,8 +1759,12 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                         yield fetchedValue;
                     }
                     if (aliasCell) {
-                        yield callContext == RuntimeContextType.VOID
-                                ? new RuntimeScalar() : aliasResult;
+                        if (callContext == RuntimeContextType.VOID) yield new RuntimeScalar();
+                        MortalList.deferDecrementIfTracked(aliasReturnOwner);
+                        // Keep the deleted scalar cell itself as the loose
+                        // lvalue result. The separate return owner protects a
+                        // referenced value after the hash alias edge retires.
+                        yield value;
                     }
                     // Schedule deferred refCount decrement — fires at next safe point
                     // (setLarge or RuntimeCode.apply). This prevents premature DESTROY
@@ -1803,8 +1808,9 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             case PLAIN_HASH -> {
                 RuntimeScalar value = elements.get(key);
                 boolean aliasCell = ownsHashAliasCell(key, value);
-                RuntimeScalar aliasResult = aliasCell && callContext != RuntimeContextType.VOID
-                        ? new RuntimeScalar(value) : null;
+                RuntimeScalar aliasReturnOwner = aliasCell
+                        && callContext != RuntimeContextType.VOID
+                        ? RuntimeScalar.retainEvalReturnValue(value) : null;
                 value = elements.remove(key);
                 if (byteKeys != null) byteKeys.remove(key);
                 if (value != null) {
@@ -1818,8 +1824,11 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                         yield fetchedValue;
                     }
                     if (aliasCell) {
-                        yield callContext == RuntimeContextType.VOID
-                                ? new RuntimeScalar() : aliasResult;
+                        if (callContext == RuntimeContextType.VOID) yield new RuntimeScalar();
+                        MortalList.deferDecrementIfTracked(aliasReturnOwner);
+                        // Preserve refaliasing for a loose delete-result lvalue;
+                        // the independent return owner only supplies lifetime.
+                        yield value;
                     }
                     // Schedule deferred refCount decrement (see delete(RuntimeScalar) above)
                     MortalList.deferDecrementIfTracked(value);
