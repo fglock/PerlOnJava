@@ -532,19 +532,14 @@ public class DestroyDispatch {
                     // Balance the args.push(self) increment on both normal
                     // and exceptional exits. If DESTROY consumed the element
                     // via shift, args.elements is empty and MortalList already
-                    // released that owner. Otherwise this direct decrement
-                    // avoids recursively entering callDestroy while the same
-                    // referent is still in its DESTROY frame.
+                    // released that owner. Otherwise retire its exact slot and
+                    // paired count without recursively entering callDestroy
+                    // while the same referent is still in its DESTROY frame.
                     for (RuntimeScalar elem : args.elements) {
                         if (elem != null && elem.refCountOwned
-                                && elem.value instanceof RuntimeBase base
-                                && base.refCount > 0) {
-                            if (base.refCountTrace) {
-                                base.releaseOwner(elem, "doCallDestroy args balance");
-                            }
-                            base.releaseActiveOwner(elem);
-                            base.refCount--;
-                            elem.refCountOwned = false;
+                                && elem.value instanceof RuntimeBase) {
+                            MortalList.releaseDestroySelfArgument(
+                                    elem, "DestroyDispatch.doCallDestroy args balance");
                         }
                     }
                     args.elements.clear();
