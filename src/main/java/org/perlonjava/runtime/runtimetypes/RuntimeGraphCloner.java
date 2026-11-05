@@ -729,21 +729,8 @@ public class RuntimeGraphCloner {
                 || !(target.value instanceof RuntimeBase referent)) {
             return;
         }
-        if (referent.refCount < 0
-                && (referent instanceof RuntimeHash || referent instanceof RuntimeArray)) {
-            referent.refCount = 0;
-        }
-        if (referent.refCount < 0) return;
-        if (referent.refCount == 0) referent.registerSharedFetchedView();
-        referent.traceRefCount(+1, "RuntimeGraphCloner.restoreScalarReferenceOwnership");
-        referent.recordOwner(target, "thread clone scalar owner");
-        referent.recordActiveOwner(target);
-        referent.refCount++;
-        referent.hadCountedReference = true;
-        target.refCountOwned = true;
         try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
-            target.recordCountedOwner(referent);
-            ScalarRefRegistry.registerRef(target);
+            RuntimeScalar.incrementRefCountForContainerStore(target);
         }
     }
 
