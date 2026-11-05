@@ -304,14 +304,9 @@ public class WeakRefRegistry {
                 weakRefs.remove(ref);
                 if (weakRefs.isEmpty()) state.referentToWeakRefs.remove(base);
             }
-            if (base.refCount >= 0) {
-                base.traceRefCount(+1, "WeakRefRegistry.unweaken (restore strong count)");
-                base.refCount++;  // restore strong count
-                ref.refCountOwned = true;  // restore ownership
-                base.hadCountedReference = true;
-                base.recordOwner(ref, "WeakRefRegistry.unweaken");
-                base.recordActiveOwner(ref);
-            }
+            // Restore the scalar edge through the same count-and-slot
+            // acquisition used by ordinary container stores. The helper also
+            // leaves formerly untracked referents uncounted.
             RuntimeScalar.incrementRefCountForContainerStore(ref);
             if (base.refCount != Integer.MIN_VALUE) {
                 RuntimeScalar.retainUnstashedIoForDurableSlot(ref);
