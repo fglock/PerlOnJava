@@ -309,6 +309,25 @@ public final class PerlOwnerSlot {
         target.hadCountedReference = true;
     }
 
+    /** Acquire a bless-created temporary edge together with its selective count. */
+    public synchronized void acquireCountedTemporaryOwner(
+            RuntimeBase target, String acquisitionSite) {
+        Objects.requireNonNull(target, "target");
+        Objects.requireNonNull(acquisitionSite, "acquisitionSite");
+        if (kind != Kind.SCALAR_CELL || referent != null || nativeOwner
+                || legacyCaptureCount != 0 || methodInvocantOwner) {
+            throw new IllegalStateException("temporary counted-owner slot is not available");
+        }
+        if (target.refCount < 0 || target.refCount == Integer.MAX_VALUE) {
+            throw new IllegalStateException(
+                    "temporary-owner acquisition requires an available tracked count");
+        }
+        acquireCountedIdentity(target);
+        target.traceRefCount(+1, acquisitionSite);
+        target.refCount++;
+        target.hadCountedReference = true;
+    }
+
     /** Whether this slot still represents its direct method-invocant hold. */
     synchronized boolean isMethodInvocantOwner(RuntimeBase target) {
         return methodInvocantOwner && kind == Kind.ARGUMENT_VALUE && referent == target;
