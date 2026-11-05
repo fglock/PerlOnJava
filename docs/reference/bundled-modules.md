@@ -241,6 +241,8 @@ These are loaded automatically or via `use`:
 | `Storable` | Java + Perl | `freeze`, `thaw`, `dclone`, `store`, `retrieve`, `nstore`, `nfreeze` — produces and consumes the native Perl `pst0` binary format, interoperable with system perl in both directions. See `dev/modules/storable_binary_format.md`. |
 | `Clone` | Java + Perl | Deep copy |
 | `Scalar::Util` | Java | `blessed`, `reftype`, `weaken`, `dualvar`, etc. |
+| `Scalar::Util::Numeric` | Java + Perl | `isnum`, `isint`, `isuv`, `isbig`, `isfloat`, `isneg`, `isinf`, `isnan`, `uvmax` |
+| `Scalar::Util::LooksLikeNumber` | Java + Perl | Raw `looks_like_number()` return flags |
 | `Scalar::Readonly` | Java + Perl | Scalar read-only query, enable, and disable operations replacing the CPAN XS implementation |
 | `Scalar::Type` | Java + Perl | Scalar storage-type introspection without native XS |
 | `List::Util` | Java | `reduce`, `first`, `min`, `max`, `sum`, `mesh`/`zip`, etc. |
