@@ -705,6 +705,14 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         return countedOwnerSlots;
     }
 
+    /** Whether a current Perl storage identity already owns this value. */
+    boolean hasIndependentPerlOwnerSlotForArgument() {
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (DestroyDispatch.isCurrentPerlOwnerSlot(this, slot)) return true;
+        }
+        return false;
+    }
+
     /**
      * Compatibility repair for a standalone scalar cell that has a counted
      * edge but has not yet been registered with lexical or container storage.

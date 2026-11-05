@@ -644,7 +644,7 @@ public class DestroyDispatch {
                 return;
             }
         }
-        if (hasEscapedPerlOwner(referent, checkingOwnerSlotDelta,
+        if (hasEscapedPerlOwner(referent, checkingGlobalOwnerDelta,
                 ownerSlotsAtStart) && !state.destroyTargetRescued) {
             referent.needsReDestroy = true;
             warnIfResurrectedDuringGlobalDestruction(referent, className);
@@ -766,6 +766,7 @@ public class DestroyDispatch {
             case UNTRACKED_REFERENCE -> {
                 RuntimeScalar owner = slot.untrackedScalarOwner();
                 return owner != null
+                        && !owner.isTransientArgumentValueOwner()
                         && owner.hasLiveDurableStrongValueSlot()
                         && !WeakRefRegistry.isweak(owner)
                         && (owner.type & RuntimeScalarType.REFERENCE_BIT) != 0
@@ -775,6 +776,7 @@ public class DestroyDispatch {
                 RuntimeScalar owner = slot.scalarContentsOwner();
                 RuntimeScalar scalarCell = slot.scalarReferenceCell();
                 return owner != null && scalarCell != null
+                        && !owner.isTransientArgumentValueOwner()
                         && owner.scalarReferenceContentsOwner == slot
                         && owner.hasLiveDurableStrongValueSlot()
                         && !WeakRefRegistry.isweak(owner)
