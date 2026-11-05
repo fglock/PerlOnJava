@@ -1875,7 +1875,15 @@ public class MortalList {
         }
         ReachabilityQueryStats queryStats = activeReachabilityQueryStats();
         if (queryStats != null) queryStats.deferredBasesProcessed++;
-        base.completeQueuedOwnerRelease(ownerRelease, "MortalList.processDeferredBase");
+        if (ownerRelease != null
+                && !base.completeQueuedOwnerRelease(
+                        ownerRelease, "MortalList.processDeferredBase")) {
+            // A release token can be encountered through more than one nested
+            // drain. Its count transition and lifecycle decision are one
+            // obligation, so a completed token must not decrement the referent
+            // again.
+            return;
+        }
         base.releaseTransientTraceOwner(transientOwnerKind,
                 "MortalList.processDeferredBase");
         boolean hasWeakRefs = WeakRefRegistry.hasWeakRefsTo(base);
