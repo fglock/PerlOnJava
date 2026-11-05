@@ -3,16 +3,16 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-05):** #1649 remains in Phase 2 on
-`wip/ownership-recovery-batch-20261105-114935`, source `63cb70bd23`. The
+`wip/ownership-recovery-batch-20261105-114935`, source `1bd93ecf73`. The
 preceding WIP snapshot `2ee46c7e0a` pairs host-side hash replacement and the
-synthetic `DESTROY` self argument with exact owner release. This batch routes
-tail-call CODE cleanup through the counted-slot release path and makes
-scalar-reference contents release/retarget carry a `PendingRelease` token
-through the shared drain. The existing
-`scalar_reference_localized_owner_lifetime.t` passes 6/6 on system Perl.
-`TailCallCodeRefDoesNotPinFromLocalBindingFlagTest` and
-`PerlOwnerSlotScalarReferenceContentsTest` cover the Java paths, but this
-candidate has not been built; saved JAR `7721ba94ec` is stale.
+synthetic `DESTROY` self argument with exact owner release. Later commits route
+tail-call CODE cleanup, scalar-reference contents release/retarget, ordinary
+scalar-backed immediate releases, and counted native-owner release through
+exact `PendingRelease` tokens and the shared drain. The existing scalar
+reference contents oracles pass 31 checks on system Perl. Java coverage
+includes `TailCallCodeRefDoesNotPinFromLocalBindingFlagTest`,
+`PerlOwnerSlotScalarReferenceContentsTest`, and native-owner release tests; the
+candidate has not been built and saved JAR `7721ba94ec` is stale.
 
 The producer audit confirms `restoreReachableOwnerCount` is reachable only
 through `MortalList.deferDecrement`, whose current callers are Java tests. Normal
