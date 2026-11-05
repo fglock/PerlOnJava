@@ -2682,52 +2682,19 @@ public class ReachabilityWalker {
         }
     }
 
-    /**
-     * Run a reachability sweep and clear weak refs for unreachable objects.
-     * Called from {@code Internals::jperl_gc()} explicitly.
-     * <p>
-     * Rescued objects (pinned by Schema-style DESTROY self-save) are NOT
-     * treated as roots here. jperl_gc is opt-in and the caller is asking
-     * for aggressive cleanup — if the user wanted to keep a phantom chain
-     * alive, they would not call jperl_gc. The rescued pins are cleared
-     * via DestroyDispatch.clearRescuedWeakRefs() as part of the sweep.
-     *
-     * @return number of weak-ref entries cleared
-     */
+    /** Compatibility no-op: weak observers are cleared by their final owner release. */
     public static int sweepWeakRefs() {
-        return sweepWeakRefs(false);
+        return 0;
     }
 
+    /** Compatibility no-op: weak observers are cleared by their final owner release. */
     public static int sweepWeakRefs(boolean quiet) {
-        return sweepWeakRefs(quiet, true);
+        return 0;
     }
 
-    /**
-     * Run a reachability sweep. When {@code quiet} is true, only clear
-     * weak refs for unreachable objects — do NOT fire DESTROY or drain
-     * rescuedObjects. Used by auto-triggered sweeps from common hot
-     * paths where firing DESTROY mid-execution would corrupt state
-     * (e.g. module loading chains that weaken() intermediate values).
-     *
-     * @param quiet if true, skip DESTROY invocations
-     * @return number of weak-ref entries cleared
-     */
+    /** Compatibility no-op retained for callers of the removed sweep API. */
     public static int sweepWeakRefs(boolean quiet, boolean forceJvmGc) {
-        return sweepWeakRefs(quiet, forceJvmGc, Collections.emptySet(), null);
-    }
-
-    static int sweepWeakRefs(boolean quiet, boolean forceJvmGc,
-                             Set<RuntimeBase> releasedTargets,
-                             ReleasedWeakSweepResult releasedSweepResult) {
-        if (CORRECTIVE_SWEEPS_DISABLED) return 0;
-        return sweepWeakRefsPass(quiet, forceJvmGc, releasedTargets,
-                releasedSweepResult).cleared();
-    }
-
-    /** Run one quiet pass explicitly requested at a safe statement boundary. */
-    static int sweepWeakRefsForExplicitImmediateRequest(boolean forceJvmGc) {
-        if (CORRECTIVE_SWEEPS_DISABLED) return 0;
-        return sweepWeakRefsPass(true, forceJvmGc, Collections.emptySet(), null).cleared();
+        return 0;
     }
 
     private record WeakSweepPass(int cleared, boolean graphChanged) {}
@@ -3446,66 +3413,6 @@ public class ReachabilityWalker {
                 releasedGraphChanged ? null : strongCycleProtected,
                 countedStrongOwners,
                 cleared);
-    }
-
-    /**
-     * Sweep only objects registered by {@link DestroyDispatch} as needing
-     * deterministic DESTROY side effects even when they are not weak-ref
-     * referents. This is intentionally narrower than {@link #sweepWeakRefs}:
-     * it does not clear unrelated weak references and it can be used from hot
-     * DBI statement-polling paths without forcing a JVM GC.
-     */
-    public static int sweepDestroyableObjects(boolean forceJvmGc) {
-        if (CORRECTIVE_SWEEPS_DISABLED) return 0;
-        if (!DestroyDispatch.hasDestroyableObjects()) return 0;
-        if (forceJvmGc) {
-            ScalarRefRegistry.forceGcAndSnapshot();
-        }
-        ReachabilityWalker w = new ReachabilityWalker();
-        return destroyUnreachableDestroyables(w.walk());
-    }
-
-    /** Reconcile File::Temp-style external resources at a safe statement boundary. */
-    static int sweepStatementBoundaryDestroyableObjects() {
-        if (CORRECTIVE_SWEEPS_DISABLED) return 0;
-        java.util.List<RuntimeBase> candidates =
-                DestroyDispatch.snapshotStatementBoundaryDestroyableObjects();
-        if (candidates.isEmpty()) return 0;
-        Set<RuntimeBase> candidateSet = Collections.newSetFromMap(new IdentityHashMap<>());
-        candidateSet.addAll(candidates);
-        releaseUnreachableScopeExitedCaptureOwners(
-                PerlRuntime.snapshotOwnerSlotReferents(), null, candidateSet);
-        Set<RuntimeBase> live = new ReachabilityWalker().walk();
-        return destroyUnreachableDestroyables(candidates, live);
-    }
-
-    private static int destroyUnreachableDestroyables(Set<RuntimeBase> live) {
-        return destroyUnreachableDestroyables(
-                DestroyDispatch.snapshotDestroyableObjects(), live);
-    }
-
-    private static int destroyUnreachableDestroyables(
-            java.util.List<RuntimeBase> candidates, Set<RuntimeBase> live) {
-        int destroyed = 0;
-        for (RuntimeBase referent : candidates) {
-            if (referent == null
-                    || referent.destroyFired
-                    || referent.currentlyDestroying
-                    || referent.refCount == Integer.MIN_VALUE) {
-                continue;
-            }
-            if (live.contains(referent)) {
-                continue;
-            }
-            if ((referent instanceof RuntimeHash || referent instanceof RuntimeArray)
-                    && referent.localBindingExists) {
-                continue;
-            }
-            referent.refCount = Integer.MIN_VALUE;
-            DestroyDispatch.callDestroy(referent);
-            destroyed++;
-        }
-        return destroyed;
     }
 
     private static Set<RuntimeBase> collectStrongCycleProtected(Set<RuntimeBase> live) {

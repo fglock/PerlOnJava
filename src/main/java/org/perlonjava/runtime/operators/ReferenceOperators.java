@@ -205,10 +205,10 @@ public class ReferenceOperators {
                     // Re-bless from untracked class: the scalar being blessed
                     // already holds a reference that was never counted (because
                     // tracking wasn't active at assignment time). Count it as 1.
-                    referent.refCount = 1;
-                    referent.recordOwner(runtimeScalar, "rebless from untracked");
-                    runtimeScalar.refCountOwned = true;
-                    referent.recordActiveOwner(runtimeScalar);
+                    referent.refCount = 0;
+                    RuntimeScalar.acquireCountedOwnerForCurrentValue(
+                            runtimeScalar, referent, null,
+                            "ReferenceOperators.bless rebless from untracked");
                 } else {
                     // Establish only the owners that already exist. The
                     // identified bless temporary below supplies its own count;
@@ -227,11 +227,11 @@ public class ReferenceOperators {
                             && scalarReferent.referencedByScalarReference) {
                         scalarReferent.localBindingExists = true;
                     }
-                    referent.refCount = existingScalarOwner ? 1 : 0;
+                    referent.refCount = 0;
                     if (existingScalarOwner) {
-                        referent.recordOwner(runtimeScalar, "first bless of existing scalar ref");
-                        runtimeScalar.refCountOwned = true;
-                        referent.recordActiveOwner(runtimeScalar);
+                        RuntimeScalar.acquireCountedOwnerForCurrentValue(
+                                runtimeScalar, referent, null,
+                                "ReferenceOperators.bless first bless of existing scalar ref");
                     }
                 }
                 MortalList.deferBlessTemporary(referent,

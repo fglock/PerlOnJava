@@ -2,33 +2,170 @@
 
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
-**Current checkpoint (2026-11-05):** #1649 remains in Phase 2 on
-`wip/ownership-fix-batch-20261105-132112`, source `8584f3bd6b`. The latest
-change makes queued owner-release completion report whether it actually
-transitioned; `MortalList` now stops a nested drain from decrementing or running
-lifecycle work twice for the same token. The focused make gate for
-`destroy_exception_resurrection.t` passed, as did that test on the interpreter,
-`issue_1649_destroy_exception_cleanup.t` on both backends, and
-`deferred_capture_live_argument.t` on both backends. Logs are recorded in the
-current #1649 handoff comment. The implementation candidate has no uncommitted
-source changes; this checkpoint update is documentation-only.
+**Current checkpoint (2026-11-06):** #1649 remains in Phase 2 on local branch
+`wip/issue1649-owner-trace-20261105-143814`, based on `8bafb0c031`; the working
+tree contains uncommitted ownership changes. The current issue claim is
+`Codex / ownership-goal-resume-20261105`; PR #1938 is still an open draft at
+`95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05`. The live handoff requires producer
+coverage, explicit ownership transitions, ordinary sweep removal, and the
+remaining #1618 acceptance. #1642 was closed by merged PR #1746; broader CPAN
+release qualification remains in #1646. The latest #1649 report adds an
+App-Scaffolder-HTML temporary-IO-invocant case.
 
-Three focused regressions still fail on both backends:
-`file_temp_path_wrapper_lifetime.t`,
-`blessed_scalar_reference_contents_destroy.t`, and
-`caller_context_in_die_overload.t`. The latest full make is still the earlier
-failure at `f0b10f2d3b` (1,548 tests, 19 failures, 6 skipped); the current
-candidate has not passed a full gate. No corrective recovery or sweep
-scheduling has been removed. The next batch is to trace scalar-reference
-contents and argument/overload alias ownership at their edge producers, using
-the File::Temp remaining-owner trace to establish whether a counted owner is
-still live before changing release behavior.
+On the current candidate, #1794 (3/3) and #1860 (4/4) pass on system Perl,
+JVM, and interpreter. The upstream HTML-Tree 5.07 suite passes all 23 files
+and 989 checks on system Perl, JVM, and interpreter; PerlOnJava runs used
+`JPERL_DISABLE_CORRECTIVE_SWEEPS=1`. `t/refloop.t` is 8/8 on all three. The
+system Perl ran the real `Test::LeakTrace` checks; PerlOnJava's bundled stub
+makes its 20 checks non-measurements. Logs:
+`/tmp/issue1649-1794-1860-perl.log`,
+`/tmp/issue1649-1794-1860-no-sweeps-both-backends.log`,
+`/tmp/issue1649-htmltree-full-current-perl.log`,
+`/tmp/issue1649-htmltree-full-current-jvm.log`, and
+`/tmp/issue1649-htmltree-full-current-interpreter.log`.
 
-PR #1938 remains an open draft at remote head
-`95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05`; the local candidate is not
-published there. Before publication, recheck `master`, reconcile the branch,
-and validate the resulting immutable candidate. An unrelated `jcpan` run is
-active in the sibling `PerlOnJava` checkout; it was left untouched.
+The remaining `restoreReachableOwnerCount()` branch is reachable only from
+the legacy `MortalList.deferDecrement()` API. Source search found no production
+Java caller of that API; its direct callers are synthetic owner-ledger tests.
+Keep this compatibility path separate from normal sweep removal until those
+fixtures can be replaced with exact release tokens.
+
+The first-bless and re-bless paths now acquire an existing scalar's counted
+edge through `RuntimeScalar.acquireCountedOwnerForCurrentValue`, removing two
+manual `refCount = 1` plus owner-recording sequences. Its validation follows
+Perl's `isReference` predicate so the distinct `FORMAT` scalar type remains
+blessable. System Perl passes the three ownership oracles (56 assertions) and
+`format_ref_bless.t` (6); `nice -n 19 make` passes in 7m41. The focused bless,
+DESTROY, and weaken tests pass 62/62 on JVM and interpreter. Logs:
+`/tmp/issue1649-bless-perl-oracle.log`,
+`/tmp/issue1649-format-ref-perl.log`,
+`/tmp/issue1649-bless-owner-centralize-make-final.log`,
+`/tmp/issue1649-bless-jvm-focused.log`, and
+`/tmp/issue1649-bless-interpreter-focused.log`.
+
+Count arithmetic is centralized in `RuntimeBase.acquireTrackedOwnerCount` and
+`releaseTrackedOwnerCount`; `PerlOwnerSlot` pairs those transitions with stable
+owner identities. IO resource leases remain separate from Perl strong edges.
+Native counted-owner retirement now goes through `MortalList`'s common
+coordinator, including the regex callback count-only policy. Post-`DESTROY` no
+longer reconstructs counts from surviving storage. It verifies that a newly
+active counted owner has a paired count. The first gate exposed baseline slots
+left during forced global teardown; snapshotting active identities at callback
+entry fixed the false positive. System Perl, JVM, and interpreter pass
+`destroy_exception_resurrection.t` 11/11; full `nice -n 19 make` passes in 7m38,
+and `make check-links` reports 832 links with zero errors.
+
+Corrective sweeps are hard-disabled. The general `sweepWeakRefs` overloads now
+return zero directly, and the destroyable-object sweep entrypoints and their
+graph walk are removed. `Internals::jperl_gc`, lifecycle scheduling hooks, and
+the targeted released-owner walk remain compatibility surfaces; source search
+finds no production caller of the targeted walk. The weak-capture inspector is
+diagnostic only. `restoreReachableOwnerCount` is reachable only through legacy
+unpaired decrements, and `MortalList.deferDecrement()` has no production Java
+caller. Exact counted-slot repair remains in deferred release, scalar overwrite,
+and CODE capture cleanup; the standalone scalar-cell bridge also remains.
+`nice -n 19 make` passes in 7m47
+(`/tmp/issue1649-remove-dead-sweep-apis-make.log`). The focused blessing,
+weaken/DESTROY, #1794, #1860, and HTML-Tree `t/refloop.t` cases pass on both
+backends with corrective sweeps disabled
+(`/tmp/issue1649-sweep-api-focused-no-sweeps.log`,
+`/tmp/issue1649-sweep-api-refloop-no-sweeps.log`). Next: audit the remaining
+normal count-recovery producers, remove recovery only after their release
+coverage exists, then run the no-sweeps, #1618, and #1642 acceptance matrix on
+one immutable final candidate. Existing Java repair fixtures deliberately
+force `refCount` below the active-slot count; they assert compatibility recovery
+but do not prove a normal Perl producer is missing a transition.
+
+The source audit confirms ordinary referent count arithmetic is centralized:
+the only `RuntimeBase.refCount++/--` operations are in
+`acquireTrackedOwnerCount()` and `releaseTrackedOwnerCount()`. The similarly
+named counters in `CustomFileChannel` are channel-state bookkeeping. Owner
+acquisition is paired in `PerlOwnerSlot`; lifecycle dispatch remains in
+`MortalList` because final scalar, native, invocant, and DESTROY-argument
+releases have different semantics. Removing `WeakRefRegistry`'s legacy
+missing-slot adoption failed three Java compatibility tests that construct
+`refCountOwned` cells directly without an owner token. Keep this bridge while
+continuing the audit; its failures do not identify a normal Perl producer that
+omits a slot. Evidence: `/tmp/issue1649-weaken-requires-slot-make.log`.
+
+The Perl model distinguishes a strong SV edge from a runtime resource lease.
+When a Perl scalar cell stops owning a reference, its counted edge is released;
+the referent reaches `DESTROY` when its last Perl strong owner is gone. An IO
+lease can outlive the temporary scalar wrapper that acquired it and therefore
+must not count as a Perl owner or resurrect the referent. Conversely, closing
+an IO resource is decided by its remaining IO holders, not by a synthetic Perl
+reference-count increment. The `IO_RESOURCE_HOLDER` migration follows this
+split explicitly.
+
+Scalar references follow Perl's cell model as well: several references to the
+same scalar cell share one owner of that cell's current referent. The
+`SCALAR_REFERENCE_CONTENTS` slots are registered on the referenced cell and
+deduplicate the count until the last live slot leaves. `RuntimeScalar` no
+longer treats the sticky `referencedByScalarReference` history flag as proof
+that an old value may be decremented when no live owner slot identifies it.
+The alias-lifetime regression passes 12/12 on system Perl, JVM, and interpreter;
+retarget and localized-lifetime regressions pass on all three. The full
+`nice -n 19 make` gate passes on this source in 8m31; log:
+`/tmp/issue1649-scalar-cell-owner-model-make.log`.
+
+The current call producers also preserve Perl's `@_` alias rule: staged
+`CallArguments` materialize each source cell through `setArrayOfAlias`, the
+bytecode call paths do the same for list arguments, and native-array call
+entry points alias each source cell into the argument array. `RuntimeScalar.addToArray`
+still copies for general list/array materialization, but the audited invocation
+producers do not use that helper to create `@_`. Its older comment about
+argument-list construction describes a legacy path; do not change this generic
+copy helper to alias without identifying a current producer and its mutation
+semantics. The remaining `@_` ownership work is cleanup of explicit alias and
+staging identities, not a blanket alias-on-pass rewrite.
+
+The 2026-11-05 source audit found no production caller of the legacy unpaired
+`MortalList.deferDecrement` API or automatic weak-sweep entry points. Sweep
+implementations remain available to compatibility tests, while the runtime
+hooks are disabled or no-ops. The full `nice -n 19 make` gate and the current
+#1794, #1860, and HTML-Tree JVM cases pass. #1642's Dancer2-Plugin-DBIx-Class
+work was merged in PR #1746; broader CPAN release qualification remains in
+#1646.
+
+Evidence on the current built candidate: `nice -n 19 make` passes (log:
+`/tmp/issue1649-central-count-full-make.log`); the focused counter and owner
+tests pass (`/tmp/issue1649-central-count-focused.log`). The File::Temp path
+wrapper and blessed scalar-reference lifetime fixtures pass 9/9 on system
+Perl, JVM, and interpreter. #1794 passes 3/3 and #1860 passes 4/4 on both
+backends. The full upstream HTML-Tree 5.07 suite passes 23 files / 989 checks
+on each backend with `JPERL_DISABLE_CORRECTIVE_SWEEPS=1`.
+
+On the restored current source, `nice -n 19 make` passes in 7m50
+(`/tmp/issue1649-restored-source-current-make.log`). The
+`temporary_io_invocant_survives_nested_render.t` regression and a focused
+Path::Class `openw()->write(Template->process(...))` reproducer pass on system
+Perl, JVM, and interpreter. The system-Perl check uses the installed Template
+Toolkit library from `/Users/fglock/.perlonjava/lib` because the default Perl
+installation lacks it. The full cached `App-Scaffolder-HTML` run remains
+unverified: `timeout 1200 ./jcpan -t App-Scaffolder-HTML` spent the entire guard
+parsing the 40 MB cached CPAN metadata index and did not start tests
+(`/tmp/issue1649-app-scaffolder-jcpan.log`). A manual extraction followed by
+system-Perl `prove` of `t/app.scaffolder.command.html.t` also stops before its
+test body because `App::Cmd::Tester` is unavailable
+(`/tmp/issue1649-app-scaffolder-html-system-current.log`).
+
+The most recent attempt to remove the standalone unregistered scalar-cell
+compatibility bridge failed `DeferredReleaseOwnerSlotFastPathTest`,
+`MethodInvocantVerifiedOwnerRepairTest`, and `path_tiny_runtime_prereqs.t`;
+the bridge has been restored. The path fixture failure was a downstream
+count-underflow exception (`counted scalar replacement requires a positive
+old reference count`), not a path behavior mismatch. This confirms that
+standalone scalar-cell lifetime is a distinct boundary in the current model;
+it does not establish that ordinary production release needs a graph walk.
+
+Still open: audit and migrate the remaining producers guarded by
+`restoreVerifiedCurrentCountedOwnerSlotRefCount`, the standalone unregistered
+scalar-cell bridge, closure/CODE transfers, cloned/shared storage, and the
+remaining untracked aggregate edges. Then remove ordinary count/root recovery
+and unused sweep machinery, preserving only explicit teardown and diagnostic
+walks. The no-sweeps acceptance matrix still needs to run on the final immutable
+candidate. The live issue and PR state was refreshed on 2026-11-05. `.git`
+remains read-only, so changes are uncommitted and backed up under `/tmp`.
 
 The eval-return/argument-unwind batch preserves a caller's pending
 `RETURN_VALUE` while retiring only releases created by the argument frames
@@ -62,17 +199,29 @@ release hook. The localized-glob manual decrement remains limited to the raw
 `type`/`value` writes modeled by existing Java compatibility tests. Ordinary
 owner gaps remain open across storage mutation, closure/CODE transfers,
 deferred cleanup, clone/shared state, cycles, suspended frames, and resource
-holders. No full gate has run on the current candidate.
+holders. The current source and counted-native release refactor pass the full
+`nice -n 19 make` gate recorded above; the no-sweeps acceptance matrix still
+needs to be rerun after the next runtime-affecting batch.
 
-The source-only fallback audit has six production calls to
-`restoreVerifiedCurrentCountedOwnerSlotRefCount()`: first weaken, scalar
-overwrite, immediate counted release, deferred release, and entry/exit around
-`DESTROY`. These are shared repair sites, not six independently proven count
-bugs. Separate compatibility paths remain for unregistered scalar cells and
-legacy unpaired releases. `RuntimeRegexCallback.releaseOwner()` still pairs
-its native slot and count directly before releasing closure captures; include
-that behavior in the native-owner transition audit, but no defect is established
-there yet.
+The current source has three production callsites of
+`restoreVerifiedCurrentCountedOwnerSlotRefCount()`: deferred release, scalar
+overwrite, and CODE cleanup before capture release. Post-`DESTROY` no longer
+restores counts from surviving slots; it checks newly active counted owners
+against their paired count. The first full gate caught an overbroad check because
+global teardown deliberately invokes `DESTROY` while baseline owner slots still
+exist. Snapshotting active identities at callback entry fixed that distinction.
+System Perl, JVM, and interpreter each pass
+`destroy_exception_resurrection.t` 11/11. Full `nice -n 19 make` passes on the
+working candidate in 7m38; logs are
+`/tmp/issue1649-destroy-resurrection-perl-oracle.log`,
+`/tmp/issue1649-destroy-resurrection-jvm.log`,
+`/tmp/issue1649-destroy-resurrection-interpreter.log`, and
+`/tmp/issue1649-no-destroy-count-rebuild2-make.log`.
+Separate compatibility paths remain for unregistered scalar cells and legacy
+unpaired releases. Regex callback slot retirement, count decrement, and token
+completion now use `MortalList`'s counted-native release coordinator; callback
+capture release remains an explicit subsequent lifecycle operation and is
+covered by `RuntimeRegexCallbackOwnerSlotTest`.
 
 `tied_handler_nested_value_owner_before_weaken.t` passes 2/2 on system Perl and
 on both backends using the existing JAR identified as `ad830f5d9f`. It covers

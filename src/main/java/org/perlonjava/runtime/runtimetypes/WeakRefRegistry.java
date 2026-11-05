@@ -146,8 +146,17 @@ public class WeakRefRegistry {
             boolean identifiedOwner = releasedSlot != null && releasedSlot.isActive()
                     && releasedSlot.referent() == base;
             if (!identifiedOwner) {
-                throw new IllegalStateException(
-                        "weakening a counted scalar requires its current owner slot");
+                // Legacy scalar construction can mark an already-counted edge
+                // before its storage producer has installed a slot token.
+                // Adopt that existing count as an identity without incrementing
+                // it, then retire the exact edge through the standard release.
+                ref.recordCountedOwner(base);
+                releasedSlot = ref.countedOwnerSlot();
+                if (releasedSlot == null || !releasedSlot.isActive()
+                        || releasedSlot.referent() != base) {
+                    throw new IllegalStateException(
+                            "weakening failed to adopt the current counted owner slot");
+                }
             }
             // Weakening retires the exact strong edge. Queue its token through
             // the same lifecycle path as overwrite and aggregate removal so
@@ -248,6 +257,17 @@ public class WeakRefRegistry {
             if (weakRefs != null) {
                 weakRefs.remove(ref);
                 if (weakRefs.isEmpty()) state.referentToWeakRefs.remove(base);
+            }
+            PerlOwnerSlot currentOwner = ref.countedOwnerSlot();
+            if (ref.refCountOwned
+                    && (currentOwner == null || !currentOwner.isActive()
+                        || currentOwner.referent() != base
+                        || currentOwner.countedScalarOwner() != ref)) {
+                // Weak scalars own no counted edge. Legacy paths can leave the
+                // marker behind after the exact slot has already been retired;
+                // normalize that stale marker before reacquiring the strong
+                // edge below, which will install a fresh identity if needed.
+                ref.refCountOwned = false;
             }
             // Restore the scalar edge through the same count-and-slot
             // acquisition used by ordinary container stores. The helper also

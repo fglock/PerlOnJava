@@ -41,9 +41,10 @@ public class DestroyDispatch {
         }
     }
 
+    /** Compatibility no-op: outer DESTROY no longer schedules a sweep. */
     static void requestSweepAfterOuterDestroy() {
-        if (!ReachabilityWalker.correctiveSweepsEnabled()) return;
-        state().sweepPendingAfterOuterDestroy = true;
+        // Keep the package-private test hook while ownership transitions replace
+        // the former corrective scheduling path.
     }
 
     public static void registerIfDestroyable(RuntimeBase referent, int blessId) {
@@ -441,7 +442,11 @@ public class DestroyDispatch {
         // decision is based on owner changes in every phase, not on whether
         // cleanup happens during a top-level flush.
         boolean checkingOwnerSlotDelta = true;
-        Set<PerlOwnerSlot> ownerSlotsAtStart = referent.ownerSlotSnapshot();
+        Set<PerlOwnerSlot> ownerSlotsAtStart = Collections.newSetFromMap(
+                new IdentityHashMap<>());
+        for (PerlOwnerSlot ownerSlot : referent.ownerSlotSnapshot()) {
+            if (ownerSlot.isActive()) ownerSlotsAtStart.add(ownerSlot);
+        }
 
         // Mark as destroyed only once we will run Perl DESTROY. Setting destroyFired
         // before the null check above incorrectly skips PPI::Element::DESTROY (and
@@ -588,21 +593,26 @@ public class DestroyDispatch {
             // Restore the DESTROY target and rescue flag for nested DESTROY calls
             state.currentDestroyTarget = savedTarget;
             state.destroyTargetRescued = savedRescued;
-            // Phase 3: Exit DESTROY state. A weak slot can be promoted during
-            // the callback after its old count was consumed. Rebuild that
-            // count from current storage identities before declaring the
-            // referent dead; the callback's temporary self argument is not a
-            // substitute for the surviving Perl slot.
+            // Phase 3: Exit DESTROY state. A weak slot promoted during the
+            // callback acquires its paired count and owner identity through
+            // the ordinary unweaken/store transition. Do not rebuild a count
+            // from surviving storage here: that would hide a missing producer.
             referent.currentlyDestroying = savedCurrentlyDestroying;
+            int newCurrentCountedOwners = countNewCurrentCountedOwnerSlots(
+                    referent, ownerSlotsAtStart);
+            if (referent.refCount == 0 && newCurrentCountedOwners != 0) {
+                throw new IllegalStateException("DESTROY returned with "
+                        + newCurrentCountedOwners + " newly acquired counted Perl owner slot(s) "
+                        + "but refCount is zero for "
+                        + referent.getClass().getSimpleName());
+            }
             if (referent.refCount == 0 && !referent.needsReDestroy) {
-                boolean currentCountedOwner =
-                        referent.restoreVerifiedCurrentCountedOwnerSlotRefCount();
                 boolean otherOwner = referent.localBindingExists
                         || referent.hasSemanticCaptureOwner()
                         || referent.hasPendingReturnOwner()
                         || referent.hasUncountedPerlOwnerSlotIdentity()
                         || referent.hasScalarCellOwner();
-                if (!currentCountedOwner && !otherOwner) {
+                if (!otherOwner) {
                     referent.refCount = Integer.MIN_VALUE;
                 }
             }
@@ -705,6 +715,19 @@ public class DestroyDispatch {
         return false;
     }
 
+    private static int countNewCurrentCountedOwnerSlots(
+            RuntimeBase referent, Set<PerlOwnerSlot> ownerSlotsAtStart) {
+        int count = 0;
+        for (PerlOwnerSlot ownerSlot : referent.ownerSlotSnapshot()) {
+            if (ownerSlotsAtStart != null && ownerSlotsAtStart.contains(ownerSlot)) continue;
+            if (PerlOwnerSlot.isCountedKind(ownerSlot.kind())
+                    && isCurrentPerlOwnerSlot(referent, ownerSlot)) {
+                count++;
+            }
+        }
+        return count;
+    }
+
     static boolean hasCurrentPerlOwnerSlot(RuntimeBase referent) {
         return hasCurrentPerlOwnerSlot(referent, referent.ownerSlotSnapshot());
     }
@@ -742,6 +765,7 @@ public class DestroyDispatch {
     static boolean isCurrentPerlOwnerSlot(RuntimeBase referent, PerlOwnerSlot slot) {
         if (slot == null || !slot.isActive() || slot.referent() != referent) return false;
         PerlOwnerSlot.Kind kind = slot.kind();
+        if (!PerlOwnerSlot.isPerlOwnerKind(kind)) return false;
         switch (kind) {
             case TEMPORARY_ROOT, ARGUMENT_ALIAS, ARGUMENT_VALUE, RETURN_VALUE, ACTIVE_CODE -> {
                 return false;
