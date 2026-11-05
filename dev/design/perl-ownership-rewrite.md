@@ -17,10 +17,12 @@ mark. The permanent `eval_callback_return_owner_release.t` regression passes
 12/12 on system Perl, JVM, and interpreter. The focused
 `JPERL_TEST_SHARD=0 JPERL_TEST_FILTER=return_owner nice -n 19 make build` passes
 in 1m16; `PerlReturnOwnerConsumptionTest` checks exact return/source release
-provenance and isolation from unrelated cleanup. The regression failed on the
-unfixed parent; earlier failed-candidate logs remain under `/tmp/issue1649-*`.
-The requested `deferred_capture_live_argument.t` is present and was previously
-validated on both backends. No full gate has run on this candidate.
+provenance and isolation from unrelated cleanup. The fixture fails test 10 on
+unfixed parent `b5e6c22568` and passes on the candidate; logs are
+`/tmp/issue1649-eval-callback-return-owner-parent.log` and
+`/tmp/issue1649-return-owner-batch3.log`. The requested
+`deferred_capture_live_argument.t` is present and was previously validated on
+both backends. No full gate has run on this candidate.
 
 The audit still has deferred-release/count repair, first weaken, aggregate
 roots/cycles, closure/CODE transfer, detached package/glob state,
