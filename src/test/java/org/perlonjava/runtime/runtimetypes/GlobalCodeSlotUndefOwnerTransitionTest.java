@@ -17,6 +17,8 @@ class GlobalCodeSlotUndefOwnerTransitionTest {
             try {
                 String name = "GlobalCodeSlotUndefOwnerTransitionTest::target";
                 RuntimeCode oldCode = new RuntimeCode((String) null, null);
+                oldCode.isConstantCv = true;
+                oldCode.lexicalSubDisplayName = true;
                 RuntimeScalar slot = new RuntimeScalar(oldCode);
                 GlobalVariable.globalCodeRefs.put(name, slot);
 
