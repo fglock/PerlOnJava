@@ -1474,6 +1474,55 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         countedOwnerSlot.associateCountedScalarOwner(this);
     }
 
+    /** Acquire one counted edge for a scalar that already contains its referent. */
+    static void acquireCountedOwnerForCurrentValue(
+            RuntimeScalar scalar, RuntimeBase referent,
+            PerlOwnerSlot.Kind intendedOwnerKind, String acquisitionSite) {
+        Objects.requireNonNull(scalar, "scalar");
+        Objects.requireNonNull(referent, "referent");
+        Objects.requireNonNull(acquisitionSite, "acquisitionSite");
+        if (intendedOwnerKind != null && !PerlOwnerSlot.isCountedKind(intendedOwnerKind)) {
+            throw new IllegalArgumentException("counted acquisition requires a counted owner kind");
+        }
+        if (scalar.value != referent
+                || ((scalar.type & RuntimeScalarType.REFERENCE_BIT) == 0
+                    && scalar.type != RuntimeScalarType.GLOB
+                    && scalar.type != RuntimeScalarType.CODE)) {
+            throw new IllegalStateException(
+                    "counted acquisition requires the scalar's current referent");
+        }
+        if (scalar.refCountOwned) {
+            PerlOwnerSlot slot = scalar.countedOwnerSlot;
+            if (slot == null || !slot.isActive() || slot.referent() != referent
+                    || slot.countedScalarOwner() != scalar) {
+                throw new IllegalStateException(
+                        "counted scalar flag has no matching active owner slot");
+            }
+            slot.reclassifyCountedIdentity(intendedOwnerKind == null
+                    ? scalar.countedOwnerKind() : intendedOwnerKind);
+            return;
+        }
+        PerlOwnerSlot slot = scalar.countedOwnerSlot;
+        if (slot != null && slot.isActive()) {
+            throw new IllegalStateException(
+                    "unowned scalar already has an active counted owner slot");
+        }
+        if (referent.refCount < 0 || referent.refCount == Integer.MAX_VALUE) {
+            throw new IllegalStateException(
+                    "counted acquisition requires an available tracked reference count");
+        }
+
+        scalar.recordCountedOwner(referent);
+        slot = scalar.countedOwnerSlot;
+        slot.reclassifyCountedIdentity(intendedOwnerKind == null
+                ? scalar.countedOwnerKind() : intendedOwnerKind);
+        referent.traceRefCount(+1, acquisitionSite);
+        referent.refCount++;
+        referent.hadCountedReference = true;
+        scalar.refCountOwned = true;
+        referent.recordOwner(scalar, acquisitionSite);
+    }
+
     boolean isCurrentAggregateElementOwner(RuntimeBase referent, PerlOwnerSlot slot) {
         if (countedOwnerSlot != slot || !refCountOwned || value != referent
                 || !slot.isActive() || slot.referent() != referent) {
@@ -1588,17 +1637,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 : containerOwner instanceof RuntimeArray array
                     && !array.elementsAliased
                     ? PerlOwnerSlot.Kind.ARRAY_ELEMENT : PerlOwnerSlot.Kind.SCALAR_CELL;
-    }
-
-    private void recordContainerCountedOwner() {
-        recordContainerCountedOwner(null);
-    }
-
-    private void recordContainerCountedOwner(PerlOwnerSlot.Kind intendedOwnerKind) {
-        if (!refCountOwned || !(value instanceof RuntimeBase referent)) return;
-        recordCountedOwner(referent);
-        countedOwnerSlot.reclassifyCountedIdentity(
-                intendedOwnerKind == null ? countedOwnerKind() : intendedOwnerKind);
     }
 
     /** Copy a reference into a return-owned scalar and defer its exact release. */
@@ -3310,7 +3348,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
         if (PerlRuntime.currentOrNull() != null && WeakRefRegistry.isweak(scalar)) return;
         if (scalar.refCountOwned) {
-            scalar.recordContainerCountedOwner(intendedOwnerKind);
+            PerlOwnerSlot slot = scalar.countedOwnerSlot;
+            if (slot == null || !slot.isActive() || slot.referent() != scalar.value
+                    || slot.countedScalarOwner() != scalar) {
+                throw new IllegalStateException(
+                        "counted scalar lost its active owner slot during container acquisition");
+            }
+            slot.reclassifyCountedIdentity(intendedOwnerKind == null
+                    ? scalar.countedOwnerKind() : intendedOwnerKind);
             if (scalar.untrackedReferenceOwnerSlot != null) {
                 scalar.releaseUntrackedReferenceOwner(
                         scalar.untrackedReferenceOwnerSlot.referent());
@@ -3350,13 +3395,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
             base.refCount = 0;
         }
-        base.traceRefCount(+1, "RuntimeScalar.incrementRefCountForContainerStore");
-        base.refCount++;
-        base.hadCountedReference = true;
-        base.recordOwner(scalar, "incrementRefCountForContainerStore");
-        base.recordActiveOwner(scalar);
-        scalar.refCountOwned = true;
-        scalar.recordContainerCountedOwner(intendedOwnerKind);
+        acquireCountedOwnerForCurrentValue(scalar, base, intendedOwnerKind,
+                "RuntimeScalar.incrementRefCountForContainerStore");
         if (scalar.untrackedReferenceOwnerSlot != null) {
             scalar.releaseUntrackedReferenceOwner(
                     scalar.untrackedReferenceOwnerSlot.referent());
