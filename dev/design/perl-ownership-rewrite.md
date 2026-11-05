@@ -3,36 +3,31 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-05):** #1649 remains in Phase 2 on
-`wip/ownership-bless-temp-20261105-102952`, WIP commit `a1bc1ec304` based on
-`436b616114`. That commit pairs the bless-created temporary's owner identity and
-selective count in `PerlOwnerSlot.acquireCountedTemporaryOwner`; the existing
-`BlessTemporaryOwnerProvenanceTest` covers its deferred release. Earlier source
-commits paired counted scalar acquisition (`b9f2792424`) and method-invocant
-acquire/release (`6fe259422e`). The branch has not been built, so those Java
-tests and this latest path remain unvalidated together. The saved JAR identifies
-as `7721ba94ec` and predates this candidate.
+`wip/ownership-bless-temp-20261105-102952`, WIP commit `90a0189c70`. The latest
+batch pairs scalar replacement's new count and slot identity, carries the
+displaced edge as an exact release token, and routes tracked weakening through
+the shared release path. `CountedScalarOwnerReplacementTest` covers changed and
+unchanged referents. System Perl passes 47 checks across the scalar-slot,
+reentrant-overwrite, and weaken oracles. The local Perl cannot parse
+`weaken_readonly_ref.t` because it does not recognize `experimental::builtin`.
+This candidate has not been built; the saved JAR `7721ba94ec` is stale.
 
-The producer/release audit confirms that direct count work remains in
-`RuntimeScalar.transitionReferenceSlot`, `WeakRefRegistry.weaken`, deferred
-cleanup, and destruction. Several lifecycle branches still reconstruct counts
-from owner identities or roots. The localized-glob decrement is a legacy direct
-stash-write path exercised by a Java fixture; normal code-map replacement uses
-stash CODE-slot release. It is not evidence of a missing normal producer.
-`restoreReachableOwnerCount` remains behind the legacy unpaired-release API,
-which has no production caller. No ordinary recovery path has been removed.
+No corrective reachability path has been removed. `restoreReachableOwnerCount`
+still has no production caller, while verified-count repair remains in scalar
+reference-content cleanup, deferred release, immediate owner release, and
+`DESTROY` entry/exit. The localized-glob decrement is a legacy direct stash-write
+path exercised by a Java fixture; normal code-map replacement uses stash
+CODE-slot release. It is not evidence of a missing normal producer.
 
-The next high-leverage batch is scalar replacement and weaken: make each strong
-edge acquire its slot and count together, retain the exact old release token,
-publish the new scalar state, then complete the displaced release. Extend that
-transition to array/hash replacement and deferred cleanup only where they share
-the same contract. Follow with closure/CODE, package-root, suspended-frame,
-clone/cycle, and resource-owner transfers. Keep real count edges, uncounted Perl
-roots, and temporary runtime holds distinct. After ordinary producers no longer
-need repair, remove lifecycle fallbacks and sweep scheduling together. To limit
-host cost, use system Perl for new Perl-level oracles, then run two immutable
-full gates: one after ownership migration and one after sweep removal. Run the
-no-sweeps, #1794, #1860, and HTML-Tree matrix against the final candidate. PR
-#1938 and its CI have not been rechecked during this resume.
+Next, migrate array/hash mutation and removal together with tied-value and
+argument aliases; then handle closure/CODE, package roots, suspended frames,
+clone/shared storage, cycles, and resource-owner transfers. For each batch,
+finish producer and release coverage before building. Run system Perl for new
+Perl-level tests as they are added. To limit host cost, run one immutable full
+gate after ordinary producers are migrated, then remove recovery/sweep
+machinery and run one final full gate. Use the same final JAR for both backends,
+the no-sweeps, #1794, #1860, and HTML-Tree acceptance matrix. PR #1938 and its CI
+still need rechecking before publication.
 
 The eval-return/argument-unwind batch preserves a caller's pending
 `RETURN_VALUE` while retiring only releases created by the argument frames
@@ -2471,12 +2466,12 @@ and final use cases still require audit before removal.
 
 ### Next steps
 
-1. Finish the producer audit in related batches: legacy pad capture
-   bookkeeping, cloned/shared-storage transfers, remaining package/glob
-   components, resource owners, and exception/cancellation releases. The
-   current working-tree native-owner transition is unbuilt. Run system Perl
-   first for each new Perl-level regression and retain parent failure evidence
-   when a normal-path defect is reproduced.
+1. Migrate aggregate replacement/removal and tied-value/argument alias paths
+   through the paired transition, then audit closure/CODE, package roots,
+   suspended frames, clone/shared-storage, cycles, resource owners, and
+   exception/cancellation releases. The scalar/weaken commit is still unbuilt.
+   Run system Perl for each new Perl-level regression and retain parent failure
+   evidence when a normal-path defect is reproduced.
 2. Once each ordinary strong edge has a producer and release proof, remove the
    ordinary reachability/count recovery, corrective-sweep scheduling, and
    unused lifecycle caches and markers. Keep only explicit teardown and
