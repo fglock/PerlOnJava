@@ -14,10 +14,15 @@ already handles ordinary scalar overwrite and explicit `undef`, while array
 and hash stores use `transitionContainerSlots`; continue auditing exceptional
 and specialized producer paths rather than adding another decrement API.
 
-The complete `nice -n 19 make` gate passed in 7m56 on the exact source tree
-committed as `d1d111ee3b`; full output is
-`/tmp/ownership-bundled-build-20261105-owner-fixes.log`. JVM focused tests pass
-for `deferred_capture_live_argument.t`,
+The saved `/tmp/ownership-bundled-build-20261105-owner-fixes.log` reports
+`BUILD SUCCESSFUL` in 7m56. **Correction (2026-11-05):** that log and the
+current `./jperl -v` identify the built JAR as
+`7721ba94ec`. The log timestamp is 08:01 local, before `d1d111ee3b` was
+committed at 08:06; the source tree at build time was not captured as an
+immutable commit. Treat the result as evidence for the `7721ba94ec` JAR only,
+not as a full-gate result for `d1d111ee3b` or the current working tree. A full
+gate on the current candidate is still required. The JVM focused logs pass for
+`deferred_capture_live_argument.t`,
 `do_block_freetmps_fresh_result.t`,
 `interpreter_eval_exception_capture.t`,
 `class_method_field_refcount.t`, `destroy_edge_cases.t`, and
@@ -27,13 +32,14 @@ all of these except the class-field fixture, which fails in parsing its Perl
 5.42 oracle. The current `/usr/bin/perl` is 5.34.1, so it cannot run that newer
 syntax. The deferred-capture, do-block, eval-exception, destroy, and global
 destruction fixtures pass under both the current system Perl and the two
-PerlOnJava backends. Full HTML-Tree 5.07, #1794, #1860, and final no-sweeps
-acceptance still need rechecking on the reconciled candidate. PR #1938 was
-last recorded open at remote head
-`95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05`; this environment's GitHub API
-request failed, so its current state still needs a live check. Issue comment
-6575277842 is the current #1649 handoff and should be refreshed after the next
-batch.
+PerlOnJava backends, but the PerlOnJava logs did not capture an immutable
+source identity and must be rerun after the next full gate. The current working
+tree adds an unbuilt shared native-owner transition in `PerlOwnerSlot` and
+migrates the `:via` layer, regex callback, and tied-hash iterator producers.
+Full HTML-Tree 5.07, #1794, #1860, and final no-sweeps acceptance still need
+rechecking on the reconciled candidate. PR #1938 was live-checked open as a
+draft at remote head `95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05` on
+2026-11-05; issue comment 6575277842 is the current #1649 handoff.
 
 To minimize full-build time, finish the remaining producer fixes in two
 coherent groups before rebuilding: (1) transfers and unwind across argument
@@ -2487,15 +2493,16 @@ and final use cases still require audit before removal.
 
 1. Finish the producer audit in related batches: legacy pad capture
    bookkeeping, cloned/shared-storage transfers, remaining package/glob
-   components, and resource and exception/cancellation releases. The current
-   WIP batch adds suspend/resume failure cleanup. The existing deferred-capture
-   and tied-handler Perl regressions pass under system Perl, but neither backend
-   has validated this batch yet.
+   components, resource owners, and exception/cancellation releases. The
+   current working-tree native-owner transition is unbuilt. Run system Perl
+   first for each new Perl-level regression and retain parent failure evidence
+   when a normal-path defect is reproduced.
 2. Once each ordinary strong edge has a producer and release proof, remove the
    ordinary reachability/count recovery, corrective-sweep scheduling, and
    unused lifecycle caches and markers. Keep only explicit teardown and
    separately justified diagnostics.
-3. Assemble both code batches before the next expensive gate: run one immutable
-   full `nice -n 19 make`, then the no-sweeps acceptance matrix on that same
-   candidate. If green, recheck #1794, #1860, HTML-Tree, current master, and
-   PR #1938 before publication. Leave merging to review.
+3. Assemble the producer groups and recovery removal before one immutable full
+   `nice -n 19 make`. Verify `./jperl -v` reports that exact source commit,
+   then run the no-sweeps, #1794, #1860, and HTML-Tree acceptance matrix on the
+   same built candidate. If green, recheck current master and PR #1938 before
+   publication. Leave merging to review.

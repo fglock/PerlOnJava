@@ -2903,19 +2903,9 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                     || base.refCount == Integer.MIN_VALUE) {
                 return null;
             }
-            boolean counted = base.refCount >= 0;
-            if (counted && base.refCount == Integer.MAX_VALUE) {
-                throw new IllegalStateException("tied-hash iterator key count overflow");
-            }
             PerlOwnerSlot slot = new PerlOwnerSlot(
                     PerlOwnerSlot.Kind.TIED_HASH_ITERATOR_KEY);
-            slot.acquireNativeOwner(base);
-            if (counted) {
-                base.traceRefCount(+1, "RuntimeTiedHashIterator retains key");
-                base.refCount++;
-                base.hadCountedReference = true;
-                slot.markCountedNativeOwner();
-            }
+            slot.acquireCountedNativeOwner(base, "RuntimeTiedHashIterator retains key");
             return slot;
         }
 
@@ -2928,14 +2918,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
 
         private void releaseIteratorKey(PerlOwnerSlot slot) {
             if (slot == null) return;
-            RuntimeBase base = slot.referent();
-            if (base == null) {
-                slot.release();
-            } else if (slot.isCountedNativeOwner()) {
-                MortalList.releaseCountedNativeOwner(base, slot);
-            } else {
-                slot.release();
-            }
+            slot.releaseNativeOwner();
         }
     }
 }

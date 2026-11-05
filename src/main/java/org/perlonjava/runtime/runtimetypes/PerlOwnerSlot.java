@@ -357,6 +357,95 @@ public final class PerlOwnerSlot {
         transferTo(target);
     }
 
+    /**
+     * Acquire a native owner and its selective count as one slot transition.
+     *
+     * <p>Some runtime-owned Perl edges participate in the selective count while
+     * others are represented only by the owner identity. This operation keeps
+     * that distinction at the producer: a tracked referent gets exactly one
+     * count paired with this slot; an untracked referent gets only the slot.</p>
+     *
+     * @return whether the referent's selective count was incremented
+     */
+    public synchronized boolean acquireCountedNativeOwner(
+            RuntimeBase target, String acquisitionSite) {
+        Objects.requireNonNull(target, "target");
+        Objects.requireNonNull(acquisitionSite, "acquisitionSite");
+        if (kind != Kind.IO_VIA_LAYER && kind != Kind.REGEX_CALLBACK
+                && kind != Kind.TIED_HASH_ITERATOR_KEY) {
+            throw new IllegalStateException("unsupported counted native owner slot: " + kind);
+        }
+        if (referent != null || nativeOwner || countedNativeOwner) {
+            throw new IllegalStateException("counted native acquisition requires an empty slot");
+        }
+        if (target.refCount == Integer.MIN_VALUE) {
+            throw new IllegalStateException("cannot own a destroyed referent");
+        }
+        boolean counted = target.refCount >= 0;
+        if (counted && target.refCount == Integer.MAX_VALUE) {
+            throw new IllegalStateException("native owner count overflow");
+        }
+
+        try {
+            acquireNativeOwner(target);
+            if (!counted) return false;
+            target.traceRefCount(+1, acquisitionSite);
+            target.refCount++;
+            target.hadCountedReference = true;
+            countedNativeOwner = true;
+            return true;
+        } catch (RuntimeException | Error failure) {
+            if (referent == target) {
+                if (countedNativeOwner) {
+                    target.traceRefCount(-1, acquisitionSite + " (rollback)");
+                    target.refCount--;
+                    countedNativeOwner = false;
+                }
+                release();
+            }
+            throw failure;
+        }
+    }
+
+    /** Release a native owner and its paired count through normal lifecycle cleanup. */
+    public void releaseNativeOwner() {
+        RuntimeBase target;
+        boolean counted;
+        synchronized (this) {
+            if (referent == null) return;
+            if (!nativeOwner) {
+                throw new IllegalStateException("native release requires a native owner slot");
+            }
+            target = referent;
+            counted = countedNativeOwner;
+        }
+        if (counted) MortalList.releaseCountedNativeOwner(target, this);
+        else release();
+    }
+
+    /** Retire a regex callback count without dispatching referent destruction. */
+    public void releaseRegexCallbackOwner(String releaseSite) {
+        RuntimeBase target;
+        boolean counted;
+        PendingRelease releaseToken;
+        synchronized (this) {
+            if (referent == null) return;
+            if (kind != Kind.REGEX_CALLBACK || !nativeOwner) {
+                throw new IllegalStateException(
+                        "regex callback release requires a regex callback owner slot");
+            }
+            target = referent;
+            counted = countedNativeOwner;
+            releaseToken = counted ? releaseCountedNativeIdentity() : null;
+            if (!counted) release();
+        }
+        if (counted && target.refCount > 0) {
+            target.traceRefCount(-1, releaseSite);
+            target.refCount--;
+        }
+        if (releaseToken != null) releaseToken.complete();
+    }
+
     /** Record one package scalar table entry as an identity-owned scalar cell. */
     synchronized void acquirePackageScalarIdentity(RuntimeScalar target) {
         if (kind != Kind.PACKAGE_SCALAR_SLOT) {
