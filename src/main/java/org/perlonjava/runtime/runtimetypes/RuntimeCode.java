@@ -146,9 +146,26 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         || pendingStrongRelease) {
                     argumentAliasOwners.add(scalar.retainArgumentAliasOwner());
                 }
+                if (needsMortalArgumentValueOwner(scalar)) {
+                    listResultOwners.add(RuntimeScalar.retainStagedArgumentValue(scalar));
+                }
             } else if (value instanceof RuntimeList) {
                 retainListResultOwners(value);
             }
+        }
+
+        private boolean needsMortalArgumentValueOwner(RuntimeScalar scalar) {
+            if (scalar == null || !scalar.isMortalReturnSnapshot()
+                    || WeakRefRegistry.isweak(scalar)
+                    || (scalar.type & RuntimeScalarType.REFERENCE_BIT) == 0
+                    || !(scalar.value instanceof RuntimeBase referent)) {
+                return false;
+            }
+            // A return snapshot backed by a durable storage edge only aliases
+            // its source cell. If it is the sole counted edge, the call frame
+            // must acquire its own value owner before later argument cleanup
+            // can consume the pending return release.
+            return !referent.hasIndependentPerlOwnerSlotForArgument();
         }
 
         private void retainListResultOwners(RuntimeBase value) {
@@ -169,10 +186,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
                     && !WeakRefRegistry.isweak(scalar)) {
                 if (scalar.isMortalReturnSnapshot()) {
-                    // The return slot already owns this referent. Keep the
-                    // scalar cell aliased and let its exact queued release
-                    // wait for this frame instead of adding a second count.
-                    argumentAliasOwners.add(scalar.retainArgumentAliasOwner());
+                    if (needsMortalArgumentValueOwner(scalar)) {
+                        listResultOwners.add(
+                                RuntimeScalar.retainStagedArgumentValue(scalar));
+                    } else {
+                        // A separate durable counted owner already protects
+                        // this referent, so retain only the aliased scalar cell.
+                        argumentAliasOwners.add(scalar.retainArgumentAliasOwner());
+                    }
                 } else {
                     RuntimeScalar owner = RuntimeScalar.retainStagedArgumentValue(scalar);
                     listResultOwners.add(owner);

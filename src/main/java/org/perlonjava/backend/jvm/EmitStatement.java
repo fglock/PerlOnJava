@@ -75,11 +75,10 @@ public class EmitStatement {
      * Same as {@link #emitScopeExitNullStores(EmitterContext, int)} but with
      * an option to flush the MortalList after cleanup.
      * <p>
-     * When {@code flush} is true, emits a scoped flush using
-     * {@code MortalList.pushMark()} before cleanup and
-     * {@code MortalList.popAndFlush()} after. This only processes entries
-     * added by the scope-exit cleanup itself (not entries from outer scopes
-     * or prior operations), matching Perl 5's SAVETMPS/FREETMPS scoping.
+     * When {@code flush} is true, flushes entries above the active function
+     * boundary after cleanup. Callers that opened a mark at block entry use
+     * the overload with {@code markAtScopeEntry=true} to pop and flush that
+     * complete block extent, including temporaries created before cleanup.
      * <p>
      * {@code flush=true} is safe for bare blocks, loops, and control structures.
      * It must be {@code false} for subroutine body blocks where the implicit
@@ -95,7 +94,13 @@ public class EmitStatement {
     }
 
     static void emitScopeExitNullStores(EmitterContext ctx, int scopeIndex, boolean flush, int returnedLvalueSlot) {
-        emitScopeExitNullStores(ctx, scopeIndex, flush, returnedLvalueSlot, false);
+        emitScopeExitNullStores(ctx, scopeIndex, flush, returnedLvalueSlot, false, false);
+    }
+
+    static void emitScopeExitNullStores(EmitterContext ctx, int scopeIndex, boolean flush,
+                                        int returnedLvalueSlot, boolean markAtScopeEntry) {
+        emitScopeExitNullStores(ctx, scopeIndex, flush, returnedLvalueSlot, false,
+                markAtScopeEntry);
     }
 
     static void emitLoopControlScopeExit(EmitterContext ctx, int scopeIndex) {
@@ -105,12 +110,12 @@ public class EmitStatement {
         // captures from an enclosing class retain their original `my`
         // declaration metadata, so exclude their known slots just like an
         // ordinary scope exit; they belong to the enclosing scope.
-        emitScopeExitNullStores(ctx, scopeIndex, true, -1, false);
+        emitScopeExitNullStores(ctx, scopeIndex, true, -1, false, false);
     }
 
     private static void emitScopeExitNullStores(
             EmitterContext ctx, int scopeIndex, boolean flush,
-            int returnedLvalueSlot, boolean includeCaptured) {
+            int returnedLvalueSlot, boolean includeCaptured, boolean markAtScopeEntry) {
         // Gather variable indices for this scope first, to determine if cleanup is needed.
         java.util.List<Integer> scalarIndices = includeCaptured
                 ? ctx.symbolTable.getMyScalarIndicesInScope(scopeIndex)
@@ -285,7 +290,7 @@ public class EmitStatement {
         if (flush) {
             ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/MortalList",
-                    "flushAboveMark",
+                    markAtScopeEntry ? "popScopeMarkAndFlush" : "flushAboveMark",
                     "()V",
                     false);
         }
