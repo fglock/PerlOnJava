@@ -1119,9 +1119,9 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     }
 
     /** Mark the exact queued trace record as drained without relying on scalar state. */
-    public synchronized void completeQueuedOwnerRelease(PendingOwnerRelease release, String releaseSite) {
-        if (release == null) return;
-        if (!release.completed.compareAndSet(false, true)) return;
+    public synchronized boolean completeQueuedOwnerRelease(
+            PendingOwnerRelease release, String releaseSite) {
+        if (release == null || !release.completed.compareAndSet(false, true)) return false;
         if (release.ownerSlotRelease != null) {
             if (release.ownerSlotRelease.kind() == PerlOwnerSlot.Kind.RETURN_VALUE) {
                 pendingReturnOwners--;
@@ -1129,7 +1129,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             release.ownerSlotRelease.complete();
         }
         pendingOwnerReleases--;
-        if (!REFCOUNT_TRACE_ENV) return;
+        if (!REFCOUNT_TRACE_ENV) return true;
         java.util.ArrayList<PendingOwnerRelease> releases = pendingTraceOwnerReleases.get(this);
         if (releases != null) {
             releases.remove(release);
@@ -1141,6 +1141,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                 + " acquire-site=" + release.acquireSite
                 + " queue-site=" + release.queueSite
                 + " release-site=" + releaseSite);
+        return true;
     }
 
     public void cancelQueuedOwnerRelease(PendingOwnerRelease release, String cancelSite) {
