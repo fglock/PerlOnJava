@@ -11478,8 +11478,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             placeholder.requiresForwardGlobAliasGroup = true;
             placeholder.forwardGlobAliases.add(placeholder);
             placeholder.lexicalForwardGlobPlaceholder = true;
-            runtimeScalar.type = RuntimeScalarType.CODE;
-            runtimeScalar.value = placeholder;
+            // Promotion of the lexical cell is a real CODE reference store.
+            // Route it through the scalar transition so its current lexical or
+            // state-slot owner is attached to the placeholder CV.
+            runtimeScalar.set(new RuntimeScalar(placeholder));
             return runtimeScalar;
         }
 
