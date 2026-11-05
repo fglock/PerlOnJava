@@ -421,7 +421,9 @@ public class MortalList {
         if (base == null || slotRelease == null) return;
         int checkpoint = pendingSize();
         deferOwnerSlotDecrement(base, null, slotRelease, releaseSite);
-        drainPendingSince(checkpoint);
+        // Scalar overwrite and weaken historically leave weak observers alone
+        // when an unrelated local binding keeps the referent alive.
+        drainPendingSince(checkpoint, false);
     }
 
     /** Release a counted native owner through the normal destruction transition. */
@@ -1937,6 +1939,11 @@ public class MortalList {
                 // that edge does not participate in the legacy referent count.
                 // Keep weak observers until the exact stash entry is removed.
                 base.deferFinalReleaseToUncountedOwnerSlots();
+            } else if (base.hasCurrentUncountedPerlOwnerSlotIdentity()) {
+                // A current lexical, package, alias, or resource slot can keep
+                // the referent alive without contributing to the selective
+                // count. Carry its lifecycle obligation on that exact identity.
+                base.deferFinalReleaseToUncountedOwnerSlots();
             } else if (isFinalCountedReferentRelease(base, ownerRelease)) {
                 // This decrement retired an identified scalar/element edge.
                 // Every other migrated edge is already absent from the ledger;
@@ -2181,6 +2188,11 @@ public class MortalList {
      * @param startIdx the {@link #pendingSize} captured before apply()
      */
     public static void drainPendingSince(int startIdx) {
+        drainPendingSince(startIdx, true);
+    }
+
+    private static void drainPendingSince(
+            int startIdx, boolean clearWeakRefsForLocalBinding) {
         if (!isActive()) return;
         if (startIdx < 0) startIdx = 0;
         LifecycleRuntimeState state = state();
@@ -2191,7 +2203,7 @@ public class MortalList {
         int i = startIdx;
         try {
             while (i < state.pending.size()) {
-                processDeferredBase(state.pending.get(i), true,
+                processDeferredBase(state.pending.get(i), clearWeakRefsForLocalBinding,
                         state.pendingOwnerReleases.get(i),
                         state.pendingTransientOwnerKinds.get(i));
                 i++;
