@@ -981,6 +981,9 @@ public final class PerlOwnerSlot {
         next.hadCountedReference = true;
         if (next != previous) acquireCountedIdentity(next);
         associateCountedScalarOwner(scalar);
+        if (next != previous) {
+            previous.releaseOwner(scalar, acquisitionSite + " displaced");
+        }
         next.recordOwner(scalar, acquisitionSite);
         return previousRelease;
     }
