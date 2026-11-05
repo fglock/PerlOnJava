@@ -336,12 +336,9 @@ public class MyVarCleanupStack {
                     && !WeakRefRegistry.isweak(scalar)
                     && !scalar.refCountOwned
                     && seen.put(scalar, Boolean.TRUE) == null) {
-                scalar.refCountOwned = true;
-                referent.recordOwner(scalar, "blessed glob lexical alias");
-                referent.recordActiveOwner(scalar);
-                referent.traceRefCount(+1, "MyVarCleanupStack.retainBlessedGlobAliases");
-                referent.refCount++;
-                referent.hadCountedReference = true;
+                RuntimeScalar.acquireCountedOwnerForCurrentValue(
+                        scalar, referent, null,
+                        "MyVarCleanupStack.retainBlessedGlobAliases (lexical alias)");
             }
         }
         for (RuntimeScalar scalar : GlobalVariable.scalarSlots().values()) {
@@ -352,12 +349,9 @@ public class MyVarCleanupStack {
                     && !WeakRefRegistry.isweak(scalar)
                     && !scalar.refCountOwned
                     && seen.put(scalar, Boolean.TRUE) == null) {
-                scalar.refCountOwned = true;
-                referent.recordOwner(scalar, "blessed glob package alias");
-                referent.recordActiveOwner(scalar);
-                referent.traceRefCount(+1, "MyVarCleanupStack.retainBlessedGlobAliases");
-                referent.refCount++;
-                referent.hadCountedReference = true;
+                RuntimeScalar.acquireCountedOwnerForCurrentValue(
+                        scalar, referent, null,
+                        "MyVarCleanupStack.retainBlessedGlobAliases (package alias)");
             }
         }
     }
