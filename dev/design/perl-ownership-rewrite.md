@@ -3,12 +3,13 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-05):** #1649 remains in Phase 2 on
-`wip/ownership-async-resume-20261105-041622`, at `d06913a229`; this WIP
-snapshot contains the CODE producer batch `ad830f5d9f`, the merge of
+`wip/ownership-async-resume-20261105-041622`, with the latest committed
+checkpoint at `3323b9ee74`. This branch contains the CODE producer batch
+`ad830f5d9f`, the merge of
 `origin/master` at `2d4f278e42`, and the clone ownership consolidation. The
 WIP commit adds exception-safe suspend/resume cleanup, complete root-snapshot
-owner release after failures, and focused Java regressions. This batch remains
-unbuilt.
+owner release after failures, and focused Java regressions. The async/root
+snapshot batch remains unbuilt.
 `RuntimeScalar.transitionReferenceSlot`
 already handles ordinary scalar overwrite and explicit `undef`, while array
 and hash stores use `transitionContainerSlots`; continue auditing exceptional
@@ -31,8 +32,11 @@ release. IO clone coverage
 already checks shared transport lifetime; DBI thread cloning replaces native
 JDBC resources with invalid child tokens. A long-running CPAN tester is
 in `/Users/fglock/projects/PerlOnJava`, separate from this checkout; no build
-or JAR reader is active in this checkout. To limit host load, finish the
-do not spend a gate on this intermediate worktree. PR #1938 is OPEN at remote head
+or JAR reader is active here. To limit host load, finish the argument-frame
+producer and cleanup batch alongside the pending async/root-snapshot work,
+then run one full `nice -n 19 make` on the assembled candidate. The current
+argument-frame changes and their Java regression are still unbuilt. PR #1938
+is OPEN at remote head
 `95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05` and is not reconciled with this
 branch. The latest comments are now available, and the active #1649 claim was
 updated at [issue comment 6575277842](https://github.com/fglock/PerlOnJava/issues/1649#issuecomment-6575277842)

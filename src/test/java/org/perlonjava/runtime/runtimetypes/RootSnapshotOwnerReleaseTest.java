@@ -4,7 +4,6 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -19,10 +18,15 @@ class RootSnapshotOwnerReleaseTest {
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeHash first = new RuntimeHash();
             RuntimeHash second = new RuntimeHash();
-            PerlOwnerSlot laterOwner = temporaryOwner(first, false);
-            PerlOwnerSlot failingOwner = temporaryOwner(second, true);
+            PerlOwnerSlot laterOwner = temporaryOwner(first);
+            PerlOwnerSlot failingOwner = temporaryOwner(second);
             PerlRuntime.RootSnapshot snapshot = new PerlRuntime.RootSnapshot(
-                    runtime, List.of(first, second), List.of(failingOwner, laterOwner));
+                    runtime, List.of(first, second), List.of(failingOwner, laterOwner), owner -> {
+                        owner.release();
+                        if (owner == failingOwner) {
+                            throw new IllegalStateException("owner release failed");
+                        }
+                    });
 
             try {
                 IllegalStateException failure = assertThrows(IllegalStateException.class,
@@ -51,12 +55,18 @@ class RootSnapshotOwnerReleaseTest {
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeHash first = new RuntimeHash();
             RuntimeHash second = new RuntimeHash();
-            firstOwner = temporaryOwner(first, true);
-            secondOwner = temporaryOwner(second, true);
+            firstOwner = temporaryOwner(first);
+            secondOwner = temporaryOwner(second);
             firstSnapshot = new PerlRuntime.RootSnapshot(
-                    runtime, List.of(first), List.of(firstOwner));
+                    runtime, List.of(first), List.of(firstOwner), owner -> {
+                        owner.release();
+                        throw new IllegalStateException("owner release failed");
+                    });
             secondSnapshot = new PerlRuntime.RootSnapshot(
-                    runtime, List.of(second), List.of(secondOwner));
+                    runtime, List.of(second), List.of(secondOwner), owner -> {
+                        owner.release();
+                        throw new IllegalStateException("owner release failed");
+                    });
         }
 
         try {
@@ -64,6 +74,8 @@ class RootSnapshotOwnerReleaseTest {
                     IllegalStateException.class, runtime::close);
 
             assertEquals("owner release failed", failure.getMessage());
+            assertEquals(1, failure.getSuppressed().length);
+            assertEquals("owner release failed", failure.getSuppressed()[0].getMessage());
             assertFalse(firstOwner.isActive());
             assertFalse(secondOwner.isActive());
             assertTrue(runtime.isClosed(), "runtime teardown completes after all releases are tried");
@@ -76,17 +88,8 @@ class RootSnapshotOwnerReleaseTest {
         }
     }
 
-    private static PerlOwnerSlot temporaryOwner(RuntimeBase referent, boolean failAfterRelease) {
-        AtomicBoolean shouldFail = new AtomicBoolean(failAfterRelease);
-        PerlOwnerSlot owner = new PerlOwnerSlot(PerlOwnerSlot.Kind.TEMPORARY_ROOT) {
-            @Override
-            synchronized void release() {
-                super.release();
-                if (shouldFail.compareAndSet(true, false)) {
-                    throw new IllegalStateException("owner release failed");
-                }
-            }
-        };
+    private static PerlOwnerSlot temporaryOwner(RuntimeBase referent) {
+        PerlOwnerSlot owner = new PerlOwnerSlot(PerlOwnerSlot.Kind.TEMPORARY_ROOT);
         owner.acquireTemporaryRootIdentity(referent);
         return owner;
     }

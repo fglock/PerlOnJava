@@ -257,11 +257,8 @@ public final class PerlRuntime implements AutoCloseable {
         }
         Throwable pendingException = null;
         for (int i = snapshots.size() - 1; i >= 0; i--) {
-            try {
-                snapshots.get(i).releaseOwnerSlots();
-            } catch (Throwable failure) {
-                pendingException = failure;
-            }
+            RootSnapshot snapshot = snapshots.get(i);
+            pendingException = attemptCleanup(pendingException, snapshot::releaseOwnerSlots);
         }
         rethrowCleanupFailure(pendingException);
     }
@@ -281,7 +278,8 @@ public final class PerlRuntime implements AutoCloseable {
         try {
             cleanup.run();
         } catch (Throwable failure) {
-            pendingException = failure;
+            if (pendingException == null) return failure;
+            if (pendingException != failure) pendingException.addSuppressed(failure);
         }
         return pendingException;
     }
@@ -581,14 +579,23 @@ public final class PerlRuntime implements AutoCloseable {
         private final PerlRuntime runtime;
         private final List<RuntimeBase> roots;
         private final List<PerlOwnerSlot> ownerSlots;
+        private final java.util.function.Consumer<PerlOwnerSlot> ownerSlotReleaser;
         private final java.util.concurrent.atomic.AtomicBoolean ownersReleased =
                 new java.util.concurrent.atomic.AtomicBoolean();
 
         RootSnapshot(
                 PerlRuntime runtime, List<RuntimeBase> roots, List<PerlOwnerSlot> ownerSlots) {
+            this(runtime, roots, ownerSlots, PerlOwnerSlot::release);
+        }
+
+        RootSnapshot(
+                PerlRuntime runtime, List<RuntimeBase> roots, List<PerlOwnerSlot> ownerSlots,
+                java.util.function.Consumer<PerlOwnerSlot> ownerSlotReleaser) {
             this.runtime = Objects.requireNonNull(runtime, "runtime");
             this.roots = Collections.unmodifiableList(new ArrayList<>(roots));
             this.ownerSlots = List.copyOf(ownerSlots);
+            this.ownerSlotReleaser = Objects.requireNonNull(
+                    ownerSlotReleaser, "ownerSlotReleaser");
             runtime.retainRootSnapshot(this);
         }
 
@@ -604,11 +611,9 @@ public final class PerlRuntime implements AutoCloseable {
             // Release in acquisition order so the scalar's root edge retires
             // before its referent lease can trigger final lifecycle work.
             for (int i = 0; i < ownerSlots.size(); i++) {
-                try {
-                    ownerSlots.get(i).release();
-                } catch (Throwable failure) {
-                    pendingException = failure;
-                }
+                PerlOwnerSlot owner = ownerSlots.get(i);
+                pendingException = attemptCleanup(
+                        pendingException, () -> ownerSlotReleaser.accept(owner));
             }
             rethrowCleanupFailure(pendingException);
         }

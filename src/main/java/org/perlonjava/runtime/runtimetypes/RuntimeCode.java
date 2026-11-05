@@ -195,6 +195,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
         public void finish() {
             ownerState.callArgumentFrames.remove(this);
+            Throwable failure = null;
             if (materializedArguments != null) {
                 RuntimeArray arguments = materializedArguments;
                 materializedArguments = null;
@@ -204,29 +205,20 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         PerlOwnerSlot owner = scalar.countedOwnerSlot();
                         if (owner != null && owner.isActive()
                                 && owner.kind() == PerlOwnerSlot.Kind.ARGUMENT_VALUE) {
-                            RuntimeScalar.scopeExitCleanup(scalar);
+                            failure = attemptCleanup(
+                                    failure, () -> RuntimeScalar.scopeExitCleanup(scalar));
                         }
-                        arguments.forgetOwnedAliasElement(scalar);
+                        failure = attemptCleanup(
+                                failure, () -> arguments.forgetOwnedAliasElement(scalar));
                     }
                 }
             }
-            for (RuntimeScalar owner : listResultOwners) {
-                RuntimeScalar.releaseStagedArgumentValue(owner);
-            }
-            listResultOwners.clear();
-            for (RuntimeScalar owner : stagedScalarOwners) {
-                RuntimeScalar.releaseStagedArgumentValue(owner);
-            }
-            stagedScalarOwners.clear();
-            for (RuntimeScalar.ArgumentAliasOwner owner : argumentAliasOwners) {
-                owner.release();
-            }
-            argumentAliasOwners.clear();
-            for (ArgumentContainerOwner owner : argumentContainerOwners) {
-                owner.release();
-            }
-            argumentContainerOwners.clear();
-            MortalList.drainDeferredArgumentOwnerReleases();
+            failure = releaseStagedArgumentOwners(listResultOwners, failure);
+            failure = releaseStagedArgumentOwners(stagedScalarOwners, failure);
+            failure = releaseArgumentAliasOwners(argumentAliasOwners, failure);
+            failure = releaseArgumentContainerOwners(argumentContainerOwners, failure);
+            failure = attemptCleanup(failure, MortalList::drainDeferredArgumentOwnerReleases);
+            rethrowCleanupFailure(failure);
         }
 
         private List<ArgumentContainerOwner> transferArgumentContainerOwners(
@@ -239,13 +231,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
         /** Release a partially evaluated call that will never enter its callee. */
         public Throwable abandon(Throwable failure) {
-            finish();
+            Throwable pendingFailure = attemptCleanup(failure, this::finish);
             // A non-local return carries a result whose mortal owner must
             // survive until the receiving call boundary consumes it.
             if (!(failure instanceof PerlNonLocalReturnException)) {
-                MortalList.flushAboveMark();
+                pendingFailure = attemptCleanup(pendingFailure, MortalList::flushAboveMark);
             }
-            return failure;
+            return pendingFailure;
         }
     }
 
@@ -277,11 +269,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         "argument-container owner changed its referent before release");
             }
             active = false;
-            try {
-                RuntimeScalar.releaseTiedHandlerValue(handlerOwner);
-            } finally {
-                RuntimeScalar.releaseArgumentContainerValue(ownerValue);
-            }
+            Throwable failure = attemptCleanup(null,
+                    () -> RuntimeScalar.releaseTiedHandlerValue(handlerOwner));
+            failure = attemptCleanup(failure,
+                    () -> RuntimeScalar.releaseArgumentContainerValue(ownerValue));
+            rethrowCleanupFailure(failure);
         }
     }
 
@@ -320,9 +312,59 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
 
         void releaseRemaining() {
-            for (RuntimeScalar.ArgumentAliasOwner owner : owners) owner.release();
-            owners.clear();
+            rethrowCleanupFailure(releaseArgumentAliasOwners(owners, null));
         }
+    }
+
+    /** Run every cleanup action while preserving the first failure as primary. */
+    static Throwable attemptCleanup(Throwable pendingFailure, Runnable cleanup) {
+        try {
+            cleanup.run();
+        } catch (Throwable cleanupFailure) {
+            if (pendingFailure == null) return cleanupFailure;
+            if (pendingFailure != cleanupFailure) pendingFailure.addSuppressed(cleanupFailure);
+        }
+        return pendingFailure;
+    }
+
+    static void rethrowCleanupFailure(Throwable failure) {
+        if (failure == null) return;
+        if (failure instanceof RuntimeException runtimeException) throw runtimeException;
+        if (failure instanceof Error error) throw error;
+        throw new IllegalStateException("argument-owner cleanup failed", failure);
+    }
+
+    private static Throwable releaseStagedArgumentOwners(
+            List<RuntimeScalar> owners, Throwable failure) {
+        RuntimeScalar[] pendingOwners = owners.toArray(new RuntimeScalar[0]);
+        owners.clear();
+        for (RuntimeScalar owner : pendingOwners) {
+            failure = attemptCleanup(
+                    failure, () -> RuntimeScalar.releaseStagedArgumentValue(owner));
+        }
+        return failure;
+    }
+
+    private static Throwable releaseArgumentAliasOwners(
+            List<RuntimeScalar.ArgumentAliasOwner> owners, Throwable failure) {
+        RuntimeScalar.ArgumentAliasOwner[] pendingOwners =
+                owners.toArray(new RuntimeScalar.ArgumentAliasOwner[0]);
+        owners.clear();
+        for (RuntimeScalar.ArgumentAliasOwner owner : pendingOwners) {
+            failure = attemptCleanup(failure, owner::release);
+        }
+        return failure;
+    }
+
+    private static Throwable releaseArgumentContainerOwners(
+            List<ArgumentContainerOwner> owners, Throwable failure) {
+        ArgumentContainerOwner[] pendingOwners =
+                owners.toArray(new ArgumentContainerOwner[0]);
+        owners.clear();
+        for (ArgumentContainerOwner owner : pendingOwners) {
+            failure = attemptCleanup(failure, owner::release);
+        }
+        return failure;
     }
 
     private static RuntimeBase argumentAliasContainer(RuntimeBase value) {
@@ -346,9 +388,20 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         RuntimeScalar ownerValue = RuntimeScalar.retainArgumentContainerValue(container);
         if (ownerValue == null) return null;
         RuntimeBaseProxy magicProxy = argumentAliasMagicProxy(value);
-        RuntimeScalar handlerOwner = magicProxy == null ? null
-                : magicProxy.retainArgumentAliasHandlerOwner();
-        return new ArgumentContainerOwner(container, ownerValue, magicProxy, handlerOwner);
+        RuntimeScalar handlerOwner = null;
+        try {
+            handlerOwner = magicProxy == null ? null
+                    : magicProxy.retainArgumentAliasHandlerOwner();
+            return new ArgumentContainerOwner(container, ownerValue, magicProxy, handlerOwner);
+        } catch (Throwable acquisitionFailure) {
+            RuntimeScalar handlerOwnerToRelease = handlerOwner;
+            Throwable failure = attemptCleanup(acquisitionFailure,
+                    () -> RuntimeScalar.releaseTiedHandlerValue(handlerOwnerToRelease));
+            failure = attemptCleanup(failure,
+                    () -> RuntimeScalar.releaseArgumentContainerValue(ownerValue));
+            rethrowCleanupFailure(failure);
+            return null;
+        }
     }
 
     private static RuntimeBaseProxy argumentAliasMagicProxy(RuntimeBase value) {
@@ -2278,7 +2331,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     private static void pushArgs(
             RuntimeArray args, boolean snapshotRequired,
             ExecutionRuntimeState executionState) {
+        Objects.requireNonNull(args, "args");
         TailCallArgumentOwners tailCallOwners = null;
+        List<RuntimeScalar.ArgumentAliasOwner> argumentOwners = new ArrayList<>();
+        List<ArgumentContainerOwner> containerOwners = new ArrayList<>();
+        boolean argsPushed = false;
+        boolean aliasOwnersPushed = false;
+        boolean containerOwnersPushed = false;
+        boolean pristineArgsPushed = false;
         if (!executionState.pendingTailCallArgumentOwners.isEmpty()) {
             TailCallArgumentOwners pending =
                     executionState.pendingTailCallArgumentOwners.peek();
@@ -2286,36 +2346,58 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 tailCallOwners = executionState.pendingTailCallArgumentOwners.pop();
             }
         }
-        List<RuntimeScalar.ArgumentAliasOwner> argumentOwners = tailCallOwners == null
-                ? retainArgumentAliasOwners(args)
-                : retainMissingArgumentAliasOwners(args, tailCallOwners.takeMatching(args));
-        executionState.argsStack.push(args);
-        executionState.argumentAliasOwnerFrames.push(argumentOwners);
-        List<ArgumentContainerOwner> stagedContainerOwners =
-                takeStagedArgumentContainerOwners(args, executionState);
-        executionState.argumentContainerOwnerFrames.push(stagedContainerOwners != null
-                ? stagedContainerOwners : retainArgumentContainerOwners(args));
-        if (tailCallOwners != null) tailCallOwners.releaseRemaining();
-        // Snapshot the args list so @DB::args stays pristine even if the sub
-        // later shifts/pops from @_.
-        if (args == null || args.elements.isEmpty()) {
-            executionState.pristineArgsStack.push(EMPTY_ARGUMENT_SNAPSHOT);
-        } else if (snapshotRequired) {
-            executionState.pristineArgsStack.push(new java.util.ArrayList<>(args.elements));
-        } else {
-            executionState.pristineArgsStack.push(args.elements);
+        try {
+            if (tailCallOwners == null) {
+                retainArgumentAliasOwners(args, argumentOwners);
+            } else {
+                argumentOwners.addAll(tailCallOwners.takeMatching(args));
+                retainMissingArgumentAliasOwners(args, argumentOwners);
+            }
+            List<ArgumentContainerOwner> stagedContainerOwners =
+                    takeStagedArgumentContainerOwners(args, executionState);
+            if (stagedContainerOwners != null) {
+                containerOwners = stagedContainerOwners;
+            } else {
+                retainArgumentContainerOwners(args, containerOwners);
+            }
+            // Snapshot the args list so @DB::args stays pristine even if the
+            // sub later shifts/pops from @_.
+            List<RuntimeScalar> pristineArguments = args.elements.isEmpty()
+                    ? EMPTY_ARGUMENT_SNAPSHOT
+                    : snapshotRequired
+                            ? new java.util.ArrayList<>(args.elements)
+                            : args.elements;
+            if (tailCallOwners != null) tailCallOwners.releaseRemaining();
+
+            executionState.argsStack.push(args);
+            argsPushed = true;
+            executionState.argumentAliasOwnerFrames.push(argumentOwners);
+            aliasOwnersPushed = true;
+            executionState.argumentContainerOwnerFrames.push(containerOwners);
+            containerOwnersPushed = true;
+            executionState.pristineArgsStack.push(pristineArguments);
+            pristineArgsPushed = true;
+        } catch (Throwable setupFailure) {
+            Throwable failure = setupFailure;
+            if (pristineArgsPushed) executionState.pristineArgsStack.pop();
+            if (containerOwnersPushed) executionState.argumentContainerOwnerFrames.pop();
+            if (aliasOwnersPushed) executionState.argumentAliasOwnerFrames.pop();
+            if (argsPushed) executionState.argsStack.pop();
+            failure = releaseArgumentAliasOwners(argumentOwners, failure);
+            failure = releaseArgumentContainerOwners(containerOwners, failure);
+            if (tailCallOwners != null) {
+                failure = attemptCleanup(failure, tailCallOwners::releaseRemaining);
+            }
+            rethrowCleanupFailure(failure);
         }
     }
 
-    private static List<RuntimeScalar.ArgumentAliasOwner> retainArgumentAliasOwners(
-            RuntimeArray args) {
-        ArrayList<RuntimeScalar.ArgumentAliasOwner> owners = new ArrayList<>();
-        if (args == null) return owners;
+    private static void retainArgumentAliasOwners(
+            RuntimeArray args, List<RuntimeScalar.ArgumentAliasOwner> owners) {
         for (RuntimeScalar scalar : args.elements) {
             if (scalar == null || !hasPersistentArgumentCell(scalar)) continue;
             owners.add(scalar.retainArgumentAliasOwner());
         }
-        return owners;
     }
 
     private static boolean holdsStrongArgumentValue(RuntimeScalar scalar) {
@@ -2327,7 +2409,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 && !WeakRefRegistry.isweak(scalar);
     }
 
-    private static List<RuntimeScalar.ArgumentAliasOwner> retainMissingArgumentAliasOwners(
+    private static void retainMissingArgumentAliasOwners(
             RuntimeArray args, List<RuntimeScalar.ArgumentAliasOwner> adopted) {
         java.util.IdentityHashMap<RuntimeScalar, Integer> adoptedCounts =
                 new java.util.IdentityHashMap<>();
@@ -2344,7 +2426,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 adopted.add(scalar.retainArgumentAliasOwner());
             }
         }
-        return adopted;
     }
 
     /** Detach current {@code @_} value owners before source-frame cleanup. */
@@ -2385,9 +2466,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 || args.hasPerlStrongOwner()) {
             return;
         }
+        Throwable failure = null;
         for (RuntimeScalar scalar : new ArrayList<>(args.elements)) {
-            if (scalar != null) scalar.releaseContainerOwner(args);
+            if (scalar != null) {
+                failure = attemptCleanup(failure, () -> scalar.releaseContainerOwner(args));
+            }
         }
+        rethrowCleanupFailure(failure);
     }
 
     private static List<ArgumentContainerOwner> takeStagedArgumentContainerOwners(
@@ -2400,15 +2485,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return null;
     }
 
-    private static List<ArgumentContainerOwner> retainArgumentContainerOwners(RuntimeArray args) {
-        ArrayList<ArgumentContainerOwner> owners = new ArrayList<>();
-        if (args == null) return owners;
+    private static void retainArgumentContainerOwners(
+            RuntimeArray args, List<ArgumentContainerOwner> owners) {
         for (RuntimeScalar scalar : args.elements) {
             if (scalar == null) continue;
             ArgumentContainerOwner owner = retainArgumentContainerOwner(scalar);
             if (owner != null) owners.add(owner);
         }
-        return owners;
     }
 
     /** Retire the active {@code @_} alias identity for one removed argument slot. */
@@ -2469,19 +2552,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     private static void popArgs(ExecutionRuntimeState executionState) {
         Deque<RuntimeArray> stack = executionState.argsStack;
         RuntimeArray exitedArgs = null;
+        Throwable failure = null;
         if (!stack.isEmpty()) {
             exitedArgs = stack.pop();
             if (!executionState.argumentAliasOwnerFrames.isEmpty()) {
-                for (RuntimeScalar.ArgumentAliasOwner owner :
-                        executionState.argumentAliasOwnerFrames.pop()) {
-                    owner.release();
-                }
+                failure = releaseArgumentAliasOwners(
+                        executionState.argumentAliasOwnerFrames.pop(), failure);
             }
             if (!executionState.argumentContainerOwnerFrames.isEmpty()) {
-                for (ArgumentContainerOwner owner :
-                        executionState.argumentContainerOwnerFrames.pop()) {
-                    owner.release();
-                }
+                failure = releaseArgumentContainerOwners(
+                        executionState.argumentContainerOwnerFrames.pop(), failure);
             }
         }
         // A return inside an argument expression can bypass the invocation
@@ -2490,30 +2570,35 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (!executionState.callArgumentFrames.isEmpty()) {
             for (CallArguments frame : executionState.callArgumentFrames.toArray(new CallArguments[0])) {
                 if (frame.argumentDepth > stack.size()) {
-                    frame.finish();
+                    failure = attemptCleanup(failure, frame::finish);
                 }
             }
         }
+        RuntimeArray argumentsToRelease = exitedArgs;
         Deque<java.util.List<RuntimeScalar>> pStack = executionState.pristineArgsStack;
         if (!pStack.isEmpty()) {
-            pStack.pop();
+            failure = attemptCleanup(failure, pStack::pop);
         }
-        MortalList.drainDeferredArgumentOwnerReleases();
-        cleanupOwnedArgumentAliases(exitedArgs);
-        releaseExitedArgumentArrayContainerOwners(exitedArgs, executionState);
-        drainDeferredArgumentAggregateCleanup(executionState);
+        failure = attemptCleanup(failure, MortalList::drainDeferredArgumentOwnerReleases);
+        failure = attemptCleanup(
+                failure, () -> cleanupOwnedArgumentAliases(argumentsToRelease));
+        failure = attemptCleanup(failure,
+                () -> releaseExitedArgumentArrayContainerOwners(argumentsToRelease, executionState));
+        failure = attemptCleanup(failure,
+                () -> drainDeferredArgumentAggregateCleanup(executionState));
         Deque<Boolean> haStack = executionState.hasArgsStack;
         if (!haStack.isEmpty()) {
-            haStack.pop();
+            failure = attemptCleanup(failure, haStack::pop);
         }
         Deque<Integer> ctxStack = executionState.callContextStack;
         if (!ctxStack.isEmpty()) {
-            ctxStack.pop();
+            failure = attemptCleanup(failure, ctxStack::pop);
         }
         Deque<String> pendingPackages = executionState.pendingCallerPackages;
         if (!pendingPackages.isEmpty()) {
-            pendingPackages.pop();
+            failure = attemptCleanup(failure, pendingPackages::pop);
         }
+        rethrowCleanupFailure(failure);
     }
 
     /**
@@ -2525,10 +2610,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (args == null || args.ownedAliasElements == null
                 || args.ownedAliasElements.isEmpty()) return;
         RuntimeScalar[] owned = args.ownedAliasElements.toArray(new RuntimeScalar[0]);
+        Throwable failure = null;
         for (RuntimeScalar scalar : owned) {
-            RuntimeScalar.scopeExitCleanup(scalar);
-            args.forgetOwnedAliasElement(scalar);
+            failure = attemptCleanup(failure, () -> RuntimeScalar.scopeExitCleanup(scalar));
+            failure = attemptCleanup(failure, () -> args.forgetOwnedAliasElement(scalar));
         }
+        rethrowCleanupFailure(failure);
     }
 
     /**
