@@ -3,21 +3,44 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-05):** #1649 remains in Phase 2 on
-`wip/ownership-audit-20261105-021429`, at `63c7a0a334`; this includes the CODE
-producer batch `ad830f5d9f` and the merge of `origin/master` at
-`2d4f278e42`. The worktree has a clone-path source edit, a focused Java test,
-and this checkpoint update; none has been built. `RuntimeGraphCloner` now
-routes counted cloned scalar references through
-`RuntimeScalar.incrementRefCountForContainerStore`; the new test checks the
-child scalar-cell owner and weak-observer cleanup. The async audit confirms
-suspended lexical and dynamic state use explicit owner identities. Dynamic
-state restoration can invoke callbacks, so exception cleanup still needs
-review before changing that path. Resource inheritance already has dedicated
-coverage; no ownership defect is established there yet. Process enumeration
-is unavailable on this host, so no shared-JAR build has been started. PR #1938
-is OPEN at remote head `95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05` and is not
-reconciled with this branch; the GitHub API currently cannot return #1649's
-latest comments.
+`wip/ownership-async-resume-20261105-041622`, at `fe9d5f1fb7`; this WIP
+snapshot contains the CODE producer batch `ad830f5d9f`, the merge of
+`origin/master` at `2d4f278e42`, and the clone ownership consolidation. The
+worktree now adds exception-safe suspend/resume cleanup, complete root-snapshot
+owner release after failures, and focused Java regressions; none of the current
+worktree changes has been built.
+`RuntimeScalar.transitionReferenceSlot`
+already handles ordinary scalar overwrite and explicit `undef`, while array
+and hash stores use `transitionContainerSlots`; continue auditing exceptional
+and specialized paths instead of duplicating these operations.
+
+The async audit found that both suspension and restoration can fail around
+Perl callbacks. A failed `dynamicSuspendState()` could strand earlier detached
+owner slots; a failed `dynamicResumeState()` could leave later slots and
+reattached states behind. The current change unwinds the remaining dynamic
+stack and releases all acquired suspended owners. Resume stops at the first
+restore failure. Two Java regressions cover both paths, including ensuring
+later resume callbacks do not run. Root-snapshot close now tries every
+temporary owner slot even if one release throws; its Java regression checks
+that later owner slots are retired before the failure propagates. Snapshot-root
+construction also releases leases acquired for earlier roots if a later root
+cannot be retained, and closes the child runtime when snapshot construction
+fails. Runtime teardown tries every retained snapshot and cleanup phase before
+reporting a failure. Its regression covers lease rollback and complete root
+release. IO clone coverage
+already checks shared transport lifetime; DBI thread cloning replaces native
+JDBC resources with invalid child tokens. A long-running CPAN tester is
+in `/Users/fglock/projects/PerlOnJava`, separate from this checkout; no build
+or JAR reader is active in this checkout. To limit host load, finish the
+related producer audit and group its regressions before the next full build;
+do not spend a gate on this intermediate worktree. PR #1938 is OPEN at remote head
+`95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05` and is not reconciled with this
+branch; the GitHub API currently cannot return #1649's latest comments.
+The existing `deferred_capture_live_argument.t` and
+`tied_handler_nested_value_owner_before_weaken.t` regressions pass 3/3 and 2/2
+under system Perl; logs are `/tmp/ownership-deferred-capture-system-perl-20261105.log`
+and `/tmp/ownership-tied-handler-system-perl-20261105.log`. JVM/interpreter
+results for the current worktree remain pending.
 
 The eval-return/argument-unwind batch preserves a caller's pending
 `RETURN_VALUE` while retiring only releases created by the argument frames
@@ -2450,12 +2473,17 @@ and final use cases still require audit before removal.
 
 ### Next steps
 
-1. Audit mutation paths that bypass `transitionReferenceSlot` and
-   `transitionContainerSlots`, then trace current-count repairs to normal
-   producers in scalar overwrite, first weaken, and deferred release.
-2. Group package/glob/CODE roots, tied values, closure/CODE transfers,
-   cloned/shared storage, cycles, suspended frames, and IO owners by acquisition
-   and release site. Remove ordinary recovery only after producer coverage.
-3. Run the final no-sweeps acceptance matrix and one immutable full
-   `nice -n 19 make`; then recheck #1794, #1860, HTML-Tree, current master, and
+1. Finish the producer audit as one batch: legacy pad capture bookkeeping,
+   cloned/shared-storage transfers, remaining package/glob components, and
+   resource and exception/cancellation releases. The current worktree adds
+   suspend/resume failure cleanup; the existing deferred-capture and tied-
+   handler Perl regressions pass under system Perl, but neither backend has
+   validated this worktree yet.
+2. Once each ordinary strong edge has a producer and release proof, remove the
+   ordinary reachability/count recovery, corrective-sweep scheduling, and
+   unused lifecycle caches and markers. Keep only explicit teardown and
+   separately justified diagnostics.
+3. Assemble both code batches before the next expensive gate: run one immutable
+   full `nice -n 19 make`, then the no-sweeps acceptance matrix on that same
+   candidate. If green, recheck #1794, #1860, HTML-Tree, current master, and
    PR #1938 before publication. Leave merging to review.
