@@ -833,6 +833,7 @@ public class EmitterMethodCreator implements Opcodes {
             java.util.List<Integer> evalCleanupLocals = null;
             int evalArgumentDepthSlot = -1;
             int evalMethodInvocantDepthSlot = -1;
+            int evalMortalMarkDepthSlot = -1;
             int evalThrowableSlot = -1;
 
             if (useTryCatch) {
@@ -864,6 +865,12 @@ public class EmitterMethodCreator implements Opcodes {
                         "methodInvocantHoldDepth",
                         "(Lorg/perlonjava/runtime/runtimetypes/ExecutionRuntimeState;)I", false);
                 mv.visitVarInsn(Opcodes.ISTORE, evalMethodInvocantDepthSlot);
+
+                evalMortalMarkDepthSlot = ctx.symbolTable.allocateLocalVariable();
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/MortalList",
+                        "markDepth", "()I", false);
+                mv.visitVarInsn(Opcodes.ISTORE, evalMortalMarkDepthSlot);
                 evalThrowableSlot = ctx.symbolTable.allocateLocalVariable();
 
                 tryStart = new Label();
@@ -1204,6 +1211,14 @@ public class EmitterMethodCreator implements Opcodes {
                         "catchEval",
                         "(Ljava/lang/Throwable;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
                 mv.visitInsn(Opcodes.POP);
+
+                // Scope marks opened inside eval were bypassed by the thrown
+                // exception. Restore the eval-entry boundary before the
+                // explicit lexical cleanup below drains their releases.
+                mv.visitVarInsn(Opcodes.ILOAD, evalMortalMarkDepthSlot);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/MortalList",
+                        "restoreMarkDepth", "(I)V", false);
 
                 // Scope-exit cleanup for lexical variables allocated inside the eval body.
                 // When die throws a PerlDieException, Java exception handling jumps directly

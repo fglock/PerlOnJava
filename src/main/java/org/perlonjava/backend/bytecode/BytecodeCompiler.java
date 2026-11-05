@@ -1047,10 +1047,14 @@ public class BytecodeCompiler implements Visitor {
      *              is on the stack.
      */
     private void exitScope(boolean flush) {
+        exitScope(flush, false);
+    }
+
+    private void exitScope(boolean flush, boolean markAtScopeEntry) {
         if (!scopeIndices.isEmpty()) {
             int scopeIdx = scopeIndices.pop();
 
-            emitScopeCleanup(scopeIdx, flush);
+            emitScopeCleanup(scopeIdx, flush, markAtScopeEntry);
 
             symbolTable.exitScope(scopeIdx);
             if (!savedNextRegister.isEmpty()) {
@@ -1080,22 +1084,27 @@ public class BytecodeCompiler implements Visitor {
     }
 
     private void emitScopeCleanup(int scopeIdx, boolean flush) {
+        emitScopeCleanup(scopeIdx, flush, false);
+    }
+
+    private void emitScopeCleanup(int scopeIdx, boolean flush, boolean markAtScopeEntry) {
         // Gather variable indices to determine if cleanup is needed.
         java.util.List<Integer> scalarIndices = myScalarCleanupIndicesInScope(scopeIdx);
         java.util.Map<Integer, String> scalarNames = symbolTable.getMyScalarNamesInScope(scopeIdx);
         java.util.List<Integer> hashIndices = myHashCleanupIndicesInScope(scopeIdx);
         java.util.List<Integer> arrayIndices = myArrayCleanupIndicesInScope(scopeIdx);
 
-        // Only emit pushMark/popAndFlush when there are variables that need cleanup.
-        // Scopes with no my-variables skip this entirely.
-        boolean needsCleanup = flush
-                && (!scalarIndices.isEmpty() || !hashIndices.isEmpty() || !arrayIndices.isEmpty());
+        // Ordinary scopes need a local mark only when lexical cleanup can add
+        // releases. Fresh-result do blocks already pushed their mark at entry,
+        // and must close it even when they declare no lexicals.
+        boolean hasScopeVariables = !scalarIndices.isEmpty()
+                || !hashIndices.isEmpty() || !arrayIndices.isEmpty();
+        boolean needsCleanup = flush && (markAtScopeEntry || hasScopeVariables);
 
-        // Push mark so popAndFlush only drains entries added by
-        // scopeExitCleanup. Entries from method returns within the block
-        // that are below the mark will be processed by the next setLarge()
-        // or undefine() flush, or by the enclosing scope's exit.
-        if (needsCleanup) {
+        // For ordinary scopes, push immediately before cleanup so only
+        // cleanup releases drain here. A fresh-result do block uses its
+        // earlier entry mark to include temporaries created by its body.
+        if (needsCleanup && !markAtScopeEntry) {
             emit(Opcodes.MORTAL_PUSH_MARK);
         }
 
@@ -1150,7 +1159,8 @@ public class BytecodeCompiler implements Visitor {
 
         // Pop mark and flush only entries added since the mark.
         if (needsCleanup) {
-            emit(Opcodes.MORTAL_POP_FLUSH);
+            emit(markAtScopeEntry
+                    ? Opcodes.MORTAL_POP_SCOPE_FLUSH : Opcodes.MORTAL_POP_FLUSH);
         }
     }
 
@@ -2069,6 +2079,18 @@ public class BytecodeCompiler implements Visitor {
         if (node.getBooleanAnnotation("givenBlock")) givenBlockDepth++;
         enterScope();
 
+        // A fresh-result do block can flush its complete dynamic extent: its
+        // result cannot retain any value created inside the block. Record the
+        // boundary before evaluating the body so constructor mortals created
+        // there are included in the exit flush.
+        boolean isSubroutineBlock = node.getBooleanAnnotation("blockIsSubroutine");
+        boolean isDoBlock = node.getBooleanAnnotation("blockIsDoBlock");
+        boolean freshDoBlockScope = !isSubroutineBlock && isDoBlock
+                && DoBlockResultAnalysis.isAlwaysFresh(node);
+        if (freshDoBlockScope) {
+            emit(Opcodes.MORTAL_PUSH_SCOPE_MARK);
+        }
+
         int regexSaveReg = -1;
         if (!node.getBooleanAnnotation("blockIsSubroutine")
                 && !node.getBooleanAnnotation("skipRegexSaveRestore")
@@ -2330,11 +2352,9 @@ public class BytecodeCompiler implements Visitor {
         // may still refer to an inner lexical. A do-block ending in an always-fresh
         // scalar operator is safe: its result is independent, so FREETMPS can run at
         // block exit and transient objects are destroyed before the caller proceeds.
-        boolean isSubroutine = node.getBooleanAnnotation("blockIsSubroutine");
-        boolean isDoBlock = node.getBooleanAnnotation("blockIsDoBlock");
-        boolean flushAtScopeExit = !isSubroutine
-                && (isDoBlock ? DoBlockResultAnalysis.isAlwaysFresh(node) : outerResultReg < 0);
-        exitScope(flushAtScopeExit);
+        boolean flushAtScopeExit = !isSubroutineBlock
+                && (isDoBlock ? freshDoBlockScope : outerResultReg < 0);
+        exitScope(flushAtScopeExit, freshDoBlockScope);
         if (blockLoopInfo != null) {
             emit(Opcodes.POP_CONTROL_BLOCK);
         }

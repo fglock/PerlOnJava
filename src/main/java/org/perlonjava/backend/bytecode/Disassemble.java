@@ -38,6 +38,12 @@ public class Disassemble {
                     case Opcodes.MORTAL_POP_FLUSH:
                         sb.append("MORTAL_POP_FLUSH\n");
                         break;
+                    case Opcodes.MORTAL_PUSH_SCOPE_MARK:
+                        sb.append("MORTAL_PUSH_SCOPE_MARK\n");
+                        break;
+                    case Opcodes.MORTAL_POP_SCOPE_FLUSH:
+                        sb.append("MORTAL_POP_SCOPE_FLUSH\n");
+                        break;
                     case Opcodes.SCOPE_EXIT_CLEANUP:
                         int secReg = interpretedCode.bytecode[pc++];
                         sb.append("SCOPE_EXIT_CLEANUP r").append(secReg).append("\n");

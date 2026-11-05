@@ -2333,6 +2333,12 @@ public class Opcodes {
      */
     public static final short MORTAL_POP_FLUSH = 465;
 
+    /** Push an unconditional dynamic-scope mark before a fresh-result block. */
+    public static final short MORTAL_PUSH_SCOPE_MARK = 643;
+
+    /** Pop and flush the matching unconditional fresh-result block mark. */
+    public static final short MORTAL_POP_SCOPE_FLUSH = 644;
+
     /**
      * Scope-exit cleanup for a my-hash register.
      * Walks hash values recursively for tracked blessed references

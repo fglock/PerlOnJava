@@ -554,7 +554,14 @@ public class BytecodeInterpreter {
                                 scopeCleanupBatches.push(new java.util.ArrayList<>());
                             }
 
-                            case Opcodes.MORTAL_POP_FLUSH -> {
+                            case Opcodes.MORTAL_PUSH_SCOPE_MARK -> {
+                                // The mark belongs to a fresh-result do block and
+                                // must exist even if tracking activates in its body.
+                                MortalList.pushScopeMark();
+                                scopeCleanupBatches.push(new java.util.ArrayList<>());
+                            }
+
+                            case Opcodes.MORTAL_POP_FLUSH, Opcodes.MORTAL_POP_SCOPE_FLUSH -> {
                                 if (!scopeCleanupBatches.isEmpty()) {
                                     for (int cleanupReg : scopeCleanupBatches.pop()) {
                                         RuntimeBase slot = registers[cleanupReg];
@@ -564,7 +571,11 @@ public class BytecodeInterpreter {
                                     }
                                 }
                                 // Pop mark and flush only entries added since it (scoped FREETMPS)
-                                MortalList.popAndFlush();
+                                if (opcode == Opcodes.MORTAL_POP_SCOPE_FLUSH) {
+                                    MortalList.popScopeMarkAndFlush();
+                                } else {
+                                    MortalList.popAndFlush();
+                                }
                             }
 
                             case Opcodes.SCOPE_EXIT_CLEANUP -> {
@@ -2947,6 +2958,8 @@ public class BytecodeInterpreter {
 
                                 // Push catch PC onto eval stack
                                 evalCatchStack.push(catchPc);
+                                frame.evalMortalMarkDepthStack.push(MortalList.markDepth());
+                                frame.evalScopeCleanupBatchDepthStack.push(scopeCleanupBatches.size());
                                 frame.evalControlBlockDepthStack.push(new int[]{
                                         controlBlockStack.size(), labeledBlockStack.size(),
                                         visibleEvalFrame ? 1 : 0});
@@ -2987,6 +3000,12 @@ public class BytecodeInterpreter {
                                 if (!evalCatchStack.isEmpty()) {
                                     evalCatchStack.pop();
                                 }
+                                if (!frame.evalMortalMarkDepthStack.isEmpty()) {
+                                    frame.evalMortalMarkDepthStack.pop();
+                                }
+                                if (!frame.evalScopeCleanupBatchDepthStack.isEmpty()) {
+                                    frame.evalScopeCleanupBatchDepthStack.pop();
+                                }
                                 popEvalCallerFrame(frame);
 
                                 // Pop the base register (not needed on success path)
@@ -3019,6 +3038,21 @@ public class BytecodeInterpreter {
 
                                 int rd = bytecode[pc++];
                                 int context = bytecode[pc++];
+
+                                // The exception jumped over lexical block exits
+                                // in the eval body. Discard their mortal marks and
+                                // deferred cleanup batches before continuing at the
+                                // catch site.
+                                if (!frame.evalMortalMarkDepthStack.isEmpty()) {
+                                    MortalList.restoreMarkDepth(
+                                            frame.evalMortalMarkDepthStack.pop());
+                                }
+                                if (!frame.evalScopeCleanupBatchDepthStack.isEmpty()) {
+                                    int batchDepth = frame.evalScopeCleanupBatchDepthStack.pop();
+                                    while (scopeCleanupBatches.size() > batchDepth) {
+                                        scopeCleanupBatches.pop();
+                                    }
+                                }
 
                                 // WarnDie.catchEval() should have already been called to set $@
                                 // Perl returns an empty list from a failed eval in list context,
@@ -3875,6 +3909,16 @@ public class BytecodeInterpreter {
                             && !frame.evalControlBlockDepthStack.isEmpty()
                             && frame.evalControlBlockDepthStack.peek()[2] != 0) {
                         int catchPc = evalCatchStack.pop();
+                        if (!frame.evalMortalMarkDepthStack.isEmpty()) {
+                            MortalList.restoreMarkDepth(
+                                    frame.evalMortalMarkDepthStack.pop());
+                        }
+                        if (!frame.evalScopeCleanupBatchDepthStack.isEmpty()) {
+                            int batchDepth = frame.evalScopeCleanupBatchDepthStack.pop();
+                            while (scopeCleanupBatches.size() > batchDepth) {
+                                scopeCleanupBatches.pop();
+                            }
+                        }
                         int baseReg = evalBaseRegStack.peek();
                         java.util.ArrayList<Object> locals = new java.util.ArrayList<>();
                         BitSet myVars = code.myVarRegisters;

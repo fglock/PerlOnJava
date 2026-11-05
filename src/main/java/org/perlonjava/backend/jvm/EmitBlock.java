@@ -575,6 +575,18 @@ public class EmitBlock {
 
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("generateCodeBlock start context:" + emitterVisitor.ctx.contextType);
         int scopeIndex = emitterVisitor.ctx.symbolTable.enterScope();
+        boolean isSubBody = node.getBooleanAnnotation("blockIsSubroutine");
+        boolean isDoBlock = node.getBooleanAnnotation("blockIsDoBlock");
+        boolean doBlockFreshResult = isDoBlock && DoBlockResultAnalysis.isAlwaysFresh(node);
+        boolean markAtScopeEntry = !isSubBody && doBlockFreshResult;
+        if (markAtScopeEntry) {
+            // The fresh result cannot retain values created in this block.
+            // Mark before evaluating it so constructor mortals are included
+            // with lexical releases at block exit.
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/MortalList",
+                    "pushScopeMark", "()V", false);
+        }
         EmitterVisitor voidVisitor =
                 emitterVisitor.with(RuntimeContextType.VOID); // statements in the middle of the block have context VOID
         List<Node> list = node.elements;
@@ -932,9 +944,6 @@ public class EmitBlock {
         // container. For those we DO flush, fixing op/do.t RT 124248
         // (DESTROY firing on do-block exit for transient my-vars) without
         // risking DBIC's `do { my $x = ...; $x }` patterns.
-        boolean isSubBody = node.getBooleanAnnotation("blockIsSubroutine");
-        boolean isDoBlock = node.getBooleanAnnotation("blockIsDoBlock");
-        boolean doBlockFreshResult = isDoBlock && DoBlockResultAnalysis.isAlwaysFresh(node);
         Object blockResultRegObj = node.getAnnotation("resultRegister");
         boolean hasBlockResultRegister = blockResultRegObj instanceof Integer && (Integer) blockResultRegObj >= 0;
         boolean blockMayNeedResultAfterScopeExit = emitterVisitor.ctx.contextType != RuntimeContextType.VOID
@@ -966,7 +975,8 @@ public class EmitBlock {
                     "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)V",
                     false);
         }
-        EmitStatement.emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex, flushAtScopeExit, returnedLvalueSlot);
+        EmitStatement.emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex, flushAtScopeExit,
+                returnedLvalueSlot, markAtScopeEntry);
         if (returnedLvalueSlot >= 0) {
             if (protectReturnedWeakOwner) {
                 mv.visitVarInsn(Opcodes.ALOAD, returnedLvalueSlot);

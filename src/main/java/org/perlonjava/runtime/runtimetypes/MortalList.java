@@ -2232,9 +2232,9 @@ public class MortalList {
 
     /**
      * Push a mark recording the current pending list size.
-     * Called before scope-exit cleanup so that popAndFlush() only
-     * processes entries added by the cleanup (not earlier entries
-     * from outer scopes or prior operations).
+     * Called before scope-exit cleanup for ordinary scopes, or at block
+     * entry when the complete block lifetime must be flushed. popAndFlush()
+     * then processes only entries added after that dynamic boundary.
      * Also called at function entry (RuntimeCode.apply) to establish
      * a function-scoped mortal boundary — entries from the caller's
      * scope stay below the mark and are not processed by statement-
@@ -2250,6 +2250,34 @@ public class MortalList {
         state.pushMortalMark(state.pending.size(), state.pendingTiedReleases.size(),
                 state.pendingIoReleases.size(),
                 state.pendingUntrackedReturnOwnerReleases.size());
+    }
+
+    /** Push a block boundary even when its first tracked value is created later. */
+    public static void pushScopeMark() {
+        LifecycleRuntimeState state = state();
+        state.pushMortalMark(state.pending.size(), state.pendingTiedReleases.size(),
+                state.pendingIoReleases.size(),
+                state.pendingUntrackedReturnOwnerReleases.size());
+    }
+
+    /** Current nesting depth for exception boundaries that must unwind marks. */
+    public static int markDepth() {
+        return state().markDepth;
+    }
+
+    /**
+     * Discard marks opened after {@code depth} without processing their
+     * entries. Exception cleanup releases lexical owners and drains the
+     * resulting queue separately.
+     */
+    public static void restoreMarkDepth(int depth) {
+        LifecycleRuntimeState state = state();
+        if (depth < 0) {
+            throw new IllegalArgumentException("Invalid mortal mark depth: " + depth
+                    + " (current " + state.markDepth + ")");
+        }
+        if (depth > state.markDepth) return;
+        state.markDepth = depth;
     }
 
     /**
@@ -2383,5 +2411,16 @@ public class MortalList {
         // via callDestroy), check if any deferred captures are now ready.
         processReadyDeferredCaptures(state);
         DestroyDispatch.processRescuedObjects();
+    }
+
+    /** Pop a mark opened by {@link #pushScopeMark()}, including before tracking activates. */
+    public static void popScopeMarkAndFlush() {
+        LifecycleRuntimeState state = state();
+        if (!state.hasMortalMarks()) return;
+        if (!state.mortalActive) {
+            state.popMortalMark();
+            return;
+        }
+        popAndFlush();
     }
 }

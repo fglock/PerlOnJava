@@ -1108,6 +1108,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return mortalReturnSnapshot;
     }
 
+    /** Whether this scalar is runtime staging, rather than durable Perl storage. */
+    boolean isTransientArgumentValueOwner() {
+        return mortalReturnSnapshot || mortalReturnValueOwner || stagedValueOwner;
+    }
+
     /** Identity of this scalar cell's counted edge, retained across assignments. */
     PerlOwnerSlot countedOwnerSlot() {
         return countedOwnerSlot;
@@ -4251,6 +4256,21 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
         if (isCurrentReferenceSlotMutation(referenceSlotMutationVersion)) {
             refreshArgumentAliasOwnerSlots();
+        }
+        // During global destruction Perl warns when DESTROY stores its dying
+        // object into durable Perl storage, even if that storage cell already
+        // held the same reference before the callback. Owner-slot delta alone
+        // cannot see that same-cell assignment, so record the store at its
+        // scalar-slot producer while the lifecycle phase is still DESTRUCT.
+        if (isCurrentReferenceSlotMutation(referenceSlotMutationVersion)
+                && DestroyDispatch.currentDestroyTarget() != null
+                && "DESTRUCT".equals(GlobalVariable
+                        .getGlobalVariable(GlobalContext.GLOBAL_PHASE).toString())
+                && isPackageGlobalRoot
+                && !WeakRefRegistry.isweak(this)
+                && this.value == DestroyDispatch.currentDestroyTarget()
+                && hasLiveDurableStrongValueSlot()) {
+            DestroyDispatch.markDestroyTargetRescued();
         }
         // An explicitly discarded closure can have an inflated CODE refcount,
         // so waiting for callDestroy() leaves its captures alive indefinitely.
