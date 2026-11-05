@@ -842,8 +842,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                         // the normal alias group alone cannot make a later
                         // glob definition visible to direct lexical calls.
                         // Point that storage at the target's live placeholder.
-                        value.type = codeContainer.type;
-                        value.value = codeContainer.value;
+                        value.set(codeContainer);
                     }
                     // Preserve the target's cached placeholder; the shared
                     // alias group will populate it when either name is defined.

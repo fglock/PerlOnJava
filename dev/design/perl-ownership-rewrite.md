@@ -3,41 +3,55 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-05):** #1649 remains in Phase 2 on
-`wip/ownership-batch-20261104-232418`, now at `0357595ae6`, based on local
-master merge `8367167b64` from `289e34284d`. PR #1938 remains OPEN/DRAFT at
-remote head `95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05`; it has not been
-reconciled with this branch.
+`wip/ownership-batch-20261104-232418`. The source base is `7a624b0025` (runtime
+return fix `0357595ae6`, based on local master merge `8367167b64`); the CODE
+producer batch below is currently uncommitted. PR #1938 remains OPEN/DRAFT at
+the previously verified remote head `95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05`
+and has not been reconciled with this branch.
 
-The eval-return/argument-unwind batch now preserves a caller's pending
+The eval-return/argument-unwind batch preserves a caller's pending
 `RETURN_VALUE` while retiring only releases created by the argument frames
-being unwound. `RuntimeCode.unwindEvalMethodInvocantHolds` records the pending
-queue boundary and drains from that point instead of flushing the caller's
-older return release. No-`DESTROY` container cleanup also uses its own mortal
-mark. The permanent `eval_callback_return_owner_release.t` regression passes
-12/12 on system Perl, JVM, and interpreter. The focused
-`JPERL_TEST_SHARD=0 JPERL_TEST_FILTER=return_owner nice -n 19 make build` passes
-in 1m16; `PerlReturnOwnerConsumptionTest` checks exact return/source release
-provenance and isolation from unrelated cleanup. The fixture fails test 10 on
-unfixed parent `b5e6c22568` and passes on the candidate; logs are
+being unwound. `RuntimeCode.unwindEvalMethodInvocantHolds` drains from the
+frame's saved queue boundary, and no-`DESTROY` container cleanup uses its own
+mortal mark. `eval_callback_return_owner_release.t` passes 12/12 on system
+Perl, JVM, and interpreter. The focused build passed in 1m16, and
+`PerlReturnOwnerConsumptionTest` verifies return/source release provenance.
+The fixture fails test 10 on parent `b5e6c22568`; evidence is in
 `/tmp/issue1649-eval-callback-return-owner-parent.log` and
-`/tmp/issue1649-return-owner-batch3.log`. The requested
-`deferred_capture_live_argument.t` is present and was previously validated on
-both backends. No full gate has run on this candidate.
+`/tmp/issue1649-return-owner-batch3.log`.
 
-The audit still has deferred-release/count repair, first weaken, aggregate
-roots/cycles, closure/CODE transfer, detached package/glob state,
-destruction/resurrection, temporary roots, suspended frames, and resource
-holders to close. Production deferred releases carry slot tokens, while
+The new CODE producer batch routes lexical forward-CV promotion, forward-glob
+source-cell replacement, and constructor predeclaration through scalar
+transitions. `RuntimeCodeSlotTransitionTest` passes 3/3. The filtered
+`nice -n 19 make build` passed in 1m15; `lexical_sub_forward_undefined.t` and
+`zz_forward_code_glob_alias.t` pass 23/23 on system Perl and 23/23 on each
+PerlOnJava backend. Evidence is in
+`/tmp/issue1649-code-slot-batch1-fixedtest.log`,
+`/tmp/issue1649-forward-code-existing-perl.log`,
+`/tmp/issue1649-forward-code-lexical-jvm.log`,
+`/tmp/issue1649-forward-code-lexical-interpreter.log`,
+`/tmp/issue1649-forward-code-glob-jvm.log`, and
+`/tmp/issue1649-forward-code-glob-interpreter.log`. The first build caught a
+test setup that had not registered its scalar as lexical storage; its
+preserved log is `/tmp/issue1649-code-slot-batch1.log`.
+
+Production deferred releases carry slot tokens, while
 `restoreReachableOwnerCount` remains reachable only from the legacy unpaired
-release hook. No normal count/owner mismatch producer has been confirmed;
-synthetic stale-count tests remain defensive evidence. `RuntimeGlob` localized
-restore still has a manual CODE release to reconcile with stash-slot release.
+release hook. The localized-glob manual decrement remains limited to the raw
+`type`/`value` writes modeled by existing Java compatibility tests. Ordinary
+owner gaps remain open across storage mutation, closure/CODE transfers,
+deferred cleanup, clone/shared state, cycles, suspended frames, and resource
+holders. No full gate has run on the current candidate.
 
-Next, batch the remaining storage-slot producers, then the specialized
-closure/CODE, clone/shared, suspended-frame, and resource-owner transfers.
-Remove ordinary recovery only after those producers have explicit invariant
-coverage. Then run the no-sweeps acceptance matrix and one immutable full
-`nice -n 19 make` before reconciling PR #1938.
+To limit expensive builds, audit the remaining producers first, then group
+mutations that share slot-transition semantics into one storage batch and
+transfers that share exact release provenance into one lifecycle batch. Run a
+focused filtered `nice -n 19 make build` after each coherent batch, with
+system-Perl/JVM/interpreter checks for its Perl-level regressions. Do not run a
+full `make` between related fixes. Remove ordinary recovery after producer
+coverage, then run the no-sweeps acceptance matrix and one immutable full
+`nice -n 19 make`. If a gate exposes a defect, finish its connected correction
+before rebuilding.
 
 Standard Perl is the oracle for every Perl-visible reference edge and its
 lifetime behavior. A reference-slot transition should retain a new strong
