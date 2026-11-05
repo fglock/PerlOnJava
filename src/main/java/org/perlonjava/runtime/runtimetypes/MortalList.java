@@ -353,10 +353,8 @@ public class MortalList {
             throw new IllegalStateException("cannot bless a destroyed referent");
         }
         PerlOwnerSlot temporaryOwner = new PerlOwnerSlot(PerlOwnerSlot.Kind.SCALAR_CELL);
-        temporaryOwner.acquireCountedIdentity(base);
-        base.traceRefCount(+1, "ReferenceOperators.bless mortal temporary");
-        base.refCount++;
-        base.hadCountedReference = true;
+        temporaryOwner.acquireCountedTemporaryOwner(
+                base, "ReferenceOperators.bless mortal temporary");
         base.acquireTransientTraceOwner("bless mortal temporary",
                 "ReferenceOperators.bless");
         PerlOwnerSlot.PendingRelease slotRelease = strongPerlOwner

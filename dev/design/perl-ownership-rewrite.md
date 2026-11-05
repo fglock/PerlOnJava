@@ -19,7 +19,14 @@ release into `MortalList.releaseCountedMethodInvocantOwner`. Existing
 abandonment, and zero-root-query cleanup. The source is now at
 `6fe259422e`; these Java changes have not yet been built.
 
-The candidate has not been built. The saved full build and local JAR identify
+The current worktree also moves the bless-created temporary increment into
+`PerlOwnerSlot.acquireCountedTemporaryOwner`, so its slot identity and selective
+count are acquired by one checked operation. Existing
+`BlessTemporaryOwnerProvenanceTest` covers the bless/deferred-release path.
+This patch is uncommitted and has not been built or run; it belongs in the next
+counted-acquisition batch.
+
+The current candidate has not been built. The saved full build and local JAR identify
 as `7721ba94ec`, predating `d1d111ee3b`, so they do not validate this branch.
 PR #1938 was live-checked open as a draft at remote head
 `95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05`; issue comment 6575277842 is the
