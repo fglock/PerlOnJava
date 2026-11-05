@@ -955,6 +955,36 @@ public final class PerlOwnerSlot {
         WeakRefRegistry.onStrongOwnerSlotReleased(previous);
     }
 
+    /** Replace one scalar edge while acquiring the replacement count and release token. */
+    synchronized PendingRelease replaceCountedScalarOwnerAndAcquire(
+            RuntimeBase previous, RuntimeBase next, RuntimeScalar scalar,
+            String acquisitionSite) {
+        Objects.requireNonNull(previous, "previous");
+        Objects.requireNonNull(next, "next");
+        Objects.requireNonNull(scalar, "scalar");
+        Objects.requireNonNull(acquisitionSite, "acquisitionSite");
+        if (!isCountedKind(kind) || referent != previous
+                || countedScalarOwner() != scalar || !scalar.refCountOwned
+                || nativeOwner || legacyCaptureCount != 0) {
+            throw new IllegalStateException(
+                    "scalar replacement requires its current counted owner identity");
+        }
+        if (next.refCount < 0 || next.refCount == Integer.MAX_VALUE) {
+            throw new IllegalStateException(
+                    "scalar replacement requires an available tracked reference count");
+        }
+
+        PendingRelease previousRelease = new PendingRelease(
+                identity, ++nextReleaseSequence, kind, previous);
+        next.traceRefCount(+1, acquisitionSite);
+        next.refCount++;
+        next.hadCountedReference = true;
+        if (next != previous) acquireCountedIdentity(next);
+        associateCountedScalarOwner(scalar);
+        next.recordOwner(scalar, acquisitionSite);
+        return previousRelease;
+    }
+
     /**
      * Record an active {@code @_} alias to a scalar cell without adding a
      * second Perl-visible reference count for the aliased value.

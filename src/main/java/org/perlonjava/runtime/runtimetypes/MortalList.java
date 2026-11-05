@@ -399,13 +399,29 @@ public class MortalList {
     /** Queue a closure-capture bridge decrement with owner-slot provenance. */
     static void deferOwnerSlotDecrement(RuntimeBase base, String transientOwnerKind,
                                         PerlOwnerSlot.PendingRelease slotRelease) {
+        deferOwnerSlotDecrement(base, transientOwnerKind, slotRelease,
+                "MortalList.deferOwnerSlotDecrement");
+    }
+
+    private static void deferOwnerSlotDecrement(RuntimeBase base, String transientOwnerKind,
+                                                 PerlOwnerSlot.PendingRelease slotRelease,
+                                                 String releaseSite) {
         if (base.refCountTrace) {
-            base.traceRefCount(0, "MortalList.deferOwnerSlotDecrement (queued)");
+            base.traceRefCount(0, releaseSite + " (queued)");
         }
         LifecycleRuntimeState state = state();
         markBoundaryWork(state);
         RuntimeBase.PendingOwnerRelease ownerRelease = base.queueOwnerSlotRelease(slotRelease);
         queueDeferredBase(state, base, ownerRelease, transientOwnerKind);
+    }
+
+    /** Consume one exact scalar-edge release after its replacement is published. */
+    static void releaseCountedOwnerSlotImmediately(
+            RuntimeBase base, PerlOwnerSlot.PendingRelease slotRelease, String releaseSite) {
+        if (base == null || slotRelease == null) return;
+        int checkpoint = pendingSize();
+        deferOwnerSlotDecrement(base, null, slotRelease, releaseSite);
+        drainPendingSince(checkpoint);
     }
 
     /** Release a counted native owner through the normal destruction transition. */
