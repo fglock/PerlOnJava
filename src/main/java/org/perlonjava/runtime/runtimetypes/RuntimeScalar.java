@@ -1351,7 +1351,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         PerlOwnerSlot ownerSlot = new PerlOwnerSlot(PerlOwnerSlot.Kind.ARGUMENT_ALIAS);
         if (argumentAliasOwnerSlots == null) argumentAliasOwnerSlots = new ArrayList<>();
         argumentAliasOwnerSlots.add(ownerSlot);
-        refreshArgumentAliasOwnerSlots();
+        try {
+            refreshArgumentAliasOwnerSlots();
+        } catch (Throwable acquisitionFailure) {
+            argumentAliasOwnerSlots.remove(ownerSlot);
+            if (argumentAliasOwnerSlots.isEmpty()) argumentAliasOwnerSlots = null;
+            Throwable failure = RuntimeCode.attemptCleanup(
+                    acquisitionFailure, ownerSlot::release);
+            RuntimeCode.rethrowCleanupFailure(failure);
+        }
         return new ArgumentAliasOwner(this, ownerSlot);
     }
 
