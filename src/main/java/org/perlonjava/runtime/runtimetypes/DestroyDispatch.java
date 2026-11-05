@@ -412,20 +412,25 @@ public class DestroyDispatch {
             // to decrement refCounts of any tracked references they hold.
             // Without this, blessed objects without DESTROY (e.g., Moo objects like
             // DBIx::Class::Storage::BlockRunner) leak their contained references.
-            WeakRefRegistry.clearWeakRefsTo(referent);
-            releaseTiedContainerOwner(referent);
-            if (referent instanceof RuntimeHash hash) {
-                MortalList.scopeExitCleanupDestroyedHash(hash);
-                MortalList.flush();
-            } else if (referent instanceof RuntimeArray arr) {
-                MortalList.scopeExitCleanupDestroyedArray(arr);
-                MortalList.flush();
-            } else if (referent instanceof RuntimeScalar scalar) {
-                RuntimeScalar.scopeExitCleanupDestroyed(scalar);
-                MortalList.flush();
-            } else if (referent instanceof RuntimeCode code) {
-                code.releaseStateStorage();
-                MortalList.flush();
+            MortalList.pushMark();
+            try {
+                WeakRefRegistry.clearWeakRefsTo(referent);
+                releaseTiedContainerOwner(referent);
+                if (referent instanceof RuntimeHash hash) {
+                    MortalList.scopeExitCleanupDestroyedHash(hash);
+                } else if (referent instanceof RuntimeArray arr) {
+                    MortalList.scopeExitCleanupDestroyedArray(arr);
+                } else if (referent instanceof RuntimeScalar scalar) {
+                    RuntimeScalar.scopeExitCleanupDestroyed(scalar);
+                } else if (referent instanceof RuntimeCode code) {
+                    code.releaseStateStorage();
+                }
+            } finally {
+                // A no-DESTROY cleanup is a nested lifecycle boundary. Drain
+                // only releases created while clearing this referent; a global
+                // flush here can consume an unrelated RETURN_VALUE that the
+                // enclosing expression has not transferred to its receiver.
+                MortalList.popAndFlush();
             }
             referent.markPerlDestroyed();
             return;

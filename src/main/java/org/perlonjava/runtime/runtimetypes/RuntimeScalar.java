@@ -1091,6 +1091,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
     private boolean mortalReturnSnapshot;
     private boolean mortalReturnValueOwner;
+    private long mortalReturnSourceOwnerIdentity;
+    private long mortalReturnSourceReleaseSequence;
+    private RuntimeBase mortalReturnSourceReferent;
     private boolean tiedHandlerValueOwner;
     private boolean stagedValueOwner;
     /** This snapshot temporarily carries a scalar's counted edge during local(). */
@@ -1099,6 +1102,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     boolean isMortalReturnSnapshot() {
         return mortalReturnSnapshot && !hasStorageOwnerForVoidDiscard()
                 && !RuntimeCode.isCurrentArgumentAlias(this);
+    }
+
+    boolean hasMortalReturnSnapshot() {
+        return mortalReturnSnapshot;
     }
 
     /** Identity of this scalar cell's counted edge, retained across assignments. */
@@ -1586,6 +1593,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         RuntimeScalar copy = new RuntimeScalar(source);
         copy.mortalReturnSnapshot = true;
         copy.copiedFromArgumentFrame = null;
+        copy.captureMortalReturnSourceOwner(source);
         incrementRefCountForContainerStore(copy);
         if (copy.refCountOwned) {
             copy.countedOwnerSlot.reclassifyCountedIdentity(PerlOwnerSlot.Kind.RETURN_VALUE);
@@ -1600,6 +1608,44 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
         }
         return copy;
+    }
+
+    private void captureMortalReturnSourceOwner(RuntimeScalar source) {
+        if (source == null || !(source.value instanceof RuntimeBase referent)) return;
+        PerlOwnerSlot sourceSlot = source.countedOwnerSlot;
+        if (sourceSlot == null || sourceSlot.referent() != referent) return;
+        if (source.refCountOwned && sourceSlot.isActive()) {
+            mortalReturnSourceOwnerIdentity = sourceSlot.identity();
+            mortalReturnSourceReleaseSequence = sourceSlot.nextReleaseSequenceValue();
+            mortalReturnSourceReferent = referent;
+            return;
+        }
+        PerlOwnerSlot.PendingRelease pendingRelease =
+                MortalList.pendingCountedReleaseFor(source, referent);
+        if (pendingRelease != null) {
+            mortalReturnSourceOwnerIdentity = pendingRelease.ownerSlotIdentity();
+            mortalReturnSourceReleaseSequence = pendingRelease.sequence();
+            mortalReturnSourceReferent = referent;
+        }
+    }
+
+    long mortalReturnSourceOwnerIdentity() {
+        return mortalReturnSourceOwnerIdentity;
+    }
+
+    long mortalReturnSourceReleaseSequence() {
+        return mortalReturnSourceReleaseSequence;
+    }
+
+    RuntimeBase mortalReturnSourceReferent() {
+        return mortalReturnSourceReferent;
+    }
+
+    void finishMortalReturnHandoff() {
+        mortalReturnSnapshot = false;
+        mortalReturnSourceOwnerIdentity = 0;
+        mortalReturnSourceReleaseSequence = 0;
+        mortalReturnSourceReferent = null;
     }
 
     void releaseMortalReturnValueOwner() {
@@ -3914,6 +3960,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     updateUntrackedReferenceOwner(this.value instanceof RuntimeBase referent
                             && (this.type & RuntimeScalarType.REFERENCE_BIT) != 0
                             ? referent : null);
+                    if (value != this && !stagedValueOwner
+                            && this.value instanceof RuntimeBase referent) {
+                        MortalList.consumeMortalReturnValue(value, referent);
+                    }
                     if (packageCodeRefName != null) {
                         GlobalVariable.noteGlobalCodeRefSlotMutation(this);
                     }
@@ -4416,6 +4466,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
         if (isCurrentReferenceSlotMutation(referenceSlotMutationVersion)) {
             retainScalarReferenceContents(value);
+        }
+
+        if (value != this && !stagedValueOwner
+                && this.value instanceof RuntimeBase referent) {
+            MortalList.consumeMortalReturnValue(value, referent);
         }
 
         // Flush deferred mortal decrements from the current function scope.
