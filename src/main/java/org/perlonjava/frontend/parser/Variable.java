@@ -109,8 +109,8 @@ public class Variable {
         // two characters as the ^= operator, so recover the contextual
         // split before identifier parsing consumes the special variable.
         if (sigil.equals("*") && nextToken.text.equals("^=")) {
-            nextToken.text = "^";
-            parser.tokens.add(nextTokIdx + 1, new LexerToken(LexerTokenType.OPERATOR, "="));
+            parser.tokens.set(nextTokIdx, LexerToken.of(LexerTokenType.OPERATOR, "^"));
+            parser.tokens.add(nextTokIdx + 1, LexerToken.of(LexerTokenType.OPERATOR, "="));
         }
 
         // Special case 1: $${...} - nested scalar dereference

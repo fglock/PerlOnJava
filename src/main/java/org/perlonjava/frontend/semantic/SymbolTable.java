@@ -19,6 +19,12 @@ public class SymbolTable {
         this.index = index;
     }
 
+    /** Copy constructor: shares immutable SymbolEntry values, copies only the HashMap shell. */
+    public SymbolTable(SymbolTable template) {
+        this.variableIndex = new HashMap<>(template.variableIndex);
+        this.index = template.index;
+    }
+
     /**
      * Adds a variable to the symbol table if it does not already exist.
      *

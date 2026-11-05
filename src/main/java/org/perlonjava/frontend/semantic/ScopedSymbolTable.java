@@ -207,6 +207,16 @@ public class ScopedSymbolTable {
         symbolTableStack.push(new SymbolTable(0));
     }
 
+    /**
+     * Replace the initial (bottom) symbol table with a copy of the given template.
+     * Called from BytecodeCompiler's cached eval-string path to avoid N individual
+     * addVariableWithIndex calls — one HashMap copy replaces N puts + N SymbolEntry allocs.
+     */
+    public void useInitialTable(SymbolTable template) {
+        symbolTableStack.pop();
+        symbolTableStack.push(new SymbolTable(template));
+    }
+
     public static String stringifyFeatureFlags(int featureFlags) {
         StringBuilder result = new StringBuilder();
         for (Map.Entry<String, Integer> entry : featureBitPositions.entrySet()) {

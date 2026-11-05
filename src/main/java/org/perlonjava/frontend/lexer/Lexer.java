@@ -172,8 +172,8 @@ public class Lexer {
         while ((token = nextToken()) != null) {
             tokens.add(token);
         }
-        tokens.add(new LexerToken(LexerTokenType.EOF, EOF));
-        tokens.add(new LexerToken(LexerTokenType.EOF, EOF));
+        tokens.add(LexerToken.TOKEN_EOF);
+        tokens.add(LexerToken.TOKEN_EOF);
 
         this.input = null;  // Throw away input to spare memory
         return tokens;
@@ -218,7 +218,7 @@ public class Lexer {
         if (isAsciiWhitespace(current)) {
             if (current == '\n' || current == '\r') {
                 position++;
-                return new LexerToken(LexerTokenType.NEWLINE, String.valueOf(current));
+                return LexerToken.of(LexerTokenType.NEWLINE, String.valueOf(current));
             } else {
                 return consumeWhitespace();
             }
@@ -325,7 +325,7 @@ public class Lexer {
                     || input.charAt(position) == '\r' || input.charAt(position) == '\f')) {
             position++;
         }
-        return new LexerToken(LexerTokenType.WHITESPACE, input.substring(start, position));
+        return LexerToken.of(LexerTokenType.WHITESPACE, input.substring(start, position));
     }
 
     public LexerToken consumeNumber() {
@@ -680,6 +680,6 @@ public class Lexer {
         }
 
         position++;
-        return new LexerToken(LexerTokenType.OPERATOR, input.substring(start, start + 1));
+        return LexerToken.of(LexerTokenType.OPERATOR, input.substring(start, start + 1));
     }
 }
