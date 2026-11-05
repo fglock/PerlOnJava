@@ -294,6 +294,21 @@ public final class PerlOwnerSlot {
         transferWithoutRuntimeRoot(target, false);
     }
 
+    /** Acquire the method-invocant slot and its paired selective count together. */
+    public synchronized void acquireCountedMethodInvocantOwner(
+            RuntimeBase target, String acquisitionSite) {
+        Objects.requireNonNull(target, "target");
+        Objects.requireNonNull(acquisitionSite, "acquisitionSite");
+        if (target.refCount < 0 || target.refCount == Integer.MAX_VALUE) {
+            throw new IllegalStateException(
+                    "method-invocant acquisition requires an available tracked count");
+        }
+        acquireMethodInvocantIdentity(target);
+        target.traceRefCount(+1, acquisitionSite);
+        target.refCount++;
+        target.hadCountedReference = true;
+    }
+
     /** Whether this slot still represents its direct method-invocant hold. */
     synchronized boolean isMethodInvocantOwner(RuntimeBase target) {
         return methodInvocantOwner && kind == Kind.ARGUMENT_VALUE && referent == target;

@@ -3460,10 +3460,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         MethodInvocantHold(RuntimeBase referent, ExecutionRuntimeState ownerState) {
             this.referent = referent;
             this.ownerState = ownerState;
-            owner.acquireMethodInvocantIdentity(referent);
-            referent.traceRefCount(+1, "RuntimeCode.method invocant hold (+1)");
-            referent.refCount++;
-            referent.hadCountedReference = true;
+            owner.acquireCountedMethodInvocantOwner(
+                    referent, "RuntimeCode.method invocant hold (+1)");
             referent.acquireTransientTraceOwner("method invocant hold", "RuntimeCode.acquireMethodInvocantHold");
             ownerState.methodInvocantHolds.add(this);
         }
@@ -3471,26 +3469,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         void release(boolean abandoned) {
             if (!owner.isActive()) return;
             ownerState.methodInvocantHolds.remove(this);
-            PerlOwnerSlot.PendingRelease release = owner.releaseCountedIdentity();
             referent.releaseTransientTraceOwner("method invocant hold", "RuntimeCode.MethodInvocantHold.release");
-            if (referent.refCount <= 0 || referent.currentlyDestroying) {
-                release.complete();
-                return;
-            }
-            if (referent.refCount > 1) {
-                // Other counted owners remain. Preserve the existing immediate
-                // decrement without losing this call's distinct release identity.
-                referent.traceRefCount(-1, "RuntimeCode.method invocant hold release (-1)");
-                referent.refCount--;
-                release.complete();
-                return;
-            }
-            // Normal returns need a mortal boundary so their receiver can
-            // acquire the result. Abandoned calls have no receiver and drain
-            // this exact release immediately, including within DESTROY.
-            int checkpoint = MortalList.pendingSize();
-            MortalList.deferOwnerSlotDecrement(referent, null, release);
-            if (abandoned) MortalList.drainPendingSince(checkpoint);
+            // Normal returns keep the final decrement pending until the
+            // receiver has acquired the result; abandoned calls drain it now.
+            MortalList.releaseCountedMethodInvocantOwner(referent, owner,
+                    "RuntimeCode.method invocant hold release (-1)", abandoned);
         }
     }
 
