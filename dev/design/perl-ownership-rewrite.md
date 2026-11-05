@@ -3,49 +3,50 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-05):** #1649 remains in Phase 2 on
-`wip/ownership-async-resume-20261105-041622`, with the latest committed
-checkpoint at `3323b9ee74`. This branch contains the CODE producer batch
-`ad830f5d9f`, the merge of
-`origin/master` at `2d4f278e42`, and the clone ownership consolidation. The
-WIP commit adds exception-safe suspend/resume cleanup, complete root-snapshot
-owner release after failures, and focused Java regressions. The async/root
-snapshot batch remains unbuilt.
-`RuntimeScalar.transitionReferenceSlot`
+`wip/ownership-batch-20261105-064502`, source commit `d1d111ee3b`. The latest
+batch completes fresh-result `do` block mortal boundaries in the JVM and
+interpreter, restores mortal-mark and cleanup-batch depths after eval
+exceptions, stages mortal return referents across argument evaluation only
+when no independent Perl owner exists, excludes transient return/staging
+identities from that owner proof, and limits same-slot global resurrection
+signals to package scalar stores. `RuntimeScalar.transitionReferenceSlot`
 already handles ordinary scalar overwrite and explicit `undef`, while array
 and hash stores use `transitionContainerSlots`; continue auditing exceptional
-and specialized paths instead of duplicating these operations.
+and specialized producer paths rather than adding another decrement API.
 
-The async audit found that both suspension and restoration can fail around
-Perl callbacks. A failed `dynamicSuspendState()` could strand earlier detached
-owner slots; a failed `dynamicResumeState()` could leave later slots and
-reattached states behind. The current change unwinds the remaining dynamic
-stack and releases all acquired suspended owners. Resume stops at the first
-restore failure. Two Java regressions cover both paths, including ensuring
-later resume callbacks do not run. Root-snapshot close now tries every
-temporary owner slot even if one release throws; its Java regression checks
-that later owner slots are retired before the failure propagates. Snapshot-root
-construction also releases leases acquired for earlier roots if a later root
-cannot be retained, and closes the child runtime when snapshot construction
-fails. Runtime teardown tries every retained snapshot and cleanup phase before
-reporting a failure. Its regression covers lease rollback and complete root
-release. IO clone coverage
-already checks shared transport lifetime; DBI thread cloning replaces native
-JDBC resources with invalid child tokens. A long-running CPAN tester is
-in `/Users/fglock/projects/PerlOnJava`, separate from this checkout; no build
-or JAR reader is active here. To limit host load, finish the argument-frame
-producer and cleanup batch alongside the pending async/root-snapshot work,
-then run one full `nice -n 19 make` on the assembled candidate. The current
-argument-frame changes and their Java regression are still unbuilt. PR #1938
-is OPEN at remote head
-`95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05` and is not reconciled with this
-branch. The latest comments are now available, and the active #1649 claim was
-updated at [issue comment 6575277842](https://github.com/fglock/PerlOnJava/issues/1649#issuecomment-6575277842)
-with this WIP commit, current validation status, and the batched next steps.
-The existing `deferred_capture_live_argument.t` and
-`tied_handler_nested_value_owner_before_weaken.t` regressions pass 3/3 and 2/2
-under system Perl; logs are `/tmp/ownership-deferred-capture-system-perl-20261105.log`
-and `/tmp/ownership-tied-handler-system-perl-20261105.log`. JVM/interpreter
-results for the current worktree remain pending.
+The complete `nice -n 19 make` gate passed in 7m56 on the exact source tree
+committed as `d1d111ee3b`; full output is
+`/tmp/ownership-bundled-build-20261105-owner-fixes.log`. JVM focused tests pass
+for `deferred_capture_live_argument.t`,
+`do_block_freetmps_fresh_result.t`,
+`interpreter_eval_exception_capture.t`,
+`class_method_field_refcount.t`, `destroy_edge_cases.t`, and
+`global_destruction_weak_owner_not_resurrection.t`. Interpreter mode passes
+all of these except the class-field fixture, which fails in parsing its Perl
+`class` syntax before runtime; that fixture passes on JVM and the saved Perl
+5.42 oracle. The current `/usr/bin/perl` is 5.34.1, so it cannot run that newer
+syntax. The deferred-capture, do-block, eval-exception, destroy, and global
+destruction fixtures pass under both the current system Perl and the two
+PerlOnJava backends. Full HTML-Tree 5.07, #1794, #1860, and final no-sweeps
+acceptance still need rechecking on the reconciled candidate. PR #1938 was
+last recorded open at remote head
+`95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05`; this environment's GitHub API
+request failed, so its current state still needs a live check. Issue comment
+6575277842 is the current #1649 handoff and should be refreshed after the next
+batch.
+
+To minimize full-build time, finish the remaining producer fixes in two
+coherent groups before rebuilding: (1) transfers and unwind across argument
+frames, closure/CODE captures, suspended frames, clone/shared storage, and
+deferred releases; (2) resource-owner acquisition and release across IO/glob
+slots, aggregate clear, #1794 controller/long-poll/WebSocket lifetimes, and
+#1860 growing output. Then remove obsolete recovery paths in one final change
+after those producers are covered. Run standard-Perl oracles and focused
+backend regressions while assembling each group, then run one immutable full
+`nice -n 19 make` and the final no-sweeps/HTML-Tree matrix against that same
+candidate. The async/root-snapshot exception-safety batch is committed in the
+preceding WIP history; the remaining audit should verify its exact release
+provenance together with the transfer group.
 
 The eval-return/argument-unwind batch preserves a caller's pending
 `RETURN_VALUE` while retiring only releases created by the argument frames
