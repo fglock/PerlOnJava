@@ -2448,7 +2448,9 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             if (localBase instanceof RuntimeCode localCodeObj) {
                 removedLocalCodeForStashRelease = localCodeObj;
             }
-            if (localBase.refCount > 0 && --localBase.refCount == 0) {
+            if (localBase.refCount > 0
+                    && localBase.releaseTrackedOwnerCount(
+                            "RuntimeGlob.restoreLocalizedCodeRef")) {
                 localBase.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroy(localBase);
             } else if (localBase.refCount == 0 && localBase instanceof RuntimeCode) {

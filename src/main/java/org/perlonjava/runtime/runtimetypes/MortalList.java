@@ -444,15 +444,13 @@ public class MortalList {
                 return;
             }
             if (base.refCount > 1) {
-                base.traceRefCount(-1, releaseSite);
-                base.refCount--;
+                base.releaseTrackedOwnerCount(releaseSite);
                 slotRelease.complete();
                 return;
             }
             if (base.refCount == 1 && base.blessId == 0
                     && !base.hasOwnerSlots() && isEmptyUnblessedAggregate(base)) {
-                base.traceRefCount(-1, releaseSite);
-                base.refCount = 0;
+                base.releaseTrackedOwnerCount(releaseSite);
                 slotRelease.complete();
                 return;
             }
@@ -476,15 +474,49 @@ public class MortalList {
     /** Release a counted native owner through the normal destruction transition. */
     public static void releaseCountedNativeOwner(
             RuntimeBase base, PerlOwnerSlot ownerSlot) {
+        releaseCountedNativeOwner(base, ownerSlot,
+                CountedNativeReleasePolicy.FINALIZE_REFERENT,
+                "MortalList.releaseCountedNativeOwner");
+    }
+
+    /** Retire a regex callback's count before its callback owner releases CODE captures. */
+    static void releaseRegexCallbackOwner(
+            RuntimeBase base, PerlOwnerSlot ownerSlot, String releaseSite) {
+        if (ownerSlot == null || ownerSlot.kind() != PerlOwnerSlot.Kind.REGEX_CALLBACK) {
+            throw new IllegalArgumentException(
+                    "regex callback release requires a regex callback owner slot");
+        }
+        releaseCountedNativeOwner(base, ownerSlot,
+                CountedNativeReleasePolicy.RETIRE_COUNT_ONLY, releaseSite);
+    }
+
+    private enum CountedNativeReleasePolicy {
+        FINALIZE_REFERENT,
+        RETIRE_COUNT_ONLY
+    }
+
+    /** Keep slot retirement, paired count decrement, and lifecycle policy together. */
+    private static void releaseCountedNativeOwner(
+            RuntimeBase base, PerlOwnerSlot ownerSlot,
+            CountedNativeReleasePolicy policy, String releaseSite) {
         if (base == null || ownerSlot == null || ownerSlot.referent() != base) return;
+        if (!ownerSlot.isCountedNativeOwner()) {
+            ownerSlot.release();
+            return;
+        }
         PerlOwnerSlot.PendingRelease release = ownerSlot.releaseCountedNativeIdentity();
         if (release == null) return;
+        if (policy == CountedNativeReleasePolicy.RETIRE_COUNT_ONLY) {
+            if (base.refCount > 0) base.releaseTrackedOwnerCount(releaseSite);
+            release.complete();
+            return;
+        }
         if (base.refCount <= 0) {
             release.complete();
             return;
         }
         releaseCountedOwnerSlotImmediately(
-                base, release, null, "MortalList.releaseCountedNativeOwner", true);
+                base, release, null, releaseSite, true);
     }
 
     /** Release a direct method-invocant edge, deferring its final count to the result boundary. */
@@ -500,8 +532,7 @@ public class MortalList {
             return;
         }
         if (base.refCount > 1) {
-            base.traceRefCount(-1, releaseSite);
-            base.refCount--;
+            base.releaseTrackedOwnerCount(releaseSite);
             release.complete();
             return;
         }
@@ -552,8 +583,7 @@ public class MortalList {
             throw new IllegalStateException(
                     "DESTROY self argument lost its release token at " + releaseSite);
         }
-        base.traceRefCount(-1, releaseSite);
-        base.refCount--;
+        base.releaseTrackedOwnerCount(releaseSite);
         release.complete();
     }
 
@@ -1894,8 +1924,8 @@ public class MortalList {
         boolean legacyUnpairedDecrement = ownerRelease == null;
         boolean finalRelease = false;
         if (base.refCount > 0) {
-            base.traceRefCount(-1, "MortalList.flush (deferred decrement)");
-            finalRelease = --base.refCount == 0;
+            finalRelease = base.releaseTrackedOwnerCount(
+                    "MortalList.flush (deferred decrement)");
         } else if (base.refCount == 0 && ownerRelease != null) {
             // The queue token may represent a real edge released after a
             // transient undercount, or an explicit zero-count temporary
@@ -1915,12 +1945,20 @@ public class MortalList {
                 code.deferFinalReleaseToActiveCode();
             } else if (base.hasSemanticCaptureOwner()) {
                 // Both native and legacy closure-pad slots identify the Perl
-                // edge that keeps this referent alive. Defer final cleanup to
-                // that slot's release while keeping refCount at zero.
-                if (ownerRelease != null) {
-                    base.deferFinalReleaseToUncountedOwnerSlots();
-                } else {
+                // edge that keeps this referent alive. The direct PerlIO::via
+                // hold is runtime scaffolding around PUSHED; when POPPED drops
+                // it, retain the tracked zero count and let the closure slot
+                // carry the remaining lifecycle. Ordinary scalar weakening
+                // continues to use WEAKLY_TRACKED while a semantic capture is
+                // the only remaining strong path.
+                boolean releasedViaLayerOwner = ownerRelease != null
+                        && ownerRelease.ownerSlotRelease != null
+                        && ownerRelease.ownerSlotRelease.kind()
+                                == PerlOwnerSlot.Kind.IO_VIA_LAYER;
+                if (ownerRelease == null || releasedViaLayerOwner) {
                     base.deferZeroCountFinalReleaseToUncountedOwnerSlots();
+                } else {
+                    base.deferFinalReleaseToUncountedOwnerSlots();
                 }
             } else if (base instanceof RuntimeScalar scalar
                     && scalar.referencedByScalarReference
@@ -1932,18 +1970,28 @@ public class MortalList {
                 base.deferZeroCountFinalReleaseToUncountedOwnerSlots();
             } else if (base instanceof RuntimeScalar scalar
                     && scalar.referencedByScalarReference
+                    && base.hasScalarCellStorageOwnerSlotIdentity()
                     && base.hasUncountedPerlOwnerSlotIdentity()) {
                 // A registered lexical/package scalar cell is itself the
                 // referent of \$cell. Retain that lifetime at refCount zero
                 // through its exact storage identity; localBindingExists is
                 // metadata and cannot stand in for the Perl edge.
                 base.deferZeroCountFinalReleaseToUncountedOwnerSlots();
-            } else if (ownerRelease != null
+            } else if (base.hasTemporaryRootOwnerSlotIdentity()) {
+                // A snapshot root is a runtime lease, not a Perl strong edge.
+                // Keep its cloned weak observers intact for the lease lifetime
+                // without fabricating a positive refCount. Releasing the last
+                // lease completes the pending weak cleanup through the slot.
+                base.deferFinalReleaseToTemporaryRootSlots();
+            } else if ((ownerRelease != null
+                            || base.ownerSlotCount(PerlOwnerSlot.Kind.CODE_STATE) != 0)
                     && base.hasCurrentUncountedPerlOwnerSlotIdentity()) {
-                // An exact counted edge left while a current lexical, package,
-                // alias, or resource slot still owns the value. Keep the weak
-                // lifecycle sentinel on that identity, including when legacy
-                // localBindingExists metadata is also set.
+                // An exact release token makes current uncounted Perl edges
+                // authoritative. Persistent CODE state is also a direct owner
+                // when a legacy bridge decrement has no token. Other tokenless
+                // synthetic releases retain the compatibility recovery below
+                // until their producers are migrated. Temporary roots and IO
+                // resource leases are excluded by the Perl-owner predicate.
                 base.deferFinalReleaseToUncountedOwnerSlots();
             } else if (base.localBindingExists && !(base instanceof RuntimeCode)) {
                 if (base instanceof RuntimeScalar scalar
@@ -1977,7 +2025,8 @@ public class MortalList {
                 // that edge does not participate in the legacy referent count.
                 // Keep weak observers until the exact stash entry is removed.
                 base.deferFinalReleaseToUncountedOwnerSlots();
-            } else if (base.hasCurrentUncountedPerlOwnerSlotIdentity()) {
+            } else if (!legacyUnpairedDecrement
+                    && base.hasCurrentUncountedPerlOwnerSlotIdentity()) {
                 // A current lexical, package, alias, or resource slot can keep
                 // the referent alive without contributing to the selective
                 // count. Carry its lifecycle obligation on that exact identity.
@@ -1988,16 +2037,17 @@ public class MortalList {
                 // a cached root snapshot must not invent a replacement owner.
                 base.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroyFromCountedOwner(base);
+            } else if (!(ownerRelease == null && transientOwnerKind == null
+                            && hasPackageRootedCurrentAggregateOwner(base))
+                    && base.restoreVerifiedCurrentCountedOwnerSlotRefCount()) {
+                // A verified current slot ledger is authoritative even for a
+                // legacy unpaired decrement. Reconstruct only the exact live
+                // scalar/element edges before considering a graph repair.
             } else if (legacyUnpairedDecrement && hasWeakRefs
                     && restoreReachableOwnerCount(base)) {
                 // Preserve the legacy unpaired hook's diagnostic/recovery walk
                 // while its callers migrate. Production releases carry an
                 // exact owner-slot token and bypass this compatibility path.
-            } else if (!(ownerRelease == null && transientOwnerKind == null
-                            && hasPackageRootedCurrentAggregateOwner(base))
-                    && base.restoreVerifiedCurrentCountedOwnerSlotRefCount()) {
-                // Verified current scalar cells and array/hash elements jointly
-                // restore the surviving owner count without a root walk.
             } else if (base.blessId != 0
                     && base.restoreUnregisteredScalarCellOwnerRefCount()) {
                 // Last compatibility bridge: an unregistered standalone
@@ -2009,11 +2059,12 @@ public class MortalList {
                 // Defer lifecycle cleanup to those slots instead of fabricating
                 // a legacy count that has no corresponding Perl reference.
                 base.deferFinalReleaseToUncountedOwnerSlots();
-            } else if (base.hasNonPackageAggregateUncountedOwnerSlotIdentity()
-                    || (aggregateReferent
-                        ? (base.blessId != 0 && !hasWeakRefs
-                            && base.hasUntrackedReferenceOwnerSlotIdentity())
-                        : hasUntrackedReferenceOwner)) {
+            } else if (!legacyUnpairedDecrement
+                    && (base.hasNonPackageAggregateUncountedOwnerSlotIdentity()
+                        || (aggregateReferent
+                            ? (base.blessId != 0 && !hasWeakRefs
+                                && base.hasUntrackedReferenceOwnerSlotIdentity())
+                            : hasUntrackedReferenceOwner))) {
                 // Counted owner recovery is complete above. A surviving
                 // non-package aggregate slot, or an untracked package owner of
                 // a blessed aggregate without direct weak observers, defers

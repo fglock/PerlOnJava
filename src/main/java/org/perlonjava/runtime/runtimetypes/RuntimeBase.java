@@ -468,6 +468,16 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                     || hasOwnerSlots() || hasPendingReturnOwner());
     }
 
+    /** Storage identities that own a scalar cell itself, excluding its value edges. */
+    boolean hasScalarCellStorageOwnerSlotIdentity() {
+        return ownerSlotCount(PerlOwnerSlot.Kind.SCALAR_CELL) != 0
+                || ownerSlotCount(PerlOwnerSlot.Kind.CODE_SLOT) != 0
+                || ownerSlotCount(PerlOwnerSlot.Kind.SCALAR_CAPTURE) != 0
+                || ownerSlotCount(PerlOwnerSlot.Kind.ACTIVE_LEXICAL) != 0
+                || ownerSlotCount(PerlOwnerSlot.Kind.SUSPENDED_FRAME) != 0
+                || ownerSlotCount(PerlOwnerSlot.Kind.SCALAR_REFERENCE_CONTENTS) != 0;
+    }
+
     private synchronized void registerPendingOwnerRelease(
             PerlOwnerSlot.PendingRelease release) {
         pendingOwnerReleases++;
@@ -495,13 +505,17 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     }
 
     synchronized boolean hasOwnerSlots() {
-        return ownerSlots != null && !ownerSlots.isEmpty();
+        if (ownerSlots == null || ownerSlots.isEmpty()) return false;
+        for (PerlOwnerSlot slot : ownerSlots) {
+            if (slot.isActive() && PerlOwnerSlot.isPerlOwnerKind(slot.kind())) return true;
+        }
+        return false;
     }
 
     /**
      * Whether the legacy count or a direct Perl owner slot proves this value
-     * is still owned. Runtime temporary roots are evaluation scaffolding, not
-     * Perl references, and are deliberately excluded.
+     * is still owned. Runtime temporary roots and IO resource leases are
+     * runtime bookkeeping, not Perl references, and are deliberately excluded.
      */
     public boolean hasPerlStrongOwner() {
         return refCount > 0 || hasPerlStrongOwnerIdentity();
@@ -509,16 +523,15 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
 
     /**
      * Whether current Perl owner identities, apart from the legacy count,
-     * prove that this value is still owned. Temporary roots and compatibility
-     * count pins are not Perl owners.
+     * prove that this value is still owned. Temporary roots, IO resource leases,
+     * and compatibility count pins are not Perl owners.
      */
     boolean hasPerlStrongOwnerIdentity() {
         if (localBindingExists || hasClosureCaptureOwner() || hasPendingReturnOwner()) {
             return true;
         }
         for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
-            if (slot.isActive()
-                    && slot.kind() != PerlOwnerSlot.Kind.TEMPORARY_ROOT) {
+            if (slot.isActive() && PerlOwnerSlot.isPerlOwnerKind(slot.kind())) {
                 return true;
             }
         }
@@ -533,7 +546,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         }
         for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
             if (slot == excluded || !slot.isActive()
-                    || slot.kind() == PerlOwnerSlot.Kind.TEMPORARY_ROOT) {
+                    || !PerlOwnerSlot.isPerlOwnerKind(slot.kind())) {
                 continue;
             }
             if (slot.kind() == PerlOwnerSlot.Kind.ARGUMENT_ALIAS
@@ -562,7 +575,17 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
             if (slot.isActive()
                     && !PerlOwnerSlot.isCountedKind(slot.kind())
-                    && slot.kind() != PerlOwnerSlot.Kind.TEMPORARY_ROOT) {
+                    && PerlOwnerSlot.isPerlOwnerKind(slot.kind())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** A snapshot lease delays lifecycle cleanup without becoming a Perl owner. */
+    boolean hasTemporaryRootOwnerSlotIdentity() {
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (slot.isActive() && slot.kind() == PerlOwnerSlot.Kind.TEMPORARY_ROOT) {
                 return true;
             }
         }
@@ -573,7 +596,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     boolean hasCurrentUncountedPerlOwnerSlotIdentity() {
         for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
             if (!PerlOwnerSlot.isCountedKind(slot.kind())
-                    && slot.kind() != PerlOwnerSlot.Kind.TEMPORARY_ROOT
+                    && PerlOwnerSlot.isPerlOwnerKind(slot.kind())
                     && DestroyDispatch.isCurrentPerlOwnerSlot(this, slot)) {
                 return true;
             }
@@ -583,7 +606,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
 
     boolean hasDirectOwnerSlotProofForReleasedWeakReferent() {
         for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
-            if (!slot.isActive()) continue;
+            if (!slot.isActive() || !PerlOwnerSlot.isPerlOwnerKind(slot.kind())) continue;
             if (slot.kind() == PerlOwnerSlot.Kind.ARRAY_ELEMENT
                     || slot.kind() == PerlOwnerSlot.Kind.HASH_ELEMENT) {
                 RuntimeScalar scalar = slot.countedScalarOwner();
@@ -648,11 +671,23 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
             if (!slot.isActive()
                     || PerlOwnerSlot.isCountedKind(slot.kind())
-                    || slot.kind() == PerlOwnerSlot.Kind.TEMPORARY_ROOT) {
+                    || !PerlOwnerSlot.isPerlOwnerKind(slot.kind())) {
                 continue;
             }
             if (slot.kind() == PerlOwnerSlot.Kind.UNTRACKED_REFERENCE) {
                 RuntimeScalar scalar = slot.untrackedScalarOwner();
+                if (scalar == null && blessId == 0
+                        && WeakRefRegistry.hasWeakRefsTo(this)) {
+                    slot.release();
+                    WeakRefRegistry.onStrongOwnerSlotReleased(this);
+                    continue;
+                }
+                if (scalar != null && blessId == 0
+                        && WeakRefRegistry.hasWeakRefsTo(this)
+                        && !scalar.hasLiveDurableStrongValueSlot()) {
+                    scalar.releaseUntrackedReferenceOwner(this);
+                    continue;
+                }
                 if (scalar != null && scalar.hasPackageAggregateUntrackedReferenceOwner()) {
                     continue;
                 }
@@ -674,6 +709,16 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             throw new IllegalStateException("zero-count owner release requires refCount=0");
         }
         if (!hasUncountedPerlOwnerSlotIdentity()) return;
+        deferredFinalReleaseForUncountedOwners = true;
+    }
+
+    /** Hold weak cleanup until an explicit runtime snapshot lease is released. */
+    void deferFinalReleaseToTemporaryRootSlots() {
+        if (refCount != 0) {
+            throw new IllegalStateException("temporary-root release requires refCount=0");
+        }
+        if (!hasTemporaryRootOwnerSlotIdentity()) return;
+        refCount = WeakRefRegistry.WEAKLY_TRACKED;
         deferredFinalReleaseForUncountedOwners = true;
     }
 
@@ -731,8 +776,8 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         return true;
     }
 
-    /** Restore from every surviving counted slot after verifying its current storage cell. */
-    boolean restoreVerifiedCurrentCountedOwnerSlotRefCount() {
+    /** Count surviving counted slots after verifying their current storage cells. */
+    int verifiedCurrentCountedOwnerSlotCount() {
         int count = 0;
         for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
             if (!slot.isActive()) continue;
@@ -767,6 +812,12 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                 count++;
             }
         }
+        return count;
+    }
+
+    /** Restore from verified counted identities while the compatibility bridge remains. */
+    boolean restoreVerifiedCurrentCountedOwnerSlotRefCount() {
+        int count = verifiedCurrentCountedOwnerSlotCount();
         if (count == 0) return false;
         refCount = count;
         return true;
@@ -953,6 +1004,25 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             sb.append("\n      at ").append(st[i]);
         }
         System.err.println(sb);
+    }
+
+    /** Apply the shared counter half of a tracked Perl-owner acquisition. */
+    final void acquireTrackedOwnerCount(String acquisitionSite) {
+        if (refCount < 0 || refCount == Integer.MAX_VALUE) {
+            throw new IllegalStateException("tracked owner count is unavailable at " + acquisitionSite);
+        }
+        traceRefCount(+1, acquisitionSite);
+        refCount++;
+        hadCountedReference = true;
+    }
+
+    /** Apply one exact tracked-owner decrement; returns true at zero. */
+    final boolean releaseTrackedOwnerCount(String releaseSite) {
+        if (refCount <= 0) {
+            throw new IllegalStateException("tracked owner count is not positive at " + releaseSite);
+        }
+        traceRefCount(-1, releaseSite);
+        return --refCount == 0;
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -1283,10 +1353,16 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             if (!firstOwnerSlot) result.append(", ");
             firstOwnerSlot = false;
             result.append(ownerSlot.kind()).append('#').append(ownerSlot.identity());
+            int resourceOwnerIdentity = ownerSlot.resourceScalarIdentity();
+            if (resourceOwnerIdentity != 0) {
+                result.append(" resourceScalarId=").append(resourceOwnerIdentity);
+                if (ownerSlot.resourceScalarOwner() == null) result.append(" carrierCollected");
+            }
             RuntimeScalar owner = ownerSlot.countedScalarOwner();
             if (owner == null) owner = ownerSlot.untrackedScalarOwner();
             if (owner == null) owner = ownerSlot.scalarContentsOwner();
             if (owner == null) owner = ownerSlot.suspendedScalarOwner();
+            if (owner == null) owner = ownerSlot.resourceScalarOwner();
             if (owner != null) {
                 result.append(" scalar=").append(System.identityHashCode(owner))
                         .append(" type=").append(owner.type)
