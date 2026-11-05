@@ -82,6 +82,10 @@ public final class PerlOwnerSlot {
     private WeakReference<RuntimeScalar> untrackedScalarOwner;
     /** Weak back-reference to the scalar implementing a counted cell owner. */
     private WeakReference<RuntimeScalar> countedScalarOwner;
+    /** Scalar cell currently carrying a non-counted native resource identity. */
+    private WeakReference<RuntimeScalar> resourceScalarOwner;
+    /** Last carrier identity for diagnostics, retained after its wrapper is gone. */
+    private int resourceScalarIdentity;
     /** CODE object that owns a closure-pad identity; weak to avoid a metadata cycle. */
     private WeakReference<RuntimeCode> captureOwner;
     /** Referenced scalar cell whose contents this wrapper keeps alive. */
@@ -116,6 +120,7 @@ public final class PerlOwnerSlot {
         private final LifecycleRuntimeState retainedState;
         private final RuntimeBase retainedReferent;
         private final PerlOwnerSlot releaseAtCompletion;
+        private final PerlOwnerSlot resourceReleaseAtCompletion;
 
         private PendingRelease(long ownerSlotIdentity, long sequence, Kind kind) {
             this(ownerSlotIdentity, sequence, kind, null, null);
@@ -128,10 +133,17 @@ public final class PerlOwnerSlot {
 
         private PendingRelease(long ownerSlotIdentity, long sequence, Kind kind,
                                RuntimeBase referent, PerlOwnerSlot releaseAtCompletion) {
+            this(ownerSlotIdentity, sequence, kind, referent, releaseAtCompletion, null);
+        }
+
+        private PendingRelease(long ownerSlotIdentity, long sequence, Kind kind,
+                               RuntimeBase referent, PerlOwnerSlot releaseAtCompletion,
+                               PerlOwnerSlot resourceReleaseAtCompletion) {
             this.ownerSlotIdentity = ownerSlotIdentity;
             this.sequence = sequence;
             this.kind = kind;
             this.releaseAtCompletion = releaseAtCompletion;
+            this.resourceReleaseAtCompletion = resourceReleaseAtCompletion;
             PerlRuntime runtime = PerlRuntime.currentOrNull();
             boolean transfer = kind == Kind.ARGUMENT_VALUE || kind == Kind.RETURN_VALUE
                     || kind == Kind.CODE_SLOT;
@@ -159,6 +171,9 @@ public final class PerlOwnerSlot {
         void complete() {
             if (completed.compareAndSet(false, true)) {
                 if (releaseAtCompletion != null) releaseAtCompletion.release();
+                if (resourceReleaseAtCompletion != null) {
+                    RuntimeScalar.releaseDeferredIoOwner(resourceReleaseAtCompletion);
+                }
                 PerlRuntime.releaseOwnerSlotReferent(retainedState, retainedReferent);
             }
         }
@@ -254,6 +269,22 @@ public final class PerlOwnerSlot {
         return countedScalarOwner == null ? null : countedScalarOwner.get();
     }
 
+    synchronized void associateResourceScalarOwner(RuntimeScalar scalar) {
+        if (kind != Kind.IO_RESOURCE_HOLDER) {
+            throw new IllegalStateException("resource scalar association requires an IO holder slot");
+        }
+        resourceScalarOwner = scalar == null ? null : new WeakReference<>(scalar);
+        if (scalar != null) resourceScalarIdentity = System.identityHashCode(scalar);
+    }
+
+    synchronized RuntimeScalar resourceScalarOwner() {
+        return resourceScalarOwner == null ? null : resourceScalarOwner.get();
+    }
+
+    synchronized int resourceScalarIdentity() {
+        return resourceScalarIdentity;
+    }
+
     synchronized RuntimeScalar scalarReferenceCell() {
         return scalarReferenceCell == null ? null : scalarReferenceCell.get();
     }
@@ -304,9 +335,7 @@ public final class PerlOwnerSlot {
                     "method-invocant acquisition requires an available tracked count");
         }
         acquireMethodInvocantIdentity(target);
-        target.traceRefCount(+1, acquisitionSite);
-        target.refCount++;
-        target.hadCountedReference = true;
+        target.acquireTrackedOwnerCount(acquisitionSite);
     }
 
     /** Acquire a bless-created temporary edge together with its selective count. */
@@ -323,9 +352,7 @@ public final class PerlOwnerSlot {
                     "temporary-owner acquisition requires an available tracked count");
         }
         acquireCountedIdentity(target);
-        target.traceRefCount(+1, acquisitionSite);
-        target.refCount++;
-        target.hadCountedReference = true;
+        target.acquireTrackedOwnerCount(acquisitionSite);
     }
 
     /** Whether this slot still represents its direct method-invocant hold. */
@@ -357,9 +384,7 @@ public final class PerlOwnerSlot {
             }
             transferTo(target);
         }
-        target.traceRefCount(+1, "RuntimeScalar.retainClosureCaptureReferent");
-        target.refCount++;
-        target.hadCountedReference = true;
+        target.acquireTrackedOwnerCount("RuntimeScalar.retainClosureCaptureReferent");
         target.acquireTransientTraceOwner("closure capture", "RuntimeScalar.closureCapture");
         legacyCaptureCount++;
     }
@@ -423,16 +448,13 @@ public final class PerlOwnerSlot {
         try {
             acquireNativeOwner(target);
             if (!counted) return false;
-            target.traceRefCount(+1, acquisitionSite);
-            target.refCount++;
-            target.hadCountedReference = true;
+            target.acquireTrackedOwnerCount(acquisitionSite);
             countedNativeOwner = true;
             return true;
         } catch (RuntimeException | Error failure) {
             if (referent == target) {
                 if (countedNativeOwner) {
-                    target.traceRefCount(-1, acquisitionSite + " (rollback)");
-                    target.refCount--;
+                    target.releaseTrackedOwnerCount(acquisitionSite + " (rollback)");
                     countedNativeOwner = false;
                 }
                 release();
@@ -460,8 +482,6 @@ public final class PerlOwnerSlot {
     /** Retire a regex callback count without dispatching referent destruction. */
     public void releaseRegexCallbackOwner(String releaseSite) {
         RuntimeBase target;
-        boolean counted;
-        PendingRelease releaseToken;
         synchronized (this) {
             if (referent == null) return;
             if (kind != Kind.REGEX_CALLBACK || !nativeOwner) {
@@ -469,15 +489,8 @@ public final class PerlOwnerSlot {
                         "regex callback release requires a regex callback owner slot");
             }
             target = referent;
-            counted = countedNativeOwner;
-            releaseToken = counted ? releaseCountedNativeIdentity() : null;
-            if (!counted) release();
         }
-        if (counted && target.refCount > 0) {
-            target.traceRefCount(-1, releaseSite);
-            target.refCount--;
-        }
-        if (releaseToken != null) releaseToken.complete();
+        MortalList.releaseRegexCallbackOwner(target, this, releaseSite);
     }
 
     /** Record one package scalar table entry as an identity-owned scalar cell. */
@@ -679,9 +692,7 @@ public final class PerlOwnerSlot {
         referenceCell.registerScalarReferenceContentsOwner(this);
         transferWithoutRuntimeRoot(target, false);
         if (firstOwnerForCell) {
-            target.traceRefCount(+1, "PerlOwnerSlot.acquireScalarReferenceContents");
-            target.refCount++;
-            target.hadCountedReference = true;
+            target.acquireTrackedOwnerCount("PerlOwnerSlot.acquireScalarReferenceContents");
             target.acquireTransientTraceOwner(
                     "scalar-reference contents", "PerlOwnerSlot.scalarReferenceContents");
         }
@@ -717,9 +728,7 @@ public final class PerlOwnerSlot {
             throw new IllegalStateException("scalar-reference contents count overflow");
         }
         if (firstOwnerForNextTarget) {
-            nextTarget.traceRefCount(+1, "PerlOwnerSlot.retargetScalarReferenceContents");
-            nextTarget.refCount++;
-            nextTarget.hadCountedReference = true;
+            nextTarget.acquireTrackedOwnerCount("PerlOwnerSlot.retargetScalarReferenceContents");
             nextTarget.acquireTransientTraceOwner(
                     "scalar-reference contents", "PerlOwnerSlot.scalarReferenceContents");
         }
@@ -744,8 +753,7 @@ public final class PerlOwnerSlot {
         return null;
     }
 
-    private record ScalarReferenceContentsRelease(
-            RuntimeBase referent, PendingRelease release) {}
+    private record ScalarReferenceContentsRelease(RuntimeBase referent, PendingRelease release) {}
 
     /** Detach this alias and produce one count obligation for the final cell owner. */
     private synchronized ScalarReferenceContentsRelease detachScalarReferenceContents() {
@@ -962,6 +970,23 @@ public final class PerlOwnerSlot {
         WeakRefRegistry.onStrongOwnerSlotReleased(previous);
     }
 
+    /** Acquire one scalar-backed Perl edge, pairing its identity with refCount. */
+    synchronized void acquireCountedScalarOwner(
+            RuntimeScalar scalar, RuntimeBase target, String acquisitionSite) {
+        Objects.requireNonNull(scalar, "scalar");
+        Objects.requireNonNull(target, "target");
+        Objects.requireNonNull(acquisitionSite, "acquisitionSite");
+        if (!isCountedKind(kind) || scalar.refCountOwned || referent != null
+                || target.refCount < 0 || target.refCount == Integer.MAX_VALUE) {
+            throw new IllegalStateException("invalid counted scalar owner acquisition");
+        }
+        acquireCountedIdentity(target);
+        associateCountedScalarOwner(scalar);
+        target.acquireTrackedOwnerCount(acquisitionSite);
+        scalar.refCountOwned = true;
+        target.recordOwner(scalar, acquisitionSite);
+    }
+
     /** Replace one scalar edge while acquiring the replacement count and release token. */
     synchronized PendingRelease replaceCountedScalarOwnerAndAcquire(
             RuntimeBase previous, RuntimeBase next, RuntimeScalar scalar,
@@ -981,11 +1006,11 @@ public final class PerlOwnerSlot {
                     "scalar replacement requires an available tracked reference count");
         }
 
-        PendingRelease previousRelease = new PendingRelease(
-                identity, ++nextReleaseSequence, kind, previous);
-        next.traceRefCount(+1, acquisitionSite);
-        next.refCount++;
-        next.hadCountedReference = true;
+        PerlOwnerSlot resourceRelease = next == previous ? null
+                : RuntimeScalar.detachIoOwnerForDeferredRelease(scalar, previous);
+        PendingRelease previousRelease = new PendingRelease(identity,
+                ++nextReleaseSequence, kind, previous, null, resourceRelease);
+        next.acquireTrackedOwnerCount(acquisitionSite);
         if (next != previous) acquireCountedIdentity(next);
         associateCountedScalarOwner(scalar);
         if (next != previous) {
@@ -1056,13 +1081,21 @@ public final class PerlOwnerSlot {
                 || kind == Kind.TIE_HANDLER || kind == Kind.ARGUMENT_TIE_HANDLER;
     }
 
+    /** Whether this identity represents a Perl strong reference to its referent. */
+    static boolean isPerlOwnerKind(Kind kind) {
+        return kind != Kind.TEMPORARY_ROOT && kind != Kind.IO_RESOURCE_HOLDER;
+    }
+
     /** Retire this edge and carry its identity through one deferred decrement. */
     public synchronized PendingRelease releaseCountedIdentity() {
         if (referent == null) return null;
         if (nativeOwner || legacyCaptureCount != 0) {
             throw new IllegalStateException("counted release requires a counted identity");
         }
-        PendingRelease release = new PendingRelease(identity, ++nextReleaseSequence, kind, referent);
+        RuntimeScalar owner = countedScalarOwner();
+        PerlOwnerSlot resourceRelease = RuntimeScalar.detachIoOwnerForDeferredRelease(owner, referent);
+        PendingRelease release = new PendingRelease(
+                identity, ++nextReleaseSequence, kind, referent, null, resourceRelease);
         release();
         return release;
     }
@@ -1079,7 +1112,10 @@ public final class PerlOwnerSlot {
         if (nativeOwner || legacyCaptureCount != 0) {
             throw new IllegalStateException("counted release requires a counted identity");
         }
-        return new PendingRelease(identity, ++nextReleaseSequence, kind, referent, this);
+        RuntimeScalar owner = countedScalarOwner();
+        PerlOwnerSlot resourceRelease = RuntimeScalar.detachIoOwnerForDeferredRelease(owner, referent);
+        return new PendingRelease(
+                identity, ++nextReleaseSequence, kind, referent, this, resourceRelease);
     }
 
     /** Retire a counted native owner together with its paired direct count. */
