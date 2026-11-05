@@ -424,12 +424,20 @@ public class MortalList {
     static void releaseCountedOwnerSlotImmediately(
             RuntimeBase base, PerlOwnerSlot.PendingRelease slotRelease,
             String transientOwnerKind, String releaseSite) {
+        releaseCountedOwnerSlotImmediately(
+                base, slotRelease, transientOwnerKind, releaseSite, false);
+    }
+
+    private static void releaseCountedOwnerSlotImmediately(
+            RuntimeBase base, PerlOwnerSlot.PendingRelease slotRelease,
+            String transientOwnerKind, String releaseSite,
+            boolean clearWeakRefsForLocalBinding) {
         if (base == null || slotRelease == null) return;
         int checkpoint = pendingSize();
         deferOwnerSlotDecrement(base, transientOwnerKind, slotRelease, releaseSite);
         // Scalar overwrite and weaken historically leave weak observers alone
         // when an unrelated local binding keeps the referent alive.
-        drainPendingSince(checkpoint, false);
+        drainPendingSince(checkpoint, clearWeakRefsForLocalBinding);
     }
 
     /** Release a counted native owner through the normal destruction transition. */
@@ -442,15 +450,8 @@ public class MortalList {
             release.complete();
             return;
         }
-        if (base.refCount > 1) {
-            base.traceRefCount(-1, "MortalList.releaseCountedNativeOwner");
-            base.refCount--;
-            release.complete();
-            return;
-        }
-        int checkpoint = pendingSize();
-        deferOwnerSlotDecrement(base, null, release);
-        drainPendingSince(checkpoint);
+        releaseCountedOwnerSlotImmediately(
+                base, release, null, "MortalList.releaseCountedNativeOwner", true);
     }
 
     /** Release a direct method-invocant edge, deferring its final count to the result boundary. */
