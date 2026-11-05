@@ -437,15 +437,11 @@ public class DestroyDispatch {
         }
 
         // Snapshot explicit owner identities before invoking DESTROY so
-        // temporary callback slots can be distinguished from real resurrection.
-        String globalPhase = GlobalVariable.getGlobalVariable(
-                GlobalContext.GLOBAL_PHASE).toString();
-        boolean checkingGlobalOwnerDelta = "DESTRUCT".equals(globalPhase)
-                || MortalList.isDrainingTopLevelTemporary();
-        Set<PerlOwnerSlot> ownerSlotsAtStart = null;
-        if (checkingGlobalOwnerDelta) {
-            ownerSlotsAtStart = referent.ownerSlotSnapshot();
-        }
+        // callback argument slots are not mistaken for resurrection. This
+        // decision is based on owner changes in every phase, not on whether
+        // cleanup happens during a top-level flush.
+        boolean checkingOwnerSlotDelta = true;
+        Set<PerlOwnerSlot> ownerSlotsAtStart = referent.ownerSlotSnapshot();
 
         // Mark as destroyed only once we will run Perl DESTROY. Setting destroyFired
         // before the null check above incorrectly skips PPI::Element::DESTROY (and
@@ -558,7 +554,7 @@ public class DestroyDispatch {
 
             callbackCompleted = true;
             finishDestroyOwnership(referent, className, destroyBlessId,
-                    checkingGlobalOwnerDelta, ownerSlotsAtStart);
+                    checkingOwnerSlotDelta, ownerSlotsAtStart);
         } catch (Exception e) {
             String msg = e.getMessage();
             if (msg == null) msg = e.getClass().getName();
@@ -584,7 +580,7 @@ public class DestroyDispatch {
             } finally {
                 if (!callbackCompleted) {
                     finishDestroyOwnership(referent, className, destroyBlessId,
-                            checkingGlobalOwnerDelta, ownerSlotsAtStart);
+                            checkingOwnerSlotDelta, ownerSlotsAtStart);
                 }
             }
         } finally {
@@ -648,7 +644,7 @@ public class DestroyDispatch {
                 return;
             }
         }
-        if (hasEscapedPerlOwner(referent, checkingGlobalOwnerDelta,
+        if (hasEscapedPerlOwner(referent, checkingOwnerSlotDelta,
                 ownerSlotsAtStart) && !state.destroyTargetRescued) {
             referent.needsReDestroy = true;
             warnIfResurrectedDuringGlobalDestruction(referent, className);
@@ -810,14 +806,12 @@ public class DestroyDispatch {
     /**
      * Warn when a destructor revives an object during global teardown.
      *
-     * Perl drains top-level temporaries immediately before changing
-     * {@code ${^GLOBAL_PHASE}} to {@code DESTRUCT}.  Those objects survive
-     * into teardown just like objects destroyed after the phase change, while
-     * an ordinary nested lexical resurrection must remain silent.
+     * The global phase is the lifecycle boundary. An ordinary statement-level
+     * temporary flush must not make a RUN-phase resurrection look like teardown.
      */
     private static void warnIfResurrectedDuringGlobalDestruction(RuntimeBase referent, String className) {
         String phase = GlobalVariable.getGlobalVariable(GlobalContext.GLOBAL_PHASE).toString();
-        if (!"DESTRUCT".equals(phase) && !MortalList.isDrainingTopLevelTemporary()) return;
+        if (!"DESTRUCT".equals(phase)) return;
         String name = className == null || className.isEmpty()
                 ? NameNormalizer.getBlessStr(referent.blessId) : className;
         WarnDie.warn(new RuntimeScalar(
