@@ -2,51 +2,40 @@
 
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
-**Current checkpoint (2026-11-04):** #1649 remains in Phase 2 on
-`wip/ownership-batch-20261104-232418`, based on the earlier ownership branch;
-local merge commit `8367167b64` from master `289e34284d`. WIP snapshot
-`3b3303adbc` preserves the prior work and new regressions; detached-glob fix
-`b48048802f` is the latest implementation commit. The previous
-method-invocant batch is complete: the JVM retains chained method invocants
-through argument evaluation and releases them across normal return, `last`,
-exceptions, and nonlocal exits;
-the App-Scaffolder temporary IO handle survives nested rendering. Its three
-Perl regressions passed on system Perl and both backends, with a focused build.
+**Current checkpoint (2026-11-05):** #1649 remains in Phase 2 on
+`wip/ownership-batch-20261104-232418`, now at `0357595ae6`, based on local
+master merge `8367167b64` from `289e34284d`. PR #1938 remains OPEN/DRAFT at
+remote head `95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05`; it has not been
+reconciled with this branch.
 
-The current detached-glob batch covers scalar undef/replacement and array
-clear during an aliased argument. `RuntimeScalar` now releases a detached glob
-component before publishing the scalar's replacement value. `RuntimeArray`
-clears detached GLOB-valued slots before dropping the aggregate cells, allowing
-component `DESTROY` to observe the old glob while both array and argument
-aliases still exist. The two new tests pass on system Perl (9/9). The filtered
-`nice -n 19 make build` passes three matching JVM fixtures, and all three pass
-on the interpreter (13 checks). The first filtered build exposed that checking
-only `ARGUMENT_ALIAS` missed a GLOB slot; the corrected slot-type path passes.
-Logs: `/tmp/issue1649-system-perl-detached-glob.log`,
-`/tmp/issue1649-detached-glob-filtered-build.log` (initial failure),
-`/tmp/issue1649-detached-glob-batch2-build.log`, and
-`/tmp/issue1649-interpreter-*.log`. No full gate has run on this candidate.
+The eval-return/argument-unwind batch now preserves a caller's pending
+`RETURN_VALUE` while retiring only releases created by the argument frames
+being unwound. `RuntimeCode.unwindEvalMethodInvocantHolds` records the pending
+queue boundary and drains from that point instead of flushing the caller's
+older return release. No-`DESTROY` container cleanup also uses its own mortal
+mark. The permanent `eval_callback_return_owner_release.t` regression passes
+12/12 on system Perl, JVM, and interpreter. The focused
+`JPERL_TEST_SHARD=0 JPERL_TEST_FILTER=return_owner nice -n 19 make build` passes
+in 1m16; `PerlReturnOwnerConsumptionTest` checks exact return/source release
+provenance and isolation from unrelated cleanup. The regression failed on the
+unfixed parent; earlier failed-candidate logs remain under `/tmp/issue1649-*`.
+The requested `deferred_capture_live_argument.t` is present and was previously
+validated on both backends. No full gate has run on this candidate.
 
-The remaining inventory still groups into overlapping families: deferred
-release/count repair, first weaken, aggregate roots/cycles, closure and CODE
-transfer, detached package/glob state, destruction/resurrection, temporary
-roots, suspended frames, and resource holders. The call-site audit found no
-production caller of unpaired `MortalList.deferDecrement`; production deferred
-release sites use slot-bearing APIs. `restoreReachableOwnerCount` is reachable
-only through that legacy hook. The current audit has not confirmed a normal
-producer that creates a count/owner mismatch; synthetic undercount tests remain
-defensive evidence. `RuntimeGlob.dynamicRestoreState` still has a manual CODE
-release path to reconcile with the normal stash slot API.
+The audit still has deferred-release/count repair, first weaken, aggregate
+roots/cycles, closure/CODE transfer, detached package/glob state,
+destruction/resurrection, temporary roots, suspended frames, and resource
+holders to close. Production deferred releases carry slot tokens, while
+`restoreReachableOwnerCount` remains reachable only from the legacy unpaired
+release hook. No normal count/owner mismatch producer has been confirmed;
+synthetic stale-count tests remain defensive evidence. `RuntimeGlob` localized
+restore still has a manual CODE release to reconcile with stash-slot release.
 
-Batch changes around shared slot transitions: first close producer and
-scalar/array/hash/package mutation gaps; next close remaining closure/CODE,
-clone/shared, suspended-frame, and resource-owner transfers. Add and oracle-test
-regressions as those changes land, then run one focused JVM/interpreter gate on
-the combined code. Remove ordinary recovery only after producer invariants are
-explicit, followed by one immutable full `nice -n 19 make` and the no-sweeps
-acceptance matrix. PR #1938 was last observed OPEN/DRAFT at
-`95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05`; reconcile its current state before
-publication.
+Next, batch the remaining storage-slot producers, then the specialized
+closure/CODE, clone/shared, suspended-frame, and resource-owner transfers.
+Remove ordinary recovery only after those producers have explicit invariant
+coverage. Then run the no-sweeps acceptance matrix and one immutable full
+`nice -n 19 make` before reconciling PR #1938.
 
 Standard Perl is the oracle for every Perl-visible reference edge and its
 lifetime behavior. A reference-slot transition should retain a new strong
