@@ -1300,9 +1300,8 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                                 // Host-side graph construction has no Perl callbacks or
                                 // mortal queue, but replacing a field still retires its
                                 // counted edge.
-                                old.refCountOwned = false;
-                                referent.releaseActiveOwner(old);
-                                if (referent.refCount > 0) referent.refCount--;
+                                RuntimeScalar.releaseCountedOwnerWithoutPerlRuntime(
+                                        old, referent, "RuntimeHash.storeOwnedElement");
                             }
                         }
                     }

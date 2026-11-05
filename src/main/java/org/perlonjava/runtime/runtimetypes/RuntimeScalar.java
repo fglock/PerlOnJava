@@ -1814,6 +1814,42 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
     }
 
+    /** Retire a counted storage edge during host-side graph construction. */
+    static void releaseCountedOwnerWithoutPerlRuntime(
+            RuntimeScalar owner, RuntimeBase referent, String releaseSite) {
+        Objects.requireNonNull(owner, "owner");
+        Objects.requireNonNull(referent, "referent");
+        Objects.requireNonNull(releaseSite, "releaseSite");
+        if (PerlRuntime.currentOrNull() != null) {
+            throw new IllegalStateException(
+                    "host-side counted release cannot run inside a Perl runtime");
+        }
+        PerlOwnerSlot slot = owner.countedOwnerSlot;
+        if (!owner.refCountOwned || owner.value != referent
+                || slot == null || !slot.isActive() || slot.referent() != referent
+                || slot.countedScalarOwner() != owner
+                || !PerlOwnerSlot.isCountedKind(slot.kind())) {
+            throw new IllegalStateException(
+                    "host-side counted release lost its current scalar owner at " + releaseSite);
+        }
+        if (referent.refCount <= 0) {
+            throw new IllegalStateException(
+                    "host-side counted release requires a positive reference count at "
+                            + releaseSite);
+        }
+
+        owner.refCountOwned = false;
+        referent.releaseOwner(owner, releaseSite);
+        PerlOwnerSlot.PendingRelease release = slot.releaseCountedIdentity();
+        if (release == null) {
+            throw new IllegalStateException(
+                    "host-side counted release lost its release token at " + releaseSite);
+        }
+        referent.traceRefCount(-1, releaseSite);
+        referent.refCount--;
+        release.complete();
+    }
+
     PerlOwnerSlot.PendingRelease deferCountedOwnerRelease(RuntimeBase referent) {
         return countedOwnerSlot != null && countedOwnerSlot.referent() == referent
                 ? countedOwnerSlot.releaseCountedIdentity() : null;
