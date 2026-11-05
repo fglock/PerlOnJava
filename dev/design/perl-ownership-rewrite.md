@@ -3,11 +3,14 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-05):** #1649 remains in Phase 2 on
-`wip/ownership-batch-20261104-232418`. The source base is `7a624b0025` (runtime
-return fix `0357595ae6`, based on local master merge `8367167b64`); the CODE
-producer batch below is currently uncommitted. PR #1938 remains OPEN/DRAFT at
-the previously verified remote head `95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05`
-and has not been reconciled with this branch.
+`wip/ownership-audit-20261105-021429`, at merge commit `2d4f278e42`. The
+checkpoint includes the CODE producer batch committed as `ad830f5d9f` and
+integrates current `origin/master` (`036c279972fe`). The worktree was clean
+after the merge. The merge adds the current filehandle regression and
+issue-queue update; no build has run on this merged candidate. PR #1938
+remains OPEN/DRAFT at the previously verified remote head
+`95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05` and is not reconciled with this
+branch.
 
 The eval-return/argument-unwind batch preserves a caller's pending
 `RETURN_VALUE` while retiring only releases created by the argument frames
@@ -43,15 +46,18 @@ owner gaps remain open across storage mutation, closure/CODE transfers,
 deferred cleanup, clone/shared state, cycles, suspended frames, and resource
 holders. No full gate has run on the current candidate.
 
-To limit expensive builds, audit the remaining producers first, then group
-mutations that share slot-transition semantics into one storage batch and
-transfers that share exact release provenance into one lifecycle batch. Run a
-focused filtered `nice -n 19 make build` after each coherent batch, with
-system-Perl/JVM/interpreter checks for its Perl-level regressions. Do not run a
-full `make` between related fixes. Remove ordinary recovery after producer
-coverage, then run the no-sweeps acceptance matrix and one immutable full
-`nice -n 19 make`. If a gate exposes a defect, finish its connected correction
-before rebuilding.
+To limit expensive builds, finish the producer audit before rebuilding. Bundle
+confirmed scalar, array, hash, tied, package, glob, and CODE mutations that use
+the same slot-transition contract. Separately bundle transfers that use the
+same exact release obligation across arguments, captures, returns, suspended
+frames, clones/shared storage, cycles, and resource owners. Remove ordinary
+recovery only after those producers are covered. Aim for one focused
+`nice -n 19 make build` on the combined producer/lifecycle change, then one
+immutable full `nice -n 19 make` with the no-sweeps acceptance matrix. Run
+system Perl first for every new Perl regression and both PerlOnJava backends
+against the built candidate. Do not run a full build between related fixes; if
+a focused gate exposes a defect, finish the connected correction before the
+next build.
 
 Standard Perl is the oracle for every Perl-visible reference edge and its
 lifetime behavior. A reference-slot transition should retain a new strong
