@@ -451,17 +451,15 @@ public class StringParser {
                     && tokens.get(tokPos + 1).text.equals("~")) {
                 remainStr = remainStr + "~";
                 // Neutralize the consumed ~ token so it won't be parsed again
-                tokens.get(tokPos + 1).text = " ";
-                tokens.get(tokPos + 1).type = LexerTokenType.WHITESPACE;
+                tokens.set(tokPos + 1, LexerToken.TOKEN_SPACE);
             } else if (remainStr.equals("=")
                     && tokPos + 1 < tokens.size()
                     && tokens.get(tokPos + 1).text.equals(">")) {
                 remainStr = "=>";
                 // Neutralize the consumed > token so it won't be parsed again
-                tokens.get(tokPos + 1).text = " ";
-                tokens.get(tokPos + 1).type = LexerTokenType.WHITESPACE;
+                tokens.set(tokPos + 1, LexerToken.TOKEN_SPACE);
             }
-            tokens.get(tokPos).text = remainStr;  // Put the remaining string back in the tokens list
+            tokens.set(tokPos, LexerToken.of(tokens.get(tokPos).type, remainStr));  // Put the remaining string back in the tokens list
         }
         ParsedString parsed = new ParsedString(index, tokPos, buffers, startDelim, endDelim,
                 secondBufferStartDelim, secondBufferEndDelim);

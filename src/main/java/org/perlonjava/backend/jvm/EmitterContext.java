@@ -13,6 +13,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import org.perlonjava.frontend.semantic.SymbolTable;
 
 /**
  * The EmitterContext class holds the context information required for parsing and emitting bytecode.
@@ -109,6 +110,29 @@ public class EmitterContext {
      * to later methods emitted for the same generated class.
      */
     public boolean isLvalueSubroutine;
+
+    // -------------------------------------------------------------------------
+    // Per-eval-site cache for repeated eval STRING invocations.
+    // capturedEnv and symbolTable are both fixed at compile time, so these maps
+    // are stable for the lifetime of this EmitterContext and can be reused
+    // across every runtime call to the same eval{} site.
+    // Only accessed from the eval-compilation thread (PerlRuntime is ThreadLocal).
+    // -------------------------------------------------------------------------
+
+    /** adjustedRegistry map, built once from capturedEnv indices. */
+    public Map<String, Integer> evalCachedRegistry;
+    /** adjustedDecls map (varName → decl kind), built once from capturedEnv + symbolTable. */
+    public Map<String, String> evalCachedDecls;
+    /** adjustedOurPackages map, built once from capturedEnv + symbolTable. */
+    public Map<String, String> evalCachedOurPackages;
+    /** Pre-built SymbolTable used as BytecodeCompiler's initial variable table template. */
+    public SymbolTable evalCachedCompilerSymbolTable;
+    /** capturedVarIndices for BytecodeCompiler — read-only after first eval, shared directly. */
+    public Map<String, Integer> evalCachedCapturedVarIndices;
+    /** capturedOurVariableNames for BytecodeCompiler — read-only after first eval, shared directly. */
+    public Set<String> evalCachedCapturedOurVarNames;
+    /** nextRegister value to use for BytecodeCompiler on the cached path. */
+    public int evalCachedNextRegister;
 
     /**
      * Constructs a new EmitterContext with the specified parameters.

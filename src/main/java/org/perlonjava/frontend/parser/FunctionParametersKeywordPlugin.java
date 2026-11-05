@@ -140,7 +140,7 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
                 && !validCandidateName)) {
             parser.throwError(originalText + " expects a parameter list");
         }
-        keywordToken.text = "sub";
+        parser.tokens.set(declarationIndex, LexerToken.of(keywordToken.type, "sub"));
         parser.tokenIndex++;
         parser.parsingFunctionParametersDeclaration = true;
         parser.parsingFunctionParametersMethod = method;
@@ -222,7 +222,7 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
             parser.functionParametersAttributes = previousAttributes;
             parser.functionParametersRuntime = previousRuntime;
             parser.functionParametersDefaultArguments = previousDefaultArguments;
-            keywordToken.text = originalText;
+            parser.tokens.set(declarationIndex, LexerToken.of(parser.tokens.get(declarationIndex).type, originalText));
         }
     }
 

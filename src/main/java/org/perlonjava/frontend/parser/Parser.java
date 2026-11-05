@@ -643,10 +643,11 @@ public class Parser {
             if ("CORE".equals(token.text) && tokenIndex + 2 < tokens.size()
                     && "::".equals(tokens.get(tokenIndex + 1).text)
                     && ParserTables.INFIX_OP.contains(tokens.get(tokenIndex + 2).text)) {
-                token.text = tokens.get(tokenIndex + 2).text;
-                token.type = LexerTokenType.OPERATOR;
+                String collapsedOpText = tokens.get(tokenIndex + 2).text;
                 tokens.remove(tokenIndex + 2);
                 tokens.remove(tokenIndex + 1);
+                token = LexerToken.of(LexerTokenType.OPERATOR, collapsedOpText);
+                tokens.set(tokenIndex, token);
             }
 
             // Check if we have reached the end of the input (EOF) or a terminator (like `;`).
@@ -689,11 +690,10 @@ public class Parser {
                     break; // Stop parsing infix, let 'x' be parsed as a bareword argument
                 }
                 // Combine 'x' and '=' into a single token 'x='
-                token.text = "x=";
-                // Set the token type to OPERATOR to reflect its usage
-                token.type = LexerTokenType.OPERATOR;
                 // Remove the '=' token from the list as it is now part of 'x='
                 tokens.remove(tokenIndex + 1);
+                token = LexerToken.of(LexerTokenType.OPERATOR, "x=");
+                tokens.set(tokenIndex, token);
             }
 
             // Check for the special case of 'x3' style tokens
@@ -707,8 +707,8 @@ public class Parser {
                 // position, leaving an ordinary bareword such as x1e3 alone.
                 if (remainder.matches("[0-9][0-9_]*(?:[eE][+]?[0-9_]+)?")) {
                     // Split the token into 'x' operator and the number
-                    token.text = "x";
-                    token.type = LexerTokenType.OPERATOR;
+                    token = LexerToken.of(LexerTokenType.OPERATOR, "x");
+                    tokens.set(tokenIndex, token);
                     // Insert a new token for the number after the current position
                     LexerToken numberToken = new LexerToken(LexerTokenType.NUMBER, remainder);
                     tokens.add(tokenIndex + 1, numberToken);
