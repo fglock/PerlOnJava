@@ -48,17 +48,7 @@ public final class RuntimeRegexCallback {
         }
         if (code.refCount != Integer.MIN_VALUE) {
             PerlOwnerSlot slot = new PerlOwnerSlot(PerlOwnerSlot.Kind.REGEX_CALLBACK);
-            slot.acquireNativeOwner(code);
-            if (code.refCount >= 0) {
-                if (code.refCount == Integer.MAX_VALUE) {
-                    slot.release();
-                    throw new IllegalStateException("regex callback owner count overflow");
-                }
-                code.traceRefCount(+1, "RuntimeRegexCallback.retainOwner");
-                code.refCount++;
-                code.hadCountedReference = true;
-                slot.markCountedNativeOwner();
-            }
+            slot.acquireCountedNativeOwner(code, "RuntimeRegexCallback.retainOwner");
             codeOwnerSlot = slot;
         }
         ownerCount = 1;
@@ -69,14 +59,9 @@ public final class RuntimeRegexCallback {
         ownerCount--;
         if (ownerCount != 0) return;
         PerlOwnerSlot slot = codeOwnerSlot;
-        boolean countedOwner = slot != null && slot.isCountedNativeOwner();
         if (slot != null) {
-            slot.release();
             codeOwnerSlot = null;
-        }
-        if (countedOwner && code.refCount > 0) {
-            code.traceRefCount(-1, "RuntimeRegexCallback.releaseOwner");
-            code.refCount--;
+            slot.releaseRegexCallbackOwner("RuntimeRegexCallback.releaseOwner");
         }
         if (code.refCount != Integer.MIN_VALUE
                 && !code.hasPerlOwnerForCaptureOtherThan(null)) {

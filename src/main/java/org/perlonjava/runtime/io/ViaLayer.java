@@ -3,7 +3,6 @@ package org.perlonjava.runtime.io;
 import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.operators.ModuleOperators;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
-import org.perlonjava.runtime.runtimetypes.MortalList;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
 import org.perlonjava.runtime.runtimetypes.PerlOwnerSlot;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
@@ -45,26 +44,12 @@ public class ViaLayer implements IOLayer {
 
     /** Owner identity for the Java layer's retained Perl {@code PUSHED} value. */
     static final class SelfReferenceOwner {
-        final RuntimeBase referent;
         final PerlOwnerSlot ownerSlot;
-        final boolean counted;
         private boolean released;
 
-        private SelfReferenceOwner(RuntimeBase referent, boolean counted) {
-            this.referent = referent;
-            this.counted = counted;
+        private SelfReferenceOwner(RuntimeBase referent) {
             ownerSlot = new PerlOwnerSlot(PerlOwnerSlot.Kind.IO_VIA_LAYER);
-            ownerSlot.acquireNativeOwner(referent);
-            if (counted) {
-                if (referent.refCount == Integer.MAX_VALUE) {
-                    ownerSlot.release();
-                    throw new IllegalStateException("PerlIO::via self owner count overflow");
-                }
-                referent.traceRefCount(+1, "ViaLayer retains PUSHED object");
-                referent.refCount++;
-                referent.hadCountedReference = true;
-                ownerSlot.markCountedNativeOwner();
-            }
+            ownerSlot.acquireCountedNativeOwner(referent, "ViaLayer retains PUSHED object");
         }
 
         static SelfReferenceOwner retain(RuntimeScalar self) {
@@ -73,7 +58,7 @@ public class ViaLayer implements IOLayer {
                     || base.refCount == Integer.MIN_VALUE) {
                 return null;
             }
-            return new SelfReferenceOwner(base, base.refCount >= 0);
+            return new SelfReferenceOwner(base);
         }
 
         PerlOwnerSlot ownerSlot() {
@@ -83,8 +68,7 @@ public class ViaLayer implements IOLayer {
         void release() {
             if (released) return;
             released = true;
-            if (counted) MortalList.releaseCountedNativeOwner(referent, ownerSlot);
-            else ownerSlot.release();
+            ownerSlot.releaseNativeOwner();
         }
     }
 
