@@ -688,13 +688,24 @@ public final class PerlOwnerSlot {
     }
 
     /** Retarget this alias when its scalar cell receives new contents. */
-    synchronized void retargetScalarReferenceContents(RuntimeBase nextTarget) {
+    void retargetScalarReferenceContents(RuntimeBase nextTarget) {
+        ScalarReferenceContentsRelease displaced =
+                retargetScalarReferenceContentsSlot(nextTarget);
+        if (displaced != null && displaced.release() != null) {
+            MortalList.releaseCountedOwnerSlotImmediately(
+                    displaced.referent(), displaced.release(), "scalar-reference contents",
+                    "PerlOwnerSlot.retargetScalarReferenceContents");
+        }
+    }
+
+    private synchronized ScalarReferenceContentsRelease retargetScalarReferenceContentsSlot(
+            RuntimeBase nextTarget) {
         if (kind != Kind.SCALAR_REFERENCE_CONTENTS) {
             throw new IllegalStateException(
                     "scalar-reference retargeting requires a scalar-contents slot");
         }
         RuntimeBase previous = referent;
-        if (previous == nextTarget) return;
+        if (previous == nextTarget) return null;
         RuntimeScalar referenceCell = scalarReferenceCell();
         if (referenceCell == null) {
             throw new IllegalStateException("active scalar-contents owner lost its reference cell");
@@ -721,32 +732,23 @@ public final class PerlOwnerSlot {
         }
         if (previous != null
                 && !referenceCell.hasScalarReferenceContentsOwner(this, previous)) {
-            releaseScalarReferenceContentsCount(previous,
-                    "PerlOwnerSlot.retargetScalarReferenceContents");
+            if (previous.refCount <= 0) {
+                previous.releaseTransientTraceOwner(
+                        "scalar-reference contents",
+                        "PerlOwnerSlot.retargetScalarReferenceContents");
+                return null;
+            }
+            return new ScalarReferenceContentsRelease(previous,
+                    new PendingRelease(identity, ++nextReleaseSequence, kind, previous));
         }
+        return null;
     }
 
-    /** Release this alias and decrement the shared contents count only once. */
-    synchronized void releaseScalarReferenceContents() {
-        if (kind != Kind.SCALAR_REFERENCE_CONTENTS) {
-            throw new IllegalStateException(
-                    "scalar-reference release requires a scalar-contents slot");
-        }
-        RuntimeBase target = referent;
-        RuntimeScalar referenceCell = scalarReferenceCell();
-        if (referenceCell != null) referenceCell.unregisterScalarReferenceContentsOwner(this);
-        transferWithoutRuntimeRoot(null, false);
-        scalarReferenceCell = null;
-        scalarContentsOwner = null;
-        if (target != null && (referenceCell == null
-                || !referenceCell.hasScalarReferenceContentsOwner(this, target))) {
-            releaseScalarReferenceContentsCount(target,
-                    "PerlOwnerSlot.releaseScalarReferenceContents");
-        }
-    }
+    private record ScalarReferenceContentsRelease(
+            RuntimeBase referent, PendingRelease release) {}
 
-    /** Defer the last alias's shared contents decrement with its slot identity. */
-    synchronized PendingRelease deferScalarReferenceContentsRelease() {
+    /** Detach this alias and produce one count obligation for the final cell owner. */
+    private synchronized ScalarReferenceContentsRelease detachScalarReferenceContents() {
         if (kind != Kind.SCALAR_REFERENCE_CONTENTS) {
             throw new IllegalStateException(
                     "scalar-reference release requires a scalar-contents slot");
@@ -762,25 +764,30 @@ public final class PerlOwnerSlot {
         if (!finalCellOwner || target == null) return null;
         if (target.refCount <= 0) {
             target.releaseTransientTraceOwner(
-                    "scalar-reference contents", "PerlOwnerSlot.deferScalarReferenceContentsRelease");
+                    "scalar-reference contents", "PerlOwnerSlot.releaseScalarReferenceContents");
             return null;
         }
-
-        PendingRelease release = new PendingRelease(
-                identity, ++nextReleaseSequence, kind);
-        MortalList.deferOwnerSlotDecrement(target, "scalar-reference contents", release);
-        return release;
+        return new ScalarReferenceContentsRelease(target,
+                new PendingRelease(identity, ++nextReleaseSequence, kind, target));
     }
 
-    private static void releaseScalarReferenceContentsCount(RuntimeBase target, String site) {
-        target.releaseTransientTraceOwner(
-                "scalar-reference contents", "PerlOwnerSlot.scalarReferenceContents");
-        if (target.refCount <= 0) return;
-        target.traceRefCount(-1, site);
-        if (--target.refCount == 0) {
-            target.refCount = Integer.MIN_VALUE;
-            DestroyDispatch.callDestroyFromCountedOwner(target);
+    /** Release this alias through the shared exact-slot lifecycle transition. */
+    void releaseScalarReferenceContents() {
+        ScalarReferenceContentsRelease detached = detachScalarReferenceContents();
+        if (detached != null && detached.release() != null) {
+            MortalList.releaseCountedOwnerSlotImmediately(
+                    detached.referent(), detached.release(), "scalar-reference contents",
+                    "PerlOwnerSlot.releaseScalarReferenceContents");
         }
+    }
+
+    /** Defer the final alias's shared contents decrement with its exact slot identity. */
+    PendingRelease deferScalarReferenceContentsRelease() {
+        ScalarReferenceContentsRelease detached = detachScalarReferenceContents();
+        if (detached == null || detached.release() == null) return null;
+        MortalList.deferOwnerSlotDecrement(
+                detached.referent(), "scalar-reference contents", detached.release());
+        return detached.release();
     }
 
     /** Record one direct value retained by a runtime temporary root. */

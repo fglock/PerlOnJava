@@ -418,9 +418,15 @@ public class MortalList {
     /** Consume one exact scalar-edge release after its replacement is published. */
     static void releaseCountedOwnerSlotImmediately(
             RuntimeBase base, PerlOwnerSlot.PendingRelease slotRelease, String releaseSite) {
+        releaseCountedOwnerSlotImmediately(base, slotRelease, null, releaseSite);
+    }
+
+    static void releaseCountedOwnerSlotImmediately(
+            RuntimeBase base, PerlOwnerSlot.PendingRelease slotRelease,
+            String transientOwnerKind, String releaseSite) {
         if (base == null || slotRelease == null) return;
         int checkpoint = pendingSize();
-        deferOwnerSlotDecrement(base, null, slotRelease, releaseSite);
+        deferOwnerSlotDecrement(base, transientOwnerKind, slotRelease, releaseSite);
         // Scalar overwrite and weaken historically leave weak observers alone
         // when an unrelated local binding keeps the referent alive.
         drainPendingSince(checkpoint, false);
@@ -1159,23 +1165,7 @@ public class MortalList {
                 || code.refCount <= 0) {
             return;
         }
-
-        codeRef.refCountOwned = false;
-        if (code.refCountTrace) {
-            code.traceRefCount(-1, "MortalList.releaseTailCallCodeRef");
-            code.releaseOwner(codeRef, "releaseTailCallCodeRef");
-        }
-        code.releaseActiveOwner(codeRef);
-
-        if (--code.refCount > 0) return;
-
-        if (code.hasStashCodeSlotOwner()) {
-            code.refCount = 0;
-            return;
-        }
-
-        code.refCount = Integer.MIN_VALUE;
-        DestroyDispatch.callDestroy(code);
+        releaseCountedOwnerImmediately(codeRef, "MortalList.releaseTailCallCodeRef");
     }
 
     private static void releaseTailCallArgElement(RuntimeScalar scalar) {
@@ -1931,7 +1921,7 @@ public class MortalList {
                 // through its exact storage identity; localBindingExists is
                 // metadata and cannot stand in for the Perl edge.
                 base.deferZeroCountFinalReleaseToUncountedOwnerSlots();
-            } else if (base.localBindingExists) {
+            } else if (base.localBindingExists && !(base instanceof RuntimeCode)) {
                 if (base instanceof RuntimeScalar scalar
                         && scalar.referencedByScalarReference
                         && !scalar.hasClosureCaptureOwner()
