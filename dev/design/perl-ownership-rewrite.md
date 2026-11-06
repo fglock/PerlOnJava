@@ -2,12 +2,33 @@
 
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Production sweep callers have been removed; count alignment still uses verified current owner slots while remaining producer gaps are audited.
 
-**Current checkpoint (2026-11-06):** #1649 remains in Phase 2 on branch
-`wip/issue1649-resume-20261106-164511`, integrated commit `b027bf9aa4`.
-Reference-count transitions are centralized in `RuntimeBase` and
-`PerlOwnerSlot`, and production releases carry exact owner tokens. Production calls to the public
-`MortalList.deferDecrement` hook and weak-sweep APIs remain absent; verified
-current-slot count alignment is still active while producer gaps are audited.
+**Current checkpoint (2026-11-07):** #1649 remains in Phase 2 on branch
+`wip/issue1649-resume-20261106-164511`, based on PR #1938 head
+`fd57684f2e`, with tested candidate commit `e99d8608de`. Reference-count transitions are centralized in `RuntimeBase`
+and `PerlOwnerSlot`, and production releases carry exact owner tokens.
+Production calls to the public `MortalList.deferDecrement` hook and weak-sweep
+APIs remain absent; verified current-slot count alignment is still active
+while producer gaps are audited.
+
+The latest PR CI exposed eight failures in imported
+`threads-shared/t/object2.t`: `undef` and replacement did not release blessed
+nested hash/array objects stored in shared arrays and hashes. The cause was a
+fetch-time local aggregate view created while evaluating the assignment lvalue.
+`SharedElementProxy` now retires that view when it is unowned before mutating
+the canonical slot, allowing its exact owner release to dispatch `DESTROY`.
+Project test `threads_shared_nested_object_release.t` passes 8/8 on system
+Perl, JVM, and interpreter; it failed the four undef/replacement checks on the
+unfixed parent. The unchanged imported `object2.t` now passes 133/133 with
+corrective sweeps disabled. `nice -n 19 make` passes in 8m45 on this working
+tree; the focused gates and full output are in `/tmp/issue1649-nested-object-release-*.txt`
+and `/tmp/issue1649-object2-final.log`.
+
+The candidate remains draft: PR CI at `fd57684f2e` failed the same imported
+thread assertions and its Windows job was cancelled at the runner limit. The
+fix and permanent regression are committed locally but are not yet on the PR
+branch. Immediate next action is to publish this tested change, then rerun CI. After that,
+continue the remaining producer/release audit and remove the verified
+count-alignment bridge only when explicit owner coverage supports it.
 
 The reported Class::MethodMaker tied-array lifetime failure is covered by the
 new project-owned `refcount/generated_tied_array_handler_lifetime.t`: it
@@ -99,8 +120,11 @@ ownership from one aggregate count.
 
 ### Next steps
 
-1. Recheck #1649 and draft PR #1938, then review CI before readiness.
-2. Keep the root-recovery compatibility adapter isolated to the legacy
+1. Publish the tested shared-view fix to PR #1938 and rerun CI, including a
+   fresh Windows build result.
+2. Continue the remaining producer/release audit, then review issue #1649 and
+   PR readiness against the no-sweeps acceptance plan.
+3. Keep the root-recovery compatibility adapter isolated to the legacy
    unpaired decrement API; production release paths carry exact owner tokens
    and no longer use corrective reachability sweeps.
 
