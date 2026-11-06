@@ -506,7 +506,7 @@ public class IdentifierParser {
                     int underscore = token.text.indexOf('_');
                     if (underscore >= 0) {
                         variableName.append(token.text, 0, underscore);
-                        token.text = token.text.substring(underscore);
+                        parser.tokens.set(parser.tokenIndex, LexerToken.of(token.type, token.text.substring(underscore)));
                     } else {
                         variableName.append(token.text);
                         parser.tokenIndex++;

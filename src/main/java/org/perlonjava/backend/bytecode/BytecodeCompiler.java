@@ -626,7 +626,7 @@ public class BytecodeCompiler implements Visitor {
     // Declaration metadata for captured package variables.  Keep this
     // separately from the register table because closure analysis may first
     // materialize a reference as a lexical before the body reaches `local`.
-    private final Set<String> capturedOurVariableNames = new HashSet<>();
+    private Set<String> capturedOurVariableNames = new HashSet<>();
     // EmitterContext for strict checks and other compile-time options
     private EmitterContext emitterContext;
     // Register allocation
@@ -790,6 +790,31 @@ public class BytecodeCompiler implements Visitor {
             this.maxRegisterEverUsed = maxRegister;
             this.baseRegisterForStatement = this.nextRegister;
         }
+    }
+
+    /**
+     * Cached-path constructor for repeated eval STRING invocations from the same eval site.
+     * Skips all per-variable iteration by using a pre-built SymbolTable template and
+     * sharing the pre-built capturedVarIndices / capturedOurVariableNames directly.
+     * Called from RuntimeCode.evalStringWithInterpreter when the per-site cache is warm.
+     */
+    public BytecodeCompiler(String sourceName, int sourceLine, ErrorMessageUtil errorUtil,
+                            SymbolTable cachedCompilerSymbolTable,
+                            Map<String, Integer> cachedCapturedVarIndices,
+                            Set<String> cachedCapturedOurVarNames,
+                            int cachedNextRegister) {
+        this.sourceName = sourceName;
+        this.sourceLine = sourceLine;
+        this.errorUtil = errorUtil;
+        this.isEvalString = true;
+        // One HashMap copy replaces N addVariableWithIndex calls + N SymbolEntry allocations
+        symbolTable.useInitialTable(cachedCompilerSymbolTable);
+        // Share read-only structures (never mutated after eval STRING construction)
+        this.capturedVarIndices = cachedCapturedVarIndices;
+        this.capturedOurVariableNames = cachedCapturedOurVarNames;
+        this.nextRegister = cachedNextRegister;
+        this.maxRegisterEverUsed = cachedNextRegister - 1;
+        this.baseRegisterForStatement = cachedNextRegister;
     }
 
     /**

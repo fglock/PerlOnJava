@@ -53,8 +53,8 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         }
         return pin;
     }
-    public final int maxRegisters;         // Number of registers needed
-    public final RuntimeBase[] capturedVars; // Closure support (captured from outer scope)
+    public int maxRegisters;               // Number of registers needed
+    public RuntimeBase[] capturedVars;     // Closure support (captured from outer scope)
     public final Map<String, Integer> variableRegistry; // Variable name → register index (for eval STRING)
     public final List<Map<String, Integer>> evalSiteRegistries; // Per-eval-site variable registries
     public final List<Map<String, OperatorNode>> evalSiteLexicalSubroutineBindings;
@@ -303,6 +303,11 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
     private static String sourceTextFromErrorUtil(ErrorMessageUtil errorUtil) {
         if (errorUtil == null) {
             return null;
+        }
+        // Fast path: eval strings store the raw source directly to avoid token reconstruction.
+        String raw = errorUtil.getRawSourceText();
+        if (raw != null) {
+            return raw.length() <= DEPARSE_SOURCE_TEXT_LIMIT ? raw : null;
         }
         String[] lines = errorUtil.extractSourceLines();
         if (lines == null || lines.length <= 1) {
@@ -716,6 +721,33 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         copy.signatureSlurpySigil = this.signatureSlurpySigil;
         copy.signatureSlurpyName = this.signatureSlurpyName;
         return copy;
+    }
+
+    /**
+     * Set captured variables in-place for eval STRING.
+     * Only safe when this InterpretedCode is freshly compiled and exclusively owned —
+     * i.e. the caller holds the only reference and will not share it before calling this.
+     * Avoids allocating a copy via withCapturedVars, and skips the duplicate
+     * scanMyVarRegisters and WarningBitsRegistry.register calls the copy constructor would make.
+     */
+    public void setEvalCapturedVars(RuntimeBase[] capturedVars) {
+        if (capturedVars == null || capturedVars.length == 0) {
+            return;
+        }
+        this.capturedVars = capturedVars;
+        int capturedRegisterCount = 3 + capturedVars.length;
+        if (capturedRegisterCount > this.maxRegisters) {
+            this.maxRegisters = capturedRegisterCount;
+        }
+        // Build closedOverVariables for PadWalker support (same logic as withCapturedVars).
+        this.closedOverVariables = new java.util.LinkedHashMap<>();
+        for (Map.Entry<String, Integer> entry : this.variableRegistry.entrySet()) {
+            int capturedIndex = entry.getValue() - 3;
+            if (capturedIndex >= 0 && capturedIndex < capturedVars.length
+                    && capturedVars[capturedIndex] != null) {
+                this.closedOverVariables.put(entry.getKey(), capturedVars[capturedIndex]);
+            }
+        }
     }
 
     private void validateAsyncSignature(RuntimeArray args) {

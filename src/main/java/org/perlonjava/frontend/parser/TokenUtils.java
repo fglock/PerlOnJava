@@ -72,12 +72,14 @@ public class TokenUtils {
                 parser.tokenIndex++;
             } else {
                 str = token.text.substring(0, 1);
-                token.text = token.text.substring(1);
+                String remaining = token.text.substring(1);
+                token = LexerToken.of(token.type, remaining);
+                parser.tokens.set(parser.tokenIndex, token);
                 if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("consumeChar left: " + token);
-                if (token.text.equals("=")) {
+                if (remaining.equals("=")) {
                     LexerToken next = parser.tokens.get(parser.tokenIndex + 1);
                     if (next.text.equals("=")) {
-                        next.text = "==";
+                        parser.tokens.set(parser.tokenIndex + 1, LexerToken.of(next.type, "=="));
                         parser.tokenIndex++;
                         if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("consumeChar resync: " + TokenUtils.peek(parser));
                     }

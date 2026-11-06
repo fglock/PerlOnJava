@@ -93,6 +93,8 @@ priorities and future plans.
 
 - Recognize boolean values as dual-valued in `Scalar::Util::isdual` (#1954).
 
+- Bundle Java-backed `Scalar::Util::Numeric` classifiers and raw `looks_like_number` flags (#1962, #1327).
+
 - Recognize a bareword filehandle when `print`'s implicit `$_` list ends at a block close (#1948).
 
 - Accept YAML-style mapping syntax in `YAML::Syck::LoadJSON`, matching Syck's JSON loader behavior (#1942).
@@ -115,7 +117,7 @@ priorities and future plans.
 
 - Preserve named typeglob stringification when copying package stash entries (#1927).
 
-- Reduce eval STRING overhead with lazy goto collections, parser-set AST flags that skip unneeded BytecodeCompiler analysis passes, ScopedSymbolTable snapshot caching, per-thread eval caches without synchronization, cached constructor/class-field metadata, and a re-entrant fast-path in `PerlRuntime.bind()` (#1911).
+- Reduce eval STRING overhead with lazy goto collections, parser-set AST flags that skip unneeded BytecodeCompiler analysis passes, ScopedSymbolTable snapshot caching, per-thread eval caches without synchronization, cached compiler symbol tables and captured-variable metadata for repeated eval sites, lexer token flyweights, raw-source deparse reuse, in-place captured-variable setup, cached constructor/class-field metadata, a re-entrant fast-path in `PerlRuntime.bind()`, and a lexer `sawBeginOrSub` flag that skips the O(visible_vars) outer-lexical alias loop on the common path (#1911, #1961).
 
 - Preserve arbitrary bytes in SQLite text columns across DBI fetches (#1923).
 

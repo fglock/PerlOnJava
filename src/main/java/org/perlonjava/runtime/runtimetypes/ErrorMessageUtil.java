@@ -16,6 +16,8 @@ public class ErrorMessageUtil {
     private final String originalFileName;
     private String fileName;
     private int tokenIndex;
+    /** Raw source text (set for eval strings to avoid token reconstruction). */
+    private String rawSourceText;
     private int lastLineNumber;
     private volatile int[] physicalLineNumbers;
     private volatile SourceDirectiveIndex sourceDirectiveIndex;
@@ -33,6 +35,17 @@ public class ErrorMessageUtil {
         this.tokens = tokens;
         this.tokenIndex = -1;
         this.lastLineNumber = 1;
+    }
+
+    /** Constructor that also stores the raw source text for fast deparse extraction. */
+    public ErrorMessageUtil(String fileName, List<LexerToken> tokens, String rawSourceText) {
+        this(fileName, tokens);
+        this.rawSourceText = rawSourceText;
+    }
+
+    /** Returns the raw source text, or null if not available. */
+    public String getRawSourceText() {
+        return rawSourceText;
     }
 
     /** Register a literal quote body whose apparent #line comments are data, not directives. */

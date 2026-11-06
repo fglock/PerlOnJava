@@ -6449,7 +6449,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             try {
                 // Create the AST
                 // Create an instance of ErrorMessageUtil with the file name and token list
-                evalCtx.errorUtil = new ErrorMessageUtil(evalCtx.compilerOptions.fileName, tokens);
+                evalCtx.errorUtil = new ErrorMessageUtil(evalCtx.compilerOptions.fileName, tokens, evalString);
                 Parser parser = new Parser(evalCtx, tokens); // Parse the tokens
                 parser.parsingEvalString = true;
                 BHooksEndOfScope.beginFileLoad(evalCompilerOptions.fileName);
@@ -6469,7 +6469,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // not ctx.compilerOptions.fileName (the outer file, e.g. "-e") so that
                 // anonymous subs compiled inside eval STRING get the correct source filename
                 // for #line directives and caller() reporting
-                evalCtx.errorUtil = new ErrorMessageUtil(evalCtx.compilerOptions.fileName, tokens);
+                evalCtx.errorUtil = new ErrorMessageUtil(evalCtx.compilerOptions.fileName, tokens, evalString);
                 ScopedSymbolTable postParseSymbolTable = evalCtx.symbolTable;
                 evalCtx.symbolTable = capturedSymbolTable;
                 evalCtx.symbolTable.copyFlagsFrom(postParseSymbolTable);
@@ -6965,10 +6965,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     : topLevelMain ? runtimePackage : capturedSymbolTable.getCurrentPackage();
 
             try {
+                // Parse the eval string (tokenize first so sawBegin is available for the alias gate below)
+                Lexer lexer = new Lexer(evalString);
+                tokens = lexer.tokenize();
                 // Alias captured outer variables before parsing.
                 // BEGIN/use execute during parsing, so their aliases must be in place first.
                 // Named subs in eval also access outer lexicals via these aliases.
-                {
+                // Skip this O(visible_vars) loop on the common path (no BEGIN or named sub).
+                if (lexer.sawBeginOrSub) {
                 Map<Integer, SymbolTable.SymbolEntry> capturedVars = capturedSymbolTable.getAllVisibleVariables();
                 for (SymbolTable.SymbolEntry entry : capturedVars.values()) {
                     if (!entry.name().equals("@_") && !entry.decl().isEmpty() && !entry.name().startsWith("&")) {
@@ -7024,9 +7028,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
                 evalCompilerOptions.fileName = evalFilename;
                 warnSignatureArgsInEval(evalString, evalFilename);
-                // Parse the eval string
-                Lexer lexer = new Lexer(evalString);
-                tokens = lexer.tokenize();
                 // Create parser context
                 ScopedSymbolTable parseSymbolTable = capturedSymbolTable.snapShot();
                 parseSymbolTable.setCurrentPackage(
@@ -7063,7 +7064,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         null,
                         callContext,  // Use the runtime calling context, not the saved one!
                         true,
-                        new ErrorMessageUtil(evalCompilerOptions.fileName, tokens),
+                        new ErrorMessageUtil(evalCompilerOptions.fileName, tokens, evalString),
                         evalCompilerOptions,
                         new RuntimeArray());
 
@@ -7093,55 +7094,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // Run UNITCHECK blocks
                 runUnitcheckBlocks(evalCtx.unitcheckBlocks);
 
-                // Build adjusted registry for captured variables
-                // Map variable names to register indices (3+ for captured variables)
-                Map<String, Integer> adjustedRegistry = new HashMap<>();
-                adjustedRegistry.put("this", 0);
-                adjustedRegistry.put("@_", 1);
-                adjustedRegistry.put("wantarray", 2);
-
-                // IMPORTANT: Captured variables are loaded into registers starting at 3
-                // (see BytecodeInterpreter's `System.arraycopy(code.capturedVars, 0, registers, 3, ...)`).
-                // Therefore the variable registry must map captured variable names to packed
-                // register indices 3+(i-skipVariables), in the same order as runtimeValues[].
-                // Do NOT pack indices: runtimeValues[] is sized for the full capturedEnv range
-                // and may contain null gaps, so the corresponding registers must keep the same
-                // slot numbering.
-                if (ctx.capturedEnv != null) {
-                    for (int i = 3; i < ctx.capturedEnv.length; i++) {
-                        String varName = ctx.capturedEnv[i];
-                        if (varName == null) {
-                            continue;
-                        }
-                        adjustedRegistry.put(varName, i);
-                    }
-                }
-
-                // Build a parallel map of declaration kinds so the BytecodeCompiler can distinguish
-                // 'our' (package) variables from true lexicals. 'our' variables must resolve via
-                // GlobalVariable.getGlobalVariable() on each access so that `local $OurVar` in the
-                // caller is visible inside the eval. Without this hint, captured 'our' vars are
-                // treated as lexical 'my' vars bound to the scalar captured at eval-entry time.
-                Map<String, String> adjustedDecls = new HashMap<>();
-                // Parallel map of `our` var name → declaring package. Seeded so the eval's
-                // BytecodeCompiler keeps the caller's lexical alias intact even after the
-                // eval body changes package (e.g. `package Foo; $x`).
-                Map<String, String> adjustedOurPackages = new HashMap<>();
-                if (ctx.capturedEnv != null) {
-                    for (int i = 3; i < ctx.capturedEnv.length; i++) {
-                        String varName = ctx.capturedEnv[i];
-                        if (varName == null) continue;
-                        SymbolTable.SymbolEntry entry = capturedSymbolTable.getSymbolEntry(varName);
-                        if (entry != null && !entry.decl().isEmpty()) {
-                            adjustedDecls.put(varName, entry.decl());
-                            if ("our".equals(entry.decl()) && entry.perlPackage() != null) {
-                                adjustedOurPackages.put(varName, entry.perlPackage());
-                            }
-                        }
-                    }
-                }
-
-                // Compile to InterpretedCode with variable registry.
+                // Build BytecodeCompiler for the eval body.
+                // On the first call from this eval site (cold cache), build all maps from
+                // capturedEnv, populate the per-site cache on ctx, and use the cached-path
+                // constructor.  On subsequent calls (warm cache), skip all map building and
+                // use the cached-path constructor directly.
                 //
                 // setCompilePackage() is safe here (unlike EvalStringHandler) because:
                 //   - evalCtx.errorUtil uses evalCompilerOptions.fileName (the outer script name),
@@ -7152,13 +7109,79 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 //     in the bytecode string pool.
                 //   - Without this call, the BytecodeCompiler defaults to "main", causing
                 //     eval q[*named{CODE}] to look up main::named instead of FOO3::named.
+                if (ctx.evalCachedCompilerSymbolTable == null) {
+                    // ---- Cold path: build maps and populate cache ----
+                    // Build adjustedRegistry (variable name → register index)
+                    Map<String, Integer> adjustedRegistry = new HashMap<>();
+                    adjustedRegistry.put("this", 0);
+                    adjustedRegistry.put("@_", 1);
+                    adjustedRegistry.put("wantarray", 2);
+                    // IMPORTANT: Captured variables are loaded into registers starting at 3.
+                    // Do NOT pack indices: runtimeValues[] may contain null gaps.
+                    if (ctx.capturedEnv != null) {
+                        for (int i = 3; i < ctx.capturedEnv.length; i++) {
+                            String varName = ctx.capturedEnv[i];
+                            if (varName != null) adjustedRegistry.put(varName, i);
+                        }
+                    }
+                    // Build adjustedDecls and adjustedOurPackages
+                    Map<String, String> adjustedDecls = new HashMap<>();
+                    Map<String, String> adjustedOurPackages = new HashMap<>();
+                    if (ctx.capturedEnv != null) {
+                        for (int i = 3; i < ctx.capturedEnv.length; i++) {
+                            String varName = ctx.capturedEnv[i];
+                            if (varName == null) continue;
+                            SymbolTable.SymbolEntry entry = capturedSymbolTable.getSymbolEntry(varName);
+                            if (entry != null && !entry.decl().isEmpty()) {
+                                adjustedDecls.put(varName, entry.decl());
+                                if ("our".equals(entry.decl()) && entry.perlPackage() != null) {
+                                    adjustedOurPackages.put(varName, entry.perlPackage());
+                                }
+                            }
+                        }
+                    }
+                    // Build the SymbolTable template: 3 reserved + all captured vars
+                    SymbolTable compilerSymbolTableTemplate = new SymbolTable(0);
+                    compilerSymbolTableTemplate.addVariableWithIndex("this", 0, "reserved", null);
+                    compilerSymbolTableTemplate.addVariableWithIndex("@_", 1, "reserved", null);
+                    compilerSymbolTableTemplate.addVariableWithIndex("wantarray", 2, "reserved", null);
+                    Map<String, Integer> capturedVarIndices = new HashMap<>();
+                    Set<String> capturedOurVarNames = new HashSet<>();
+                    int maxRegister = 2;
+                    for (Map.Entry<String, Integer> entry : adjustedRegistry.entrySet()) {
+                        String varName = entry.getKey();
+                        int regIndex = entry.getValue();
+                        if (regIndex >= 3) {
+                            String decl = adjustedDecls.getOrDefault(varName, "my");
+                            if (decl.isEmpty()) decl = "my";
+                            if ("our".equals(decl)) capturedOurVarNames.add(varName);
+                            String perlPkg = "our".equals(decl) ? adjustedOurPackages.get(varName) : null;
+                            if (perlPkg != null) {
+                                compilerSymbolTableTemplate.addVariableWithIndex(varName, regIndex, decl, perlPkg);
+                            } else {
+                                compilerSymbolTableTemplate.addVariableWithIndex(varName, regIndex, decl, null);
+                            }
+                            capturedVarIndices.put(varName, regIndex);
+                            if (regIndex > maxRegister) maxRegister = regIndex;
+                        }
+                    }
+                    // Populate the per-site cache (EmitterContext is per-thread, no synchronization needed)
+                    ctx.evalCachedRegistry = adjustedRegistry;
+                    ctx.evalCachedDecls = adjustedDecls;
+                    ctx.evalCachedOurPackages = adjustedOurPackages;
+                    ctx.evalCachedCompilerSymbolTable = compilerSymbolTableTemplate;
+                    ctx.evalCachedCapturedVarIndices = capturedVarIndices;
+                    ctx.evalCachedCapturedOurVarNames = capturedOurVarNames;
+                    ctx.evalCachedNextRegister = maxRegister + 1;
+                }
                 BytecodeCompiler compiler = new BytecodeCompiler(
                         evalCompilerOptions.fileName,
                         1,
                         evalCtx.errorUtil,
-                        adjustedRegistry,
-                        adjustedDecls,
-                        adjustedOurPackages);
+                        ctx.evalCachedCompilerSymbolTable,
+                        ctx.evalCachedCapturedVarIndices,
+                        ctx.evalCachedCapturedOurVarNames,
+                        ctx.evalCachedNextRegister);
                 compiler.setCompilePackage(evalCurrentPackage);
                 interpretedCode = compiler.compile(ast, evalCtx);
                 compiledSuccessfully = true;
@@ -7175,13 +7198,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 storeSourceLines(evalString, evalFilename, ast, tokens, true, debuggerFlagsAtEntry);
                 sourceLinesStored = true;
 
-                // Set captured variables
+                // Set captured variables in-place (freshly compiled, exclusively owned here).
                 if (runtimeValues.length > 0) {
                     RuntimeBase[] capturedVars2 = new RuntimeBase[runtimeValues.length];
                     for (int i = 0; i < runtimeValues.length; i++) {
                         capturedVars2[i] = (RuntimeBase) runtimeValues[i];
                     }
-                    interpretedCode = interpretedCode.withCapturedVars(capturedVars2);
+                    interpretedCode.setEvalCapturedVars(capturedVars2);
                 }
 
             } catch (Throwable e) {

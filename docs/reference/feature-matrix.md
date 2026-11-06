@@ -834,7 +834,7 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **MIME::Base64** module
 - ✅  **MIME::QuotedPrint** module
 - ✅  **Perl::OSType** module.
-- ✅  **Scalar::Util**: `blessed`, `reftype`, `set_prototype`, `dualvar` are implemented.
+- ✅  **Scalar::Util**: `blessed`, `reftype`, `set_prototype`, `dualvar`, and numeric introspection are implemented. `Scalar::Util::Numeric` provides the `isnum` classifiers; `Scalar::Util::LooksLikeNumber` preserves the raw `looks_like_number()` result.
 - ✅  **SelectSaver**: module.
 - ✅ **Storable**: Reads and writes the native Perl Storable binary format
   (`pst0` magic), interoperable with system Perl in both directions.

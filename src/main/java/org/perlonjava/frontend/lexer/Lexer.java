@@ -73,6 +73,10 @@ public class Lexer {
     public int position;
     // Length of the input
     public int length;
+    // Set to true if the token stream contains BEGIN, sub, use, or no —
+    // keywords that require the outer-lexical alias loop in evalStringWithInterpreter().
+    // False on the common path (simple expressions, while loops, etc.).
+    public boolean sawBeginOrSub = false;
 
     // Constructor to initialize the Lexer with input string
     public Lexer(String input) {
@@ -168,8 +172,8 @@ public class Lexer {
         while ((token = nextToken()) != null) {
             tokens.add(token);
         }
-        tokens.add(new LexerToken(LexerTokenType.EOF, EOF));
-        tokens.add(new LexerToken(LexerTokenType.EOF, EOF));
+        tokens.add(LexerToken.TOKEN_EOF);
+        tokens.add(LexerToken.TOKEN_EOF);
 
         this.input = null;  // Throw away input to spare memory
         return tokens;
@@ -214,7 +218,7 @@ public class Lexer {
         if (isAsciiWhitespace(current)) {
             if (current == '\n' || current == '\r') {
                 position++;
-                return new LexerToken(LexerTokenType.NEWLINE, String.valueOf(current));
+                return LexerToken.of(LexerTokenType.NEWLINE, String.valueOf(current));
             } else {
                 return consumeWhitespace();
             }
@@ -321,7 +325,7 @@ public class Lexer {
                     || input.charAt(position) == '\r' || input.charAt(position) == '\f')) {
             position++;
         }
-        return new LexerToken(LexerTokenType.WHITESPACE, input.substring(start, position));
+        return LexerToken.of(LexerTokenType.WHITESPACE, input.substring(start, position));
     }
 
     public LexerToken consumeNumber() {
@@ -368,7 +372,11 @@ public class Lexer {
             }
         }
         // Build token text using substring to preserve surrogate pairs correctly
-        return new LexerToken(LexerTokenType.IDENTIFIER, input.substring(start, position));
+        String text = input.substring(start, position);
+        if (!sawBeginOrSub
+                && (text.equals("BEGIN") || text.equals("sub")
+                    || text.equals("use") || text.equals("no"))) sawBeginOrSub = true;
+        return new LexerToken(LexerTokenType.IDENTIFIER, text);
     }
 
     public LexerToken consumeOperator() {
@@ -672,6 +680,6 @@ public class Lexer {
         }
 
         position++;
-        return new LexerToken(LexerTokenType.OPERATOR, input.substring(start, start + 1));
+        return LexerToken.of(LexerTokenType.OPERATOR, input.substring(start, start + 1));
     }
 }
