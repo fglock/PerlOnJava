@@ -1327,7 +1327,6 @@ public class MortalList {
                 if (s.refCountOwned && base.refCount > 0) {
                     if (base.refCountTrace) {
                         base.traceRefCount(0, "MortalList.deferDecrementRecursive (blessed, queued)");
-                        base.releaseOwner(s, "deferDecrementRecursive blessed");
                     }
                     RuntimeBase.PendingOwnerRelease ownerRelease = base.queueOwnerRelease(
                             s, "MortalList.deferDecrementRecursive blessed");
@@ -1506,7 +1505,6 @@ public class MortalList {
                         && !reachableCodeRef) {
                     if (base.refCountTrace) {
                         base.traceRefCount(0, "MortalList.mortalizeForVoidDiscard (queued owned container discard)");
-                        base.releaseOwner(scalar, "mortalizeForVoidDiscard container");
                     }
                     RuntimeBase.PendingOwnerRelease ownerRelease = base.queueOwnerRelease(
                             scalar, "MortalList.mortalizeForVoidDiscard");
