@@ -393,7 +393,6 @@ public class MortalList {
         markBoundaryWork(state);
         RuntimeBase.PendingOwnerRelease ownerRelease =
                 base.queueOwnerRelease(ownerScalar, releaseSite);
-        base.releaseActiveOwner(ownerScalar);
         queueDeferredBase(state, base, ownerRelease, null, ownerScalar);
     }
 
@@ -820,7 +819,6 @@ public class MortalList {
                 markBoundaryWork(state);
                 RuntimeBase.PendingOwnerRelease ownerRelease = base.queueOwnerRelease(
                         scalar, "MortalList.deferDecrementIfTracked");
-                base.releaseActiveOwner(scalar);
                 queueDeferredBase(state, base, ownerRelease, null, scalar);
             } else if (base.refCount == 0
                     && base.clearedOwnedAggregateElement
@@ -1335,7 +1333,6 @@ public class MortalList {
                     }
                     RuntimeBase.PendingOwnerRelease ownerRelease = base.queueOwnerRelease(
                             s, "MortalList.deferDecrementRecursive blessed");
-                    base.releaseActiveOwner(s);
                     // The selective count only covers counted edges. A live
                     // package, lexical, closure, or other explicit owner can
                     // still keep this container and its fields in use after
@@ -1386,7 +1383,6 @@ public class MortalList {
                     }
                     RuntimeBase.PendingOwnerRelease ownerRelease = base.queueOwnerRelease(
                             s, "MortalList.deferDecrementRecursive unblessed");
-                    base.releaseActiveOwner(s);
                     LifecycleRuntimeState state = state();
                     markBoundaryWork(state);
                     queueDeferredBase(state, base, ownerRelease, null, s);
@@ -1516,7 +1512,6 @@ public class MortalList {
                     }
                     RuntimeBase.PendingOwnerRelease ownerRelease = base.queueOwnerRelease(
                             scalar, "MortalList.mortalizeForVoidDiscard");
-                    base.releaseActiveOwner(scalar);
                     LifecycleRuntimeState state = state();
                     markBoundaryWork(state);
                     queueDeferredBase(state, base, ownerRelease, null, scalar);
@@ -1529,7 +1524,6 @@ public class MortalList {
                     if (scalar.refCountOwned) {
                         ownerRelease = base.queueOwnerRelease(
                                 scalar, "MortalList.mortalizeForVoidDiscard zero-count owner");
-                        base.releaseActiveOwner(scalar);
                     } else {
                         ownerRelease = base.queueLifecycleOnlyAtZero(
                                 "MortalList.mortalizeForVoidDiscard zero-count temporary");
