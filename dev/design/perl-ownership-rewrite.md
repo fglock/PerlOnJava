@@ -4,7 +4,7 @@
 
 **Current checkpoint (2026-11-06):** #1649 remains in Phase 2 on branch
 `wip/issue1649-owner-transition-20261106-035834`, at source commit
-`c8e7a4217e`, which includes merge commit `4865f2dddd` and the validated
+`1504828430`, which includes merge commit `4865f2dddd` and the validated
 owner-transition commit `c633398d83` on current `origin/master` at
 `9477c8c68a`. The combined build ran before commit creation on the identical
 source tree; Gradle injected the parent identifier `c03e64d996` into its
@@ -31,6 +31,18 @@ decrements. The combined source tree passes
 (`/tmp/issue1649-batched-owner-audit-make.log`). JVM and interpreter trace
 smokes both exit 0 with 367 owner trace records and no `UNPAIRED RELEASE`
 (`/tmp/issue1649-owner-trace-{jvm,interpreter}.log`).
+
+The cloned/shared-storage audit found no count arithmetic outside the owner
+transition APIs. A cloned scalar reacquires its child-runtime edge through
+`incrementRefCountForContainerStore`; cloned arrays and hashes use the same
+container-slot transition as ordinary stores. Plain thread-shared storage keeps
+its shared identity, while tied/runtime views are cloned and their child slots
+are rebuilt. Snapshot roots use `TEMPORARY_ROOT` identities and do not fabricate
+Perl reference counts. Pre-counted argument, return, capture, native, and
+scalar-reference-content edges likewise acquire through `PerlOwnerSlot` and the
+central counter method. Aggregate recursive cleanup walks the discarded
+container's actual child slots to release them; it does not use a root walk to
+reconstruct their counts.
 
 The current candidate snapshots glob arguments in `stat`, `lstat`, and file-test
 cache state, so Perl's cached subject does not extend a lexical handle's
