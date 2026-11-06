@@ -11,7 +11,7 @@ priorities and future plans.
 - Release temporary anonymous IO holder leases with list-assignment scalar owners while preserving handles carried in assignment results (#1649).
 - Finalize cleared aggregates from current owner identities; root reachability no longer preserves an ownerless referent (#1649).
 - Release `Storable::dclone` results when their last Perl owner is dropped, without leaving an extra counted return helper (#1649).
-- Release compiler, module, and postfix reference-transfer temporaries through their exact counted slot transition, including list assignment, hash slices, refalias setup, and Storable hooks (#1649).
+- Release compiler, module, and postfix reference-transfer temporaries through their exact counted slot transition, including subroutine return slots, list assignment, hash slices, refalias setup, and Storable hooks (#1649).
 - Hold an array or hash container through the lifetime of an aliased element argument, including after `shift @_` (#1649).
 - Keep a replacement reference's RHS temporary alive through reentrant cleanup of the overwritten scalar slot (#1649).
 - Preserve tied hash and array magic through aliased element arguments, including `untie` during the callee, and release the handler at frame exit (#1649).
