@@ -621,6 +621,14 @@ public class GlobalVariable {
             return globalState().codeRefs();
         }
 
+        private static RuntimeScalar strongStashSlotValue(RuntimeScalar value) {
+            // A Perl assignment copies a weak reference as a strong value. A
+            // glob CODE slot is an independent owner, so keep its scalar cell
+            // separate from a weakened source cell before acquiring the slot.
+            return value != null && WeakRefRegistry.isweak(value)
+                    ? new RuntimeScalar(value) : value;
+        }
+
         private static void maybeInvalidateMethodCacheForCodeRefPut(String key, RuntimeScalar previous, RuntimeScalar value) {
             if (key == null || value == null) {
                 return;
@@ -635,28 +643,29 @@ public class GlobalVariable {
         @Override
         public RuntimeScalar put(String key, RuntimeScalar value) {
             boolean newKey = !delegate().containsKey(key);
+            RuntimeScalar stashValue = strongStashSlotValue(value);
             markStashEntryVisible(key);
-            markPackageGlobalRoot(value);
-            RuntimeScalar old = delegate().put(key, value);
-            if (old != value) {
-                if (value != null) value.retainStashCodeSlotBinding();
-                noteCodeRefMutation(key, old, value);
+            markPackageGlobalRoot(stashValue);
+            RuntimeScalar old = delegate().put(key, stashValue);
+            if (old != stashValue) {
+                if (stashValue != null) stashValue.retainStashCodeSlotBinding();
+                noteCodeRefMutation(key, old, stashValue);
             }
             if (newKey) {
                 invalidateStashEnumerationCache();
             }
             invalidatePackageRootSnapshot();
-            if (old != null && old != value) {
+            if (old != null && old != stashValue) {
                 old.globalCodeRefFqn = null;
             }
-            if (value != null) {
-                value.globalCodeRefFqn = key;
-                if (value.value instanceof RuntimeCode code) {
+            if (stashValue != null) {
+                stashValue.globalCodeRefFqn = key;
+                if (stashValue.value instanceof RuntimeCode code) {
                     code.hadStashRef = true;
                 }
             }
-            maybeInvalidateMethodCacheForCodeRefPut(key, old, value);
-            if (old != null && old != value) old.releaseStashCodeSlotBinding();
+            maybeInvalidateMethodCacheForCodeRefPut(key, old, stashValue);
+            if (old != null && old != stashValue) old.releaseStashCodeSlotBinding();
             return old;
         }
 
@@ -2956,6 +2965,7 @@ public class GlobalVariable {
                 ref = pinned;
                 markPackageGlobalRoot(ref);
                 globalCodeRefs.put(resolvedKey, ref);
+                ref = globalCodeRefs.get(resolvedKey);
                 invalidatePackageRootSnapshot();
             } else {
                 ref = getGlobalCodeRefForFreshLookup(resolvedKey);
@@ -2965,6 +2975,7 @@ public class GlobalVariable {
         if (!globalCodeRefs.containsKey(resolvedKey)) {
             markPackageGlobalRoot(ref);
             globalCodeRefs.put(resolvedKey, ref);
+            ref = globalCodeRefs.get(resolvedKey);
             invalidatePackageRootSnapshot();
         } else {
             markPackageGlobalRoot(ref);

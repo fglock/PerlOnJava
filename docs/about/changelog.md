@@ -17,6 +17,7 @@ priorities and future plans.
 - Preserve tied hash and array magic through aliased element arguments, including `untie` during the callee, and release the handler at frame exit (#1649).
 - Acquire replacement ownership before publishing array and hash slots, then release displaced values against the updated storage state (#1649).
 - Snapshot glob arguments retained by file-test and stat caches, and retain the anonymous IO lease assigned by `sysopen` (#1649).
+- Copy weakened CODE references into independent strong stash scalars so glob slots acquire and release their own `CODE_SLOT` owner (#1649).
 
 - Release temporary JVM reference-alias RHS owners after scalar-context assignments so the final aliased cell can clean up (#1649).
 - Track first-bless mortal references with deferred owner identities while preserving weak-source behavior (#1649).
