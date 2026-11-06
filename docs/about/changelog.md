@@ -6,6 +6,7 @@ priorities and future plans.
 
 ## Work in progress
 
+- Release replaced nested hash and array objects from shared aggregate slots at assignment time, without retaining an unowned fetched view (#1649).
 - Reacquire anonymous IO holder identities for cloned Perl scalars in child thread runtimes (#1649).
 - Acquire anonymous IO holder identities for existing scalar and aggregate aliases whenever IO is installed into an existing glob (#1649).
 - Release temporary anonymous IO holder leases with list-assignment scalar owners while preserving handles carried in assignment results (#1649).
