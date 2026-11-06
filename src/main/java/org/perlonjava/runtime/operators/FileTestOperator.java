@@ -78,9 +78,13 @@ public class FileTestOperator {
         updateLastStat(arg, ok, errno, false);
     }
 
-    private static RuntimeScalar snapshotStatArgument(RuntimeScalar arg) {
+    static RuntimeScalar snapshotStatArgument(RuntimeScalar arg) {
         if (arg.type == RuntimeScalarType.GLOB || arg.type == RuntimeScalarType.GLOBREFERENCE) {
-            return arg;
+            // Perl's cached stat buffer retains the result and the displayed
+            // subject, not a new strong reference to the caller's glob. Keep
+            // an immutable scalar snapshot so file-test bookkeeping cannot
+            // extend a lexical handle's lifetime past its last Perl owner.
+            return new RuntimeScalar(arg.toString());
         }
         return new RuntimeScalar(arg.toString());
     }
@@ -306,7 +310,7 @@ public class FileTestOperator {
                     // object as its subject.  There is no native stat result
                     // to cache, but the bytecode stack form consumes the
                     // current file-test subject through the same cache slot.
-                    state().lastFileHandle.set(fileHandle);
+                    state().lastFileHandle.set(snapshotStatArgument(fileHandle));
                     updateLastStat(fileHandle, true, 0);
                     state().lastOverloadedFileTestSubject.set(fileHandle);
                     state().hasLastOverloadedFileTestSubject = true;

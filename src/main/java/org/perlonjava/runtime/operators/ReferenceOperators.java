@@ -203,14 +203,22 @@ public class ReferenceOperators {
                     }
                 }
 
+                // Scalar owners may already hold this referent inside an
+                // untracked container or temporary list. Promote those exact
+                // owner-slot identities now; blessing changes lifecycle
+                // tracking, but it does not create or remove Perl edges.
+                referent.refCount = 0;
+                referent.promoteUntrackedScalarOwners();
+
                 if (wasAlreadyBlessed) {
                     // Re-bless from untracked class: the scalar being blessed
                     // already holds a reference that was never counted (because
                     // tracking wasn't active at assignment time). Count it as 1.
-                    referent.refCount = 0;
-                    RuntimeScalar.acquireCountedOwnerForCurrentValue(
-                            runtimeScalar, referent, runtimeScalar.countedOwnerKind(),
-                            "ReferenceOperators.bless rebless from untracked");
+                    if (!runtimeScalar.refCountOwned) {
+                        RuntimeScalar.acquireCountedOwnerForCurrentValue(
+                                runtimeScalar, referent, runtimeScalar.countedOwnerKind(),
+                                "ReferenceOperators.bless rebless from untracked");
+                    }
                 } else {
                     // Establish only the owners that already exist. The
                     // identified bless temporary below supplies its own count;
@@ -229,7 +237,6 @@ public class ReferenceOperators {
                             && scalarReferent.referencedByScalarReference) {
                         scalarReferent.localBindingExists = true;
                     }
-                    referent.refCount = 0;
                     if (existingScalarOwner) {
                         RuntimeScalar.acquireCountedOwnerForCurrentValue(
                                 runtimeScalar, referent, runtimeScalar.countedOwnerKind(),

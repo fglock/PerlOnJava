@@ -2037,7 +2037,8 @@ public class IOOperator {
             RuntimeGlob anonGlob = new RuntimeGlob(null).setIO(fh);
             newGlob.value = anonGlob;
             RuntimeIO.registerGlobForFdRecycling(anonGlob, fh);
-            fileHandle.set(newGlob);
+            RuntimeScalar assignedHandle = fileHandle.set(newGlob);
+            RuntimeScalar.retainUnstashedIoForDurableSlot(assignedHandle);
         }
         return scalarTrue;
     }
