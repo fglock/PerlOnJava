@@ -1723,7 +1723,25 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 copy.mortalReturnValueOwner = false;
             }
         }
+        source.releasePostfixReferenceTransferOwner(
+                "RuntimeScalar.copyToMortalReturnSlot postfix temporary transfer");
         return copy;
+    }
+
+    /**
+     * Retire the owner moved into a postfix result after another Perl value
+     * has taken responsibility for that result. Assignment and subroutine
+     * return are both such transfers; the latter first acquires its mortal
+     * return-slot owner in {@link #copyToMortalReturnSlot(RuntimeScalar)}.
+     */
+    private void releasePostfixReferenceTransferOwner(String releaseSite) {
+        if (!postfixReferenceOwnershipTransfer) return;
+        postfixReferenceOwnershipTransfer = false;
+        if (refCountOwned
+                && (type & REFERENCE_BIT) != 0
+                && value instanceof RuntimeBase) {
+            MortalList.releaseCountedOwnerImmediately(this, releaseSite);
+        }
     }
 
     private void captureMortalReturnSourceOwner(RuntimeScalar source) {
@@ -3374,17 +3392,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      */
     public RuntimeScalar addToScalar(RuntimeScalar scalar) {
         RuntimeScalar result = scalar.set(this);
-        if (postfixReferenceOwnershipTransfer) {
-            postfixReferenceOwnershipTransfer = false;
-            if ((type & REFERENCE_BIT) != 0 && value instanceof RuntimeBase base
-                    && base.refCount > 0) {
-                // set() published and acquired the destination owner. Release
-                // this exact postfix temporary through the shared slot/count
-                // transition so final cleanup follows the installed state.
-                MortalList.releaseCountedOwnerImmediately(
-                        this, "RuntimeScalar.addToScalar postfix temporary transfer");
-            }
-        }
+        // set() published and acquired the destination owner. Release this
+        // exact postfix temporary through the shared slot/count transition.
+        releasePostfixReferenceTransferOwner(
+                "RuntimeScalar.addToScalar postfix temporary transfer");
         return result;
     }
 
