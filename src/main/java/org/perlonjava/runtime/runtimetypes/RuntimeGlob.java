@@ -2432,14 +2432,10 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         }
         GlobalVariable.invalidatePackageRootSnapshot();
 
-        // Before replacing the code ref, decrement the refCount of the CODE
-        // that was installed during the local scope. The local scope's code
-        // was set via setLarge (which incremented refCount), but the restore
-        // via put() bypasses setLarge, so we must decrement manually.
-        // Without this, CODE refs installed in localized globs (e.g.,
-        // `local *Foo::bar; sub bar { ... }` in Sub::Quote's unquote_sub)
-        // have permanently overcounted refCount, preventing releaseCaptures
-        // from firing at the right time.
+        // Retire the local CODE slot's own counted edge before restoring the
+        // saved stash entry. The scalar owner token identifies which count this
+        // slot acquired; a positive referent count alone cannot prove this CODE
+        // slot is the edge to decrement.
         RuntimeScalar localCode = GlobalVariable.globalCodeRefs.get(snap.globName);
         RuntimeCode removedLocalCodeForStashRelease = null;
         if (localCode != null && (localCode.type & REFERENCE_BIT) != 0
@@ -2448,11 +2444,18 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             if (localBase instanceof RuntimeCode localCodeObj) {
                 removedLocalCodeForStashRelease = localCodeObj;
             }
-            if (localBase.refCount > 0
-                    && localBase.releaseTrackedOwnerCount(
-                            "RuntimeGlob.restoreLocalizedCodeRef")) {
-                localBase.refCount = Integer.MIN_VALUE;
-                DestroyDispatch.callDestroy(localBase);
+            if (localCode.refCountOwned) {
+                MortalList.releaseCountedOwnerImmediately(
+                        localCode, "RuntimeGlob.restoreLocalizedCodeRef");
+            } else if (localCode.hasCodeSlotBinding() && localBase.refCount > 0) {
+                // Older direct CODE-slot stores did not create a scalar owner
+                // token. The current stash binding is the exact storage proof;
+                // attach that existing count to a token before normal release.
+                RuntimeScalar.adoptExistingCountedOwnerForCurrentValue(
+                        localCode, localBase, PerlOwnerSlot.Kind.CODE_SLOT,
+                        "RuntimeGlob.restoreLocalizedCodeRef");
+                MortalList.releaseCountedOwnerImmediately(
+                        localCode, "RuntimeGlob.restoreLocalizedCodeRef");
             } else if (localBase.refCount == 0 && localBase instanceof RuntimeCode) {
                 localBase.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroy(localBase);
