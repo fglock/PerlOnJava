@@ -3,34 +3,28 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-06):** #1649 remains in Phase 2 on local branch
-`wip/issue1649-owner-trace-20261105-143814`, base source `574c43e2ce`. The
-working tree has uncommitted scalar transfer and counted-release coordinator
-changes in `RuntimeScalar`, `RuntimeBase`, `MortalList`, `RuntimeArray`, and
-`GlobalRuntimeScalar`. The
-current issue claim remains `Codex / ownership-goal-resume-20261105`;
-PR #1938 is an open draft on a separate remote branch at
-`95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05`, with no review comments. The issue
-handoff requires explicit owner transitions, removal of ordinary sweep
-recovery, and #1618 acceptance. #1642 was delivered by merged PR #1746; wider
-CPAN release qualification remains in #1646.
+`wip/issue1649-perl-owner-model-20261106-032049`, source commit `e8fed9d792`.
+The current working diff consolidates zero-count retirement of a stale scalar
+owner identity in `RuntimeBase`, so `refCountOwned`, trace state, and the exact
+`PerlOwnerSlot` are retired as one checked transition. Normal queued releases
+already consume their slot and flag together. `git diff --check` passes; the
+latest `nice -n 19 make` passed on source `e8fed9d792` before this small local
+change (`/tmp/issue1649-queued-release-single-transition-make.log`).
 
-On the current candidate, #1794 (3/3) and #1860 (4/4) pass on system Perl,
-JVM, and interpreter. The upstream HTML-Tree 5.07 suite passes all 23 files
-and 989 checks on system Perl, JVM, and interpreter; PerlOnJava runs used
-`JPERL_DISABLE_CORRECTIVE_SWEEPS=1`. `t/refloop.t` is 8/8 on all three. The
-system Perl ran the real `Test::LeakTrace` checks; PerlOnJava's bundled stub
-makes its 20 checks non-measurements. Logs:
-`/tmp/issue1649-1794-1860-perl.log`,
-`/tmp/issue1649-1794-1860-no-sweeps-both-backends.log`,
-`/tmp/issue1649-htmltree-full-current-perl.log`,
-`/tmp/issue1649-htmltree-full-current-jvm.log`, and
-`/tmp/issue1649-htmltree-full-current-interpreter.log`.
-
-The remaining `restoreReachableOwnerCount()` branch is reachable only from
-the legacy `MortalList.deferDecrement()` API. Source search found no production
-Java caller of that API; its direct callers are synthetic owner-ledger tests.
-Keep this compatibility path separate from normal sweep removal until those
-fixtures can be replaced with exact release tokens.
+The HTML-Tree 5.07 full suite passes 23 files and 989 checks on JVM and
+interpreter with corrective sweeps disabled, and `t/refloop.t` passes 8/8 on
+system Perl and both backends at parent source `f73533b68d`. The current source
+audit finds no production caller of legacy `MortalList.deferDecrement()` or
+`ReachabilityWalker.sweepReleasedWeakReferents()`; those remain reachable from
+synthetic Java tests. Thus the remaining graph recovery in `processDeferredBase`
+is compatibility-only, while verified active-slot count alignment is a
+separate non-graph bridge required by existing fixtures. #1642's package test
+could not get past `jcpan` metadata loading within 600 seconds; do not repeat
+that run without a faster direct acceptance path. Remote issue handoff remains
+unverified because GitHub API access failed. Next: validate the scalar-owner
+retirement change, then refresh the final no-sweeps and #1618 acceptance on one
+immutable source candidate before deciding whether any compatibility recovery
+can be removed.
 
 The first-bless and re-bless paths now acquire an existing scalar's counted
 edge through `RuntimeScalar.acquireCountedOwnerForCurrentValue`, removing two
