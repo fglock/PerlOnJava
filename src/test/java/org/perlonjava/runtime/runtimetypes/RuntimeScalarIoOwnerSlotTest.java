@@ -5,8 +5,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.perlonjava.runtime.io.StandardIO;
+import org.perlonjava.runtime.operators.IOOperator;
 
 import java.io.ByteArrayOutputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -94,6 +97,40 @@ class RuntimeScalarIoOwnerSlotTest {
     }
 
     @Test
+    void sysopenOnExistingGlobRetainsEveryCurrentScalarOwner() throws Exception {
+        RuntimeGlob glob = new RuntimeGlob(null);
+        RuntimeScalar handle = handle(glob);
+        RuntimeScalar alias = handle(glob);
+        retainCountedAlias(glob, handle);
+        retainCountedAlias(glob, alias);
+        MyVarCleanupStack.register(handle);
+        MyVarCleanupStack.register(alias);
+        Path path = Files.createTempFile("perlonjava-sysopen-owner-", ".tmp");
+
+        try {
+            RuntimeScalar result = IOOperator.sysopen(0,
+                    handle,
+                    new RuntimeScalar(path.toString()),
+                    new RuntimeScalar(2)); // O_RDWR
+
+            assertTrue(result.getBoolean());
+            assertTrue(handle.hasIoOwner());
+            assertTrue(alias.hasIoOwner(),
+                    "opening an existing glob must retain each scalar cell that owns it");
+            assertEquals(2, glob.ioHolderCount());
+            assertEquals(2, glob.ownerSlotCount(PerlOwnerSlot.Kind.IO_RESOURCE_HOLDER));
+        } finally {
+            RuntimeScalar io = glob.getIO();
+            if (io != null && io.value instanceof RuntimeIO runtimeIO) runtimeIO.close();
+            RuntimeScalar.releaseIoOwner(handle);
+            RuntimeScalar.releaseIoOwner(alias);
+            MyVarCleanupStack.unregister(alias);
+            MyVarCleanupStack.unregister(handle);
+            Files.deleteIfExists(path);
+        }
+    }
+
+    @Test
     void expressionCopyMovesOwnerButPackageScalarCopyKeepsItsOwner() {
         RuntimeGlob expressionGlob = anonymousGlob();
         RuntimeScalar expression = handle(expressionGlob);
@@ -160,5 +197,11 @@ class RuntimeScalarIoOwnerSlotTest {
     private static RuntimeGlob anonymousGlob() {
         return new RuntimeGlob(null).setIO(new RuntimeIO(
                 new StandardIO(new ByteArrayOutputStream(), true)));
+    }
+
+    private static void retainCountedAlias(RuntimeGlob glob, RuntimeScalar alias) {
+        alias.refCountOwned = true;
+        glob.recordOwner(alias, "existing glob IO owner regression");
+        glob.recordActiveOwner(alias);
     }
 }
