@@ -729,6 +729,15 @@ public class RuntimeGraphCloner {
             weakReferences.add(target);
         } else {
             restoreScalarReferenceOwnership(source, target);
+            if (source.hasIoOwner()) {
+                // IO holder identities are runtime-local just like counted
+                // scalar edges. The source scalar keeps its parent lease;
+                // the cloned Perl scalar owns a fresh lease on the cloned
+                // anonymous glob so child cleanup cannot outlive its handle.
+                try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
+                    RuntimeScalar.retainUnstashedIoForDurableSlot(target);
+                }
+            }
         }
         if (target.value instanceof RuntimeCode code && code.__SUB__ == null) {
             // JVM CODE commonly stores its generated implementation in
