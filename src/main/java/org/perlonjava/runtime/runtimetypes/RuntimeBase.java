@@ -758,24 +758,6 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         return false;
     }
 
-    /**
-     * Compatibility repair for a standalone scalar cell that has a counted
-     * edge but has not yet been registered with lexical or container storage.
-     * Aggregate slots and cells with stale storage metadata must use current
-     * storage proofs instead.
-     */
-    boolean restoreUnregisteredScalarCellOwnerRefCount() {
-        int count = 0;
-        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
-            if (!slot.isActive() || slot.kind() != PerlOwnerSlot.Kind.SCALAR_CELL) continue;
-            RuntimeScalar owner = slot.countedScalarOwner();
-            if (owner != null && owner.isUnregisteredCountedScalarCellOwner(this, slot)) count++;
-        }
-        if (count == 0) return false;
-        refCount = count;
-        return true;
-    }
-
     /** Count surviving counted slots after verifying their current storage cells. */
     int verifiedCurrentCountedOwnerSlotCount() {
         int count = 0;
