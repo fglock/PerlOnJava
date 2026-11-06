@@ -1138,6 +1138,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 continue;
             }
             boolean liveContainerOwner = owner.hasPerlStrongOwner()
+                    || GlobalVariable.isPackageRootedAggregate(owner)
                     || (runtime != null && MyVarCleanupStack.isRegistered(owner));
             if (!requireLiveContainer || liveContainerOwner) liveOwningContainer = true;
         }
@@ -1648,6 +1649,28 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 || isCurrentCapturedScalarCellOwner(referent, slot);
     }
 
+    /**
+     * Narrow compatibility proof for a standalone scalar cell whose storage
+     * has not yet been registered with a lexical, package, code, or container
+     * owner. This does not accept stale container associations or aliases.
+     */
+    boolean isUnregisteredCountedScalarCellOwner(RuntimeBase referent, PerlOwnerSlot slot) {
+        if (slot.kind() != PerlOwnerSlot.Kind.SCALAR_CELL
+                || countedOwnerSlot != slot || slot.countedScalarOwner() != this
+                || !refCountOwned || value != referent
+                || ((type & RuntimeScalarType.REFERENCE_BIT) == 0
+                    && type != RuntimeScalarType.GLOB
+                    && type != RuntimeScalarType.CODE)
+                || WeakRefRegistry.isweak(this) || scopeExited
+                || !slot.isActive() || slot.referent() != referent
+                || hasClosureCaptureOwner() || hasActiveArgumentAliasOwner(referent)
+                || !containerOwnerSnapshot().isEmpty()
+                || hasDirectScalarCellStorageOwner()) {
+            return false;
+        }
+        return true;
+    }
+
     private boolean hasCurrentAggregateStorageOwner() {
         for (RuntimeBase owner : containerOwnerSnapshot()) {
             if (isStoredInAnyContainer(owner)) return true;
@@ -1835,6 +1858,20 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     static void releaseCountedOwnerWithoutPerlRuntime(
             RuntimeScalar owner, RuntimeBase referent, String releaseSite) {
         MortalList.releaseCountedOwnerWithoutPerlRuntime(owner, referent, releaseSite);
+    }
+
+    /** Retire the paired Perl edge and IO lease of an assignment transport copy. */
+    static void releaseMaterializedAssignmentCopy(
+            RuntimeScalar scalar, String target, RuntimeBase returned) {
+        if (scalar == null) return;
+        releaseIoOwnerPreservingReturned(scalar, returned);
+        if (!scalar.refCountOwned
+                || ((scalar.type & RuntimeScalarType.REFERENCE_BIT) == 0
+                    && scalar.type != RuntimeScalarType.GLOB)
+                || !(scalar.value instanceof RuntimeBase base)
+                || base.refCount <= 0) return;
+        MortalList.releaseCountedOwnerImmediately(
+                scalar, "RuntimeList materialized-copy undo (" + target + ")");
     }
 
     PerlOwnerSlot.PendingRelease deferCountedOwnerRelease(RuntimeBase referent) {

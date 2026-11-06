@@ -646,6 +646,17 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         return ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE) != 0;
     }
 
+    /** Promote existing scalar-cell owners when this referent enters counted tracking. */
+    public void promoteUntrackedScalarOwners() {
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (slot.kind() != PerlOwnerSlot.Kind.UNTRACKED_REFERENCE || !slot.isActive()) continue;
+            RuntimeScalar owner = slot.untrackedScalarOwner();
+            if (owner == null || WeakRefRegistry.isweak(owner)
+                    || !owner.hasLiveDurableStrongValueSlot()) continue;
+            RuntimeScalar.incrementRefCountForContainerStore(owner, owner.countedOwnerKind());
+        }
+    }
+
     boolean hasUntrackedReferenceOwnerSlotIdentity(int scalarType) {
         if (!hasUntrackedReferenceOwnerSlotIdentity()) return false;
         for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
@@ -792,6 +803,20 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                     || kind == PerlOwnerSlot.Kind.ARGUMENT_TIE_HANDLER)
                     && owner.isCurrentCountedScalarOwner(this, slot)) {
                 count++;
+            }
+        }
+        // Some blessed referents can retain a live counted scalar-cell slot
+        // before the scalar has acquired lexical, package, or aggregate
+        // storage metadata. Preserve the legacy fallback's precedence: use
+        // these exact standalone-cell proofs only when no ordinary verified
+        // counted owner was found.
+        if (count == 0 && blessId != 0) {
+            for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+                if (!slot.isActive() || slot.kind() != PerlOwnerSlot.Kind.SCALAR_CELL) continue;
+                RuntimeScalar owner = slot.countedScalarOwner();
+                if (owner != null && owner.isUnregisteredCountedScalarCellOwner(this, slot)) {
+                    count++;
+                }
             }
         }
         return count;
