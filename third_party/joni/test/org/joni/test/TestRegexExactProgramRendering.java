@@ -102,7 +102,13 @@ public class TestRegexExactProgramRendering {
         assertDescription("(?i)[\\x{2bc}]", Option.NONE,
                 "EXACTFU_REQ8 <\\x{2bc}>");
         assertDescription("(?i)[\\x{2029}]", Option.NONE,
-                "EXACT_REQ8 <\\x{2029}>");
+                "EXACT_NF_REQ8 <\\x{2029}>");
+        assertDescription("(?i)[\\x{2b9}]", Option.NONE,
+                "EXACT_NF_REQ8 <\\x{2b9}>");
+        assertDescription("(?i)[:][\\x{b6}]", Option.NONE,
+                "EXACT_NF <:\\x{b6}>");
+        assertDescription("(?i)[\\x{2029}][:]", Option.NONE,
+                "EXACT_NF_REQ8 <\\x{2029}:>");
         assertDescription("(?il)[\\x{2029}]", Option.NONE,
                 "EXACTL <\\x{2029}>");
         assertDescription("(?i)[s][s]", Option.PERL_BYTE_PATTERN,

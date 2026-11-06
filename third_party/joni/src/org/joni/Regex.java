@@ -1966,8 +1966,10 @@ public final class Regex {
         boolean foldRequiresUtf8 = enc == UTF8Encoding.INSTANCE
                 && exact.codePoints().stream().anyMatch(value -> value > 0xff);
         int option = exact.lexicalOption();
+        boolean noFold = Option.isIgnoreCase(option) && !Option.isPerlLocale(option)
+                && RegexDebugProgram.isKnownNonFoldExact(exact.codePoints());
         String name;
-        if (exact.ignoreCaseOpcode()) {
+        if (exact.ignoreCaseOpcode() && !noFold) {
             if (Option.isPerlLocale(option)) {
                 name = requiresLocaleUtf8(exact.codePoints())
                         ? "EXACTFLU8" : "EXACTFL";
@@ -1981,6 +1983,10 @@ public final class Regex {
             } else {
                 name = foldRequiresUtf8 ? "EXACTFU_REQ8" : "EXACTFU";
             }
+        } else if (noFold) {
+            boolean nonFoldRequiresUtf8 = enc == UTF8Encoding.INSTANCE
+                    && exact.codePoints().stream().anyMatch(value -> value > 0xff);
+            name = nonFoldRequiresUtf8 ? "EXACT_NF_REQ8" : "EXACT_NF";
         } else if (Option.isPerlLocale(option)) {
             name = "EXACTL";
         } else {

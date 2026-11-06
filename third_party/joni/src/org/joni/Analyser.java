@@ -821,7 +821,14 @@ final class Analyser extends Parser {
                 tlen = getCharLengthTree(qn.target, level, activeCalls);
                 if (returnCode == 0) len = MinMaxLen.distanceMultiply(tlen, qn.lower);
             } else {
-                returnCode = GET_CHAR_LEN_VARLEN;
+                // Repeating a zero-width assertion remains zero-width even
+                // when the repeat itself is optional. Such assertions can
+                // still publish captures, but they do not add characters to
+                // a containing look-behind's width.
+                tlen = getCharLengthTree(qn.target, level, activeCalls);
+                if (returnCode == 0 && tlen != 0) {
+                    returnCode = GET_CHAR_LEN_VARLEN;
+                }
             }
             break;
 

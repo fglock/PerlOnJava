@@ -86,10 +86,10 @@ public class TestRegexCompleteSimpleFoldClassRendering {
 
     @Test
     public void retainsNonFoldNamesForU2029InEveryCharsetMode() {
-        assertDescription("(?i)[\\x{2029}]", "EXACT_REQ8 <\\x{2029}>");
-        assertDescription("(?iu)[\\x{2029}]", "EXACT_REQ8 <\\x{2029}>");
+        assertDescription("(?i)[\\x{2029}]", "EXACT_NF_REQ8 <\\x{2029}>");
+        assertDescription("(?iu)[\\x{2029}]", "EXACT_NF_REQ8 <\\x{2029}>");
         assertDescription("(?il)[\\x{2029}]", "EXACTL <\\x{2029}>");
-        assertDescription("(?iaa)[\\x{2029}]", "EXACT_REQ8 <\\x{2029}>");
+        assertDescription("(?iaa)[\\x{2029}]", "EXACT_NF_REQ8 <\\x{2029}>");
     }
 
     @Test

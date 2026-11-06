@@ -2,6 +2,8 @@ package org.perlonjava.runtime.perlmodule;
 
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.perlonjava.PerlRuntimeTestBase;
 import org.perlonjava.app.cli.CompilerOptions;
 import org.perlonjava.app.scriptengine.PerlLanguageProvider;
@@ -13,6 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class IOTtyRegularFileSourceTest extends PerlRuntimeTestBase {
 
     @Test
+    @DisabledOnOs(OS.WINDOWS)
     void fileHandleIsNotMistakenForReusedPtyDescriptorOnEitherBackend() throws Exception {
         String source = """
                 use IO::Pty;

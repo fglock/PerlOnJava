@@ -38,10 +38,10 @@ is first_program(q{qr/[\x{103}\x{102}]/}),
     'EXACTFU_REQ8 <\x{103}>', 'complete U+0102/U+0103 fold class';
 
 my @u2029 = (
-    [q{qr/(?i)[\x{2029}]/},   'EXACT_REQ8 <\x{2029}>', '/i'],
-    [q{qr/(?iu)[\x{2029}]/},  'EXACT_REQ8 <\x{2029}>', '/iu'],
+    [q{qr/(?i)[\x{2029}]/},   'EXACT_NF_REQ8 <\x{2029}>', '/i'],
+    [q{qr/(?iu)[\x{2029}]/},  'EXACT_NF_REQ8 <\x{2029}>', '/iu'],
     [q{qr/(?il)[\x{2029}]/},  'EXACTL <\x{2029}>',     '/il'],
-    [q{qr/(?iaa)[\x{2029}]/}, 'EXACT_REQ8 <\x{2029}>', '/iaa'],
+    [q{qr/(?iaa)[\x{2029}]/}, 'EXACT_NF_REQ8 <\x{2029}>', '/iaa'],
 );
 for my $case (@u2029) {
     is first_program($case->[0]), $case->[1], "U+2029 $case->[2] mode";
