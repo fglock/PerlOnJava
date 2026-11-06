@@ -1936,7 +1936,7 @@ X<POD> X<documentation>
 =item Plain Old Comments (Not!)
 X<comment> X<line> X<#> X<preprocessor> X<eval>
 
-=item Experimental Details on given and when
+=item Details on given and when
 
 Z<>1, Z<>2, Z<>3, Z<>4, Z<>5, Z<>6, Z<>7, Z<>8, Z<>9, Z<>10
 
@@ -5919,9 +5919,10 @@ C<SAVEDELETE(HV *hv, char *key, I32 length)>,
 C<SAVEDESTRUCTOR(DESTRUCTORFUNC_NOCONTEXT_t f, void *p)>,
 C<SAVEDESTRUCTOR_X(DESTRUCTORFUNC_t f, void *p)>, C<MORTALSVFUNC_X(SVFUNC_t
 f, SV *sv)>, C<MORTALDESTRUCTOR_SV(SV *coderef, SV *args)>,
-C<SAVESTACK_POS()>, C<SV* save_scalar(GV *gv)>, C<AV* save_ary(GV *gv)>,
-C<HV* save_hash(GV *gv)>, C<void save_item(SV *item)>, C<SV* save_svref(SV
-**sptr)>, C<void save_aptr(AV **aptr)>, C<void save_hptr(HV **hptr)>
+C<SAVESTACK_POS()>, C<SV* save_scalar_flags(GV *gv, U32 flags)>, C<SV*
+save_scalar(GV *gv)>, C<AV* save_ary(GV *gv)>, C<HV* save_hash(GV *gv)>,
+C<void save_item(SV *item)>, C<SV* save_svref(SV **sptr)>, C<void
+save_aptr(AV **aptr)>, C<void save_hptr(HV **hptr)>
 
 =back
 
@@ -6520,12 +6521,12 @@ C<MORTALDESTRUCTOR_SV> X<mortal_destructor_sv>X<MORTALDESTRUCTOR_SV>,
 C<Nullop> X<Nullop>, C<PL_errgv>, C<save_aelem>, C<save_aelem_flags>
 X<save_aelem>X<save_aelem_flags>, C<save_aptr>, C<save_ary>, C<save_hash>,
 C<save_helem>, C<save_helem_flags> X<save_helem>X<save_helem_flags>,
-C<save_hptr>, C<save_item>, C<save_scalar>, C<save_svref>, C<SAVEBOOL>,
-C<SAVEDELETE>, C<SAVEDESTRUCTOR>, C<SAVEDESTRUCTOR_X>, C<SAVEFREEOP>,
-C<SAVEFREEPV>, C<SAVEFREERCPV>, C<SAVEFREESV>, C<SAVEGENERICSV>,
-C<SAVEINT>, C<SAVEIV>, C<SAVEI8>, C<SAVEI16>, C<SAVEI32>,
-C<SAVEMORTALIZESV>, C<SAVEPPTR>, C<SAVERCPV>, C<SAVESPTR>,
-C<SAVESTACK_POS>, C<SAVESTRLEN>, C<SAVETMPS> X<SAVETMPS>
+C<save_hptr>, C<save_item>, C<save_scalar>, C<save_scalar_flags>,
+C<save_svref>, C<SAVEBOOL>, C<SAVEDELETE>, C<SAVEDESTRUCTOR>,
+C<SAVEDESTRUCTOR_X>, C<SAVEFREEOP>, C<SAVEFREEPV>, C<SAVEFREERCPV>,
+C<SAVEFREESV>, C<SAVEGENERICSV>, C<SAVEINT>, C<SAVEIV>, C<SAVEI8>,
+C<SAVEI16>, C<SAVEI32>, C<SAVEMORTALIZESV>, C<SAVEPPTR>, C<SAVERCPV>,
+C<SAVESPTR>, C<SAVESTACK_POS>, C<SAVESTRLEN>, C<SAVETMPS> X<SAVETMPS>
 
 =item Casting
 
@@ -6806,9 +6807,10 @@ C<vform*>, C<vmess*>
 
 =item Embedding, Threads, and Interpreter Cloning
 X<CLONEf_CLONE_HOST>X<CLONEf_COPY_STACKS>X<CLONEf_KEEP_PTR_TABLE>
-X<CV_NAME_NOTQUAL>X<NOT_IN_PAD>X<PADNAMEf_OUTER>X<PERL_EXIT_ABORT>
-X<PERL_EXIT_DESTRUCT_END>X<PERL_EXIT_EXPECTED>X<PERL_EXIT_WARN>
-X<PERL_LOADMOD_DENY>X<PERL_LOADMOD_IMPORT_OPS>X<PERL_LOADMOD_NOIMPORT>
+X<CV_NAME_NOTQUAL>X<NOT_IN_PAD>X<padfind_NO_INNER_CAPTURE>
+X<PADNAMEf_OUTER>X<PERL_EXIT_ABORT>X<PERL_EXIT_DESTRUCT_END>
+X<PERL_EXIT_EXPECTED>X<PERL_EXIT_WARN>X<PERL_LOADMOD_DENY>
+X<PERL_LOADMOD_IMPORT_OPS>X<PERL_LOADMOD_NOIMPORT>
 
 C<call_atexit> X<call_atexit>, C<cv_clone> X<cv_clone>, C<cv_name>
 X<cv_name>, C<cv_undef> X<cv_undef>, C<find_rundefsv> X<find_rundefsv>,
@@ -6822,7 +6824,8 @@ X<newPADNAMEpvn>, C<nothreadhook> X<nothreadhook>, C<pad_add_anon>
 X<pad_add_anon>, C<pad_add_name_pv>, C<pad_add_name_pvn>,
 C<pad_add_name_pvs>, C<pad_add_name_sv>
 X<pad_add_name_pv>X<pad_add_name_pvn>X<pad_add_name_pvs>X<pad_add_name_sv>,
-C<pad_alloc> X<pad_alloc>, C<pad_findmy_pv>, C<pad_findmy_pvn>,
+C<pad_alloc> X<pad_alloc>, C<pad_fetchmy_pvn>, C<pad_fetchmy_sv>
+X<pad_fetchmy_pvn>X<pad_fetchmy_sv>, C<pad_findmy_pv>, C<pad_findmy_pvn>,
 C<pad_findmy_pvs>, C<pad_findmy_sv>
 X<pad_findmy_pv>X<pad_findmy_pvn>X<pad_findmy_pvs>X<pad_findmy_sv>,
 C<pad_tidy> X<pad_tidy>, C<padnamelist_fetch> X<padnamelist_fetch>,
@@ -7221,17 +7224,21 @@ X<MAGIC>X<MGv2f_ALWAYS_WEAK_AUXSV>X<MGv2f_WITH_KEYIV>X<MGv2f_WITH_KEYSV>
 
 =item Magic v2
 
-C<magicv2_localize_copy> X<magicv2_localize_copy>, C<mg_clear> X<mg_clear>,
-C<mg_copy> X<mg_copy>, C<mg_find> X<mg_find>, C<mg_findext> X<mg_findext>,
-C<mg_free> X<mg_free>, C<mg_free_type> X<mg_free_type>, C<mg_freeext>
-X<mg_freeext>, C<mg_get> X<mg_get>, C<mg_magical> X<mg_magical>, C<mg_set>
-X<mg_set>, C<MgARRAYVARFUNCS> X<MgARRAYVARFUNCS>, C<MgAUXSV> X<MgAUXSV>,
-C<MgAUXSV_set> X<MgAUXSV_set>, C<MGf_COPY>, C<MGf_DUP>, C<MGf_LOCAL>,
-C<MgFLAGS> X<MgFLAGS>, C<MgFUNCS> X<MgFUNCS>, C<MgHASHVARFUNCS>
-X<MgHASHVARFUNCS>, C<MgHasKEYIV>, C<MgHasKEYSV> X<MgHasKEYIV>X<MgHasKEYSV>,
-C<MgIsV2> X<MgIsV2>, C<MgKEYIV> X<MgKEYIV>, C<MgKEYIV_set> X<MgKEYIV_set>,
-C<MgKEYSV> X<MgKEYSV>, C<MgKEYSV_set> X<MgKEYSV_set>, C<MgPRIV> X<MgPRIV>,
-C<MgPTR>, C<MgPTRLEN> X<MgPTR>X<MgPTRLEN>, C<MgPTR_set>, C<MgPTRLEN_set>
+C<magicv2_copy> X<magicv2_copy>, C<magicv2_copy_inc_auxsv>
+X<magicv2_copy_inc_auxsv>, C<magicv2_copy_weak_auxsv>
+X<magicv2_copy_weak_auxsv>, C<mg_clear> X<mg_clear>, C<mg_copy> X<mg_copy>,
+C<mg_find> X<mg_find>, C<mg_findext> X<mg_findext>, C<mg_free> X<mg_free>,
+C<mg_free_type> X<mg_free_type>, C<mg_freeext> X<mg_freeext>, C<mg_get>
+X<mg_get>, C<mg_magical> X<mg_magical>, C<mg_set> X<mg_set>,
+C<MgARRAYVARFUNCS> X<MgARRAYVARFUNCS>, C<MgAUXSV> X<MgAUXSV>,
+C<MgAUXSV_set> X<MgAUXSV_set>, C<MgAUXSV_set_inc> X<MgAUXSV_set_inc>,
+C<MgAUXSV_set_weak> X<MgAUXSV_set_weak>, C<MGf_COPY>, C<MGf_DUP>,
+C<MGf_LOCAL>, C<MgFLAGS> X<MgFLAGS>, C<MgFUNCS> X<MgFUNCS>,
+C<MgHASHVARFUNCS> X<MgHASHVARFUNCS>, C<MgHasKEYIV>, C<MgHasKEYSV>
+X<MgHasKEYIV>X<MgHasKEYSV>, C<MgIsV2> X<MgIsV2>, C<MgKEYIV> X<MgKEYIV>,
+C<MgKEYIV_set> X<MgKEYIV_set>, C<MgKEYSV> X<MgKEYSV>, C<MgKEYSV_set>
+X<MgKEYSV_set>, C<MgPRIV> X<MgPRIV>, C<MgPTR>, C<MgPTRLEN>
+X<MgPTR>X<MgPTRLEN>, C<MgPTR_set>, C<MgPTRLEN_set>
 X<MgPTR_set>X<MgPTRLEN_set>, C<MgPTRLEN*>, C<MgSCALARVALUEFUNCS>
 X<MgSCALARVALUEFUNCS>, C<MgSCALARVARFUNCS> X<MgSCALARVARFUNCS>,
 C<MgUSERSTRUCT> X<MgUSERSTRUCT>, C<MGVTBL>, C<MgWEAK_AUXSV>
@@ -7351,31 +7358,31 @@ C<newFOROP> X<newFOROP>, C<newGIVENOP> X<newGIVENOP>, C<newGVOP>
 X<newGVOP>, C<newGVREF> X<newGVREF>, C<newHVREF> X<newHVREF>, C<newLISTOP>
 X<newLISTOP>, C<newLISTOPn> X<newLISTOPn>, C<newLOGOP> X<newLOGOP>,
 C<newLOOPEX> X<newLOOPEX>, C<newLOOPOP> X<newLOOPOP>, C<newMETHOP>
-X<newMETHOP>, C<newMETHOP_named> X<newMETHOP_named>, C<newNULLLIST>
-X<newNULLLIST>, C<newOP> X<newOP>, C<newPADOP> X<newPADOP>, C<newPMOP>
-X<newPMOP>, C<newPVOP> X<newPVOP>, C<newRANGE> X<newRANGE>, C<newSLICEOP>
-X<newSLICEOP>, C<newSTATEOP> X<newSTATEOP>, C<newSUB> X<newSUB>, C<newSVOP>
-X<newSVOP>, C<newSVREF> X<newSVREF>, C<newTRYCATCHOP> X<newTRYCATCHOP>,
-C<newUNOP> X<newUNOP>, C<newUNOP_AUX> X<newUNOP_AUX>, C<newWHENOP>
-X<newWHENOP>, C<newWHILEOP> X<newWHILEOP>, C<newXS> X<newXS>, C<OA_BASEOP>,
-C<OA_BINOP>, C<OA_COP>, C<OA_LISTOP>, C<OA_LOGOP>, C<OA_LOOP>, C<OA_PADOP>,
-C<OA_PMOP>, C<OA_PVOP_OR_SVOP>, C<OA_SVOP>, C<OA_UNOP>, C<OP>,
-C<op_append_elem> X<op_append_elem>, C<op_append_list> X<op_append_list>,
-C<OP_CLASS> X<OP_CLASS>, C<op_clear> X<op_clear>, C<op_contextualize>
-X<op_contextualize>, C<op_convert_list> X<op_convert_list>, C<OP_DESC>
-X<OP_DESC>, C<op_force_list> X<op_force_list>, C<op_free> X<op_free>,
-C<op_linklist> X<op_linklist>, C<op_lvalue> X<op_lvalue>, C<OP_NAME>
-X<OP_NAME>, C<op_null> X<op_null>, C<op_parent> X<op_parent>,
-C<op_prepend_elem> X<op_prepend_elem>, C<op_scope> X<op_scope>,
-C<OP_SIBLING> X<OP_SIBLING>, C<op_sibling_splice> X<op_sibling_splice>,
-C<OP_TYPE_IS> X<OP_TYPE_IS>, C<OP_TYPE_IS_OR_WAS> X<OP_TYPE_IS_OR_WAS>,
-C<op_wrap_finally> X<op_wrap_finally>, C<opcode> X<opcode>,
-C<OpHAS_SIBLING> X<OpHAS_SIBLING>, C<OpLASTSIB_set> X<OpLASTSIB_set>,
-C<OpMAYBESIB_set> X<OpMAYBESIB_set>, C<OpMORESIB_set> X<OpMORESIB_set>,
-C<OpSIBLING> X<OpSIBLING>, C<optimize_optree> X<optimize_optree>,
-C<peep_t>, C<Perl_cpeep_t>, C<PL_opfreehook> X<PL_opfreehook>, C<PL_peepp>
-X<PL_peepp>, C<PL_rpeepp> X<PL_rpeepp>, C<PMOP>, C<rv2cv_op_cv>
-X<rv2cv_op_cv>, C<UNOP>, C<XOP>
+X<newMETHOP>, C<newMETHOP_named> X<newMETHOP_named>, C<newMYSUB>
+X<newMYSUB>, C<newNULLLIST> X<newNULLLIST>, C<newOP> X<newOP>, C<newPADOP>
+X<newPADOP>, C<newPMOP> X<newPMOP>, C<newPVOP> X<newPVOP>, C<newRANGE>
+X<newRANGE>, C<newSLICEOP> X<newSLICEOP>, C<newSTATEOP> X<newSTATEOP>,
+C<newSUB> X<newSUB>, C<newSVOP> X<newSVOP>, C<newSVREF> X<newSVREF>,
+C<newTRYCATCHOP> X<newTRYCATCHOP>, C<newUNOP> X<newUNOP>, C<newUNOP_AUX>
+X<newUNOP_AUX>, C<newWHENOP> X<newWHENOP>, C<newWHILEOP> X<newWHILEOP>,
+C<newXS> X<newXS>, C<OA_BASEOP>, C<OA_BINOP>, C<OA_COP>, C<OA_LISTOP>,
+C<OA_LOGOP>, C<OA_LOOP>, C<OA_PADOP>, C<OA_PMOP>, C<OA_PVOP_OR_SVOP>,
+C<OA_SVOP>, C<OA_UNOP>, C<OP>, C<op_append_elem> X<op_append_elem>,
+C<op_append_list> X<op_append_list>, C<OP_CLASS> X<OP_CLASS>, C<op_clear>
+X<op_clear>, C<op_contextualize> X<op_contextualize>, C<op_convert_list>
+X<op_convert_list>, C<OP_DESC> X<OP_DESC>, C<op_force_list>
+X<op_force_list>, C<op_free> X<op_free>, C<op_linklist> X<op_linklist>,
+C<op_lvalue> X<op_lvalue>, C<OP_NAME> X<OP_NAME>, C<op_null> X<op_null>,
+C<op_parent> X<op_parent>, C<op_prepend_elem> X<op_prepend_elem>,
+C<op_scope> X<op_scope>, C<OP_SIBLING> X<OP_SIBLING>, C<op_sibling_splice>
+X<op_sibling_splice>, C<OP_TYPE_IS> X<OP_TYPE_IS>, C<OP_TYPE_IS_OR_WAS>
+X<OP_TYPE_IS_OR_WAS>, C<op_wrap_finally> X<op_wrap_finally>, C<opcode>
+X<opcode>, C<OpHAS_SIBLING> X<OpHAS_SIBLING>, C<OpLASTSIB_set>
+X<OpLASTSIB_set>, C<OpMAYBESIB_set> X<OpMAYBESIB_set>, C<OpMORESIB_set>
+X<OpMORESIB_set>, C<OpSIBLING> X<OpSIBLING>, C<optimize_optree>
+X<optimize_optree>, C<peep_t>, C<Perl_cpeep_t>, C<PL_opfreehook>
+X<PL_opfreehook>, C<PL_peepp> X<PL_peepp>, C<PL_rpeepp> X<PL_rpeepp>,
+C<PMOP>, C<rv2cv_op_cv> X<rv2cv_op_cv>, C<UNOP>, C<XOP>
 
 =item Pack and Unpack
 
@@ -7573,6 +7580,7 @@ C<HAS_SOCKETPAIR> X<HAS_SOCKETPAIR>, C<HAS_SOCKS5_INIT> X<HAS_SOCKS5_INIT>,
 C<I_SOCKS> X<I_SOCKS>, C<I_SYS_SOCKIO> X<I_SYS_SOCKIO>
 
 =item Source Filters
+X<filter_add>X<filter_read>
 
 C<apply_builtin_cv_attributes> X<apply_builtin_cv_attributes>,
 C<filter_add>, C<filter_del> X<filter_del>, C<filter_read>, C<scan_vstring>
@@ -7737,7 +7745,8 @@ C<sv_magicv2_find_or_add> X<sv_magicv2_find_or_add>,
 C<sv_magicv2_findnext_by_auxsv> X<sv_magicv2_findnext_by_auxsv>,
 C<sv_magicv2_findnext_by_funcs> X<sv_magicv2_findnext_by_funcs>,
 C<sv_magicv2_remove> X<sv_magicv2_remove>, C<sv_magicv2_remove_by_funcs>
-X<sv_magicv2_remove_by_funcs>, C<sv_mortalcopy>, C<sv_mortalcopy_flags>
+X<sv_magicv2_remove_by_funcs>, C<sv_magicv2_remove_by_shape>
+X<sv_magicv2_remove_by_shape>, C<sv_mortalcopy>, C<sv_mortalcopy_flags>
 X<sv_mortalcopy>X<sv_mortalcopy_flags>, C<sv_newmortal> X<sv_newmortal>,
 C<sv_numcmp>, C<sv_numcmp_flags> X<sv_numcmp>X<sv_numcmp_flags>,
 C<sv_numeq>, C<sv_numeq_flags>, C<sv_numne>, C<sv_numne_flags>,
@@ -8181,12 +8190,14 @@ X<XS_EXTERNAL>, C<XS_INTERNAL> X<XS_INTERNAL>, C<XSPROTO> X<XSPROTO>
 =back
 
 =head2 perlintern - autogenerated documentation of purely B<internal>
-Perl functions
+Perl functions, macros, I<etc>.
 
 =over 4
 
 =item DESCRIPTION
 X<internal Perl functions> X<interpreter functions>
+
+Core only, Core and ext/re only, Core and extensions only, Everywhere
 
 =item AV Handling
 
@@ -8216,9 +8227,43 @@ C<Null> X<Null>
 
 =item Character case changing
 
+C<is_FOLDS_TO_MULTI_utf8> X<is_FOLDS_TO_MULTI_utf8>,
+C<is_MULTI_CHAR_FOLD_latin1_safe> X<is_MULTI_CHAR_FOLD_latin1_safe>,
+C<is_MULTI_CHAR_FOLD_START_utf8> X<is_MULTI_CHAR_FOLD_START_utf8>,
+C<is_MULTI_CHAR_FOLD_utf8_safe> X<is_MULTI_CHAR_FOLD_utf8_safe>,
+C<is_PROBLEMATIC_LOCALE_FOLD_cp> X<is_PROBLEMATIC_LOCALE_FOLD_cp>,
+C<is_PROBLEMATIC_LOCALE_FOLD_utf8> X<is_PROBLEMATIC_LOCALE_FOLD_utf8>,
+C<is_PROBLEMATIC_LOCALE_FOLDEDS_START_cp>
+X<is_PROBLEMATIC_LOCALE_FOLDEDS_START_cp>,
+C<is_PROBLEMATIC_LOCALE_FOLDEDS_START_utf8>
+X<is_PROBLEMATIC_LOCALE_FOLDEDS_START_utf8>,
+C<is_THREE_CHAR_FOLD_HEAD_latin1_safe>
+X<is_THREE_CHAR_FOLD_HEAD_latin1_safe>,
+C<is_THREE_CHAR_FOLD_HEAD_utf8_safe> X<is_THREE_CHAR_FOLD_HEAD_utf8_safe>,
+C<is_THREE_CHAR_FOLD_latin1_safe> X<is_THREE_CHAR_FOLD_latin1_safe>,
+C<is_THREE_CHAR_FOLD_utf8_safe> X<is_THREE_CHAR_FOLD_utf8_safe>,
+C<what_MULTI_CHAR_FOLD_latin1_safe> X<what_MULTI_CHAR_FOLD_latin1_safe>,
+C<what_MULTI_CHAR_FOLD_utf8_safe> X<what_MULTI_CHAR_FOLD_utf8_safe>
+
 =item Character classification
 
-C<CC_mask_> X<CC_mask_>, C<Perl_isCC_by_bit> X<Perl_isCC_by_bit>
+C<CC_mask_> X<CC_mask_>, C<is_HANGUL_ED_utf8_safe>
+X<is_HANGUL_ED_utf8_safe>, C<is_HORIZWS_cp_high> X<is_HORIZWS_cp_high>,
+C<is_HORIZWS_high> X<is_HORIZWS_high>, C<is_LARGER_NON_CHARS_utf8>
+X<is_LARGER_NON_CHARS_utf8>, C<is_LNBREAK_latin1_safe>
+X<is_LNBREAK_latin1_safe>, C<is_LNBREAK_safe> X<is_LNBREAK_safe>,
+C<is_LNBREAK_utf8_safe> X<is_LNBREAK_utf8_safe>, C<is_NONCHAR_utf8_safe>
+X<is_NONCHAR_utf8_safe>, C<is_PATWS_safe> X<is_PATWS_safe>,
+C<is_QUOTEMETA_high> X<is_QUOTEMETA_high>, C<is_SHORTER_NON_CHARS_utf8>
+X<is_SHORTER_NON_CHARS_utf8>, C<is_SPACE_utf8_safe_backwards>
+X<is_SPACE_utf8_safe_backwards>, C<is_SURROGATE_utf8> X<is_SURROGATE_utf8>,
+C<is_SURROGATE_utf8_safe> X<is_SURROGATE_utf8_safe>, C<is_VERTWS_cp_high>
+X<is_VERTWS_cp_high>, C<is_VERTWS_high> X<is_VERTWS_high>,
+C<is_WORD_BUT_NONCONT_safe> X<is_WORD_BUT_NONCONT_safe>,
+C<is_XDIGIT_cp_high> X<is_XDIGIT_cp_high>, C<is_XDIGIT_high>
+X<is_XDIGIT_high>, C<is_XPERLSPACE_cp_high> X<is_XPERLSPACE_cp_high>,
+C<is_XPERLSPACE_high> X<is_XPERLSPACE_high>, C<Perl_isCC_by_bit>
+X<Perl_isCC_by_bit>
 
 =item Compiler and Preprocessor information
 
@@ -8403,12 +8448,16 @@ X<S_perl_siphash_seed_state>
 =item Optrees
 X<OP_LVALUE_NO_CROAK>
 
+C<build_function_invocation> X<build_function_invocation>,
+C<build_method_invocation> X<build_method_invocation>, C<target>,
+C<method>, C<arguments>, C<build_method_invocation_arguments>
+X<build_method_invocation_arguments>, C<target>, C<arguments>,
 C<new_block_statement> X<new_block_statement>, C<newATTRSUB_x>
-X<newATTRSUB_x>, C<newFORM> X<newFORM>, C<newMYSUB> X<newMYSUB>,
-C<newXS_len_flags> X<newXS_len_flags>, C<op_lvalue_flags>
-X<op_lvalue_flags>, OP_LVALUE_NO_CROAK, C<op_refcnt_lock>
-X<op_refcnt_lock>, C<op_refcnt_unlock> X<op_refcnt_unlock>, C<package>
-X<package>, C<traverse_op_tree> X<traverse_op_tree>
+X<newATTRSUB_x>, C<newFORM> X<newFORM>, C<newXS_len_flags>
+X<newXS_len_flags>, C<op_lvalue_flags> X<op_lvalue_flags>,
+OP_LVALUE_NO_CROAK, C<op_refcnt_lock> X<op_refcnt_lock>,
+C<op_refcnt_unlock> X<op_refcnt_unlock>, C<package> X<package>,
+C<traverse_op_tree> X<traverse_op_tree>
 
 =item Pack and Unpack
 
@@ -8704,8 +8753,8 @@ Test files not found under F<t/>
 
 =item Special C<make test> targets
 
-test_porting, minitest, test.valgrind check.valgrind, test_harness,
-test-notty test_notty
+test_porting, test_reonly test-reonly, minitest, test.valgrind
+check.valgrind, test_harness, test-notty test_notty
 
 =item Parallel tests
 
@@ -9255,6 +9304,8 @@ XXX
 
 =item Testing
 
+t/TEST and t/harness now run generated tests
+
 =item Platform Support
 
 =over 4
@@ -9269,13 +9320,17 @@ XXX-some-platform
 
 =item Platform-Specific Notes
 
-XXX-some-platform
+XXX-some-platform, macOS (Darwin)
 
 =back
 
 =item Internal Changes
 
+save_scalar_flags
+
 =item Selected Bug Fixes
+
+Properly initialize ${^UTF8CACHE} in new threads
 
 =item Known Problems
 
@@ -9293,7 +9348,7 @@ XXX-some-platform
 
 =back
 
-=head2 perl5454delta, [ this is a template for a new perldelta file. Any
+=head2 perl5455delta, [ this is a template for a new perldelta file. Any
 text flagged as XXX needs
 to be processed before release. ]
 
@@ -9365,6 +9420,8 @@ XXX
 
 =item Testing
 
+t/TEST and t/harness now run generated tests
+
 =item Platform Support
 
 =over 4
@@ -9379,19 +9436,83 @@ XXX-some-platform
 
 =item Platform-Specific Notes
 
-XXX-some-platform
+XXX-some-platform, macOS (Darwin)
 
 =back
 
 =item Internal Changes
 
+save_scalar_flags
+
 =item Selected Bug Fixes
+
+Properly initialize ${^UTF8CACHE} in new threads
 
 =item Known Problems
 
 =item Errata From Previous Releases
 
 =item Obituary
+
+=item Acknowledgements
+
+=item Reporting Bugs
+
+=item Give Thanks
+
+=item SEE ALSO
+
+=back
+
+=head2 perl5454delta - what is new for perl v5.45.4
+
+=over 4
+
+=item DESCRIPTION
+
+=item Security
+
+=over 4
+
+=item CVE-2026-107401 Regex engine incorrectly skipped UTF8 characters
+
+=back
+
+=item Performance Enhancements
+
+=item Modules and Pragmata
+
+=over 4
+
+=item Updated Modules and Pragmata
+
+=back
+
+=item Diagnostics
+
+=over 4
+
+=item New Diagnostics
+
+L<Unaligned "next" pointer in the free chain 0x% at 0x%|perldiag/"Unaligned
+"next" pointer in the free chain 0x% at 0x%">, L<Unaligned pointer in the
+free chain 0x%|perldiag/"Unaligned pointer in the free chain 0x%">
+
+=back
+
+=item Platform Support
+
+=over 4
+
+=item Platform-Specific Notes
+
+VMS
+
+=back
+
+=item Internal Changes
+
+=item Selected Bug Fixes
 
 =item Acknowledgements
 
@@ -20270,7 +20391,13 @@ L<Class::C3>
 
 =item DESCRIPTION
 
-=item CC0 1.0 Universal
+=item COPYRIGHT AND LICENSE
+
+=over 4
+
+=item Original license: CC0 1.0 Universal
+
+=back
 
 =back
 
@@ -31150,10 +31277,12 @@ A filename, A filehandle, A scalar reference
 
 C<< AutoClose => 0|1 >>, C<< MultiStream => 0|1 >>, C<< Prime => $string
 >>, C<< Transparent => 0|1 >>, C<< BlockSize => $num >>, C<< InputLength =>
-$size >>, C<< Append => 0|1 >>, C<< Strict => 0|1 >>, C<< ParseExtra => 0|1
->> If the gzip FEXTRA header field is present and this option is set, it
-will force the module to check that it conforms to the sub-field structure
-as defined in RFC 1952
+$size >>, C<< Append => 0|1 >>, C<< NewStreamHook => \&hook >> The C<hook>
+sub will only be invoked when the C<MultiStream> option is enabled and the
+code has detected a new gzip header, C<< Strict => 0|1 >>, C<< ParseExtra
+=> 0|1 >> If the gzip FEXTRA header field is present and this option is
+set, it will force the module to check that it conforms to the sub-field
+structure as defined in RFC 1952
 
 =back
 
@@ -33433,11 +33562,13 @@ C<datasend($data)>, C<dataend()>
 C<debug_print($dir, $text)>, C<debug_text($dir, $text)>, C<command($cmd[,
 $args, ... ])>, C<unsupported()>, C<response()>, C<parse_response($text)>,
 C<getline()>, C<ungetline($text)>, C<rawdatasend($data)>,
-C<read_until_dot()>, C<tied_fh()>
+C<read_until_dot()>, C<tied_fh()>, C<max_partial_bytes()>,
+C<max_resp_bytes()>, C<max_dotread_bytes()>
 
 =item Pseudo Responses
 
-Initial value, Connection closed, Timeout
+Initial value, Connection closed, Timeout, Response line too long, Response
+too large, Dot-read body too large
 
 =back
 
@@ -45811,9 +45942,15 @@ Chad Granum E<lt>exodist@cpan.orgE<gt>
 
 =item MAINTAINER
 
-Chad Granum E<lt>exodist@cpan.orgE<gt>
+Chad Granum E<lt>exodist7@gmail.comE<gt>
 
-=item CC0 1.0 Universal
+=item COPYRIGHT AND LICENSE
+
+=over 4
+
+=item Original license: CC0 1.0 Universal
+
+=back
 
 =back
 
