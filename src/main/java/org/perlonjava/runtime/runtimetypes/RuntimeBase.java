@@ -901,6 +901,35 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     }
 
     public void releaseActiveOwner(RuntimeScalar scalar) {
+        retireCountedOwnerIdentity(scalar, "RuntimeBase.releaseActiveOwner");
+    }
+
+    /**
+     * Retire a stale scalar owner identity after a nested-call guard preserved
+     * the referent at selective count zero. The count was already consumed by
+     * the guard, so this transition clears only the scalar's mirrored ownership
+     * flag, trace entry, and exact Perl owner slot.
+     */
+    final void retireZeroCountOwnerIdentity(RuntimeScalar scalar, String releaseSite) {
+        Objects.requireNonNull(scalar, "scalar");
+        Objects.requireNonNull(releaseSite, "releaseSite");
+        if (refCount != 0) {
+            throw new IllegalStateException(
+                    "zero-count owner identity retirement requires refCount=0 at " + releaseSite);
+        }
+        retireCountedOwnerIdentity(scalar, releaseSite);
+    }
+
+    private void retireCountedOwnerIdentity(RuntimeScalar scalar, String releaseSite) {
+        PerlOwnerSlot slot = scalar.countedOwnerSlot();
+        if (!scalar.refCountOwned || slot == null || !slot.isActive()
+                || slot.referent() != this || slot.countedScalarOwner() != scalar) {
+            throw new IllegalStateException(
+                    "counted owner identity retirement requires its active PerlOwnerSlot at "
+                            + releaseSite);
+        }
+        scalar.refCountOwned = false;
+        releaseOwner(scalar, releaseSite);
         scalar.releaseCountedOwner(this);
     }
 
