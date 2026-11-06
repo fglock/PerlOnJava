@@ -54,7 +54,8 @@ public class AutovivificationArray extends ArrayList<RuntimeScalar> {
             } else {
                 referent.value = array;
                 referent.type = RuntimeScalarType.ARRAYREFERENCE;
-                RuntimeScalar.incrementRefCountForContainerStore(referent);
+                RuntimeScalar.incrementRefCountForContainerStore(
+                        referent, referent.countedOwnerKind());
             }
         }
     }

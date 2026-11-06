@@ -272,7 +272,8 @@ public class WeakRefRegistry {
             // Restore the scalar edge through the same count-and-slot
             // acquisition used by ordinary container stores. The helper also
             // leaves formerly untracked referents uncounted.
-            RuntimeScalar.incrementRefCountForContainerStore(ref);
+            RuntimeScalar.incrementRefCountForContainerStore(
+                    ref, ref.countedOwnerKind());
             if (base.refCount != Integer.MIN_VALUE) {
                 RuntimeScalar.retainUnstashedIoForDurableSlot(ref);
             }

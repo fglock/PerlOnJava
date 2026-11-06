@@ -1084,10 +1084,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 || !(value instanceof RuntimeCode code)) return;
         MortalList.setActive(true);
         prepareCodeSlotValue(this);
-        incrementRefCountForContainerStore(this);
-        if (refCountOwned) {
-            countedOwnerSlot.reclassifyCountedIdentity(PerlOwnerSlot.Kind.CODE_SLOT);
-        }
+        incrementRefCountForContainerStore(this, PerlOwnerSlot.Kind.CODE_SLOT);
     }
     private boolean mortalReturnSnapshot;
     private boolean mortalReturnValueOwner;
@@ -1699,7 +1696,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return false;
     }
 
-    PerlOwnerSlot.Kind countedOwnerKind() {
+    public PerlOwnerSlot.Kind countedOwnerKind() {
         return codeSlotBindings != 0 ? PerlOwnerSlot.Kind.CODE_SLOT
                 : containerOwner instanceof RuntimeHash ? PerlOwnerSlot.Kind.HASH_ELEMENT
                 : containerOwner instanceof RuntimeArray array
@@ -1713,9 +1710,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         copy.mortalReturnSnapshot = true;
         copy.copiedFromArgumentFrame = null;
         copy.captureMortalReturnSourceOwner(source);
-        incrementRefCountForContainerStore(copy);
+        incrementRefCountForContainerStore(copy, PerlOwnerSlot.Kind.RETURN_VALUE);
         if (copy.refCountOwned) {
-            copy.countedOwnerSlot.reclassifyCountedIdentity(PerlOwnerSlot.Kind.RETURN_VALUE);
             MortalList.deferDecrementIfTracked(copy);
         } else {
             copy.mortalReturnValueOwner = true;
@@ -3104,10 +3100,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             // count can belong to a different scalar cell, so decide whether
             // this cell needs an owner from its storage identity. Argument
             // cleanup can then retire this edge without a graph walk.
-            incrementRefCountForContainerStore(this);
-            if (countedOwnerSlot != null && countedOwnerSlot.isActive()) {
-                countedOwnerSlot.reclassifyCountedIdentity(PerlOwnerSlot.Kind.ARGUMENT_VALUE);
-            }
+            incrementRefCountForContainerStore(this, PerlOwnerSlot.Kind.ARGUMENT_VALUE);
             arr.markOwnedAliasElement(this);
         }
         return arr;

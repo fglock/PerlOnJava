@@ -379,7 +379,7 @@ public class MyVarCleanupStack {
                     && !scalar.refCountOwned
                     && seen.put(scalar, Boolean.TRUE) == null) {
                 RuntimeScalar.acquireCountedOwnerForCurrentValue(
-                        scalar, referent, null,
+                        scalar, referent, scalar.countedOwnerKind(),
                         "MyVarCleanupStack.retainBlessedGlobAliases (lexical alias)");
             }
         }
@@ -392,7 +392,7 @@ public class MyVarCleanupStack {
                     && !scalar.refCountOwned
                     && seen.put(scalar, Boolean.TRUE) == null) {
                 RuntimeScalar.acquireCountedOwnerForCurrentValue(
-                        scalar, referent, null,
+                        scalar, referent, scalar.countedOwnerKind(),
                         "MyVarCleanupStack.retainBlessedGlobAliases (package alias)");
             }
         }

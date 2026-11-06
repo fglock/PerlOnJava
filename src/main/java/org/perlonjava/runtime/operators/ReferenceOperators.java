@@ -209,7 +209,7 @@ public class ReferenceOperators {
                     // tracking wasn't active at assignment time). Count it as 1.
                     referent.refCount = 0;
                     RuntimeScalar.acquireCountedOwnerForCurrentValue(
-                            runtimeScalar, referent, null,
+                            runtimeScalar, referent, runtimeScalar.countedOwnerKind(),
                             "ReferenceOperators.bless rebless from untracked");
                 } else {
                     // Establish only the owners that already exist. The
@@ -232,7 +232,7 @@ public class ReferenceOperators {
                     referent.refCount = 0;
                     if (existingScalarOwner) {
                         RuntimeScalar.acquireCountedOwnerForCurrentValue(
-                                runtimeScalar, referent, null,
+                                runtimeScalar, referent, runtimeScalar.countedOwnerKind(),
                                 "ReferenceOperators.bless first bless of existing scalar ref");
                     }
                 }
