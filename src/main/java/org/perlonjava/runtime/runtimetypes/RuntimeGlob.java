@@ -494,7 +494,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             throw new IllegalArgumentException("A named CODE reference is required");
         }
         RuntimeScalar oldCodeRef = GlobalVariable.globalCodeRefs.get(globName);
-        if (oldCodeRef == sourceCodeRef) {
+        if (oldCodeRef == sourceCodeRef && !WeakRefRegistry.isweak(sourceCodeRef)) {
             return;
         }
         if (oldCodeRef != null && oldCodeRef.value instanceof RuntimeCode oldCode
@@ -502,7 +502,8 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             oldCode.stashRefCount--;
         }
         GlobalVariable.globalCodeRefs.put(globName, sourceCodeRef);
-        GlobalVariable.replacePinnedCodeRef(globName, sourceCodeRef);
+        GlobalVariable.replacePinnedCodeRef(
+                globName, GlobalVariable.globalCodeRefs.get(globName));
         newCode.hadStashRef = true;
         newCode.stashRefCount++;
         GlobalVariable.isSubs.put(globName, true);
