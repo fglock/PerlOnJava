@@ -41,6 +41,51 @@ public class ErrorMessageUtil {
     public ErrorMessageUtil(String fileName, List<LexerToken> tokens, String rawSourceText) {
         this(fileName, tokens);
         this.rawSourceText = rawSourceText;
+        // Skip O(n_tokens) #line directive scan when the source contains no #line directive at all.
+        if (rawSourceText != null && !sourceCouldHaveLineDirectives(rawSourceText)) {
+            sourceDirectiveIndex = EMPTY_SOURCE_DIRECTIVE_INDEX;
+        }
+    }
+
+    private static final SourceDirectiveIndex EMPTY_SOURCE_DIRECTIVE_INDEX =
+            new SourceDirectiveIndex(new int[0], new int[0], new long[0], new String[0]);
+
+    /**
+     * Fast O(n_chars) pre-check: returns true only when the raw source could contain
+     * a {@code #line} directive (a {@code #} at start-of-line, optional spaces/tabs,
+     * then the word {@code line}).  A false return guarantees no directive exists.
+     */
+    private static boolean sourceCouldHaveLineDirectives(String source) {
+        int len = source.length();
+        int i = 0;
+        boolean atBol = true;
+        while (i < len) {
+            char c = source.charAt(i);
+            if (c == '\n') {
+                atBol = true;
+                i++;
+            } else if (atBol && c == '#') {
+                int j = i + 1;
+                while (j < len && (source.charAt(j) == ' ' || source.charAt(j) == '\t')) j++;
+                if (j + 4 <= len
+                        && source.charAt(j)     == 'l'
+                        && source.charAt(j + 1) == 'i'
+                        && source.charAt(j + 2) == 'n'
+                        && source.charAt(j + 3) == 'e'
+                        && (j + 4 >= len || !Character.isLetterOrDigit(source.charAt(j + 4))
+                                && source.charAt(j + 4) != '_')) {
+                    return true;
+                }
+                atBol = false;
+                i++;
+            } else if (c != ' ' && c != '\t') {
+                atBol = false;
+                i++;
+            } else {
+                i++;
+            }
+        }
+        return false;
     }
 
     /** Returns the raw source text, or null if not available. */
