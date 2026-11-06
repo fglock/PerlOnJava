@@ -269,15 +269,22 @@ public class EmitSubroutine {
         // Carry the loop-body set so it can reject an illegal entry before the
         // loop's iterator/control state has been initialized.
         if (ctx.javaClassInfo != null) {
-            if (node.useTryCatch) {
+            if (node.useTryCatch && ctx.javaClassInfo.gotoLabelsInsideLoop != null
+                    && !ctx.javaClassInfo.gotoLabelsInsideLoop.isEmpty()) {
+                newJavaClassInfo.ensureGotoCollections();
                 newJavaClassInfo.gotoLabelsInsideLoop.addAll(ctx.javaClassInfo.gotoLabelsInsideLoop);
             }
-            newJavaClassInfo.gotoLabelsInsideDefer.addAll(ctx.javaClassInfo.gotoLabelsInsideDefer);
+            if (ctx.javaClassInfo.gotoLabelsInsideDefer != null
+                    && !ctx.javaClassInfo.gotoLabelsInsideDefer.isEmpty()) {
+                newJavaClassInfo.ensureGotoCollections();
+                newJavaClassInfo.gotoLabelsInsideDefer.addAll(ctx.javaClassInfo.gotoLabelsInsideDefer);
+            }
         }
         // A subroutine body is emitted into a separate JavaClassInfo from the
         // containing file/block. Collect its defer destinations here so a
         // goto compiled before the defer registration can still diagnose an
         // attempted entry rather than degrading to a missing-label error.
+        newJavaClassInfo.ensureGotoCollections();
         EmitBlock.collectDeferLabels(node.block, newJavaClassInfo.gotoLabelsInsideDefer);
         if (node.useTryCatch) {
             // The eval body is compiled into a fresh method before its own
@@ -1404,6 +1411,7 @@ public class EmitSubroutine {
                 && emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot >= 0) {
 
             // Get or create a block-level dispatcher for the current loop state
+            emitterVisitor.ctx.javaClassInfo.ensureGotoCollections();
             String loopStateSignature = emitterVisitor.ctx.javaClassInfo.getLoopStateSignature();
             Label blockDispatcher = emitterVisitor.ctx.javaClassInfo.blockDispatcherLabels.get(loopStateSignature);
             boolean isFirstUse = (blockDispatcher == null);
@@ -1705,6 +1713,7 @@ public class EmitSubroutine {
             return;
         }
 
+        emitterVisitor.ctx.javaClassInfo.ensureGotoCollections();
         String loopStateSignature = emitterVisitor.ctx.javaClassInfo.getLoopStateSignature();
         Label blockDispatcher =
                 emitterVisitor.ctx.javaClassInfo.blockDispatcherLabels.get(loopStateSignature);

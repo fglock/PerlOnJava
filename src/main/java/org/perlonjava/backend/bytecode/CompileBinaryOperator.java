@@ -36,104 +36,8 @@ public class CompileBinaryOperator {
         // Track token index for error reporting
         bytecodeCompiler.currentTokenIndex = node.getIndex();
 
-        if (node.operator.equals("->") && node.left instanceof OperatorNode sigil
-                && sigil.operator.equals("%")) {
-            bytecodeCompiler.throwCompilerException("Can't use a hash as a reference");
-            return;
-        }
-
-        // Perl evaluates chained comparisons left-to-right, evaluating each
-        // operand once and stopping as soon as a comparison is false.  The JVM
-        // backend has a dedicated emitter for this shape; keep the bytecode
-        // interpreter backend equivalent instead of compiling the nested AST as
-        // ordinary boolean comparisons.
-        if (isChainedComparison(node)) {
-            compileChainedComparison(bytecodeCompiler, node);
-            return;
-        }
-
-        // Handle print/say early (special handling for filehandle)
-        if (node.operator.equals("print") || node.operator.equals("say")) {
-            // print/say FILEHANDLE LIST
-            // left = filehandle reference (\*STDERR)
-            // right = list to print
-
-            bytecodeCompiler.compileNode(node.left, -1, bytecodeCompiler.currentCallContext);
-            int filehandleReg = bytecodeCompiler.lastResultReg;
-
-            // Compile the content (right operand) in LIST context
-            bytecodeCompiler.compileNode(node.right, -1, RuntimeContextType.LIST);
-            int contentReg = bytecodeCompiler.lastResultReg;
-
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            if (node.operator.equals("say")) {
-                bytecodeCompiler.emit(Opcodes.SAY);
-                bytecodeCompiler.emitReg(contentReg);
-                bytecodeCompiler.emitReg(filehandleReg);
-                // SAY's existing opcode does not expose its result yet.
-                bytecodeCompiler.emit(Opcodes.LOAD_INT);
-                bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.emitInt(1);
-            } else {
-                // PRINT can fail (including a tied handle returning false), so
-                // preserve IOOperator.print's actual result for expression use.
-                bytecodeCompiler.emitWithToken(Opcodes.PRINT_RESULT, node.getIndex());
-                bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.emitReg(contentReg);
-                bytecodeCompiler.emitReg(filehandleReg);
-            }
-
-            bytecodeCompiler.lastResultReg = rd;
-            return;
-        }
-
-        // Handle sprintf early (special handling for list of arguments)
-        if (node.operator.equals("sprintf")) {
-            // sprintf $format, @args
-            // left = format string
-            // right = ListNode of arguments
-
-            bytecodeCompiler.compileNode(node.left, -1, bytecodeCompiler.currentCallContext);
-            int formatReg = bytecodeCompiler.lastResultReg;
-
-            // Compile the arguments (right operand) into a list
-            // Use LIST context only for array/hash args so they expand;
-            // scalar expressions keep current context to avoid wrapping in RuntimeList
-            int argsListReg = bytecodeCompiler.allocateRegister();
-            if (node.right instanceof ListNode argsList) {
-                java.util.List<Integer> argRegs = new java.util.ArrayList<>();
-                for (Node arg : argsList.elements) {
-                    bytecodeCompiler.compileNode(arg, -1, RuntimeContextType.LIST);
-                    argRegs.add(bytecodeCompiler.lastResultReg);
-                }
-                bytecodeCompiler.emit(Opcodes.CREATE_LIST);
-                bytecodeCompiler.emitReg(argsListReg);
-                bytecodeCompiler.emit(argRegs.size());
-                for (int argReg : argRegs) {
-                    bytecodeCompiler.emitReg(argReg);
-                }
-            } else {
-                int rightCtx = isArrayLikeNode(node.right) ? RuntimeContextType.LIST : bytecodeCompiler.currentCallContext;
-                bytecodeCompiler.compileNode(node.right, -1, rightCtx);
-                int argReg = bytecodeCompiler.lastResultReg;
-                bytecodeCompiler.emit(Opcodes.CREATE_LIST);
-                bytecodeCompiler.emitReg(argsListReg);
-                bytecodeCompiler.emit(1);
-                bytecodeCompiler.emitReg(argReg);
-            }
-
-            // Call sprintf
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(bytecodeCompiler.isBytesEnabled() ? Opcodes.SPRINTF_BYTES : Opcodes.SPRINTF);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(formatReg);
-            bytecodeCompiler.emitReg(argsListReg);
-
-            bytecodeCompiler.lastResultReg = rd;
-            return;
-        }
-
-        // Handle I/O and misc binary operators that use MiscOpcodeHandler (filehandle + args → list)
+        // Single switch dispatches all named operators; avoids cascaded String.equals
+        // for every operator that falls through to the arithmetic/comparison path.
         switch (node.operator) {
             case "binmode", "seek", "eof", "close", "fileno", "getc", "printf", "send":
                 compileBinaryAsListOp(bytecodeCompiler, node);
@@ -144,36 +48,41 @@ public class CompileBinaryOperator {
             case "join", "join_interpolation":
                 compileJoinBinaryOp(bytecodeCompiler, node);
                 return;
+            case "print", "say":
+                compilePrintSay(bytecodeCompiler, node);
+                return;
+            case "sprintf":
+                compileSprintf(bytecodeCompiler, node);
+                return;
+            case "push", "unshift":
+                bytecodeCompiler.handlePushUnshift(node);
+                return;
+            case "+=", "-=", "*=", "/=", "%=", ".=",
+                 "&=", "|=", "^=", "&.=", "|.=", "^.=",
+                 "x=", "**=", "<<=", ">>=", "&&=", "||=", "//=", "^^=",
+                 "binary&=", "binary|=", "binary^=":
+                bytecodeCompiler.handleCompoundAssignment(node);
+                return;
+            case "=":
+                CompileAssignment.compileAssignmentOperator(bytecodeCompiler, node);
+                return;
             default:
                 break;
         }
 
-        // Handle compound assignment operators (+=, -=, *=, /=, %=, .=, &=, |=, ^=, &.=, |.=, ^.=, binary&=, binary|=, binary^=, x=, **=, <<=, >>=, &&=, ||=, ^^=)
-        if (node.operator.equals("+=") || node.operator.equals("-=") ||
-                node.operator.equals("*=") || node.operator.equals("/=") ||
-                node.operator.equals("%=") || node.operator.equals(".=") ||
-                node.operator.equals("&=") || node.operator.equals("|=") || node.operator.equals("^=") ||
-                node.operator.equals("&.=") || node.operator.equals("|.=") || node.operator.equals("^.=") ||
-                node.operator.equals("x=") || node.operator.equals("**=") ||
-                node.operator.equals("<<=") || node.operator.equals(">>=") ||
-                node.operator.equals("&&=") || node.operator.equals("||=") ||
-                node.operator.equals("//=") || node.operator.equals("^^=") ||
-                node.operator.equals("binary&=") ||
-                node.operator.equals("binary|=") ||
-                node.operator.equals("binary^=")) {
-            bytecodeCompiler.handleCompoundAssignment(node);
-            return;
-        }
-
-        // Handle assignment separately (doesn't follow standard left-right-op pattern)
-        if (node.operator.equals("=")) {
-            CompileAssignment.compileAssignmentOperator(bytecodeCompiler, node);
+        // Chained comparisons (e.g. 1 < $x < 10) require special handling.
+        if (isChainedComparison(node)) {
+            compileChainedComparison(bytecodeCompiler, node);
             return;
         }
 
 
         // Handle -> operator specially for hashref/arrayref dereference
         if (node.operator.equals("->")) {
+            if (node.left instanceof OperatorNode sigil && sigil.operator.equals("%")) {
+                bytecodeCompiler.throwCompilerException("Can't use a hash as a reference");
+                return;
+            }
             bytecodeCompiler.currentTokenIndex = node.getIndex();  // Track token for error reporting
 
             if (node.right instanceof HashLiteralNode keyNode) {
@@ -487,32 +396,6 @@ public class CompileBinaryOperator {
             // Handle general case: expr{key}
             // This covers cases like $hash{outer}{inner} where $hash{outer} is an expression
             bytecodeCompiler.handleGeneralHashAccess(node);
-            return;
-        }
-
-        // Handle push/unshift operators
-        if (node.operator.equals("push") || node.operator.equals("unshift")) {
-            bytecodeCompiler.handlePushUnshift(node);
-            return;
-        }
-
-        // Handle "join" operator specially to ensure proper context
-        // Left operand (separator) needs SCALAR context, right operand (list) needs LIST context
-        if (node.operator.equals("join") || node.operator.equals("join_interpolation")) {
-            bytecodeCompiler.compileNode(node.left, -1, RuntimeContextType.SCALAR);
-            int rs1 = bytecodeCompiler.lastResultReg;
-
-            bytecodeCompiler.compileNode(node.right, -1, RuntimeContextType.LIST);
-            int rs2 = bytecodeCompiler.lastResultReg;
-
-            int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(node.operator.equals("join_interpolation")
-                    ? Opcodes.JOIN_INTERPOLATION : Opcodes.JOIN);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitReg(rs1);
-            bytecodeCompiler.emitReg(rs2);
-
-            bytecodeCompiler.lastResultReg = rd;
             return;
         }
 
@@ -1173,6 +1056,66 @@ public class CompileBinaryOperator {
             }
         }
         return sourceArgumentStart(lineNode);
+    }
+
+    private static void compilePrintSay(BytecodeCompiler bytecodeCompiler, BinaryOperatorNode node) {
+        // print/say FILEHANDLE LIST
+        bytecodeCompiler.compileNode(node.left, -1, bytecodeCompiler.currentCallContext);
+        int filehandleReg = bytecodeCompiler.lastResultReg;
+        bytecodeCompiler.compileNode(node.right, -1, RuntimeContextType.LIST);
+        int contentReg = bytecodeCompiler.lastResultReg;
+        int rd = bytecodeCompiler.allocateOutputRegister();
+        if (node.operator.equals("say")) {
+            bytecodeCompiler.emit(Opcodes.SAY);
+            bytecodeCompiler.emitReg(contentReg);
+            bytecodeCompiler.emitReg(filehandleReg);
+            // SAY's existing opcode does not expose its result yet.
+            bytecodeCompiler.emit(Opcodes.LOAD_INT);
+            bytecodeCompiler.emitReg(rd);
+            bytecodeCompiler.emitInt(1);
+        } else {
+            // PRINT can fail (including a tied handle returning false), so
+            // preserve IOOperator.print's actual result for expression use.
+            bytecodeCompiler.emitWithToken(Opcodes.PRINT_RESULT, node.getIndex());
+            bytecodeCompiler.emitReg(rd);
+            bytecodeCompiler.emitReg(contentReg);
+            bytecodeCompiler.emitReg(filehandleReg);
+        }
+        bytecodeCompiler.lastResultReg = rd;
+    }
+
+    private static void compileSprintf(BytecodeCompiler bytecodeCompiler, BinaryOperatorNode node) {
+        // sprintf $format, @args
+        bytecodeCompiler.compileNode(node.left, -1, bytecodeCompiler.currentCallContext);
+        int formatReg = bytecodeCompiler.lastResultReg;
+        int argsListReg = bytecodeCompiler.allocateRegister();
+        if (node.right instanceof ListNode argsList) {
+            java.util.List<Integer> argRegs = new java.util.ArrayList<>();
+            for (Node arg : argsList.elements) {
+                bytecodeCompiler.compileNode(arg, -1, RuntimeContextType.LIST);
+                argRegs.add(bytecodeCompiler.lastResultReg);
+            }
+            bytecodeCompiler.emit(Opcodes.CREATE_LIST);
+            bytecodeCompiler.emitReg(argsListReg);
+            bytecodeCompiler.emit(argRegs.size());
+            for (int argReg : argRegs) {
+                bytecodeCompiler.emitReg(argReg);
+            }
+        } else {
+            int rightCtx = isArrayLikeNode(node.right) ? RuntimeContextType.LIST : bytecodeCompiler.currentCallContext;
+            bytecodeCompiler.compileNode(node.right, -1, rightCtx);
+            int argReg = bytecodeCompiler.lastResultReg;
+            bytecodeCompiler.emit(Opcodes.CREATE_LIST);
+            bytecodeCompiler.emitReg(argsListReg);
+            bytecodeCompiler.emit(1);
+            bytecodeCompiler.emitReg(argReg);
+        }
+        int rd = bytecodeCompiler.allocateOutputRegister();
+        bytecodeCompiler.emit(bytecodeCompiler.isBytesEnabled() ? Opcodes.SPRINTF_BYTES : Opcodes.SPRINTF);
+        bytecodeCompiler.emitReg(rd);
+        bytecodeCompiler.emitReg(formatReg);
+        bytecodeCompiler.emitReg(argsListReg);
+        bytecodeCompiler.lastResultReg = rd;
     }
 
     private static int sourceArgumentStart(AbstractNode node) {

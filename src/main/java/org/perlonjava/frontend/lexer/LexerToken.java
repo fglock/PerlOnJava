@@ -31,9 +31,18 @@ public class LexerToken {
     public static final LexerToken TOKEN_NEWLINE  = new LexerToken(LexerTokenType.NEWLINE, "\n");
     public static final LexerToken TOKEN_SPACE    = new LexerToken(LexerTokenType.WHITESPACE, " ");
 
+    // Cache pure-space WHITESPACE tokens up to this length (covers 1–4 level indentation
+    // at 2/4/8-space increments; eval STRING tokenizes indented source on every call).
+    private static final int MAX_CACHED_SPACES = 20;
+    private static final LexerToken[] SPACE_CACHE = new LexerToken[MAX_CACHED_SPACES + 1];
+
     static {
         for (char c : "!\"#$%&'()*+,-./:;<=>?@[\\]^`{|}~".toCharArray()) {
             OPERATOR_CACHE[c] = new LexerToken(LexerTokenType.OPERATOR, String.valueOf(c));
+        }
+        SPACE_CACHE[1] = TOKEN_SPACE;
+        for (int i = 2; i <= MAX_CACHED_SPACES; i++) {
+            SPACE_CACHE[i] = new LexerToken(LexerTokenType.WHITESPACE, " ".repeat(i));
         }
     }
 
@@ -53,8 +62,12 @@ public class LexerToken {
             return TOKEN_EOF;
         } else if (type == LexerTokenType.NEWLINE && "\n".equals(text)) {
             return TOKEN_NEWLINE;
-        } else if (type == LexerTokenType.WHITESPACE && " ".equals(text)) {
-            return TOKEN_SPACE;
+        } else if (type == LexerTokenType.WHITESPACE) {
+            int len = text.length();
+            if (len >= 1 && len <= MAX_CACHED_SPACES && text.charAt(0) == ' ') {
+                LexerToken cached = SPACE_CACHE[len];
+                if (cached.text.equals(text)) return cached;
+            }
         }
         return new LexerToken(type, text);
     }
