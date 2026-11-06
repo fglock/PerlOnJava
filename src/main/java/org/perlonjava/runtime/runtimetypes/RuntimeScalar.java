@@ -1811,36 +1811,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     /** Retire a counted storage edge during host-side graph construction. */
     static void releaseCountedOwnerWithoutPerlRuntime(
             RuntimeScalar owner, RuntimeBase referent, String releaseSite) {
-        Objects.requireNonNull(owner, "owner");
-        Objects.requireNonNull(referent, "referent");
-        Objects.requireNonNull(releaseSite, "releaseSite");
-        if (PerlRuntime.currentOrNull() != null) {
-            throw new IllegalStateException(
-                    "host-side counted release cannot run inside a Perl runtime");
-        }
-        PerlOwnerSlot slot = owner.countedOwnerSlot;
-        if (!owner.refCountOwned || owner.value != referent
-                || slot == null || !slot.isActive() || slot.referent() != referent
-                || slot.countedScalarOwner() != owner
-                || !PerlOwnerSlot.isCountedKind(slot.kind())) {
-            throw new IllegalStateException(
-                    "host-side counted release lost its current scalar owner at " + releaseSite);
-        }
-        if (referent.refCount <= 0) {
-            throw new IllegalStateException(
-                    "host-side counted release requires a positive reference count at "
-                            + releaseSite);
-        }
-
-        owner.refCountOwned = false;
-        referent.releaseOwner(owner, releaseSite);
-        PerlOwnerSlot.PendingRelease release = slot.releaseCountedIdentity();
-        if (release == null) {
-            throw new IllegalStateException(
-                    "host-side counted release lost its release token at " + releaseSite);
-        }
-        referent.releaseTrackedOwnerCount(releaseSite);
-        release.complete();
+        MortalList.releaseCountedOwnerWithoutPerlRuntime(owner, referent, releaseSite);
     }
 
     PerlOwnerSlot.PendingRelease deferCountedOwnerRelease(RuntimeBase referent) {
@@ -4590,58 +4561,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 // The old edge was already queued before the active alias could
                 // observe the scalar's replacement.
             } else {
-                if (explicitUndef && isCurrentReferenceSlotMutation(referenceSlotMutationVersion)) {
-                    this.refCountOwned = false;
-                }
-            }
-            boolean exactCountedRelease = oldCountedOwnerRelease != null
-                    || oldArgumentAliasReleaseQueued;
-            if (!exactCountedRelease && oldBase.refCount > 0
-                    && oldBase.releaseTrackedOwnerCount(
-                            "RuntimeScalar.setLargeRefCounted (decrement on overwrite)")) {
-                boolean liveScalarReferentBinding = oldBase.localBindingExists
-                        && (!(oldBase instanceof RuntimeScalar scalarReferent)
-                            || !scalarReferent.referencedByScalarReference
-                            || scalarReferent.hasClosureCaptureOwner()
-                            || MyVarCleanupStack.isRegistered(scalarReferent));
-                if (liveScalarReferentBinding
-                        && oldBase.hasUncountedPerlOwnerSlotIdentity()) {
-                    // The final counted edge left, but this referent is a live
-                    // lexical scalar cell. Carry its zero-count lifecycle
-                    // obligation on the exact storage identity until scope
-                    // cleanup releases that edge.
-                    oldBase.deferZeroCountFinalReleaseToUncountedOwnerSlots();
-                } else if (liveScalarReferentBinding) {
-                    // Named container (my %hash / my @array): the local variable
-                    // slot holds a strong reference not counted in refCount.
-                    // Don't call callDestroy — the container is still alive.
-                    // Cleanup will happen at scope exit (scopeExitCleanupHash/Array).
-                } else if (oldIdentifiedOwner && MortalList.canTrustFinalCountedRelease(oldBase)) {
-                    // The final identified edge is gone. Nested calls and
-                    // cached root walks cannot supply a replacement owner.
-                    oldBase.refCount = Integer.MIN_VALUE;
-                    DestroyDispatch.callDestroyFromCountedOwner(oldBase);
-                } else if (oldBase.restoreVerifiedCurrentCountedOwnerSlotRefCount()) {
-                    // Verified current scalar cells and aggregate elements
-                    // jointly repair transient undercounts without a root walk.
-                } else if (oldBase instanceof RuntimeCode code
-                        && code.hasActiveCodeOwner()) {
-                    // An executing CV owns its final state independently of
-                    // the compatibility count. Keep zero until its last frame
-                    // releases the native ACTIVE_CODE slot.
-                    code.deferFinalReleaseToActiveCode();
-                } else if (oldBase.hasUncountedAggregateOwnerSlotIdentity()
-                        || oldBase.hasUntrackedReferenceOwnerSlotIdentity(
-                                RuntimeScalarType.REFERENCE)
-                        || oldBase.hasUncountedPerlOwnerSlotIdentity()) {
-                    // Counted slots have already been repaired above. A
-                    // remaining native owner identity is direct evidence of a
-                    // strong value; defer cleanup until that exact slot leaves.
-                    oldBase.deferFinalReleaseToUncountedOwnerSlots();
-                } else {
-                    oldBase.refCount = Integer.MIN_VALUE;
-                    DestroyDispatch.callDestroy(oldBase);
-                }
+                throw new IllegalStateException(
+                        "counted scalar replacement lost its pending owner release");
             }
         }
 
