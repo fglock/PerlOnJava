@@ -1832,8 +1832,9 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     }
 
     private void updateStandardRuntimeHandle(RuntimeIO io) {
-        if (PerlRuntime.current().standardIOGlob(globName) != null) {
-            PerlRuntime.current().replaceStandardHandle(globName, io);
+        PerlRuntime runtime = PerlRuntime.currentOrNull();
+        if (runtime != null && runtime.standardIOGlob(globName) != null) {
+            runtime.replaceStandardHandle(globName, io);
         }
     }
 
