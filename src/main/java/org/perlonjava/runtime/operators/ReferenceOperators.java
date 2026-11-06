@@ -193,11 +193,13 @@ public class ReferenceOperators {
                 // held by a ResultSet's {result_source} hash element).
                 if (referent instanceof RuntimeHash hash) {
                     for (RuntimeScalar elem : hash.elements.values()) {
-                        RuntimeScalar.incrementRefCountForContainerStore(elem);
+                        RuntimeScalar.incrementRefCountForContainerStore(
+                                elem, PerlOwnerSlot.Kind.HASH_ELEMENT);
                     }
                 } else if (referent instanceof RuntimeArray arr) {
                     for (RuntimeScalar elem : arr.elements) {
-                        RuntimeScalar.incrementRefCountForContainerStore(elem);
+                        RuntimeScalar.incrementRefCountForContainerStore(
+                                elem, PerlOwnerSlot.Kind.ARRAY_ELEMENT);
                     }
                 }
 

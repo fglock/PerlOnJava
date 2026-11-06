@@ -3460,7 +3460,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     /** Acquire a counted edge for a destination slot before publishing that slot. */
-    static void incrementRefCountForContainerStore(
+    public static void incrementRefCountForContainerStore(
             RuntimeScalar scalar, PerlOwnerSlot.Kind intendedOwnerKind) {
         if (scalar == null) return;
         if (intendedOwnerKind != null && !PerlOwnerSlot.isCountedKind(intendedOwnerKind)) {
