@@ -3,14 +3,14 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-06):** #1649 remains in Phase 2 on local branch
-`wip/issue1649-owner-trace-20261105-143814`, based on `8bafb0c031`; the working
-tree contains uncommitted ownership changes. The current issue claim is
-`Codex / ownership-goal-resume-20261105`; PR #1938 is still an open draft at
-`95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05`. The live handoff requires producer
-coverage, explicit ownership transitions, ordinary sweep removal, and the
-remaining #1618 acceptance. #1642 was closed by merged PR #1746; broader CPAN
-release qualification remains in #1646. The latest #1649 report adds an
-App-Scaffolder-HTML temporary-IO-invocant case.
+`wip/issue1649-owner-trace-20261105-143814`, source `25480a466c`. The working
+tree is clean after a WIP snapshot and the validated release-transition
+commit. The current issue claim remains `Codex / ownership-goal-resume-20261105`;
+PR #1938 is an open draft on a separate remote branch at
+`95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05`, with no review comments. The issue
+handoff requires explicit owner transitions, removal of ordinary sweep
+recovery, and #1618 acceptance. #1642 was delivered by merged PR #1746; wider
+CPAN release qualification remains in #1646.
 
 On the current candidate, #1794 (3/3) and #1860 (4/4) pass on system Perl,
 JVM, and interpreter. The upstream HTML-Tree 5.07 suite passes all 23 files
@@ -45,7 +45,11 @@ DESTROY, and weaken tests pass 62/62 on JVM and interpreter. Logs:
 
 Count arithmetic is centralized in `RuntimeBase.acquireTrackedOwnerCount` and
 `releaseTrackedOwnerCount`; `PerlOwnerSlot` pairs those transitions with stable
-owner identities. IO resource leases remain separate from Perl strong edges.
+owner identities. `MortalList` now coordinates host-side exact-token release
+as well as runtime-bound release. `RuntimeScalar.setLargeRefCounted` no longer
+has a tokenless decrement or count-reconstruction fallback for a counted
+overwrite: a valid overwrite must carry its exact pending slot release. IO
+resource leases remain separate from Perl strong edges.
 Native counted-owner retirement now goes through `MortalList`'s common
 coordinator, including the regex callback count-only policy. Post-`DESTROY` no
 longer reconstructs counts from surviving storage. It verifies that a newly
@@ -62,10 +66,10 @@ the targeted released-owner walk remain compatibility surfaces; source search
 finds no production caller of the targeted walk. The weak-capture inspector is
 diagnostic only. `restoreReachableOwnerCount` is reachable only through legacy
 unpaired decrements, and `MortalList.deferDecrement()` has no production Java
-caller. Exact counted-slot repair remains in deferred release, scalar overwrite,
-and CODE capture cleanup; the standalone scalar-cell bridge also remains.
-`nice -n 19 make` passes in 7m47
-(`/tmp/issue1649-remove-dead-sweep-apis-make.log`). The focused blessing,
+caller. Exact counted-slot repair remains in deferred release and CODE capture
+cleanup; the standalone scalar-cell bridge also remains. Source `25480a466c`
+passes `nice -n 19 make` in 7m39
+(`/tmp/issue1649-central-counted-overwrite-release-make.log`). The focused blessing,
 weaken/DESTROY, #1794, #1860, and HTML-Tree `t/refloop.t` cases pass on both
 backends with corrective sweeps disabled
 (`/tmp/issue1649-sweep-api-focused-no-sweeps.log`,
@@ -853,21 +857,18 @@ batch is pending.
 
 ### Next steps
 
-1. Audit `RuntimeScalar.transitionReferenceSlot`, the array/hash mutation APIs,
-   and their exact owner-release helpers as one producer and transfer batch.
-   Keep scalar overwrite and undef, aggregate replacement and removal, returned
-   aliases, and deferred release together where they share the same slot
-   transition. Add any missing Perl-level regressions before the next runtime
-   build.
-2. Keep closure/CODE, tied-handler, and resource-owner transitions as separate
-   batches unless a traced producer shares the same exact release operation.
-   Validate each batch with system Perl first, then one focused make gate and
-   both backends; reserve the full no-sweeps make and acceptance matrix for the
-   final immutable candidate.
-3. Once producers are covered, migrate lifecycle decisions to current owner
-   identities and remove obsolete recovery paths and unused sweep machinery.
+1. Continue the release audit at localized CODE restore and DESTROY's synthetic
+   `$_[0]` owner. Route exact token releases through `MortalList`; remove any
+   tokenless decrement only after its producer has an exact slot transition.
+2. Trace the remaining `restoreVerifiedCurrentCountedOwnerSlotRefCount` callers
+   and the standalone unregistered scalar-cell bridge back to normal producers.
+   Replace real missing transitions with `PerlOwnerSlot` acquire/transfer/release
+   operations; keep synthetic undercount fixtures separate from producer proof.
+3. Audit clone/shared storage, suspended frames, cycles and IO holders against
+   the same owned, borrowed, transferred and deferred-release contract. Then
+   remove the remaining ordinary recovery branches and unused sweep machinery.
 4. Run the final weak-reference, `DESTROY`, resurrection, cycle, cancellation,
-   #1794, #1860, and full HTML::Tree acceptance matrix on the immutable
+   #1794, #1860, #1618 and HTML::Tree acceptance matrix on one immutable
    candidate; reconcile it with draft PR #1938 and review CI before readiness.
 
 ### Open questions and blockers
