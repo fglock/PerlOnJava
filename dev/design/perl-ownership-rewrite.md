@@ -72,8 +72,14 @@ commit `6dd6b1a6b0` passed the full no-sweeps Make gate in 7m53
 routing in `b1a29eb0b6` also passed in 7m41
 (`/tmp/issue1649-io-producers-b1a29eb0b6-make.log`). The sysopen regression
 passed within that gate, and `./jperl -v` reported the validated source commit.
-The remaining ownership producer/release audit and removal of ordinary
-corrective recovery are still in progress.
+On the same built runtime with corrective sweeps disabled, the #1794, #1860,
+END-die, async-cancellation, weak-resurrection, and cycle fixtures pass on both
+backends (`/tmp/issue1649-final-lifecycle-matrix-summary.txt`). HTML-Tree 5.07
+passes all 23 files and 989 checks on both backends; 11 upstream TODO checks
+remain marked TODO (`/tmp/issue1649-htmltree-b1a29-jvm.log` and
+`/tmp/issue1649-htmltree-b1a29-interpreter.log`). The remaining ownership
+producer/release audit and removal of ordinary corrective recovery are still
+in progress.
 
 The source audit still finds no production caller of legacy
 `MortalList.deferDecrement()` or `ReachabilityWalker.sweepReleasedWeakReferents()`;
