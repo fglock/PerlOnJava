@@ -921,16 +921,11 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     }
 
     private void retireCountedOwnerIdentity(RuntimeScalar scalar, String releaseSite) {
-        PerlOwnerSlot slot = scalar.countedOwnerSlot();
-        if (!scalar.refCountOwned || slot == null || !slot.isActive()
-                || slot.referent() != this || slot.countedScalarOwner() != scalar) {
+        if (scalar.releaseCountedOwnerIdentity(this, releaseSite, true) == null) {
             throw new IllegalStateException(
                     "counted owner identity retirement requires its active PerlOwnerSlot at "
                             + releaseSite);
         }
-        scalar.refCountOwned = false;
-        releaseOwner(scalar, releaseSite);
-        scalar.releaseCountedOwner(this);
     }
 
     public int activeOwnerCount() {

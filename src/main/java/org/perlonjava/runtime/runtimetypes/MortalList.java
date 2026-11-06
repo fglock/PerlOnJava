@@ -445,9 +445,8 @@ public class MortalList {
                             + releaseSite);
         }
 
-        owner.refCountOwned = false;
-        referent.releaseOwner(owner, releaseSite);
-        PerlOwnerSlot.PendingRelease release = slot.releaseCountedIdentity();
+        PerlOwnerSlot.PendingRelease release =
+                owner.releaseCountedOwnerIdentity(referent, releaseSite, true);
         if (release == null) {
             throw new IllegalStateException(
                     "host-side counted release lost its release token at " + releaseSite);
@@ -605,8 +604,8 @@ public class MortalList {
             throw new IllegalStateException(
                     "counted argument owner lost its active slot at " + releaseSite);
         }
-        owner.refCountOwned = false;
-        PerlOwnerSlot.PendingRelease release = ownerSlot.releaseCountedIdentity();
+        PerlOwnerSlot.PendingRelease release =
+                owner.releaseCountedOwnerIdentity(base, releaseSite, true);
         if (release == null) {
             throw new IllegalStateException(
                     "counted argument owner lost its release token at " + releaseSite);
@@ -630,9 +629,8 @@ public class MortalList {
             throw new IllegalStateException(
                     "DESTROY self argument lost its counted owner at " + releaseSite);
         }
-        owner.refCountOwned = false;
-        base.releaseOwner(owner, releaseSite);
-        PerlOwnerSlot.PendingRelease release = ownerSlot.releaseCountedIdentity();
+        PerlOwnerSlot.PendingRelease release =
+                owner.releaseCountedOwnerIdentity(base, releaseSite, true);
         if (release == null) {
             throw new IllegalStateException(
                     "DESTROY self argument lost its release token at " + releaseSite);

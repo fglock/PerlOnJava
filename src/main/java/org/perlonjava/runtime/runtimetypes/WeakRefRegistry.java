@@ -162,9 +162,8 @@ public class WeakRefRegistry {
             // Weakening retires the exact strong edge. Queue its token through
             // the same lifecycle path as overwrite and aggregate removal so
             // the slot identity and count cannot drift apart.
-            ref.refCountOwned = false;
-            base.releaseOwner(ref, "weaken");
-            PerlOwnerSlot.PendingRelease release = releasedSlot.releaseCountedIdentity();
+            PerlOwnerSlot.PendingRelease release =
+                    ref.releaseCountedOwnerIdentity(base, "weaken", true);
             if (release == null) {
                 throw new IllegalStateException(
                         "weakening a counted scalar lost its owner release token");
