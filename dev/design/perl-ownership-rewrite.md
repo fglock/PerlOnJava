@@ -2,29 +2,29 @@
 
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
-**Current checkpoint (2026-11-06):** #1649 remains in Phase 2 on local branch
-`wip/issue1649-perl-owner-model-20261106-032049`, source commit `e8fed9d792`.
-The current working diff consolidates zero-count retirement of a stale scalar
-owner identity in `RuntimeBase`, so `refCountOwned`, trace state, and the exact
-`PerlOwnerSlot` are retired as one checked transition. Normal queued releases
-already consume their slot and flag together. `git diff --check` passes; the
-latest `nice -n 19 make` passed on source `e8fed9d792` before this small local
-change (`/tmp/issue1649-queued-release-single-transition-make.log`).
+**Current checkpoint (2026-11-06):** #1649 remains in Phase 2 on branch
+`wip/issue1649-owner-transition-20261106-035834`, source commit `985ed7824f`.
+Immediate scalar-backed counted-edge retirement now goes through one
+`RuntimeScalar` transition that retires the exact `PerlOwnerSlot` and mirrored
+`refCountOwned` state. Immediate paths also remove the owner trace there;
+deferred queueing preserves trace state until `RuntimeBase` captures it. The
+transition is used by weakening, host-side storage release, DESTROY self
+argument release, zero-count identity retirement, and immediate argument
+release. The immutable candidate passes `nice -n 19 timeout 1800 make` in 7m14
+(`/tmp/issue1649-central-scalar-retirement-985ed-make.log`).
 
-The HTML-Tree 5.07 full suite passes 23 files and 989 checks on JVM and
-interpreter with corrective sweeps disabled, and `t/refloop.t` passes 8/8 on
-system Perl and both backends at parent source `f73533b68d`. The current source
-audit finds no production caller of legacy `MortalList.deferDecrement()` or
-`ReachabilityWalker.sweepReleasedWeakReferents()`; those remain reachable from
-synthetic Java tests. Thus the remaining graph recovery in `processDeferredBase`
-is compatibility-only, while verified active-slot count alignment is a
-separate non-graph bridge required by existing fixtures. #1642's package test
-could not get past `jcpan` metadata loading within 600 seconds; do not repeat
-that run without a faster direct acceptance path. Remote issue handoff remains
-unverified because GitHub API access failed. Next: validate the scalar-owner
-retirement change, then refresh the final no-sweeps and #1618 acceptance on one
-immutable source candidate before deciding whether any compatibility recovery
-can be removed.
+The source audit still finds no production caller of legacy
+`MortalList.deferDecrement()` or `ReachabilityWalker.sweepReleasedWeakReferents()`;
+those entry points remain for synthetic Java tests. Graph recovery in
+`processDeferredBase` is guarded by that legacy unpaired path. Removing verified
+active-slot count alignment is not yet safe: an earlier full gate without it
+failed Perl-level scope, argument, capture, weak-owner, and package-lifetime
+cases. That bridge is non-graph recovery, but its producers still need audit so
+the owner ledger and selective count stay paired without repair. The previous
+HTML-Tree no-sweeps and #1618 evidence predates `985ed7824f` and must be refreshed
+on the final candidate. Next: audit the undercounting producers behind verified
+owner alignment, migrate them to paired transitions, then rerun the no-sweeps
+acceptance matrix on one immutable source candidate.
 
 The first-bless and re-bless paths now acquire an existing scalar's counted
 edge through `RuntimeScalar.acquireCountedOwnerForCurrentValue`, removing two
