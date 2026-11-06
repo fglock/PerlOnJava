@@ -4,10 +4,10 @@
 
 **Current checkpoint (2026-11-06):** #1649 remains in Phase 2 on branch
 `wip/issue1649-owner-transition-20261106-035834`, at source commit
-`1504828430`, which includes merge commit `4865f2dddd` and the validated
-owner-transition commit `c633398d83` on current `origin/master` at
-`9477c8c68a`. The combined build ran before commit creation on the identical
-source tree; Gradle injected the parent identifier `c03e64d996` into its
+`095c1a3101`, based on documentation commit `f8c0a3e4dd`, which includes merge
+commit `4865f2dddd` and validated owner-transition commit `c633398d83` on
+`origin/master` at `9477c8c68a`. The latest build ran before source commit on
+the identical tree; Gradle injected parent identifier `f8c0a3e4dd` into its
 launcher. Count arithmetic and owner-token transitions remain centralized in
 `RuntimeBase.acquireTrackedOwnerCount` / `releaseTrackedOwnerCount`,
 `PerlOwnerSlot`, and scalar replacement/release paths. Fix missing or extra
@@ -43,6 +43,20 @@ scalar-reference-content edges likewise acquire through `PerlOwnerSlot` and the
 central counter method. Aggregate recursive cleanup walks the discarded
 container's actual child slots to release them; it does not use a root walk to
 reconstruct their counts.
+
+The glob producer audit found a split-owner bug for a weak CODE source: Perl
+copies it into the stash as a strong CODE slot, while `GlobalCodeRefMap` reused
+the weak scalar and therefore skipped slot-count acquisition. The map now
+copies weak inputs before installing the slot, and CODE-definition callers
+retain the canonical installed slot. `GlobalCodeRefMapWeakSourceOwnerTest`
+failed on the unfixed tree at the distinct-slot assertion, then passes with the
+fix. `localized_weak_code_slot_ownership.t` passes 5/5 on system Perl, JVM, and
+interpreter. The unfixed gate log is
+`/tmp/issue1649-weak-code-owner-unfixed-make.log`; the final no-sweeps
+`make` passes in 7m50 (`/tmp/issue1649-weak-code-owner-final-make.log`). The
+final-candidate matrix passes nine ownership/lifecycle fixtures on both
+backends and HTML-Tree 5.07 `t/refloop.t` 8/8 on system Perl and both backends
+(`/tmp/issue1649-final-candidate-matrix-summary.txt`).
 
 The current candidate snapshots glob arguments in `stat`, `lstat`, and file-test
 cache state, so Perl's cached subject does not extend a lexical handle's
