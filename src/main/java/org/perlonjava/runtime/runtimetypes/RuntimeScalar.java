@@ -4344,6 +4344,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // old edge carries a separate release token through cleanup.
         boolean oldArgumentAliasReleaseQueued = false;
         boolean retireOldCountedOwnerAfterPublish = false;
+        boolean oldOwnerTraceReleasedDuringReplacement = false;
         PerlOwnerSlot.PendingRelease oldCountedOwnerRelease = null;
         boolean newOwned = false;
         RuntimeBase newReferent = null;
@@ -4406,6 +4407,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                         .replaceCountedScalarOwnerAndAcquire(
                                 oldBase, newReferent, this,
                                 "RuntimeScalar.setLargeRefCounted store");
+                oldOwnerTraceReleasedDuringReplacement = oldBase != newReferent;
             } else {
                 retireOldCountedOwnerAfterPublish = true;
             }
@@ -4640,7 +4642,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 // The slot now describes the replacement edge. Drain the exact
                 // displaced edge token so this release cannot retire or infer
                 // ownership from the scalar's newer value.
-                if (!newOwned || oldBase != newReferent) {
+                if (!oldOwnerTraceReleasedDuringReplacement
+                        && (!newOwned || oldBase != newReferent)) {
                     oldBase.releaseOwner(this, "setLargeRefCounted overwrite");
                 }
                 if (staleAggregateOwner && oldBase.refCount <= 0) {
