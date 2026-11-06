@@ -37,6 +37,10 @@ final class CompiledDirectCallSite {
         return name;
     }
 
+    int index() {
+        return cachedRef.compiledDirectCallSiteIndex();
+    }
+
     RuntimeScalar resolve() {
         if (compileTimePinned || ownsRetiredTarget) return cachedRef;
         RuntimeScalar visible = GlobalVariable.getVisibleGlobalCodeRefForDirectCall(name);

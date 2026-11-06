@@ -6653,10 +6653,13 @@ public class BytecodeCompiler implements Visitor {
                     RuntimeScalar parseTimeCallRef =
                             node.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar codeRef
                                     ? codeRef : null;
+                    RuntimeScalar deferredCallTarget =
+                            node.getAnnotation("deferredDirectCallTarget") instanceof RuntimeScalar target
+                                    ? target : null;
                     RuntimeScalar emissionTimeCallRef =
                             GlobalVariable.getVisibleGlobalCodeRefForDirectCall(subName);
                     RuntimeScalar initialCallRef = parseTimeCallRef != null
-                            ? parseTimeCallRef
+                            ? deferredCallTarget != null ? deferredCallTarget : parseTimeCallRef
                             : emissionTimeCallRef != null
                                     ? emissionTimeCallRef
                                     : GlobalVariable.getGlobalCodeRefForFreshLookup(subName);
@@ -6669,6 +6672,9 @@ public class BytecodeCompiler implements Visitor {
                     cachedCallRef.configureCompiledDirectCallSite(
                             subName, siteIndex, initialCallRef, compileTimePinned,
                             retainTargetIfDeletedBeforeCallsiteInstall);
+                    cachedCallRef.setCompiledDirectCallHasDeferredParseOwner(
+                            deferredCallTarget != null);
+                    cachedCallRef.setCompiledDirectCallPinSlot(parseTimeCallRef);
                     int cacheIdx = addToConstantPool(cachedCallRef);
                     padConstants.add(cachedCallRef);
                     Object classMethod = node.getAnnotation("directClassMethod");

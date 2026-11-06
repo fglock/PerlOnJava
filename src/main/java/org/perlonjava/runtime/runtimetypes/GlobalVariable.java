@@ -193,6 +193,17 @@ public class GlobalVariable {
         if (site != null) globalState().unregisterCompiledDirectCallSite(site);
     }
 
+    static RuntimeScalar resolveRegisteredCompiledDirectCallSite(String key, int siteIndex) {
+        if (key == null) return new RuntimeScalar();
+        String resolvedKey = resolveAliasedFqn(key);
+        CompiledDirectCallSite site = globalState().findCompiledDirectCallSite(
+                resolvedKey, siteIndex);
+        if (site == null && !resolvedKey.equals(key)) {
+            site = globalState().findCompiledDirectCallSite(key, siteIndex);
+        }
+        return site == null ? getGlobalCodeRefForDirectCall(key) : site.resolve();
+    }
+
     private static Set<String> compiledDirectCallSiteKeys(String key) {
         Set<String> keys = new java.util.LinkedHashSet<>();
         if (key != null) {
@@ -3043,6 +3054,22 @@ public class GlobalVariable {
         RuntimeScalar previous = pinnedCodeRefs().remove(key);
         if (previous == null) return;
         previous.releaseCodeSlotBinding();
+    }
+
+    /** Snapshot and own a parsed direct-call CV until its containing CV is compiled. */
+    public static RuntimeScalar snapshotDeferredDirectCallTarget(RuntimeScalar source) {
+        if (source == null) return null;
+        RuntimeScalar snapshot = new RuntimeScalar();
+        snapshot.type = source.type;
+        snapshot.value = source.value;
+        snapshot.globalCodeRefFqn = source.globalCodeRefFqn;
+        snapshot.retainCodeSlotBinding();
+        return snapshot;
+    }
+
+    /** Transfer a deferred parser owner after the compiled callsite has acquired its edge. */
+    public static void releaseDeferredDirectCallOwner(RuntimeScalar codeRef) {
+        if (codeRef != null) codeRef.releaseCodeSlotBinding();
     }
 
     static void replacePinnedCodeRef(String key, RuntimeScalar codeRef) {
