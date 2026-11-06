@@ -4,7 +4,8 @@
 
 **Current checkpoint (2026-11-06):** #1649 remains in Phase 2 on branch
 `wip/issue1649-owner-transition-20261106-035834`, based on source commit
-`86de9c7914` with uncommitted ownership and regression changes. Count
+`4865f2dddd`, which merges the validated owner-transition commit
+`c633398d83` with current `origin/master` at `9477c8c68a`. Count
 arithmetic and owner-token transitions remain centralized in
 `RuntimeBase.acquireTrackedOwnerCount` / `releaseTrackedOwnerCount`,
 `PerlOwnerSlot`, and scalar replacement/release paths. Fix missing or extra
@@ -43,15 +44,15 @@ broader CPAN qualification is tracked by #1646. Continue the remaining
 producer/release audit and remove ordinary corrective reachability recovery
 only after those paths are covered.
 
-An isolated integration copy combined this worktree candidate at `86de9c7914`
-with the current `origin/master` delta through `9477c8c68a`. Its no-sweeps
+An isolated integration copy built the same combined source tree before the
+merge commit was created. Its no-sweeps
 `nice -n 19 timeout 1800 make` gate passed in 8m24
 (`/private/tmp/issue1649-integrated-no-sweeps-make.log`), and `make check-links`
 passed with 835 links and zero errors. The #1794/#1860 and lifecycle matrix
 passes eight fixtures on both backends; HTML-Tree 5.07 `t/refloop.t` passes
-8/8 on system Perl, JVM, and interpreter. This validates the combined source
-but does not update the branch ref; repository metadata is read-only in this
-workspace.
+8/8 on system Perl, JVM, and interpreter. The branch is now merged with
+`origin/master`; run the final no-sweeps gate on the exact merged commit before
+calling the candidate validated.
 
 `RuntimeList.setFromList` now retires an assignment-materialization cell's
 anonymous IO lease alongside its counted edge, preserving that lease when the
@@ -2826,7 +2827,7 @@ and final use cases still require audit before removal.
    identities directly; removing it previously failed lifecycle and Perl-level
    owner tests. It is not reachability-based recovery.
 3. Continue the remaining producer/release audit and batch any fixes with
-   focused coverage before rebuilding. The current-master integration preview
-   passes, but the branch must still be merged/reconciled and the final
-   immutable candidate revalidated. Recheck issue #1649 and PR #1938 before
+   focused coverage before rebuilding. The branch now includes current
+   `origin/master`; rerun the final no-sweeps gate and acceptance matrix on the
+   exact final commit after the audit. Recheck issue #1649 and PR #1938 before
    publication; leave merging to review.
