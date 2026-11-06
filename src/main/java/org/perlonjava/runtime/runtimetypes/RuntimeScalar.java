@@ -1864,10 +1864,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     PerlOwnerSlot.PendingRelease deferCountedOwnerRelease(RuntimeBase referent) {
+        return releaseCountedOwnerIdentity(referent, null, false);
+    }
+
+    /**
+     * Retire this scalar's exact counted Perl edge as one ownership transition.
+     * Deferred queueing leaves the trace owner in place until RuntimeBase has
+     * captured it; immediate releases remove that trace entry here.
+     */
+    PerlOwnerSlot.PendingRelease releaseCountedOwnerIdentity(
+            RuntimeBase referent, String releaseSite, boolean releaseTrace) {
         PerlOwnerSlot slot = countedOwnerSlot;
         if (slot == null) {
-            // RuntimeBase decides whether the tokenless compatibility path is
-            // allowed before it changes the mirrored flag.
             return null;
         }
         if (!refCountOwned || !slot.isActive() || slot.referent() != referent
@@ -1876,6 +1884,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         PerlOwnerSlot.PendingRelease release = slot.releaseCountedIdentity();
         if (release == null) return null;
         refCountOwned = false;
+        if (releaseTrace) referent.releaseOwner(this, releaseSite);
         return release;
     }
 
