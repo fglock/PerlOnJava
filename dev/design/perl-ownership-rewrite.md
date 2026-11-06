@@ -3,7 +3,8 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-06):** #1649 remains in Phase 2 on branch
-`wip/issue1649-owner-transition-20261106-035834`, source commit `c47cec61b5`.
+`wip/issue1649-owner-transition-20261106-035834`, latest source commit
+`b1a29eb0b6`.
 Immediate scalar-backed counted-edge retirement now goes through one
 `RuntimeScalar` transition that retires the exact `PerlOwnerSlot` and mirrored
 `refCountOwned` state. Immediate paths also remove the owner trace there;
@@ -67,8 +68,12 @@ and fork-open completion. Named package globs keep their existing stash-owned
 IO policy. `RuntimeScalarIoOwnerSlotTest` exercises sysopen on an IO-less glob
 with two scalar owners and checks each gets an independent lease. Immutable
 commit `6dd6b1a6b0` passed the full no-sweeps Make gate in 7m53
-(`/tmp/issue1649-existing-glob-6dd6b1a6b0-make.log`); it includes the sysopen
-regression. The expanded producer routing is the current unvalidated change.
+(`/tmp/issue1649-existing-glob-6dd6b1a6b0-make.log`); the expanded producer
+routing in `b1a29eb0b6` also passed in 7m41
+(`/tmp/issue1649-io-producers-b1a29eb0b6-make.log`). The sysopen regression
+passed within that gate, and `./jperl -v` reported the validated source commit.
+The remaining ownership producer/release audit and removal of ordinary
+corrective recovery are still in progress.
 
 The source audit still finds no production caller of legacy
 `MortalList.deferDecrement()` or `ReachabilityWalker.sweepReleasedWeakReferents()`;
