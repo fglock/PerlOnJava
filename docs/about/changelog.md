@@ -6,7 +6,7 @@ priorities and future plans.
 
 ## Work in progress
 
-- Reject Java-backed regular files as terminals in `IO::Tty::ttyname`, preserve unsigned 64-bit scalar signs in Storable round-trips, and fix nested lookbehind, repeated capture, and exact-opcode diagnostics (#1988).
+- Reject Java-backed regular files as terminals in `IO::Tty::ttyname`, preserve unsigned 64-bit scalar signs in Storable round-trips, and fix Perl 5.45 regex lookbehind, capture, exact-opcode, and start-class diagnostics (#1988).
 
 - Refresh the imported Perl-core and dual-life modules from the current Perl blead snapshot.
 

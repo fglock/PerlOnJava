@@ -4257,6 +4257,10 @@ final class Analyser extends Parser {
         regex.minimumLength = opt.length.min;
         if (regex.perlOnJavaSyntax) {
             setLogicalOptimizationInfo(node, oenv);
+            CClassNode leadingClass = leadingCharacterClass(node);
+            if (leadingClass != null) {
+                regex.optimizationStartClass = renderAsciiStartClass(leadingClass);
+            }
         }
 
         regex.anchor = opt.anchor.leftAnchor & (AnchorType.BEGIN_BUF |
@@ -4327,6 +4331,97 @@ final class Analyser extends Parser {
         if (Config.DEBUG_COMPILE || Config.DEBUG_MATCH) {
             Config.log.println(regex.optimizeInfoToString());
         }
+    }
+
+    private CClassNode leadingCharacterClass(Node node) {
+        CClassNode[] result = new CClassNode[1];
+        return findLeadingCharacterClass(node, result) == 1 ? result[0] : null;
+    }
+
+    // 1 means the first consuming atom is a class, 2 means this node is
+    // zero-width and traversal may continue, and 0 means it consumes or
+    // branches in a way that makes the leading class ambiguous.
+    private int findLeadingCharacterClass(Node node, CClassNode[] result) {
+        if (node == null) return 2;
+        switch (node.getType()) {
+        case NodeType.LIST: {
+            ListNode list = (ListNode)node;
+            do {
+                int status = findLeadingCharacterClass(list.value, result);
+                if (status != 2) return status;
+            } while ((list = list.tail) != null);
+            return 2;
+        }
+        case NodeType.CCLASS:
+            result[0] = (CClassNode)node;
+            return 1;
+        case NodeType.ANCHOR: {
+            AnchorNode anchor = (AnchorNode)node;
+            if (anchor.type == AnchorType.PREC_READ) {
+                return getMinMatchLength(anchor.target) == 0
+                        && !containsDynamicCallout(anchor.target) ? 2 : 0;
+            }
+            if (anchor.type == AnchorType.PREC_READ_NOT) return 0;
+            return 2;
+        }
+        case NodeType.QTFR: {
+            QuantifierNode quantifier = (QuantifierNode)node;
+            int status = findLeadingCharacterClass(quantifier.target, result);
+            return quantifier.lower == 0 && status != 2 ? 0 : status;
+        }
+        case NodeType.ENCLOSE:
+            return findLeadingCharacterClass(((EncloseNode)node).target, result);
+        case NodeType.STR: {
+            StringNode string = (StringNode)node;
+            return !(string instanceof ControlVerbNode)
+                    && !(string instanceof CalloutNode)
+                    && string.length(enc) == 0 ? 2 : 0;
+        }
+        default:
+            return 0;
+        }
+    }
+
+    private String renderAsciiStartClass(CClassNode characterClass) {
+        if (characterClass.isNot() || characterClass.hasDeferredProperties()
+                || characterClass.hasWideScalarRanges()) return null;
+        boolean[] included = new boolean[0x80];
+        for (int value = 0; value < included.length; value++) {
+            included[value] = characterClass.bs.at(value);
+        }
+        if (characterClass.mbuf != null) {
+            int[] ranges = characterClass.mbuf.getCodeRange();
+            for (int index = 0; index < ranges[0]; index++) {
+                int from = ranges[index * 2 + 1];
+                int to = ranges[index * 2 + 2];
+                if (from < 0 || to >= included.length) return null;
+                for (int value = from; value <= to; value++) included[value] = true;
+            }
+        }
+        StringBuilder rendered = new StringBuilder("ANYOF[");
+        int value = 0;
+        while (value < 0x80) {
+            if (!included[value]) {
+                value++;
+                continue;
+            }
+            int end = value;
+            while (end + 1 < 0x80 && included[end + 1]) end++;
+            appendStartClassChar(rendered, value);
+            if (end > value) {
+                rendered.append('-');
+                appendStartClassChar(rendered, end);
+            }
+            value = end + 1;
+        }
+        return rendered.append(']').toString();
+    }
+
+    private void appendStartClassChar(StringBuilder rendered, int value) {
+        if (value == '\\' || value == ']' || value == '^' || value == '-') {
+            rendered.append('\\');
+        }
+        rendered.append((char)value);
     }
 
     private void setLogicalOptimizationInfo(Node node, OptEnvironment oenv) {

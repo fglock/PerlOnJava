@@ -31,6 +31,11 @@ import org.jcodings.specific.UTF8Encoding;
 import org.junit.Test;
 
 public class TestOptimizationIntrospection {
+    private static final Syntax PERLONJAVA = new Syntax("PERLONJAVA",
+            Syntax.Perl.op, Syntax.Perl.op2, Syntax.Perl.op3,
+            Syntax.Perl.behavior, Syntax.Perl.options,
+            Syntax.Perl.metaCharTable);
+
     private static Regex compile(String source) {
         byte[] pattern = source.getBytes(StandardCharsets.UTF_8);
         return new Regex(pattern, 0, pattern.length, Option.NONE,
@@ -64,5 +69,16 @@ public class TestOptimizationIntrospection {
         assertEquals(0, empty.minimumLength());
         assertNull(empty.exact());
         assertEquals("NONE", empty.searchAlgorithm());
+    }
+
+    @Test
+    public void retainsStartClassAfterNullablePositiveLookahead() {
+        byte[] pattern = "\\A(?=a*)[0-9]a".getBytes(StandardCharsets.UTF_8);
+        Regex.OptimizationInfo info = new Regex(pattern, 0, pattern.length,
+                Option.NONE, UTF8Encoding.INSTANCE, PERLONJAVA)
+                .getOptimizationInfo();
+        assertEquals("ANYOF[0-9]", info.startClass());
+        assertEquals("a", info.exact());
+        assertEquals(1, info.minimumOffset());
     }
 }
