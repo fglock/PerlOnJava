@@ -2196,6 +2196,20 @@ public class CompileAssignment {
             rhsContext = RuntimeContextType.LIST;
         }
 
+        // Fast-path: plain scalar LHS like $var = $var + N or $var = $x + $y.
+        // For OperatorNode("$", IdentifierNode) none of the complex guards below
+        // (!, empty-list-void, unary+, five reference-alias checks, my/state, local)
+        // can ever match, so jump straight to the ADD-ASSIGN specializations.
+        // The two try-methods return false without side effects when they do not
+        // match, at which point execution falls through to the general path below.
+        if (node.left instanceof OperatorNode earlyScalarOp
+                && earlyScalarOp.operator.length() == 1
+                && earlyScalarOp.operator.charAt(0) == '$'
+                && earlyScalarOp.operand instanceof IdentifierNode) {
+            if (tryAddAssignOptimization(bytecodeCompiler, node, rhsContext)) return;
+            if (tryDirectAddAssignmentOptimization(bytecodeCompiler, node)) return;
+        }
+
         // Prefix ! is parsed as a scalar-looking assignment target in this
         // compatibility corner. Perl evaluates its RHS before the target's
         // immutable temporary is rejected.

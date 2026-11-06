@@ -44,7 +44,7 @@ priorities and future plans.
 
 - Preserve named typeglob stringification when copying package stash entries (#1927).
 
-- Reduce eval STRING overhead with lazy goto collections, parser-set AST flags that skip unneeded BytecodeCompiler analysis passes, ScopedSymbolTable snapshot caching, per-thread eval caches without synchronization, cached compiler symbol tables and captured-variable metadata for repeated eval sites, lexer token flyweights, raw-source deparse reuse, in-place captured-variable setup, cached constructor/class-field metadata, a re-entrant fast-path in `PerlRuntime.bind()`, and a lexer `sawBeginOrSub` flag that skips the O(visible_vars) outer-lexical alias loop on the common path (#1911, #1961).
+- Reduce eval STRING overhead with lazy goto collections, parser-set AST flags that skip unneeded BytecodeCompiler analysis passes, ScopedSymbolTable snapshot caching, per-thread eval caches without synchronization, cached compiler symbol tables and captured-variable metadata for repeated eval sites, lexer token flyweights, raw-source deparse reuse, in-place captured-variable setup, cached constructor/class-field metadata, a re-entrant fast-path in `PerlRuntime.bind()`, a lexer `sawBeginOrSub` flag that skips the O(visible_vars) outer-lexical alias loop on the common path, a fast-path in `#line` directive scanning that skips the O(n_tokens) loop when the source contains no directive, reduced `String.equals` dispatch overhead in binary operator compilation, an early fast-path for `$var = $var + N` assignments in bytecode compilation, and a pure-space whitespace-token flyweight cache in the lexer (#1911, #1961).
 
 - Preserve arbitrary bytes in SQLite text columns across DBI fetches (#1923).
 
