@@ -2087,10 +2087,6 @@ public class MortalList {
                 // Preserve the legacy unpaired hook's diagnostic/recovery walk
                 // while its callers migrate. Production releases carry an
                 // exact owner-slot token and bypass this compatibility path.
-            } else if (base.blessId != 0
-                    && base.restoreUnregisteredScalarCellOwnerRefCount()) {
-                // Last compatibility bridge: an unregistered standalone
-                // scalar cell has no storage registry to prove its edge.
             } else if (base instanceof RuntimeScalarReadOnly
                     && RuntimeCode.isInstalledPadConstant(base)) {
                 // A readonly scalar referenced through \("literal") has an
