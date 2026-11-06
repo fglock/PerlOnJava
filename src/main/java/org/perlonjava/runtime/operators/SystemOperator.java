@@ -1510,6 +1510,7 @@ public class SystemOperator {
                 existing.replaceStateFrom(input);
             } else if (pending.fileHandle.value instanceof RuntimeGlob glob) {
                 glob.setIO(input);
+                MyVarCleanupStack.retainLiveIoGlobOwners(glob, pending.fileHandle);
             } else {
                 pending.fileHandle.set(input);
             }

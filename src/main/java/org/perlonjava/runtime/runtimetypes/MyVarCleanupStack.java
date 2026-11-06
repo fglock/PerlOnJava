@@ -354,6 +354,12 @@ public class MyVarCleanupStack {
         }
     }
 
+    /** Acquire leases for current aliases and the explicit destination scalar. */
+    public static void retainLiveIoGlobOwners(RuntimeGlob glob, RuntimeScalar handle) {
+        retainLiveIoGlobOwners(glob);
+        RuntimeScalar.retainUnstashedIoForDurableSlot(handle);
+    }
+
     /**
      * Count every currently-live lexical alias when an open glob is blessed.
      * Open handles can enter as {@code GLOB} scalars, which ordinary reference

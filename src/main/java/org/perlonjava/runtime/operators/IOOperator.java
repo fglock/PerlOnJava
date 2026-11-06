@@ -41,8 +41,7 @@ public class IOOperator {
     private static final int O_NONBLOCK = NativeUtils.IS_MAC ? 4 : 04000;
 
     private static void retainLiveIoGlobOwners(RuntimeGlob glob, RuntimeScalar handle) {
-        MyVarCleanupStack.retainLiveIoGlobOwners(glob);
-        RuntimeScalar.retainUnstashedIoForDurableSlot(handle);
+        MyVarCleanupStack.retainLiveIoGlobOwners(glob, handle);
     }
 
     // File descriptor to RuntimeIO mapping for duplication support
@@ -2579,8 +2578,7 @@ public class IOOperator {
 
             if (targetGlob != null) {
                 targetGlob.setIO(socketIO);
-                MyVarCleanupStack.retainLiveIoGlobOwners(targetGlob);
-                RuntimeScalar.retainUnstashedIoForDurableSlot(socketHandle);
+                retainLiveIoGlobOwners(targetGlob, socketHandle);
             } else {
                 // Create a new anonymous GLOB and assign it to the lvalue
                 RuntimeScalar newGlob = new RuntimeScalar();
@@ -2865,8 +2863,7 @@ public class IOOperator {
             if (targetGlob != null) {
                 targetGlob.setIO(clientRuntimeIO);
                 targetGlob.acceptedSocket = true;
-                MyVarCleanupStack.retainLiveIoGlobOwners(targetGlob);
-                RuntimeScalar.retainUnstashedIoForDurableSlot(newSocketHandle);
+                retainLiveIoGlobOwners(targetGlob, newSocketHandle);
             } else {
                 // Create a new anonymous GLOB and assign it to the lvalue
                 RuntimeScalar newGlob = new RuntimeScalar();
@@ -2958,6 +2955,7 @@ public class IOOperator {
             }
             if (readGlob != null) {
                 readGlob.setIO(readerIO);
+                retainLiveIoGlobOwners(readGlob, readHandle);
             } else {
                 // Create a new anonymous GLOB and assign it to the lvalue
                 RuntimeScalar newGlob = new RuntimeScalar();
@@ -2980,6 +2978,7 @@ public class IOOperator {
             }
             if (writeGlob != null) {
                 writeGlob.setIO(writerIO);
+                retainLiveIoGlobOwners(writeGlob, writeHandle);
             } else {
                 // Create a new anonymous GLOB and assign it to the lvalue
                 RuntimeScalar newGlob = new RuntimeScalar();
@@ -4119,8 +4118,7 @@ public class IOOperator {
             } else {
                 targetGlob.setIO(io);
             }
-            MyVarCleanupStack.retainLiveIoGlobOwners(targetGlob);
-            RuntimeScalar.retainUnstashedIoForDurableSlot(handle);
+            retainLiveIoGlobOwners(targetGlob, handle);
         } else {
             // Create a new anonymous GLOB and assign it to the lvalue
             RuntimeScalar newGlob = new RuntimeScalar();
