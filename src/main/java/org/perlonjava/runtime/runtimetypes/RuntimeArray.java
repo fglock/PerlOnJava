@@ -2545,7 +2545,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         }
         for (RuntimeScalar elem : this.elements) {
             RuntimeScalar.retainUnstashedIoForDurableSlot(elem);
-            RuntimeScalar.incrementRefCountForContainerStore(elem);
+            RuntimeScalar.incrementRefCountForContainerStore(
+                    elem, PerlOwnerSlot.Kind.ARRAY_ELEMENT);
         }
         // The literal owns the element copies above. Removal paths use this
         // aggregate flag in addition to each scalar's refCountOwned bit when

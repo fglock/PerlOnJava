@@ -994,7 +994,8 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             RuntimeScalar val = iterator.hasNext() ? new RuntimeScalar(iterator.next()) : new RuntimeScalar();
             resultHash.put(key, val);
             if (trackValues) {
-                RuntimeScalar.incrementRefCountForContainerStore(val);
+                RuntimeScalar.incrementRefCountForContainerStore(
+                        val, PerlOwnerSlot.Kind.HASH_ELEMENT);
             }
         }
         return result;
@@ -1019,7 +1020,8 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             RuntimeScalar val = iterator.hasNext() ? new RuntimeScalar(iterator.next()) : new RuntimeScalar();
             resultHash.put(key, val);
             if (trackValues) {
-                RuntimeScalar.incrementRefCountForContainerStore(val);
+                RuntimeScalar.incrementRefCountForContainerStore(
+                        val, PerlOwnerSlot.Kind.HASH_ELEMENT);
             }
         }
         return result;
@@ -2022,7 +2024,8 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         RuntimeScalar result = createAnonymousReference();
         for (RuntimeScalar elem : this.elements.values()) {
             RuntimeScalar.retainUnstashedIoForDurableSlot(elem);
-            RuntimeScalar.incrementRefCountForContainerStore(elem);
+            RuntimeScalar.incrementRefCountForContainerStore(
+                    elem, PerlOwnerSlot.Kind.HASH_ELEMENT);
         }
         return result;
     }
