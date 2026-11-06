@@ -4,7 +4,7 @@
 
 **Current checkpoint (2026-11-06):** #1649 remains in Phase 2 on branch
 `wip/issue1649-owner-transition-20261106-035834`, latest source commit
-`28bedc5f43`.
+`2ad3a0ed0f`.
 Immediate scalar-backed counted-edge retirement now goes through one
 `RuntimeScalar` transition that retires the exact `PerlOwnerSlot` and mirrored
 `refCountOwned` state. Immediate paths also remove the owner trace there;
@@ -97,6 +97,19 @@ exit (`/tmp/issue1649-perl-cell-semantics.log`). Logs:
 `/tmp/issue1649-active-lexical-interpreter-28bedc5f43.log`,
 `/tmp/issue1649-path-tiny-jvm-28bedc5f43.log`, and
 `/tmp/issue1649-path-tiny-interpreter-28bedc5f43.log`.
+
+The next producer batch now declares `CODE_SLOT`, `RETURN_VALUE`, and
+`ARGUMENT_VALUE` during acquisition for CODE stash values, mortal returns,
+closure arguments, and tail-call targets. Unweaken, autovivification, blessing,
+and blessed-glob alias restoration pass their current storage kind to the same
+typed acquisition API. `TailCallCodeRefOwnerSlotTest` verifies the tail-call
+slot is released exactly. The full `nice -n 19 timeout 1800 make` gate passes
+on `2ad3a0ed0f` in 10m35; the system-Perl/JVM/interpreter
+`tailcall_code_owner_lifetime.t` oracle passes 3/3 on each. Logs:
+`/tmp/issue1649-tailcall-explicit-owner-2ad3a0ed0f-make.log`,
+`/tmp/issue1649-tailcall-code-owner-perl-2ad3a0ed0f.log`,
+`/tmp/issue1649-tailcall-code-owner-jvm-2ad3a0ed0f.log`, and
+`/tmp/issue1649-tailcall-code-owner-interpreter-2ad3a0ed0f.log`.
 
 The source audit still finds no production caller of legacy
 `MortalList.deferDecrement()` or `ReachabilityWalker.sweepReleasedWeakReferents()`;
