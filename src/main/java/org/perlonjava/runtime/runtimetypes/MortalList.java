@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -421,6 +422,41 @@ public class MortalList {
         releaseCountedOwnerSlotImmediately(base, slotRelease, null, releaseSite);
     }
 
+    /** Retire an exact scalar edge while building host-side storage. */
+    static void releaseCountedOwnerWithoutPerlRuntime(
+            RuntimeScalar owner, RuntimeBase referent, String releaseSite) {
+        Objects.requireNonNull(owner, "owner");
+        Objects.requireNonNull(referent, "referent");
+        Objects.requireNonNull(releaseSite, "releaseSite");
+        if (PerlRuntime.currentOrNull() != null) {
+            throw new IllegalStateException(
+                    "host-side counted release cannot run inside a Perl runtime");
+        }
+        PerlOwnerSlot slot = owner.countedOwnerSlot();
+        if (!owner.refCountOwned || owner.value != referent
+                || slot == null || !slot.isActive() || slot.referent() != referent
+                || slot.countedScalarOwner() != owner
+                || !PerlOwnerSlot.isCountedKind(slot.kind())) {
+            throw new IllegalStateException(
+                    "host-side counted release lost its current scalar owner at " + releaseSite);
+        }
+        if (referent.refCount <= 0) {
+            throw new IllegalStateException(
+                    "host-side counted release requires a positive reference count at "
+                            + releaseSite);
+        }
+
+        owner.refCountOwned = false;
+        referent.releaseOwner(owner, releaseSite);
+        PerlOwnerSlot.PendingRelease release = slot.releaseCountedIdentity();
+        if (release == null) {
+            throw new IllegalStateException(
+                    "host-side counted release lost its release token at " + releaseSite);
+        }
+        releaseCountedOwnerSlotImmediately(
+                referent, release, null, releaseSite, false, true);
+    }
+
     static void releaseCountedOwnerSlotImmediately(
             RuntimeBase base, PerlOwnerSlot.PendingRelease slotRelease,
             String transientOwnerKind, String releaseSite) {
@@ -432,8 +468,27 @@ public class MortalList {
             RuntimeBase base, PerlOwnerSlot.PendingRelease slotRelease,
             String transientOwnerKind, String releaseSite,
             boolean clearWeakRefsForLocalBinding) {
+        releaseCountedOwnerSlotImmediately(
+                base, slotRelease, transientOwnerKind, releaseSite,
+                clearWeakRefsForLocalBinding, false);
+    }
+
+    private static void releaseCountedOwnerSlotImmediately(
+            RuntimeBase base, PerlOwnerSlot.PendingRelease slotRelease,
+            String transientOwnerKind, String releaseSite,
+            boolean clearWeakRefsForLocalBinding, boolean hostCountOnly) {
         if (base == null || slotRelease == null) return;
         if (PerlRuntime.currentOrNull() == null) {
+            if (hostCountOnly) {
+                if (base.refCount <= 0) {
+                    throw new IllegalStateException(
+                            "host-side owner-slot release requires a positive reference count at "
+                                    + releaseSite);
+                }
+                base.releaseTrackedOwnerCount(releaseSite);
+                slotRelease.complete();
+                return;
+            }
             // A host-side owner transition can retire a non-final count without
             // a Perl execution context. Keep this path limited to count-only
             // releases and empty unblessed aggregates; any final Perl lifecycle
