@@ -6,6 +6,8 @@ priorities and future plans.
 
 ## Work in progress
 
+- Reject Java-backed regular files as terminals in `IO::Tty::ttyname`, and preserve unsigned 64-bit scalar signs in Storable round-trips (#1988).
+
 - Refresh the imported Perl-core and dual-life modules from the current Perl blead snapshot.
 
 - Preserve wide-string UTF-8 metadata through runtime read-only marking and string interpolation (#1970).
