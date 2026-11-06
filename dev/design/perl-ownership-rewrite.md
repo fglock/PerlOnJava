@@ -3,9 +3,11 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-06):** #1649 remains in Phase 2 on local branch
-`wip/issue1649-owner-trace-20261105-143814`, source `574c43e2ce`. The working
-tree is clean after the validated source commits. The current issue claim
-remains `Codex / ownership-goal-resume-20261105`;
+`wip/issue1649-owner-trace-20261105-143814`, base source `574c43e2ce`. The
+working tree has uncommitted scalar transfer and counted-release coordinator
+changes in `RuntimeScalar`, `RuntimeBase`, `MortalList`, `RuntimeArray`, and
+`GlobalRuntimeScalar`. The
+current issue claim remains `Codex / ownership-goal-resume-20261105`;
 PR #1938 is an open draft on a separate remote branch at
 `95b7c0cd8abbec3d55e9ee377f67a9c1a3c8ca05`, with no review comments. The issue
 handoff requires explicit owner transitions, removal of ordinary sweep
@@ -50,6 +52,39 @@ as well as runtime-bound release. `RuntimeScalar.setLargeRefCounted` no longer
 has a tokenless decrement or count-reconstruction fallback for a counted
 overwrite: a valid overwrite must carry its exact pending slot release. IO
 resource leases remain separate from Perl strong edges.
+Scalar owner handoffs now move the exact active `PerlOwnerSlot` and the
+`refCountOwned` state together, validating that source and destination carry
+the same referent. Postfix `++`/`--` uses a separate promotion transition for
+Perl's returned old value, including borrowed-source adoption of an existing
+count. The full `nice -n 19 timeout 1800 make` gate passes in 7m56, and
+`postfix_reference_temporary_owner.t` passes 6/6 on system Perl, JVM, and
+interpreter with corrective sweeps disabled. Logs:
+`/tmp/issue1649-central-scalar-transfer-make.log` and
+`/tmp/issue1649-central-transfer-postfix-{perl,jvm,interpreter}.log`.
+Queued counted releases now take their exact slot and clear `refCountOwned`
+inside the scalar transition. Array removal and localized scalar restore no
+longer clear the flag before queueing. Missing identities are rejected for
+tracked referents; the narrow tokenless path remains for old synthetic scalars
+that never entered tracked counting. An initial strict gate exposed those two
+production pre-clears and synthetic test fixtures; after migrating the
+producers and preserving only that fixture bridge, `nice -n 19 timeout 1800
+make` passes in 7m49 (`/tmp/issue1649-central-queued-release-compat-make.log`).
+Normal scalar stores now verify that paired acquisition already installed the
+active slot instead of recording it afterward. Weakening of legacy scalar
+cells, localized legacy CODE slots, and postfix result promotion use an
+explicit existing-edge adoption transition, which preserves Perl's
+already-counted reference without adding a second count. The record-only API
+remains solely for synthetic lifecycle fixtures; no production caller uses it.
+An attempt to remove verified-slot count alignment from deferred cleanup
+failed 17 Java tests that explicitly require current scalar, aggregate,
+invocant, native, and CODE owner identities to repair deliberate transient
+undercounts (`/tmp/issue1649-tokenized-release-no-repair-make.log`). That
+repair uses exact current owner slots and performs no root walk; it remains a
+separate compatibility/lifecycle bridge from graph-based reachability
+recovery. Keep it while removing ordinary graph recovery. The latter remains
+reachable only through legacy `MortalList.deferDecrement()`; source search has
+no production Java caller. CODE capture cleanup likewise retains its
+tokenless verified-slot bridge for explicit self-capture lifecycle entry.
 Localized CODE restore now releases the scalar's exact counted owner token.
 The legacy direct-store fixture has no token, so restore adopts the existing
 count only when the current stash-bound scalar proves that CODE edge, then

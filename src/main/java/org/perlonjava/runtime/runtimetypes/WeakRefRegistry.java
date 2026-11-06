@@ -150,7 +150,8 @@ public class WeakRefRegistry {
                 // before its storage producer has installed a slot token.
                 // Adopt that existing count as an identity without incrementing
                 // it, then retire the exact edge through the standard release.
-                ref.recordCountedOwner(base);
+                RuntimeScalar.adoptExistingCountedOwnerForCurrentValue(
+                        ref, base, ref.countedOwnerKind(), "WeakRefRegistry.weaken legacy edge");
                 releasedSlot = ref.countedOwnerSlot();
                 if (releasedSlot == null || !releasedSlot.isActive()
                         || releasedSlot.referent() != base) {
