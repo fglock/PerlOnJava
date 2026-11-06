@@ -813,9 +813,8 @@ public class MortalList {
                 || scalar.type == RuntimeScalarType.GLOB)
                 && scalar.value instanceof RuntimeBase base) {
             if (base.refCount > 0) {
-                scalar.refCountOwned = false;
                 if (base.refCountTrace) {
-                    base.traceRefCount(0, "MortalList.deferDecrementIfTracked (queued, scalar.refCountOwned->false)");
+                    base.traceRefCount(0, "MortalList.deferDecrementIfTracked (queued owner release)");
                 }
                 LifecycleRuntimeState state = state();
                 markBoundaryWork(state);
@@ -1333,7 +1332,6 @@ public class MortalList {
             if (base.blessId != 0) {
                 boolean releasingLastOwner = false;
                 if (s.refCountOwned && base.refCount > 0) {
-                    s.refCountOwned = false;
                     if (base.refCountTrace) {
                         base.traceRefCount(0, "MortalList.deferDecrementRecursive (blessed, queued)");
                         base.releaseOwner(s, "deferDecrementRecursive blessed");
@@ -1386,7 +1384,6 @@ public class MortalList {
                 boolean hasCleanupTargets = hasDirectWeakElementRefs
                         || containerMayContainCleanupTargets(base);
                 if (s.refCountOwned && base.refCount > 0) {
-                    s.refCountOwned = false;
                     if (base.refCountTrace) {
                         base.traceRefCount(0, "MortalList.deferDecrementRecursive (unblessed container, queued)");
                     }
@@ -1516,7 +1513,6 @@ public class MortalList {
                         && scalar.isStoredInRegisteredContainerOwner();
                 if (scalar.refCountOwned && base.refCount > 0 && unblessedDiscardableContainer
                         && !reachableCodeRef) {
-                    scalar.refCountOwned = false;
                     if (base.refCountTrace) {
                         base.traceRefCount(0, "MortalList.mortalizeForVoidDiscard (queued owned container discard)");
                         base.releaseOwner(scalar, "mortalizeForVoidDiscard container");
@@ -1534,7 +1530,6 @@ public class MortalList {
                         || base instanceof RuntimeCode)) {
                     RuntimeBase.PendingOwnerRelease ownerRelease;
                     if (scalar.refCountOwned) {
-                        scalar.refCountOwned = false;
                         ownerRelease = base.queueOwnerRelease(
                                 scalar, "MortalList.mortalizeForVoidDiscard zero-count owner");
                         base.releaseActiveOwner(scalar);
@@ -2098,9 +2093,9 @@ public class MortalList {
             } else if (!(ownerRelease == null && transientOwnerKind == null
                             && hasPackageRootedCurrentAggregateOwner(base))
                     && base.restoreVerifiedCurrentCountedOwnerSlotRefCount()) {
-                // A verified current slot ledger is authoritative even for a
-                // legacy unpaired decrement. Reconstruct only the exact live
-                // scalar/element edges before considering a graph repair.
+                // Exact active scalar, element, invocant, or native slots are
+                // the ownership proof here. This narrow count-alignment bridge
+                // does not inspect roots or walk the runtime object graph.
             } else if (legacyUnpairedDecrement && hasWeakRefs
                     && restoreReachableOwnerCount(base)) {
                 // Preserve the legacy unpaired hook's diagnostic/recovery walk

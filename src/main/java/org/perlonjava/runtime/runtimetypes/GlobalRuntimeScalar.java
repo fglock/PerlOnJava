@@ -238,7 +238,6 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
                         && localValueOwner.referent() == base;
                 if (releaseDisplacedCountedOwner) {
                     displacedBase = (RuntimeBase) localVar.value;
-                    localVar.refCountOwned = false;
                     MortalList.pushMark();
                 }
                 try {

@@ -1091,7 +1091,6 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                     || scalar.type == RuntimeScalarType.GLOB)
                 && scalar.value instanceof RuntimeBase base
                 && base.refCount > 0) {
-            scalar.refCountOwned = false;
             array.forgetOwnedAliasElement(scalar);
             MortalList.deferDecrementFromArraySlot(base, scalar, releaseSite);
         }
