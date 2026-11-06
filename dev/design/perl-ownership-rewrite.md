@@ -19,11 +19,13 @@ those entry points remain for synthetic Java tests. Graph recovery in
 `processDeferredBase` is guarded by that legacy unpaired path. Removing verified
 active-slot count alignment is not yet safe: an earlier full gate without it
 failed Perl-level scope, argument, capture, weak-owner, and package-lifetime
-cases. That bridge is non-graph recovery, but its producers still need audit so
-the owner ledger and selective count stay paired without repair. The previous
-HTML-Tree no-sweeps and #1618 evidence predates `985ed7824f` and must be refreshed
-on the final candidate. Next: audit the undercounting producers behind verified
-owner alignment, migrate them to paired transitions, then rerun the no-sweeps
+cases. A zero-count deferral experiment also failed 12 existing Java lifecycle
+tests that explicitly require live counted slots to restore the selective
+count. Keep this non-graph owner-alignment contract while auditing the
+producers that create undercounts; do not replace it with root recovery. The
+previous HTML-Tree no-sweeps and #1618 evidence predates `985ed7824f` and must
+be refreshed on the final candidate. Next: audit the undercounting producers,
+migrate them to paired transitions where possible, then rerun the no-sweeps
 acceptance matrix on one immutable source candidate.
 
 The first-bless and re-bless paths now acquire an existing scalar's counted
