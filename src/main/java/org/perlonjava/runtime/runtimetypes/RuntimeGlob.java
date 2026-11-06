@@ -495,15 +495,10 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         if (oldCodeRef == sourceCodeRef && !WeakRefRegistry.isweak(sourceCodeRef)) {
             return;
         }
-        if (oldCodeRef != null && oldCodeRef.value instanceof RuntimeCode oldCode
-                && oldCode.stashRefCount > 0) {
-            oldCode.stashRefCount--;
-        }
         GlobalVariable.globalCodeRefs.put(globName, sourceCodeRef);
         GlobalVariable.replacePinnedCodeRef(
                 globName, GlobalVariable.globalCodeRefs.get(globName));
         newCode.hadStashRef = true;
-        newCode.stashRefCount++;
         GlobalVariable.isSubs.put(globName, true);
         GlobalVariable.invalidatePackageRootSnapshot();
         InheritanceResolver.invalidateCache();

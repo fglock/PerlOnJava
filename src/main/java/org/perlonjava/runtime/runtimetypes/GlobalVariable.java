@@ -2834,8 +2834,12 @@ public class GlobalVariable {
         RuntimeScalar codeRef = getGlobalCodeRefForFreshLookup(key);
         if (codeRef.type != RuntimeScalarType.CODE || !(codeRef.value instanceof RuntimeCode)) {
             RuntimeScalar fresh = createEmptyCodeRef(key);
-            codeRef.type = fresh.type;
-            codeRef.value = fresh.value;
+            // A named CODE slot may already be bound to the stash while its
+            // value is undef (for example after `local *name` followed by a
+            // runtime `\&name`). Assign through the scalar transition so the
+            // bound slot acquires its own CODE_SLOT count and owner identity.
+            codeRef.set(fresh);
+            codeRef.globalCodeRefFqn = key;
             InheritanceResolver.invalidateCache();
         }
         RuntimeCode runtimeCode = (RuntimeCode) codeRef.value;
