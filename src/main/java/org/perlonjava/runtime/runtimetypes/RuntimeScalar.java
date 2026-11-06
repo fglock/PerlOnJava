@@ -1508,6 +1508,43 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 acquisitionSite);
     }
 
+    /** Reify an already-counted legacy storage edge as a slot before release. */
+    static void adoptExistingCountedOwnerForCurrentValue(
+            RuntimeScalar scalar, RuntimeBase referent,
+            PerlOwnerSlot.Kind ownerKind, String acquisitionSite) {
+        Objects.requireNonNull(scalar, "scalar");
+        Objects.requireNonNull(referent, "referent");
+        Objects.requireNonNull(ownerKind, "ownerKind");
+        Objects.requireNonNull(acquisitionSite, "acquisitionSite");
+        if (!PerlOwnerSlot.isCountedKind(ownerKind)
+                || scalar.refCountOwned || scalar.value != referent
+                || (!RuntimeScalarType.isReference(scalar)
+                    && scalar.type != RuntimeScalarType.GLOB
+                    && scalar.type != RuntimeScalarType.CODE)
+                || referent.refCount <= 0
+                || referent.refCount == Integer.MIN_VALUE) {
+            throw new IllegalStateException(
+                    "legacy owner adoption requires an existing counted storage edge at "
+                            + acquisitionSite);
+        }
+        PerlOwnerSlot slot = scalar.countedOwnerSlot;
+        if (slot == null) {
+            slot = new PerlOwnerSlot(ownerKind);
+            scalar.countedOwnerSlot = slot;
+        } else {
+            if (slot.isActive()) {
+                throw new IllegalStateException(
+                        "legacy owner adoption found an active counted slot at "
+                                + acquisitionSite);
+            }
+            slot.reclassifyCountedIdentity(ownerKind);
+        }
+        slot.acquireCountedIdentity(referent);
+        slot.associateCountedScalarOwner(scalar);
+        scalar.refCountOwned = true;
+        referent.recordOwner(scalar, acquisitionSite);
+    }
+
     /** Acquire a paired count and identity before a pending scalar value is published. */
     private static void acquireCountedOwnerForPendingValue(
             RuntimeScalar scalar, RuntimeBase referent,
