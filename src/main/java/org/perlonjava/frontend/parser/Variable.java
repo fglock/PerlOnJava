@@ -1109,6 +1109,17 @@ public class Variable {
                 && operatorNode.operand instanceof IdentifierNode) {
             operatorNode.setAnnotation("directNamedCall", true);
             operatorNode.setAnnotation("retainTargetIfDeletedBeforeCallsiteInstall", true);
+            Object parseTimeRef = operatorNode.getAnnotation("parseTimeCodeRef");
+            if (parseTimeRef instanceof RuntimeScalar codeRef
+                    && codeRef.type == RuntimeScalarType.CODE
+                    && codeRef.value instanceof RuntimeCode) {
+                // This call may live in a lazily compiled subroutine. Keep its
+                // parse-time CV alive in an independent scalar until RuntimeCode
+                // installs the callsite owner. The visible glob slot itself can
+                // be emptied by deletion before lazy compilation happens.
+                operatorNode.setAnnotation("deferredDirectCallTarget",
+                        GlobalVariable.snapshotDeferredDirectCallTarget(codeRef));
+            }
         }
 
         Node list;
