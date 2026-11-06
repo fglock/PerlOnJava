@@ -3,15 +3,34 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Production sweep callers have been removed; count alignment still uses verified current owner slots while remaining producer gaps are audited.
 
 **Current checkpoint (2026-11-06):** #1649 remains in Phase 2 on branch
-`wip/issue1649-owner-transition-20261106-035834`, based on source commit
-`4865f2dddd`, which merges the validated owner-transition commit
-`c633398d83` with current `origin/master` at `9477c8c68a`. Count
-arithmetic and owner-token transitions remain centralized in
+`wip/issue1649-owner-transition-20261106-035834`, at source commit
+`c8e7a4217e`, which includes merge commit `4865f2dddd` and the validated
+owner-transition commit `c633398d83` on current `origin/master` at
+`9477c8c68a`. The combined build ran before commit creation on the identical
+source tree; Gradle injected the parent identifier `c03e64d996` into its
+launcher. Count arithmetic and owner-token transitions remain centralized in
 `RuntimeBase.acquireTrackedOwnerCount` / `releaseTrackedOwnerCount`,
 `PerlOwnerSlot`, and scalar replacement/release paths. Fix missing or extra
 edges at the producer or storage boundary that creates, transfers, caches, or
 retires the Perl value; do not repair those mismatches by reconstructing counts
 from reachability.
+
+The source audit finds the only numeric `RuntimeBase.refCount` increment and
+decrement in `RuntimeBase.acquireTrackedOwnerCount` and
+`RuntimeBase.releaseTrackedOwnerCount`; the other arithmetic hits belong to
+`CustomFileChannel`'s independent IO-state counter. Production owner drops use
+exact release tokens. `MortalList.deferDecrement` has no production caller, and
+the weak-sweep APIs have no production caller; remaining graph recovery is
+confined to the legacy unpaired hook. The write-site inventory is at
+`/private/tmp/issue1649-refcount-arithmetic-sites.txt`. The current audit also
+removed duplicate owner-trace removals before queued releases; the queue
+coordinator already retires those trace records. Zero-count initialization and
+lifecycle sentinels remain state transitions rather than owner increments or
+decrements. The combined source tree passes
+`JPERL_DISABLE_CORRECTIVE_SWEEPS=1 nice -n 19 timeout 1800 make` in 7m58
+(`/tmp/issue1649-batched-owner-audit-make.log`). JVM and interpreter trace
+smokes both exit 0 with 367 owner trace records and no `UNPAIRED RELEASE`
+(`/tmp/issue1649-owner-trace-{jvm,interpreter}.log`).
 
 The current candidate snapshots glob arguments in `stat`, `lstat`, and file-test
 cache state, so Perl's cached subject does not extend a lexical handle's
@@ -44,15 +63,16 @@ broader CPAN qualification is tracked by #1646. Continue the remaining
 producer/release audit and remove ordinary corrective reachability recovery
 only after those paths are covered.
 
-An isolated integration copy built the same combined source tree before the
-merge commit was created. Its no-sweeps
-`nice -n 19 timeout 1800 make` gate passed in 8m24
-(`/private/tmp/issue1649-integrated-no-sweeps-make.log`), and `make check-links`
-passed with 835 links and zero errors. The #1794/#1860 and lifecycle matrix
-passes eight fixtures on both backends; HTML-Tree 5.07 `t/refloop.t` passes
-8/8 on system Perl, JVM, and interpreter. The branch is now merged with
-`origin/master`; run the final no-sweeps gate on the exact merged commit before
-calling the candidate validated.
+The exact merged checkout passed
+`nice -n 19 timeout 1800 env JPERL_DISABLE_CORRECTIVE_SWEEPS=1 make` in 8m02
+(`/private/tmp/issue1649-final-merged-no-sweeps-make.log`); the generated
+launcher reports `c03e64d996`. `make check-links` passes with 835 links and zero
+errors. The #1794/#1860 and lifecycle matrix passes eight fixtures on both
+backends (`/private/tmp/issue1649-final-lifecycle-matrix-summary.txt`).
+HTML-Tree 5.07
+`t/refloop.t` passes 8/8 on system Perl, JVM, and interpreter. The candidate is
+integrated and validated; continue the producer audit before declaring the
+full sweep-removal objective complete.
 
 `RuntimeList.setFromList` now retires an assignment-materialization cell's
 anonymous IO lease alongside its counted edge, preserving that lease when the
