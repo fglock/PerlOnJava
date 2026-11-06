@@ -826,11 +826,8 @@ public class MortalList {
                 // A nested-call guard may preserve this object at a selective
                 // count of zero. Retire the stale scalar owner identity; scope
                 // exit or the final remaining owner slot performs cleanup.
-                scalar.refCountOwned = false;
-                if (base.refCountTrace) {
-                    base.releaseOwner(scalar, "deferDecrementIfTracked zero-count owner");
-                }
-                base.releaseActiveOwner(scalar);
+                base.retireZeroCountOwnerIdentity(
+                        scalar, "deferDecrementIfTracked zero-count owner");
             }
             // Note: WEAKLY_TRACKED (-2) objects are NOT scheduled for destruction
             // on scope exit. We can't count strong refs for non-DESTROY objects
