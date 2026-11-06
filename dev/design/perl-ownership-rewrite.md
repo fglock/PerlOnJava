@@ -22,11 +22,24 @@ failed Perl-level scope, argument, capture, weak-owner, and package-lifetime
 cases. A zero-count deferral experiment also failed 12 existing Java lifecycle
 tests that explicitly require live counted slots to restore the selective
 count. Keep this non-graph owner-alignment contract while auditing the
-producers that create undercounts; do not replace it with root recovery. The
-previous HTML-Tree no-sweeps and #1618 evidence predates `985ed7824f` and must
-be refreshed on the final candidate. Next: audit the undercounting producers,
-migrate them to paired transitions where possible, then rerun the no-sweeps
-acceptance matrix on one immutable source candidate.
+producers that create undercounts; do not replace it with root recovery.
+
+The clean-source full gate passes on rebuilt candidate `b207326996` in 7m43
+(`/tmp/issue1649-restored-985ed-make.log`). With corrective sweeps disabled,
+HTML-Tree 5.07 passes 23/23 files and 989/989 checks on both backends; its
+`t/refloop.t` is 8/8. The focused no-sweeps matrix for #1794, #1860,
+DESTROY/resurrection, cycles, async cancellation, and nested END exit/die passes
+7/7 files and 35/35 checks on each backend. Logs:
+`/tmp/issue1649-htmltree-jvm-b207.log`,
+`/tmp/issue1649-htmltree-interpreter-b207.log`,
+`/tmp/issue1649-lifecycle-acceptance-jvm-b207.log`, and
+`/tmp/issue1649-lifecycle-acceptance-interpreter-b207.log`.
+
+The next work is to audit producers that undercount the selective counter and
+preserve the owner-ledger contract. The remaining root recovery is behind the
+legacy unpaired hook, which has no production caller. After the producer audit
+and any compatible recovery removal, rerun the full no-sweeps acceptance on the
+final immutable candidate.
 
 The first-bless and re-bless paths now acquire an existing scalar's counted
 edge through `RuntimeScalar.acquireCountedOwnerForCurrentValue`, removing two
