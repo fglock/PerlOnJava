@@ -304,10 +304,46 @@ public class MyVarCleanupStack {
         }
     }
 
-    /** Acquire IO ownership for every currently-live lexical alias of a glob. */
+    /**
+     * Acquire IO ownership for current scalar-cell aliases and registered
+     * lexical aliases of a glob after its IO slot becomes live.
+     *
+     * <p>The glob's owner ledger finds scalar and aggregate storage without a
+     * runtime-root walk. The cleanup stack supplements it for registered
+     * lexicals whose referent has not entered selective counting.</p>
+     */
     public static void retainLiveIoGlobOwners(RuntimeGlob glob) {
         if (glob == null) return;
         IdentityHashMap<RuntimeScalar, Boolean> seen = new IdentityHashMap<>();
+        for (PerlOwnerSlot slot : glob.ownerSlotSnapshot()) {
+            RuntimeScalar scalar = null;
+            if (slot.kind() == PerlOwnerSlot.Kind.UNTRACKED_REFERENCE) {
+                RuntimeScalar candidate = slot.untrackedScalarOwner();
+                if (candidate != null
+                        && candidate.untrackedReferenceOwnerSlot() == slot
+                        && candidate.value == glob
+                        && candidate.type == RuntimeScalarType.GLOBREFERENCE
+                        && !WeakRefRegistry.isweak(candidate)) {
+                    scalar = candidate;
+                }
+            } else if (PerlOwnerSlot.isCountedKind(slot.kind())) {
+                RuntimeScalar candidate = slot.countedScalarOwner();
+                if (candidate != null
+                        && candidate.value == glob
+                        && candidate.type == RuntimeScalarType.GLOBREFERENCE
+                        && !WeakRefRegistry.isweak(candidate)) {
+                    boolean current = switch (slot.kind()) {
+                        case ARRAY_ELEMENT, HASH_ELEMENT ->
+                                candidate.isCurrentAggregateElementOwner(glob, slot);
+                        default -> candidate.isCurrentCountedScalarOwner(glob, slot);
+                    };
+                    if (current) scalar = candidate;
+                }
+            }
+            if (scalar != null && seen.put(scalar, Boolean.TRUE) == null) {
+                RuntimeScalar.retainUnstashedIoForDurableSlot(scalar);
+            }
+        }
         for (Object var : stack()) {
             if (var instanceof RuntimeScalar scalar
                     && scalar.type == RuntimeScalarType.GLOBREFERENCE

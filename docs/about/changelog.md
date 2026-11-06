@@ -7,6 +7,7 @@ priorities and future plans.
 ## Work in progress
 
 - Reacquire anonymous IO holder identities for cloned Perl scalars in child thread runtimes (#1649).
+- Acquire anonymous IO holder identities for existing scalar and aggregate aliases when `open` or `sysopen` installs IO into an existing glob (#1649).
 - Release temporary anonymous IO holder leases with list-assignment scalar owners while preserving handles carried in assignment results (#1649).
 - Finalize cleared aggregates from current owner identities; root reachability no longer preserves an ownerless referent (#1649).
 - Release `Storable::dclone` results when their last Perl owner is dropped, without leaving an extra counted return helper (#1649).

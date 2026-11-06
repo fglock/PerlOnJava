@@ -55,6 +55,18 @@ passes on immutable commit `c47cec61b5` in 7m22
 (`/tmp/issue1649-clone-io-owner-c47cec61b5-make.log`). The earlier working-tree
 gate also passed in 7m56 (`/tmp/issue1649-clone-io-owner-no-sweeps-make.log`).
 
+The IO producer audit found that `open` and `sysopen` could install a live IO
+slot into an existing anonymous glob without acquiring leases for scalar cells
+that already referenced that glob. Assignment into an undefined handle already
+acquired its lease through the scalar transition, which hid the existing-glob
+case. `MyVarCleanupStack.retainLiveIoGlobOwners` now supplements registered
+lexicals by consulting current counted and untracked scalar owner slots; the
+open and sysopen paths also retain the explicitly passed handle. The focused
+`RuntimeScalarIoOwnerSlotTest` exercises sysopen on an IO-less glob with two
+scalar owners and checks each owner gets an independent lease. This code is
+under validation on the current branch; the remaining work is to audit other
+IO installation producers and run the no-sweeps acceptance gate.
+
 The source audit still finds no production caller of legacy
 `MortalList.deferDecrement()` or `ReachabilityWalker.sweepReleasedWeakReferents()`;
 those entry points remain for synthetic Java tests. Graph recovery in

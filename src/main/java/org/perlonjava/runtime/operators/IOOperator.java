@@ -40,6 +40,11 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
 public class IOOperator {
     private static final int O_NONBLOCK = NativeUtils.IS_MAC ? 4 : 04000;
 
+    private static void retainLiveIoGlobOwners(RuntimeGlob glob, RuntimeScalar handle) {
+        MyVarCleanupStack.retainLiveIoGlobOwners(glob);
+        RuntimeScalar.retainUnstashedIoForDurableSlot(handle);
+    }
+
     // File descriptor to RuntimeIO mapping for duplication support
     private static Map<Integer, RuntimeIO> fileDescriptorMap() {
         return PerlRuntime.current().ioRegistryState.operatorFileDescriptors;
@@ -836,6 +841,7 @@ public class IOOperator {
                         // registered on the global glob, so callers can find it by name.
                     }
                 }
+                retainLiveIoGlobOwners(targetGlob, fileHandle);
             } else {
                 RuntimeScalar newGlob = new RuntimeScalar();
                 newGlob.type = RuntimeScalarType.GLOBREFERENCE;
@@ -1086,6 +1092,7 @@ public class IOOperator {
                 System.err.flush();
             }
             targetGlob.openIO(fh);
+            retainLiveIoGlobOwners(targetGlob, fileHandle);
         } else {
             // Create a new anonymous GLOB and assign it to the lvalue
             RuntimeScalar newGlob = new RuntimeScalar();
@@ -2024,6 +2031,7 @@ public class IOOperator {
 
         if (targetGlob != null) {
             targetGlob.openIO(fh);
+            retainLiveIoGlobOwners(targetGlob, fileHandle);
         } else {
             RuntimeScalar newGlob = new RuntimeScalar();
             newGlob.type = RuntimeScalarType.GLOBREFERENCE;
