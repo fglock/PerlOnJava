@@ -326,12 +326,9 @@ public class DestroyDispatch {
         // Release closure captures when a CODE ref's refCount hits 0.
         // This allows captured variables to be properly cleaned up
         // (e.g., blessed objects in captured scalars can fire DESTROY).
-        // However, skip releaseCaptures if a current CODE_SLOT owner remains.
-        // The selective refCount can falsely reach 0
-        // for stash-installed closures because glob assignments, closure captures,
-        // and other JVM-level references aren't always counted. Releasing captures
-        // prematurely would cascade to clear weak references (e.g., in Sub::Defer's
-        // %DEFERRED hash), causing infinite recursion in Moo/DBIx::Class.
+        // A current counted CODE_SLOT owner must still have its paired count.
+        // Tokenless lifecycle entry still has a narrow verified-slot bridge;
+        // it uses explicit owner identities and does not walk roots.
         if (referent instanceof RuntimeCode code) {
             if (code.hasCountedCodeSlots || !code.hasStashCodeSlotOwner()) {
                 if (!finalCountedOwner

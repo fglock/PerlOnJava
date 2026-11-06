@@ -1466,12 +1466,24 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return containerOwner instanceof RuntimeArray array && !array.elementsAliased;
     }
 
+    /** Compatibility bridge for fixtures and pre-slot scalar construction. */
     void recordCountedOwner(RuntimeBase referent) {
         if (countedOwnerSlot == null) {
             countedOwnerSlot = new PerlOwnerSlot(countedOwnerKind());
         }
         countedOwnerSlot.acquireCountedIdentity(referent);
         countedOwnerSlot.associateCountedScalarOwner(this);
+    }
+
+    /** Verify that this scalar's Perl strong edge has its paired active slot. */
+    private void requireCountedOwner(RuntimeBase referent, String operation) {
+        PerlOwnerSlot slot = countedOwnerSlot;
+        if (!refCountOwned || slot == null || !slot.isActive()
+                || slot.referent() != referent || slot.countedScalarOwner() != this
+                || !PerlOwnerSlot.isCountedKind(slot.kind())) {
+            throw new IllegalStateException(
+                    operation + " requires a paired active Perl owner slot");
+        }
     }
 
     /** Acquire one counted edge for a scalar that already contains its referent. */
@@ -1517,7 +1529,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         Objects.requireNonNull(ownerKind, "ownerKind");
         Objects.requireNonNull(acquisitionSite, "acquisitionSite");
         if (!PerlOwnerSlot.isCountedKind(ownerKind)
-                || scalar.refCountOwned || scalar.value != referent
+                || scalar.value != referent
                 || (!RuntimeScalarType.isReference(scalar)
                     && scalar.type != RuntimeScalarType.GLOB
                     && scalar.type != RuntimeScalarType.CODE)
@@ -1687,7 +1699,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return false;
     }
 
-    private PerlOwnerSlot.Kind countedOwnerKind() {
+    PerlOwnerSlot.Kind countedOwnerKind() {
         return codeSlotBindings != 0 ? PerlOwnerSlot.Kind.CODE_SLOT
                 : containerOwner instanceof RuntimeHash ? PerlOwnerSlot.Kind.HASH_ELEMENT
                 : containerOwner instanceof RuntimeArray array
@@ -1852,19 +1864,62 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     PerlOwnerSlot.PendingRelease deferCountedOwnerRelease(RuntimeBase referent) {
-        return countedOwnerSlot != null && countedOwnerSlot.referent() == referent
-                ? countedOwnerSlot.releaseCountedIdentity() : null;
+        PerlOwnerSlot slot = countedOwnerSlot;
+        if (slot == null) {
+            // RuntimeBase decides whether the tokenless compatibility path is
+            // allowed before it changes the mirrored flag.
+            return null;
+        }
+        if (!refCountOwned || !slot.isActive() || slot.referent() != referent
+                || slot.countedScalarOwner() != this
+                || !PerlOwnerSlot.isCountedKind(slot.kind())) return null;
+        PerlOwnerSlot.PendingRelease release = slot.releaseCountedIdentity();
+        if (release == null) return null;
+        refCountOwned = false;
+        return release;
     }
 
     private void transferCountedOwnerTo(RuntimeScalar destination) {
+        Objects.requireNonNull(destination, "destination");
+        if (destination == this) {
+            throw new IllegalArgumentException("counted owner transfer requires a distinct scalar");
+        }
+        if (!refCountOwned || countedOwnerSlot == null || !countedOwnerSlot.isActive()
+                || countedOwnerSlot.referent() != value
+                || destination.value != value) {
+            throw new IllegalStateException(
+                    "counted owner transfer requires the source and destination to carry the same active owner");
+        }
         destination.countedOwnerSlot = countedOwnerSlot;
         countedOwnerSlot = null;
-        if (destination.countedOwnerSlot != null) {
-            destination.countedOwnerSlot.associateCountedScalarOwner(destination);
+        destination.countedOwnerSlot.associateCountedScalarOwner(destination);
+        destination.refCountOwned = true;
+        refCountOwned = false;
+    }
+
+    /**
+     * Promote the old value returned by postfix ++/-- to the existing counted
+     * edge. A borrowed source may have no scalar token, so this Perl value
+     * transition adopts the already-counted edge into the returned scalar.
+     */
+    private void transferPostfixReferenceOwnerTo(RuntimeScalar destination) {
+        Objects.requireNonNull(destination, "destination");
+        if (!(value instanceof RuntimeBase referent) || destination.value != referent) {
+            throw new IllegalStateException(
+                    "postfix owner promotion requires matching reference values");
         }
-        if (destination.countedOwnerSlot == null && destination.value instanceof RuntimeBase referent) {
-            destination.recordCountedOwner(referent);
+        if (refCountOwned && countedOwnerSlot != null && countedOwnerSlot.isActive()
+                && countedOwnerSlot.referent() == referent) {
+            transferCountedOwnerTo(destination);
+            return;
         }
+        if (refCountOwned) {
+            throw new IllegalStateException(
+                    "postfix owner promotion found a counted scalar without its active token");
+        }
+        adoptExistingCountedOwnerForCurrentValue(
+                destination, referent, destination.countedOwnerKind(),
+                "postfix reference result promotion");
     }
 
     /** Move a non-counted strong value edge with a localized scalar snapshot. */
@@ -4324,7 +4379,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 MortalList.deferDecrementFromArraySlot(oldBase, this,
                         "RuntimeScalar.setLargeRefCounted overwrite");
                 oldArgumentAliasReleaseQueued = true;
-                this.refCountOwned = false;
                 if (newOwned) {
                     acquireCountedOwnerForPendingValue(this, newReferent,
                             countedOwnerKind(),
@@ -4623,7 +4677,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (isCurrentReferenceSlotMutation(referenceSlotMutationVersion)) {
             this.refCountOwned = newOwned;
             if (newOwned && this.value instanceof RuntimeBase ownedReferent) {
-                recordCountedOwner(ownedReferent);
+                requireCountedOwner(ownedReferent, "RuntimeScalar.setLargeRefCounted store");
                 if (untrackedReferenceOwnerSlot != null) {
                     releaseUntrackedReferenceOwner(untrackedReferenceOwnerSlot.referent());
                 }
@@ -7419,10 +7473,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 // returned reference becomes the first durable owner.  The
                 // assignment receiving this scalar will balance the temporary
                 // copy, so retain one cleanup token for that returned value.
-                old.refCountOwned = true;
                 old.postfixReferenceOwnershipTransfer = true;
-                this.refCountOwned = false;
-                transferCountedOwnerTo(old);
+                transferPostfixReferenceOwnerTo(old);
                 // Check if object is eligible for overloading
                 int blessId = blessedId(this);
                 if (blessId != 0) {
@@ -7731,10 +7783,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             default -> { // All reference types
                 // See postAutoIncrementLarge(): the returned pre-mutation
                 // reference inherits this lvalue's ownership token.
-                old.refCountOwned = true;
                 old.postfixReferenceOwnershipTransfer = true;
-                this.refCountOwned = false;
-                transferCountedOwnerTo(old);
+                transferPostfixReferenceOwnerTo(old);
                 // Check if object is eligible for overloading
                 int blessId = blessedId(this);
                 if (blessId != 0) {
@@ -7904,10 +7954,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             // local() changes the value in this same scalar cell. Carry the
             // old counted edge with the saved state before a store can reuse
             // this scalar's slot for the localized replacement.
-            currentState.refCountOwned = true;
             currentState.localizedSavedCountedOwner = true;
             transferCountedOwnerTo(currentState);
-            refCountOwned = false;
         }
         if (untrackedReferenceOwnerSlot != null
                 && untrackedReferenceOwnerSlot.isActive()
@@ -7958,9 +8006,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                         if (refCountOwned && countedOwnerSlot != null
                                 && countedOwnerSlot.isActive()
                                 && countedOwnerSlot.referent() == value) {
-                            movedValue.refCountOwned = true;
                             transferCountedOwnerTo(movedValue);
-                            refCountOwned = false;
                         }
                         if (untrackedReferenceOwnerSlot != null
                                 && untrackedReferenceOwnerSlot.isActive()
@@ -7991,7 +8037,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             if (releaseDisplacedCountedOwner) MortalList.pushMark();
             try {
                 if (releaseDisplacedCountedOwner) {
-                    refCountOwned = false;
                     MortalList.deferDecrementFromScalarSlot(
                             displacedBase, this, "RuntimeScalar.dynamicRestoreState");
                 }
@@ -8006,7 +8051,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 if (previousState.refCountOwned && previousState.countedOwnerSlot != null) {
                     previousState.transferCountedOwnerTo(this);
                     previousState.localizedSavedCountedOwner = false;
-                    previousState.refCountOwned = false;
                 }
                 previousState.transferUntrackedOwnerTo(this);
                 this.blessId = previousState.blessId;
@@ -8063,10 +8107,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (refCountOwned && countedOwnerSlot != null
                 && countedOwnerSlot.isActive()
                 && countedOwnerSlot.referent() == value) {
-            activeState.refCountOwned = true;
             activeState.localizedSavedCountedOwner = true;
             transferCountedOwnerTo(activeState);
-            refCountOwned = false;
         }
         if (untrackedReferenceOwnerSlot != null
                 && untrackedReferenceOwnerSlot.isActive()
@@ -8092,7 +8134,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             if (activeState.refCountOwned && activeState.countedOwnerSlot != null) {
                 activeState.transferCountedOwnerTo(this);
                 activeState.localizedSavedCountedOwner = false;
-                activeState.refCountOwned = false;
             }
             activeState.transferUntrackedOwnerTo(this);
             this.blessId = activeState.blessId;
