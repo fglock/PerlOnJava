@@ -793,12 +793,12 @@ public class RuntimeList extends RuntimeBase {
                     result.elements.add(useAlias ? rhsAlias : rhsValue);
 
                     if (rhsIndex < rhsSize) {
-                        // Undo the materialized copy's refCount increment for the consumed
+                        // Retire the materialized copy's counted edge and IO lease for the consumed
                         // RHS value (mirrors the corresponding fix in the assigned-scalar
                         // branch below). Without this, `my (undef, $name) = @_;` patterns
                         // leak +1 refCount per call on the discarded first arg — visible
                         // in op/inccode.t "no leaks" tests #61, #63 (bug perl #92252).
-                        releaseMaterializedAssignmentCopy(rhsValue, "undef-target");
+                        releaseMaterializedAssignmentCopy(rhsValue, "undef-target", result);
                         rhsIndex++;
                     }
                 } else if (elem instanceof RuntimeScalar runtimeScalar) {
@@ -808,14 +808,14 @@ public class RuntimeList extends RuntimeBase {
                     RuntimeScalar assigned = (rhsIndex < rhsSize) ? rhsElements.get(rhsIndex++) : null;
                     runtimeScalar.set(assigned != null ? assigned : new RuntimeScalar());
                     result.elements.add(runtimeScalar);  // Add reference to the variable itself
-                    // Undo the materialized copy's refCount increment.
+                    // Retire the materialized copy's counted edge and IO lease.
                     // The materialization (addToArray → addToScalar → set → setLarge) incremented
                     // refCount on the copy. The target's set() above created its own increment.
                     // The copy's increment is now redundant and would leak (the temporary copy
                     // sits in the local `rhs` array which is never scope-exit-cleaned).
                     // Array/hash targets take direct ownership of materialized copies, so only
                     // scalar targets need this correction.
-                    releaseMaterializedAssignmentCopy(assigned, "scalar-target");
+                    releaseMaterializedAssignmentCopy(assigned, "scalar-target", null);
                 } else if (elem instanceof RuntimeArray runtimeArray) {
                     List<RuntimeScalar> remaining = (rhsIndex < rhsSize)
                             ? new ArrayList<>(rhsElements.subList(rhsIndex, rhsSize))
@@ -830,9 +830,9 @@ public class RuntimeList extends RuntimeBase {
                     RuntimeArray assignedArray = runtimeArray.setFromList(remainingList);
                     // setFromList creates destination cells and acquires their
                     // owners. The materialized RHS copies are temporary transport
-                    // values, so retire any counted owners they acquired as well.
+                    // values, so retire their counted edges and IO leases as well.
                     for (RuntimeScalar r : remaining) {
-                        releaseMaterializedAssignmentCopy(r, "array-target");
+                        releaseMaterializedAssignmentCopy(r, "array-target", result);
                     }
                     result.elements.addAll(assignedArray.elements);
                     rhsIndex = rhsSize; // Consume the rest
@@ -849,9 +849,9 @@ public class RuntimeList extends RuntimeBase {
                     // assignment behavior and the assigned key/value list.
                     result.elements.addAll(assignedHash.elements);
                     // The RHS materialization is temporary transport; retire its
-                    // counted copies after the destination has acquired its slots.
+                    // counted edges and IO leases after the destination acquired slots.
                     for (RuntimeScalar r : remaining) {
-                        releaseMaterializedAssignmentCopy(r, "hash-target");
+                        releaseMaterializedAssignmentCopy(r, "hash-target", result);
                     }
                     rhsIndex = rhsSize; // Consume the rest
                 }
@@ -864,7 +864,7 @@ public class RuntimeList extends RuntimeBase {
                 // updated. Retire any transport copies that did not reach an LHS
                 // and avoid leaving flushing suppressed across exception unwind.
                 for (RuntimeScalar copy : rhs.elements) {
-                    releaseMaterializedAssignmentCopy(copy, "unwind");
+                    releaseMaterializedAssignmentCopy(copy, "unwind", null);
                 }
             } finally {
                 MortalList.suppressFlush(wasFlushing);
@@ -880,14 +880,19 @@ public class RuntimeList extends RuntimeBase {
         return result;
     }
 
-    private static void releaseMaterializedAssignmentCopy(RuntimeScalar scalar, String target) {
-        if (scalar == null || !scalar.refCountOwned
+    private static void releaseMaterializedAssignmentCopy(
+            RuntimeScalar scalar, String target, RuntimeBase returned) {
+        if (scalar == null) return;
+        // Assignment materialization may attach both a counted scalar edge and
+        // an anonymous-IO resource lease to the same temporary cell. Retire
+        // both through their normal owner transitions; if the cell is part of
+        // the assignment result, transfer/preserve its IO lease there.
+        RuntimeScalar.releaseIoOwnerPreservingReturned(scalar, returned);
+        if (!scalar.refCountOwned
                 || ((scalar.type & RuntimeScalarType.REFERENCE_BIT) == 0
                     && scalar.type != RuntimeScalarType.GLOB)
                 || !(scalar.value instanceof RuntimeBase base)
-                || base.refCount <= 0) {
-            return;
-        }
+                || base.refCount <= 0) return;
         MortalList.releaseCountedOwnerImmediately(
                 scalar, "RuntimeList materialized-copy undo (" + target + ")");
     }
