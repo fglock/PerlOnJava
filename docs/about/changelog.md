@@ -14,7 +14,7 @@ priorities and future plans.
 - Normalize out-of-range calendar fields in `Time::Piece->strptime`, matching Perl date overflow behavior (#2001).
 - Reduce GC pressure in inner `eval STRING` compilation: replace `FastStack<T>`'s default lazy ArrayList initialisation (first-push allocates `Object[10]`) with an explicit `super(2)` constructor, cutting per-stack array allocation 5× for the 16 `FastStack` fields in each snapshot `ScopedSymbolTable`; replace the O(N log N) `getAllVisibleVariables()` `TreeMap`+`HashSet` build inside `getVisibleVariableRegistry()` and `getVisibleOurRegistry()` with direct O(N) iteration of `symbolTableStack` using `putIfAbsent` for shadowing, caching results until the next `clearVisibleVariablesCache()` invalidation — eliminating `TreeMap.put`, `TreeMap.successor`, and `HashSet.add` allocations from the JFR execution-sample profile for inner eval compilation.
 - Reacquire anonymous IO holder identities for cloned Perl scalars in child thread runtimes (#1649).
-- Acquire anonymous IO holder identities for existing scalar and aggregate aliases when `open` or `sysopen` installs IO into an existing glob (#1649).
+- Acquire anonymous IO holder identities for existing scalar and aggregate aliases whenever IO is installed into an existing glob (#1649).
 - Release temporary anonymous IO holder leases with list-assignment scalar owners while preserving handles carried in assignment results (#1649).
 - Finalize cleared aggregates from current owner identities; root reachability no longer preserves an ownerless referent (#1649).
 - Release `Storable::dclone` results when their last Perl owner is dropped, without leaving an extra counted return helper (#1649).
