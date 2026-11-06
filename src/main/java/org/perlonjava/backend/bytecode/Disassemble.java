@@ -1378,8 +1378,10 @@ public class Disassemble {
                         rs2 = interpretedCode.bytecode[pc++];  // closure register
                         int pkgIdx = InterpretedCode.readInt(interpretedCode.bytecode, pc);
                         pc += 1;
+                        int sortCtx = interpretedCode.bytecode[pc++];
                         sb.append("SORT r").append(rd).append(" = sort(r").append(rs1)
-                                .append(", r").append(rs2).append(", pkg=").append(interpretedCode.stringPool[pkgIdx]).append(")\n");
+                                .append(", r").append(rs2).append(", pkg=").append(interpretedCode.stringPool[pkgIdx])
+                                .append(", ctx=").append(sortCtx).append(")\n");
                         break;
                     case Opcodes.NEW_ARRAY:
                         rd = interpretedCode.bytecode[pc++];
