@@ -270,13 +270,15 @@ final class StatementCopline {
      */
     private static boolean isCommentStart(List<LexerToken> tokens, int index, int previousSignificant) {
         LexerToken token = tokens.get(index);
-        if (token.type != LexerTokenType.OPERATOR || !"#".equals(token.text)) {
+        if (token.type != LexerTokenType.OPERATOR
+                || token.text.length() != 1 || token.text.charAt(0) != '#') {
             return false;
         }
         if (previousSignificant >= 0) {
             String previous = tokens.get(previousSignificant).text;
-            if ("$".equals(previous) || "@".equals(previous) || "%".equals(previous)) {
-                return false;
+            if (previous.length() == 1) {
+                char c = previous.charAt(0);
+                if (c == '$' || c == '@' || c == '%') return false;
             }
         }
         return true;
