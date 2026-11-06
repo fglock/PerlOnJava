@@ -3,7 +3,7 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Remaining owner families still prevent removal of the legacy bridge and reachability fallbacks.
 
 **Current checkpoint (2026-11-06):** #1649 remains in Phase 2 on branch
-`wip/issue1649-owner-transition-20261106-035834`, source commit `985ed7824f`.
+`wip/issue1649-owner-transition-20261106-035834`, source commit `3ebcdfe796`.
 Immediate scalar-backed counted-edge retirement now goes through one
 `RuntimeScalar` transition that retires the exact `PerlOwnerSlot` and mirrored
 `refCountOwned` state. Immediate paths also remove the owner trace there;
@@ -12,6 +12,28 @@ transition is used by weakening, host-side storage release, DESTROY self
 argument release, zero-count identity retirement, and immediate argument
 release. The immutable candidate passes `nice -n 19 timeout 1800 make` in 7m14
 (`/tmp/issue1649-central-scalar-retirement-985ed-make.log`).
+
+`RuntimeList.setFromList` now retires an assignment-materialization cell's
+anonymous IO lease alongside its counted edge, preserving that lease when the
+same handle is carried in the assignment result. This closes the holder leak
+where a temporary scalar carrier was collected with an active
+`IO_RESOURCE_HOLDER`. `%^H` restoration also stopped pre-queuing values before
+removing them through `RuntimeHash`'s owner-aware map, eliminating a duplicate
+edge release. Commit `3ebcdfe796` passes the immutable
+`nice -n 19 timeout 1800 make` gate in 7m43
+(`/tmp/issue1649-io-owner-3ebcdfe-make.log`). With corrective sweeps disabled,
+`file_temp_path_wrapper_lifetime.t` passes 5/5 and
+`refcount/blessed_scalar_reference_contents_destroy.t` passes 4/4 on both
+backends; `hint_hash_scope_destroy.t` passes 4/4 on both backends. The
+system-Perl file-wrapper oracle passes 5/5. `make check-links` passes with
+832 links and zero errors. Logs:
+`/tmp/issue1649-filetemp-system-perl-owner-release.log`,
+`/tmp/issue1649-materialized-io-filetemp-jvm.log`,
+`/tmp/issue1649-materialized-io-filetemp-interpreter.log`,
+`/tmp/issue1649-materialized-io-blessed-ref-jvm.log`,
+`/tmp/issue1649-materialized-io-blessed-ref-interpreter.log`,
+`/tmp/issue1649-io-owner-hinthash-jvm.log`, and
+`/tmp/issue1649-io-owner-hinthash-interpreter.log`.
 
 The source audit still finds no production caller of legacy
 `MortalList.deferDecrement()` or `ReachabilityWalker.sweepReleasedWeakReferents()`;
@@ -35,11 +57,14 @@ DESTROY/resurrection, cycles, async cancellation, and nested END exit/die passes
 `/tmp/issue1649-lifecycle-acceptance-jvm-b207.log`, and
 `/tmp/issue1649-lifecycle-acceptance-interpreter-b207.log`.
 
-The next work is to audit producers that undercount the selective counter and
-preserve the owner-ledger contract. The remaining root recovery is behind the
-legacy unpaired hook, which has no production caller. After the producer audit
-and any compatible recovery removal, rerun the full no-sweeps acceptance on the
-final immutable candidate.
+The next work is to continue the producer audit, including cloned/shared
+storage and remaining pre-counted temporary values, then determine which
+verified-slot alignment and legacy recovery bridges can be removed without
+breaking normal Perl lifetimes. Root-count reconstruction remains behind the
+legacy unpaired hook, which has no production caller; do not treat that
+compatibility path as evidence that ordinary owner identities are complete.
+After the audit and compatible recovery removal, rerun the #1618/#1642 and
+no-sweeps acceptance on one final immutable candidate.
 
 The first-bless and re-bless paths now acquire an existing scalar's counted
 edge through `RuntimeScalar.acquireCountedOwnerForCurrentValue`, removing two
@@ -418,7 +443,7 @@ unpaired test hook. Current-slot count restoration still needs producer audit.
 | Rescued object cleanup | `DestroyDispatch.processRescuedObjects` no longer infers death from `refCount == 1` or `Integer.MIN_VALUE`; it checks current Perl owner identities. | A weak scalar promoted during `DESTROY` acquires its normal counted slot. The rescue list records pending lifecycle work but is not an owner. Releasing the last identified owner removes the queued marker and re-dispatches `DESTROY`; marker-only rescue proceeds to final cleanup. | `destroy_weak_aggregate_slot_resurrection.t` passes system Perl, JVM, and interpreter; `dbic_deep_cycle_weak_shift_regression.t` passes on both backends and preserves an unrelated strong-cycle rescue. `PerlReferentDestroyLifecycleTest` covers marker-only cleanup. Broader producer coverage and removal of the remaining rescue registry are still open. |
 | Temporary evaluation roots | `MortalList` stores temporary roots and the reachability walker follows them during cleanup; temporary roots intentionally do not count as Perl owners. | `pushTemporaryRoot`/`popTemporaryRoot` bracket setter and return cleanup. A temporary root must defer finalization only until its exact removal, without turning it into a persistent Perl edge. | `PerlStrongOwnerProofTest` distinguishes temporary roots from Perl owners; `TemporaryReturnOwnerTraversalTest` covers direct aggregate values. Final cleanup on temporary-root release remains part of the migration. |
 | Suspended async frame | Awaited Future values formerly had a separate `suspendedRoots` map consumed by reachability snapshots. That supplemental root is removed. | `InterpreterSuspension` copies the await operand into a scalar cell and attaches a `SUSPENDED_FRAME` slot. Completion, cancellation, and exception cleanup detach the slot and notify weak cleanup. Lexical registers already use per-register `SUSPENDED_FRAME` identities. | `InterpreterSuspensionOwnerTest` verifies acquisition and final release; `issue_1649_cleared_aggregate_async_scope_exit.t` passes on both backends; `issue_1649_cancelled_async_scope_exit.t` verifies cancellation and exactly-once destruction 5/5 on both backends. Chained-await coverage remains in the final matrix. |
-| Resource holders | Each anonymous IO resource holder has a native `IO_RESOURCE_HOLDER` identity on its `RuntimeGlob`; `RuntimeScalar.ioOwnerSlot` carries that identity, and `RuntimeGlob.ioHolderCount()` derives the active count from the owner ledger. | `retainUnstashedIoForDurableSlot` acquires a slot for a strong scalar, while `releaseIoOwner` retires it exactly once. Weaken releases a weak scalar's holder after any final destructor dispatch; unweaken reacquires it for a live glob. Detached-value assignment, returned aliases, and localized-global suspension move the same identity. Replacement acquires the new edge before releasing the old one. Bulk clear still queues the owning scalar for release. Thread cloning drops nonportable IO ownership. | Existing IO coverage remains; `WeakGlobIoOwnerSlotTest` verifies weak and strong aliases, IO-holder release, and unweaken. The new blessed-glob regression passes 5/5 on both backends and system Perl. The eight-file Perl IO matrix passes on both backends and system Perl (74 checks; TCP loopback test skipped because the listener is unavailable). Socket return, exception unwind, localization, aggregate clear, selected-glob restoration, #1794, and #1860 remain covered. Non-socket handle close policy and broader resource-owner acquisition paths remain under audit. |
+| Resource holders | Each anonymous IO resource holder has a native `IO_RESOURCE_HOLDER` identity on its `RuntimeGlob`; `RuntimeScalar.ioOwnerSlot` carries that identity, and `RuntimeGlob.ioHolderCount()` derives the active count from the owner ledger. Resource leases remain separate from Perl strong-reference counts. | `retainUnstashedIoForDurableSlot` acquires a slot for a strong scalar, while `releaseIoOwner` retires it exactly once. Weaken releases a weak scalar's holder after any final destructor dispatch; unweaken reacquires it for a live glob. Detached-value assignment, returned aliases, and localized-global suspension move the same identity. Replacement acquires the new edge before releasing the old one. Aggregate clear queues the owning scalar for release. `RuntimeList.setFromList` now retires a materialized scalar's lease with its counted edge and preserves it when the result still carries that handle. Thread cloning drops nonportable IO ownership. | `WeakGlobIoOwnerSlotTest` verifies weak/strong aliases, holder release, and unweaken. `file_temp_path_wrapper_lifetime.t` passes 5/5 and `blessed_scalar_reference_contents_destroy.t` passes 4/4 on both backends with corrective sweeps disabled; system Perl passes the file-wrapper oracle. The immutable full make passes on `3ebcdfe796`. Socket return, exception unwind, localization, aggregate clear, selected-glob restoration, #1794/#1860, and cloned/shared-storage paths remain in the broader audit. Non-socket close policy remains a separate resource decision. |
 
 ### Active lexical aggregate and signature pad owners (2026-11-03)
 
