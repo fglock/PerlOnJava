@@ -4701,6 +4701,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             boolean retainTargetIfDeletedBeforeInstall =
                     descriptor.compiledDirectCallRetainTargetIfDeletedBeforeInstall();
             RuntimeScalar initialSlot = descriptor.compiledDirectCallInitialSlot();
+            RuntimeScalar pinSlot = descriptor.compiledDirectCallPinSlot();
             RuntimeCode initialTarget = descriptor.compiledDirectCallInitialTarget();
             if (initialTarget == null && descriptor.value instanceof RuntimeCode code) {
                 initialTarget = code;
@@ -4727,7 +4728,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // keep their source callsite ownership untouched.
             if (descriptor.isCompiledDirectCallSiteDescriptor()) {
                 descriptor.releaseCompiledDirectCallSiteDescriptorBinding();
-                GlobalVariable.releaseCompiledDirectCallPin(name, initialSlot);
+                GlobalVariable.releaseCompiledDirectCallPin(
+                        name, pinSlot == null ? initialSlot : pinSlot);
+                if (descriptor.compiledDirectCallHasDeferredParseOwner()) {
+                    GlobalVariable.releaseDeferredDirectCallOwner(initialSlot);
+                }
             }
         }
         return prepared;
@@ -4768,8 +4773,22 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         Map<Integer, CompiledDirectCallSite> sites =
                 compiledDirectCallSitesByClassName.get(className == null ? "" : className);
         CompiledDirectCallSite site = sites == null ? null : sites.get(siteIndex);
+        if (site == null && className == null) {
+            // Interpreter bytecode is emitted in a per-CV code object, while
+            // embedded optrees may have registered their callsites under a
+            // generated-class key. Recover the unique name/index entry from
+            // this CV's owner table when the bytecode has no class-name operand.
+            for (Map<Integer, CompiledDirectCallSite> candidates
+                    : compiledDirectCallSitesByClassName.values()) {
+                CompiledDirectCallSite candidate = candidates.get(siteIndex);
+                if (candidate != null && candidate.name().equals(name)) {
+                    site = candidate;
+                    break;
+                }
+            }
+        }
         return site == null
-                ? GlobalVariable.getGlobalCodeRefForDirectCall(name)
+                ? GlobalVariable.resolveRegisteredCompiledDirectCallSite(name, siteIndex)
                 : site.resolve();
     }
 

@@ -1036,6 +1036,9 @@ public class EmitSubroutine {
             RuntimeScalar parseTimeCodeRef = operatorNode.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar codeRef
                     ? codeRef
                     : null;
+            RuntimeScalar deferredCallTarget =
+                    operatorNode.getAnnotation("deferredDirectCallTarget") instanceof RuntimeScalar target
+                            ? target : null;
             RuntimeScalar emissionTimeCodeRef = parseTimeCodeRef == null
                     ? null
                     : GlobalVariable.getVisibleGlobalCodeRefForDirectCall(directName);
@@ -1044,7 +1047,7 @@ public class EmitSubroutine {
             // RuntimeCode installs an owner identity when it receives this
             // pad-constant tree.
             RuntimeScalar initialCallRef = parseTimeCodeRef != null
-                    ? parseTimeCodeRef
+                    ? deferredCallTarget != null ? deferredCallTarget : parseTimeCodeRef
                     : emissionTimeCodeRef != null
                             ? emissionTimeCodeRef
                             : GlobalVariable.getGlobalCodeRefForFreshLookup(directName);
@@ -1058,6 +1061,9 @@ public class EmitSubroutine {
             descriptor.configureCompiledDirectCallSite(
                     directName, siteIndex, initialCallRef, compileTimePinned,
                     retainTargetIfDeletedBeforeCallsiteInstall);
+            descriptor.setCompiledDirectCallHasDeferredParseOwner(
+                    deferredCallTarget != null);
+            descriptor.setCompiledDirectCallPinSlot(parseTimeCodeRef);
             mv.visitLdcInsn(directName);
             mv.visitLdcInsn(className);
             mv.visitLdcInsn(siteIndex);

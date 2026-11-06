@@ -462,9 +462,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     private int compiledDirectCallSiteIndex = -1;
     private WeakReference<RuntimeCode> compiledDirectCallInitialTarget;
     private WeakReference<RuntimeScalar> compiledDirectCallInitialSlot;
+    private WeakReference<RuntimeScalar> compiledDirectCallPinSlot;
     private boolean compiledDirectCallSiteDescriptor;
     private boolean compiledDirectCallCompileTimePinned;
     private boolean compiledDirectCallRetainTargetIfDeletedBeforeInstall;
+    private boolean compiledDirectCallHasDeferredParseOwner;
     private boolean updatingCompiledDirectCallCache;
 
     /** Mark this scalar as metadata for a compiled direct named-call site. */
@@ -521,6 +523,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return compiledDirectCallRetainTargetIfDeletedBeforeInstall;
     }
 
+    public void setCompiledDirectCallHasDeferredParseOwner(boolean hasOwner) {
+        compiledDirectCallHasDeferredParseOwner = hasOwner;
+    }
+
+    public void setCompiledDirectCallPinSlot(RuntimeScalar pinSlot) {
+        compiledDirectCallPinSlot = pinSlot == null ? null : new WeakReference<>(pinSlot);
+    }
+
+    boolean compiledDirectCallHasDeferredParseOwner() {
+        return compiledDirectCallHasDeferredParseOwner;
+    }
+
     boolean isCompiledDirectCallSiteDescriptor() {
         return compiledDirectCallSiteDescriptor;
     }
@@ -542,6 +556,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     RuntimeScalar compiledDirectCallInitialSlot() {
         return compiledDirectCallInitialSlot == null
                 ? null : compiledDirectCallInitialSlot.get();
+    }
+
+    RuntimeScalar compiledDirectCallPinSlot() {
+        return compiledDirectCallPinSlot == null
+                ? null : compiledDirectCallPinSlot.get();
     }
 
     void updateCompiledDirectCallTarget(RuntimeCode target) {

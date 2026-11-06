@@ -248,6 +248,25 @@ public final class GlobalRuntimeState {
         });
     }
 
+    synchronized CompiledDirectCallSite findCompiledDirectCallSite(String key, int siteIndex) {
+        ArrayList<WeakReference<CompiledDirectCallSite>> sites = compiledDirectCallSites.get(key);
+        if (sites == null) return null;
+        CompiledDirectCallSite match = null;
+        var iterator = sites.iterator();
+        while (iterator.hasNext()) {
+            CompiledDirectCallSite site = iterator.next().get();
+            if (site == null) {
+                iterator.remove();
+            } else if (site.index() == siteIndex) {
+                // A pad-constant tree can transfer from a compiled body to its
+                // published CV. The latest live registration owns that transfer.
+                match = site;
+            }
+        }
+        if (sites.isEmpty()) compiledDirectCallSites.remove(key);
+        return match;
+    }
+
     void notifyCompiledDirectCallSites(
             String key, RuntimeScalar previous, RuntimeScalar replacement) {
         if (key == null) return;
