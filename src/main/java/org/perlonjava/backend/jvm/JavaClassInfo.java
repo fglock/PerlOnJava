@@ -337,19 +337,33 @@ public class JavaClassInfo {
         this.dynamicLevelSlot = -1;
         this.loopLabelStack = new ArrayDeque<>();
         this.gotoLabelStack = new ArrayDeque<>();
-        this.gotoLabelsInsideLoop = new HashSet<>();
-        this.gotoLoopLabelTokenIndices = new HashMap<>();
-        this.gotoLabelsInsideConstruct = new HashSet<>();
-        this.gotoConditionalLabelContexts = new HashMap<>();
-        this.gotoConditionalSourceContexts = new HashMap<>();
-        this.gotoSimpleConditionalBranchLabels = new HashSet<>();
-        this.gotoLabelsInsideBinaryOrListExpression = new HashSet<>();
-        this.gotoLabelsInsideGiven = new HashSet<>();
-        this.gotoLabelsInsideDefer = new HashSet<>();
-        this.gotoGivenLabelTokenIndices = new HashMap<>();
-        this.blockDispatcherLabels = new HashMap<>();
+        // Goto-analysis collections are null until first use: most eval strings
+        // contain no goto labels, so allocating 11 HashSet/HashMap objects per
+        // eval call wastes ~11 allocations. Call ensureGotoCollections() before
+        // any write or read of these fields.
         this.spillSlots = new int[0];
         this.spillTop = 0;
+    }
+
+    /**
+     * Lazily allocates all 11 goto-analysis collections in one shot.
+     * All 11 fields are always null or always non-null together.
+     * Call this before any read or write of any goto collection field.
+     */
+    public void ensureGotoCollections() {
+        if (gotoLabelsInsideLoop == null) {
+            gotoLabelsInsideLoop = new HashSet<>();
+            gotoLoopLabelTokenIndices = new HashMap<>();
+            gotoLabelsInsideConstruct = new HashSet<>();
+            gotoConditionalLabelContexts = new HashMap<>();
+            gotoConditionalSourceContexts = new HashMap<>();
+            gotoSimpleConditionalBranchLabels = new HashSet<>();
+            gotoLabelsInsideBinaryOrListExpression = new HashSet<>();
+            gotoLabelsInsideGiven = new HashSet<>();
+            gotoLabelsInsideDefer = new HashSet<>();
+            gotoGivenLabelTokenIndices = new HashMap<>();
+            blockDispatcherLabels = new HashMap<>();
+        }
     }
 
     /**

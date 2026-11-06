@@ -1164,6 +1164,7 @@ public class Dereference {
                     && emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot >= 0) {
 
                 // Get or create a block-level dispatcher for the current loop state
+                emitterVisitor.ctx.javaClassInfo.ensureGotoCollections();
                 String loopStateSignature = emitterVisitor.ctx.javaClassInfo.getLoopStateSignature();
                 Label blockDispatcher = emitterVisitor.ctx.javaClassInfo.blockDispatcherLabels.get(loopStateSignature);
                 boolean isFirstUse = (blockDispatcher == null);

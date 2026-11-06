@@ -970,17 +970,21 @@ public class EmitControlFlow {
                     "Dynamic goto EXPR requires interpreter fallback", ctx.errorUtil);
         }
 
-        boolean gotoIntoGiven = ctx.javaClassInfo.gotoLabelsInsideGiven.contains(labelName)
+        // All goto-analysis collections are null when the code has no goto constructs.
+        // ensureGotoCollections() is called by emitBlock before any collection is written,
+        // so null here means no analysis was performed and all checks return false/empty.
+        boolean hasGotoAnalysis = ctx.javaClassInfo.gotoLabelsInsideGiven != null;
+        boolean gotoIntoGiven = hasGotoAnalysis && ctx.javaClassInfo.gotoLabelsInsideGiven.contains(labelName)
                 && !node.getBooleanAnnotation("insideGivenBlock");
-        boolean gotoIntoBinaryOrListExpression = ctx.javaClassInfo
+        boolean gotoIntoBinaryOrListExpression = hasGotoAnalysis && ctx.javaClassInfo
                 .gotoLabelsInsideBinaryOrListExpression.contains(labelName);
-        Set<Integer> targetConditional = ctx.javaClassInfo.gotoConditionalLabelContexts.get(labelName);
-        Set<Integer> sourceConditional = ctx.javaClassInfo.gotoConditionalSourceContexts.get(node.tokenIndex);
-        boolean sameConditional = ctx.javaClassInfo.gotoSimpleConditionalBranchLabels.contains(labelName)
+        Set<Integer> targetConditional = hasGotoAnalysis ? ctx.javaClassInfo.gotoConditionalLabelContexts.get(labelName) : null;
+        Set<Integer> sourceConditional = hasGotoAnalysis ? ctx.javaClassInfo.gotoConditionalSourceContexts.get(node.tokenIndex) : null;
+        boolean sameConditional = hasGotoAnalysis && ctx.javaClassInfo.gotoSimpleConditionalBranchLabels.contains(labelName)
                 && targetConditional != null && sourceConditional != null
                 && targetConditional.stream().anyMatch(sourceConditional::contains);
         if (gotoIntoGiven || gotoIntoBinaryOrListExpression
-                || (ctx.javaClassInfo.gotoLabelsInsideConstruct.contains(labelName) && !sameConditional)) {
+                || (hasGotoAnalysis && ctx.javaClassInfo.gotoLabelsInsideConstruct.contains(labelName) && !sameConditional)) {
             if (gotoIntoGiven) {
                 // Perl reports the destination label's location.  Raise at
                 // compile time so an eval preserves that source location,
@@ -1028,6 +1032,7 @@ public class EmitControlFlow {
         // For static label, check if it's local
         GotoLabels targetLabel = ctx.javaClassInfo.findGotoLabelsByName(labelName);
         if (!ctx.javaClassInfo.isInDeferBlock
+                && ctx.javaClassInfo.gotoLabelsInsideDefer != null
                 && ctx.javaClassInfo.gotoLabelsInsideDefer.contains(labelName)) {
             var location = ctx.errorUtil.getSourceLocationAccurate(node.tokenIndex);
             emitRuntimeControlFlowError(ctx, "Can't \"goto\" into a \"defer\" block at "
@@ -1039,7 +1044,8 @@ public class EmitControlFlow {
                 throw PerlCompilerException.withSourceLocation(node.tokenIndex,
                         "Can't find label " + labelName, ctx.errorUtil);
             }
-            if (ctx.javaClassInfo.gotoLabelsInsideLoop.contains(labelName)) {
+            if (ctx.javaClassInfo.gotoLabelsInsideLoop != null
+                    && ctx.javaClassInfo.gotoLabelsInsideLoop.contains(labelName)) {
                 // A label in a foreach body is not a valid destination from
                 // outside that body: its iterator/control-block setup has not
                 // run. This applies equally to source-level and eval gotos.
