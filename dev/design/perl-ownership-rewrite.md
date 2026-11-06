@@ -4,7 +4,7 @@
 
 **Current checkpoint (2026-11-06):** #1649 remains in Phase 2 on branch
 `wip/issue1649-owner-transition-20261106-035834`, latest source commit
-`b1a29eb0b6`.
+`28bedc5f43`.
 Immediate scalar-backed counted-edge retirement now goes through one
 `RuntimeScalar` transition that retires the exact `PerlOwnerSlot` and mirrored
 `refCountOwned` state. Immediate paths also remove the owner trace there;
@@ -80,6 +80,23 @@ remain marked TODO (`/tmp/issue1649-htmltree-b1a29-jvm.log` and
 `/tmp/issue1649-htmltree-b1a29-interpreter.log`). The remaining ownership
 producer/release audit and removal of ordinary corrective recovery are still
 in progress.
+
+Aggregate producers now state their edge kind at acquisition: blessing's
+retroactive array/hash owner pass, tracked anonymous array/hash construction,
+and list-to-hash materialization pass `ARRAY_ELEMENT` or `HASH_ELEMENT`
+directly. The full `nice -n 19 timeout 1800 make` gate passes on immutable
+`28bedc5f43` in 10m11; `./jperl -v` reports that commit. With corrective
+sweeps disabled, `active_lexical_scalar_referent_owner.t` passes 9/9 and
+`path_tiny_runtime_prereqs.t` passes 23/23 on JVM and interpreter. System Perl
+passes the scalar-cell regression 9/9, and a focused oracle confirms that a
+reference to a scalar cell keeps its current value alive after lexical scope
+exit (`/tmp/issue1649-perl-cell-semantics.log`). Logs:
+`/tmp/issue1649-explicit-container-owner-kinds-28bedc5f43-make.log`,
+`/tmp/issue1649-active-lexical-system-perl.log`,
+`/tmp/issue1649-active-lexical-jvm-28bedc5f43.log`,
+`/tmp/issue1649-active-lexical-interpreter-28bedc5f43.log`,
+`/tmp/issue1649-path-tiny-jvm-28bedc5f43.log`, and
+`/tmp/issue1649-path-tiny-interpreter-28bedc5f43.log`.
 
 The source audit still finds no production caller of legacy
 `MortalList.deferDecrement()` or `ReachabilityWalker.sweepReleasedWeakReferents()`;
