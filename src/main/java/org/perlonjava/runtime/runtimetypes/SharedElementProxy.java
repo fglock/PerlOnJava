@@ -17,8 +17,26 @@ final class SharedElementProxy extends RuntimeScalar {
         // leaves an extra owner behind when the fetch result is weakened.
     }
 
+    /**
+     * An lvalue fetch is replaced through the canonical slot, so its local
+     * aggregate view is not copied into a Perl scalar owner. Retire that
+     * otherwise-unowned view before releasing the canonical slot; otherwise
+     * the shared lifecycle sees a permanent live view and defers DESTROY.
+     */
+    private void retireUnownedFetchView() {
+        if (value instanceof RuntimeBase view
+                && view.threadSharedFetchedView
+                && view.refCount == 0) {
+            view.refCount = Integer.MIN_VALUE;
+            DestroyDispatch.callDestroy(view);
+            value = null;
+            type = RuntimeScalarType.UNDEF;
+        }
+    }
+
     @Override
     public RuntimeScalar set(RuntimeScalar value) {
+        retireUnownedFetchView();
         SharedPerlStorage.publishBlessing(value);
         // The proxy is a transient FETCH view, not a second Perl scalar slot.
         // Updating it through RuntimeScalar.set() would acquire a second
@@ -30,11 +48,13 @@ final class SharedElementProxy extends RuntimeScalar {
 
     @Override
     public RuntimeScalar undefine() {
+        retireUnownedFetchView();
         return storage.undefine();
     }
 
     @Override
     public RuntimeScalar createReference() {
+        retireUnownedFetchView();
         return storage.createReference();
     }
 }
