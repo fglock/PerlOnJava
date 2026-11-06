@@ -4280,14 +4280,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
         if (hasIoOwner() && !preserveCurrentIoOwner) {
             IoOwnerRelease oldRelease = releaseIoOwnerSlot(this);
-            RuntimeGlob oldGlob = oldRelease.glob();
-            if (oldRelease.remainingHolders() <= 0 && isUnstashedIoGlob(oldGlob)) {
-                RuntimeScalar oldIoSlot = oldGlob.getIO();
-                if (oldIoSlot != null && oldIoSlot.value instanceof RuntimeIO oldIo
-                        && isSocketIOHandle(oldIo.ioHandle)) {
-                    oldIo.close();
-                }
-            }
+            finishIoOwnerRelease(oldRelease);
         }
 
         // NOTE: Do NOT release captures here on CODE overwrite.
@@ -6905,10 +6898,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                         && !(io.ioHandle instanceof ClosedIOHandle)) {
                     // Closing is required for stream sockets: merely dropping
                     // the synthetic fileno does not send EOF to the peer.
-                    // Other anonymous handles still encounter transient
-                    // method-invocant cleanup paths that are not true Perl SV
-                    // destruction, so retain their established unregister-only
-                    // behavior until those aliases have dedicated ownership.
+                    // Ordinary handles can still have transient IO::File
+                    // aliases whose Perl ownership is not represented by this
+                    // resource lease, so they keep the unregister-only path.
                     if (isSocketIOHandle(io.ioHandle)) io.close();
                     else io.unregisterFileno();
                 }

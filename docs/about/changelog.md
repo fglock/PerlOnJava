@@ -25,6 +25,7 @@ priorities and future plans.
 - Acquire replacement ownership before publishing array and hash slots, then release displaced values against the updated storage state (#1649).
 - Snapshot glob arguments retained by file-test and stat caches, and retain the anonymous IO lease assigned by `sysopen` (#1649).
 - Copy weakened CODE references into independent strong stash scalars so glob slots acquire and release their own `CODE_SLOT` owner (#1649).
+- Use owner-slot transitions for named CODE vivification and typeglob aliases instead of direct replacement or parallel stash counts (#1649).
 
 - Replace the O(N) `getAllVisibleVariables()` scan in `recycleTemporaryRegisters()` (called after every compiled statement) with an O(1) read of `ScopedSymbolTable.getTopScopeNextIndex()`: the innermost scope's `index` field is already the exact high-water mark for all allocated variable registers (maintained by `enterScope`/`exitScope` propagation and `addVariable`/`addVariableWithIndex`), so no full symbol-table traversal is needed. Removes `getHighestVariableRegister` from the JFR execution-sample profile entirely and reduces `recycleTemporaryRegisters` samples from ~138 to ~5, yielding ~11–13% wall-clock speedup on a 2 M-iteration `eval STRING` benchmark (10.67 s vs 12.07 s).
 
