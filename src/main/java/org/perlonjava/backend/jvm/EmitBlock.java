@@ -220,6 +220,7 @@ public class EmitBlock {
 
     /** Collect protected foreach destinations for a separately compiled eval block. */
     static void collectEvalLoopBodyLabels(Node block, JavaClassInfo javaClassInfo) {
+        javaClassInfo.ensureGotoCollections();
         collectLoopBodyLabels(block, javaClassInfo.gotoLabelsInsideLoop,
                 javaClassInfo.gotoLoopLabelTokenIndices, false);
     }
@@ -553,6 +554,7 @@ public class EmitBlock {
      */
     public static void emitBlock(EmitterVisitor emitterVisitor, BlockNode node) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
+        emitterVisitor.ctx.javaClassInfo.ensureGotoCollections();
         collectLoopBodyLabels(node, emitterVisitor.ctx.javaClassInfo.gotoLabelsInsideLoop,
                 emitterVisitor.ctx.javaClassInfo.gotoLoopLabelTokenIndices, false);
         collectConditionalGotoContexts(node,

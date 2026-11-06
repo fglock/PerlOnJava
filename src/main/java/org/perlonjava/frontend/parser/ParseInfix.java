@@ -106,17 +106,17 @@ public class ParseInfix {
     }
 
     // Non-chainable comparison operators (cannot be chained with any operator)
-    private static final List<String> NON_CHAINABLE_COMPARISON_OPS = Arrays.asList("<=>", "cmp", "~~");
+    private static final Set<String> NON_CHAINABLE_COMPARISON_OPS = Set.of("<=>", "cmp", "~~");
 
     // Non-chainable relational operators (cannot be chained with any operator)
-    private static final List<String> NON_CHAINABLE_RELATIONAL_OPS = List.of("isa");
+    private static final Set<String> NON_CHAINABLE_RELATIONAL_OPS = Set.of("isa");
 
     // Chainable equality operators (can chain with each other)
-    private static final List<String> CHAINABLE_EQUALITY_OPS =
-            Arrays.asList("==", "!=", "===", "!==", "eq", "ne", "equ", "neu");
+    private static final Set<String> CHAINABLE_EQUALITY_OPS =
+            Set.of("==", "!=", "===", "!==", "eq", "ne", "equ", "neu");
 
     // Chainable relational operators (can chain with each other)
-    private static final List<String> CHAINABLE_RELATIONAL_OPS = Arrays.asList("<", ">", "<=", ">=", "lt", "gt", "le", "ge");
+    private static final Set<String> CHAINABLE_RELATIONAL_OPS = Set.of("<", ">", "<=", ">=", "lt", "gt", "le", "ge");
 
     /**
      * Parses infix operators and their right-hand operands.
