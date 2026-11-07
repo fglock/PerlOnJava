@@ -24,16 +24,29 @@ in this run. Full transcript:
 `/tmp/cpan_random_logs/20261107-205306-58894/`.
 
 The design inventory lists nine owner/lifecycle audit areas, not nine confirmed
-bugs. The current retained mechanisms are: root-based recovery isolated behind
-the legacy unpaired decrement hook (no production caller found); verified
-current-slot count alignment (still needed by synthetic undercount tests and
-not reachability recovery); and `sweepReleasedWeakReferents()` for direct Java
-compatibility/test calls (no production caller). The localized CODE restore
-count-adoption path also has no normal producer because production stash writes
-acquire through `GlobalCodeRefMap`, but its direct-state Java fixture still
-covers the compatibility behavior. Keep those contracts distinct and finish
-the producer/release and current-slot audit before considering their removal.
-#1649 is not complete; leave PR #1938 in draft.
+bugs. Five retained mechanisms remain under audit: legacy root-based recovery
+behind the unpaired decrement hook; verified current-slot count alignment;
+`sweepReleasedWeakReferents()` for direct Java compatibility/test calls; the
+localized CODE restore count-adoption path; and missing-token adoption in
+`WeakRefRegistry.weaken`. Only current-slot alignment remains on a normal
+production path; it validates actual owner slots and does not walk Perl roots.
+The other paths have no ordinary production caller. Keep these contracts
+distinct while finishing the producer/release audit.
+
+The rescued-aggregate audit removed a separate recursive weak-reference walk
+from `DestroyDispatch`. Rescued roots now stay queued while a current Perl owner
+exists; after the final owner leaves, normal aggregate cleanup releases nested
+slots and runs nested `DESTROY` at the exact owner transition. Finalization now
+runs after END even when no deferred captures were queued. The new Java
+`RescuedAggregateOwnerFinalizationTest` verifies the nested destructor and weak
+observer behavior. The full `JPERL_DISABLE_CORRECTIVE_SWEEPS=1 nice -n 19
+timeout 3600 make` gate passes in 7m20; the DBIC rescued-schema callback,
+rescued-weak-slot, and deep-cycle regressions pass on system Perl, JVM, and
+interpreter. Logs: `/private/tmp/issue1649-rescued-owner-finalization-no-sweeps-make.log`
+and `/private/tmp/issue1649-rescued-owner-*.log`.
+
+#1649 remains incomplete; leave PR #1938 in draft until the remaining
+producer/release and current-slot audits and PR acceptance review are complete.
 
 The tied aggregate conversion audit found that replacing `TieArray`/`TieHash`
 with raw synchronized collections dropped the mutation callbacks used to record
