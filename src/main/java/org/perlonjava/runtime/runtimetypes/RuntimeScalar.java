@@ -4821,6 +4821,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return cn != null && DestroyDispatch.classHasDestroy(base.blessId, cn);
     }
 
+    /** Whether a primitive/string setter must retire an existing Perl owner edge. */
+    private boolean requiresOwnerAwareScalarOverwrite() {
+        return (type & REFERENCE_BIT) != 0
+                || type == GLOB
+                || type == CODE
+                || refCountOwned
+                || (countedOwnerSlot != null && countedOwnerSlot.isActive())
+                || untrackedReferenceOwnerSlot != null
+                || scalarReferenceContentsOwner != null
+                || ioOwnerSlot != null;
+    }
+
     public RuntimeScalar set(int value) {
         clearLastReadlineHandleIfGlobValue();
         if (this.type == TIED_SCALAR) {
@@ -4832,6 +4844,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
             throw new PerlCompilerException("Modification of a read-only value attempted");
         }
+        if (requiresOwnerAwareScalarOverwrite()) return set(new RuntimeScalar(value));
         this.type = RuntimeScalarType.INTEGER;
         this.value = value;
         refreshArgumentAliasOwnerSlots();
@@ -4851,6 +4864,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (this.type == READONLY_SCALAR) {
             throw new PerlCompilerException("Modification of a read-only value attempted");
         }
+        if (requiresOwnerAwareScalarOverwrite()) return set(new RuntimeScalar(value));
         this.initializeWithLong(value);
         refreshArgumentAliasOwnerSlots();
         this.tainted = false;
@@ -4876,6 +4890,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (this.type == READONLY_SCALAR) {
             throw new PerlCompilerException("Modification of a read-only value attempted");
         }
+        if (requiresOwnerAwareScalarOverwrite()) return set(new RuntimeScalar(value));
 
         // Check if the value fits in an int
         if (value.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) <= 0
@@ -4912,6 +4927,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (this.type == READONLY_SCALAR) {
             throw new PerlCompilerException("Modification of a read-only value attempted");
         }
+        if (requiresOwnerAwareScalarOverwrite()) return set(new RuntimeScalar(value));
         this.type = RuntimeScalarType.BOOLEAN;
         this.value = value;
         refreshArgumentAliasOwnerSlots();
@@ -4936,6 +4952,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
             throw new PerlCompilerException("Modification of a read-only value attempted");
         }
+        if (requiresOwnerAwareScalarOverwrite()) return set(new RuntimeScalar(value));
         if (value == null) {
             this.type = UNDEF;
         } else {
