@@ -3,22 +3,21 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Production sweep callers have been removed; count alignment still uses verified current owner slots while remaining producer gaps are audited.
 
 **Current checkpoint (2026-11-07):** #1649 remains in Phase 2; PR #1938 is
-open and draft on current `master` (`3f8bd1ec8e`). The merged PR source
-`7683d18534` resolves the changelog conflict and GitHub reports it mergeable.
-Ordinary full `make` passed in 22m35 and full `make` with corrective sweeps
-disabled passed in 6m36. CI run `42368181699` passes on Ubuntu and Windows.
-Fresh-home acceptance with sweeps disabled completed on this exact source:
-DateTime (3,592), Image::ExifTool (600), PPR (1,255), Template (3,180), and
-Excel::Writer::XLSX (5,138) passed. Mojolicious timed out after 2,400s,
-Catalyst failed 11/235 subtests, and DBIx::Class failed 105/43,080 subtests.
-The full DBIx::Class count matches the earlier `bcc919aaf9` run, and its
-focused `t/34exception_action.t` failure also reproduces on earlier source
-`12737cbdfd`; these failures were not introduced by the latest owner-slot
-follow-up. Logs:
-`/private/tmp/issue1649-merge-master-make.log`,
-`/private/tmp/issue1649-merge-master-no-sweeps-make.log`,
-`/private/tmp/issue1649-cpan-merged-7683d/build/reports/cpan-release-acceptance.log`,
-and [CI run 42368181699](https://github.com/fglock/PerlOnJava/actions/runs/42368181699).
+open and draft on current `master` (`3f8bd1ec8e`), at candidate
+`238f71c77dad1707fa9b9d5bfd35a35728555563`. CI run `42390141888` passes on
+Ubuntu and Windows. Ordinary full `make` passed in 7m15 and full `make` with
+corrective sweeps disabled passed in 7m18. The exact-candidate fresh-home
+acceptance run passed Excel::Writer::XLSX (5,138), PPR (1,255), Image::ExifTool
+(600), DateTime (3,592), and Template (3,180; upgraded from its prior failure).
+Mojolicious timed out at its 2,400s soft limit; Catalyst failed 11/235
+subtests; DBIx::Class failed 105/43,080. The latter two counts match earlier
+runs; focused DBIx::Class `t/34exception_action.t` failures reproduce on
+`12737cbdfd`. The acceptance target exits nonzero for the three strict failures.
+Logs: `/private/tmp/issue1649-shared-tie-owner-final-make.log`,
+`/private/tmp/issue1649-shared-tie-owner-no-sweeps-make.log`,
+`/private/tmp/issue1649-final-cpan-238f71c77.log`,
+`build/reports/cpan-release-acceptance.log`, and
+[CI run 42390141888](https://github.com/PerlOnJava/PerlOnJava/actions/runs/42390141888).
 
 The tied aggregate conversion audit found that replacing `TieArray`/`TieHash`
 with raw synchronized collections dropped the mutation callbacks used to record
