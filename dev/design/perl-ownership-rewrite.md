@@ -3,21 +3,37 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Production sweep callers have been removed; count alignment still uses verified current owner slots while remaining producer gaps are audited.
 
 **Current checkpoint (2026-11-07):** #1649 remains in Phase 2; PR #1938 is
-open and draft on current `master` (`3f8bd1ec8e`), at candidate
-`238f71c77dad1707fa9b9d5bfd35a35728555563`. CI run `42390141888` passes on
-Ubuntu and Windows. Ordinary full `make` passed in 7m15 and full `make` with
-corrective sweeps disabled passed in 7m18. The exact-candidate fresh-home
-acceptance run passed Excel::Writer::XLSX (5,138), PPR (1,255), Image::ExifTool
-(600), DateTime (3,592), and Template (3,180; upgraded from its prior failure).
-Mojolicious timed out at its 2,400s soft limit; Catalyst failed 11/235
-subtests; DBIx::Class failed 105/43,080. The latter two counts match earlier
-runs; focused DBIx::Class `t/34exception_action.t` failures reproduce on
-`12737cbdfd`. The acceptance target exits nonzero for the three strict failures.
-Logs: `/private/tmp/issue1649-shared-tie-owner-final-make.log`,
-`/private/tmp/issue1649-shared-tie-owner-no-sweeps-make.log`,
-`/private/tmp/issue1649-final-cpan-238f71c77.log`,
-`build/reports/cpan-release-acceptance.log`, and
-[CI run 42390141888](https://github.com/PerlOnJava/PerlOnJava/actions/runs/42390141888).
+open and draft at runtime commit `ebcb9a9824e7ac5135842ea8a55359470f61be02`,
+based on current `master`. The `local $#array` restore mismatch is fixed:
+Perl does not restore the prior array contents at scope exit, and restoring the
+old tail could revive scalar wrappers whose counted owner slots had already
+been released. The new `localized_array_size_assignment.t` fails on its
+unfixed parent and passes 5/5 under system Perl, JVM, and interpreter.
+
+`JPERL_DISABLE_CORRECTIVE_SWEEPS=1 nice -n 19 timeout 3600 make` passed on the
+exact commit in 6m14; `nice -n 19 timeout 600 make check-links` passed with 830
+documents and zero errors. PR CI run
+[42407597660](https://github.com/PerlOnJava/PerlOnJava/actions/runs/42407597660)
+passes on Ubuntu and Windows. The exact-candidate eight-target CPAN gate
+(including the standard seven plus Excel::Writer::XLSX) passed Template,
+DateTime, PPR, Image::ExifTool, and Excel::Writer::XLSX. Catalyst retained its
+11/235 failures and DBIx::Class its 105/43,080 failures; Mojolicious exceeded
+the 2,400s soft timeout. There were no compatibility upgrades or regressions
+in this run. Full transcript:
+`/private/tmp/issue1649-ebcb9a9824-cpan-acceptance.log`; per-target diagnostics:
+`/tmp/cpan_random_logs/20261107-205306-58894/`.
+
+The design inventory lists nine owner/lifecycle audit areas, not nine confirmed
+bugs. The current retained mechanisms are: root-based recovery isolated behind
+the legacy unpaired decrement hook (no production caller found); verified
+current-slot count alignment (still needed by synthetic undercount tests and
+not reachability recovery); and `sweepReleasedWeakReferents()` for direct Java
+compatibility/test calls (no production caller). The localized CODE restore
+count-adoption path also has no normal producer because production stash writes
+acquire through `GlobalCodeRefMap`, but its direct-state Java fixture still
+covers the compatibility behavior. Keep those contracts distinct and finish
+the producer/release and current-slot audit before considering their removal.
+#1649 is not complete; leave PR #1938 in draft.
 
 The tied aggregate conversion audit found that replacing `TieArray`/`TieHash`
 with raw synchronized collections dropped the mutation callbacks used to record
