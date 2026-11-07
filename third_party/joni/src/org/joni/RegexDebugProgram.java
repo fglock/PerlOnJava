@@ -597,9 +597,15 @@ final class RegexDebugProgram {
         return java.util.Arrays.copyOf(encoded, length);
     }
 
-    private static boolean isKnownNonFoldExact(List<Long> codePoints) {
-        if (codePoints.size() != 1) return false;
-        long codePoint = codePoints.get(0);
+    static boolean isKnownNonFoldExact(List<Long> codePoints) {
+        if (codePoints.isEmpty()) return false;
+        for (long codePoint : codePoints) {
+            if (!isKnownNonFoldCodePoint(codePoint)) return false;
+        }
+        return true;
+    }
+
+    private static boolean isKnownNonFoldCodePoint(long codePoint) {
         if (codePoint == 0x2bcL) return false;
         if (codePoint == 0x2b9L || codePoint > Integer.MAX_VALUE) return true;
         int value = (int)codePoint;

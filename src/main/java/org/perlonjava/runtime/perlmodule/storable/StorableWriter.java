@@ -8,6 +8,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeHash;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
+import org.perlonjava.runtime.runtimetypes.UnsignedWordValue;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
 import org.perlonjava.runtime.runtimetypes.ScalarUtils;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
@@ -507,6 +508,15 @@ public final class StorableWriter {
         }
         // integers
         if (v.type == RuntimeScalarType.INTEGER) {
+            if (v.value instanceof UnsignedWordValue unsigned
+                    && unsigned.toBigInteger().compareTo(BigInteger.valueOf(Long.MAX_VALUE)) > 0) {
+                // Perl Storable writes a UV that does not fit in the signed
+                // native IV as a decimal scalar string. Encoding its identical
+                // bits through SX_INTEGER would make the reader sign-extend it.
+                writeStringBody(c, unsigned.toBigInteger().toString()
+                        .getBytes(StandardCharsets.US_ASCII), false);
+                return;
+            }
             if (v.value instanceof BigInteger integer
                     && (integer.compareTo(BigInteger.valueOf(Long.MIN_VALUE)) < 0
                         || integer.compareTo(BigInteger.valueOf(Long.MAX_VALUE)) > 0)) {

@@ -92,4 +92,17 @@ public class TestPerlRepeatCaptureLifetime {
                 Option.CAPTURE_GROUP, UTF8Encoding.INSTANCE, Syntax.RUBY);
         assertEquals(-1, regex.matcher(input).search(0, input.length, Option.NONE));
     }
+
+    @Test
+    public void lazyOptionalSelfBackrefRestoresWinningCaptureAfterBacktracking() {
+        byte[] pattern = "\\A(?:(a|b\\1)??c)+\\z"
+                .getBytes(StandardCharsets.UTF_8);
+        byte[] input = "acbac".getBytes(StandardCharsets.UTF_8);
+        Regex regex = new Regex(pattern, 0, pattern.length,
+                Option.CAPTURE_GROUP, UTF8Encoding.INSTANCE, Syntax.Perl);
+        Matcher matcher = regex.matcher(input);
+        assertEquals(0, matcher.search(0, input.length, Option.NONE));
+        assertEquals(2, matcher.getRegion().getBeg(1));
+        assertEquals(4, matcher.getRegion().getEnd(1));
+    }
 }

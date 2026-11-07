@@ -32,7 +32,7 @@ my @cases = (
     [600,  q{qr/(?il)[\x{212A}]/},           'EXACTFL <\x{212a}>'],
     [1297, q{my $a = '(?i)[\x{410}]'; utf8::upgrade($a); qr/$a/},
                                                 'EXACTFU_REQ8 <\x{430}>'],
-    [1300, q{qr/(?i)[\x{2b9}]/},             'EXACT_REQ8 <\x{2b9}>'],
+    [1300, q{qr/(?i)[\x{2b9}]/},             'EXACT_NF_REQ8 <\x{2b9}>'],
     [1303, q{qr/(?i)[\x{390}]/},             'EXACTFU_REQ8 <\x{3b9}\x{308}\x{301}>'],
     [1304, q{qr/(?i)[\x{1E9E}]/},            'EXACTFU <ss>'],
     [1305, q{qr/(?iaa)[\x{1E9E}]/},          'EXACTFAA <\x{17f}\x{17f}>'],

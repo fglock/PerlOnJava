@@ -28,7 +28,7 @@ is first_program(q{qr/(?i:[^:])/}), 'NEXACTb[:]',
     'caseless negated singleton with no fold peers uses NEXACTb node';
 is first_program(q{qr/(?i:[^a])/}), 'NANYOFM[Aa]',
     'caseless negated singleton with fold peers retains both mask bytes';
-is first_program(q{qr/(?i:[:])/}), 'EXACT <:>',
+is first_program(q{qr/(?i:[:])/}), 'EXACT_NF <:>',
     'positive singleton remains an exact node';
 
 done_testing;

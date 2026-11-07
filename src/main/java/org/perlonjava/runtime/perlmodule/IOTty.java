@@ -1,7 +1,12 @@
 package org.perlonjava.runtime.perlmodule;
 
-import org.perlonjava.runtime.io.FileDescriptorTable;
 import org.perlonjava.runtime.io.NativeFdIOHandle;
+import org.perlonjava.runtime.io.StandardIO;
+import org.perlonjava.runtime.io.LayeredIOHandle;
+import org.perlonjava.runtime.io.BorrowedIOHandle;
+import org.perlonjava.runtime.io.DupIOHandle;
+import org.perlonjava.runtime.io.SharedTransportIOHandle;
+import org.perlonjava.runtime.io.IOHandle;
 import org.perlonjava.runtime.nativ.ffm.FFMPosix;
 import org.perlonjava.runtime.nativ.ffm.FFMPosixInterface;
 import org.perlonjava.runtime.nativ.ffm.FFMPosixLinux;
@@ -291,8 +296,11 @@ public class IOTty extends PerlModuleBase {
         }
 
         if (rio != null) {
-            RuntimeScalar filenoResult = rio.fileno();
-            fd = filenoResult.getInt();
+            Integer nativeFd = nativeTtyFd(rio.ioHandle);
+            if (nativeFd == null) {
+                return new RuntimeScalar().getList();
+            }
+            fd = nativeFd;
         } else {
             fd = fhArg.getInt();
         }
@@ -304,6 +312,34 @@ public class IOTty extends PerlModuleBase {
             return new RuntimeScalar().getList();  // undef
         }
         return new RuntimeScalar(name).getList();
+    }
+
+    /**
+     * Resolve only handles backed by a native descriptor. RuntimeIO assigns
+     * synthetic fileno values to Java file channels; passing one to ttyname can
+     * alias an unrelated still-open native PTY descriptor with the same number.
+     */
+    private static Integer nativeTtyFd(IOHandle handle) {
+        while (handle != null) {
+            if (handle instanceof NativeFdIOHandle nativeFd) {
+                return nativeFd.getNativeFd();
+            }
+            if (handle instanceof StandardIO standardIO) {
+                return standardIO.fileno().getInt();
+            }
+            if (handle instanceof LayeredIOHandle layered) {
+                handle = layered.getDelegate();
+            } else if (handle instanceof BorrowedIOHandle borrowed) {
+                handle = borrowed.getDelegate();
+            } else if (handle instanceof DupIOHandle duplicate) {
+                handle = duplicate.getDelegate();
+            } else if (handle instanceof SharedTransportIOHandle shared) {
+                handle = shared.getDelegate();
+            } else {
+                return null;
+            }
+        }
+        return null;
     }
 
     /**

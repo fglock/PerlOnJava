@@ -87,7 +87,8 @@ final class ArrayCompiler extends Compiler {
         int codeSize = Config.USE_STRING_TEMPLATES ? 8 : ((analyser.getEnd() - analyser.getBegin()) * 2 + 2);
         code = new int[codeSize];
         codeLength = 0;
-        collectPreviousRepeatBackrefs(root, 0, 0, new boolean[regex.numMem + 1]);
+        collectPreviousRepeatBackrefs(root, 0, 0, false,
+                new boolean[regex.numMem + 1]);
         collectRecursiveFrameBackrefs(root, false);
     }
 
@@ -704,18 +705,18 @@ final class ArrayCompiler extends Compiler {
     }
 
     private void collectPreviousRepeatBackrefs(Node node, int repeatDepth, int alternativeDepth,
-                                                boolean[] activeRepeatedCaptures) {
+                                                boolean lazyOptional, boolean[] activeRepeatedCaptures) {
         if (node == null) return;
         switch (node.getType()) {
         case NodeType.LIST:
             for (ListNode item = (ListNode)node; item != null; item = item.tail) {
-                collectPreviousRepeatBackrefs(item.value, repeatDepth, alternativeDepth,
+                collectPreviousRepeatBackrefs(item.value, repeatDepth, alternativeDepth, lazyOptional,
                         activeRepeatedCaptures);
             }
             break;
         case NodeType.ALT:
             for (ListNode item = (ListNode)node; item != null; item = item.tail) {
-                collectPreviousRepeatBackrefs(item.value, repeatDepth, alternativeDepth + 1,
+                collectPreviousRepeatBackrefs(item.value, repeatDepth, alternativeDepth + 1, lazyOptional,
                         activeRepeatedCaptures);
             }
             break;
@@ -723,7 +724,10 @@ final class ArrayCompiler extends Compiler {
             QuantifierNode quantifier = (QuantifierNode)node;
             int nestedRepeatDepth = quantifier.upper == QuantifierNode.REPEAT_INFINITE
                     || quantifier.upper > 1 ? repeatDepth + 1 : repeatDepth;
+            boolean nestedLazyOptional = lazyOptional || (!quantifier.greedy
+                    && quantifier.lower == 0 && quantifier.upper == 1);
             collectPreviousRepeatBackrefs(quantifier.target, nestedRepeatDepth, alternativeDepth,
+                    nestedLazyOptional,
                     activeRepeatedCaptures);
             break;
         case NodeType.ENCLOSE:
@@ -731,7 +735,7 @@ final class ArrayCompiler extends Compiler {
             if (enclosure.isCondition() && enclosure.target instanceof ListNode
                     && enclosure.target.getType() == NodeType.ALT) {
                 for (ListNode item = (ListNode)enclosure.target; item != null; item = item.tail) {
-                    collectPreviousRepeatBackrefs(item.value, repeatDepth, alternativeDepth,
+                    collectPreviousRepeatBackrefs(item.value, repeatDepth, alternativeDepth, lazyOptional,
                             activeRepeatedCaptures);
                 }
                 break;
@@ -741,7 +745,7 @@ final class ArrayCompiler extends Compiler {
                 wasActive = activeRepeatedCaptures[enclosure.regNum];
                 activeRepeatedCaptures[enclosure.regNum] = true;
             }
-            collectPreviousRepeatBackrefs(enclosure.target, repeatDepth, alternativeDepth,
+            collectPreviousRepeatBackrefs(enclosure.target, repeatDepth, alternativeDepth, lazyOptional,
                     activeRepeatedCaptures);
             if (enclosure.isMemory() && enclosure.regNum > 0 && repeatDepth > 0) {
                 activeRepeatedCaptures[enclosure.regNum] = wasActive;
@@ -749,11 +753,13 @@ final class ArrayCompiler extends Compiler {
             break;
         case NodeType.ANCHOR:
             collectPreviousRepeatBackrefs(((AnchorNode)node).target, repeatDepth, alternativeDepth,
+                    lazyOptional,
                     activeRepeatedCaptures);
             break;
         case NodeType.BREF:
             BackRefNode backref = (BackRefNode)node;
-            if (backref.backNum == 1 && !backref.isNestLevel() && alternativeDepth == 0
+            if (backref.backNum == 1 && !backref.isNestLevel()
+                    && (alternativeDepth == 0 || lazyOptional)
                     && backref.back[0] < activeRepeatedCaptures.length
                     && activeRepeatedCaptures[backref.back[0]]) {
                 previousRepeatBackrefs.add(backref);

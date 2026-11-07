@@ -6,6 +6,10 @@ priorities and future plans.
 
 ## Work in progress
 
+- Reject Java-backed regular files as terminals in `IO::Tty::ttyname`, preserve unsigned 64-bit scalar signs in Storable round-trips, and fix Perl 5.45 regex lookbehind, capture, exact-opcode, and start-class diagnostics (#1988).
+
+- Refresh the imported Perl-core and dual-life modules from the current Perl blead snapshot.
+
 - Preserve wide-string UTF-8 metadata through runtime read-only marking and string interpolation (#1970).
 
 - Make an explicit `-n` run sample new and previously tested CPAN targets while maintaining a rolling window of target and dependency results.
