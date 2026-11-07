@@ -2,11 +2,12 @@
 
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Production sweep callers have been removed; count alignment still uses verified current owner slots while remaining producer gaps are audited.
 
-**Current checkpoint (2026-11-07):** #1649 remains in Phase 2 on branch
-`wip/issue1649-resume-20261106-164511`, PR #1938. The last pushed head is
-`6134694a39`. Production releases carry exact owner tokens; public corrective
-sweep callers remain absent, while verified current-slot count alignment and
-the producer audit are still in progress.
+**Current checkpoint (2026-11-07):** #1649 remains in Phase 2; PR #1938 is
+open and draft. Merge candidate `504040ab9f` brings current `master`
+(`3f8bd1ec8e`) into the PR and resolves its changelog conflict. The full
+`nice -n 19 timeout 3600 make` passed on the merged candidate in 22m35;
+`make check-links` passed on its merged Markdown. The merge candidate has not
+yet been pushed or run through PR CI.
 
 Commit `6134694a39` indexes semantic owner-slot membership on `RuntimeBase`,
 excluding temporary roots and IO leases. `RuntimeScalar` now avoids container
@@ -22,18 +23,23 @@ before the primitive-value fast path. Logs:
 `/tmp/issue1649-current-followup-standard-make.log`, and
 `/tmp/issue1649-primitive-owner-scan-fastpath-datetime.log`.
 
-PR CI run `42333872972` passes on Ubuntu and Windows for `12737cbdfd`. Fresh-home
-acceptance on that commit completed: Template (3,180), PPR (1,255),
-Image::ExifTool, and Excel::Writer::XLSX passed. DateTime and Mojolicious timed
-out after 2,400s, DBIx::Class timed out after 3,600s, and Catalyst failed 11 of
-235 subtests across 176 of 200 programs. The current follow-up has not yet been
-tested by that gate. Results:
-`/private/tmp/issue1649-cpan-release-12737cbdfd/build/reports/cpan-release-acceptance.log`.
+Fresh-home acceptance on exact PR source `bcc919aaf9`, with corrective sweeps
+disabled, completed all eight targets: DateTime (3,592), PPR (1,255),
+Image::ExifTool, Template (3,180; upgraded from FAIL), and Excel::Writer::XLSX
+(5,138) passed. Mojolicious timed out at 2,400s, Catalyst failed 11/235
+subtests, and DBIx::Class failed 105/43,080 subtests. The Catalyst count matches
+the prior candidate. Mojolicious logs record the same WebSocket route failures
+and unsupported fork test seen previously. DBIx::Class needs focused failure
+classification against standard Perl or the existing baseline before deciding
+whether it is related to #1649. Logs:
+`/private/tmp/issue1649-cpan-release-bcc919aaf9/build/reports/cpan-release-acceptance.log`
+and `/private/tmp/issue1649-cpan-release-acceptance-bcc919aaf9.log`.
 
-Next: run fresh-home CPAN acceptance and CI on `6134694a39`, classify the
-remaining acceptance failures, then continue the producer/release and
-count-alignment/legacy-recovery audit. Keep PR #1938 in draft; #1649 is not
-complete.
+The prior PR CI run `42333872972` passed on Ubuntu and Windows for
+`12737cbdfd`; CI has not yet run on `bcc919aaf9` or the merged candidate.
+Keep PR #1938 in draft while CI and DBIx::Class failure classification run,
+then continue the producer/release and count-alignment/legacy-recovery audit.
+#1649 is not complete.
 
 The reported Class::MethodMaker tied-array lifetime failure is covered by the
 new project-owned `refcount/generated_tied_array_handler_lifetime.t`: it
@@ -125,11 +131,13 @@ ownership from one aggregate count.
 
 ### Next steps
 
-1. Restart and finish the fresh-home CPAN acceptance run for the new exact PR
-   head, classifying any failures against system Perl and existing baselines.
-2. Continue the producer/release audit, then review issue #1649 and PR readiness
+1. Publish the validated merge candidate and get CI results on the new PR head.
+2. Classify the 105 DBIx::Class assertions against standard Perl or a stable
+   baseline, and determine whether the Mojolicious/Catalyst failures are
+   independent of owner cleanup.
+3. Continue the producer/release audit, then review issue #1649 and PR readiness
    against the no-sweeps acceptance plan.
-3. Keep the root-recovery compatibility adapter isolated to the legacy
+4. Keep the root-recovery compatibility adapter isolated to the legacy
    unpaired decrement API; production release paths carry exact owner tokens
    and no longer use corrective reachability sweeps.
 
