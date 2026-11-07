@@ -4065,18 +4065,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // handles refCount tracking, IO lifecycle, and weak ref bookkeeping.
     private RuntimeScalar setLarge(RuntimeScalar value) {
         if (value == null) {
-            closeIOOnDrop();
-            prepareDetachedGlobValueOwner(RuntimeScalarType.UNDEF, null);
-            this.type = RuntimeScalarType.UNDEF;
-            this.value = null;
-            refreshDetachedGlobValueOwner();
-            refreshArgumentAliasOwnerSlots();
-            this.tainted = false;
-            this.numericLiteralText = null;
-            this.numericContextSeen = false;
-            this.firstClassRegexScalar = false;
-            this.formatPictureTainted = false;
-            return this;
+            return undefine();
         }
         // Unwrap source special types via switch dispatcher
         switch (value.type) {
