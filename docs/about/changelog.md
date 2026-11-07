@@ -14,6 +14,7 @@ priorities and future plans.
 - Normalize out-of-range calendar fields in `Time::Piece->strptime`, matching Perl date overflow behavior (#2001).
 - Reduce GC pressure in inner `eval STRING` compilation: replace `FastStack<T>`'s default lazy ArrayList initialisation (first-push allocates `Object[10]`) with an explicit `super(2)` constructor, cutting per-stack array allocation 5× for the 16 `FastStack` fields in each snapshot `ScopedSymbolTable`; replace the O(N log N) `getAllVisibleVariables()` `TreeMap`+`HashSet` build inside `getVisibleVariableRegistry()` and `getVisibleOurRegistry()` with direct O(N) iteration of `symbolTableStack` using `putIfAbsent` for shadowing, caching results until the next `clearVisibleVariablesCache()` invalidation — eliminating `TreeMap.put`, `TreeMap.successor`, and `HashSet.add` allocations from the JFR execution-sample profile for inner eval compilation.
 - Keep hash owner lookup constant-time during large hash hydration by indexing stored scalar-cell identities (#1649).
+- Index semantic Perl owner-slot membership and skip referent-owner scans for primitive scalar stores (#1649).
 - Route primitive and string scalar setters through owner-slot transitions when replacing tracked values (#1649).
 - Release replaced nested hash and array objects from shared aggregate slots at assignment time, without retaining an unowned fetched view (#1649).
 - Reacquire anonymous IO holder identities for cloned Perl scalars in child thread runtimes (#1649).
