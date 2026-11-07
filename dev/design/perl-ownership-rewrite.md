@@ -3,11 +3,22 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Production sweep callers have been removed; count alignment still uses verified current owner slots while remaining producer gaps are audited.
 
 **Current checkpoint (2026-11-07):** #1649 remains in Phase 2; PR #1938 is
-open and draft. Merge candidate `504040ab9f` brings current `master`
-(`3f8bd1ec8e`) into the PR and resolves its changelog conflict. The full
-`nice -n 19 timeout 3600 make` passed on the merged candidate in 22m35;
-`make check-links` passed on its merged Markdown. The merge candidate has not
-yet been pushed or run through PR CI.
+open and draft on current `master` (`3f8bd1ec8e`). The merged PR source
+`7683d18534` resolves the changelog conflict and GitHub reports it mergeable.
+Ordinary full `make` passed in 22m35 and full `make` with corrective sweeps
+disabled passed in 6m36. CI run `42368181699` passes on Ubuntu and Windows.
+Fresh-home acceptance with sweeps disabled completed on this exact source:
+DateTime (3,592), Image::ExifTool (600), PPR (1,255), Template (3,180), and
+Excel::Writer::XLSX (5,138) passed. Mojolicious timed out after 2,400s,
+Catalyst failed 11/235 subtests, and DBIx::Class failed 105/43,080 subtests.
+The full DBIx::Class count matches the earlier `bcc919aaf9` run, and its
+focused `t/34exception_action.t` failure also reproduces on earlier source
+`12737cbdfd`; these failures were not introduced by the latest owner-slot
+follow-up. Logs:
+`/private/tmp/issue1649-merge-master-make.log`,
+`/private/tmp/issue1649-merge-master-no-sweeps-make.log`,
+`/private/tmp/issue1649-cpan-merged-7683d/build/reports/cpan-release-acceptance.log`,
+and [CI run 42368181699](https://github.com/fglock/PerlOnJava/actions/runs/42368181699).
 
 Commit `6134694a39` indexes semantic owner-slot membership on `RuntimeBase`,
 excluding temporary roots and IO leases. `RuntimeScalar` now avoids container
@@ -23,23 +34,15 @@ before the primitive-value fast path. Logs:
 `/tmp/issue1649-current-followup-standard-make.log`, and
 `/tmp/issue1649-primitive-owner-scan-fastpath-datetime.log`.
 
-Fresh-home acceptance on exact PR source `bcc919aaf9`, with corrective sweeps
-disabled, completed all eight targets: DateTime (3,592), PPR (1,255),
-Image::ExifTool, Template (3,180; upgraded from FAIL), and Excel::Writer::XLSX
-(5,138) passed. Mojolicious timed out at 2,400s, Catalyst failed 11/235
-subtests, and DBIx::Class failed 105/43,080 subtests. The Catalyst count matches
-the prior candidate. Mojolicious logs record the same WebSocket route failures
-and unsupported fork test seen previously. DBIx::Class needs focused failure
-classification against standard Perl or the existing baseline before deciding
-whether it is related to #1649. Logs:
-`/private/tmp/issue1649-cpan-release-bcc919aaf9/build/reports/cpan-release-acceptance.log`
-and `/private/tmp/issue1649-cpan-release-acceptance-bcc919aaf9.log`.
-
-The prior PR CI run `42333872972` passed on Ubuntu and Windows for
-`12737cbdfd`; CI has not yet run on `bcc919aaf9` or the merged candidate.
-Keep PR #1938 in draft while CI and DBIx::Class failure classification run,
-then continue the producer/release and count-alignment/legacy-recovery audit.
-#1649 is not complete.
+Fresh-home acceptance on exact PR source `bcc919aaf9`, also with corrective
+sweeps disabled, had the same three strict failures as the merged source.
+Mojolicious logs showed the known WebSocket route failures and unsupported fork
+test; Catalyst had the same 11/235 failures. The merged-source run completed
+and confirmed the DBIx::Class count. Its focused `t/34exception_action.t` has
+the same `carp_unique` and `BaseSchema` END cleanup failures on both `7683d18534`
+and earlier source `12737cbdfd`, so those failures predate this follow-up.
+Keep PR #1938 in draft while continuing the producer/release and
+count-alignment/legacy-recovery audit. #1649 is not complete.
 
 The reported Class::MethodMaker tied-array lifetime failure is covered by the
 new project-owned `refcount/generated_tied_array_handler_lifetime.t`: it
@@ -131,13 +134,11 @@ ownership from one aggregate count.
 
 ### Next steps
 
-1. Publish the validated merge candidate and get CI results on the new PR head.
-2. Classify the 105 DBIx::Class assertions against standard Perl or a stable
-   baseline, and determine whether the Mojolicious/Catalyst failures are
-   independent of owner cleanup.
-3. Continue the producer/release audit, then review issue #1649 and PR readiness
-   against the no-sweeps acceptance plan.
-4. Keep the root-recovery compatibility adapter isolated to the legacy
+1. Continue the producer/release and current-slot count-alignment audit; retain
+   the legacy root-recovery adapter only for its unpaired compatibility hook.
+2. Review PR readiness against the no-sweeps acceptance plan. Rerun the full
+   gates after any runtime changes, then hand the draft to review.
+3. Keep the root-recovery compatibility adapter isolated to the legacy
    unpaired decrement API; production release paths carry exact owner tokens
    and no longer use corrective reachability sweeps.
 
@@ -155,11 +156,8 @@ ownership from one aggregate count.
   Image::ExifTool 13.55 `t/Unknown.t` passes 3/3. The Catalyst chained action
   and Dancer2-Plugin-DBIx-Class shutdown tests pass on both backends. PR CI is
   green on Ubuntu and Windows. The fresh-home `make test-cpan-release-acceptance`
-  gate has not been completed on this final candidate. The earlier run hit
-  DateTime and Catalyst setup timeouts and Mojolicious had 99/109 programs fail
-  to load because its isolated home lacked `IO::Compress::Gzip`; these are
-  historical run outcomes, not final-candidate suite results. The full gate remains a required final qualification; targeted-file results do
-  not substitute for it.
+  gate is complete on merged source `7683d18534`; results and the remaining
+  three baseline failures are recorded in the current checkpoint above.
 - END CVs have queued and active lifetime tests, including aggregate captures,
   nested `exit`, `die`, and callback failure. UNITCHECK/CHECK/INIT lexical-pad
   lifetime is covered separately; the corresponding phaser ownership path is
