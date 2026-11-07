@@ -330,8 +330,33 @@ public class Lexer {
 
     public LexerToken consumeNumber() {
         int start = position;
-        while (position < length && ((input.charAt(position) >= '0' && input.charAt(position) <= '9') || input.charAt(position) == '_')) {
-            position++;
+        int val = 0;
+        boolean simple = true;  // true while we have a plain decimal integer in [0, MAX_CACHED_INT]
+        while (position < length) {
+            char c = input.charAt(position);
+            if (c >= '0' && c <= '9') {
+                if (simple) {
+                    int next = val * 10 + (c - '0');
+                    if (next > LexerToken.MAX_CACHED_INT) {
+                        simple = false;
+                    } else {
+                        val = next;
+                    }
+                }
+                position++;
+            } else if (c == '_') {
+                simple = false;
+                position++;
+            } else {
+                break;
+            }
+        }
+        // Return cached token only for plain integers without leading zeros.
+        // Numbers like "006" must preserve the leading zero (used in version strings
+        // like `use 5.006`), so only cache when the first digit is non-zero or
+        // exactly one digit was consumed.
+        if (simple && (input.charAt(start) != '0' || position - start == 1)) {
+            return LexerToken.INT_CACHE[val];
         }
         return new LexerToken(LexerTokenType.NUMBER, input.substring(start, position));
     }
