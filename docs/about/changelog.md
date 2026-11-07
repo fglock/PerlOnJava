@@ -24,6 +24,7 @@ priorities and future plans.
 - Copy weakened CODE references into independent strong stash scalars so glob slots acquire and release their own `CODE_SLOT` owner (#1649).
 - Use owner-slot transitions for named CODE vivification and typeglob aliases instead of direct replacement or parallel stash counts (#1649).
 - Preserve container-owner callbacks when `threads::shared` replaces tied arrays and hashes with native shared storage (#1649).
+- Match Perl's non-restoring `local $#array` behavior so removed elements are not revived after their owners are released (#1649).
 
 - Release temporary JVM reference-alias RHS owners after scalar-context assignments so the final aliased cell can clean up (#1649).
 - Track first-bless mortal references with deferred owner identities while preserving weak-source behavior (#1649).
