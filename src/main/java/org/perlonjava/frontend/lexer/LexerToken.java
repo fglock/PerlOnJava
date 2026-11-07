@@ -36,6 +36,12 @@ public class LexerToken {
     private static final int MAX_CACHED_SPACES = 20;
     private static final LexerToken[] SPACE_CACHE = new LexerToken[MAX_CACHED_SPACES + 1];
 
+    // Cache NUMBER tokens for small non-negative integers (0–99). eval STRING tokenizes
+    // its source on every call; loop counters and small literals like 1 and 40 recur
+    // constantly. Consumed by Lexer.consumeNumber() which avoids substring() for these.
+    static final int MAX_CACHED_INT = 99;
+    static final LexerToken[] INT_CACHE = new LexerToken[MAX_CACHED_INT + 1];
+
     static {
         for (char c : "!\"#$%&'()*+,-./:;<=>?@[\\]^`{|}~".toCharArray()) {
             OPERATOR_CACHE[c] = new LexerToken(LexerTokenType.OPERATOR, String.valueOf(c));
@@ -43,6 +49,9 @@ public class LexerToken {
         SPACE_CACHE[1] = TOKEN_SPACE;
         for (int i = 2; i <= MAX_CACHED_SPACES; i++) {
             SPACE_CACHE[i] = new LexerToken(LexerTokenType.WHITESPACE, " ".repeat(i));
+        }
+        for (int i = 0; i <= MAX_CACHED_INT; i++) {
+            INT_CACHE[i] = new LexerToken(LexerTokenType.NUMBER, Integer.toString(i));
         }
     }
 

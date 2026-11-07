@@ -74,14 +74,14 @@ public class SymbolTable {
         }
     }
 
+    private static final SymbolEntry MISSING = new SymbolEntry(-1, null, null, null, null);
+
     public int getVariableIndex(String name) {
-        // Return the index of the variable, or -1 if not found
-        return variableIndex.getOrDefault(name, new SymbolEntry(-1, null, null, null, null)).index;
+        return variableIndex.getOrDefault(name, MISSING).index;
     }
 
     public SymbolEntry getSymbolEntry(String name) {
-        // Return the index of the variable, or null if not found
-        return variableIndex.getOrDefault(name, null);
+        return variableIndex.get(name);
     }
 
     @Override
