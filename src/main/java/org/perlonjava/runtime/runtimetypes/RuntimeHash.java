@@ -133,6 +133,17 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 && map.ownsHashAliasCell(key, cell);
     }
 
+    boolean containsElementCellIdentity(RuntimeScalar cell) {
+        if (cell == null || elements == null) return false;
+        if (elements instanceof RuntimeHashElementMap map) {
+            return map.containsValueIdentity(cell);
+        }
+        for (RuntimeScalar value : elements.values()) {
+            if (value == cell) return true;
+        }
+        return false;
+    }
+
     private boolean hasHashAliasCellOwner(RuntimeScalar cell) {
         return cell != null
                 && cell.ownerSlotCount(PerlOwnerSlot.Kind.HASH_ALIAS_CELL) != 0;
@@ -296,6 +307,8 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     private static final class RuntimeHashElementMap extends StableHashMap<String, RuntimeScalar> {
         private final RuntimeHash owner;
         private final Map<String, HashAliasCellOwner> hashAliasCellOwners = new HashMap<>();
+        private final IdentityHashMap<RuntimeScalar, Integer> valueIdentityCounts =
+                new IdentityHashMap<>();
         private long stableMethodFieldCacheRevision;
         private boolean stableMethodFieldCacheable = true;
         private Set<Map.Entry<String, RuntimeScalar>> entrySetView;
@@ -304,6 +317,21 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
 
         private RuntimeHashElementMap(RuntimeHash owner) {
             this.owner = owner;
+        }
+
+        private boolean containsValueIdentity(RuntimeScalar value) {
+            return valueIdentityCounts.containsKey(value);
+        }
+
+        private void addValueIdentity(RuntimeScalar value) {
+            if (value != null) valueIdentityCounts.merge(value, 1, Integer::sum);
+        }
+
+        private void removeValueIdentity(RuntimeScalar value) {
+            if (value == null) return;
+            Integer count = valueIdentityCounts.get(value);
+            if (count == null || count <= 1) valueIdentityCounts.remove(value);
+            else valueIdentityCounts.put(value, count - 1);
         }
 
         private boolean ownsHashAliasCell(String key, RuntimeScalar cell) {
@@ -401,6 +429,10 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 }
             }
             RuntimeScalar result = super.put(key, value);
+            if (previous != value) {
+                removeValueIdentity(previous);
+                addValueIdentity(value);
+            }
             stableMethodFieldCacheRevision++;
             if (value != null) value.markContainerOwner(owner);
             owner.markPackageRootedValue(value);
@@ -601,6 +633,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                                 String removedKey = currentEntry.getKey();
                                 RuntimeScalar removedValue = currentEntry.getValue();
                                 delegate.remove();
+                                removeValueIdentity(removedValue);
                                 retireRemovedValue(removedKey, removedValue);
                                 currentEntry = null;
                                 canRemove = false;
@@ -654,6 +687,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                                 String removedKey = currentEntry.getKey();
                                 RuntimeScalar removedValue = currentEntry.getValue();
                                 delegate.remove();
+                                removeValueIdentity(removedValue);
                                 retireRemovedValue(removedKey, removedValue);
                                 currentEntry = null;
                                 currentValue = null;
@@ -721,6 +755,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                     if (!canRemove) throw new IllegalStateException();
                     RuntimeScalar removedValue = currentEntry.getValue();
                     delegate.remove();
+                    removeValueIdentity(removedValue);
                     retireRemovedValue(currentKey, removedValue);
                     currentEntry = null;
                     currentKey = null;
@@ -794,7 +829,15 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                     }
                 }
             }
-            super.putAll(m);
+            for (Map.Entry<? extends String, ? extends RuntimeScalar> entry : m.entrySet()) {
+                RuntimeScalar previous = super.get(entry.getKey());
+                RuntimeScalar replacement = entry.getValue();
+                if (previous != replacement) {
+                    removeValueIdentity(previous);
+                    addValueIdentity(replacement);
+                }
+                super.put(entry.getKey(), replacement);
+            }
             if (!m.isEmpty()) stableMethodFieldCacheRevision++;
             for (RuntimeScalar value : m.values()) {
                 if (value != null) value.markContainerOwner(owner);
@@ -823,6 +866,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         @Override
         public RuntimeScalar remove(Object key) {
             RuntimeScalar previous = super.remove(key);
+            removeValueIdentity(previous);
             retireRemovedValue((String) key, previous);
             return previous;
         }
@@ -839,6 +883,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 }
                 owner.notePackageRootClear(removed);
                 super.clear();
+                valueIdentityCounts.clear();
                 releaseAllHashAliasCellOwners();
                 for (Map.Entry<String, RuntimeScalar> entry : removedEntries) {
                     RuntimeScalar scalar = entry.getValue();
@@ -848,6 +893,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 return;
             }
             super.clear();
+            valueIdentityCounts.clear();
             releaseAllHashAliasCellOwners();
         }
 
