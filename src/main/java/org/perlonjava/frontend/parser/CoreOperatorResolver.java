@@ -292,6 +292,7 @@ public class CoreOperatorResolver {
                 || next.text.equals("}") || next.text.equals(")")) {
             parser.throwError("Not enough arguments for lock");
         }
+        parser.parsedLocal = true;
         return parseWithPrototype(parser, token, currentIndex, coreQualified);
     }
 

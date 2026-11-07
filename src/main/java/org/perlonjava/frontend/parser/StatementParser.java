@@ -1680,6 +1680,9 @@ public class StatementParser {
         // Get warning scope ID if "no warnings" was called (for runtime propagation)
         int warningScopeId = getLastScopeId();
         clearLastScopeId();
+        if (warningScopeId > 0) {
+            parser.parsedLocal = true;
+        }
 
         // return the current compiler flags
         // If warningScopeId > 0, this node needs to emit runtime code for local ${^WARNING_SCOPE}

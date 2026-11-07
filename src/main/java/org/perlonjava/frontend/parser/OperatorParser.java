@@ -1322,6 +1322,7 @@ public class OperatorParser {
         // Check for 'delete local' syntax
         LexerToken nextToken = peek(parser);
         if (nextToken.text.equals("local")) {
+            parser.parsedLocal = true;
             TokenUtils.consume(parser); // consume 'local'
             parser.parsingTakeReference = true;
             operand = ListParser.parseZeroOrOneList(parser, 1);
@@ -2011,6 +2012,7 @@ public class OperatorParser {
     }
 
     static OperatorNode parseLocal(Parser parser, LexerToken token, int currentIndex) {
+        parser.parsedLocal = true;
         // Check if this is a declared reference (local \$x, local \@array, etc.)
         boolean isDeclaredReference = false;
         if (peek(parser).type == OPERATOR && peek(parser).text.equals("\\")) {

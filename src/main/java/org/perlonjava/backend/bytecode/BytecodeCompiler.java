@@ -632,6 +632,12 @@ public class BytecodeCompiler implements Visitor {
     boolean isSubroutineBody;
     private boolean isSortComparator;
     boolean isSmartmatchPredicate;
+    // Eval-string gating flags set once in compile() from root AST annotations.
+    // True when the analysis pass is needed: either not an eval string, or the
+    // parser saw the relevant construct.  Avoids per-node AST traversals for
+    // the common case of eval strings with no regex/local/defer.
+    private boolean evalStringHasEvalOrRegex;
+    private boolean evalStringHasLocalOrDefer;
     // Runtime regex interpolation can synthesize executable source through
     // overload, so the containing CV must expose all of its live lexical cells.
     private boolean tracksRuntimeRegexLexicals;
@@ -1540,18 +1546,24 @@ public class BytecodeCompiler implements Visitor {
                 || node instanceof AbstractNode abstractNode
                 && abstractNode.getBooleanAnnotation("subroutineIsLvalue");
 
-        boolean hasGoto        = false;
-        boolean hasLabels      = false;
-        boolean hasDefer       = false;
-        boolean hasGiven       = false;
-        boolean hasEvalOrRegex = false;
+        boolean hasGoto         = false;
+        boolean hasLabels       = false;
+        boolean hasDefer        = false;
+        boolean hasGiven        = false;
+        boolean hasEvalOrRegex  = false;
+        boolean hasLocalOrDefer = false;
         if (isEvalString && node instanceof AbstractNode rootNode) {
-            hasGoto        = rootNode.getBooleanAnnotation("hasGoto");
-            hasLabels      = rootNode.getBooleanAnnotation("hasLabels");
-            hasDefer       = rootNode.getBooleanAnnotation("hasDefer");
-            hasGiven       = rootNode.getBooleanAnnotation("hasGiven");
-            hasEvalOrRegex = rootNode.getBooleanAnnotation("hasEvalOrRegex");
+            hasGoto         = rootNode.getBooleanAnnotation("hasGoto");
+            hasLabels       = rootNode.getBooleanAnnotation("hasLabels");
+            hasDefer        = rootNode.getBooleanAnnotation("hasDefer");
+            hasGiven        = rootNode.getBooleanAnnotation("hasGiven");
+            hasEvalOrRegex  = rootNode.getBooleanAnnotation("hasEvalOrRegex");
+            hasLocalOrDefer = rootNode.getBooleanAnnotation("hasLocalOrDefer");
         }
+        // Set gating flags: true for non-eval strings (full analysis) or when the
+        // parser saw the relevant construct in this eval string.
+        evalStringHasEvalOrRegex  = !isEvalString || hasEvalOrRegex;
+        evalStringHasLocalOrDefer = !isEvalString || hasLocalOrDefer;
         boolean needsGotoAnalysis = hasGoto || hasLabels;
 
         if (needsGotoAnalysis || !isEvalString) {
@@ -2000,7 +2012,7 @@ public class BytecodeCompiler implements Visitor {
                 }
             }
             // Check for both local operators and defer statements - both need scope cleanup
-            boolean hasLocalOrDefer = FindDeclarationVisitor.containsLocalOrDefer(node);
+            boolean hasLocalOrDefer = evalStringHasLocalOrDefer && FindDeclarationVisitor.containsLocalOrDefer(node);
             if (hasScopedPackage || hasNonScopedPackage || hasLocalOrDefer) {
                 needsLocalRestore = true;
                 localLevelReg = allocateRegister();
@@ -2024,7 +2036,8 @@ public class BytecodeCompiler implements Visitor {
         enterScope();
 
         int regexSaveReg = -1;
-        if (!node.getBooleanAnnotation("blockIsSubroutine")
+        if (evalStringHasEvalOrRegex
+                && !node.getBooleanAnnotation("blockIsSubroutine")
                 && !node.getBooleanAnnotation("skipRegexSaveRestore")
                 && RegexUsageDetector.containsRegexOperation(node)) {
             regexSaveReg = allocateScopeStateRegister();
@@ -7915,7 +7928,7 @@ public class BytecodeCompiler implements Visitor {
         int listReg = lastResultReg;
 
         int foreachRegexSaveReg = -1;
-        if (node.useNewScope && RegexUsageDetector.containsRegexOperation(node)) {
+        if (node.useNewScope && evalStringHasEvalOrRegex && RegexUsageDetector.containsRegexOperation(node)) {
             foreachRegexSaveReg = allocateScopeStateRegister();
             emit(Opcodes.SAVE_REGEX_STATE);
             emitReg(foreachRegexSaveReg);
@@ -8206,7 +8219,7 @@ public class BytecodeCompiler implements Visitor {
         LoopInfo loopInfo = new LoopInfo(node.labelName, bodyStartPc, true);
         loopStack.push(loopInfo);
         loopInfo.cleanupScopeIndex = symbolTable.currentScopeIndex() + 1;
-        if (node.body != null && FindDeclarationVisitor.containsLocalOrDefer(node.body)) {
+        if (node.body != null && evalStringHasLocalOrDefer && FindDeclarationVisitor.containsLocalOrDefer(node.body)) {
             loopInfo.dynamicLocalLevelReg = allocateRegister();
             emit(Opcodes.GET_LOCAL_LEVEL);
             emitReg(loopInfo.dynamicLocalLevelReg);
@@ -8582,7 +8595,7 @@ public class BytecodeCompiler implements Visitor {
             // bypasses the body's POP_LOCAL_LEVEL. This outer pair catches that case.
             // On normal exit, the body already restored locals, so this is a no-op.
             int blockLocalLevelReg = -1;
-            if (FindDeclarationVisitor.containsLocalOrDefer(node)) {
+            if (evalStringHasLocalOrDefer && FindDeclarationVisitor.containsLocalOrDefer(node)) {
                 blockLocalLevelReg = allocateRegister();
                 emit(Opcodes.GET_LOCAL_LEVEL);
                 emitReg(blockLocalLevelReg);
@@ -8693,7 +8706,7 @@ public class BytecodeCompiler implements Visitor {
         // directly and bypasses the body's normal teardown, so a per-body
         // snapshot would otherwise accumulate and leak its match variables.
         if (node.useNewScope && !node.isDoWhile
-                && RegexUsageDetector.containsRegexOperation(node)) {
+                && evalStringHasEvalOrRegex && RegexUsageDetector.containsRegexOperation(node)) {
             loopRegexSaveReg = allocateScopeStateRegister();
             emit(Opcodes.SAVE_REGEX_STATE);
             emitReg(loopRegexSaveReg);
@@ -8716,7 +8729,7 @@ public class BytecodeCompiler implements Visitor {
         // bypasses the body's POP_LOCAL_LEVEL. This outer pair catches that case.
         // On normal exit, the body already restored locals, so POP_LOCAL_LEVEL is a no-op.
         int for3LocalLevelReg = -1;
-        if (FindDeclarationVisitor.containsLocalOrDefer(node)) {
+        if (evalStringHasLocalOrDefer && FindDeclarationVisitor.containsLocalOrDefer(node)) {
             for3LocalLevelReg = allocateRegister();
             emit(Opcodes.GET_LOCAL_LEVEL);
             emitReg(for3LocalLevelReg);
@@ -8925,7 +8938,7 @@ public class BytecodeCompiler implements Visitor {
         // A local used in an if condition is scoped to that expression. Keep
         // it on the normal path so its dynamic binding can be restored before
         // either branch is entered.
-        boolean conditionHasLocal = FindDeclarationVisitor.containsLocalOrDefer(node.condition);
+        boolean conditionHasLocal = evalStringHasLocalOrDefer && FindDeclarationVisitor.containsLocalOrDefer(node.condition);
         if (conditionHasLocal) {
             constantValue = null;
         }
@@ -9452,7 +9465,7 @@ public class BytecodeCompiler implements Visitor {
         if (currentCallContext == RuntimeContextType.VOID
                 && node.getBooleanAnnotation("emptyTargetAssignmentVoidRhs")) {
             for (Node element : node.elements) {
-                int elementContext = RegexUsageDetector.containsRegexOperation(element)
+                int elementContext = evalStringHasEvalOrRegex && RegexUsageDetector.containsRegexOperation(element)
                         ? RuntimeContextType.LIST : RuntimeContextType.VOID;
                 compileNode(element, -1, elementContext);
             }

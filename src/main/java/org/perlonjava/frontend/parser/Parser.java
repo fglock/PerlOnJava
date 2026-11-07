@@ -249,6 +249,10 @@ public class Parser {
     public boolean parsedDefer = false;
     public boolean parsedGiven = false;
     public boolean parsedEvalOrRegex = false;
+    // Set when local, delete_local, lock, or a no-warnings scope is parsed.
+    // Lets BytecodeCompiler skip FindDeclarationVisitor.containsLocalOrDefer traversals
+    // for eval strings that contain none of these constructs.
+    public boolean parsedLocal = false;
     // Set when a named subroutine definition is parsed inside an eval STRING.
     // Used to trigger outer-variable aliasing after parsing (subs need aliases
     // before they are called, not before the parse phase itself).

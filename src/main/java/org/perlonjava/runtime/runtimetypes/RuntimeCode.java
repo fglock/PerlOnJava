@@ -5517,6 +5517,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     if (parser.parsedGiven)       astNode.setAnnotation("hasGiven", true);
                     if (parser.parsedEvalOrRegex) astNode.setAnnotation("hasEvalOrRegex", true);
                     if (parser.parsedNamedSub)    astNode.setAnnotation("hasNamedSub", true);
+                    if (parser.parsedLocal || parser.parsedDefer) astNode.setAnnotation("hasLocalOrDefer", true);
                 }
 
                 // Run UNITCHECK blocks

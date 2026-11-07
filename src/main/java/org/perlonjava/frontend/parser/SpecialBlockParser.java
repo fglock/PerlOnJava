@@ -312,6 +312,9 @@ public class SpecialBlockParser {
             }
             int warningScopeId = WarningFlags.getLastScopeId();
             WarningFlags.clearLastScopeId();
+            if (warningScopeId > 0) {
+                parser.parsedLocal = true;
+            }
 
             java.util.BitSet fatalFlags = (java.util.BitSet) parser.ctx.symbolTable.warningFatalStack.peek().clone();
             java.util.BitSet disabledFlags = (java.util.BitSet) parser.ctx.symbolTable.warningDisabledStack.peek().clone();

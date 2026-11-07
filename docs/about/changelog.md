@@ -6,6 +6,8 @@ priorities and future plans.
 
 ## Work in progress
 
+- Gate per-node AST analysis passes in `BytecodeCompiler` on parse-time flags to avoid unnecessary object allocation and traversal for simple eval strings: a new `parsedLocal` flag (set at `local`, `delete local`, `lock`, and runtime warning-scope pragmas) is propagated to the AST root as `hasLocalOrDefer` alongside the existing `hasEvalOrRegex`, allowing `FindDeclarationVisitor.containsLocalOrDefer` and `RegexUsageDetector.containsRegexOperation` traversals in `visit(BlockNode)`, `visit(For1Node)`, `visit(For3Node)`, `visit(IfNode)`, and list compilation to be skipped entirely when neither construct appears in the eval string.
+
 - Reject Java-backed regular files as terminals in `IO::Tty::ttyname`, preserve unsigned 64-bit scalar signs in Storable round-trips, and fix Perl 5.45 regex lookbehind, capture, exact-opcode, and start-class diagnostics (#1988).
 
 - Refresh the imported Perl-core and dual-life modules from the current Perl blead snapshot.
