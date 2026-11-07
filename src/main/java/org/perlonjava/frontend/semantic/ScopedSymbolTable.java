@@ -208,6 +208,13 @@ public class ScopedSymbolTable {
     }
 
     /**
+     * Blank constructor used only by snapShot(). All FastStack fields are initialized
+     * at declaration time (empty ArrayList); the constructor body pushes nothing, so
+     * snapShot can populate each stack exactly once without redundant pop/push pairs.
+     */
+    private ScopedSymbolTable(boolean _snapshot) { }
+
+    /**
      * Replace the initial (bottom) symbol table with a copy of the given template.
      * Called from BytecodeCompiler's cached eval-string path to avoid N individual
      * addVariableWithIndex calls — one HashMap copy replaces N puts + N SymbolEntry allocs.
@@ -1041,70 +1048,66 @@ public class ScopedSymbolTable {
      * @return A cloned instance of ScopedSymbolTable.
      */
     public ScopedSymbolTable snapShot(SymbolTable prebuiltTable) {
-        ScopedSymbolTable st = new ScopedSymbolTable();
-        st.enterScope();
+        // Use the blank constructor so each stack starts empty — no default push/pop waste.
+        // We push exactly one value per stack here, replacing the old pattern of
+        // new ScopedSymbolTable() (pushes defaults) + enterScope() (pushes copies) +
+        // 11 × pop()+push() to replace those copies with the parent's actual values.
+        ScopedSymbolTable st = new ScopedSymbolTable(true);
 
+        // Symbol table: copy from prebuilt (fast) or rebuild from visible vars (slow).
         if (prebuiltTable != null) {
-            // Fast path: copy pre-built variable map directly, no addVariable() loop.
-            SymbolTable topTable = st.symbolTableStack.peek();
-            topTable.variableIndex.putAll(prebuiltTable.variableIndex);
-            topTable.index = prebuiltTable.index;
+            st.symbolTableStack.push(new SymbolTable(prebuiltTable));
         } else {
             // Clone visible variables (preserve the original `perlPackage` for
             // `our` entries — otherwise eval STRING compiled against this snapshot
             // would lose the caller's `our` aliases and resolve names against
             // whatever package is active inside the eval body).
+            SymbolTable table = new SymbolTable(0);
+            st.symbolTableStack.push(table);
             Map<Integer, SymbolTable.SymbolEntry> visibleVariables = this.getAllVisibleVariables();
             for (Integer index : visibleVariables.keySet()) {
                 SymbolTable.SymbolEntry entry = visibleVariables.get(index);
-                st.addVariable(entry.name(), entry.decl(), entry.perlPackage(), entry.ast());
+                table.addVariable(entry.name(), entry.decl(), entry.perlPackage(), entry.ast());
             }
         }
 
-        // Clone the current package
-        st.setCurrentPackage(this.getCurrentPackage(), this.currentPackageIsClass());
+        // Package: push parent's value directly (replaces constructor push + setCurrentPackage pop/push).
+        String srcPkg = this.getCurrentPackage();
+        String existingVersion = packageVersions().get(srcPkg);
+        st.packageStack.push(new PackageInfo(srcPkg, this.currentPackageIsClass(), existingVersion));
 
-        // Clone the current subroutine
-        st.setCurrentSubroutine(this.getCurrentSubroutine());
+        // Subroutine and body flag.
+        String sub = this.getCurrentSubroutine();
+        st.subroutineStack.push(sub != null ? sub : "");
+        st.inSubroutineBodyStack.push(this.isInSubroutineBody());
 
-        // Clone whether we are inside a subroutine body
-        st.setInSubroutineBody(this.isInSubroutineBody());
-
-        // Clone warning flags
-        st.warningFlagsStack.pop(); // Remove the initial value pushed by enterScope
+        // Warning flags: push parent's values directly (no pop needed — stacks are empty).
         BitSet wf = this.warningFlagsStack.peek();
         st.warningFlagsStack.push(wf.isEmpty() ? new BitSet() : (BitSet) wf.clone());
-
-        // Clone disabled warnings flags
-        st.warningDisabledStack.pop(); // Remove the initial value pushed by enterScope
         BitSet wd = this.warningDisabledStack.peek();
         st.warningDisabledStack.push(wd.isEmpty() ? new BitSet() : (BitSet) wd.clone());
-
-        // Clone fatal warnings flags
-        st.warningFatalStack.pop(); // Remove the initial value pushed by enterScope
         BitSet wft = this.warningFatalStack.peek();
         st.warningFatalStack.push(wft.isEmpty() ? new BitSet() : (BitSet) wft.clone());
 
-        // Clone feature flags
-        st.featureFlagsStack.pop(); // Remove the initial value pushed by enterScope
+        // Feature and syntax flags.
         st.featureFlagsStack.push(this.featureFlagsStack.peek());
-        st.postderefQqStack.pop();
         st.postderefQqStack.push(this.postderefQqStack.peek());
-        st.enhancedXxStack.pop();
         st.enhancedXxStack.push(this.enhancedXxStack.peek());
 
-        // Clone strict options
-        st.strictOptionsStack.pop(); // Remove the initial value pushed by enterScope
+        // Strict options.
         st.strictOptionsStack.push(this.strictOptionsStack.peek());
-        st.explicitStrictOptionsStack.pop();
         st.explicitStrictOptionsStack.push(this.explicitStrictOptionsStack.peek());
-        st.regexModifierStack.pop();
         st.regexModifierStack.push(this.regexModifierStack.peek());
-        st.regexDebugFlagsStack.pop();
         st.regexDebugFlagsStack.push(this.regexDebugFlagsStack.peek());
-        st.parserKeywordPluginsStack.pop();
+
+        // useVersionStack: enterScope always pushed null (not the parent's version),
+        // so the snapshot also starts with null at the base scope.
+        st.useVersionStack.push(null);
+
+        // Parser keyword plugins.
         Map<String, ParserKeywordPlugin> srcPlugins = this.parserKeywordPluginsStack.peek();
         st.parserKeywordPluginsStack.push(srcPlugins.isEmpty() ? new LinkedHashMap<>() : new LinkedHashMap<>(srcPlugins));
+
         st.lexicalRegexPragmaChanged = this.lexicalRegexPragmaChanged;
 
         return st;
