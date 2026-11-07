@@ -442,6 +442,8 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     private java.util.Set<PerlOwnerSlot> ownerSlots = null;
     private int argumentAliasOwnerSlots;
     private int countedOwnerSlots;
+    /** Active semantic Perl owner identities; excludes temporary roots and IO leases. */
+    private volatile int perlStrongOwnerSlots;
     private int pendingReturnOwners;
     private int pendingOwnerReleases;
 
@@ -494,6 +496,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         if (ownerSlots.add(slot)) {
             if (slot.kind() == PerlOwnerSlot.Kind.ARGUMENT_ALIAS) argumentAliasOwnerSlots++;
             if (PerlOwnerSlot.isCountedKind(slot.kind())) countedOwnerSlots++;
+            if (PerlOwnerSlot.isPerlOwnerKind(slot.kind())) perlStrongOwnerSlots++;
         }
     }
 
@@ -501,15 +504,12 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         if (ownerSlots != null && ownerSlots.remove(slot)) {
             if (slot.kind() == PerlOwnerSlot.Kind.ARGUMENT_ALIAS) argumentAliasOwnerSlots--;
             if (PerlOwnerSlot.isCountedKind(slot.kind())) countedOwnerSlots--;
+            if (PerlOwnerSlot.isPerlOwnerKind(slot.kind())) perlStrongOwnerSlots--;
         }
     }
 
-    synchronized boolean hasOwnerSlots() {
-        if (ownerSlots == null || ownerSlots.isEmpty()) return false;
-        for (PerlOwnerSlot slot : ownerSlots) {
-            if (slot.isActive() && PerlOwnerSlot.isPerlOwnerKind(slot.kind())) return true;
-        }
-        return false;
+    boolean hasOwnerSlots() {
+        return perlStrongOwnerSlots > 0;
     }
 
     /**
@@ -530,12 +530,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         if (localBindingExists || hasClosureCaptureOwner() || hasPendingReturnOwner()) {
             return true;
         }
-        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
-            if (slot.isActive() && PerlOwnerSlot.isPerlOwnerKind(slot.kind())) {
-                return true;
-            }
-        }
-        return false;
+        return perlStrongOwnerSlots > 0;
     }
 
     /** Whether a current Perl owner identity other than one slot remains. */
