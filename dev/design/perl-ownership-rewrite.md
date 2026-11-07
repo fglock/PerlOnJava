@@ -1896,16 +1896,20 @@ and final use cases still require audit before removal.
 ### Next steps
 
 1. Keep the `restoreReachableOwnerCount` path isolated to its legacy unpaired
-   decrement hook. The current main-source audit finds no production caller of
-   `MortalList.deferDecrement`; production owner releases carry exact slot
-   tokens. The only production call to `ReachabilityWalker.isScalarReachable`
-   is through `restoreReachableOwnerCount`; the remaining root-based recovery
-   branches in `processDeferredBase` are likewise guarded by that legacy
-   unpaired path. `finalizeClearedAggregateOwnerAfterScopeExit` may issue a
-   root query only when query statistics are enabled, and ignores its result.
-   `sweepWeakRefs` and `sweepReleasedWeakReferents` have no production callers,
-   and the public sweep entry points are compatibility no-ops. Ordinary runtime
-   cleanup no longer depends on graph sweeps.
+   decrement hook. The call-site audit finds no production caller of
+   `MortalList.deferDecrement(RuntimeBase)`. Every production
+   `deferDecrementIfTracked` caller passes a `RuntimeScalar`, whose active owner
+   slot is captured in a `PendingOwnerRelease`; `RuntimeCode.releaseCaptures`
+   reaches that same scalar-aware path after retiring its capture slot. Thus
+   ordinary production cleanup does not enter `legacyUnpairedDecrement`. The
+   only production call to `ReachabilityWalker.isScalarReachable` is through
+   `restoreReachableOwnerCount`; the remaining root-based recovery branches in
+   `processDeferredBase` are likewise guarded by that legacy unpaired path.
+   `finalizeClearedAggregateOwnerAfterScopeExit` may issue a root query only
+   when query statistics are enabled, and ignores its result. `sweepWeakRefs`
+   and `sweepReleasedWeakReferents` have no production callers, and the public
+   sweep entry points are compatibility no-ops. Ordinary runtime cleanup no
+   longer depends on graph sweeps.
 2. Retain verified owner-slot count alignment while its producer gaps are
    audited. This checks current scalar, aggregate, invocant, and native owner
    identities directly; removing it previously failed lifecycle and Perl-level
