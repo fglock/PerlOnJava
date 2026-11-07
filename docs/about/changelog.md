@@ -86,9 +86,15 @@ priorities and future plans.
 - Preserve captured weak referents through semantic closure-pad owner identities; release scalar cells after the last capture and retry weak cleanup after pending owner release (#1649).
 - Defer legacy semantic closure-pad cleanup to its owner-slot release, removing the final capture-path positive-count pin (#1649).
 - Bind signature parameter cells that skip lexical alias resolution into active pads so slurpy aggregates release weak observers at frame exit (#1649).
+- Reject Java-backed regular files as terminals in `IO::Tty::ttyname`, preserve unsigned 64-bit scalar signs in Storable round-trips, and fix Perl 5.45 regex lookbehind, capture, exact-opcode, and start-class diagnostics (#1988).
+
+- Refresh the imported Perl-core and dual-life modules from the current Perl blead snapshot.
+
 - Preserve wide-string UTF-8 metadata through runtime read-only marking and string interpolation (#1970).
 
 - Make an explicit `-n` run sample new and previously tested CPAN targets while maintaining a rolling window of target and dependency results.
+
+- Preserve scalar `sort` results when the calling context is determined at subroutine return time (#1991).
 
 - Preserve callable CODE slots and captured values when copying stash globs returned by `each`.
 

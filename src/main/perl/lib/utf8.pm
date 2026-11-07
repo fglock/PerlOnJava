@@ -10,12 +10,12 @@ our $utf8_hint_bits  = 0x00800000;
 our $ascii_hint_bits = 0x00000010;  # Turned off when utf8 turned on
 
 sub import {
-    utf8::_native_import();
+    $^H |= $utf8_hint_bits;
     $^H &= ~$ascii_hint_bits;
 }
 
 sub unimport {
-    utf8::_native_unimport();
+    $^H &= ~$utf8_hint_bits;
 }
 
 __END__

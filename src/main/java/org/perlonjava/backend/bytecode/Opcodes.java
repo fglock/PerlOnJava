@@ -679,7 +679,7 @@ public class Opcodes {
     public static final short GREP = 100;
 
     /**
-     * Sort operator: rd = ListOperators.sort(list_reg, closure_reg, package_name)
+     * Sort operator: rd = ListOperators.sort(list_reg, closure_reg, package_name, context)
      */
     public static final short SORT = 101;
 

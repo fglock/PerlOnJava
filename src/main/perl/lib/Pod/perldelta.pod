@@ -5,15 +5,15 @@
 [ this is a template for a new perldelta file. Any text flagged as XXX needs
 to be processed before release. ]
 
-perldelta - what is new for perl v5.45.4
+perldelta - what is new for perl v5.45.5
 
 =head1 DESCRIPTION
 
-This document describes differences between the 5.45.3 release and the 5.45.4
+This document describes differences between the 5.45.4 release and the 5.45.5
 release.
 
-If you are upgrading from an earlier release such as 5.45.2, first read
-L<perl5453delta>, which describes differences between 5.45.2 and 5.45.3.
+If you are upgrading from an earlier release such as 5.45.3, first read
+L<perl5454delta>, which describes differences between 5.45.3 and 5.45.4.
 
 =head1 Notice
 
@@ -34,16 +34,6 @@ vulnerabilities closed should be noted here rather than in the
 L</Selected Bug Fixes> section.
 
 [ List each security issue as a =head2 entry ]
-
-=head2 CVE-2026-107401 (title TBD)
-
-A regular expression performing a greedy match of a UTF8 character could
-have incorrectly failed if the first attempt at a match was unsuccessful.
-Instead of skipping over all consecutive instances of that I<character>
-associated with the first attempt, all consecutive characters that had
-the same first I<byte> were skipped.
-
-[GH #24916]
 
 =head1 Incompatible Changes
 
@@ -99,16 +89,40 @@ There may well be none in a stable release.
 
 =item *
 
-Changes have been made to the "super-linear cache", which is used to avoid
-excessive backtracking in some regexes which include quantifiers on
-variable-length sub-patterns, such as C<(a|bc)*> and C<(ab+){2,}>. This
-change may reduce the amount of backtracking that takes place, and may
-reduce the amount of temporary memory used for the cache.
+Case-insensitive literal alternatives such as C<foo|bar|a_word|_qux> can
+compile into a single trie again.  Characters that do not participate in
+Unicode case folding can join neighboring folded literals after the
+optimizer records their fixed substrings.
+L<[GH #19953]|https://github.com/Perl/perl5/issues/19953>
 
 =item *
 
-C<substr()> now updates the UTF-8 position cache correctly, avoiding
-repeated scans when accessing the same part of a string. [GH #24531]
+Non-folded trie matching against native byte strings now consumes a
+character's encoded octets in one iteration. This reduces reader bookkeeping
+when the character requires two UTF-8 or UTF-EBCDIC octets.
+
+=item *
+
+The Aho-Corasick regex scanner uses Boyer-Moore-Horspool shift tables to skip
+positions where no literal alternative can start.  It can also skip repeated
+blocks of octets that cannot start an alternative.  These filters apply to
+eligible case-sensitive literals, with separate shift tables for Latin-1 and
+UTF-8 targets.
+
+Eligible case-insensitive literal alternatives use a start-octet map that
+includes their possible folds.  They do not use the shift tables, because
+folding can change encoded lengths.  Locale-dependent folding uses the
+existing scanner.
+
+The scanner also reduces the cost of tracking match positions, especially
+for case-sensitive matching against non-UTF-8 targets, and avoids repeated
+alignment checks while finding a rejected block of octets.
+
+=item *
+
+The C<isa> operator now does a cached lookup of the C<isa> method,
+improving performance when that isa() method happens to be
+C<UNIVERSAL::isa>. [GH #24997]
 
 =back
 
@@ -273,7 +287,26 @@ L</Platform Support> section, instead.
 
 =item *
 
-XXX
+Fix some build noise and technical undefined behaviour with
+C<-Duselongdouble> builds on ARM64:
+
+=over
+
+=item *
+
+C<Configure> would detect C<double> format strings rather than the
+correct C<long double> format string as the format string for NV when NV
+was C<long double>, resulting in C<-Wformat> warnings.
+
+=item *
+
+F<perl.h> would disable C<USE_LONG_DOUBLE> when C<double> and C<long
+double> were the same size leaving NV as C<long double>.  This would
+result in calls to a C library function that expected a C<double>
+pointer being supplied a <long double> pointer, resulting in type
+mismatch warnings.
+
+=back
 
 =back
 
@@ -299,6 +332,25 @@ made:
 [ List each test improvement as an =item entry ]
 
 =over 4
+
+=item * t/TEST and t/harness now run generated tests
+
+F<t/TEST> and F<t/harness> are the programs which are the engines underneath
+C<make test> and C<make test_harness>.  Up till now the list of test files that
+they run was composed by examination of F<MANIFEST>.  However in 2020 the test
+files for the Devel-PPPort library (shipped with core in the
+F<dist/Devel-PPPort> directory) were overhauled such that they were composed
+during that library's own build process from data files found underneath that
+directory.  As such they were no longer listed as test files in F<MANIFEST> --
+but F<t/TEST> and F<t/harness> were not updated to account for the possibility
+of generated tests in addition to "MANIFEST-listed" tests.  This was not
+noticed until L<[GH #24855]|https://github.com/Perl/perl5/issues/24855>.
+
+This has been corrected.  Testers will now see F<dist/Devel-PPPort/t/*.t> test
+files being run as part of C<make test> and C<make test_harness>.  In
+addition, F<t/porting/test_testlist.t> now verifies that generated tests are
+being run and more thoroughly exercises the various ways in which running the
+test suite can be triggered.
 
 =item *
 
@@ -353,6 +405,12 @@ L</Modules and Pragmata> section.
 
 XXX
 
+=item macOS (Darwin)
+
+Given GCC 3.3 20030304 (Apple Computer, Inc. build 1435) from the June 2003 GCC
+update or newer, it should be possible to build current Perl on Mac OS X 10.2
+Jaguar (Darwin 6) once again.
+
 =back
 
 =head1 Internal Changes
@@ -365,50 +423,9 @@ well.
 
 =over 4
 
-=item *
+=item * save_scalar_flags
 
-Locale thread-safety is now enabled by default for the next few v5.45
-development releases.
-
-This feature, introduced with default-off in v5.45.3, is never turned on
-for builds that don't have threads, and on platforms where perl believes
-that the locale handling is natively thread-safe.
-
-Otherwise, the feature is on by default during a portion of the
-remaining 5.45 development cycle, so as to test it in the field, but the
-intention is to make it opt-in for the official 5.46 release.  To turn
-it off, pass this to F<Configure>:
-
- -Accflags=-DNO_EMULATE_THREAD_SAFE_LOCALES
-
-See L<perllocale/Multi-threaded operation>.
-
-
-=item *
-
-The inline function C<Perl_newSV_type> now only handles the SV types most
-commonly seen at runtime. C<Perl_newSV_type_generic> has been added as
-a non-inline function that can handle all SV types. This change reduces
-binary bloating and increases the chances of C<Perl_newSV_type> being
-succesfully inlined.
-
-=item *
-
-When a shifted array is unshifted, C<Perl_av_extend_guts> used to perform
-a C<(key > *maxp - 10)> check and always reallocate. That check dates from
-Perl 3.0 and the rationale for it seems to have been lost to time. (It may
-have been to encourage array growth, but the general levers for doing so
-have changed significantly over time.)
-
-Always reallocating when it is not strictly necessary could cause Perl
-applications that repeatedly perform a mixture of C<shift>/C<push> operations
-(or similar) to suffer from unnecessary allocator thrashing.
-C<Perl_av_extend_guts> will now only reallocate if the array really is out
-of space and must be extended.
-
-=item *
-
-XXX
+Added a new function analogous to C<save_aelem_flags> and C<save_helem_flags>, to have more control over saving scalars.
 
 =back
 
@@ -426,53 +443,81 @@ manager will later use a regex to expand these into links.
 
 =item *
 
-Line number information is stored rather than discarded when an anonymous
-subroutine is encountered during compilation. This should improve the
-accuracy of line numbers emitted by diagnostic messages and `caller()`
-for code following an anonymous subroutine declaration.
-
-Note that (i) this change could break any tests that hardcode the
-less-accurate line numbers (ii) further improvements to line number
-accuracy may follow within this development cycle.
-
-[GH #24396]
+Resolving a deferred array or hash element no longer frees the element when
+the deferred alias holds the container's last reference. Assigning through a
+deferred array element that can no longer extend its array no longer leaks the
+array. [GH #25038]
 
 =item *
 
-Regular expression compilation could have mistaken the width of a
-quantified subpattern (e.g. C<b{2}>) when a potentially infinite
-qualifier (e.g. C<+>) occured earlier in the pattern. This could lead to
-viable match candidates at the start of the target string being missed.
-
-[GH #24915]
+A case-insensitive regex trie no longer accepts a word ending partway through
+an input character's fold. For example, C</s|zoo/iu> no longer matches a
+sharp-s, whose full fold is C<ss>. Later alternatives are tried in order.
 
 =item *
 
-Following an unsuccessful earlier non-greedy match, a regular expression
-intended to perform a separate I<greedy> match could have instead
-performed a I<non-greedy> match because of skipped flag clearance.
-
-[GH #24926]
+A folded regex trie now updates its minimum and maximum lengths independently.
+An alternative which changes both bounds could previously cause a valid
+match to be missed or an assertion failure during Aho-Corasick scanning.
 
 =item *
 
-An anchored regular expressions starting with a repeating character could
-have incorrectly skipped later instances of that character if the match
-contained a C<(*SKIP)> and was initially unsuccessful.
+Case-insensitive trie prefix extraction no longer splits a multi-character
+fold between regex nodes. For example, a UTF-8 flagged C<ssx|sy> pattern
+under C</iu> now matches C<"\x{df}x">.
 
 =item *
 
-In some cases warnings that occurred while using unpack on an invalid
-UTF-8 marked string would result in an invalid free.  [GH #24913]
+A case-insensitive regular expression with a folded literal start class
+could loop indefinitely when searching at the end of a UTF-8 string.
+This could occur on a subsequent C</g> match after a successful match.
+
+[GH #24934]
 
 =item *
 
-Builds with C<PERL_NO_COW> could crash when modifying or freeing boolean
-values. This has been fixed. [GH #19987]
+L<perlfunc/caller> is better able to identify the correct call site when
+multiple branches of an C<if>/C<elsif>/C<else> chain call the same function.
 
 =item *
 
-C<goto> within a defer block should now work more consistently. [GH #19240]
+L<B::Xref> is able to use line numbers stored within nulled COPs. [GH #7947]
+
+=item *
+
+Perl 5.44.0 introduced some internal changes that broke uses of C<substr> when
+the string argument it is operating on was itself a special lvalue scalar
+created by another C<substr> call. This would cause debugging assertions or
+invalid C<free()> crashes from code that had a structure such as the following
+examples:
+
+    my $ref = \substr($str, $offset);
+    substr($$ref, 0, 1, "replacement");
+
+Z<>
+
+    substr(substr($str, $offset), 0, 1, "replacement");
+
+This bug has now been fixed. [GH #24933]
+
+=item * Properly initialize ${^UTF8CACHE} in new threads
+
+Previously the UTF-8 cache wasn't enabled in new threads, leading to performance issues.
+
+=item *
+
+The C<isa> operator now calls get magic on its left argument before
+checking if that value is a reference and what it is a reference to.
+[GH #24997]
+
+=item *
+
+No longer crashes when using multivariable C<foreach> loops with both
+refaliasing and the C<builtin::indexed> function. [GH #24999]
+
+    foreach my ( $idx, \@arr ) ( builtin::indexed @list_of_arefs ) {
+        say "Array number [$idx] contains <@arr>";
+    }
 
 =back
 
@@ -512,7 +557,7 @@ died, add a short obituary here.
 
 XXX Generate this with:
 
-  perl Porting/acknowledgements.pl v5.45.3..HEAD
+  perl Porting/acknowledgements.pl v5.45.4..HEAD
 
 =head1 Reporting Bugs
 

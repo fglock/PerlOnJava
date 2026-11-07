@@ -380,6 +380,7 @@ public class CompileBinaryOperatorHelper {
                     bytecodeCompiler.emitReg(rs2);       // List register
                     bytecodeCompiler.emitReg(rs1);       // Closure register
                     bytecodeCompiler.emitInt(bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage()));  // Package name for sort
+                    bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
                 }
             }
             case "split" -> {

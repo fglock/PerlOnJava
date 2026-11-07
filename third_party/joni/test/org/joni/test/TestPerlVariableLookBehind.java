@@ -101,6 +101,20 @@ public class TestPerlVariableLookBehind {
     }
 
     @Test
+    public void optionalNestedLookBehindKeepsTheContainingWidthFixed() {
+        String pattern = "b(?=.*(?<=(?<=(.{4}))?(.{5})).$)";
+        String input = "abcdef5678";
+        Matcher matcher = matcher(pattern, input);
+        assertEquals(1, matcher.search(0, input.length(), Option.NONE));
+        assertEquals(0, matcher.getRegion().getBeg(1));
+        assertEquals(4, matcher.getRegion().getEnd(1));
+        assertEquals(4, matcher.getRegion().getBeg(2));
+        assertEquals(9, matcher.getRegion().getEnd(2));
+        assertEquals(-1, matcher("b(?=.*(?<=(?<=(.{4}))?(.{5})).$)",
+                "acde5678").search(0, 8, Option.NONE));
+    }
+
+    @Test
     public void nestedLookAheadRespectsPerlLookBehindLengthLimit() {
         String input254 = "a".repeat(254) + "b";
         String input255 = "a".repeat(255) + "b";

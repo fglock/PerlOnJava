@@ -1,6 +1,6 @@
 # Reviewed issue queues
 
-Snapshot: 2026-11-05, from live open issues, PRs and the #1649 phase contract.
+Snapshot: 2026-11-06, from live open issues, PRs and the #1649 phase contract.
 This is a bounded selection aid, not the complete backlog or fresh runtime
 validation. Follow the [triage and claim protocol](../../docs/guides/issue-triage.md)
 and recheck live issue comments/PRs before starting. Unlisted work is unreviewed
@@ -49,6 +49,7 @@ resolved before implementation. No new pass or failure is asserted here.
 | Call-path measurement | [#1863](https://github.com/fglock/PerlOnJava/issues/1863) Throughput acceptance | Normal / Verify | Portfolio targets are reported met by #1870. Reconcile merged-source evidence and remaining criteria with #1885 before scheduling more optimizations. |
 | Scalar string growth | [#1298](https://github.com/fglock/PerlOnJava/issues/1298) Repeated `.=` | Normal / Investigate | Establish current scaling and alias/encoding requirements; keep attribution separate from #1174's matcher cost. Check scalar-representation overlap with #1649 before implementation. |
 | CPAN update tooling | [#1114](https://github.com/fglock/PerlOnJava/issues/1114), [#1278](https://github.com/fglock/PerlOnJava/issues/1278) Port updater/manifest | Normal / Investigate | Project features: executable import/update behavior. Compare scope and agree one shared manifest boundary, then separate deliverables and required gates. Related proposals are not yet confirmed duplicates. |
+| Perl-core module imports | [#1986](https://github.com/fglock/PerlOnJava/issues/1986) Refresh imported Perl core modules from current blead | Normal / Active | Full manifest synchronized from verified Perl blead tip `29974cc644cdca03cbdc4d603b6965b0427934bf` with 218 successes and 0 errors; second sync is idempotent. Full `make` passes. The bundled-module gate has three failures, each reproduced on current `master`; these are pre-existing. Candidate is on `feature/update-perl5-core-latest`. [Current claim](https://github.com/fglock/PerlOnJava/issues/1986#issuecomment-6684845612). |
 
 ## Ownership work and holds (Project)
 

@@ -787,6 +787,7 @@ public class EmitOperator {
             // (real Perl's sort BLOCK shares the surrounding sub's @_).
             mv.visitVarInsn(Opcodes.ALOAD, 1);
             emitterVisitor.pushCurrentPackage();
+            emitterVisitor.pushCallContext();
         } else {
             // For map, grep, all, any: push the outer @_ so blocks can access $_[0], $_[1] etc.
             // @_ is at local variable slot 1 in subroutines
