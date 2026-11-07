@@ -1907,9 +1907,12 @@ and final use cases still require audit before removal.
    `processDeferredBase` are likewise guarded by that legacy unpaired path.
    `finalizeClearedAggregateOwnerAfterScopeExit` may issue a root query only
    when query statistics are enabled, and ignores its result. `sweepWeakRefs`
-   and `sweepReleasedWeakReferents` have no production callers, and the public
-   sweep entry points are compatibility no-ops. Ordinary runtime cleanup no
-   longer depends on graph sweeps.
+   overloads are compatibility no-ops. `sweepReleasedWeakReferents` still has
+   targeted root/cycle traversal and fixed-point weak-cleanup logic for direct
+   Java compatibility/test calls; a source call-site audit finds no production
+   callers. Keep that distinction explicit and retire the implementation only
+   after its direct callers and tests have a replacement contract. Ordinary
+   runtime cleanup no longer depends on graph sweeps.
 2. Retain verified owner-slot count alignment while its producer gaps are
    audited. This checks current scalar, aggregate, invocant, and native owner
    identities directly; removing it previously failed lifecycle and Perl-level
