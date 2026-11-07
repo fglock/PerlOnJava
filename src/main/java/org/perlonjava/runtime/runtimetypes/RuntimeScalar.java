@@ -1178,14 +1178,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     private boolean isStoredInContainer(RuntimeBase owner) {
         return owner instanceof RuntimeHash hash
-                ? hash.elements != null && hash.elements.containsValue(this)
+                ? hash.containsElementCellIdentity(this)
                 : owner instanceof RuntimeArray array && !array.elementsAliased
                     && array.elements != null && array.elements.contains(this);
     }
 
     private boolean isStoredInAnyContainer(RuntimeBase owner) {
         return owner instanceof RuntimeHash hash
-                ? hash.elements != null && hash.elements.containsValue(this)
+                ? hash.containsElementCellIdentity(this)
                 : owner instanceof RuntimeArray array
                     && array.elements != null && array.elements.contains(this);
     }
