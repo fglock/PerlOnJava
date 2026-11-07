@@ -3,81 +3,31 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Production sweep callers have been removed; count alignment still uses verified current owner slots while remaining producer gaps are audited.
 
 **Current checkpoint (2026-11-07):** #1649 remains in Phase 2 on branch
-`wip/issue1649-resume-20261106-164511`, on PR #1938. The last pushed head is
-`1744c720b8`; a follow-up null-assignment owner fix is validated locally and
-awaiting commit/push. Reference-count transitions are centralized in `RuntimeBase`
-and `PerlOwnerSlot`, and production releases carry exact owner tokens.
-Production calls to the public `MortalList.deferDecrement` hook and weak-sweep
-APIs remain absent; verified current-slot count alignment is still active
-while producer gaps are audited.
+`wip/issue1649-resume-20261106-164511`, PR #1938. The last pushed head is
+`12737cbdfd`. Production releases carry exact owner tokens; public corrective
+sweep callers remain absent, while verified current-slot count alignment and
+the producer audit are still in progress.
 
-The latest PR CI exposed eight failures in imported
-`threads-shared/t/object2.t`: `undef` and replacement did not release blessed
-nested hash/array objects stored in shared arrays and hashes. The cause was a
-fetch-time local aggregate view created while evaluating the assignment lvalue.
-`SharedElementProxy` now retires that view when it is unowned before mutating
-the canonical slot, allowing its exact owner release to dispatch `DESTROY`.
-Project test `threads_shared_nested_object_release.t` passes 9/9 on system
-Perl, JVM, and interpreter, including a discarded-fetch-then-undef case; it
-failed the four undef/replacement checks on the unfixed parent. The unchanged
-imported `object2.t` passes 133/133 with corrective sweeps disabled. The full
-`JPERL_DISABLE_CORRECTIVE_SWEEPS=1 nice -n 19 make` passes in 8m08 on this
-working tree. Logs: `/tmp/issue1649-nested-object-release-perl.txt`,
-`/tmp/issue1649-nested-object-release-{jvm,interpreter}-final.txt`,
-`/tmp/issue1649-object2-expanded-final.log`, and
-`/tmp/issue1649-nested-object-release-nosweeps-make.txt`.
+The local follow-up indexes semantic owner-slot membership on `RuntimeBase`,
+excluding temporary roots and IO leases. `RuntimeScalar` now avoids container
+history work for values without a RuntimeBase referent, preserves release of a
+previous reference owner, fast-checks its current container owner, and scans
+remaining container identities in place when required. The first fast-path
+variant regressed the Mojolicious WebSocket controller lifetime test; restoring
+the original aggregate-owner predicate fixed it. The full no-sweeps make gate
+passes with the current code in 9m26 (`/tmp/issue1649-primitive-owner-scan-fastpath-make.log`).
+DateTime 1.68 `t/09greg.t` passes with sweeps disabled (`/tmp/issue1649-primitive-owner-scan-fastpath-datetime.log`); the same test timed out at 300s before the primitive-value fast path.
 
-PR CI run `42311549868` passes on Ubuntu (38m20s) and Windows (34m14s). The
-fresh-home `make test-cpan-release-acceptance` run at `b4653bced8` was
-intentionally interrupted after a JVM thread dump proved quadratic hash
-hydration: every stored-value owner refresh called `LinkedHashMap.containsValue`.
-`RuntimeHashElementMap` now maintains identity multiplicities through puts,
-bulk copy, iterator removal, key removal, and clear; scalar owner checks use the
-index. `RuntimeHashIdentityMembershipTest` covers duplicate cell identities,
-distinct equal-valued cells, replacements, bulk insertion, view removals, and
-clear. `JPERL_DISABLE_CORRECTIVE_SWEEPS=1 nice -n 19 make` passes in 7m10;
-log: `/tmp/issue1649-hash-identity-index-make.log`. The regression test result
-is in `build/test-results/testUnitShard0/TEST-org.perlonjava.runtime.runtimetypes.RuntimeHashIdentityMembershipTest.xml`.
+PR CI run `42333872972` passes on Ubuntu and Windows for `12737cbdfd`. The
+fresh-home acceptance run remains pinned to that older commit: Template (3,180),
+PPR (1,255), and Image::ExifTool passed; DateTime, Mojolicious, and
+DBIx::Class timed out, and Catalyst is still running. The
+current follow-up has not yet been tested by that gate.
 
-The fresh-home acceptance gate at `1744c720b8` confirms that Image::ExifTool
-passes in 432s after the indexed owner lookup. PPR passes 1,255 subtests and
-Template passes 3,180. DBIx::Class times out after 3,601s without activity;
-its output records multiple outstanding Storage weak-registry cleanup failures
-and is under classification. Excel::Writer::XLSX completes 1,247 programs and
-5,080 subtests, but three upstream programs fail with an active `SCALAR_CELL`
-owner token whose scalar payload has already become null. The cause was
-direct primitive/string setters replacing a tracked value without its owner
-transition. Primitive and string setters now delegate to the normal scalar
-assignment path when an owner token exists. `RuntimeScalarDirectSetterOwnerReleaseTest`
-covers string replacement, string null, Java-null `RuntimeScalar`, integer,
-long, `BigInteger`, and boolean setters, checking final weak cleanup. Its first
-focused CPAN rerun on the partial `setLarge(null)` fix still reproduced the
-owner error, which identified the remaining direct setter overloads. The
-corrected no-sweeps `make` passes in 7m48; log:
-`/tmp/issue1649-direct-setter-owner-release-make.log`. The three failing
-Excel::Writer::XLSX programs now pass 5/5, 8/8, and 48/48 on JVM with sweeps
-disabled; log: `/tmp/issue1649-excel-writer-jperl-fixed.log`. The project
-regression passes in `build/test-results/testUnitShard0/TEST-org.perlonjava.runtime.runtimetypes.RuntimeScalarDirectSetterOwnerReleaseTest.xml`.
-
-CI rerun attempt 3 for PR run `42319669548` passes on Windows and Ubuntu. The
-first attempt had a Windows concurrent-modification error in
-`thread_shared_queue_clone.t`; that test passed on the rerun. Ubuntu's first
-rerun attempt hit a 10s MakeMaker process timeout; that passed on the next
-rerun. Logs: `/tmp/issue1649-ci-failed-1744.log` and
-`/tmp/issue1649-ci-rerun-failed-1744.log`.
-
-The prior gate transcript and JVM dump are preserved at
-`/private/tmp/issue1649-cpan-release-acceptance-b4653bced8.log` and
-`/private/tmp/issue1649-cpan-exiftool-thread-dump.txt`. The old-source gate
-did not report a package test failure; the run was stopped to fix the measured
-performance regression before restarting on the new candidate.
-
-Immediate next action is to commit and push the direct-setter owner fix, finish
-the fresh-home acceptance run currently testing DateTime, then rerun the gate
-on the updated commit and classify outstanding failures. Continue the
-producer/release audit and review the verified count-alignment bridge. Keep
-#1938 in draft until the bridge/legacy recovery decision and remaining
-acceptance work are resolved; #1649 is not complete.
+Next: run the ordinary full make gate, check changed Markdown links, commit and
+push the verified follow-up, then rerun fresh-home CPAN acceptance on the new
+head. Keep PR #1938 in draft until acceptance and the count-alignment/legacy
+recovery review are resolved; #1649 is not complete.
 
 The reported Class::MethodMaker tied-array lifetime failure is covered by the
 new project-owned `refcount/generated_tied_array_handler_lifetime.t`: it

@@ -7,6 +7,7 @@ priorities and future plans.
 ## Work in progress
 
 - Keep hash owner lookup constant-time during large hash hydration by indexing stored scalar-cell identities (#1649).
+- Index semantic Perl owner-slot membership and skip referent-owner scans for primitive scalar stores (#1649).
 - Route primitive and string scalar setters through owner-slot transitions when replacing tracked values (#1649).
 - Release replaced nested hash and array objects from shared aggregate slots at assignment time, without retaining an unowned fetched view (#1649).
 - Reacquire anonymous IO holder identities for cloned Perl scalars in child thread runtimes (#1649).
