@@ -3,9 +3,9 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Production sweep callers have been removed; count alignment still uses verified current owner slots while remaining producer gaps are audited.
 
 **Current checkpoint (2026-11-07):** #1649 remains in Phase 2 on branch
-`wip/issue1649-resume-20261106-164511`, on PR #1938. The PR head before this
-checkpoint is `b4653bced8`; an additional hash-owner index fix is validated
-locally and awaiting commit/push. Reference-count transitions are centralized in `RuntimeBase`
+`wip/issue1649-resume-20261106-164511`, on PR #1938. The last pushed head is
+`1744c720b8`; a follow-up null-assignment owner fix is validated locally and
+awaiting commit/push. Reference-count transitions are centralized in `RuntimeBase`
 and `PerlOwnerSlot`, and production releases carry exact owner tokens.
 Production calls to the public `MortalList.deferDecrement` hook and weak-sweep
 APIs remain absent; verified current-slot count alignment is still active
@@ -39,17 +39,38 @@ clear. `JPERL_DISABLE_CORRECTIVE_SWEEPS=1 nice -n 19 make` passes in 7m10;
 log: `/tmp/issue1649-hash-identity-index-make.log`. The regression test result
 is in `build/test-results/testUnitShard0/TEST-org.perlonjava.runtime.runtimetypes.RuntimeHashIdentityMembershipTest.xml`.
 
+The fresh-home acceptance gate at `1744c720b8` confirms that Image::ExifTool
+passes in 432s after the indexed owner lookup. PPR passes 1,255 subtests and
+Template passes 3,180. DBIx::Class times out after 3,601s without activity;
+its output records multiple outstanding Storage weak-registry cleanup failures
+and is under classification. Excel::Writer::XLSX completes 1,247 programs and
+5,080 subtests, but three upstream programs fail with an active `SCALAR_CELL`
+owner token whose scalar payload has already become null. The cause was
+`RuntimeScalar.setLarge(null)` clearing the payload without its owner-slot
+transition. Java-null assignment now delegates to `undefine()`, and
+`RuntimeScalarJavaNullAssignmentOwnerTest` verifies final weak cleanup and a
+subsequent reference assignment. The full no-sweeps `make` passes in 7m39;
+log: `/tmp/issue1649-java-null-owner-release-make.log`.
+
+CI rerun attempt 3 for PR run `42319669548` passes on Windows and Ubuntu. The
+first attempt had a Windows concurrent-modification error in
+`thread_shared_queue_clone.t`; that test passed on the rerun. Ubuntu's first
+rerun attempt hit a 10s MakeMaker process timeout; that passed on the next
+rerun. Logs: `/tmp/issue1649-ci-failed-1744.log` and
+`/tmp/issue1649-ci-rerun-failed-1744.log`.
+
 The prior gate transcript and JVM dump are preserved at
 `/private/tmp/issue1649-cpan-release-acceptance-b4653bced8.log` and
 `/private/tmp/issue1649-cpan-exiftool-thread-dump.txt`. The old-source gate
 did not report a package test failure; the run was stopped to fix the measured
 performance regression before restarting on the new candidate.
 
-Immediate next action is to commit and push the hash-owner index, restart the
-fresh-home CPAN acceptance gate on that exact source, and classify any package
-failures. Then continue the producer/release audit and review the verified
-count-alignment bridge. Keep #1938 in draft until the bridge/legacy recovery
-decision and remaining acceptance work are resolved; #1649 is not complete.
+Immediate next action is to commit and push the null-assignment owner fix,
+finish the fresh-home acceptance run currently testing DateTime, then rerun
+the gate on the updated commit and classify outstanding failures. Continue the
+producer/release audit and review the verified count-alignment bridge. Keep
+#1938 in draft until the bridge/legacy recovery decision and remaining
+acceptance work are resolved; #1649 is not complete.
 
 The reported Class::MethodMaker tied-array lifetime failure is covered by the
 new project-owned `refcount/generated_tied_array_handler_lifetime.t`: it
