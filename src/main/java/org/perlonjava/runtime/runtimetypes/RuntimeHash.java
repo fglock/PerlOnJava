@@ -126,6 +126,12 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         return map;
     }
 
+    void replaceWithEmptySharedStorage() {
+        type = PLAIN_HASH;
+        elements = Collections.synchronizedMap(newElementMap());
+        resetIterator();
+    }
+
     private record HashAliasCellOwner(RuntimeScalar cell, PerlOwnerSlot owner) {}
 
     boolean ownsHashAliasCell(String key, RuntimeScalar cell) {
