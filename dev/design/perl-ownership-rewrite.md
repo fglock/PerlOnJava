@@ -46,11 +46,18 @@ its output records multiple outstanding Storage weak-registry cleanup failures
 and is under classification. Excel::Writer::XLSX completes 1,247 programs and
 5,080 subtests, but three upstream programs fail with an active `SCALAR_CELL`
 owner token whose scalar payload has already become null. The cause was
-`RuntimeScalar.setLarge(null)` clearing the payload without its owner-slot
-transition. Java-null assignment now delegates to `undefine()`, and
-`RuntimeScalarJavaNullAssignmentOwnerTest` verifies final weak cleanup and a
-subsequent reference assignment. The full no-sweeps `make` passes in 7m39;
-log: `/tmp/issue1649-java-null-owner-release-make.log`.
+direct primitive/string setters replacing a tracked value without its owner
+transition. Primitive and string setters now delegate to the normal scalar
+assignment path when an owner token exists. `RuntimeScalarDirectSetterOwnerReleaseTest`
+covers string replacement, string null, Java-null `RuntimeScalar`, integer,
+long, `BigInteger`, and boolean setters, checking final weak cleanup. Its first
+focused CPAN rerun on the partial `setLarge(null)` fix still reproduced the
+owner error, which identified the remaining direct setter overloads. The
+corrected no-sweeps `make` passes in 7m48; log:
+`/tmp/issue1649-direct-setter-owner-release-make.log`. The three failing
+Excel::Writer::XLSX programs now pass 5/5, 8/8, and 48/48 on JVM with sweeps
+disabled; log: `/tmp/issue1649-excel-writer-jperl-fixed.log`. The project
+regression passes in `build/test-results/testUnitShard0/TEST-org.perlonjava.runtime.runtimetypes.RuntimeScalarDirectSetterOwnerReleaseTest.xml`.
 
 CI rerun attempt 3 for PR run `42319669548` passes on Windows and Ubuntu. The
 first attempt had a Windows concurrent-modification error in
@@ -65,9 +72,9 @@ The prior gate transcript and JVM dump are preserved at
 did not report a package test failure; the run was stopped to fix the measured
 performance regression before restarting on the new candidate.
 
-Immediate next action is to commit and push the null-assignment owner fix,
-finish the fresh-home acceptance run currently testing DateTime, then rerun
-the gate on the updated commit and classify outstanding failures. Continue the
+Immediate next action is to commit and push the direct-setter owner fix, finish
+the fresh-home acceptance run currently testing DateTime, then rerun the gate
+on the updated commit and classify outstanding failures. Continue the
 producer/release audit and review the verified count-alignment bridge. Keep
 #1938 in draft until the bridge/legacy recovery decision and remaining
 acceptance work are resolved; #1649 is not complete.
