@@ -118,7 +118,6 @@ public final class FutureAsyncAwaitRuntime {
                         state.callbackActive.set(false);
                     }
                     if (callbackWarningHandler != null) {
-                        callbackWarningHandler.releaseClosureCapture();
                         RuntimeScalar.scopeExitCleanup(callbackWarningHandler);
                     }
                 }
@@ -215,6 +214,7 @@ public final class FutureAsyncAwaitRuntime {
         outer = state.outerAfterResume();
         if (outer == null) {
             state.terminal.set(true);
+            suspension.frame.releaseSuspendedLexicalOwners();
             warnLostReturningFuture(suspension.frame, callbackWarningHandler);
             return;
         }
@@ -223,9 +223,13 @@ public final class FutureAsyncAwaitRuntime {
         }
         try {
             if (isCancelled(outer)) {
+                suspension.frame.releaseSuspendedLexicalOwners();
                 state.clearOuterProbe();
                 return;
             }
+            // The interpreter has produced and transferred its return value;
+            // retire frame lexicals before AWAIT_DONE can invoke callbacks.
+            suspension.frame.releaseSuspendedLexicalOwners();
             call(outer, "AWAIT_DONE", new RuntimeArray(result), RuntimeContextType.VOID);
             state.clearOuterProbe();
         } catch (Throwable error) {
@@ -238,6 +242,7 @@ public final class FutureAsyncAwaitRuntime {
         RuntimeScalar outer = state.outerAfterResume();
         if (outer == null) {
             state.terminal.set(true);
+            frame.releaseSuspendedLexicalOwners();
             warnAbandonedFailure(frame, error, callbackWarningHandler);
             return;
         }
@@ -245,9 +250,11 @@ public final class FutureAsyncAwaitRuntime {
             return;
         }
         if (isCancelled(outer)) {
+            frame.releaseSuspendedLexicalOwners();
             state.clearOuterProbe();
             return;
         }
+        frame.releaseSuspendedLexicalOwners();
         call(outer, "AWAIT_FAIL", new RuntimeArray(exceptionValue(error)),
                 RuntimeContextType.VOID);
         state.clearOuterProbe();
@@ -322,9 +329,7 @@ public final class FutureAsyncAwaitRuntime {
                 return null;
             }
             if (outerWeak.value instanceof RuntimeBase referent
-                    && !ReachabilityWalker.isReachableFromRoots(referent)
-                    && !ReachabilityWalker.isReachableFromLiveScalarRegistry(referent)
-                    && !ReachabilityWalker.isReachableFromLiveCodeCaptures(referent)) {
+                    && !referent.hasPerlStrongOwner()) {
                 WeakRefRegistry.clearWeakRefsTo(referent);
                 return null;
             }
@@ -446,7 +451,6 @@ public final class FutureAsyncAwaitRuntime {
         // anonymous handler and its lexical captures before it emits the
         // self-abandonment warning. Keep the closure graph alive until the
         // queued resume has completed.
-        retained.retainClosureCapture();
         return retained;
     }
 

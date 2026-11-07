@@ -8,7 +8,9 @@ import java.util.Stack;
  * when they are accessed.
  */
 public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
-    private static Stack<RuntimeScalar> dynamicStateStack() {
+    record SavedHashElement(RuntimeScalar value, PerlOwnerSlot aliasOwner) {}
+
+    private static Stack<SavedHashElement> dynamicStateStack() {
         return PerlRuntime.current().executionState().hashProxyStates;
     }
 
@@ -31,6 +33,11 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
 
     /** D-W6.18: package-global flag propagation. */
     public RuntimeHash getParent() {
+        return parent;
+    }
+
+    @Override
+    RuntimeBase argumentAliasContainer() {
         return parent;
     }
 
@@ -150,8 +157,7 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
     public RuntimeScalar aliasToReference(RuntimeScalar reference) {
         if (parent.threadShared) SharedPerlStorage.validateStoredValue(reference);
         RuntimeScalar referent = reference.refAliasScalarReference();
-        parent.notePackageRootMutation();
-        parent.elements.put(key, referent);
+        parent.aliasScalarCell(key, referent);
         parent.markKeyByte(key, byteKey);
         parent.markPackageRootedValue(referent);
         this.lvalue = referent;
@@ -187,7 +193,12 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
         } else {
             // Preserve the actual hash slot, not merely its value. Refaliasing
             // can make the slot's scalar identity observable after local() unwinds.
-            dynamicStateStack().push(this.lvalue);
+            PerlOwnerSlot savedAliasOwner = null;
+            if (parent.ownsHashAliasCell(key, this.lvalue)) {
+                savedAliasOwner = new PerlOwnerSlot(PerlOwnerSlot.Kind.HASH_ALIAS_CELL);
+                savedAliasOwner.acquireHashAliasCellIdentity(this.lvalue, parent);
+            }
+            dynamicStateStack().push(new SavedHashElement(this.lvalue, savedAliasOwner));
             // The localized value needs a distinct mutable slot. Clearing the
             // saved slot would also clear the object that must be reinstalled
             // at scope exit, losing ordinary `local $hash{key}` values.
@@ -213,21 +224,34 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
      */
     @Override
     public void dynamicRestoreState() {
-        Stack<RuntimeScalar> dynamicStateStack = dynamicStateStack();
+        Stack<SavedHashElement> dynamicStateStack = dynamicStateStack();
         if (!dynamicStateStack.isEmpty()) {
             // Pop the most recent saved state from the stack
-            RuntimeScalar previousState = dynamicStateStack.pop();
+            SavedHashElement savedState = dynamicStateStack.pop();
+            RuntimeScalar previousState = savedState == null ? null : savedState.value();
             if (previousState == null) {
                 // Key didn't exist before — remove it from the parent hash.
                 // Re-fetch from parent in case hash was reassigned (setFromList clears elements).
+                RuntimeScalar currentSlot = parent.elements.get(key);
+                boolean currentWasAlias = parent.ownsHashAliasCell(key, currentSlot);
                 parent.notePackageRootMutation();
                 RuntimeScalar current = parent.elements.remove(key);
-                if (current != null
-                        && (current.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                        && current.value instanceof RuntimeBase displacedBase
-                        && displacedBase.refCount > 0 && --displacedBase.refCount == 0) {
-                    displacedBase.refCount = Integer.MIN_VALUE;
-                    DestroyDispatch.callDestroy(displacedBase);
+                if (current != null) {
+                    // The key was created only inside the localized scope.
+                    // Removing its temporary scalar must also retire any
+                    // anonymous IO holder acquired by assignments to it.
+                    // Hint hashes already queue full slot cleanup in their
+                    // map's remove hook.
+                    if (!currentWasAlias && !parent.isHintHash) {
+                        // Release the exact counted slot owner. Directly
+                        // decrementing the referent here left refCountOwned and
+                        // the HASH_ELEMENT identity active when another scalar
+                        // still owned the referent, so the removed slot could
+                        // appear live during a later final release.
+                        MortalList.deferDecrementIfTracked(current);
+                        MortalList.deferIoOwnerRelease(current);
+                    }
+                    MortalList.flush();
                 }
                 this.lvalue = null;
                 this.type = RuntimeScalarType.UNDEF;
@@ -236,8 +260,13 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
                 // A temporary local alias may have replaced the map entry.
                 // Reinstall the saved slot so its original scalar identity
                 // remains observable after the dynamic scope unwinds.
+                RuntimeScalar currentSlot = parent.elements.get(key);
+                boolean displacedWasAlias = parent.ownsHashAliasCell(key, currentSlot);
                 parent.notePackageRootMutation();
-                RuntimeScalar displaced = parent.elements.put(key, previousState);
+                boolean savedAliasCell = savedState.aliasOwner() != null;
+                RuntimeScalar displaced = savedAliasCell
+                        ? parent.aliasScalarCell(key, previousState)
+                        : parent.elements.put(key, previousState);
                 parent.markPackageRootedValue(previousState);
                 this.lvalue = previousState;
                 this.type = this.lvalue.type;
@@ -248,7 +277,8 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
                 // reachable after the saved hash entry is restored. Release
                 // it only after restoration, so a DESTROY method observes the
                 // restored dynamic value (notably a restored %SIG handler).
-                if (displaced != null && displaced != previousState) {
+                if (!savedAliasCell && !displacedWasAlias
+                        && displaced != null && displaced != previousState) {
                     // Replacing a localized element has the same ownership
                     // effect as deleting a hash element.  In particular, a
                     // CODE slot can be the last counted owner of a closure;
@@ -258,6 +288,9 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
                     MortalList.deferIoOwnerRelease(displaced);
                     MortalList.flush();
                 }
+            }
+            if (savedState != null && savedState.aliasOwner() != null) {
+                savedState.aliasOwner().release();
             }
         }
     }

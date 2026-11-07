@@ -2,9 +2,9 @@ package org.perlonjava.runtime.io;
 
 import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.operators.ModuleOperators;
-import org.perlonjava.runtime.runtimetypes.DestroyDispatch;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
+import org.perlonjava.runtime.runtimetypes.PerlOwnerSlot;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
@@ -40,7 +40,37 @@ public class ViaLayer implements IOLayer {
     private final RuntimeScalar poppedMethod;
 
     private boolean popped;
-    private boolean holdsSelfReference;
+    private SelfReferenceOwner selfReferenceOwner;
+
+    /** Owner identity for the Java layer's retained Perl {@code PUSHED} value. */
+    static final class SelfReferenceOwner {
+        final PerlOwnerSlot ownerSlot;
+        private boolean released;
+
+        private SelfReferenceOwner(RuntimeBase referent) {
+            ownerSlot = new PerlOwnerSlot(PerlOwnerSlot.Kind.IO_VIA_LAYER);
+            ownerSlot.acquireCountedNativeOwner(referent, "ViaLayer retains PUSHED object");
+        }
+
+        static SelfReferenceOwner retain(RuntimeScalar self) {
+            if (self == null || !RuntimeScalarType.isReference(self)
+                    || !(self.value instanceof RuntimeBase base)
+                    || base.refCount == Integer.MIN_VALUE) {
+                return null;
+            }
+            return new SelfReferenceOwner(base);
+        }
+
+        PerlOwnerSlot ownerSlot() {
+            return ownerSlot;
+        }
+
+        void release() {
+            if (released) return;
+            released = true;
+            ownerSlot.releaseNativeOwner();
+        }
+    }
 
     public ViaLayer(String requestedPackage, IOHandle belowHandle, String mode) {
         this.belowIO = new RuntimeIO(new BorrowedIOHandle(belowHandle));
@@ -305,25 +335,13 @@ public class ViaLayer implements IOLayer {
     }
 
     private void holdSelfReference() {
-        if (RuntimeScalarType.isReference(self)
-                && self.value instanceof RuntimeBase base
-                && base.refCount >= 0) {
-            base.refCount++;
-            holdsSelfReference = true;
-        }
+        selfReferenceOwner = SelfReferenceOwner.retain(self);
     }
 
     private void releaseSelfReference() {
-        if (!holdsSelfReference) {
-            return;
-        }
-        if (RuntimeScalarType.isReference(self) && self.value instanceof RuntimeBase base) {
-            if (base.refCount > 0 && --base.refCount == 0) {
-                base.refCount = Integer.MIN_VALUE;
-                DestroyDispatch.callDestroy(base);
-            }
-        }
-        holdsSelfReference = false;
+        SelfReferenceOwner owner = selfReferenceOwner;
+        selfReferenceOwner = null;
+        if (owner != null) owner.release();
     }
 
     private static boolean isPushFailure(RuntimeScalar result) {

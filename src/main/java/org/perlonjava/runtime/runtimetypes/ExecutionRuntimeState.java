@@ -39,7 +39,7 @@ public final class ExecutionRuntimeState {
     final Stack<Object> globalScalarStates = new Stack<>();
     final Stack<Object> globalArrayStates = new Stack<>();
     final Stack<Object> globalHashStates = new Stack<>();
-    final Stack<RuntimeScalar> hashProxyStates = new Stack<>();
+    final Stack<RuntimeHashProxyEntry.SavedHashElement> hashProxyStates = new Stack<>();
     final Stack<Integer> arrayProxyIndexStates = new Stack<>();
     final Stack<RuntimeScalar> arrayProxyStates = new Stack<>();
     final Stack<Integer> arrayProxySavedSizes = new Stack<>();
@@ -73,9 +73,19 @@ public final class ExecutionRuntimeState {
     public final Deque<RuntimeCode.EvalSourceFrame> activeEvalSources = new ArrayDeque<>();
     public final ArrayDeque<ArrayList<String>> syntheticCallerFrames = new ArrayDeque<>();
     public final Deque<RuntimeArray> argsStack = new ArrayDeque<>();
-    /** Weak roots for JVM call arguments while their expressions are evaluated. */
-    final ArrayList<java.lang.ref.WeakReference<RuntimeCode.CallArguments>> callArgumentFrames =
+    final Deque<List<RuntimeScalar.ArgumentAliasOwner>> argumentAliasOwnerFrames =
+            new ArrayDeque<>();
+    /** Source-frame alias owners awaiting adoption by a tail-call target frame. */
+    final Deque<RuntimeCode.TailCallArgumentOwners> pendingTailCallArgumentOwners =
+            new ArrayDeque<>();
+    /** Counted owners for aggregates containing the active aliased argument slots. */
+    final Deque<List<RuntimeCode.ArgumentContainerOwner>> argumentContainerOwnerFrames =
+            new ArrayDeque<>();
+    /** Explicit owners for staged arguments, retired by call completion or frame exit. */
+    final ArrayList<RuntimeCode.CallArguments> callArgumentFrames =
             new ArrayList<>();
+    /** Temporary chained-method invocant owners active in the generated caller. */
+    final ArrayList<RuntimeBase> methodInvocantHolds = new ArrayList<>();
     public final Deque<RuntimeCode> activeCodeStack = new ArrayDeque<>();
     /** Perl source callsites aligned with the active Perl code frames. */
     public final Deque<CallerStack.CallerInfo> activeCodeCallSites = new ArrayDeque<>();
@@ -99,6 +109,8 @@ public final class ExecutionRuntimeState {
     public Object reusableActiveLexicalFrame;
     /** Lexical cells owned by the top-level compilation unit. */
     public final Map<String, RuntimeBase> topLevelLexicals = new LinkedHashMap<>();
+    /** Owner identities for aggregate cells held by top-level lexical names. */
+    final Map<String, PerlOwnerSlot> topLevelLexicalOwnerSlots = new LinkedHashMap<>();
     public final Deque<List<RuntimeScalar>> pristineArgsStack = new ArrayDeque<>();
     /** Reusable one-scalar return lists, populated only after scalar extraction. */
     final Deque<RuntimeList> availableScalarResultLists = new ArrayDeque<>();
@@ -135,7 +147,6 @@ public final class ExecutionRuntimeState {
 
     final ArrayList<Object> myVarCleanupStack = new ArrayList<>();
     final IdentityHashMap<Object, Integer> registeredMyVarCounts = new IdentityHashMap<>();
-    final IdentityHashMap<Object, Integer> liveMyVarCounts = new IdentityHashMap<>();
 
     private final IdentityHashMap<RuntimeCode, CallDepthState> callDepths = new IdentityHashMap<>();
     private RuntimeCode lastCallDepthCode;

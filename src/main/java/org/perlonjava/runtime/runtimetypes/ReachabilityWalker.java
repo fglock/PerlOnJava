@@ -40,6 +40,12 @@ import java.lang.ref.WeakReference;
  * </ul>
  */
 public class ReachabilityWalker {
+    /** Runtime cleanup must use owner releases; retain walker diagnostics only. */
+    private static final boolean CORRECTIVE_SWEEPS_DISABLED = true;
+
+    static boolean correctiveSweepsEnabled() {
+        return !CORRECTIVE_SWEEPS_DISABLED;
+    }
 
     private static final String WALKER_TRACE_CLASS =
             System.getenv("JPERL_WALKER_TRACE_CLASS");
@@ -142,11 +148,11 @@ public class ReachabilityWalker {
             if (owner == null || !owner.refCountOwned || owner.value != referent) continue;
             RuntimeBase container = owner.containerOwner;
             if (container instanceof RuntimeArray array
-                    && array.captureCount > 0 && array.elements.contains(owner)) {
+                    && array.hasClosureCaptureOwner() && array.elements.contains(owner)) {
                 return true;
             }
             if (container instanceof RuntimeHash hash
-                    && hash.captureCount > 0 && hash.elements.containsValue(owner)) {
+                    && hash.hasClosureCaptureOwner() && hash.elements.containsValue(owner)) {
                 return true;
             }
         }
@@ -226,9 +232,6 @@ public class ReachabilityWalker {
         // elements remain reachable until the closure releases the slot.
         for (RuntimeBase ownerReferent : PerlRuntime.snapshotOwnerSlotReferents()) {
             addReachable(ownerReferent, todo);
-        }
-        for (RuntimeBase suspended : MortalList.snapshotSuspendedRoots()) {
-            addReachable(suspended, todo);
         }
         if (useLexicalSeeds) {
             // Phase D-W1 (walker_gate_dbic_minimal.t): seed from live
@@ -335,7 +338,6 @@ public class ReachabilityWalker {
                     visitScalar(value, todo);
                 }
             } else if (cur instanceof RuntimeCode code) {
-                visitCodePadConstants(code, todo);
                 visitCodeStateVariables(code, todo);
                 if (code.closedOverVariables != null) {
                     for (RuntimeBase captured : code.closedOverVariables.values()) {
@@ -392,7 +394,6 @@ public class ReachabilityWalker {
                 if (!hasWalkableCodeEdges(code, walkCaptures)) {
                     continue;
                 }
-                visitCodePadConstants(code, todo);
                 visitCodeStateVariables(code, todo);
                 // Phase 2 normally keeps closure captures opaque to avoid
                 // over-rescuing DBIC objects through internal callbacks.
@@ -424,14 +425,6 @@ public class ReachabilityWalker {
         }
     }
 
-    private void visitCodePadConstants(RuntimeCode code,
-                                       java.util.ArrayDeque<RuntimeBase> todo) {
-        if (code.padConstants == null) return;
-        for (RuntimeBase constant : code.padConstants) {
-            addReachable(constant, todo);
-        }
-    }
-
     /**
      * Global CODE slots themselves are roots, but most named subs have no
      * object-valued pad, state, or capture edges. Keep those CODE refs in the
@@ -450,8 +443,7 @@ public class ReachabilityWalker {
     }
 
     static boolean hasWalkableCodeEdges(RuntimeCode code, boolean walkCaptures) {
-        if ((code.padConstants != null && code.padConstants.length != 0)
-                || !code.stateVariable.isEmpty()
+        if (!code.stateVariable.isEmpty()
                 || !code.stateArray.isEmpty()
                 || !code.stateHash.isEmpty()) {
             return true;
@@ -699,12 +691,6 @@ public class ReachabilityWalker {
         for (RuntimeScalar sc : org.perlonjava.runtime.WarningBitsRegistry.snapshotHintHashStackScalars()) {
             seedPath(sc, "<hint-hash#" + (hhIdx++) + ">", howReached, todo);
         }
-        int suspendedIdx = 0;
-        for (RuntimeBase suspended : MortalList.snapshotSuspendedRoots()) {
-            if (howReached.putIfAbsent(suspended, "<suspended#" + (suspendedIdx++) + ">") == null) {
-                todo.add(suspended);
-            }
-        }
         // Phase B1: seed from ScalarRefRegistry (same as walk()) so the
         // trace matches what sweepWeakRefs sees.
         // Phase I: force GC before snapshotting so stale
@@ -719,7 +705,7 @@ public class ReachabilityWalker {
                     : ScalarRefRegistry.snapshot();
             for (RuntimeScalar sc : lexicalScalars) {
                 if (sc == null) continue;
-                if (sc.captureCount > 0) continue;
+                if (sc.hasClosureCaptureOwner()) continue;
                 if (WeakRefRegistry.isweak(sc)) continue;
                 if (MortalList.isDeferredCapture(sc)) continue;
                 if (!MyVarCleanupStack.isLive(sc)) continue;
@@ -1160,28 +1146,6 @@ public class ReachabilityWalker {
         return value instanceof RuntimeCode || isSupportedCycleContainer(value);
     }
 
-    /**
-     * True when a CODE cycle strongly retains an object that has an external
-     * weak reference. Perl refcounting keeps this graph alive; AnyEvent uses
-     * it for weak event-loop registries whose watcher callbacks own themselves
-     * through captured state.
-     */
-    public static boolean strongCycleRetainsWeakReferent(RuntimeCode code) {
-        if (code == null || !hasStrongCycle(code)) return false;
-        final int MAX_VISITS = 50_000;
-        Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
-        java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
-        seen.add(code);
-        todo.addLast(code);
-        int visits = 0;
-        while (!todo.isEmpty() && visits++ < MAX_VISITS) {
-            RuntimeBase current = todo.removeFirst();
-            if (WeakRefRegistry.hasWeakRefsTo(current)) return true;
-            enqueueStrongEdges(current, null, seen, todo);
-        }
-        return false;
-    }
-
     private static boolean enqueueStrongScalar(RuntimeScalar s, RuntimeBase target,
                                                Set<RuntimeBase> seen,
                                                java.util.ArrayDeque<RuntimeBase> todo) {
@@ -1321,7 +1285,8 @@ public class ReachabilityWalker {
             }
             for (RuntimeScalar scalar : ScalarRefRegistry.snapshot()) {
                 if (!budget.visitEdge()) break rootScan;
-                if (scalar == null || scalar.captureCount > 0 || WeakRefRegistry.isweak(scalar)
+                if (scalar == null || scalar.hasClosureCaptureOwner()
+                        || WeakRefRegistry.isweak(scalar)
                         || (!MyVarCleanupStack.isLive(scalar) && !scalar.refCountOwned)
                         || scalar.scopeExited) continue;
                 seedTarget(scalar, null, seen, todo, stats);
@@ -1412,29 +1377,6 @@ public class ReachabilityWalker {
         return isReachableFromLiveScalarRegistry(target, ScalarRefRegistry.forceGcAndSnapshot());
     }
 
-    public static boolean isReachableFromLiveCodeCaptures(RuntimeBase target) {
-        if (target == null) return false;
-        Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
-        java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
-        for (Object liveVar : MyVarCleanupStack.snapshotLiveVars()) {
-            if (!(liveVar instanceof RuntimeScalar sc)) continue;
-            if (WeakRefRegistry.isweak(sc)) continue;
-            if (sc.value instanceof RuntimeCode code
-                    && followGlobalCodeCaptures(code, target, seen, todo)) return true;
-        }
-        // A closure CODE scalar can outlive the lexical register that created
-        // it while the caller is suspended.  ScalarRefRegistry retains a weak
-        // key for such reference-holding scalars; use those live keys as
-        // additional code roots when the cleanup-stack snapshot has detached
-        // the caller's frame.
-        for (RuntimeScalar sc : ScalarRefRegistry.snapshot()) {
-            if (sc == null || sc.scopeExited || WeakRefRegistry.isweak(sc)) continue;
-            if (sc.value instanceof RuntimeCode code
-                    && followGlobalCodeCaptures(code, target, seen, todo)) return true;
-        }
-        return false;
-    }
-
     public static boolean hasLiveStrongScalarReferent(RuntimeBase target) {
         return hasLiveStrongScalarReferentOtherThan(target, null);
     }
@@ -1459,19 +1401,6 @@ public class ReachabilityWalker {
         return false;
     }
 
-    public static boolean isReachableFromGlobalCodeCaptures(RuntimeBase target) {
-        if (target == null) return false;
-        Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
-        Set<RuntimeCode> followed = Collections.newSetFromMap(new IdentityHashMap<>());
-        java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
-        for (RuntimeScalar sc : GlobalVariable.globalCodeRefEdgeRootsView()) {
-            if (sc != null && sc.value instanceof RuntimeCode code
-                    && followed.add(code)
-                    && followGlobalCodeCaptures(code, target, seen, todo)) return true;
-        }
-        return false;
-    }
-
     static boolean isReachableFromLiveScalarRegistry(RuntimeBase target,
                                                      java.util.List<RuntimeScalar> roots) {
         if (target == null) return false;
@@ -1482,7 +1411,7 @@ public class ReachabilityWalker {
 
         for (RuntimeScalar sc : roots) {
             if (sc == null) continue;
-            if (sc.captureCount > 0) continue;
+            if (sc.hasClosureCaptureOwner()) continue;
             if (WeakRefRegistry.isweak(sc)) continue;
             if (sc.scopeExited) continue;
             if (followScalar(sc, target, seen, todo)) return true;
@@ -1514,8 +1443,8 @@ public class ReachabilityWalker {
     /**
      * D-W6.14: check if a specific RuntimeScalar instance is reachable
      * from package globals or live lexical roots. Used at refCount→0
-     * transitions to verify that surviving "owner" scalars in the
-     * activeOwners set are actually live (not phantoms).
+     * transitions to verify that counted owner slots whose current storage
+     * is not otherwise proven still belong to live Perl roots.
      *
      * Walks containers and verifies whether the specific scalar
      * identity can be reached. Critical: walks INTO scalars (so
@@ -1879,6 +1808,11 @@ public class ReachabilityWalker {
         if (target == null) return false;
         ReachabilityQueryStats stats = MortalList.activeReachabilityQueryStats();
         if (stats != null) stats.rootQueries++;
+        // An active owner slot is already a direct Perl-ownership proof for
+        // ordinary root checks. Use it before scanning package containers;
+        // global-only callers still need to distinguish package roots from
+        // lexical and runtime-owned slots.
+        if (!globalOnly && target.hasOwnerSlots()) return true;
         // Node and edge caps bound both graph traversal and root seeding. An
         // incomplete proof conservatively retains an unresolved target.
         final int MAX_VISITS = MAX_ROOT_SNAPSHOT_VISITS;
@@ -1949,7 +1883,7 @@ public class ReachabilityWalker {
             for (RuntimeScalar sc : ScalarRefRegistry.snapshot()) {
                 if (!budget.visitEdge()) return true;
                 if (sc == null) continue;
-                if (sc.captureCount > 0) continue;
+                if (sc.hasClosureCaptureOwner()) continue;
                 if (WeakRefRegistry.isweak(sc)) continue;
                 if (!MyVarCleanupStack.isLive(sc) && !sc.refCountOwned) continue;
                 if (sc.scopeExited) continue;
@@ -1987,11 +1921,10 @@ public class ReachabilityWalker {
                     }
                 }
             }
-            // Live regex lexicals own executable callback captures even when
-            // weak-ref tracking has not populated the optimized live-count
-            // snapshot. Seed only regex scalars from the actual cleanup stack
-            // so callback captures remain reachable without widening ordinary
-            // lexical reachability for the refcount walk.
+            // Live regex lexicals own executable callback captures. Seed only
+            // regex scalars from the actual cleanup stack so callback captures
+            // remain reachable without widening ordinary lexical reachability
+            // for the refcount walk.
             for (Object registeredVar : MyVarCleanupStack.snapshotRegisteredVars()) {
                 if (!budget.visitEdge()) return true;
                 if (!(registeredVar instanceof RuntimeScalar scalar)
@@ -2108,17 +2041,6 @@ public class ReachabilityWalker {
         }
         walker.bfs(todo, true);
         return walker.reachable.contains(target);
-    }
-
-    /**
-     * Return true when a strong path from a package or live lexical root to
-     * {@code target} crosses a tied hash handler.  This is intentionally more
-     * specific than the ordinary root queries: objects with DESTROY normally
-     * use strict selective-refcount handling, but a pure-Perl tie handler can
-     * hold a real owner that the count temporarily misses.
-     */
-    public static boolean isReachableThroughTiedHash(RuntimeBase target) {
-        return target != null && reachableThroughTiedHashes().contains(target);
     }
 
     /**
@@ -2266,7 +2188,7 @@ public class ReachabilityWalker {
         }
         for (RuntimeScalar sc : ScalarRefRegistry.snapshot()) {
             if (sc == null) continue;
-            if (sc.captureCount > 0) continue;
+            if (sc.hasClosureCaptureOwner()) continue;
             if (WeakRefRegistry.isweak(sc)) continue;
             if (sc.scopeExited) continue;
             if (!MyVarCleanupStack.isLive(sc) && !sc.refCountOwned) continue;
@@ -2760,45 +2682,19 @@ public class ReachabilityWalker {
         }
     }
 
-    /**
-     * Run a reachability sweep and clear weak refs for unreachable objects.
-     * Called from {@code Internals::jperl_gc()} explicitly.
-     * <p>
-     * Rescued objects (pinned by Schema-style DESTROY self-save) are NOT
-     * treated as roots here. jperl_gc is opt-in and the caller is asking
-     * for aggressive cleanup — if the user wanted to keep a phantom chain
-     * alive, they would not call jperl_gc. The rescued pins are cleared
-     * via DestroyDispatch.clearRescuedWeakRefs() as part of the sweep.
-     *
-     * @return number of weak-ref entries cleared
-     */
+    /** Compatibility no-op: weak observers are cleared by their final owner release. */
     public static int sweepWeakRefs() {
-        return sweepWeakRefs(false);
+        return 0;
     }
 
+    /** Compatibility no-op: weak observers are cleared by their final owner release. */
     public static int sweepWeakRefs(boolean quiet) {
-        return sweepWeakRefs(quiet, true);
+        return 0;
     }
 
-    /**
-     * Run a reachability sweep. When {@code quiet} is true, only clear
-     * weak refs for unreachable objects — do NOT fire DESTROY or drain
-     * rescuedObjects. Used by auto-triggered sweeps from common hot
-     * paths where firing DESTROY mid-execution would corrupt state
-     * (e.g. module loading chains that weaken() intermediate values).
-     *
-     * @param quiet if true, skip DESTROY invocations
-     * @return number of weak-ref entries cleared
-     */
+    /** Compatibility no-op retained for callers of the removed sweep API. */
     public static int sweepWeakRefs(boolean quiet, boolean forceJvmGc) {
-        return sweepWeakRefs(quiet, forceJvmGc, Collections.emptySet(), null);
-    }
-
-    static int sweepWeakRefs(boolean quiet, boolean forceJvmGc,
-                             Set<RuntimeBase> releasedTargets,
-                             ReleasedWeakSweepResult releasedSweepResult) {
-        return sweepWeakRefsPass(quiet, forceJvmGc, releasedTargets,
-                releasedSweepResult).cleared();
+        return 0;
     }
 
     private record WeakSweepPass(int cleared, boolean graphChanged) {}
@@ -2887,7 +2783,8 @@ public class ReachabilityWalker {
     }
 
     private static boolean hasExistingWeakRetentionRule(RuntimeBase referent) {
-        if (referent.hasSemanticCaptureOwner()) return true;
+        if (referent.hasSemanticCaptureOwner() || referent.hasCallTransferOwner()
+                || referent.hasScalarCellOwner()) return true;
         if ((referent instanceof RuntimeHash || referent instanceof RuntimeArray)
                 && referent.localBindingExists) return true;
         if (referent instanceof RuntimeScalar scalar) {
@@ -2899,7 +2796,8 @@ public class ReachabilityWalker {
     }
 
     private static boolean hasExistingDestroyRetentionRule(RuntimeBase referent) {
-        return referent.hasSemanticCaptureOwner()
+        return referent.hasSemanticCaptureOwner() || referent.hasCallTransferOwner()
+                || referent.hasScalarCellOwner()
                 || ((referent instanceof RuntimeHash || referent instanceof RuntimeArray)
                 && referent.localBindingExists);
     }
@@ -3012,15 +2910,21 @@ public class ReachabilityWalker {
         Set<RuntimeBase> countedStrongOwners = releasedSweepResult == null
                 ? Collections.emptySet()
                 : releasedSweepResult.countedStrongOwners();
-        WeakBackrefCaptureSnapshot weakBackrefCaptures = quiet
-                ? weakBackrefCaptureSnapshot() : null;
         for (RuntimeBase referent : WeakRefRegistry.snapshotWeakRefReferents()) {
             boolean liveReferent = live.contains(referent);
             traceWeakReferent(referent, liveReferent, strongCycleProtected.contains(referent));
             // Semantic closure ownership is an explicit Perl edge.  It is not
             // necessarily visible to this conservative graph walk because
             // generated closure fields and metadata are intentionally opaque.
-            if (!liveReferent && referent.hasSemanticCaptureOwner()) {
+            if (!liveReferent && (referent.hasSemanticCaptureOwner()
+                    || referent.hasCallTransferOwner() || referent.hasScalarCellOwner())) {
+                continue;
+            }
+            // A live owner-slot identity is already the Perl refcount proof for
+            // this referent. In particular, a strong ARRAY_ELEMENT or
+            // HASH_ELEMENT slot protects a child even when the conservative
+            // root walk cannot see the generated closure that owns its parent.
+            if (!liveReferent && referent.hasOwnerSlots()) {
                 continue;
             }
             if (!liveReferent && hasCapturedAggregateElementOwner(referent)) {
@@ -3064,19 +2968,6 @@ public class ReachabilityWalker {
                         continue;
                     }
                 }
-                // Quiet auto-sweeps can run while a deferred CODE ref is being
-                // returned to its caller. Sub::Quote stores weak registry
-                // entries in hashes/arrays that are strongly captured by that
-                // CODE, but the caller's lexical may not be visible as a root
-                // yet. Keep this exception limited to unblessed metadata
-                // containers and only for quiet statement-boundary sweeps;
-                // explicit jperl_gc() keeps the stricter root-based behavior.
-                if (quiet
-                        && referent.blessId == 0
-                        && (referent instanceof RuntimeHash || referent instanceof RuntimeArray)
-                        && weakBackrefCaptures.protects(referent)) {
-                    continue;
-                }
                 // Quiet auto-sweeps run at statement boundaries. Do not clear
                 // weak refs into, or strongly reachable from, a strong cycle:
                 // Perl's refcounting keeps such cycle islands alive. This
@@ -3107,7 +2998,8 @@ public class ReachabilityWalker {
             if (live.contains(referent)) {
                 continue;
             }
-            if (referent.hasSemanticCaptureOwner()) {
+            if (referent.hasSemanticCaptureOwner() || referent.hasCallTransferOwner()
+                    || referent.hasScalarCellOwner()) {
                 continue;
             }
             if (hasCapturedAggregateElementOwner(referent)) {
@@ -3179,6 +3071,9 @@ public class ReachabilityWalker {
                 if (padCell == null || !padCell.scopeExited || slot.referent() != referent) {
                     continue;
                 }
+
+                if (releaseExplicitCaptureOwners(padCell, referent, endReachable)) continue;
+
                 if (retainedByEnd == null) retainedByEnd = walkEndBlockRoots();
                 boolean padInEnd = retainedByEnd.contains(padCell);
                 boolean referentInEnd = retainedByEnd.contains(referent);
@@ -3204,6 +3099,53 @@ public class ReachabilityWalker {
                 padCell.releaseUnreachableSemanticCaptureOwner();
             }
         }
+    }
+
+    /**
+     * Retire scope-exited captures through their CODE owner slots when every
+     * capture of this pad has an explicit owner identity. Return false when a
+     * compatibility-only capture remains, so the legacy root proof can still
+     * protect it.
+     */
+    private static boolean releaseExplicitCaptureOwners(
+            RuntimeScalar padCell, RuntimeBase referent, Set<RuntimeBase> endReachable) {
+        ArrayList<PerlOwnerSlot> captureSlots = new ArrayList<>();
+        for (PerlOwnerSlot captureSlot : padCell.ownerSlotSnapshot()) {
+            if (captureSlot.kind() == PerlOwnerSlot.Kind.SCALAR_CAPTURE
+                    && captureSlot.referent() == padCell) {
+                captureSlots.add(captureSlot);
+            }
+        }
+        int padCaptureCount = padCell.captureCount;
+        if (captureSlots.isEmpty()) return false;
+
+        boolean allCapturesExplicit = padCell.legacyCaptureOwnerCount() == 0
+                && captureSlots.size() == padCell.ownerSlotCount(
+                        PerlOwnerSlot.Kind.SCALAR_CAPTURE);
+        for (PerlOwnerSlot captureSlot : captureSlots) {
+            RuntimeCode captureOwner = captureSlot.captureOwner();
+            if (captureOwner == null) {
+                allCapturesExplicit = false;
+                continue;
+            }
+            if (captureOwner.hasPerlOwnerForCapture()) continue;
+            if (endReachable != null
+                    && (endReachable.contains(padCell) || endReachable.contains(referent))) continue;
+            if (WALKER_TRACE_CLASS != null && !WALKER_TRACE_CLASS.isEmpty()) {
+                String className = NameNormalizer.getBlessStr(referent.blessId);
+                if (className != null && className.contains(WALKER_TRACE_CLASS)) {
+                    System.err.println("[WALKER_CAPTURE_RELEASE] target=" + className + "@"
+                            + System.identityHashCode(referent)
+                            + " slot=" + captureSlot.identity()
+                            + " pad=" + System.identityHashCode(padCell)
+                            + " captureCount=" + padCaptureCount
+                            + " owner=" + System.identityHashCode(captureOwner)
+                            + " ownerless=true");
+                }
+            }
+            captureOwner.releaseCaptures();
+        }
+        return allCapturesExplicit;
     }
 
     private static boolean containsAnyCandidate(
@@ -3272,7 +3214,7 @@ public class ReachabilityWalker {
                 + " refCount=" + referent.refCount
                 + " live=" + live
                 + " cycleProtected=" + cycleProtected
-                + " activeOwners=" + referent.activeOwnerCount()
+                + " countedScalarOwners=" + referent.activeOwnerCount()
                 + " ownerSlots=" + referent.ownerSlotSnapshot().size()
                 + " ownerSlotDetails=" + ownerSlots
                 + " semanticCapture=" + referent.hasSemanticCaptureOwner()
@@ -3313,13 +3255,26 @@ public class ReachabilityWalker {
                     Collections.emptySet(), 0);
         }
 
-        // A registered, live, nonweak scalar with an owned direct reference is
-        // itself a root in walk(). If every released target has such an owner,
-        // no graph traversal is needed to preserve those targets. This is a
-        // deliberately narrow proof: nested container slots, exited captures,
-        // and uncounted references still use the full reachability walk below.
+        // A registered, live, nonweak scalar with an owned direct reference,
+        // or any active explicit owner slot, is a direct Perl strong-owner
+        // proof. If every released target has one, no graph traversal is
+        // needed to preserve those targets. Uncounted references still use
+        // the full reachability walk below.
         Set<RuntimeBase> directlyOwned =
                 Collections.newSetFromMap(new IdentityHashMap<>());
+        for (RuntimeBase referent : pending) {
+            if (referent.hasDirectOwnerSlotProofForReleasedWeakReferent()) {
+                directlyOwned.add(referent);
+            }
+        }
+        if (directlyOwned.containsAll(pending)) {
+            return new ReleasedWeakSweepResult(null, Collections.emptySet(),
+                    directlyOwned, 0);
+        }
+
+        // Owner-slot identities cover the migrated scalar, element, capture,
+        // and call-transfer families. Only take the legacy scalar registry
+        // snapshot for targets that still need its compatibility proof.
         for (RuntimeScalar owner : ScalarRefRegistry.snapshot()) {
             if (owner == null || !owner.refCountOwned || owner.scopeExited
                     || !MyVarCleanupStack.isLive(owner) || WeakRefRegistry.isweak(owner)
@@ -3401,7 +3356,8 @@ public class ReachabilityWalker {
             // conservative root walk cannot see the generated closure fields.
             // Match sweepWeakRefs() above: a targeted release of another edge
             // must not destroy an aggregate still captured by a live closure.
-            if (referent.hasSemanticCaptureOwner()) continue;
+            if (referent.hasOwnerSlots() || referent.hasSemanticCaptureOwner()
+                    || referent.hasCallTransferOwner() || referent.hasScalarCellOwner()) continue;
             // A targeted release only means that one explicit owner went
             // away. Other counted owners can still hold the referent through
             // local aggregate slots that are not represented in the lexical
@@ -3457,64 +3413,6 @@ public class ReachabilityWalker {
                 releasedGraphChanged ? null : strongCycleProtected,
                 countedStrongOwners,
                 cleared);
-    }
-
-    /**
-     * Sweep only objects registered by {@link DestroyDispatch} as needing
-     * deterministic DESTROY side effects even when they are not weak-ref
-     * referents. This is intentionally narrower than {@link #sweepWeakRefs}:
-     * it does not clear unrelated weak references and it can be used from hot
-     * DBI statement-polling paths without forcing a JVM GC.
-     */
-    public static int sweepDestroyableObjects(boolean forceJvmGc) {
-        if (!DestroyDispatch.hasDestroyableObjects()) return 0;
-        if (forceJvmGc) {
-            ScalarRefRegistry.forceGcAndSnapshot();
-        }
-        ReachabilityWalker w = new ReachabilityWalker();
-        return destroyUnreachableDestroyables(w.walk());
-    }
-
-    /** Reconcile File::Temp-style external resources at a safe statement boundary. */
-    static int sweepStatementBoundaryDestroyableObjects() {
-        java.util.List<RuntimeBase> candidates =
-                DestroyDispatch.snapshotStatementBoundaryDestroyableObjects();
-        if (candidates.isEmpty()) return 0;
-        Set<RuntimeBase> candidateSet = Collections.newSetFromMap(new IdentityHashMap<>());
-        candidateSet.addAll(candidates);
-        releaseUnreachableScopeExitedCaptureOwners(
-                PerlRuntime.snapshotOwnerSlotReferents(), null, candidateSet);
-        Set<RuntimeBase> live = new ReachabilityWalker().walk();
-        return destroyUnreachableDestroyables(candidates, live);
-    }
-
-    private static int destroyUnreachableDestroyables(Set<RuntimeBase> live) {
-        return destroyUnreachableDestroyables(
-                DestroyDispatch.snapshotDestroyableObjects(), live);
-    }
-
-    private static int destroyUnreachableDestroyables(
-            java.util.List<RuntimeBase> candidates, Set<RuntimeBase> live) {
-        int destroyed = 0;
-        for (RuntimeBase referent : candidates) {
-            if (referent == null
-                    || referent.destroyFired
-                    || referent.currentlyDestroying
-                    || referent.refCount == Integer.MIN_VALUE) {
-                continue;
-            }
-            if (live.contains(referent)) {
-                continue;
-            }
-            if ((referent instanceof RuntimeHash || referent instanceof RuntimeArray)
-                    && referent.localBindingExists) {
-                continue;
-            }
-            referent.refCount = Integer.MIN_VALUE;
-            DestroyDispatch.callDestroy(referent);
-            destroyed++;
-        }
-        return destroyed;
     }
 
     private static Set<RuntimeBase> collectStrongCycleProtected(Set<RuntimeBase> live) {
@@ -3603,5 +3501,10 @@ public class ReachabilityWalker {
         boolean complete = budget.complete
                 && todo.isEmpty() && visits < MAX_WEAK_BACKREF_CAPTURE_VISITS;
         return new WeakBackrefCaptureSnapshot(seen, complete);
+    }
+
+    /** Record the legacy post-DESTROY capture diagnostic without cleaning objects. */
+    static void inspectWeakBackrefCapturesForDiagnostics() {
+        weakBackrefCaptureSnapshot();
     }
 }

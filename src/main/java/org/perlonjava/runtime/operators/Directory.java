@@ -204,6 +204,7 @@ public class Directory {
 
             if ((dirHandle.type == RuntimeScalarType.GLOB || dirHandle.type == RuntimeScalarType.GLOBREFERENCE) && dirHandle.value instanceof RuntimeGlob glob) {
                 glob.setIO(new RuntimeIO(dirIO));
+                MyVarCleanupStack.retainLiveIoGlobOwners(glob, dirHandle);
             } else {
                 RuntimeScalar directoryGlob = new RuntimeGlob(null)
                         .setIO(new RuntimeIO(dirIO)).createReference();

@@ -55,6 +55,11 @@ public class RuntimeArraySizeLvalue extends RuntimeBaseProxy {
         parent.registerArraySizeLvalue(this);
     }
 
+    @Override
+    RuntimeBase argumentAliasContainer() {
+        return lvalue != null && lvalue.value instanceof RuntimeArray parent ? parent : null;
+    }
+
     void orphan() {
         type = RuntimeScalarType.UNDEF;
         value = null;

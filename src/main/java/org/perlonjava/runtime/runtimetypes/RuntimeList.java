@@ -171,6 +171,16 @@ public class RuntimeList extends RuntimeBase {
         return result;
     }
 
+    RuntimeList copyToMortalReturnSlots() {
+        RuntimeList result = new RuntimeList();
+        for (RuntimeBase value : elements) {
+            result.elements.add(value instanceof RuntimeScalar scalar
+                    && !scalar.isMortalReturnSnapshot()
+                    ? RuntimeScalar.copyToMortalReturnSlot(scalar) : value);
+        }
+        return result;
+    }
+
     /**
      * Adds the elements of this list to another RuntimeList.
      *
@@ -754,143 +764,122 @@ public class RuntimeList extends RuntimeBase {
         // Avoids O(n^2) from repeated RuntimeArray.shift() which does removeFirst() on ArrayList.
         RuntimeArray rhs = new RuntimeArray();
         rhs.transientListAssignmentRhs = true;
-        value.addToArray(rhs);
-
-        List<RuntimeScalar> rhsElements = rhs.elements;
-        int rhsSize = rhsElements.size();
-        int rhsIndex = 0;
-
-        // Build result with assigned values (including undef for unassigned scalars)
         RuntimeArray result = new RuntimeArray();
-        // Store original size for scalar context
-        result.scalarContextSize = rhsSize;
+        boolean assignmentCompleted = false;
+        try {
+            value.addToArray(rhs);
 
-        for (RuntimeBase elem : elements) {
-            if (elem instanceof RuntimeScalarReadOnly runtimeScalarReadOnly && !runtimeScalarReadOnly.getDefinedBoolean()) {
-                // `undef` placeholder on LHS: consume one RHS value, but return something for this position.
-                // When safe, return the RHS element as an lvalue (alias). Otherwise return the pre-assignment value.
-                RuntimeScalar rhsValue = (rhsIndex < rhsSize) ? rhsElements.get(rhsIndex) : new RuntimeScalar();
-                RuntimeScalar rhsAlias = (rhsAliasElements != null && rhsIndex < rhsAliasElements.size())
-                        ? rhsAliasElements.get(rhsIndex)
-                        : null;
+            List<RuntimeScalar> rhsElements = rhs.elements;
+            int rhsSize = rhsElements.size();
+            int rhsIndex = 0;
 
-                // If the RHS element is also assigned on the LHS, it must not be returned as an alias
-                // (it would reflect the post-assignment value rather than the pre-assignment value).
-                boolean useAlias = rhsAlias != null && lhsScalars != null && !lhsScalars.containsKey(rhsAlias);
+            // Build result with assigned values (including undef for unassigned scalars)
+            // Store original size for scalar context
+            result.scalarContextSize = rhsSize;
 
-                result.elements.add(useAlias ? rhsAlias : rhsValue);
+            for (RuntimeBase elem : elements) {
+                if (elem instanceof RuntimeScalarReadOnly runtimeScalarReadOnly && !runtimeScalarReadOnly.getDefinedBoolean()) {
+                    // `undef` placeholder on LHS: consume one RHS value, but return something for this position.
+                    // When safe, return the RHS element as an lvalue (alias). Otherwise return the pre-assignment value.
+                    RuntimeScalar rhsValue = (rhsIndex < rhsSize) ? rhsElements.get(rhsIndex) : new RuntimeScalar();
+                    RuntimeScalar rhsAlias = (rhsAliasElements != null && rhsIndex < rhsAliasElements.size())
+                            ? rhsAliasElements.get(rhsIndex)
+                            : null;
 
-                if (rhsIndex < rhsSize) {
-                    // Undo the materialized copy's refCount increment for the consumed
-                    // RHS value (mirrors the corresponding fix in the assigned-scalar
-                    // branch below). Without this, `my (undef, $name) = @_;` patterns
-                    // leak +1 refCount per call on the discarded first arg — visible
-                    // in op/inccode.t "no leaks" tests #61, #63 (bug perl #92252).
-                    if (rhsValue != null && rhsValue.refCountOwned
-                            && (rhsValue.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                            && rhsValue.value instanceof RuntimeBase base && base.refCount > 0) {
-                        base.releaseOwner(rhsValue, "RuntimeList materialized-copy undo (undef-target)");
-                        base.releaseActiveOwner(rhsValue);
-                        base.refCount--;
-                        rhsValue.refCountOwned = false;
+                    // If the RHS element is also assigned on the LHS, it must not be returned as an alias
+                    // (it would reflect the post-assignment value rather than the pre-assignment value).
+                    boolean useAlias = rhsAlias != null && lhsScalars != null && !lhsScalars.containsKey(rhsAlias);
+
+                    result.elements.add(useAlias ? rhsAlias : rhsValue);
+
+                    if (rhsIndex < rhsSize) {
+                        // Retire the materialized copy's counted edge and IO lease for the consumed
+                        // RHS value (mirrors the corresponding fix in the assigned-scalar
+                        // branch below). Without this, `my (undef, $name) = @_;` patterns
+                        // leak +1 refCount per call on the discarded first arg — visible
+                        // in op/inccode.t "no leaks" tests #61, #63 (bug perl #92252).
+                        RuntimeScalar.releaseMaterializedAssignmentCopy(
+                                rhsValue, "undef-target", result);
+                        rhsIndex++;
                     }
-                    rhsIndex++;
-                }
-            } else if (elem instanceof RuntimeScalar runtimeScalar) {
-                if (runtimeScalar.isKeysLvalue()) {
-                    runtimeScalar.rejectKeysLvalueListAssignment();
-                }
-                RuntimeScalar assigned = (rhsIndex < rhsSize) ? rhsElements.get(rhsIndex++) : null;
-                runtimeScalar.set(assigned != null ? assigned : new RuntimeScalar());
-                result.elements.add(runtimeScalar);  // Add reference to the variable itself
-                // Undo the materialized copy's refCount increment.
-                // The materialization (addToArray → addToScalar → set → setLarge) incremented
-                // refCount on the copy. The target's set() above created its own increment.
-                // The copy's increment is now redundant and would leak (the temporary copy
-                // sits in the local `rhs` array which is never scope-exit-cleaned).
-                // Array/hash targets take direct ownership of materialized copies, so only
-                // scalar targets need this correction.
-                if (assigned != null && assigned.refCountOwned
-                        && (assigned.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                        && assigned.value instanceof RuntimeBase base && base.refCount > 0) {
-                    base.releaseOwner(assigned, "RuntimeList materialized-copy undo (scalar-target)");
-                    base.releaseActiveOwner(assigned);
-                    base.refCount--;
-                    assigned.refCountOwned = false;
-                }
-            } else if (elem instanceof RuntimeArray runtimeArray) {
-                List<RuntimeScalar> remaining = (rhsIndex < rhsSize)
-                        ? new ArrayList<>(rhsElements.subList(rhsIndex, rhsSize))
-                        : new ArrayList<>();
+                } else if (elem instanceof RuntimeScalar runtimeScalar) {
+                    if (runtimeScalar.isKeysLvalue()) {
+                        runtimeScalar.rejectKeysLvalueListAssignment();
+                    }
+                    RuntimeScalar assigned = (rhsIndex < rhsSize) ? rhsElements.get(rhsIndex++) : null;
+                    runtimeScalar.set(assigned != null ? assigned : new RuntimeScalar());
+                    result.elements.add(runtimeScalar);  // Add reference to the variable itself
+                    // Retire the materialized copy's counted edge and IO lease.
+                    // The materialization (addToArray → addToScalar → set → setLarge) incremented
+                    // refCount on the copy. The target's set() above created its own increment.
+                    // The copy's increment is now redundant and would leak (the temporary copy
+                    // sits in the local `rhs` array which is never scope-exit-cleaned).
+                    // Array/hash targets take direct ownership of materialized copies, so only
+                    // scalar targets need this correction.
+                    RuntimeScalar.releaseMaterializedAssignmentCopy(
+                            assigned, "scalar-target", null);
+                } else if (elem instanceof RuntimeArray runtimeArray) {
+                    List<RuntimeScalar> remaining = (rhsIndex < rhsSize)
+                            ? new ArrayList<>(rhsElements.subList(rhsIndex, rhsSize))
+                            : new ArrayList<>();
 
-                // For tied arrays, we must assign through the tied interface.
-                // Overwriting `elements` would discard the TieArray wrapper while leaving
-                // `type == TIED_ARRAY`, leading to ClassCastException when tie operations
-                // cast `array.elements` back to TieArray.
-                // For autovivify arrays, we must also go through setFromList() to trigger
-                // the autovivification that converts the parent scalar from UNDEF to ARRAYREFERENCE.
-                if (runtimeArray.type == RuntimeArray.TIED_ARRAY || runtimeArray.type == RuntimeArray.AUTOVIVIFY_ARRAY) {
+                    // Replace through the array's normal store path so the old
+                    // element owners are released and each destination cell gets
+                    // a current ARRAY_ELEMENT identity. This also preserves tied
+                    // array dispatch and autovivification.
                     RuntimeList remainingList = new RuntimeList();
                     remainingList.elements.addAll(remaining);
-                    runtimeArray.setFromList(remainingList);
-                    // Undo materialized copies' refCount increments.
-                    // setFromList creates new copies via incrementRefCountForContainerStore;
-                    // the materialized rhs elements' increments are now redundant.
+                    RuntimeArray assignedArray = runtimeArray.setFromList(remainingList);
+                    // setFromList creates destination cells and acquires their
+                    // owners. The materialized RHS copies are temporary transport
+                    // values, so retire their counted edges and IO leases as well.
                     for (RuntimeScalar r : remaining) {
-                        if (r.refCountOwned && (r.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                                && r.value instanceof RuntimeBase base && base.refCount > 0) {
-                            base.releaseOwner(r, "RuntimeList materialized-copy undo (array-target)");
-                            base.releaseActiveOwner(r);
-                            base.refCount--;
-                            r.refCountOwned = false;
-                        }
+                        RuntimeScalar.releaseMaterializedAssignmentCopy(
+                                r, "array-target", result);
                     }
-                } else {
-                    // Plain array: directly reuse the materialized copies.
-                    // Their refCountOwned=true transfers to the array elements.
-                    runtimeArray.elements = remaining;
-                }
-                result.elements.addAll(remaining);  // Use original references
-                rhsIndex = rhsSize; // Consume the rest
-            } else if (elem instanceof RuntimeHash runtimeHash) {
-                RuntimeArray remainingArr = new RuntimeArray();
-                remainingArr.elements = (rhsIndex < rhsSize)
-                        ? new ArrayList<>(rhsElements.subList(rhsIndex, rhsSize))
-                        : new ArrayList<>();
+                    result.elements.addAll(assignedArray.elements);
+                    rhsIndex = rhsSize; // Consume the rest
+                } else if (elem instanceof RuntimeHash runtimeHash) {
+                    List<RuntimeScalar> remaining = (rhsIndex < rhsSize)
+                            ? new ArrayList<>(rhsElements.subList(rhsIndex, rhsSize))
+                            : new ArrayList<>();
 
-                RuntimeHash hash = RuntimeHash.createHashForAssignment(remainingArr);
-                // Complete scalar-to-hash autovivification before replacing the
-                // deferred hash's elements. Otherwise this assignment discards
-                // the AutovivificationHash marker without updating the scalar.
-                AutovivificationHash.vivify(runtimeHash);
-                runtimeHash.elements = hash.elements;
-                // Add lvalue references to hash elements for list assignment
-                for (Map.Entry<String, RuntimeScalar> entry : hash.elements.entrySet()) {
-                    result.elements.add(new RuntimeScalar(entry.getKey()));
-                    result.elements.add(entry.getValue());  // Add reference to hash value
-                }
-                // Undo materialized copies' refCount increments.
-                // createHashForAssignment creates new RuntimeScalars for hash values
-                // and gives those hash slots their own container-store ownership.
-                // The original rhs elements' refCount increments (from materialization
-                // via addToArray -> setLarge) are now redundant and would leak since
-                // nobody decrements them.
-                for (RuntimeScalar r : remainingArr.elements) {
-                    if (r.refCountOwned && (r.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                            && r.value instanceof RuntimeBase base && base.refCount > 0) {
-                        base.releaseOwner(r, "RuntimeList materialized-copy undo (hash-target)");
-                        base.releaseActiveOwner(r);
-                        base.refCount--;
-                        r.refCountOwned = false;
+                    RuntimeList remainingList = new RuntimeList();
+                    remainingList.elements.addAll(remaining);
+                    RuntimeArray assignedHash = runtimeHash.setFromList(remainingList);
+                    // setFromList releases displaced hash slots and acquires current
+                    // HASH_ELEMENT identities. Its result also preserves tied-hash
+                    // assignment behavior and the assigned key/value list.
+                    result.elements.addAll(assignedHash.elements);
+                    // The RHS materialization is temporary transport; retire its
+                    // counted edges and IO leases after the destination acquired slots.
+                    for (RuntimeScalar r : remaining) {
+                        RuntimeScalar.releaseMaterializedAssignmentCopy(
+                                r, "hash-target", result);
                     }
+                    rhsIndex = rhsSize; // Consume the rest
                 }
-                rhsIndex = rhsSize; // Consume the rest
+            }
+            assignmentCompleted = true;
+
+        } finally {
+            try {
+                // Assignment can throw while a tied or readonly target is being
+                // updated. Retire any transport copies that did not reach an LHS
+                // and avoid leaving flushing suppressed across exception unwind.
+                for (RuntimeScalar copy : rhs.elements) {
+                    RuntimeScalar.releaseMaterializedAssignmentCopy(copy, "unwind", null);
+                }
+            } finally {
+                MortalList.suppressFlush(wasFlushing);
+                if (!assignmentCompleted && !wasFlushing) {
+                    // A failed target callback can unwind lexical owners while
+                    // flushing is suppressed. Drain those releases now that
+                    // the assignment boundary has restored its caller state.
+                    MortalList.flush();
+                }
             }
         }
-
-        // Restore previous flushing state. Now that all LHS variables hold references
-        // to the return values, it's safe to process pending decrements.
-        MortalList.suppressFlush(wasFlushing);
 
         return result;
     }

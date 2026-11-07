@@ -448,6 +448,11 @@ public class Dereference {
      */
     public static void handleHashElementOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node, String hashOperation) {
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("handleHashElementOperator " + node + " in context " + emitterVisitor.ctx.contextType);
+        if ("get".equals(hashOperation)
+                && (emitterVisitor.ctx.contextType == RuntimeContextType.LVALUE
+                    || emitterVisitor.ctx.contextType == RuntimeContextType.LVALUE_LIST)) {
+            hashOperation = "getForLocal";
+        }
         EmitterVisitor scalarVisitor =
                 emitterVisitor.with(RuntimeContextType.SCALAR); // execute operands in scalar context
 
@@ -625,6 +630,7 @@ public class Dereference {
                         // Use strict version (throws error on symbolic references)
                         String methodName = switch (hashOperation) {
                             case "get" -> "hashDerefGet";
+                            case "getForLocal" -> "hashDerefGetForLocal";
                             case "delete" -> "hashDerefDeleteInContext";
                             case "exists" -> "hashDerefExists";
                             default ->
@@ -641,6 +647,7 @@ public class Dereference {
                         // Use non-strict version (allows symbolic references)
                         String methodName = switch (hashOperation) {
                             case "get" -> "hashDerefGetNonStrict";
+                            case "getForLocal" -> "hashDerefGetForLocalNonStrict";
                             case "delete" -> "hashDerefDeleteInContextNonStrict";
                             case "exists" -> "hashDerefExistsNonStrict";
                             default ->
@@ -668,6 +675,7 @@ public class Dereference {
                         // Use strict version (throws error on symbolic references)
                         String methodName = switch (hashOperation) {
                             case "get" -> "hashDerefGet";
+                            case "getForLocal" -> "hashDerefGetForLocal";
                             case "delete" -> "hashDerefDeleteInContext";
                             case "exists" -> "hashDerefExists";
                             default ->
@@ -684,6 +692,7 @@ public class Dereference {
                         // Use non-strict version (allows symbolic references)
                         String methodName = switch (hashOperation) {
                             case "get" -> "hashDerefGetNonStrict";
+                            case "getForLocal" -> "hashDerefGetForLocalNonStrict";
                             case "delete" -> "hashDerefDeleteInContextNonStrict";
                             case "exists" -> "hashDerefExistsNonStrict";
                             default ->
@@ -962,12 +971,16 @@ public class Dereference {
                 object = new StringNode(className, ((IdentifierNode) object).tokenIndex);
             }
 
-            // Wanted reports OBJECT when a method result is immediately used
-            // as the invocant of another method call ($obj->first->second).
-            if (object instanceof BinaryOperatorNode innerArrow
+            // A method result used as another method's invocant needs an
+            // explicit Perl owner while the outer method name and arguments
+            // are evaluated. The interpreter emits the matching hold/release
+            // opcodes; keep the JVM path on the same lifetime boundary.
+            boolean holdInvocantDuringArguments = object instanceof BinaryOperatorNode innerArrow
                     && "->".equals(innerArrow.operator)
                     && innerArrow.right instanceof BinaryOperatorNode innerCall
-                    && "(".equals(innerCall.operator)) {
+                    && "(".equals(innerCall.operator);
+            if (holdInvocantDuringArguments) {
+                BinaryOperatorNode innerArrow = (BinaryOperatorNode) object;
                 innerArrow.setAnnotation("wantedObjectContext", true);
             }
 
@@ -995,6 +1008,35 @@ public class Dereference {
             }
 
             object.accept(scalarVisitor);
+            int objectSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+            boolean pooledObject = objectSlot >= 0;
+            if (!pooledObject) {
+                objectSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            }
+            mv.visitVarInsn(Opcodes.ASTORE, objectSlot);
+
+            int holdSlot = -1;
+            boolean pooledHold = false;
+            Label holdStart = null;
+            if (holdInvocantDuringArguments) {
+                holdSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+                pooledHold = holdSlot >= 0;
+                if (!pooledHold) {
+                    holdSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                }
+                mv.visitVarInsn(Opcodes.ALOAD, objectSlot);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                        "acquireMethodInvocantHold",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)"
+                                + "Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;",
+                        false);
+                mv.visitVarInsn(Opcodes.ASTORE, holdSlot);
+                emitterVisitor.ctx.javaClassInfo.activeMethodInvocantHoldSlots.push(holdSlot);
+                holdStart = new Label();
+                mv.visitLabel(holdStart);
+            }
+
             method.accept(scalarVisitor);
 
             // Push __SUB__
@@ -1013,13 +1055,6 @@ public class Dereference {
                 methodSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
             }
             mv.visitVarInsn(Opcodes.ASTORE, methodSlot);
-
-            int objectSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
-            boolean pooledObject = objectSlot >= 0;
-            if (!pooledObject) {
-                objectSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
-            }
-            mv.visitVarInsn(Opcodes.ASTORE, objectSlot);
 
             // For small literal calls, keep values in JVM locals until every
             // expression has run, then build @_ directly. Other calls retain
@@ -1091,6 +1126,13 @@ public class Dereference {
                         "(I)Lorg/perlonjava/runtime/runtimetypes/RuntimeCode$CallArguments;", false);
                 mv.visitVarInsn(Opcodes.ASTORE, argsArraySlot);
 
+                // Argument evaluation can throw before the RuntimeCode call
+                // wrapper gets a chance to finish this staging frame.
+                Label argumentsStart = new Label();
+                Label argumentsEnd = new Label();
+                Label argumentsFailure = new Label();
+                Label argumentsReady = new Label();
+                mv.visitLabel(argumentsStart);
                 for (int index = 0; index < argCount; index++) {
                     int argSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
                     boolean pooledArg = argSlot >= 0;
@@ -1104,6 +1146,20 @@ public class Dereference {
                             "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)V", false);
                     if (pooledArg) emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
                 }
+                mv.visitLabel(argumentsEnd);
+                mv.visitJumpInsn(Opcodes.GOTO, argumentsReady);
+                mv.visitLabel(argumentsFailure);
+                // Keep the original throwable on the operand stack while
+                // releasing only this call's acquired argument owners.
+                mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
+                mv.visitInsn(Opcodes.SWAP);
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeCode$CallArguments", "abandon",
+                        "(Ljava/lang/Throwable;)Ljava/lang/Throwable;", false);
+                mv.visitInsn(Opcodes.ATHROW);
+                mv.visitLabel(argumentsReady);
+                // Register after the body so inner eval handlers take priority.
+                mv.visitTryCatchBlock(argumentsStart, argumentsEnd, argumentsFailure, null);
             }
 
             // The call context is NOT stored in a local slot (see EmitSubroutine.java comment for why:
@@ -1157,6 +1213,43 @@ public class Dereference {
                     "callCached",
                     "(ILorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;" + argsDescriptor + "I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
                     false); // generate a cached .call()
+
+            if (holdInvocantDuringArguments) {
+                // Keep the returned list on the operand stack while releasing
+                // the temporary owner, matching RELEASE_METHOD_INVOCANT in
+                // the interpreter. Exceptions from argument evaluation or
+                // dispatch abandon the hold immediately and rethrow unchanged.
+                Label holdEnd = new Label();
+                Label holdHandler = new Label();
+                Label afterHoldCleanup = new Label();
+                mv.visitLabel(holdEnd);
+                mv.visitVarInsn(Opcodes.ALOAD, holdSlot);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                        "releaseMethodInvocantHold",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)V",
+                        false);
+                mv.visitJumpInsn(Opcodes.GOTO, afterHoldCleanup);
+                mv.visitLabel(holdHandler);
+                int holdThrowableSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                mv.visitVarInsn(Opcodes.ASTORE, holdThrowableSlot);
+                mv.visitVarInsn(Opcodes.ALOAD, holdSlot);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                        "releaseAbandonedMethodInvocantHold",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)V",
+                        false);
+                mv.visitVarInsn(Opcodes.ALOAD, holdThrowableSlot);
+                mv.visitInsn(Opcodes.ATHROW);
+                mv.visitLabel(afterHoldCleanup);
+                // Register after argument-evaluation cleanup so that handler
+                // abandons the staged arguments before this owner is retired.
+                mv.visitTryCatchBlock(holdStart, holdEnd, holdHandler, null);
+                int activeHoldSlot = emitterVisitor.ctx.javaClassInfo.activeMethodInvocantHoldSlots.pop();
+                if (activeHoldSlot != holdSlot) {
+                    throw new IllegalStateException("method invocant hold stack is unbalanced");
+                }
+            }
 
             // Tagged returns control-flow handling for method calls:
             // If RuntimeCode.callCached() returned a RuntimeControlFlowList marker (TAILCALL), handle it here.
@@ -1318,6 +1411,9 @@ public class Dereference {
                 emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
             }
             if (pooledMethod) {
+                emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+            }
+            if (pooledHold) {
                 emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
             }
             if (pooledObject) {

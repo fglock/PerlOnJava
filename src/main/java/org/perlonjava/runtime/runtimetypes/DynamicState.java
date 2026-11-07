@@ -45,6 +45,16 @@ public interface DynamicState {
     void dynamicRestoreState();
 
     /**
+     * Current Perl object that must remain owned while this state is detached.
+     * Dynamic aggregate implementations expose their active value so the
+     * suspend path can acquire its owner identity before removing a package or
+     * local slot.
+     */
+    default RuntimeBase suspendedOwnerValue() {
+        return null;
+    }
+
+    /**
      * Detaches this state while an interpreter frame is suspended.  The default
      * implementation preserves the existing save/restore protocol; state types
      * that need to carry their active value across suspension may return a token

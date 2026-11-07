@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.regex;
 
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
+import org.perlonjava.runtime.runtimetypes.PerlOwnerSlot;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.operators.WarnDie;
 
@@ -27,6 +28,7 @@ public final class RuntimeRegexCallback {
     final String source;
     final boolean uninitializedWarningsEnabled;
     private int ownerCount;
+    private PerlOwnerSlot codeOwnerSlot;
 
     private RuntimeRegexCallback(
             RuntimeCode code, Kind kind, String sourceLocation, String lexicalPackage,
@@ -40,19 +42,29 @@ public final class RuntimeRegexCallback {
     }
 
     synchronized void retainOwner() {
-        if (code.refCount < 0) return;
-        if (ownerCount++ == 0) {
-            code.refCount++;
+        if (ownerCount != 0) {
+            ownerCount++;
+            return;
         }
+        if (code.refCount != Integer.MIN_VALUE) {
+            PerlOwnerSlot slot = new PerlOwnerSlot(PerlOwnerSlot.Kind.REGEX_CALLBACK);
+            slot.acquireCountedNativeOwner(code, "RuntimeRegexCallback.retainOwner");
+            codeOwnerSlot = slot;
+        }
+        ownerCount = 1;
     }
 
     synchronized void releaseOwner() {
-        if (code.refCount < 0) return;
         if (ownerCount <= 0) return;
         ownerCount--;
         if (ownerCount != 0) return;
-        if (code.refCount > 0) code.refCount--;
-        if (code.refCount == 0 && code.stashRefCount <= 0) {
+        PerlOwnerSlot slot = codeOwnerSlot;
+        if (slot != null) {
+            codeOwnerSlot = null;
+            slot.releaseRegexCallbackOwner("RuntimeRegexCallback.releaseOwner");
+        }
+        if (code.refCount != Integer.MIN_VALUE
+                && !code.hasPerlOwnerForCaptureOtherThan(null)) {
             code.releaseCaptures();
         }
     }

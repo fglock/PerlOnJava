@@ -2148,8 +2148,10 @@ public class SubroutineParser {
         // would lose the fact that a body was already defined and incorrectly
         // let a late :lvalue declaration change that body.
         if (codeRef.value == null || (isRedefinition && block != null)) {
-            codeRef.type = RuntimeScalarType.CODE;
-            codeRef.value = new RuntimeCode(subName, attributes);
+            // Keep the stash scalar cell, but replace its referent through the
+            // ordinary slot transition. Directly assigning `value` leaves a
+            // CODE_SLOT owner attached to the previous CV after redefinition.
+            codeRef.set(new RuntimeScalar(new RuntimeCode(subName, attributes)));
         }
         // Mark as explicitly declared so *{glob}{CODE} returns this code ref.
         // In Perl 5, declared subs (even forward declarations) are visible via *{glob}{CODE}.
@@ -2696,6 +2698,7 @@ public class SubroutineParser {
                     installClosureCaptureMetadata(placeholder, paramList);
                     placeholder.cvStartFile = compiledCode.cvStartFile;
                     placeholder.cvStartLine = compiledCode.cvStartLine;
+                    compiledCode.transferPadConstantTreeTo(placeholder);
 
                 } else if (runtimeCode instanceof InterpretedCode interpretedCode) {
                     // InterpretedCode path - update placeholder in-place (not replace codeRef.value)
@@ -2749,6 +2752,10 @@ public class SubroutineParser {
                     installClosureCaptureMetadata(placeholder, materializedCaptures);
                     placeholder.cvStartFile = interpretedCode.cvStartFile;
                     placeholder.cvStartLine = interpretedCode.cvStartLine;
+                    // The published placeholder is the Perl-owned CV. Move
+                    // the interpreter optree's constant edges onto it so the
+                    // temporary executable wrapper cannot pin pad literals.
+                    interpretedCode.transferPadConstantTreeTo(placeholder);
                 }
             } catch (VerifyError ve) {
                 // VerifyError extends Error (not Exception), so it's not caught by catch(Exception).
@@ -2802,17 +2809,10 @@ public class SubroutineParser {
                 installClosureCaptureMetadata(placeholder, materializedCaptures);
                 placeholder.cvStartFile = interpretedCode.cvStartFile;
                 placeholder.cvStartLine = interpretedCode.cvStartLine;
+                interpretedCode.transferPadConstantTreeTo(placeholder);
             } catch (Exception e) {
                 // Handle any exceptions during subroutine creation
                 throw new PerlCompilerException("Subroutine error: " + e.getMessage());
-            }
-
-            // Transfer pad constants (cached string literals referenced via \)
-            // from compile context to the RuntimeCode for optree reaping.
-            if (newCtx.javaClassInfo.padConstants != null && !newCtx.javaClassInfo.padConstants.isEmpty()) {
-                placeholder.padConstants = newCtx.javaClassInfo.padConstants.toArray(
-                        new org.perlonjava.runtime.runtimetypes.RuntimeBase[0]);
-                GlobalVariable.invalidateGlobalCodeRefGraphRoots();
             }
 
             // Clear the compilerSupplier once done (use the captured placeholder variable)
@@ -2896,18 +2896,11 @@ public class SubroutineParser {
 
     private static void installClosureCaptureMetadata(
             RuntimeCode code, List<String> capturedNames, List<Object> capturedValues) {
-        // Named subs created through the parser populate an existing stash
-        // scalar in place rather than going through RuntimeGlob's CODE-slot
-        // assignment path. Account for that persistent stash owner so a
-        // temporary copy of \&name cannot release the named CV's pad.
-        if (code != null && code.stashRefCount == 0) {
-            for (RuntimeScalar installed : GlobalVariable.globalCodeRefs.values()) {
-                if (installed != null && installed.value == code) {
-                    code.hadStashRef = true;
-                    code.stashRefCount = 1;
-                    break;
-                }
-            }
+        // Named subs populate their stash scalar in place. Its CODE_SLOT
+        // identity is the persistent owner proof even though installation did
+        // not pass through RuntimeGlob's value-replacement path.
+        if (code != null && code.hasStashCodeSlotOwner()) {
+            code.hadStashRef = true;
         }
         if (code != null) {
             code.captureFieldsRecorded = true;
@@ -2919,6 +2912,7 @@ public class SubroutineParser {
         }
 
         ArrayList<RuntimeScalar> capturedScalars = new ArrayList<>();
+        ArrayList<PerlOwnerSlot> capturedScalarOwnerSlots = new ArrayList<>();
         ArrayList<RuntimeBase> capturedAggregates = new ArrayList<>();
         ArrayList<PerlOwnerSlot> capturedAggregateOwnerSlots = new ArrayList<>();
         for (int i = 0; i < capturedValues.size(); i++) {
@@ -2932,15 +2926,17 @@ public class SubroutineParser {
             }
             if (value instanceof RuntimeScalar scalar) {
                 capturedScalars.add(scalar);
-                scalar.retainClosureCapture();
+                capturedScalarOwnerSlots.add(scalar.retainClosureCaptureSlot(code));
             } else if (value instanceof RuntimeArray || value instanceof RuntimeHash) {
                 RuntimeBase aggregate = (RuntimeBase) value;
                 capturedAggregates.add(aggregate);
-                capturedAggregateOwnerSlots.add(aggregate.retainClosureCaptureOwner());
+                capturedAggregateOwnerSlots.add(aggregate.retainClosureCaptureOwner(code));
             }
         }
         if (!capturedScalars.isEmpty()) {
             code.capturedScalars = capturedScalars.toArray(new RuntimeScalar[0]);
+            code.capturedScalarOwnerSlots =
+                    capturedScalarOwnerSlots.toArray(new PerlOwnerSlot[0]);
         }
         if (!capturedAggregates.isEmpty()) {
             code.capturedAggregates = capturedAggregates.toArray(new RuntimeBase[0]);
@@ -2948,7 +2944,8 @@ public class SubroutineParser {
                     capturedAggregateOwnerSlots.toArray(new PerlOwnerSlot[0]);
         }
         GlobalVariable.invalidateGlobalCodeRefGraphRoots();
-        if (!capturedScalars.isEmpty() || !capturedAggregates.isEmpty()) {
+        if ((!capturedScalars.isEmpty() || !capturedAggregates.isEmpty())
+                && code.refCount == -1) {
             code.refCount = 0;
         }
     }

@@ -133,7 +133,7 @@ public class PerlLanguageProvider {
             SpecialBlockParser.resetTopLevelState();
             WeakRefRegistry.resetState();
             ScalarRefRegistry.resetState();
-            MortalList.clearSuspendedRoots();
+            MortalList.clearTemporaryRoots();
             // A prior script may have closed its Perl-level STDIN glob. Script
             // engine resets run multiple top-level programs in one JVM, so give
             // the next program a fresh wrapper around the process standard input.
@@ -981,6 +981,16 @@ public class PerlLanguageProvider {
                         generatedClass,
                         ctx
                 );
+                RuntimeBase[] padConstants = ctx.javaClassInfo.padConstants == null
+                        ? new RuntimeBase[0]
+                        : ctx.javaClassInfo.padConstants.toArray(new RuntimeBase[0]);
+                if (padConstants.length != 0 || !ctx.javaClassInfo.embeddedPadConstants.isEmpty()) {
+                    compiled.installPadConstantTree(
+                            ctx.javaClassInfo.javaClassName,
+                            padConstants,
+                            ctx.javaClassInfo.embeddedPadConstants,
+                            ctx.javaClassInfo.embeddedPadConstantDescendants);
+                }
                 // File-scope `our` declarations, for PadWalker::peek_our(0) at file scope
                 Map<String, String> ourDeclarations = VariableCollectorVisitor.declaredOurVariables(ast);
                 compiled.declaredOurVariables = ourDeclarations.isEmpty() ? null : ourDeclarations;
