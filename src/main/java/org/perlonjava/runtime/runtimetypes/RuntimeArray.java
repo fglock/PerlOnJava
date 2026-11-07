@@ -380,6 +380,11 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         return list;
     }
 
+    void replaceWithEmptySharedStorage() {
+        type = PLAIN_ARRAY;
+        elements = Collections.synchronizedList(newElementList());
+    }
+
     void resetElementListAfterAutovivification() {
         elements = newElementList();
     }
