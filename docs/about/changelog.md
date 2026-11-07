@@ -14,6 +14,8 @@ priorities and future plans.
 
 - Make an explicit `-n` run sample new and previously tested CPAN targets while maintaining a rolling window of target and dependency results.
 
+- Preserve scalar `sort` results when the calling context is determined at subroutine return time (#1991).
+
 - Preserve callable CODE slots and captured values when copying stash globs returned by `each`.
 
 - Autovivify undefined hash references assigned through a hash dereference (#1958).

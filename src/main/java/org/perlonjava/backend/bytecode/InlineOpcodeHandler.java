@@ -1280,9 +1280,9 @@ public class InlineOpcodeHandler {
     }
 
     /**
-     * Sort operator: rd = ListOperators.sort(list, closure, package)
+     * Sort operator: rd = ListOperators.sort(list, closure, package, context)
      * Needs InterpretedCode for string pool access.
-     * Format: SORT rd listReg closureReg packageIdx(int)
+     * Format: SORT rd listReg closureReg packageIdx(int) context
      */
     public static int executeSort(int[] bytecode, int pc, RuntimeBase[] registers, InterpretedCode code) {
         int rd = bytecode[pc++];
@@ -1290,6 +1290,10 @@ public class InlineOpcodeHandler {
         int closureReg = bytecode[pc++];
         int packageIdx = bytecode[pc];
         pc += 1;
+        int context = bytecode[pc++];
+        if (context == RuntimeContextType.RUNTIME) {
+            context = ((RuntimeScalar) registers[2]).getInt();
+        }
 
         RuntimeBase listBase = registers[listReg];
         RuntimeList list = listBase.getList();
@@ -1297,7 +1301,7 @@ public class InlineOpcodeHandler {
         String packageName = code.stringPool[packageIdx];
         // Pass outer @_ (register 1) so sort blocks can access $_[0], $_[1], etc.
         RuntimeArray outerArgs = (registers[1] instanceof RuntimeArray) ? (RuntimeArray) registers[1] : null;
-        RuntimeList result = ListOperators.sort(list, closure, outerArgs, packageName);
+        RuntimeList result = ListOperators.sort(list, closure, outerArgs, packageName, context);
         registers[rd] = result;
         return pc;
     }

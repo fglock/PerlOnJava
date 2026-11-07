@@ -147,7 +147,7 @@ public class ListOperators {
      * @throws RuntimeException If the Perl comparator subroutine throws an exception.
      */
     public static RuntimeList sort(RuntimeList runtimeList, RuntimeScalar perlComparatorClosure, String packageName) {
-        return sort(runtimeList, perlComparatorClosure, null, packageName);
+        return sort(runtimeList, perlComparatorClosure, null, packageName, RuntimeContextType.LIST);
     }
 
     /**
@@ -156,9 +156,22 @@ public class ListOperators {
      * (Real Perl's sort BLOCK shares the surrounding subroutine's @_.)
      */
     public static RuntimeList sort(RuntimeList runtimeList, RuntimeScalar perlComparatorClosure, RuntimeArray outerArgs, String packageName) {
+        return sort(runtimeList, perlComparatorClosure, outerArgs, packageName, RuntimeContextType.LIST);
+    }
+
+    /**
+     * Sorts in the requested Perl context. A dynamically scalar sort evaluates
+     * its input and tied values, but returns undef without invoking its comparator.
+     */
+    public static RuntimeList sort(RuntimeList runtimeList, RuntimeScalar perlComparatorClosure,
+            RuntimeArray outerArgs, String packageName, int context) {
 
         runtimeList.fetchTiedScalarsReferencedBySort();
         RuntimeScalar.fetchReferencedTiedScalarOnce(perlComparatorClosure);
+
+        if (RuntimeCode.effectiveCallContext(context) == RuntimeContextType.SCALAR) {
+            return new RuntimeList(RuntimeScalarCache.scalarUndef);
+        }
 
         // Check each element to ensure it's not an undefined array reference
         runtimeList.validateNoAutovivification();
