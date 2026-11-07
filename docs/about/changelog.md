@@ -7,6 +7,7 @@ priorities and future plans.
 ## Work in progress
 
 - Keep hash owner lookup constant-time during large hash hydration by indexing stored scalar-cell identities (#1649).
+- Release counted scalar-cell owners through the normal undef lifecycle when Java assigns null (#1649).
 - Release replaced nested hash and array objects from shared aggregate slots at assignment time, without retaining an unowned fetched view (#1649).
 - Reacquire anonymous IO holder identities for cloned Perl scalars in child thread runtimes (#1649).
 - Acquire anonymous IO holder identities for existing scalar and aggregate aliases whenever IO is installed into an existing glob (#1649).
