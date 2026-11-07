@@ -48,7 +48,9 @@ class RescuedAggregateOwnerFinalizationTest {
                 assertEquals(RuntimeBase.PerlLifecycleState.RESURRECTED,
                         parent.perlLifecycleState());
 
-                DestroyDispatch.clearRescuedWeakRefs();
+                // This runtime has no deferred captures: shutdown must still
+                // process rescued objects instead of returning early.
+                MortalList.flushDeferredCaptures();
 
                 assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED,
                         parent.perlLifecycleState());
