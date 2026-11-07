@@ -4,30 +4,36 @@
 
 **Current checkpoint (2026-11-07):** #1649 remains in Phase 2 on branch
 `wip/issue1649-resume-20261106-164511`, PR #1938. The last pushed head is
-`12737cbdfd`. Production releases carry exact owner tokens; public corrective
+`6134694a39`. Production releases carry exact owner tokens; public corrective
 sweep callers remain absent, while verified current-slot count alignment and
 the producer audit are still in progress.
 
-The local follow-up indexes semantic owner-slot membership on `RuntimeBase`,
+Commit `6134694a39` indexes semantic owner-slot membership on `RuntimeBase`,
 excluding temporary roots and IO leases. `RuntimeScalar` now avoids container
 history work for values without a RuntimeBase referent, preserves release of a
 previous reference owner, fast-checks its current container owner, and scans
 remaining container identities in place when required. The first fast-path
 variant regressed the Mojolicious WebSocket controller lifetime test; restoring
-the original aggregate-owner predicate fixed it. The full no-sweeps make gate
-passes with the current code in 9m26 (`/tmp/issue1649-primitive-owner-scan-fastpath-make.log`).
-DateTime 1.68 `t/09greg.t` passes with sweeps disabled (`/tmp/issue1649-primitive-owner-scan-fastpath-datetime.log`); the same test timed out at 300s before the primitive-value fast path.
+the original aggregate-owner predicate fixed it. The no-sweeps full make passes
+in 9m26 and the ordinary full make passes in 18m11 under host contention.
+DateTime 1.68 `t/09greg.t` passes with sweeps disabled; it timed out at 300s
+before the primitive-value fast path. Logs:
+`/tmp/issue1649-primitive-owner-scan-fastpath-make.log`,
+`/tmp/issue1649-current-followup-standard-make.log`, and
+`/tmp/issue1649-primitive-owner-scan-fastpath-datetime.log`.
 
-PR CI run `42333872972` passes on Ubuntu and Windows for `12737cbdfd`. The
-fresh-home acceptance run remains pinned to that older commit: Template (3,180),
-PPR (1,255), and Image::ExifTool passed; DateTime, Mojolicious, and
-DBIx::Class timed out, and Catalyst is still running. The
-current follow-up has not yet been tested by that gate.
+PR CI run `42333872972` passes on Ubuntu and Windows for `12737cbdfd`. Fresh-home
+acceptance on that commit completed: Template (3,180), PPR (1,255),
+Image::ExifTool, and Excel::Writer::XLSX passed. DateTime and Mojolicious timed
+out after 2,400s, DBIx::Class timed out after 3,600s, and Catalyst failed 11 of
+235 subtests across 176 of 200 programs. The current follow-up has not yet been
+tested by that gate. Results:
+`/private/tmp/issue1649-cpan-release-12737cbdfd/build/reports/cpan-release-acceptance.log`.
 
-Next: run the ordinary full make gate, check changed Markdown links, commit and
-push the verified follow-up, then rerun fresh-home CPAN acceptance on the new
-head. Keep PR #1938 in draft until acceptance and the count-alignment/legacy
-recovery review are resolved; #1649 is not complete.
+Next: run fresh-home CPAN acceptance and CI on `6134694a39`, classify the
+remaining acceptance failures, then continue the producer/release and
+count-alignment/legacy-recovery audit. Keep PR #1938 in draft; #1649 is not
+complete.
 
 The reported Class::MethodMaker tied-array lifetime failure is covered by the
 new project-owned `refcount/generated_tied_array_handler_lifetime.t`: it
