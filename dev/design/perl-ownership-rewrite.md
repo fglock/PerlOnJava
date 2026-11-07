@@ -20,6 +20,17 @@ follow-up. Logs:
 `/private/tmp/issue1649-cpan-merged-7683d/build/reports/cpan-release-acceptance.log`,
 and [CI run 42368181699](https://github.com/fglock/PerlOnJava/actions/runs/42368181699).
 
+The tied aggregate conversion audit found that replacing `TieArray`/`TieHash`
+with raw synchronized collections dropped the mutation callbacks used to record
+container ownership. Conversion now installs synchronized wrappers around the
+aggregate's owner-aware storage. The new Java regression fails on unfixed parent
+`bb29450f78` and passes on the candidate; the focused tied-storage gate, full
+`nice -n 19 timeout 3600 make`, and full no-sweeps make all pass. Logs:
+`/private/tmp/issue1649-shared-tie-owner-unfixed-parent.log`,
+`/private/tmp/issue1649-shared-tie-owner-focused-make.log`,
+`/private/tmp/issue1649-shared-tie-owner-final-make.log`, and
+`/private/tmp/issue1649-shared-tie-owner-no-sweeps-make.log`.
+
 Commit `6134694a39` indexes semantic owner-slot membership on `RuntimeBase`,
 excluding temporary roots and IO leases. `RuntimeScalar` now avoids container
 history work for values without a RuntimeBase referent, preserves release of a
