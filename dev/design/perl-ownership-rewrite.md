@@ -4,7 +4,8 @@
 
 **Current checkpoint (2026-11-07):** #1649 remains in Phase 2 on branch
 `wip/issue1649-resume-20261106-164511`, on PR #1938 head
-`fa80a1e4e4`; the runtime fix is commit `e99d8608de`. Reference-count transitions are centralized in `RuntimeBase`
+`b4653bced8`; runtime fix `e99d8608de` and regression expansion
+`b4653bced8` are pushed. Reference-count transitions are centralized in `RuntimeBase`
 and `PerlOwnerSlot`, and production releases carry exact owner tokens.
 Production calls to the public `MortalList.deferDecrement` hook and weak-sweep
 APIs remain absent; verified current-slot count alignment is still active
@@ -22,17 +23,21 @@ failed the four undef/replacement checks on the unfixed parent. The unchanged
 imported `object2.t` passes 133/133 with corrective sweeps disabled. The full
 `JPERL_DISABLE_CORRECTIVE_SWEEPS=1 nice -n 19 make` passes in 8m08 on this
 working tree. Logs: `/tmp/issue1649-nested-object-release-perl.txt`,
-`/tmp/issue1649-nested-object-release-{jvm,interpreter}-expanded.txt`,
-`/tmp/issue1649-object2-final.log`, and
+`/tmp/issue1649-nested-object-release-{jvm,interpreter}-final.txt`,
+`/tmp/issue1649-object2-expanded-final.log`, and
 `/tmp/issue1649-nested-object-release-nosweeps-make.txt`.
 
-The candidate remains draft. CI at `fa80a1e4e4` is queued; the previous PR head
-failed the same imported thread assertions and its Windows job was cancelled at
-the runner limit. The expanded discarded-fetch assertion and its latest
-no-sweeps gate are local pending commits. Immediate next action is to publish
-that regression update and rerun CI. After that,
-continue the remaining producer/release audit and remove the verified
-count-alignment bridge only when explicit owner coverage supports it.
+PR CI run `42311549868` passes on Ubuntu (38m20s) and Windows (34m14s). The
+fresh-home `make test-cpan-release-acceptance` gate is running in isolated
+worktree `/private/tmp/issue1649-cpan-release-b4653bced8` at the exact PR head.
+The package index loaded; `Image::ExifTool` is the first target and had no test
+output after 22 minutes when last checked, inside its 60-minute limit. Log:
+`/private/tmp/issue1649-cpan-release-acceptance-b4653bced8.log`.
+
+Immediate next action is to finish and classify the CPAN gate, then audit the
+remaining producer/release paths and the verified count-alignment bridge.
+Keep #1938 in draft until the bridge/legacy recovery decision and remaining
+acceptance work are resolved; do not treat passing CI as completion of #1649.
 
 The reported Class::MethodMaker tied-array lifetime failure is covered by the
 new project-owned `refcount/generated_tied_array_handler_lifetime.t`: it
@@ -124,10 +129,10 @@ ownership from one aggregate count.
 
 ### Next steps
 
-1. Publish the tested shared-view fix to PR #1938 and rerun CI, including a
-   fresh Windows build result.
-2. Continue the remaining producer/release audit, then review issue #1649 and
-   PR readiness against the no-sweeps acceptance plan.
+1. Finish the fresh-home CPAN acceptance run for the exact PR head and
+   classify any failures against system Perl and existing baselines.
+2. Continue the producer/release audit, then review issue #1649 and PR readiness
+   against the no-sweeps acceptance plan.
 3. Keep the root-recovery compatibility adapter isolated to the legacy
    unpaired decrement API; production release paths carry exact owner tokens
    and no longer use corrective reachability sweeps.
