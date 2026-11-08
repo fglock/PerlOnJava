@@ -30,11 +30,18 @@ acceptance log also contains repeated cleanup warnings that a counted
 harness and a 20-program prefix run including the top-level POD tests did not
 reproduce them. In those runs `daemon.t` failed on the host's fork/listen-socket
 limits. The initial system-Perl `file.t` check lacked Mojolicious in `@INC`, so
-it is not oracle evidence. Logs:
+it is not oracle evidence; the corrected direct runs pass on system Perl 5.34.
+Focused `headers.t`, `file.t`, and `url.t` pass 14, 32, and 38 top-level checks
+on Perl and the JVM, with corrective sweeps disabled on the JVM; none emits the
+owner-slot warning. Logs:
 `/tmp/issue1649-mojo-headers-daemon-trace.log` and
-`/tmp/issue1649-mojo-prefix-with-pod-repro.log`. Next action: capture the
-failing scalar's slot state and isolate the producing test before treating
-this as a new gap.
+`/tmp/issue1649-mojo-prefix-with-pod-repro.log`,
+`/tmp/issue1649-mojo-headers-{perl,jvm}.log`,
+`/tmp/issue1649-mojo-file-perl-corrected.log`,
+`/tmp/issue1649-mojo-file-jvm.log`, and
+`/tmp/issue1649-mojo-url-{perl,jvm}.log`. Next action: capture the failing
+scalar's slot state and isolate the producing test before treating this as a
+new gap.
 
 Earlier work on this candidate added argument-frame owner accounting to
 `Internals::SvREFCNT` B-object probes and expanded
