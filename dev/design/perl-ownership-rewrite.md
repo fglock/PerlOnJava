@@ -3,17 +3,16 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Production sweep callers have been removed; count alignment still uses verified current owner slots while remaining producer gaps are audited.
 
 **Current checkpoint (2026-11-08):** #1649 remains incomplete; PR #1938 is
-open and draft. Local candidate `8c1145bd8a` adds Perl argument-frame owner
+open and draft. Implementation commit `8c1145bd8a` adds Perl argument-frame owner
 accounting to `Internals::SvREFCNT` B-object probes and expands the permanent
 `b_refcount_destroy_aggregate_owner.t` regression from two to four cases. The
 regression passes under system Perl, JVM, and interpreter; the unfixed runtime
 reported 4 instead of Perl's expected 2 in the nested Schema/Source destructor
-case. The full unit `make` gate passed in 7m19 on the implementation tree
-based at this candidate. That run included a temporary owner-trace formatting
-change that has since been removed, so an immutable exact-source rerun remains
-required before updating the PR. Regression evidence is in
+case. The committed no-sweeps full `make` gate passed on source commit
+`cb4ee36122` in 6m57. Focused regression evidence is in
 `/tmp/issue1649-brefcount-nested-frame-{perl,jvm,interpreter}.log`; the gate log
-is `/tmp/issue1649-owner-container-trace-make.log`.
+is `/tmp/issue1649-final-immutable-no-sweeps-make.log`. The diagnostic-only
+owner-trace formatting used during investigation was removed before commit.
 
 The DBIx::Class `t/18insert_default.t` storage leak assertion now passes in a
 temporary instrumented JVM run: LeakTracer reports all five weak references
@@ -24,9 +23,10 @@ reproduce this count difference. A plain JVM invocation reaches all four test
 assertions and then exits on an undefined `assert_empty_weakregistry` call in
 the package's END block. The interpreter run has an additional Hash::Merge
 failure. Keep those harness/parity errors separate from the storage leak
-assertion; do not add an unproven count filter. The instrumented pass is
-`/tmp/issue1649-owner-container-trace-instrumented-jvm.log`; plain backend
-outputs are `/tmp/issue1649-owner-container-trace-{jvm,interpreter}.log`.
+assertion; do not add an unproven count filter. The instrumented JVM pass is
+`/tmp/issue1649-final-dbix-jvm.log`; the interpreter output is
+`/tmp/issue1649-final-dbix-interpreter.log`. The plain backend runs are
+`/tmp/issue1649-owner-container-trace-{jvm,interpreter}.log`.
 
 The owner audit still has five retained mechanisms: legacy root recovery
 behind an unpaired decrement hook; verified current-slot count alignment;
@@ -45,9 +45,8 @@ access failed with DNS resolution earlier; no CI polling has been done.
 1. Reconcile the instrumented DBIx intermediate `REFCNT` value with system Perl
    using a project-owned reproducer only after the difference is reduced to a
    standard-Perl case; the storage leak assertion itself currently passes.
-2. Run the exact-source no-sweeps `nice -n 19 timeout 3600 make`, then rerun the
-   focused Perl/JVM/interpreter regression and the DBIx leak acceptance with a
-   working test harness.
+2. Classify the plain DBIx END-block symbol failure and interpreter Hash::Merge
+   failure separately from the Storage leak assertion.
 3. Refresh the PR branch and verify its checks when GitHub connectivity returns.
    Keep CI status polling at intervals of at least six minutes.
 
