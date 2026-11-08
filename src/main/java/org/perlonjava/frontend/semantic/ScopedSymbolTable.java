@@ -103,6 +103,32 @@ public class ScopedSymbolTable {
         public T peek() { return get(size() - 1); }
     }
 
+    // Shared empty sentinels: pushed onto warning/plugin stacks when state is all-default.
+    // Any mutation path replaces the sentinel with a fresh copy first (copy-on-write).
+    static final BitSet EMPTY_BITSET = new BitSet();
+    static final LinkedHashMap<String, ParserKeywordPlugin> EMPTY_PLUGINS = new LinkedHashMap<>();
+
+    /** Copy-on-write for warning BitSet stacks: replaces the sentinel with a fresh BitSet
+     *  before the caller mutates it. No-op when the top is already a real (non-sentinel) BitSet. */
+    private static BitSet cowBitSet(FastStack<BitSet> stack) {
+        BitSet bs = stack.peek();
+        if (bs == EMPTY_BITSET) {
+            bs = new BitSet();
+            stack.set(stack.size() - 1, bs);
+        }
+        return bs;
+    }
+
+    /** Copy-on-write for the parser-keyword-plugins map stack. */
+    private Map<String, ParserKeywordPlugin> cowPlugins() {
+        Map<String, ParserKeywordPlugin> m = parserKeywordPluginsStack.peek();
+        if (m == EMPTY_PLUGINS) {
+            m = new LinkedHashMap<>();
+            parserKeywordPluginsStack.set(parserKeywordPluginsStack.size() - 1, m);
+        }
+        return m;
+    }
+
     // Stack to manage warning categories for each scope
     public final FastStack<BitSet> warningFlagsStack = new FastStack<>();
     // Stack to track explicitly disabled warning categories (for proper $^W interaction)
@@ -163,12 +189,10 @@ public class ScopedSymbolTable {
         // This matches Perl behavior where code without explicit 'use warnings'
         // has no warning bits set. Experimental warnings will be enabled when
         // the relevant features are used (e.g., 'use feature "try"').
-        BitSet defaultWarnings = new BitSet();
-        warningFlagsStack.push(defaultWarnings);
-        // Initialize the disabled warnings stack (empty by default)
-        warningDisabledStack.push(new BitSet());
-        // Initialize the fatal warnings stack (empty by default)
-        warningFatalStack.push(new BitSet());
+        // Use shared sentinels; mutation paths swap in a fresh BitSet (copy-on-write).
+        warningFlagsStack.push(EMPTY_BITSET);
+        warningDisabledStack.push(EMPTY_BITSET);
+        warningFatalStack.push(EMPTY_BITSET);
         // Current Perl accepts `say` in a source file without an explicit
         // feature pragma, and an older `use VERSION` does not erase that
         // interpreter default. Keep the rest of PerlOnJava's legacy defaults
@@ -196,7 +220,7 @@ public class ScopedSymbolTable {
         regexModifierStack.push("");
         regexDebugFlagsStack.push(0);
         useVersionStack.push(null);
-        parserKeywordPluginsStack.push(new LinkedHashMap<>());
+        parserKeywordPluginsStack.push(EMPTY_PLUGINS);
         // Initialize the package name
         packageStack.push(new PackageInfo("main", false, null));
         // Initialize the subroutine stack with empty string (no subroutine)
@@ -280,13 +304,13 @@ public class ScopedSymbolTable {
         // Push a copy of the current subroutine-body flag onto the stack
         inSubroutineBodyStack.push(inSubroutineBodyStack.peek());
         // Push a copy of the current warning categories map onto the stack.
-        // Empty BitSets are common (code without `use warnings`); avoid clone overhead.
+        // Empty BitSets share the EMPTY_BITSET sentinel (copy-on-write on first mutation).
         BitSet curWarnings = warningFlagsStack.peek();
-        warningFlagsStack.push(curWarnings.isEmpty() ? new BitSet() : (BitSet) curWarnings.clone());
+        warningFlagsStack.push(curWarnings.isEmpty() ? EMPTY_BITSET : (BitSet) curWarnings.clone());
         BitSet curDisabled = warningDisabledStack.peek();
-        warningDisabledStack.push(curDisabled.isEmpty() ? new BitSet() : (BitSet) curDisabled.clone());
+        warningDisabledStack.push(curDisabled.isEmpty() ? EMPTY_BITSET : (BitSet) curDisabled.clone());
         BitSet curFatal = warningFatalStack.peek();
-        warningFatalStack.push(curFatal.isEmpty() ? new BitSet() : (BitSet) curFatal.clone());
+        warningFatalStack.push(curFatal.isEmpty() ? EMPTY_BITSET : (BitSet) curFatal.clone());
         // Push a copy of the current feature categories map onto the stack
         featureFlagsStack.push(featureFlagsStack.peek());
         postderefQqStack.push(postderefQqStack.peek());
@@ -298,7 +322,7 @@ public class ScopedSymbolTable {
         regexDebugFlagsStack.push(regexDebugFlagsStack.peek());
         useVersionStack.push(null);
         Map<String, ParserKeywordPlugin> curPlugins = parserKeywordPluginsStack.peek();
-        parserKeywordPluginsStack.push(curPlugins.isEmpty() ? new LinkedHashMap<>() : new LinkedHashMap<>(curPlugins));
+        parserKeywordPluginsStack.push(curPlugins.isEmpty() ? EMPTY_PLUGINS : new LinkedHashMap<>(curPlugins));
 
         // Return the current size of the symbol table stack as the scope index
         return symbolTableStack.size() - 1;
@@ -376,11 +400,14 @@ public class ScopedSymbolTable {
     }
 
     public void registerParserKeywordPlugin(String keyword, ParserKeywordPlugin plugin) {
-        parserKeywordPluginsStack.peek().put(keyword, plugin);
+        cowPlugins().put(keyword, plugin);
     }
 
     public void removeParserKeywordPlugin(String keyword) {
-        parserKeywordPluginsStack.peek().remove(keyword);
+        Map<String, ParserKeywordPlugin> m = parserKeywordPluginsStack.peek();
+        if (m != EMPTY_PLUGINS) {
+            m.remove(keyword);
+        }
     }
 
     public ParserKeywordPlugin getParserKeywordPlugin(String keyword) {
@@ -1082,12 +1109,13 @@ public class ScopedSymbolTable {
         st.inSubroutineBodyStack.push(this.isInSubroutineBody());
 
         // Warning flags: push parent's values directly (no pop needed — stacks are empty).
+        // Empty BitSets share the EMPTY_BITSET sentinel (copy-on-write on first mutation).
         BitSet wf = this.warningFlagsStack.peek();
-        st.warningFlagsStack.push(wf.isEmpty() ? new BitSet() : (BitSet) wf.clone());
+        st.warningFlagsStack.push(wf.isEmpty() ? EMPTY_BITSET : (BitSet) wf.clone());
         BitSet wd = this.warningDisabledStack.peek();
-        st.warningDisabledStack.push(wd.isEmpty() ? new BitSet() : (BitSet) wd.clone());
+        st.warningDisabledStack.push(wd.isEmpty() ? EMPTY_BITSET : (BitSet) wd.clone());
         BitSet wft = this.warningFatalStack.peek();
-        st.warningFatalStack.push(wft.isEmpty() ? new BitSet() : (BitSet) wft.clone());
+        st.warningFatalStack.push(wft.isEmpty() ? EMPTY_BITSET : (BitSet) wft.clone());
 
         // Feature and syntax flags.
         st.featureFlagsStack.push(this.featureFlagsStack.peek());
@@ -1106,7 +1134,7 @@ public class ScopedSymbolTable {
 
         // Parser keyword plugins.
         Map<String, ParserKeywordPlugin> srcPlugins = this.parserKeywordPluginsStack.peek();
-        st.parserKeywordPluginsStack.push(srcPlugins.isEmpty() ? new LinkedHashMap<>() : new LinkedHashMap<>(srcPlugins));
+        st.parserKeywordPluginsStack.push(srcPlugins.isEmpty() ? EMPTY_PLUGINS : new LinkedHashMap<>(srcPlugins));
 
         st.lexicalRegexPragmaChanged = this.lexicalRegexPragmaChanged;
 
@@ -1219,11 +1247,9 @@ public class ScopedSymbolTable {
         Integer bitPosition = warningBitPositions().get(category);
         if (bitPosition != null) {
             cachedWarningBitsString = null;
-            warningFlagsStack.peek().set(bitPosition);
-            // A normal "use warnings 'category'" downgrades any inherited
-            // FATAL bit for that category back to a regular warning.
+            cowBitSet(warningFlagsStack).set(bitPosition);
+            // clear() on EMPTY_BITSET is always a no-op (bit is already 0)
             warningFatalStack.peek().clear(bitPosition);
-            // Clear the disabled bit when enabling
             warningDisabledStack.peek().clear(bitPosition);
         }
     }
@@ -1232,13 +1258,10 @@ public class ScopedSymbolTable {
         Integer bitPosition = warningBitPositions().get(category);
         if (bitPosition != null) {
             cachedWarningBitsString = null;
+            // clear() on EMPTY_BITSET is always a no-op (bit is already 0)
             warningFlagsStack.peek().clear(bitPosition);
-            // A disabled category cannot remain fatal.  Keeping the fatal bit
-            // made warning-mask serialization re-enable the category when an
-            // eval STRING inherited its caller's lexical warning state.
             warningFatalStack.peek().clear(bitPosition);
-            // Mark as explicitly disabled (for proper $^W interaction)
-            warningDisabledStack.peek().set(bitPosition);
+            cowBitSet(warningDisabledStack).set(bitPosition);
         }
     }
 
@@ -1285,9 +1308,9 @@ public class ScopedSymbolTable {
         Integer bitPosition = warningBitPositions().get(category);
         if (bitPosition != null) {
             cachedWarningBitsString = null;
-            warningFatalStack.peek().set(bitPosition);
-            // FATAL implies enabled
-            warningFlagsStack.peek().set(bitPosition);
+            cowBitSet(warningFatalStack).set(bitPosition);
+            cowBitSet(warningFlagsStack).set(bitPosition);
+            // clear() on EMPTY_BITSET is always a no-op (bit is already 0)
             warningDisabledStack.peek().clear(bitPosition);
         }
     }
@@ -1382,7 +1405,7 @@ public class ScopedSymbolTable {
         Integer warnBitPos = warningBitPositions().get(experimentalWarning);
         if (warnBitPos != null && !warningDisabledStack.peek().get(warnBitPos)) {
             cachedWarningBitsString = null;
-            warningFlagsStack.peek().set(warnBitPos);
+            cowBitSet(warningFlagsStack).set(warnBitPos);
         }
     }
 
