@@ -3,12 +3,12 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Production sweep callers have been removed; count alignment still uses verified current owner slots while remaining producer gaps are audited.
 
 **Current checkpoint (2026-11-08):** #1649 remains in Phase 2; PR #1938 is
-open and draft at head `db90d7f1976dde3596a8860da6fef7d392693983`, based on
-current `master`. The `local $#array` restore mismatch is fixed:
-Perl does not restore the prior array contents at scope exit, and restoring the
-old tail could revive scalar wrappers whose counted owner slots had already
-been released. The new `localized_array_size_assignment.t` fails on its
-unfixed parent and passes 5/5 under system Perl, JVM, and interpreter.
+open and draft at runtime candidate `e6921def8d`, with docs-only follow-up
+`334441f825`, based on current `master`. The `local $#array` restore mismatch
+is fixed: Perl does not restore the prior array contents at scope exit, and
+restoring the old tail could revive scalar wrappers whose counted owner slots
+had already been released. The new `localized_array_size_assignment.t` fails
+on its unfixed parent and passes 5/5 under system Perl, JVM, and interpreter.
 
 `JPERL_DISABLE_CORRECTIVE_SWEEPS=1 nice -n 19 timeout 3600 make` passed on the
 rescued-owner candidate in 6m56; `nice -n 19 timeout 600 make check-links`
@@ -27,6 +27,22 @@ the 2,400s soft timeout after 2,024s without output. No regressions were
 recorded. Full transcript:
 `/private/tmp/issue1649-e692-cpan-acceptance-console.log`; per-target
 diagnostics: `/tmp/cpan_random_logs/20261108-000654-29167/`.
+
+Follow-up isolation confirms DBIx::Class `t/18insert_default.t` passes under
+system Perl (including its weak-registry cleanup check) but fails on the
+PerlOnJava runtime candidate: the storage object remains in a `HASH_ELEMENT`
+owner slot after the upstream test scope ends. Targeted refcount tracing
+identifies the surviving `DBIx::Class::Storage::DBI::SQLite` owner as scalar
+`1872135733`, held by `RuntimeHash#997123528`; this is a concrete production
+lifecycle gap, not an established regression from the memory rewrite because
+there is no prior exact-module baseline. Logs:
+`/tmp/issue1649-dbix-t18-system-perl.log`,
+`/tmp/issue1649-dbix-t18-jperl.log`, and
+`/tmp/issue1649-dbix-t18-trace.log`. The full Catalyst failures begin at
+`Moose::Meta::Method::Accessor::Native::super` during dependency loading, so
+they do not yet isolate owner accounting. Mojolicious emitted counted-owner
+release warnings before its timeout and also has an independent websocket
+route assertion failure in the partial log; both need targeted classification.
 
 The design inventory lists nine owner/lifecycle audit areas, not nine confirmed
 bugs. Five retained mechanisms remain under audit: legacy root-based recovery
@@ -178,13 +194,17 @@ ownership from one aggregate count.
 
 ### Next steps
 
-1. Continue the producer/release and current-slot count-alignment audit; retain
-   the legacy root-recovery adapter only for its unpaired compatibility hook.
-2. Review PR readiness against the no-sweeps acceptance plan. Rerun the full
-   gates after any runtime changes, then hand the draft to review.
-3. Keep the root-recovery compatibility adapter isolated to the legacy
-   unpaired decrement API; production release paths carry exact owner tokens
-   and no longer use corrective reachability sweeps.
+1. Trace the DBIx::Class storage's `HASH_ELEMENT` parent to its owning
+   container and identify the missed retirement transition; add a permanent
+   focused test that passes on system Perl and fails on this candidate.
+2. Classify the Catalyst dependency-load failures and Mojolicious timeout,
+   including its owner-release warnings and websocket assertion, before
+   deciding whether they share the same lifecycle gap.
+3. Keep the known five-mechanism inventory scoped as written: one production
+   count-alignment path and four direct-test/compatibility paths. The DBIx
+   failure is a newly demonstrated producer/release gap, so the total number
+   of remaining fixes is not yet closed. Rerun the bundled acceptance batch
+   after related lifecycle fixes land, then review PR readiness.
 
 ### Open questions and blockers
 
