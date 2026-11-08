@@ -6,6 +6,8 @@ priorities and future plans.
 
 ## Work in progress
 
+- Eliminate unbounded `WarningBitsRegistry` growth for interpreter-compiled evals: warning bits are now embedded directly in the `caller()` frame token rather than registered in a global `ConcurrentHashMap`, removing a memory leak and a ~22% `ConcurrentHashMap.transfer` hot spot on repeated `eval STRING`.
+
 - Free `ByteCodeSourceMapper` source-location data after each `eval STRING` execution to prevent unbounded old-generation heap growth; reorder captured-variable guards in assignment-optimisation fast paths to skip `NameNormalizer` work early. Together these reduce eval-STRING CPU time by ~3.7% on a 1M-iteration benchmark.
 
 - Gate per-node AST analysis passes in `BytecodeCompiler` on parse-time flags to avoid unnecessary object allocation and traversal for simple eval strings: a new `parsedLocal` flag (set at `local`, `delete local`, `lock`, and runtime warning-scope pragmas) is propagated to the AST root as `hasLocalOrDefer` alongside the existing `hasEvalOrRegex`, allowing `FindDeclarationVisitor.containsLocalOrDefer` and `RegexUsageDetector.containsRegexOperation` traversals in `visit(BlockNode)`, `visit(For1Node)`, `visit(For3Node)`, `visit(IfNode)`, and list compilation to be skipped entirely when neither construct appears in the eval string.
