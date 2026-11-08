@@ -10,10 +10,10 @@ refalias regression passes 8/8 with sweeps disabled on both JVM and
 interpreter, as well as 8/8 on system Perl. Logs:
 `/tmp/issue1649-refalias-array-element-no-sweeps-{jvm,interpreter}.log` and
 `/tmp/issue1649-refalias-array-element-oracle-final.log`. `make check-links`
-passed. PR #1938 is open and draft at `54fc94c370`. Its Ubuntu and Windows
-builds remain pending; CodeQL failed on alert #2 (`java/insufficient-key-size`)
-at an unchanged `CryptOpenSSLRSA.java` path, already present on `master`. The
-other language analyses and dependency submission checks passed.
+passed. PR #1938 is open and draft at `1b40bdfbf7`. On this head, Ubuntu,
+Windows, and Java/Kotlin checks are pending; Actions, C/C++, Python, Gradle,
+and Maven pass. CodeQL is skipping. The prior head's CodeQL failure was the
+unchanged `CryptOpenSSLRSA.java` alert already open on `master`.
 
 The latest PR update is documentation-only; runtime source remains unchanged
 from the passing no-sweeps gate. PR #1938 is open and draft, and the new head's
@@ -41,7 +41,8 @@ owner-slot warning. Logs:
 `/tmp/issue1649-mojo-file-jvm.log`, and
 `/tmp/issue1649-mojo-url-{perl,jvm}.log`. Next action: capture the failing
 scalar's slot state and isolate the producing test before treating this as a
-new gap.
+new gap. Focused Perl/JVM runs establish only their own behavior; full CPAN
+acceptance and the DBIx count/harness issues remain open.
 
 Earlier work on this candidate added argument-frame owner accounting to
 `Internals::SvREFCNT` B-object probes and expanded
