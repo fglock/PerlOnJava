@@ -24,6 +24,7 @@ priorities and future plans.
 - Match Perl's `B::SV::REFCNT` during `DESTROY` without counting synthetic argument-frame or overlapping B wrapper owners as external references (#1649).
 - Release `Storable::dclone` results when their last Perl owner is dropped, without leaving an extra counted return helper (#1649).
 - Release compiler, module, and postfix reference-transfer temporaries through their exact counted slot transition, including subroutine return slots, list assignment, hash slices, refalias setup, and Storable hooks (#1649).
+- Discard unused hash-slice list-assignment results in void context so temporary lvalue proxies do not retain asynchronous Promise owners (#1649).
 - Hold an array or hash container through the lifetime of an aliased element argument, including after `shift @_` (#1649).
 - Keep a replacement reference's RHS temporary alive through reentrant cleanup of the overwritten scalar slot (#1649).
 - Preserve tied hash and array magic through aliased element arguments, including `untie` during the callee, and release the handler at frame exit (#1649).
