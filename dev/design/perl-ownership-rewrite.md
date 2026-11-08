@@ -3,7 +3,7 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Production sweep callers have been removed; count alignment still uses verified current owner slots while remaining producer gaps are audited.
 
 **Current checkpoint (2026-11-08):** #1649 remains in Phase 2; PR #1938 is
-open and draft at head `e6921def8dcc1367707d89c01140081cc3169032`, based on
+open and draft at head `db90d7f1976dde3596a8860da6fef7d392693983`, based on
 current `master`. The `local $#array` restore mismatch is fixed:
 Perl does not restore the prior array contents at scope exit, and restoring the
 old tail could revive scalar wrappers whose counted owner slots had already
@@ -12,15 +12,12 @@ unfixed parent and passes 5/5 under system Perl, JVM, and interpreter.
 
 `JPERL_DISABLE_CORRECTIVE_SWEEPS=1 nice -n 19 timeout 3600 make` passed on the
 rescued-owner candidate in 6m56; `nice -n 19 timeout 600 make check-links`
-passed with 830 documents and zero errors. Earlier PR CI run
-[42407597660](https://github.com/PerlOnJava/PerlOnJava/actions/runs/42407597660)
-passes on Ubuntu and Windows for the earlier runtime candidate. Current-source
-CI run [42423050409](https://github.com/PerlOnJava/PerlOnJava/actions/runs/42423050409)
-fails two Windows unit tests, `makemaker_autosplit_autoloader_only.t` and
-`makemaker_postamble_rule_style.t`, at their nested `make.EXE` calls; both pass
-under system Perl, and the latest master CI run `42396817494` passes. Its
-Ubuntu job was cancelled. The three individual CodeQL analyses succeeded, but
-the aggregate CodeQL check failed.
+passed with 830 documents and zero errors. Current-source CI run
+[42434114069](https://github.com/PerlOnJava/PerlOnJava/actions/runs/42434114069)
+passes on Ubuntu and Windows. The previous Windows failures at nested
+`make.EXE` calls did not recur. The three individual CodeQL analyses
+succeeded, but aggregate CodeQL remains failed on an unchanged high-severity
+short-RSA-key alert at `CryptOpenSSLRSA.java:203`.
 
 The exact-source eight-target CPAN gate passed DateTime (3,592),
 Image::ExifTool (600), PPR (1,255), Template (3,180), and Excel::Writer::XLSX
