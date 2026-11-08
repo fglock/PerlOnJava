@@ -37,8 +37,10 @@ not nine confirmed defects. Four mechanisms have no ordinary production
 caller or no demonstrated missing-token path; current-slot alignment is the
 only ordinary production count-recovery path and checks direct slots without a
 root walk. The clean base checkout remains on a separate branch; the active
-feature branch is `feature/issue1649-rescued-owner-finalization`. GitHub API
-access failed with DNS resolution earlier; no CI polling has been done.
+feature branch is `feature/issue1649-rescued-owner-finalization`, pushed to
+PR #1938 at head `41e8639904`. The PR remains draft. The PR description refresh
+and a `gh pr checks` request failed with GitHub API DNS resolution; the next CI
+status query is deferred for at least six minutes.
 
 ### Next steps
 
@@ -47,8 +49,8 @@ access failed with DNS resolution earlier; no CI polling has been done.
    standard-Perl case; the storage leak assertion itself currently passes.
 2. Classify the plain DBIx END-block symbol failure and interpreter Hash::Merge
    failure separately from the Storage leak assertion.
-3. Refresh the PR branch and verify its checks when GitHub connectivity returns.
-   Keep CI status polling at intervals of at least six minutes.
+3. Refresh the PR description and verify its checks when GitHub API connectivity
+   returns. Keep CI status polling at intervals of at least six minutes.
 
 ### Open questions and blockers
 
