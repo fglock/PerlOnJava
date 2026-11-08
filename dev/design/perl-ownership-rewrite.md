@@ -3,46 +3,55 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Production sweep callers have been removed; count alignment still uses verified current owner slots while remaining producer gaps are audited.
 
 **Current checkpoint (2026-11-08):** #1649 remains incomplete on runtime source
-`8776112b94` (`feature/issue1649-rescued-owner-finalization`). The full
-`JPERL_DISABLE_CORRECTIVE_SWEEPS=1 nice -n 19 make` passed on immutable tree
-`6205ac0a16` in 6m36; log: `/tmp/issue1649-final-no-sweeps-make.log`. The new array-element
-refalias regression passes 8/8 with sweeps disabled on both JVM and
-interpreter, as well as 8/8 on system Perl. Logs:
-`/tmp/issue1649-refalias-array-element-no-sweeps-{jvm,interpreter}.log` and
-`/tmp/issue1649-refalias-array-element-oracle-final.log`. `make check-links`
-passed. PR #1938 is open and draft at `1b40bdfbf7`. On this head, Ubuntu,
-Windows, and Java/Kotlin checks are pending; Actions, C/C++, Python, Gradle,
-and Maven pass. CodeQL is skipping. The prior head's CodeQL failure was the
-unchanged `CryptOpenSSLRSA.java` alert already open on `master`.
+`8776112b94` (`feature/issue1649-rescued-owner-finalization`). Its full
+no-sweeps `nice -n 19 make` gate previously passed on immutable tree `6205ac0a16`
+in 6m36 (`/tmp/issue1649-final-no-sweeps-make.log`). This turn added a
+project-owned async rejected-Promise regression. It passes 2/2 on system Perl
+and the interpreter, but fails 1/2 on the JVM with corrective sweeps disabled.
+The fixture's event loop drains all next-tick callbacks like Mojolicious's
+reactor. An unfixed trace shows the rejected Promise and two `then` callback
+capture edges surviving until global destruction; a simpler dual-callback
+control passes on all three runtimes. Evidence:
+`/tmp/issue1649-mojo-promise-{perl,jvm}.log`,
+`/tmp/issue1649-mojo-event-loop-oracle-correct-loop.log`,
+`/tmp/issue1649-mojo-event-loop-{jvm,interpreter}-correct-loop.log`, and
+`/tmp/issue1649-mojo-event-loop-correct-loop-trace.log`.
 
-The latest PR update is documentation-only; runtime source remains unchanged
-from the passing no-sweeps gate. PR #1938 is open and draft, and the new head's
-CI run is pending the next scheduled poll. GitHub access required extended
-network permission for the push and description update.
-The source audit confirms that raw unpaired decrements and direct weak-sweep
-helpers have no production callers; lifecycle-only zero-count paths carry
-non-null completion tokens. Root-based recovery is confined to the raw legacy
-hook. Exact current-slot count alignment remains the sole ordinary production
-count-repair path and does not traverse roots. The current-source Mojolicious
-acceptance log also contains repeated cleanup warnings that a counted
-`RuntimeScalar -> RuntimeCode` owner slot was missing at
-`MortalList.deferDecrementRecursive`. The adjacent `headers.t`/`daemon.t`
-harness and a 20-program prefix run including the top-level POD tests did not
-reproduce them. In those runs `daemon.t` failed on the host's fork/listen-socket
-limits. The initial system-Perl `file.t` check lacked Mojolicious in `@INC`, so
-it is not oracle evidence; the corrected direct runs pass on system Perl 5.34.
-Focused `headers.t`, `file.t`, and `url.t` pass 14, 32, and 38 top-level checks
-on Perl and the JVM, with corrective sweeps disabled on the JVM; none emits the
-owner-slot warning. Logs:
-`/tmp/issue1649-mojo-headers-daemon-trace.log` and
-`/tmp/issue1649-mojo-prefix-with-pod-repro.log`,
-`/tmp/issue1649-mojo-headers-{perl,jvm}.log`,
-`/tmp/issue1649-mojo-file-perl-corrected.log`,
-`/tmp/issue1649-mojo-file-jvm.log`, and
-`/tmp/issue1649-mojo-url-{perl,jvm}.log`. Next action: capture the failing
-scalar's slot state and isolate the producing test before treating this as a
-new gap. Focused Perl/JVM runs establish only their own behavior; full CPAN
-acceptance and the DBIx count/harness issues remain open.
+Follow-up tracing identifies PromiseModel #2's tracked count reaching zero
+during deferred capture cleanup; its `DESTROY` warning is then emitted during
+global destruction. This confirms late Perl-level ownership release but does
+not yet identify which capture/owner producer leaves the count outstanding.
+The no-result list-assignment candidate did not change the regression result
+and has been reverted; it was not the Promise root cause.
+Revalidation on the current tree confirms 2/2 checks on system Perl and the
+interpreter, while the JVM still fails the wait-time warning assertion (1/2).
+Logs: `/tmp/issue1649-promise-current-{perl,jvm,interpreter}.log`. The earlier
+full no-sweeps build remains the only suite-wide evidence for this candidate.
+Temporary owner-ledger probes narrow the retained graph further: after the
+reactor queue drains, its weak callback references are gone, but the two
+`PromiseModel::then` wrapper CODE refs remain owned by one-element callback
+arrays. Their capture pads still point to the rejected Promise. This focuses
+the next trace on release of the queued callback's captured array and the
+array's element owner slots; it does not yet identify which runtime cleanup
+boundary missed that release. Evidence:
+`/tmp/issue1649-promise-tick-ownertrace.log` and
+`/tmp/issue1649-promise-callback-ownertrace.log`.
+
+An attempted JVM no-result path for void-context `my (...) = ...` assignment,
+including array/hash tails, did not fix the regression. Its source changes
+were removed after the 6m50 no-sweeps `nice -n 19 make` run failed only the new
+test in shard 3; all other reported unit shards passed. Log:
+`/tmp/make-issue1649-void-list-assignment-no-sweeps.log`. The current tree
+contains the new test and this checkpoint, neither committed nor pushed. PR
+#1938 remains open/draft at its previously pushed documentation head; CI
+polling remains subject to the user's six-minute minimum interval.
+
+The owner audit still has five retained mechanisms, only one of which has
+demonstrated ordinary production traffic: exact current-slot alignment. The
+other production fallbacks (localized CODE restore and `weaken` token adoption)
+remain unconfirmed in ordinary producers; raw unpaired-decrement recovery and
+`sweepReleasedWeakReferents()` have no production caller. Full CPAN acceptance,
+the DBIx count/harness issues, and the Mojolicious cleanup warning remain open.
 
 Earlier work on this candidate added argument-frame owner accounting to
 `Internals::SvREFCNT` B-object probes and expanded
@@ -118,13 +127,15 @@ mechanism.
 
 ### Next steps
 
-1. Poll PR #1938 CI after the six-minute interval and classify any failures.
-2. Continue the remaining producer audit, focusing on exact current-slot
-   alignment and any source path that can bypass owner-slot acquisition. Batch
-   proven runtime fixes and focused regressions before the next full gate.
-3. Keep the DBIx END-block and interpreter Hash::Merge failures separate from
-   storage-lifetime assertions; classify strict CPAN outcomes before any
-   completion claim.
+1. Trace the exact owner slot retained by the async Promise regression through
+   its creating array/list assignment and closure release; fix the producer or
+   release path rather than adding another reachability fallback.
+2. Batch proven producer fixes and their focused regressions, oracle-check the
+   Perl test, and run a single full no-sweeps `nice -n 19 make` gate only after
+   the regression passes on both backends.
+3. Resume the exact-current-slot producer audit and classify the remaining
+   Mojolicious and DBIx acceptance outcomes before any completion claim. Poll
+   PR #1938 CI no more often than every six minutes.
 
 ### Open questions and blockers
 
