@@ -2,93 +2,60 @@
 
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Production sweep callers have been removed; count alignment still uses verified current owner slots while remaining producer gaps are audited.
 
-**Current checkpoint (2026-11-08):** #1649 remains incomplete; PR #1938's
-state and checks could not be refreshed because GitHub API requests fail from
-this host. Implementation commit `8c1145bd8a` adds Perl argument-frame owner
-accounting to `Internals::SvREFCNT` B-object probes and expands the permanent
-`b_refcount_destroy_aggregate_owner.t` regression from two to four cases. The
-regression passes under system Perl, JVM, and interpreter; the unfixed runtime
-reported 4 instead of Perl's expected 2 in the nested Schema/Source destructor
-case. The no-sweeps full `make` gate passed on source commit `cb4ee36122` in
-6m57; a later full `make` passed in 7m52 with the HTML-Tree lifecycle
-regression present in the worktree. Focused regression evidence is in
-`/tmp/issue1649-brefcount-nested-frame-{perl,jvm,interpreter}.log`; the gate log
-is `/tmp/issue1649-final-immutable-no-sweeps-make.log`. The diagnostic-only
-owner-trace formatting used during investigation was removed before commit.
-Class::MethodMaker `t/array.t`, raised in the latest issue comments, now passes
-438/438 on system Perl 5.45.5, JVM, and interpreter:
-`/tmp/issue1649-cmm-array-{oracle,jvm,interpreter}.log`.
-The project-owned `generated_tied_array_handler_lifetime.t` reproduces the
-premature handler destruction on the unfixed candidate and passes 4/4 on all
-three runtimes: `/tmp/jperl-cmm-parent.log` and
-`/tmp/issue1649-tied-array-owner-{perl,jvm,interpreter}.log`.
+**Current checkpoint (2026-11-08):** #1649 remains incomplete on pushed
+candidate `aca9a9130b` (`feature/issue1649-rescued-owner-finalization`, PR
+#1938). The latest full `nice -n 19 make` passed in 7m52 with the HTML-Tree
+lifecycle regression present; log:
+`/tmp/issue1649-html-tree-lifecycle-full-make.log`. That regression passes 4/4
+on system Perl 5.34, JVM, and interpreter. GitHub API access still fails from
+this host, so PR state/checks have not been refreshed since this push.
 
-The DBIx::Class `t/18insert_default.t` storage leak assertion now passes in a
-temporary instrumented JVM run: LeakTracer reports all five weak references
-collected. The same run still records an intermediate Artist source count of 4
-where system Perl reports 1, followed by a later count of 1; a minimal
-scope-exit/hash-owner probe passes identically on both backends and does not
-reproduce this count difference. A plain JVM invocation reaches all four test
-assertions and then exits on an undefined `assert_empty_weakregistry` call in
-the package's END block. The interpreter run has an additional Hash::Merge
-failure. Keep those harness/parity errors separate from the storage leak
-assertion; do not add an unproven count filter. The instrumented JVM pass is
-`/tmp/issue1649-final-dbix-jvm.log`; the interpreter output is
-`/tmp/issue1649-final-dbix-interpreter.log`. The plain backend runs are
-`/tmp/issue1649-owner-container-trace-{jvm,interpreter}.log`.
+Earlier work on this candidate added argument-frame owner accounting to
+`Internals::SvREFCNT` B-object probes and expanded
+`b_refcount_destroy_aggregate_owner.t` to four cases. It passes on all three
+runtimes; the unfixed runtime reported 4 instead of Perl's expected 2 in the
+nested Schema/Source destructor case. Class::MethodMaker `t/array.t` passes
+438/438 on system Perl 5.45.5 and both backends. The project-owned tied-array
+handler lifetime regression fails on the unfixed parent and passes 4/4 on all
+three runtimes. Prior focused evidence is retained in the `/tmp/issue1649-*`
+logs referenced by the earlier commits.
 
-The END-block import failure is not yet attributable to `namespace::clean`:
-an Exporter-style import followed by `namespace::clean` and a bare imported
-call from `END` passes under host Perl 5.34 and both PerlOnJava backends when
-using the production `B::Hooks::EndOfScope` module. The exact system-Perl
-DBIx test could not start because this host lacks `SQL::Abstract::Util`; keep
-the package-specific failure open without changing cleanup semantics.
-
-The current producer/release call-site audit finds no production caller of
-`MortalList.deferDecrement(RuntimeBase)`. Every production deferred release
-uses a `RuntimeScalar` and carries its exact `PerlOwnerSlot` token, so the
-root-walk recovery branches inside `processDeferredBase` are confined to the
-legacy unpaired API. `restoreReachableOwnerCount` is called only from that
-guarded branch. Current counted-slot alignment remains a separate direct
-identity check, not reachability recovery.
-
-The HTML-Tree content and incremental parser lifecycle failure recorded below
-is resolved on the current candidate. The permanent unit regression
-`refcount/html_tree_builder_lifecycle.t` passes 4/4 on system Perl 5.34, JVM,
-and interpreter. Post-build logs are `/tmp/issue1649-html-tree-lifecycle-
-postbuild-{jvm,interpreter}.log`; the oracle log is
-`/tmp/issue1649-html-tree-lifecycle-oracle.log`.
+DBIx::Class `t/18insert_default.t` passes all four assertions and its END leak
+check on exact system Perl 5.34. The JVM reaches all assertions, then exits 22
+because the package's END block calls the imported `assert_empty_weakregistry`
+after `namespace::clean` removes its stash entry. The interpreter has a
+separate Hash::Merge failure. A reduced case passes on Perl and fails on the
+current JVM when another module is loaded before the importing package; a
+similarly small helper without that preceding load passes. The trigger is not
+isolated enough to change namespace cleanup. Keep this separate from the
+storage leak assertion and its intermediate `REFCNT` discrepancy. Evidence:
+`/tmp/issue1649-dbix-18insert-host-perl.log`,
+`/tmp/issue1649-dbix-18insert-current-jvm.log`,
+`/tmp/issue1649-dbix-end-binding-{perl,jvm}.log`, and
+`/tmp/issue1649-helper-runmode-{perl,jvm}.log`.
 
 The owner audit still has five retained mechanisms: legacy root recovery
 behind an unpaired decrement hook; verified current-slot count alignment;
 `sweepReleasedWeakReferents()` for direct Java compatibility/test calls;
 localized CODE restore count adoption; and missing-token adoption in
-`WeakRefRegistry.weaken`. Nine inventory entries are lifecycle audit areas,
-not nine confirmed defects. Four mechanisms have no ordinary production
-caller or no demonstrated missing-token path; current-slot alignment is the
-only ordinary production count-recovery path and checks direct slots without a
-root walk. The clean base checkout remains on a separate branch; the active
-feature branch is `feature/issue1649-rescued-owner-finalization`, pushed to
-PR #1938 with checkpoint commit `16e4fe369d`. PR state and checks could not be
-verified after the latest push because GitHub API requests fail from this host.
-The last successful CI poll on head `8202431b06` showed Ubuntu and Windows
-builds pending; Actions,
-C/C++, Python, and submit jobs passed; Java/Kotlin analysis remained pending.
-CodeQL failed on the unchanged high-severity RSA key-size alert at
-`CryptOpenSSLRSA.java:203`. That poll predates the latest branch push.
+`WeakRefRegistry.weaken`. Nine inventory entries are audit areas, not nine
+confirmed defects. Four mechanisms have no ordinary production caller or no
+demonstrated missing-token path; current-slot alignment is the only ordinary
+production count-recovery path and checks exact owner identities without a
+root walk. Group implementation work into two gates: first close proven
+producer gaps and add focused coverage for ordinary owner-slot alignment; then
+assess compatibility recovery and adoption bridges against direct callers.
+Poll CI no more frequently than every six minutes; the latest API attempt failed
+and the last successful poll predates this push.
 
 ### Next steps
 
-1. Reconcile the instrumented DBIx intermediate `REFCNT` value with system Perl
-   using a project-owned reproducer only after the difference is reduced to a
-   standard-Perl case; the storage leak assertion itself currently passes.
-2. Reduce the plain DBIx END-block symbol failure to a project-owned or
-   package-local reproducer before changing namespace cleanup; the current
-   focused import case passes on all three runtimes. Keep the interpreter
-   Hash::Merge failure separate from the Storage leak assertion.
-3. Refresh the PR description and verify its checks when GitHub API connectivity
-   returns. The latest poll attempt failed to connect to `api.github.com`; keep
-   CI status polling at intervals of at least six minutes.
+1. Isolate why a preceding module load changes imported-sub lifetime in a
+   deferred END block. Keep the interpreter Hash::Merge failure separate from
+   the JVM END failure and storage leak assertion.
+2. Continue the owner-slot producer audit, batching only demonstrated gaps with
+   focused Perl-oracle tests before the next full build.
+3. Refresh PR #1938 description and checks when GitHub API connectivity returns.
 
 ### Open questions and blockers
 
