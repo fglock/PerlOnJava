@@ -2,26 +2,34 @@
 
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Production sweep callers have been removed; count alignment still uses verified current owner slots while remaining producer gaps are audited.
 
-**Current checkpoint (2026-11-07):** #1649 remains in Phase 2; PR #1938 is
-open and draft at runtime commit `ebcb9a9824e7ac5135842ea8a55359470f61be02`,
-based on current `master`. The `local $#array` restore mismatch is fixed:
+**Current checkpoint (2026-11-08):** #1649 remains in Phase 2; PR #1938 is
+open and draft at head `e6921def8dcc1367707d89c01140081cc3169032`, based on
+current `master`. The `local $#array` restore mismatch is fixed:
 Perl does not restore the prior array contents at scope exit, and restoring the
 old tail could revive scalar wrappers whose counted owner slots had already
 been released. The new `localized_array_size_assignment.t` fails on its
 unfixed parent and passes 5/5 under system Perl, JVM, and interpreter.
 
 `JPERL_DISABLE_CORRECTIVE_SWEEPS=1 nice -n 19 timeout 3600 make` passed on the
-exact commit in 6m14; `nice -n 19 timeout 600 make check-links` passed with 830
-documents and zero errors. PR CI run
+rescued-owner candidate in 6m56; `nice -n 19 timeout 600 make check-links`
+passed with 830 documents and zero errors. Earlier PR CI run
 [42407597660](https://github.com/PerlOnJava/PerlOnJava/actions/runs/42407597660)
-passes on Ubuntu and Windows. The exact-candidate eight-target CPAN gate
-(including the standard seven plus Excel::Writer::XLSX) passed Template,
-DateTime, PPR, Image::ExifTool, and Excel::Writer::XLSX. Catalyst retained its
-11/235 failures and DBIx::Class its 105/43,080 failures; Mojolicious exceeded
-the 2,400s soft timeout. There were no compatibility upgrades or regressions
-in this run. Full transcript:
-`/private/tmp/issue1649-ebcb9a9824-cpan-acceptance.log`; per-target diagnostics:
-`/tmp/cpan_random_logs/20261107-205306-58894/`.
+passes on Ubuntu and Windows for the earlier runtime candidate. Current-source
+CI run [42423050409](https://github.com/PerlOnJava/PerlOnJava/actions/runs/42423050409)
+fails two Windows unit tests, `makemaker_autosplit_autoloader_only.t` and
+`makemaker_postamble_rule_style.t`, at their nested `make.EXE` calls; both pass
+under system Perl, and the latest master CI run `42396817494` passes. Its
+Ubuntu job was cancelled. The three individual CodeQL analyses succeeded, but
+the aggregate CodeQL check failed.
+
+The exact-source eight-target CPAN gate passed DateTime (3,592),
+Image::ExifTool (600), PPR (1,255), Template (3,180), and Excel::Writer::XLSX
+(5,138). Template upgraded from FAIL to PASS. Catalyst retained 11/235
+failures and DBIx::Class retained 105/43,080 failures; Mojolicious exceeded
+the 2,400s soft timeout after 2,024s without output. No regressions were
+recorded. Full transcript:
+`/private/tmp/issue1649-e692-cpan-acceptance-console.log`; per-target
+diagnostics: `/tmp/cpan_random_logs/20261108-000654-29167/`.
 
 The design inventory lists nine owner/lifecycle audit areas, not nine confirmed
 bugs. Five retained mechanisms remain under audit: legacy root-based recovery
@@ -40,7 +48,7 @@ slots and runs nested `DESTROY` at the exact owner transition. Finalization now
 runs after END even when no deferred captures were queued. The new Java
 `RescuedAggregateOwnerFinalizationTest` verifies the nested destructor and weak
 observer behavior. The full `JPERL_DISABLE_CORRECTIVE_SWEEPS=1 nice -n 19
-timeout 3600 make` gate passes in 7m20; the DBIC rescued-schema callback,
+timeout 3600 make` gate passes in 6m56; the DBIC rescued-schema callback,
 rescued-weak-slot, and deep-cycle regressions pass on system Perl, JVM, and
 interpreter. Logs: `/private/tmp/issue1649-rescued-owner-finalization-no-sweeps-make.log`
 and `/private/tmp/issue1649-rescued-owner-*.log`.
