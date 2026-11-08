@@ -31,31 +31,40 @@ diagnostics: `/tmp/cpan_random_logs/20261108-000654-29167/`.
 Follow-up isolation confirms DBIx::Class `t/18insert_default.t` passes under
 system Perl (including its weak-registry cleanup check) but fails on the
 PerlOnJava runtime candidate: the storage object remains in a `HASH_ELEMENT`
-owner slot after the upstream test scope ends. An assertion-boundary trace,
-captured before LeakTracer emits its diagnostic, shows the surviving Storage
-held in the `DBICTest::Schema` hash; that Schema is in turn held through an
-`Artist` ResultSource's `schema` hash element. Temporary instrumentation of
-`Schema::DESTROY` observes `refcount($Artist_source)` values of 2, 4, then 3
-across repeated destructor entries. That refcount threshold controls DBIC's
-strong/weak handoff between the schema's source registry and the source's
-schema backreference, so this narrows the remaining producer/release audit to
-that handoff and the source's other live owner slots. The shutdown-only
-`RuntimeHash` owner report is separate: it is emitted after the assertion
-fails, when LeakTracer calls `B::svref_2object(...)->REFCNT`; the PerlOnJava
-`B::SV` wrapper then stores the referent in a hash slot. It is a diagnostic
-artifact, not the cause of the earlier failure. A separate system-Perl/JVM
-probe confirms a module-defined `END` block sees an expired scoped lexical on
-both runtimes, so generic module `END` ordering does not reproduce the gap.
-The failure is not established as a regression from the memory rewrite
-because there is no prior exact-module baseline. A minimal schema-owns-storage
-graph with a weakened storage-to-schema backreference passes under system Perl
-and PerlOnJava; the DBIx source-registration handoff remains to be reduced.
+owner slot after the upstream test scope ends. A focused destruction-time B
+refcount regression confirmed a Perl model mismatch: system Perl reports one
+owner for an object held only in a hash slot, while the candidate reported two
+inside `DESTROY`; both report two when an independent lexical owner exists.
+Removing the extra destruction-only adjustment and its root query fixes the
+regression on both backends. The full no-sweeps make gate passes in 6m43, and
+the focused regression passes 2/2 on JVM and interpreter. Exact DBIx
+`t/18insert_default.t` still fails to collect Storage on both backends.
+
+An assertion-boundary trace, captured before LeakTracer emits its diagnostic,
+shows Storage held by a Schema hash element, with that Schema held by an
+`Artist` ResultSource `schema` element. With the B count correction, temporary
+`Schema::DESTROY` instrumentation reports the first Artist source at refcount
+1, but a later source still has multiple active hash-element owners and
+refcounts 4 then 3 across repeated entries. `jperl_trace_to` finds only the
+active argument frames for these sources, not a persistent root. These owner
+slots remain the unresolved DBIx release path. The shutdown-only `RuntimeHash`
+owner report is separate: it is emitted after the assertion fails, when
+LeakTracer calls `B::svref_2object(...)->REFCNT`; the PerlOnJava `B::SV` wrapper
+then stores the referent in a hash slot. It is a diagnostic artifact, not the
+cause of the earlier failure. A separate system-Perl/JVM probe confirms a
+module-defined `END` block sees an expired scoped lexical on both runtimes, so
+generic module `END` ordering does not reproduce the gap. There is no prior
+exact-module baseline, and a minimal schema-owns-storage graph with a weakened
+storage-to-schema backreference passes under system Perl and PerlOnJava.
 Logs:
 `/tmp/issue1649-dbix-t18-system-perl.log`,
 `/tmp/issue1649-dbix-t18-jperl.log`, and
 `/tmp/issue1649-dbix-t18-trace.log`,
 `/tmp/issue1649-dbic-schema-boundary-jperl.log`, and
-`/tmp/issue1649-dbic-schema-destroy-boundary.log`, plus
+`/tmp/issue1649-dbic-schema-destroy-boundary.log`,
+`/tmp/issue1649-b-refcount-destroy-{system-perl,unfixed-jvm,unfixed-interpreter,final-jvm,final-interpreter}.log`,
+`/tmp/issue1649-b-refcount-destroy-no-sweeps-make.log`, and
+`/tmp/issue1649-dbix-t18-fixed-{jvm,interpreter}.log`, plus
 `/tmp/issue1649-weak-backref-{system-perl,jperl}.log`. The full Catalyst failures begin at
 `Moose::Meta::Method::Accessor::Native::super` during dependency loading, so
 they do not yet isolate owner accounting. Mojolicious emitted counted-owner
@@ -215,10 +224,11 @@ ownership from one aggregate count.
 
 ### Next steps
 
-1. Reduce DBIx::Class `t/18insert_default.t` past the passing schema/storage
-   weak-backreference probe, trace the additional owner edge, and add a
-   permanent focused test that passes on system Perl and fails on this
-   candidate.
+1. Reduce the remaining DBIx::Class `t/18insert_default.t` retention by tracing
+   the multiple active ResultSource hash-element owners seen during
+   `Schema::DESTROY` re-entry. The B refcount mismatch has a permanent passing
+   regression and is fixed, but the exact CPAN test still fails on both
+   backends.
 2. Classify the Catalyst dependency-load failures and Mojolicious timeout,
    including its owner-release warnings and websocket assertion, before
    deciding whether they share the same lifecycle gap.
