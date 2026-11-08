@@ -13,6 +13,9 @@ case. The committed no-sweeps full `make` gate passed on source commit
 `/tmp/issue1649-brefcount-nested-frame-{perl,jvm,interpreter}.log`; the gate log
 is `/tmp/issue1649-final-immutable-no-sweeps-make.log`. The diagnostic-only
 owner-trace formatting used during investigation was removed before commit.
+Class::MethodMaker `t/array.t`, raised in the latest issue comments, now passes
+438/438 on system Perl 5.45.5, JVM, and interpreter:
+`/tmp/issue1649-cmm-array-{oracle,jvm,interpreter}.log`.
 
 The DBIx::Class `t/18insert_default.t` storage leak assertion now passes in a
 temporary instrumented JVM run: LeakTracer reports all five weak references
@@ -39,8 +42,9 @@ only ordinary production count-recovery path and checks direct slots without a
 root walk. The clean base checkout remains on a separate branch; the active
 feature branch is `feature/issue1649-rescued-owner-finalization`, pushed to
 PR #1938. The PR remains draft. The PR description refresh
-and a `gh pr checks` request failed with GitHub API DNS resolution; the next CI
-status query is deferred for at least six minutes.
+has since succeeded through the approved API path. A `gh pr checks` request
+failed with GitHub API DNS resolution; the next CI status query is deferred for
+at least six minutes.
 
 ### Next steps
 
