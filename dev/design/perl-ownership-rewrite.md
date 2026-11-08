@@ -42,11 +42,19 @@ localized CODE restore count adoption; and missing-token adoption in
 confirmed defects. Four mechanisms have no ordinary production caller or no
 demonstrated missing-token path; current-slot alignment is the only ordinary
 production count-recovery path and checks exact owner identities without a
-root walk. Group implementation work into two gates: first close proven
-producer gaps and add focused coverage for ordinary owner-slot alignment; then
-assess compatibility recovery and adoption bridges against direct callers.
-Poll CI no more frequently than every six minutes; the latest API attempt failed
-and the last successful poll predates this push.
+root walk. A removal experiment for the weaken adapter failed three existing
+Java tests that intentionally construct an already-counted scalar without a
+slot token. Keep this direct-caller compatibility contract while auditing
+production producers; it is not an ordinary reachability recovery path.
+Continue closing proven producer gaps before reassessing the remaining
+compatibility bridges. On PR head `714b07474f`, the latest check snapshot has
+Ubuntu and Windows builds running; Actions and dependency submissions passed.
+The C/C++, Java/Kotlin, and Python analysis jobs failed during CodeQL
+initialization because GitHub returned HTTP 504 for the CodeQL CLI bundle, so
+those jobs did not analyze source. Aggregate CodeQL is neutral. Details:
+[analysis run 42467369054](https://github.com/PerlOnJava/PerlOnJava/actions/runs/42467369054)
+and [build run 42467371162](https://github.com/PerlOnJava/PerlOnJava/actions/runs/42467371162).
+Recheck after the six-minute polling interval for build completion.
 
 The fresh source call-site audit confirms that production code has no caller of
 `MortalList.deferDecrement(RuntimeBase)` and no caller of
@@ -65,17 +73,25 @@ passes 8/8 on both backends. The fix acquires the identity before publishing
 the slot and carries existing cell identities into array alias views and
 tail-call carriers. `nice -n 19 make` passed on this source in 7m23; log:
 `/tmp/issue1649-array-refalias-full-make.log`. The ordinary recovery/adoption
-audit remains at five mechanisms. Next: continue the producer audit in a batch
-before reassessing any compatibility recovery mechanism.
+audit remains at five retained mechanisms; a temporary removal of missing-token
+adoption failed three direct Java tests that construct a counted scalar without
+a slot token. The original implementation is restored. Evidence:
+`/tmp/issue1649-no-weaken-adoption-full-make.log` and XML reports in
+`build/test-results/testUnitShard0/`. Next: classify the current CI failures,
+then continue the producer audit before reassessing any remaining compatibility
+mechanism.
 
 ### Next steps
 
-1. Isolate why a preceding module load changes imported-sub lifetime in a
-   deferred END block. Keep the interpreter Hash::Merge failure separate from
-   the JVM END failure and storage leak assertion.
-2. Continue the owner-slot producer audit, batching only demonstrated gaps with
-   focused Perl-oracle tests before the next full build.
-3. Refresh PR #1938 description and checks when GitHub API connectivity returns.
+1. Run the full `JPERL_DISABLE_CORRECTIVE_SWEEPS=1 nice -n 19 make` gate on one
+   immutable candidate after the producer batch.
+2. Refresh PR #1938 checks after its current Ubuntu and Windows builds finish;
+   CodeQL CLI initialization failed with HTTP 504 and needs a rerun or clear
+   infrastructure classification.
+3. Continue the producer/release audit, especially localized CODE restore and
+   exact current-slot alignment. Keep the DBIx END-block and interpreter
+   Hash::Merge failures separate from storage-lifetime assertions; classify
+   strict CPAN outcomes before any completion claim.
 
 ### Open questions and blockers
 
