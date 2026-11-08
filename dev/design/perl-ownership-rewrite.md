@@ -46,9 +46,12 @@ only ordinary production count-recovery path and checks direct slots without a
 root walk. The clean base checkout remains on a separate branch; the active
 feature branch is `feature/issue1649-rescued-owner-finalization`, pushed to
 PR #1938. The PR remains draft. The PR description refresh
-has since succeeded through the approved API path. A `gh pr checks` request
-failed with GitHub API DNS resolution; the next CI status query is deferred for
-at least six minutes.
+has since succeeded through the approved API path. The last six-minute-spaced
+CI poll on head `8202431b06` showed Ubuntu and Windows builds pending; Actions,
+C/C++, Python, and submit jobs passed; Java/Kotlin analysis remained pending.
+CodeQL failed on the unchanged high-severity RSA key-size alert at
+`CryptOpenSSLRSA.java:203`. The next CI status poll is deferred for at least
+six minutes.
 
 ### Next steps
 
