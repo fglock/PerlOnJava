@@ -545,6 +545,28 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         return count;
     }
 
+    /** Count temporary referent slots held only by active Perl argument frames. */
+    public int currentArgumentFrameReferentOwnerCount() {
+        PerlRuntime runtime = PerlRuntime.currentOrNull();
+        if (runtime == null) return 0;
+        java.util.Deque<RuntimeArray> activeArgs = runtime.executionState().argsStack;
+        int count = 0;
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (!slot.isActive()) continue;
+            if (slot.kind() == PerlOwnerSlot.Kind.ARGUMENT_CONTAINER) {
+                count++;
+                continue;
+            }
+            RuntimeScalar owner = slot.countedScalarOwner();
+            if (owner != null && owner.value == this
+                    && owner.containerOwner instanceof RuntimeArray array
+                    && activeArgs.contains(array)) {
+                count++;
+            }
+        }
+        return count;
+    }
+
     /**
      * Whether current Perl owner identities, apart from the legacy count,
      * prove that this value is still owned. Temporary roots, IO resource leases,
