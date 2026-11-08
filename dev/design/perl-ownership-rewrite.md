@@ -2,14 +2,16 @@
 
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Production sweep callers have been removed; count alignment still uses verified current owner slots while remaining producer gaps are audited.
 
-**Current checkpoint (2026-11-08):** #1649 remains incomplete; PR #1938 is
-open and draft. Implementation commit `8c1145bd8a` adds Perl argument-frame owner
+**Current checkpoint (2026-11-08):** #1649 remains incomplete; PR #1938's
+state and checks could not be refreshed because GitHub API requests fail from
+this host. Implementation commit `8c1145bd8a` adds Perl argument-frame owner
 accounting to `Internals::SvREFCNT` B-object probes and expands the permanent
 `b_refcount_destroy_aggregate_owner.t` regression from two to four cases. The
 regression passes under system Perl, JVM, and interpreter; the unfixed runtime
 reported 4 instead of Perl's expected 2 in the nested Schema/Source destructor
-case. The committed no-sweeps full `make` gate passed on source commit
-`cb4ee36122` in 6m57. Focused regression evidence is in
+case. The no-sweeps full `make` gate passed on source commit `cb4ee36122` in
+6m57; a later full `make` passed in 7m52 with the HTML-Tree lifecycle
+regression present in the worktree. Focused regression evidence is in
 `/tmp/issue1649-brefcount-nested-frame-{perl,jvm,interpreter}.log`; the gate log
 is `/tmp/issue1649-final-immutable-no-sweeps-make.log`. The diagnostic-only
 owner-trace formatting used during investigation was removed before commit.
@@ -42,6 +44,21 @@ using the production `B::Hooks::EndOfScope` module. The exact system-Perl
 DBIx test could not start because this host lacks `SQL::Abstract::Util`; keep
 the package-specific failure open without changing cleanup semantics.
 
+The current producer/release call-site audit finds no production caller of
+`MortalList.deferDecrement(RuntimeBase)`. Every production deferred release
+uses a `RuntimeScalar` and carries its exact `PerlOwnerSlot` token, so the
+root-walk recovery branches inside `processDeferredBase` are confined to the
+legacy unpaired API. `restoreReachableOwnerCount` is called only from that
+guarded branch. Current counted-slot alignment remains a separate direct
+identity check, not reachability recovery.
+
+The HTML-Tree content and incremental parser lifecycle failure recorded below
+is resolved on the current candidate. The permanent unit regression
+`refcount/html_tree_builder_lifecycle.t` passes 4/4 on system Perl 5.34, JVM,
+and interpreter. Post-build logs are `/tmp/issue1649-html-tree-lifecycle-
+postbuild-{jvm,interpreter}.log`; the oracle log is
+`/tmp/issue1649-html-tree-lifecycle-oracle.log`.
+
 The owner audit still has five retained mechanisms: legacy root recovery
 behind an unpaired decrement hook; verified current-slot count alignment;
 `sweepReleasedWeakReferents()` for direct Java compatibility/test calls;
@@ -52,13 +69,13 @@ caller or no demonstrated missing-token path; current-slot alignment is the
 only ordinary production count-recovery path and checks direct slots without a
 root walk. The clean base checkout remains on a separate branch; the active
 feature branch is `feature/issue1649-rescued-owner-finalization`, pushed to
-PR #1938. The PR remains draft. The PR description refresh
-has since succeeded through the approved API path. The last six-minute-spaced
-CI poll on head `8202431b06` showed Ubuntu and Windows builds pending; Actions,
+PR #1938 with checkpoint commit `16e4fe369d`. PR state and checks could not be
+verified after the latest push because GitHub API requests fail from this host.
+The last successful CI poll on head `8202431b06` showed Ubuntu and Windows
+builds pending; Actions,
 C/C++, Python, and submit jobs passed; Java/Kotlin analysis remained pending.
 CodeQL failed on the unchanged high-severity RSA key-size alert at
-`CryptOpenSSLRSA.java:203`. The next CI status poll is deferred for at least
-six minutes.
+`CryptOpenSSLRSA.java:203`. That poll predates the latest branch push.
 
 ### Next steps
 
@@ -99,10 +116,10 @@ six minutes.
   `cpan/Scalar-List-Utils/lib` added to `@INC`; the checkout remains untouched.
   The prior Perl 5.44.0 build remains the oracle for historical HTML-Tree
   integration results.
-- The focused `new_from_lol` regression now passes, but HTML-Tree 5.07's
-  content and incremental parser cases still retain two and three elements at
-  the immediate release assertion on both PerlOnJava backends; Perl 5.44 passes
-  all cases. The new parser lifecycle reproducer records this open failure.
+- The previously failing HTML-Tree content and incremental parser release
+  assertions now pass 4/4 on the current candidate and host system Perl. The
+  project-owned regression is in `src/test/resources/unit/refcount/`; this
+  lifecycle workload no longer demonstrates a producer gap.
 - The Dancer2-Plugin-DBIx-Class `t/01_both_using_rsnames.t` workload now passes
   all six assertions and exits on both backends. The interpreter first exposed
   a `caller->isa` scalar-context bug, fixed in this follow-up, then exceeded a
