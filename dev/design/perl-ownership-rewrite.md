@@ -2,13 +2,20 @@
 
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Production sweep callers have been removed; count alignment still uses verified current owner slots while remaining producer gaps are audited.
 
-**Current checkpoint (2026-11-08):** #1649 remains incomplete on candidate
-`8776112b94` (`feature/issue1649-rescued-owner-finalization`, PR #1938).
-`nice -n 19 make` passed in 7m23 with the new array-element refalias producer
-fix and regression; log: `/tmp/issue1649-array-refalias-full-make.log`. The new
-regression passes 8/8 on system Perl, JVM, and interpreter. `make check-links`
-also passed. The latest GitHub API attempt failed from this host, so CI/PR state
-still needs refreshing.
+**Current checkpoint (2026-11-08):** #1649 remains incomplete on runtime source
+`8776112b94` (`feature/issue1649-rescued-owner-finalization`). The full
+`JPERL_DISABLE_CORRECTIVE_SWEEPS=1 nice -n 19 make` passed on immutable tree
+`6205ac0a16` in 6m36; log: `/tmp/issue1649-final-no-sweeps-make.log`. The new array-element
+refalias regression passes 8/8 with sweeps disabled on both JVM and
+interpreter, as well as 8/8 on system Perl. Logs:
+`/tmp/issue1649-refalias-array-element-no-sweeps-{jvm,interpreter}.log` and
+`/tmp/issue1649-refalias-array-element-oracle-final.log`. `make check-links`
+passed. At the last PR poll, head `714b07474f` had passed Ubuntu and Windows
+builds. Three CodeQL language initializations failed with HTTP 504 while
+downloading CLI 2.27.4; source analysis did not run. Actions and dependency
+submission checks passed; aggregate CodeQL is neutral. Runs:
+[analysis 42467369054](https://github.com/PerlOnJava/PerlOnJava/actions/runs/42467369054)
+and [build 42467371162](https://github.com/PerlOnJava/PerlOnJava/actions/runs/42467371162).
 
 Earlier work on this candidate added argument-frame owner accounting to
 `Internals::SvREFCNT` B-object probes and expanded
@@ -47,14 +54,7 @@ Java tests that intentionally construct an already-counted scalar without a
 slot token. Keep this direct-caller compatibility contract while auditing
 production producers; it is not an ordinary reachability recovery path.
 Continue closing proven producer gaps before reassessing the remaining
-compatibility bridges. On PR head `714b07474f`, the latest check snapshot has
-Ubuntu and Windows builds running; Actions and dependency submissions passed.
-The C/C++, Java/Kotlin, and Python analysis jobs failed during CodeQL
-initialization because GitHub returned HTTP 504 for the CodeQL CLI bundle, so
-those jobs did not analyze source. Aggregate CodeQL is neutral. Details:
-[analysis run 42467369054](https://github.com/PerlOnJava/PerlOnJava/actions/runs/42467369054)
-and [build run 42467371162](https://github.com/PerlOnJava/PerlOnJava/actions/runs/42467371162).
-Recheck after the six-minute polling interval for build completion.
+compatibility bridges.
 
 The fresh source call-site audit confirms that production code has no caller of
 `MortalList.deferDecrement(RuntimeBase)` and no caller of
@@ -83,15 +83,13 @@ mechanism.
 
 ### Next steps
 
-1. Run the full `JPERL_DISABLE_CORRECTIVE_SWEEPS=1 nice -n 19 make` gate on one
-   immutable candidate after the producer batch.
-2. Refresh PR #1938 checks after its current Ubuntu and Windows builds finish;
-   CodeQL CLI initialization failed with HTTP 504 and needs a rerun or clear
-   infrastructure classification.
-3. Continue the producer/release audit, especially localized CODE restore and
-   exact current-slot alignment. Keep the DBIx END-block and interpreter
-   Hash::Merge failures separate from storage-lifetime assertions; classify
-   strict CPAN outcomes before any completion claim.
+1. Push the tested candidate checkpoint to PR #1938, refresh its description,
+   and track CI on the new head with six-minute-or-longer polling.
+2. Continue the producer/release audit, especially localized CODE restore and
+   exact current-slot alignment, batching any proven fixes before another gate.
+3. Keep the DBIx END-block and interpreter Hash::Merge failures separate from
+   storage-lifetime assertions; classify strict CPAN outcomes before any
+   completion claim.
 
 ### Open questions and blockers
 
