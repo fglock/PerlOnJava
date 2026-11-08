@@ -14,7 +14,7 @@ priorities and future plans.
 - Acquire anonymous IO holder identities for existing scalar and aggregate aliases whenever IO is installed into an existing glob (#1649).
 - Release temporary anonymous IO holder leases with list-assignment scalar owners while preserving handles carried in assignment results (#1649).
 - Finalize cleared aggregates from current owner identities; root reachability no longer preserves an ownerless referent (#1649).
-- Match Perl's `B::SV::REFCNT` during `DESTROY` without counting a synthetic argument-frame owner as an external reference (#1649).
+- Match Perl's `B::SV::REFCNT` during `DESTROY` without counting synthetic argument-frame or overlapping B wrapper owners as external references (#1649).
 - Release `Storable::dclone` results when their last Perl owner is dropped, without leaving an extra counted return helper (#1649).
 - Release compiler, module, and postfix reference-transfer temporaries through their exact counted slot transition, including subroutine return slots, list assignment, hash slices, refalias setup, and Storable hooks (#1649).
 - Hold an array or hash container through the lifetime of an aliased element argument, including after `shift @_` (#1649).

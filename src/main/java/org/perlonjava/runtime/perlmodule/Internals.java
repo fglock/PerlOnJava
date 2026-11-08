@@ -656,6 +656,13 @@ public class Internals extends PerlModuleBase {
             if (bObjectProbe && base.localBindingExists && !compileHintsHash) {
                 adjust = -1;
             }
+            if (bObjectProbe) {
+                // Native B wrappers contain only an SV pointer, so none of
+                // their PerlOnJava hash slots count as referent owners. This
+                // includes wrappers left live by an outer DESTROY frame while
+                // a rescued object is queried again.
+                adjust -= base.currentBObjectReferentOwnerCount();
+            }
             return new RuntimeScalar(rc + extra + adjust).getList();
         }
         return new RuntimeScalar(1).getList();
