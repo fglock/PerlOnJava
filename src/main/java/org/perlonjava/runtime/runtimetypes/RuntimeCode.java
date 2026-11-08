@@ -7451,7 +7451,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     if (frame < javaClassNames.size()) {
                         String className = javaClassNames.get(frame);
                         if (className != null) {
-                            warningBits = WarningBitsRegistry.get(className);
+                            if (className.startsWith("interpreter_wbs:")) {
+                                // Interpreter frame: bits are embedded in the token (no registry lookup).
+                                String embedded = className.substring("interpreter_wbs:".length());
+                                warningBits = embedded.isEmpty() ? null : embedded;
+                            } else {
+                                warningBits = WarningBitsRegistry.get(className);
+                            }
                         }
                     }
                 }
@@ -8202,9 +8208,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * Extracts Java class names from a Throwable's stack trace, parallel to
      * how ExceptionFormatter.formatException produces Perl frames.
      * This allows caller() to look up warning bits from WarningBitsRegistry.
+     * <p>
+     * For interpreter frames, warning bits are embedded directly in the entry
+     * using the prefix {@code "interpreter_wbs:"} to avoid a global registry
+     * lookup (which would grow unboundedly for repeated eval STRING calls).
+     * JVM-compiled frames still use the full class name for registry lookup.
      *
      * @param t The Throwable containing the stack trace
-     * @return List of Java class names, one per Perl frame in same order as formatException
+     * @return List of class-name tokens, one per Perl frame in same order as formatException
      */
     private static java.util.ArrayList<String> extractJavaClassNames(Throwable t) {
         java.util.ArrayList<String> classNames = new java.util.ArrayList<>();
@@ -8244,10 +8255,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             classNames.add(null);
                             interpreterFrameIndex++;
                         } else {
-                            // For interpreter, warning bits come from InterpretedCode.warningBits.
-                            // Use the code's identifier as a pseudo-class name.
-                            String codeId = "interpreter:" + System.identityHashCode(frame.code());
-                            classNames.add(codeId);
+                            // For interpreter, embed the warning bits string directly in the
+                            // entry using the "interpreter_wbs:" prefix.  This avoids a global
+                            // registry lookup that would grow unboundedly for repeated eval STRING
+                            // calls (ConcurrentHashMap.transfer was ~22 % of eval microbench time).
+                            InterpretedCode interpCode = (InterpretedCode) frame.code();
+                            String wbs = interpCode.warningBitsString;
+                            classNames.add(wbs != null ? "interpreter_wbs:" + wbs : "interpreter_wbs:");
                             addedFrameForCurrentLevel = true;
                         }
                     } else {
