@@ -32,13 +32,20 @@ Follow-up isolation confirms DBIx::Class `t/18insert_default.t` passes under
 system Perl (including its weak-registry cleanup check) but fails on the
 PerlOnJava runtime candidate: the storage object remains in a `HASH_ELEMENT`
 owner slot after the upstream test scope ends. Targeted refcount tracing
-identifies the surviving `DBIx::Class::Storage::DBI::SQLite` owner as scalar
-`1872135733`, held by `RuntimeHash#997123528`; this is a concrete production
-lifecycle gap, not an established regression from the memory rewrite because
-there is no prior exact-module baseline. A minimal schema-owns-storage graph
-with a weakened storage-to-schema backreference passes under system Perl and
-PerlOnJava, so ordinary weak backreferences and hash-element release work; the
-remaining reproducer must retain DBIx's additional setup or callback edges.
+identifies a surviving `DBIx::Class::Storage::DBI::SQLite` owner as scalar
+`1872135733`, held in `RuntimeHash#997123528`. The final owner dump occurs
+after `DBICTest::Util::LeakTracer` reports the failed weak-registry assertion;
+its diagnostic then calls `B::svref_2object(...)->REFCNT`, whose PerlOnJava
+`B::SV` wrapper stores the referent in a hash slot. Treat that final slot as a
+diagnostic artifact, not as the cause of the earlier assertion failure. A
+separate system-Perl/JVM probe confirms that a module-defined `END` block sees
+an expired scoped lexical on both runtimes, so generic module `END` ordering
+does not reproduce the gap. The original DBIx retention cause remains
+unresolved and is not established as a regression from the memory rewrite
+because there is no prior exact-module baseline. A minimal schema-owns-storage
+graph with a weakened storage-to-schema backreference passes under system Perl
+and PerlOnJava, so ordinary weak backreferences and hash-element release work;
+the remaining reproducer must retain DBIx's additional setup or callback edges.
 Logs:
 `/tmp/issue1649-dbix-t18-system-perl.log`,
 `/tmp/issue1649-dbix-t18-jperl.log`, and
@@ -54,10 +61,13 @@ bugs. Five retained mechanisms remain under audit: legacy root-based recovery
 behind the unpaired decrement hook; verified current-slot count alignment;
 `sweepReleasedWeakReferents()` for direct Java compatibility/test calls; the
 localized CODE restore count-adoption path; and missing-token adoption in
-`WeakRefRegistry.weaken`. Only current-slot alignment remains on a normal
-production path; it validates actual owner slots and does not walk Perl roots.
-The other paths have no ordinary production caller. Keep these contracts
-distinct while finishing the producer/release audit.
+`WeakRefRegistry.weaken`. Only current-slot alignment performs count recovery
+on a normal production release path; it validates current owner slots and
+does not walk Perl roots. The legacy root-recovery and targeted-sweep entry
+points have no ordinary production callers. The CODE-restore and weaken-side
+adoption guards sit on production mutation paths, but the producer audit has
+not found a normal operation that reaches either guard without an owner token.
+Keep these distinctions explicit while finishing the producer/release audit.
 
 The rescued-aggregate audit removed a separate recursive weak-reference walk
 from `DestroyDispatch`. Rescued roots now stay queued while a current Perl owner
