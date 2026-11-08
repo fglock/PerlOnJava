@@ -4,6 +4,7 @@ use Test::More;
 use B qw(svref_2object);
 
 our @observed_refcounts;
+our @retained_b_wrappers;
 
 {
     package Issue1649::BRefcountDestroyOwner;
@@ -30,5 +31,18 @@ is(shift @observed_refcounts, 1,
 }
 is(shift @observed_refcounts, 2,
     'B::SV::REFCNT preserves an independent lexical owner during DESTROY');
+
+{
+    my $owner = bless {
+        child => bless({}, 'Issue1649::BRefcountDestroyChild'),
+    }, 'Issue1649::BRefcountDestroyOwner';
+    push @retained_b_wrappers,
+        B::svref_2object($owner->{child}),
+        B::svref_2object($owner->{child});
+    undef $owner;
+}
+is(shift @observed_refcounts, 1,
+    'overlapping B::SV wrappers do not become extra Perl owners during DESTROY');
+@retained_b_wrappers = ();
 
 done_testing;
