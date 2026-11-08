@@ -662,6 +662,12 @@ public class Internals extends PerlModuleBase {
                 // includes wrappers left live by an outer DESTROY frame while
                 // a rescued object is queried again.
                 adjust -= base.currentBObjectReferentOwnerCount();
+                // Perl @_ aliases do not add references to their referents.
+                // Our argument containers and their elements are counted
+                // slots, so discount the extra ones while retaining the
+                // existing single-call adjustment above.
+                adjust -= Math.max(0,
+                        base.currentArgumentFrameReferentOwnerCount() - 1);
             }
             return new RuntimeScalar(rc + extra + adjust).getList();
         }
