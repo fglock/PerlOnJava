@@ -128,6 +128,7 @@ priorities and future plans.
 - Track saved namespace moves with stash owner slots and release them when consumed or when the stale stash dies (#1649).
 - Acquire active lexical owner identities when aggregate registration follows the initial pad bind, and clear weak aggregate observers on normal scope exit (#1649).
 - Release scalar-cell pad owners after lexical cleanup, clearing weak observers at the correct scope exit (#1649).
+- Retain array element refalias scalar cells through explicit array alias owner slots, including alias views and tail-call carriers (#1649).
 - Exclude weak glob aliases from strong-owner backfill; release their anonymous IO holder on weaken and restore it on unweaken (#1649).
 - Release displaced hash-element owners when multi-LHS list assignment replaces a hash tail, through the normal tied and package-root-aware store path (#1649).
 - Release materialized list-assignment owners and restore lexical cleanup when tied hash assignment throws from `STORE` (#1649).
