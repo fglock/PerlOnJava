@@ -16,6 +16,10 @@ owner-trace formatting used during investigation was removed before commit.
 Class::MethodMaker `t/array.t`, raised in the latest issue comments, now passes
 438/438 on system Perl 5.45.5, JVM, and interpreter:
 `/tmp/issue1649-cmm-array-{oracle,jvm,interpreter}.log`.
+The project-owned `generated_tied_array_handler_lifetime.t` reproduces the
+premature handler destruction on the unfixed candidate and passes 4/4 on all
+three runtimes: `/tmp/jperl-cmm-parent.log` and
+`/tmp/issue1649-tied-array-owner-{perl,jvm,interpreter}.log`.
 
 The DBIx::Class `t/18insert_default.t` storage leak assertion now passes in a
 temporary instrumented JVM run: LeakTracer reports all five weak references
