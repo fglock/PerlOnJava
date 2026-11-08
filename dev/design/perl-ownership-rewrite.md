@@ -1099,6 +1099,15 @@ constants; the reachability walker no longer follows pad constants as a
 substitute for explicit edges. Full build and backend validation for this
 batch is pending.
 
+The fresh source call-site audit confirms that production code has no caller of
+`MortalList.deferDecrement(RuntimeBase)` and no caller of
+`ReachabilityWalker.sweepReleasedWeakReferents()`; the latter appears only in
+four Java tests. All current `refCountOwned = true` assignments acquire a
+`PerlOwnerSlot` or transfer an existing active slot, apart from the explicit
+legacy-adoption helper. These findings support retaining the test/compatibility
+contracts while continuing to look for a real producer-ordering gap; they do
+not justify removing the active exact-slot alignment bridge.
+
 ### Next steps
 
 1. Trace `restoreVerifiedCurrentCountedOwnerSlotRefCount` in deferred release
