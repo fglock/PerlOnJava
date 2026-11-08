@@ -2,43 +2,40 @@
 
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Production sweep callers have been removed; count alignment still uses verified current owner slots while remaining producer gaps are audited.
 
-**Current checkpoint (2026-11-08):** #1649 remains incomplete on runtime source
-`8776112b94` (`feature/issue1649-rescued-owner-finalization`). Its full
-no-sweeps `nice -n 19 make` gate previously passed on immutable tree `6205ac0a16`
-in 6m36 (`/tmp/issue1649-final-no-sweeps-make.log`). This turn added a
-project-owned rejected-Promise cleanup regression. It passes 2/2 on system Perl
-and the interpreter, and fails 1/2 on the JVM with sweeps disabled. The failed
-no-sweeps full gate ran 7m17 and failed only this test; log
-`/tmp/make-issue1649-hash-slice-flush-above-mark.log`. The Perl oracle and
-`make check-links` pass. The attempted `flushAboveMark()` at the end of
-`HASH_SLICE_SET` did not fix it and has been removed.
+**Current checkpoint (2026-11-08):** #1649 remains incomplete. The new
+project-owned rejected-Promise cleanup regression passes 2/2 on system Perl,
+JVM, and interpreter, with corrective sweeps disabled on PerlOnJava. The
+upstream Mojolicious 9.53 `t/mojo/promise.t` passes all 40 subtests on all
+three runtimes; the JVM originally failed the two unhandled-rejection warnings.
+The focused mount lifecycle test passes 18/18 on the JVM with extended socket
+access. Logs: `/tmp/issue1649-narrow-unit-{jvm,interpreter}.log`,
+`/tmp/issue1649-narrow-upstream-{jvm,interpreter}.log`,
+`/tmp/issue1649-upstream-promise-perl.log`, and
+`/tmp/issue1649-narrow-mount-jvm-extended.log`.
 
-The issue is reproduced in the actual Mojolicious 9.53 `Mojo::Promise`
-implementation and upstream `t/mojo/promise.t`: system Perl passes all 40
-subtests; the JVM with sweeps disabled fails the two “unhandled” warnings in
-the `Warnings` subtest; the interpreter passes all 40. Logs:
-`/tmp/issue1649-upstream-promise-{perl,jvm,interpreter}.log`. Replacing only
-`_defer`'s hash-slice assignment with three scalar hash stores in a temporary
-copy of the upstream module makes all 40 subtests pass on system Perl and the
-JVM. Logs:
-`/tmp/issue1649-upstream-promise-scalar-{perl,jvm}.log`.
-
-JVM disassembly shows this hash-slice assignment going through
+JVM disassembly shows the affected hash-slice assignment going through
 `RuntimeHash.getForLocalSlice()` and `RuntimeBase.setFromList()`. In void
-context the returned assignment list is discarded, but `RuntimeList.setFromList`
-still constructs an array containing the hash-element lvalue proxies. The
-working fix candidate adds a shared `setFromListVoid()` dispatch and makes its
-`RuntimeList` implementation skip that unused result array. This is a targeted
-compiler/runtime ownership fix; it has not yet passed a build gate. The focused
-regression passes 2/2 on system Perl; the previous full no-sweeps gate failed
-only that regression before this candidate was implemented.
+context, the returned assignment list was discarded while `RuntimeList` still
+built an array containing the hash-element lvalue proxies. The fix adds a
+shared `setFromListVoid()` operation and uses it for hash-slice assignments in
+void context; `RuntimeList` then skips building that unused result array. A
+broader version of the compiler dispatch failed the existing mount lifecycle
+regression, so dispatch is limited to hash slices and the established simple
+`my` scalar list case.
 
-Current work is on `wip/issue1649-hashslice-20261108-134948` at source commit
-`f6f4f2c2b7`. Earlier
-owner-trace probes retained callback refs strongly for diagnostics, so they
-are not valid evidence of an uninstrumented leak and should not drive the fix.
-PR #1938 remains open/draft at its prior published documentation head. CI
-polling remains subject to the user's six-minute minimum interval.
+The full no-sweeps `nice -n 19 make` gate passed in 8m18 on immutable tree
+`83d77a08b0`; runtime source is `f6f4f2c2b7`, and the only subsequent commits
+are documentation. Log: `/tmp/make-issue1649-narrow-final-no-sweeps.log`. The
+no-test build and `make check-links` also pass:
+`/tmp/build-issue1649-narrow-candidate.log` and
+`/tmp/issue1649-focused-pass-check-links.log`. A Work in progress changelog
+entry is included.
+
+PR #1938 is open and draft at head `835bd3d8ed`. After the push, CodeQL failed;
+Analyze, Gradle submission, and Maven submission passed. The prior-head CodeQL
+failure was the unchanged alert #2 already open on master; confirm the new run's
+failure details before classifying it. Ubuntu/Windows build checks were not
+listed at the last poll. Poll at least six minutes apart.
 
 The owner audit still has five retained mechanisms, only one of which has
 demonstrated ordinary production traffic: exact current-slot alignment. The
@@ -121,10 +118,12 @@ mechanism.
 
 ### Next steps
 
-1. Run one full no-sweeps `nice -n 19 make` gate on `f6f4f2c2b7`.
-2. If it passes, resume the exact-current-slot audit and classify remaining
-   Mojolicious and DBIx acceptance outcomes. Poll PR #1938 CI no more often
-   than every six minutes.
+1. Continue the exact-current-slot producer audit; confirm which of the five
+   retained compatibility mechanisms have ordinary production traffic.
+2. Classify the remaining Mojolicious cleanup warning and DBIx count/harness
+   outcomes, then complete the broader CPAN acceptance plan. Keep PR #1938 in
+   draft until the remaining acceptance gaps are resolved. Poll its CI no more
+   often than every six minutes.
 
 ### Open questions and blockers
 
