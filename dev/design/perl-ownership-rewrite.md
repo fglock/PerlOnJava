@@ -3,8 +3,9 @@
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Production sweep callers have been removed; count alignment still uses verified current owner slots while remaining producer gaps are audited.
 
 **Current checkpoint (2026-11-08):** #1649 remains in Phase 2; PR #1938 is
-open and draft at runtime candidate `e6921def8d`, with docs-only follow-up
-`334441f825`, based on current `master`. The `local $#array` restore mismatch
+open and draft, with remote head `8b11f5236f` and local verified candidate
+`bfa604a016` on `feature/issue1649-rescued-owner-finalization`. Publishing the
+candidate is pending GitHub connectivity. The `local $#array` restore mismatch
 is fixed: Perl does not restore the prior array contents at scope exit, and
 restoring the old tail could revive scalar wrappers whose counted owner slots
 had already been released. The new `localized_array_size_assignment.t` fails
@@ -36,8 +37,8 @@ refcount regression confirmed a Perl model mismatch: system Perl reports one
 owner for an object held only in a hash slot, while the candidate reported two
 inside `DESTROY`; both report two when an independent lexical owner exists.
 Removing the extra destruction-only adjustment and its root query fixes the
-regression on both backends. The full no-sweeps make gate passes in 6m43, and
-the focused regression passes 2/2 on JVM and interpreter. Exact DBIx
+regression on both backends. The exact-commit no-sweeps make gate passes in
+6m35, and the focused regression passes 2/2 on JVM and interpreter. Exact DBIx
 `t/18insert_default.t` still fails to collect Storage on both backends.
 
 An assertion-boundary trace, captured before LeakTracer emits its diagnostic,
@@ -45,9 +46,12 @@ shows Storage held by a Schema hash element, with that Schema held by an
 `Artist` ResultSource `schema` element. With the B count correction, temporary
 `Schema::DESTROY` instrumentation reports the first Artist source at refcount
 1, but a later source still has multiple active hash-element owners and
-refcounts 4 then 3 across repeated entries. `jperl_trace_to` finds only the
-active argument frames for these sources, not a persistent root. These owner
-slots remain the unresolved DBIx release path. The shutdown-only `RuntimeHash`
+refcounts 4 then 3 across repeated entries. Those owner slots name the `ref`,
+`result_source`, and `_result_source` hash keys. The corresponding system-Perl
+destructor entries both report source refcount 1. `jperl_trace_to` finds only
+the active argument frames for the extra PerlOnJava owners, not a persistent
+root. These extra current hash-element owners remain the unresolved DBIx
+release path. The shutdown-only `RuntimeHash`
 owner report is separate: it is emitted after the assertion fails, when
 LeakTracer calls `B::svref_2object(...)->REFCNT`; the PerlOnJava `B::SV` wrapper
 then stores the referent in a hash slot. It is a diagnostic artifact, not the
