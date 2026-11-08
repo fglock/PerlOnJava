@@ -45,8 +45,10 @@ A second system-Perl regression covers overlapping B wrappers retained across
 a destructor: system Perl reports 1, while the pre-fix candidate reported 3.
 `Internals::SvREFCNT` now excludes all active B wrapper slots. The expanded
 focused test passes 3/3 on system Perl, JVM, and interpreter. A no-sweeps make
-passed in 6m44 on the implementation tree; the exact-commit rerun for
-`17b7be3e34` is pending.
+passed in 6m44 on the implementation tree. The immutable no-sweeps make gate
+then passed on checkpoint commit `35ade2815c` in 6m47. Exact DBIx
+`t/18insert_default.t` remains failing on both backends after the B wrapper
+correction.
 
 An assertion-boundary trace, captured before LeakTracer emits its diagnostic,
 shows Storage held by a Schema hash element, with that Schema held by an
