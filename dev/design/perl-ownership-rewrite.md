@@ -35,6 +35,13 @@ assertion; do not add an unproven count filter. The instrumented JVM pass is
 `/tmp/issue1649-final-dbix-interpreter.log`. The plain backend runs are
 `/tmp/issue1649-owner-container-trace-{jvm,interpreter}.log`.
 
+The END-block import failure is not yet attributable to `namespace::clean`:
+an Exporter-style import followed by `namespace::clean` and a bare imported
+call from `END` passes under host Perl 5.34 and both PerlOnJava backends when
+using the production `B::Hooks::EndOfScope` module. The exact system-Perl
+DBIx test could not start because this host lacks `SQL::Abstract::Util`; keep
+the package-specific failure open without changing cleanup semantics.
+
 The owner audit still has five retained mechanisms: legacy root recovery
 behind an unpaired decrement hook; verified current-slot count alignment;
 `sweepReleasedWeakReferents()` for direct Java compatibility/test calls;
@@ -58,10 +65,13 @@ six minutes.
 1. Reconcile the instrumented DBIx intermediate `REFCNT` value with system Perl
    using a project-owned reproducer only after the difference is reduced to a
    standard-Perl case; the storage leak assertion itself currently passes.
-2. Classify the plain DBIx END-block symbol failure and interpreter Hash::Merge
-   failure separately from the Storage leak assertion.
+2. Reduce the plain DBIx END-block symbol failure to a project-owned or
+   package-local reproducer before changing namespace cleanup; the current
+   focused import case passes on all three runtimes. Keep the interpreter
+   Hash::Merge failure separate from the Storage leak assertion.
 3. Refresh the PR description and verify its checks when GitHub API connectivity
-   returns. Keep CI status polling at intervals of at least six minutes.
+   returns. The latest poll attempt failed to connect to `api.github.com`; keep
+   CI status polling at intervals of at least six minutes.
 
 ### Open questions and blockers
 
