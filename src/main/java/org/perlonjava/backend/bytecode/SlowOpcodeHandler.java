@@ -1406,12 +1406,6 @@ public class SlowOpcodeHandler {
             releaseHashSliceTemporaryOwner(value);
         }
 
-        // Replacing slice entries queues recursive owner releases for the
-        // displaced values. Drain this statement's work here: unlike the
-        // scalar assignment opcode, HASH_SLICE_SET may have no later mortal
-        // boundary before an async callback returns to its event loop.
-        MortalList.flushAboveMark();
-
         return pc;
     }
 
