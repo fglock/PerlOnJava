@@ -48,6 +48,15 @@ assess compatibility recovery and adoption bridges against direct callers.
 Poll CI no more frequently than every six minutes; the latest API attempt failed
 and the last successful poll predates this push.
 
+The fresh source call-site audit confirms that production code has no caller of
+`MortalList.deferDecrement(RuntimeBase)` and no caller of
+`ReachabilityWalker.sweepReleasedWeakReferents()`; the latter appears only in
+four Java tests. All current `refCountOwned = true` assignments acquire a
+`PerlOwnerSlot` or transfer an existing active slot, apart from the explicit
+legacy-adoption helper. These findings support retaining the test/compatibility
+contracts while continuing to look for a real producer-ordering gap; they do
+not justify removing the active exact-slot alignment bridge.
+
 ### Next steps
 
 1. Isolate why a preceding module load changes imported-sub lifetime in a
