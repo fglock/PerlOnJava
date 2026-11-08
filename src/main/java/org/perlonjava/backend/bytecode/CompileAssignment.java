@@ -1840,13 +1840,16 @@ public class CompileAssignment {
         if (!rightLeftOp.operator.equals("$") || !(rightLeftOp.operand instanceof IdentifierNode rightLeftId)) return false;
         String leftVarName = "$" + leftId.name;
         String rightLeftVarName = "$" + rightLeftId.name;
+        // Check the cheapest conditions first: name mismatch and captured-variable status.
+        // Captured variables are common in eval STRING; rejecting early avoids the
+        // NameNormalizer and getForeachGlobalAliasRegister calls below.
+        if (!leftVarName.equals(rightLeftVarName)) return false;
         boolean isCaptured = bc.capturedVarIndices != null && bc.capturedVarIndices.containsKey(leftVarName);
+        if (isCaptured) return false;
         String normalizedGlobalName = "$" + NameNormalizer.normalizeVariableName(
                 leftId.name, bc.getCurrentPackage());
         Integer foreachGlobalAliasReg = bc.getForeachGlobalAliasRegister(normalizedGlobalName);
-        if (!leftVarName.equals(rightLeftVarName)
-                || (!bc.hasVariable(leftVarName) && foreachGlobalAliasReg == null)
-                || isCaptured) return false;
+        if (!bc.hasVariable(leftVarName) && foreachGlobalAliasReg == null) return false;
         int targetReg = foreachGlobalAliasReg != null
                 ? foreachGlobalAliasReg
                 : bc.getVariableRegister(leftVarName);
@@ -1869,12 +1872,14 @@ public class CompileAssignment {
             return false;
         }
         String varName = "$" + leftId.name;
+        // Check isCaptured first: captured variables are common in eval STRING and this
+        // avoids hasVariable/isOurVariable/isReservedVariable lookups when not applicable.
         boolean isCaptured = bc.capturedVarIndices != null
                 && bc.capturedVarIndices.containsKey(varName);
-        if (!bc.hasVariable(varName)
+        if (isCaptured
+                || !bc.hasVariable(varName)
                 || bc.isOurVariable(varName)
                 || bc.isReservedVariable(varName)
-                || isCaptured
                 || bc.isIntegerEnabled()
                 || bc.isNoOverloadingEnabled()
                 || !bc.isUninitializedWarningsEnabled()
