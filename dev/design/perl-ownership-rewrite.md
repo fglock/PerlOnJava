@@ -35,10 +35,15 @@ owner slot after the upstream test scope ends. Targeted refcount tracing
 identifies the surviving `DBIx::Class::Storage::DBI::SQLite` owner as scalar
 `1872135733`, held by `RuntimeHash#997123528`; this is a concrete production
 lifecycle gap, not an established regression from the memory rewrite because
-there is no prior exact-module baseline. Logs:
+there is no prior exact-module baseline. A minimal schema-owns-storage graph
+with a weakened storage-to-schema backreference passes under system Perl and
+PerlOnJava, so ordinary weak backreferences and hash-element release work; the
+remaining reproducer must retain DBIx's additional setup or callback edges.
+Logs:
 `/tmp/issue1649-dbix-t18-system-perl.log`,
 `/tmp/issue1649-dbix-t18-jperl.log`, and
-`/tmp/issue1649-dbix-t18-trace.log`. The full Catalyst failures begin at
+`/tmp/issue1649-dbix-t18-trace.log`, plus
+`/tmp/issue1649-weak-backref-{system-perl,jperl}.log`. The full Catalyst failures begin at
 `Moose::Meta::Method::Accessor::Native::super` during dependency loading, so
 they do not yet isolate owner accounting. Mojolicious emitted counted-owner
 release warnings before its timeout and also has an independent websocket
@@ -194,9 +199,10 @@ ownership from one aggregate count.
 
 ### Next steps
 
-1. Trace the DBIx::Class storage's `HASH_ELEMENT` parent to its owning
-   container and identify the missed retirement transition; add a permanent
-   focused test that passes on system Perl and fails on this candidate.
+1. Reduce DBIx::Class `t/18insert_default.t` past the passing schema/storage
+   weak-backreference probe, trace the additional owner edge, and add a
+   permanent focused test that passes on system Perl and fails on this
+   candidate.
 2. Classify the Catalyst dependency-load failures and Mojolicious timeout,
    including its owner-release warnings and websocket assertion, before
    deciding whether they share the same lifecycle gap.
