@@ -27,10 +27,14 @@ count-repair path and does not traverse roots. The current-source Mojolicious
 acceptance log also contains repeated cleanup warnings that a counted
 `RuntimeScalar -> RuntimeCode` owner slot was missing at
 `MortalList.deferDecrementRecursive`. The adjacent `headers.t`/`daemon.t`
-harness run did not reproduce them; `daemon.t` instead hit the environment's
-fork limit. The initial system-Perl `file.t` check lacked Mojolicious in
-`@INC`, so it is not oracle evidence. Next action: capture the failing scalar's
-slot state and isolate the producing test before treating this as a new gap.
+harness and a 20-program prefix run including the top-level POD tests did not
+reproduce them. In those runs `daemon.t` failed on the host's fork/listen-socket
+limits. The initial system-Perl `file.t` check lacked Mojolicious in `@INC`, so
+it is not oracle evidence. Logs:
+`/tmp/issue1649-mojo-headers-daemon-trace.log` and
+`/tmp/issue1649-mojo-prefix-with-pod-repro.log`. Next action: capture the
+failing scalar's slot state and isolate the producing test before treating
+this as a new gap.
 
 Earlier work on this candidate added argument-frame owner accounting to
 `Internals::SvREFCNT` B-object probes and expanded
