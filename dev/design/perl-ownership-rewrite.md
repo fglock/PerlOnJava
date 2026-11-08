@@ -1793,7 +1793,7 @@ in 7m27. Log:
 The ordinary `restoreReachableOwnerCount` root fallback remains; its producers
 and final use cases still require audit before removal.
 
-### Next steps
+### Retained mechanism rationale
 
 1. Keep the `restoreReachableOwnerCount` path isolated to its legacy unpaired
    decrement hook. The call-site audit finds no production caller of
@@ -1819,8 +1819,6 @@ and final use cases still require audit before removal.
    owner tests that explicitly construct undercount/sentinel states. No normal
    producer mismatch was found in this pass. It is not reachability-based
    recovery.
-3. Continue the remaining producer/release audit outside closure capture, then
-   batch any demonstrated fixes with focused coverage before rebuilding. The
-   branch now includes current `origin/master`; rerun the final no-sweeps gate
-   and acceptance matrix on the exact final candidate after the audit. Recheck
-   issue #1649 and PR #1938 before publication; leave merging to review.
+3. Batch any demonstrated producer/release fixes with focused coverage before
+   rebuilding. The current Phase 2 acceptance and PR status are in the
+   checkpoint at the top of this document.
