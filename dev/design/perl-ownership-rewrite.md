@@ -6,44 +6,38 @@
 `8776112b94` (`feature/issue1649-rescued-owner-finalization`). Its full
 no-sweeps `nice -n 19 make` gate previously passed on immutable tree `6205ac0a16`
 in 6m36 (`/tmp/issue1649-final-no-sweeps-make.log`). This turn added a
-project-owned async rejected-Promise regression. It passes 2/2 on system Perl
-and the interpreter, but fails 1/2 on the JVM with corrective sweeps disabled.
-The fixture's event loop drains all next-tick callbacks like Mojolicious's
-reactor. An unfixed trace shows the rejected Promise and two `then` callback
-capture edges surviving until global destruction; a simpler dual-callback
-control passes on all three runtimes. Evidence:
-`/tmp/issue1649-mojo-promise-{perl,jvm}.log`,
-`/tmp/issue1649-mojo-event-loop-oracle-correct-loop.log`,
-`/tmp/issue1649-mojo-event-loop-{jvm,interpreter}-correct-loop.log`, and
-`/tmp/issue1649-mojo-event-loop-correct-loop-trace.log`.
+project-owned rejected-Promise cleanup regression. It passes 2/2 on system Perl
+and the interpreter, and fails 1/2 on the JVM with sweeps disabled. The failed
+no-sweeps full gate ran 7m17 and failed only this test; log
+`/tmp/make-issue1649-hash-slice-flush-above-mark.log`. The Perl oracle and
+`make check-links` pass. The attempted `flushAboveMark()` at the end of
+`HASH_SLICE_SET` did not fix it and has been removed.
 
-Follow-up tracing identifies PromiseModel #2's tracked count reaching zero
-during deferred capture cleanup; its `DESTROY` warning is then emitted during
-global destruction. This confirms late Perl-level ownership release but does
-not yet identify which capture/owner producer leaves the count outstanding.
-The no-result list-assignment candidate did not change the regression result
-and has been reverted; it was not the Promise root cause.
-Revalidation on the current tree confirms 2/2 checks on system Perl and the
-interpreter, while the JVM still fails the wait-time warning assertion (1/2).
-Logs: `/tmp/issue1649-promise-current-{perl,jvm,interpreter}.log`. The earlier
-full no-sweeps build remains the only suite-wide evidence for this candidate.
-Temporary owner-ledger probes narrow the retained graph further: after the
-reactor queue drains, its weak callback references are gone, but the two
-`PromiseModel::then` wrapper CODE refs remain owned by one-element callback
-arrays. Their capture pads still point to the rejected Promise. This focuses
-the next trace on release of the queued callback's captured array and the
-array's element owner slots; it does not yet identify which runtime cleanup
-boundary missed that release. Evidence:
-`/tmp/issue1649-promise-tick-ownertrace.log` and
-`/tmp/issue1649-promise-callback-ownertrace.log`.
+The issue is reproduced in the actual Mojolicious 9.53 `Mojo::Promise`
+implementation and upstream `t/mojo/promise.t`: system Perl passes all 40
+subtests; the JVM with sweeps disabled fails the two “unhandled” warnings in
+the `Warnings` subtest; the interpreter passes all 40. Logs:
+`/tmp/issue1649-upstream-promise-{perl,jvm,interpreter}.log`. Replacing only
+`_defer`'s hash-slice assignment with three scalar hash stores in a temporary
+copy of the upstream module makes all 40 subtests pass on system Perl and the
+JVM. Logs:
+`/tmp/issue1649-upstream-promise-scalar-{perl,jvm}.log`.
 
-An attempted JVM no-result path for void-context `my (...) = ...` assignment,
-including array/hash tails, did not fix the regression. Its source changes
-were removed after the 6m50 no-sweeps `nice -n 19 make` run failed only the new
-test in shard 3; all other reported unit shards passed. Log:
-`/tmp/make-issue1649-void-list-assignment-no-sweeps.log`. The current tree
-contains the new test and this checkpoint, neither committed nor pushed. PR
-#1938 remains open/draft at its previously pushed documentation head; CI
+JVM disassembly shows this hash-slice assignment going through
+`RuntimeHash.getForLocalSlice()` and `RuntimeBase.setFromList()`. In void
+context the returned assignment list is discarded, but `RuntimeList.setFromList`
+still constructs an array containing the hash-element lvalue proxies. The
+working fix candidate adds a shared `setFromListVoid()` dispatch and makes its
+`RuntimeList` implementation skip that unused result array. This is a targeted
+compiler/runtime ownership fix; it has not yet passed a build gate. The focused
+regression passes 2/2 on system Perl; the previous full no-sweeps gate failed
+only that regression before this candidate was implemented.
+
+Current work is on `wip/issue1649-hashslice-20261108-134948`, based on WIP
+snapshot `657a978f14`; the fix candidate is pending validation. Earlier
+owner-trace probes retained callback refs strongly for diagnostics, so they
+are not valid evidence of an uninstrumented leak and should not drive the fix.
+PR #1938 remains open/draft at its prior published documentation head. CI
 polling remains subject to the user's six-minute minimum interval.
 
 The owner audit still has five retained mechanisms, only one of which has
@@ -127,15 +121,12 @@ mechanism.
 
 ### Next steps
 
-1. Trace the exact owner slot retained by the async Promise regression through
-   its creating array/list assignment and closure release; fix the producer or
-   release path rather than adding another reachability fallback.
-2. Batch proven producer fixes and their focused regressions, oracle-check the
-   Perl test, and run a single full no-sweeps `nice -n 19 make` gate only after
-   the regression passes on both backends.
-3. Resume the exact-current-slot producer audit and classify the remaining
-   Mojolicious and DBIx acceptance outcomes before any completion claim. Poll
-   PR #1938 CI no more often than every six minutes.
+1. Validate the no-result list-assignment candidate with one full no-sweeps
+   `nice -n 19 make` gate, then run the exact upstream Promise test on both
+   backends using the resulting JAR.
+2. If the candidate passes, resume the exact-current-slot producer audit and
+   classify the remaining Mojolicious and DBIx acceptance outcomes before any
+   completion claim. Poll PR #1938 CI no more often than every six minutes.
 
 ### Open questions and blockers
 
