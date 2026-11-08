@@ -17,6 +17,16 @@ submission checks passed; aggregate CodeQL is neutral. Runs:
 [analysis 42467369054](https://github.com/PerlOnJava/PerlOnJava/actions/runs/42467369054)
 and [build 42467371162](https://github.com/PerlOnJava/PerlOnJava/actions/runs/42467371162).
 
+The latest local docs-only audit commit is `d338f5f5be`; runtime source is
+unchanged from the passing no-sweeps gate. The last verified PR state was open
+draft #1938 at `97777dbb68`. GitHub DNS/API access failed on the last retries,
+so this documentation checkpoint is not pushed and CI has not been refreshed.
+The source audit confirms that raw unpaired decrements and direct weak-sweep
+helpers have no production callers; lifecycle-only zero-count paths carry
+non-null completion tokens. Root-based recovery is confined to the raw legacy
+hook. Exact current-slot count alignment remains the sole ordinary production
+count-repair path and does not traverse roots.
+
 Earlier work on this candidate added argument-frame owner accounting to
 `Internals::SvREFCNT` B-object probes and expanded
 `b_refcount_destroy_aggregate_owner.t` to four cases. It passes on all three
@@ -46,13 +56,21 @@ behind an unpaired decrement hook; verified current-slot count alignment;
 `sweepReleasedWeakReferents()` for direct Java compatibility/test calls;
 localized CODE restore count adoption; and missing-token adoption in
 `WeakRefRegistry.weaken`. Nine inventory entries are audit areas, not nine
-confirmed defects. Four mechanisms have no ordinary production caller or no
-demonstrated missing-token path; current-slot alignment is the only ordinary
-production count-recovery path and checks exact owner identities without a
-root walk. A removal experiment for the weaken adapter failed three existing
-Java tests that intentionally construct an already-counted scalar without a
-slot token. Keep this direct-caller compatibility contract while auditing
-production producers; it is not an ordinary reachability recovery path.
+confirmed defects. One mechanism has demonstrated ordinary production traffic:
+exact current-slot alignment. Two others are called from production code only
+for fallback states whose presence in ordinary producer flows is unconfirmed:
+localized CODE restore adoption and `WeakRefRegistry.weaken` missing-token
+adoption. The other two have no production caller: the unpaired-decrement root
+recovery and `sweepReleasedWeakReferents()`. `BytecodeInterpreter.STORE_GLOBAL_CODE`
+and five compiler emission sites write through `globalCodeRefs`, whose
+`GlobalCodeRefMap.put` override installs the stash binding and refreshes the
+CODE-slot owner token. Thus these ordinary bytecode producers have an identified
+acquisition path; the localized restore adapter's tokenless state is only
+exercised by Java compatibility tests that mutate a slot's `type`/`value`
+directly after insertion. A removal experiment for the weaken adapter failed
+three existing Java tests that intentionally construct an already-counted
+scalar without a slot token. Keep these direct-caller compatibility contracts
+while auditing producers; they are not ordinary reachability recovery paths.
 Continue closing proven producer gaps before reassessing the remaining
 compatibility bridges.
 
@@ -83,10 +101,12 @@ mechanism.
 
 ### Next steps
 
-1. Push the tested candidate checkpoint to PR #1938, refresh its description,
-   and track CI on the new head with six-minute-or-longer polling.
-2. Continue the producer/release audit, especially localized CODE restore and
-   exact current-slot alignment, batching any proven fixes before another gate.
+1. Publish the docs-only audit checkpoint to PR #1938 when GitHub connectivity
+   is available, then track CI on the new head with six-minute-or-longer
+   polling.
+2. Continue the remaining producer audit, focusing on exact current-slot
+   alignment and any source path that can bypass owner-slot acquisition. Batch
+   proven runtime fixes and focused regressions before the next full gate.
 3. Keep the DBIx END-block and interpreter Hash::Merge failures separate from
    storage-lifetime assertions; classify strict CPAN outcomes before any
    completion claim.
@@ -1667,10 +1687,10 @@ that currently protects it:
 | Recovery path | Semantic strong edge | Remaining gap before removal |
 |---|---|---|
 | `restoreReachableOwnerCount` | Counted scalar-cell owner slots, formerly mirrored by `activeOwners`, including nested package-array cells | The audited array and hash mutation wrappers mark current storage; their main count-acquiring APIs do so after insertion. The remaining root-snapshot tests exercise earlier count acquisition: `ReachabilityQueryCostTest.deferredOwnerChecksShareOneRootSnapshotPerDrain` calls `incrementRefCountForContainerStore` before adding the scalar to the nested package array, leaving a `SCALAR_CELL` identity; `UnblessedAggregateReachabilitySnapshotTest.repeatedOwnerScalarChecksShareOneRootSnapshotPerDrain` also clears `containerOwner` directly. No production caller with this exact ordering has been identified in the call-site audit so far. These tests preserve the bridge for synthetic/out-of-order states and do not establish a normal store-path defect. |
-| Scalar overwrite (`RuntimeScalar.setLargeRefCounted`) | The scalar cell's old referent edge; new edge is acquired before old release | Scalar-referent cells with a live uncounted lexical/package identity now defer zero-count cleanup to that exact edge. Counted scalar/aggregate slots still repair identified undercounts. External-root/live-CODE checks and the blessed weak-referent raw-count bridge remain for aggregate referents; trace their producers and final release before removal. `ActiveLexicalScalarOwnerLifecycleTest` covers overwrite and observer lifetime. |
-| First weaken (`WeakRefRegistry.weaken`) | The scalar cell being weakened and any other current scalar, aggregate, or capture owners | Ordinary tracked owners use current counted-slot identities; general live-CODE and strong-root walks were removed from this path. Package-nested untracked aggregates now use exact `UNTRACKED_REFERENCE` identities without a compatibility pin or fabricated count. The cloned-thread snapshot root and direct CODE pad-constant check remain. `FirstWeakenUsesCurrentPackageOwnerTest`, `WeakeningCountedOwnerSlotTest`, and `PackageNestedUntrackedAggregateReleaseTest` cover current owner identities and weak-observer lifetime. |
-| Unblessed aggregate root snapshot | Array/hash elements reachable through lexical or package storage | Normal slots have identities; parser assembly and compatibility mutation paths still need producer-level invariant coverage. `UnblessedAggregateReachabilitySnapshotTest` deliberately exercises the remaining fallback. |
-| Strong-cycle graph walk | Internal scalar-reference and aggregate-element edges | The CODE weak-referent cycle walk has been removed; non-final CODE releases restore from verified current counted slots. Self-capture lifetime is covered on both backends. Audit uncounted cycle edge kinds and producer coverage before removing remaining cycle or cleanup recovery. |
+| Scalar overwrite (`RuntimeScalar.setLargeRefCounted`) | The scalar cell's old referent edge; new edge is acquired before old release | Scalar-referent cells with a live uncounted lexical/package identity now defer zero-count cleanup to that exact edge. Counted scalar/aggregate slots carry their release token through cleanup; a claimed counted edge without its active token fails before replacement. Root-based branches in `processDeferredBase` require a null release token, and the caller audit finds no production raw-decrement caller. `ActiveLexicalScalarOwnerLifecycleTest` covers overwrite and observer lifetime. |
+| First weaken (`WeakRefRegistry.weaken`) | The scalar cell being weakened and any other current scalar, aggregate, or capture owners | Ordinary tracked owners use current counted-slot identities; general live-CODE and strong-root walks were removed from this path. The missing-token adapter applies only to an inconsistent flagged scalar and remains for Java compatibility fixtures. Package-nested untracked aggregates use exact `UNTRACKED_REFERENCE` identities. The cloned-thread snapshot root and direct CODE pad-constant check remain. `FirstWeakenUsesCurrentPackageOwnerTest`, `WeakeningCountedOwnerSlotTest`, and `PackageNestedUntrackedAggregateReleaseTest` cover current owner identities and weak-observer lifetime. |
+| Unblessed aggregate root snapshot | Array/hash elements reachable through lexical or package storage | The snapshot recovery branch is only entered for a raw unpaired decrement. Ordinary array/hash stores install current element identities; the existing snapshot tests deliberately invoke the raw hook and preserve its Java compatibility contract. No ordinary producer-ordering gap was found in this source audit. |
+| Strong-cycle graph walk | Internal scalar-reference and aggregate-element edges | The CODE weak-referent cycle walk has been removed. `sweepReleasedWeakReferents` retains targeted cycle traversal only for direct Java compatibility/test calls; ordinary releases use owner tokens and final lifecycle dispatch. Self-capture lifetime is covered on both backends. |
 | Deferred live/global CODE capture walk | Captured scalar cells, aggregate pads, and persistent CODE state | Persistent state cells and aggregates now carry `CODE_STATE` identities; closure captures use `SCALAR_CAPTURE` / `CLOSURE_PAD` slots. The deferred traversal and its unused live/global query helpers are removed. |
 | Nested-call depth pin | Active argument aliases and compiler temporaries | Borrowed aliases and owned argument/return values must remain distinct through unwind and async suspension. |
 | Blessed root snapshots and package cache | Package scalar, aggregate, glob, or CODE slots | Package scalar, array/hash, named IO glob, and CODE stash entries have owner identities. Whole-glob aliases route these components through wrapper maps; thread-clone setup rebuilds owner ledgers after raw-map population and before activation. Remaining root snapshots serve compatibility or diagnostic paths rather than ordinary ownership decisions. |
@@ -1841,6 +1861,9 @@ and final use cases still require audit before removal.
    slot is captured in a `PendingOwnerRelease`; `RuntimeCode.releaseCaptures`
    reaches that same scalar-aware path after retiring its capture slot. Thus
    ordinary production cleanup does not enter `legacyUnpairedDecrement`. The
+   production zero-count lifecycle paths call `queueLifecycleOnlyAtZero`,
+   which creates a non-null completion token without fabricating a released
+   edge; they therefore remain outside the raw unpaired path as well. The
    only production call to `ReachabilityWalker.isScalarReachable` is through
    `restoreReachableOwnerCount`; the remaining root-based recovery branches in
    `processDeferredBase` are likewise guarded by that legacy unpaired path.
@@ -1851,7 +1874,9 @@ and final use cases still require audit before removal.
    Java compatibility/test calls; a source call-site audit finds no production
    callers. Keep that distinction explicit and retire the implementation only
    after its direct callers and tests have a replacement contract. Ordinary
-   runtime cleanup no longer depends on graph sweeps.
+   runtime cleanup no longer depends on graph sweeps. The post-DESTROY
+   diagnostic capture walk is also not production-scheduled:
+   `sweepPendingAfterOuterDestroy` is only set directly by its Java tests.
 2. Retain verified owner-slot count alignment while its producer gaps are
    audited. This checks current scalar, aggregate, invocant, and native owner
    identities directly; removing it previously failed lifecycle and Perl-level
