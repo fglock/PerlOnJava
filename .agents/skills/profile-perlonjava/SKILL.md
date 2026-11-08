@@ -47,18 +47,109 @@ The end-to-end benchmark protocol and worked guidance live in
    builds after individual edits. Push only after the local candidate passes,
    then check hosted CI.
 
-## Creating a JFR recording
+## Profiling with async-profiler
 
-Use the JDK that built the candidate. For a bounded recording through the
-project launcher, pass JVM options with `JPERL_OPTS` and keep a timeout around
-the run:
+Async-profiler gives lower-overhead, allocation-unbiased CPU flat/collapsed
+profiles that complement JFR.  The installed version is at
+`/opt/homebrew/bin/asprof` (async-profiler 4.5 on this host).
+
+### Finding the JVM PID
+
+`./jperl` ends with `exec java …`, so the bash wrapper is **replaced** by
+the JVM.  Wrap the run in `timeout` and find the PID via the timeout's child
+tree — never the wrapper PID:
+
+```bash
+timeout 120 ./jperl dev/bench/benchmark_eval_string.pl > /tmp/bench.txt &
+TIMEOUT_PID=$!
+sleep 5          # let the JVM warm up
+JAVA_PID=$(pgrep -P $TIMEOUT_PID java 2>/dev/null || \
+           pgrep -f "perlonjava.*\.jar" 2>/dev/null | head -1)
+echo "Java PID: $JAVA_PID"
+```
+
+On a quiet machine the benchmark finishes in ~20 s; shorten the warmup sleep
+(≤5 s) and increase the profiling duration so the JVM is still alive when
+`asprof` attaches.
+
+### Capturing and converting a profile
+
+```bash
+# Capture a JFR profile (CPU only, 40 s)
+/opt/homebrew/bin/asprof -d 40 -f /tmp/profile.jfr $JAVA_PID
+
+# Convert to collapsed-stack format for analysis
+java -cp /opt/homebrew/Cellar/async-profiler/4.5/libexec/jfr-converter.jar \
+     one.convert.Main -o collapsed --cpu /tmp/profile.jfr /tmp/profile_collapsed.txt
+
+# Total sample count
+awk '{n+=$NF} END{print n}' /tmp/profile_collapsed.txt
+```
+
+### Analysing the collapsed output
+
+Each line is `frame1;frame2;...;leaf N`.  Count leaf frames by class:
+
+```python
+from collections import defaultdict
+counts = defaultdict(int)
+with open('/tmp/profile_collapsed.txt') as f:
+    for line in f:
+        parts = line.rsplit(' ', 1)
+        if len(parts) != 2: continue
+        stack, cnt = parts
+        try: cnt = int(cnt.strip())
+        except: continue
+        leaf = stack.split(';')[-1]
+        cls = leaf.split('.')[-2].split('/')[-1].split('[')[0] if '.' in leaf else leaf[:30]
+        counts[cls] += cnt
+for k, v in sorted(counts.items(), key=lambda x: -x[1])[:30]:
+    print(f'{v:5d}  {k}')
+```
+
+To show full call chains through a specific class:
+
+```python
+with open('/tmp/profile_collapsed.txt') as f:
+    for line in f:
+        parts = line.rsplit(' ', 1)
+        if len(parts) != 2: continue
+        stack, cnt = parts
+        try: cnt = int(cnt.strip())
+        except: continue
+        frames = stack.split(';')
+        for i, fr in enumerate(frames):
+            if 'TargetClass' in fr:
+                context = ';'.join(frames[max(0,i-2):i+3])
+                print(f'{cnt:4d}  {context}')
+                break
+```
+
+### Reading the profile
+
+*   `[j]` = JIT-compiled frame, `[i]` = interpreter frame, `[0]` = C1 tier.
+    A method appearing as a leaf with `[0]` or `[i]` is not yet hot-compiled
+    and will be faster once the JIT promotes it.
+*   GC frames (`G1ParScanThreadState`, `GenericTaskQueueSet`,
+    `OopOopIterateBackwardsDispatch`) indicate **allocation pressure**: too many
+    long-lived objects are being created.  Identify which allocations promote to
+    the old generation (HashMap/TreeMap/ArrayList growth that never shrinks) and
+    bound or clear them.
+*   `ThreadLocal$ThreadLocalMap` samples indicate frequent per-thread state
+    lookups; consider caching the result in a local variable if called in a hot
+    loop.
+*   `HashMap.getNode` samples are usually leaf-attributed to the calling class;
+    use the call-chain analysis to identify which HashMap is hot and whether
+    it can be replaced with an array, a bitmask, or direct fields.
+
+### Creating a JFR recording with the JDK
 
 ```bash
 JPERL_OPTS="-XX:StartFlightRecording=duration=60s,filename=/tmp/perlonjava.jfr" \
   timeout 90 ./jperl path/to/workload.pl
 ```
 
-Inspect the recording with the JDK's `jfr` tool:
+Inspect with:
 
 ```bash
 jfr summary /tmp/perlonjava.jfr

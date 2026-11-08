@@ -6,6 +6,7 @@ import org.perlonjava.backend.bytecode.BytecodeCompiler;
 import org.perlonjava.backend.bytecode.Disassemble;
 import org.perlonjava.backend.bytecode.InterpretedCode;
 import org.perlonjava.backend.bytecode.InterpreterState;
+import org.perlonjava.backend.jvm.ByteCodeSourceMapper;
 import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.backend.jvm.EmitterMethodCreator;
 import org.perlonjava.backend.jvm.InterpreterFallbackException;
@@ -5517,6 +5518,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     if (parser.parsedGiven)       astNode.setAnnotation("hasGiven", true);
                     if (parser.parsedEvalOrRegex) astNode.setAnnotation("hasEvalOrRegex", true);
                     if (parser.parsedNamedSub)    astNode.setAnnotation("hasNamedSub", true);
+                    if (parser.parsedLocal || parser.parsedDefer) astNode.setAnnotation("hasLocalOrDefer", true);
                 }
 
                 // Run UNITCHECK blocks
@@ -5888,6 +5890,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
             // Clean up this eval's ThreadLocal stack entry.
             popEvalRuntimeContext(runtimeCtx);
+
+            // Release eval-specific source location data accumulated during compilation.
+            // All caller()/warn/die lookups happen inside the eval's execution window;
+            // once the eval returns the data is unreachable and keeping it causes
+            // unbounded old-generation heap growth with repeated full GC cycles.
+            if (evalFilename != null) {
+                ByteCodeSourceMapper.removeEvalSourceInfo(evalFilename);
+            }
             } finally {
                 PerlLanguageProvider.COMPILE_LOCK.unlock();
                 compilationLock.close();

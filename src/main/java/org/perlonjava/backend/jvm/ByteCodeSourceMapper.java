@@ -65,6 +65,28 @@ public class ByteCodeSourceMapper {
     }
 
     /**
+     * Removes source location data accumulated during an eval string compilation and
+     * execution.  All caller()/warn/die lookups happen inside the eval's own execution
+     * window, so by the time the eval returns the data is unreachable from outside.
+     * Calling this after each eval keeps {@code sourceFiles} bounded and eliminates the
+     * old-generation heap pressure that otherwise forces repeated full GC cycles.
+     *
+     * @param evalFilename the eval's compile-time filename (e.g. "(eval 42)")
+     */
+    public static void removeEvalSourceInfo(String evalFilename) {
+        State state = state();
+        Integer fileId = state.fileNameToId.remove(evalFilename);
+        if (fileId != null) {
+            state.sourceFiles.remove(fileId);
+            // Null out the pool slot so the String is eligible for GC.
+            // The slot itself stays (IDs are positional) but the reference is freed.
+            if (fileId < state.fileNamePool.size()) {
+                state.fileNamePool.set(fileId, null);
+            }
+        }
+    }
+
+    /**
      * Gets or creates a unique identifier for a package name.
      *
      * @param packageName The fully qualified package name
