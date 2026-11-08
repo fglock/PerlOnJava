@@ -33,8 +33,8 @@ compiler/runtime ownership fix; it has not yet passed a build gate. The focused
 regression passes 2/2 on system Perl; the previous full no-sweeps gate failed
 only that regression before this candidate was implemented.
 
-Current work is on `wip/issue1649-hashslice-20261108-134948`, based on WIP
-snapshot `657a978f14`; the fix candidate is pending validation. Earlier
+Current work is on `wip/issue1649-hashslice-20261108-134948`, at commit
+`c3747845c2` plus the narrowed uncommitted emitter change. Earlier
 owner-trace probes retained callback refs strongly for diagnostics, so they
 are not valid evidence of an uninstrumented leak and should not drive the fix.
 PR #1938 remains open/draft at its prior published documentation head. CI
@@ -121,12 +121,12 @@ mechanism.
 
 ### Next steps
 
-1. Validate the no-result list-assignment candidate with one full no-sweeps
-   `nice -n 19 make` gate, then run the exact upstream Promise test on both
-   backends using the resulting JAR.
-2. If the candidate passes, resume the exact-current-slot producer audit and
-   classify the remaining Mojolicious and DBIx acceptance outcomes before any
-   completion claim. Poll PR #1938 CI no more often than every six minutes.
+1. Build the narrowed candidate without tests, then run the Promise regression,
+   upstream Promise suite, and mount lifecycle regression on both backends.
+2. If those focused checks pass, run one full no-sweeps `nice -n 19 make` gate.
+   Then resume the exact-current-slot audit and classify remaining Mojolicious
+   and DBIx acceptance outcomes. Poll PR #1938 CI no more often than every six
+   minutes.
 
 ### Open questions and blockers
 
