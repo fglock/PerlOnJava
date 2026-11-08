@@ -288,11 +288,6 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         // exception propagation. Temporaries (hash element aliases, method return
         // values) are NOT in this set and should NOT get scopeExitCleanup.
         this.myVarRegisters = scanMyVarRegisters(bytecode, maxRegisters);
-        // Register with WarningBitsRegistry for caller()[9] support
-        if (warningBitsString != null) {
-            String registryKey = "interpreter:" + System.identityHashCode(this);
-            WarningBitsRegistry.register(registryKey, warningBitsString);
-        }
     }
 
     private static String sourceTextFromErrorUtil(ErrorMessageUtil errorUtil) {
@@ -707,7 +702,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
      * Only safe when this InterpretedCode is freshly compiled and exclusively owned —
      * i.e. the caller holds the only reference and will not share it before calling this.
      * Avoids allocating a copy via withCapturedVars, and skips the duplicate
-     * scanMyVarRegisters and WarningBitsRegistry.register calls the copy constructor would make.
+     * scanMyVarRegisters call the copy constructor would make.
      */
     public void setEvalCapturedVars(RuntimeBase[] capturedVars) {
         if (capturedVars == null || capturedVars.length == 0) {
