@@ -10,12 +10,10 @@ refalias regression passes 8/8 with sweeps disabled on both JVM and
 interpreter, as well as 8/8 on system Perl. Logs:
 `/tmp/issue1649-refalias-array-element-no-sweeps-{jvm,interpreter}.log` and
 `/tmp/issue1649-refalias-array-element-oracle-final.log`. `make check-links`
-passed. At the last PR poll, head `714b07474f` had passed Ubuntu and Windows
-builds. Three CodeQL language initializations failed with HTTP 504 while
-downloading CLI 2.27.4; source analysis did not run. Actions and dependency
-submission checks passed; aggregate CodeQL is neutral. Runs:
-[analysis 42467369054](https://github.com/PerlOnJava/PerlOnJava/actions/runs/42467369054)
-and [build 42467371162](https://github.com/PerlOnJava/PerlOnJava/actions/runs/42467371162).
+passed. PR #1938 is open and draft at `54fc94c370`. Its Ubuntu and Windows
+builds remain pending; CodeQL failed on alert #2 (`java/insufficient-key-size`)
+at an unchanged `CryptOpenSSLRSA.java` path, already present on `master`. The
+other language analyses and dependency submission checks passed.
 
 The latest PR update is documentation-only; runtime source remains unchanged
 from the passing no-sweeps gate. PR #1938 is open and draft, and the new head's
@@ -25,7 +23,14 @@ The source audit confirms that raw unpaired decrements and direct weak-sweep
 helpers have no production callers; lifecycle-only zero-count paths carry
 non-null completion tokens. Root-based recovery is confined to the raw legacy
 hook. Exact current-slot count alignment remains the sole ordinary production
-count-repair path and does not traverse roots.
+count-repair path and does not traverse roots. The current-source Mojolicious
+acceptance log also contains repeated cleanup warnings that a counted
+`RuntimeScalar -> RuntimeCode` owner slot was missing at
+`MortalList.deferDecrementRecursive`. The adjacent `headers.t`/`daemon.t`
+harness run did not reproduce them; `daemon.t` instead hit the environment's
+fork limit. The initial system-Perl `file.t` check lacked Mojolicious in
+`@INC`, so it is not oracle evidence. Next action: capture the failing scalar's
+slot state and isolate the producing test before treating this as a new gap.
 
 Earlier work on this candidate added argument-frame owner accounting to
 `Internals::SvREFCNT` B-object probes and expanded
