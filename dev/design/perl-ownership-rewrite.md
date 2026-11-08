@@ -57,6 +57,17 @@ legacy-adoption helper. These findings support retaining the test/compatibility
 contracts while continuing to look for a real producer-ordering gap; they do
 not justify removing the active exact-slot alignment bridge.
 
+The next audited producer gap was direct array-element refaliasing:
+`RuntimeArrayProxyEntry.aliasToReference` installed the referenced scalar cell
+without an `ARRAY_ALIAS_CELL` owner identity. The new regression passed 8/8 on
+system Perl, failed on the unfixed JVM and interpreter candidates, and now
+passes 8/8 on both backends. The fix acquires the identity before publishing
+the slot and carries existing cell identities into array alias views and
+tail-call carriers. `nice -n 19 make` passed on this source in 7m23; log:
+`/tmp/issue1649-array-refalias-full-make.log`. The ordinary recovery/adoption
+audit remains at five mechanisms. Next: continue the producer audit in a batch
+before reassessing any compatibility recovery mechanism.
+
 ### Next steps
 
 1. Isolate why a preceding module load changes imported-sub lifetime in a
