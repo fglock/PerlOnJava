@@ -17,10 +17,10 @@ submission checks passed; aggregate CodeQL is neutral. Runs:
 [analysis 42467369054](https://github.com/PerlOnJava/PerlOnJava/actions/runs/42467369054)
 and [build 42467371162](https://github.com/PerlOnJava/PerlOnJava/actions/runs/42467371162).
 
-The latest local docs-only audit commit is `d338f5f5be`; runtime source is
-unchanged from the passing no-sweeps gate. The last verified PR state was open
-draft #1938 at `97777dbb68`. GitHub DNS/API access failed on the last retries,
-so this documentation checkpoint is not pushed and CI has not been refreshed.
+The latest PR update is documentation-only; runtime source remains unchanged
+from the passing no-sweeps gate. PR #1938 is open and draft, and the new head's
+CI run is pending the next scheduled poll. GitHub access required extended
+network permission for the push and description update.
 The source audit confirms that raw unpaired decrements and direct weak-sweep
 helpers have no production callers; lifecycle-only zero-count paths carry
 non-null completion tokens. Root-based recovery is confined to the raw legacy
@@ -101,9 +101,7 @@ mechanism.
 
 ### Next steps
 
-1. Publish the docs-only audit checkpoint to PR #1938 when GitHub connectivity
-   is available, then track CI on the new head with six-minute-or-longer
-   polling.
+1. Poll PR #1938 CI after the six-minute interval and classify any failures.
 2. Continue the remaining producer audit, focusing on exact current-slot
    alignment and any source path that can bypass owner-slot acquisition. Batch
    proven runtime fixes and focused regressions before the next full gate.
