@@ -4,7 +4,7 @@
 
 **Current checkpoint (2026-11-08):** #1649 remains in Phase 2; PR #1938 is
 open and draft, with remote head `8b11f5236f` and local verified candidate
-`bfa604a016` on `feature/issue1649-rescued-owner-finalization`. Publishing the
+`17b7be3e34` on `feature/issue1649-rescued-owner-finalization`. Publishing the
 candidate is pending GitHub connectivity. The `local $#array` restore mismatch
 is fixed: Perl does not restore the prior array contents at scope exit, and
 restoring the old tail could revive scalar wrappers whose counted owner slots
@@ -41,6 +41,13 @@ regression on both backends. The exact-commit no-sweeps make gate passes in
 6m35, and the focused regression passes 2/2 on JVM and interpreter. Exact DBIx
 `t/18insert_default.t` still fails to collect Storage on both backends.
 
+A second system-Perl regression covers overlapping B wrappers retained across
+a destructor: system Perl reports 1, while the pre-fix candidate reported 3.
+`Internals::SvREFCNT` now excludes all active B wrapper slots. The expanded
+focused test passes 3/3 on system Perl, JVM, and interpreter. A no-sweeps make
+passed in 6m44 on the implementation tree; the exact-commit rerun for
+`17b7be3e34` is pending.
+
 An assertion-boundary trace, captured before LeakTracer emits its diagnostic,
 shows Storage held by a Schema hash element, with that Schema held by an
 `Artist` ResultSource `schema` element. With the B count correction, temporary
@@ -50,8 +57,9 @@ refcounts 4 then 3 across repeated entries. Those owner slots name the `ref`,
 `result_source`, and `_result_source` hash keys. The corresponding system-Perl
 destructor entries both report source refcount 1. `jperl_trace_to` finds only
 the active argument frames for the extra PerlOnJava owners, not a persistent
-root. These extra current hash-element owners remain the unresolved DBIx
-release path. The shutdown-only `RuntimeHash`
+root. The B wrapper correction does not resolve this exact DBIx test; these
+current hash-element owners remain the unresolved release path. The
+shutdown-only `RuntimeHash`
 owner report is separate: it is emitted after the assertion fails, when
 LeakTracer calls `B::svref_2object(...)->REFCNT`; the PerlOnJava `B::SV` wrapper
 then stores the referent in a hash slot. It is a diagnostic artifact, not the
@@ -67,6 +75,8 @@ Logs:
 `/tmp/issue1649-dbic-schema-boundary-jperl.log`, and
 `/tmp/issue1649-dbic-schema-destroy-boundary.log`,
 `/tmp/issue1649-b-refcount-destroy-{system-perl,unfixed-jvm,unfixed-interpreter,final-jvm,final-interpreter}.log`,
+`/tmp/issue1649-b-refcount-multiple-wrapper-{perl,jperl}.log`,
+`/tmp/issue1649-b-refcount-overlap-fix-v2-make.log`,
 `/tmp/issue1649-b-refcount-destroy-no-sweeps-make.log`, and
 `/tmp/issue1649-dbix-t18-fixed-{jvm,interpreter}.log`, plus
 `/tmp/issue1649-weak-backref-{system-perl,jperl}.log`. The full Catalyst failures begin at
