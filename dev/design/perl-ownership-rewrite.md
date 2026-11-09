@@ -8,32 +8,29 @@ was incorrectly recorded as the owning container for scalar cells that the
 assignment targets already own. `RuntimeList.setFromList` and
 `RuntimeArray.setFromList` now append these cells through a borrowed-result path,
 which preserves package-root and ISA bookkeeping without replacing their real
-container owner. Temporary tracing has been removed. The narrowed candidate
-passes the full `JPERL_DISABLE_CORRECTIVE_SWEEPS=1 nice -n 19 make` gate in
-6m46 with exit 0; log: `/tmp/issue1649-no-sweeps-ordinary-result-make.log`.
-The Mojolicious Promise warning and mount regressions both pass in that gate.
-Four alias/refcount regressions pass under system Perl (68 assertions),
-including `foreach_alias_does_not_add_referent_owner.t`,
+container owner. Temporary tracing has been removed. The full
+`JPERL_DISABLE_CORRECTIVE_SWEEPS=1 nice -n 19 make` gate passed in 6m41 on tree
+`d26efbd65ea8956ffbec5a53e59e5b24232d6b13`; log:
+`/tmp/issue1649-no-sweeps-ccf99843d3.log`. The commit was then amended only to
+correct its message; final commit `14e3a36b0111f8b5cd3b09ff2da2505e942f6781`
+has the same tree. The gate includes the Mojolicious Promise warning and mount
+regressions. Four alias/refcount regressions pass under system Perl (68
+assertions), including `foreach_alias_does_not_add_referent_owner.t`,
 `refalias_array_element_cell_owner.t`, and
 `scalar_reference_contents_alias_lifetime.t`.
 
-Alias semantics are now covered distinctly: copying a reference into a new
-scalar creates another referent owner; a scalar alias shares its source cell,
-so it keeps that cell alive without counting the referent twice. A refalias
-array slot has its own cell-owner identity and releases it when the final alias
-is removed. No regression test changes were needed in this batch. The full gate
-compiled the modified working tree while it was held unchanged; its injected
-Git metadata still names the preservation snapshot, so commit the candidate and
-rerun the final gate on that immutable commit before publishing. PR #1938 remains
-open/draft at `1a6555c05ce7ddab547da276413328fab4f9b997`.
+Alias semantics are covered distinctly: copying a reference into a new scalar
+creates another referent owner; a scalar alias shares its source cell and does
+not count the referent twice. A refalias array slot has its own cell-owner
+identity and releases it when the final alias is removed. No regression test
+changes were needed in this batch. PR #1938 remains open/draft at
+`1a6555c05ce7ddab547da276413328fab4f9b997`.
 
 ### Next steps
 
-1. Commit the borrowed assignment-result fix and this checkpoint, then rerun
-   the full no-sweeps gate against that commit.
-2. Complete the remaining owner-producer/release audit and strict CPAN
-   acceptance matrix; record any newly demonstrated gaps with permanent tests.
-3. Update the #1649 claim and PR #1938 handoff with immutable-source evidence.
+1. Complete the remaining owner-producer/release audit and strict CPAN
+   acceptance matrix; add permanent tests for any newly demonstrated gaps.
+2. Update the #1649 claim and PR #1938 with the passing immutable-tree evidence.
    Keep the issue and PR open until those acceptance items are complete.
 
 The reported Class::MethodMaker tied-array lifetime failure is covered by the
