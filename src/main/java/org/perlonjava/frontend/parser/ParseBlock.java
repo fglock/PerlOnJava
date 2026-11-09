@@ -12,6 +12,7 @@ import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.perlmodule.BHooksEndOfScope;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 import static org.perlonjava.frontend.parser.ParsePrimary.isIsQuoteLikeOperator;
@@ -109,9 +110,10 @@ public class ParseBlock {
         int scopeIndex = parser.ctx.symbolTable.enterScope();
         parser.enterLexicalSubDeclarationFrame();
 
-        // Container for all statements in the block
+        // Container for all statements in the block.
+        // blockLabels is lazily allocated — most blocks have no labels.
         List<Node> statements = new ArrayList<>();
-        List<String> blockLabels = new ArrayList<>(); // track labels
+        List<String> blockLabels = null;
 
         // True when the statement about to be parsed had its first token consumed
         // as the lookahead that let the previous brace-terminated statement reduce.
@@ -138,14 +140,20 @@ public class ParseBlock {
             // Label parsing logic
             String label = null;
             if (token.type == LexerTokenType.IDENTIFIER) {
-                label = parseLabel(parser, statements, blockLabels);
+                label = parseLabel(parser, statements);
+                if (label != null) {
+                    if (blockLabels == null) blockLabels = new ArrayList<>();
+                    blockLabels.add(label);
+                }
 
                 token = peek(parser);
                 String nextLabel = label;
                 while (nextLabel != null && token.type == LexerTokenType.IDENTIFIER) {
-                    nextLabel = parseLabel(parser, statements, blockLabels);
+                    nextLabel = parseLabel(parser, statements);
                     token = peek(parser);
                     if (nextLabel != null) {
+                        if (blockLabels == null) blockLabels = new ArrayList<>();
+                        blockLabels.add(nextLabel);
                         label = nextLabel;  // Keep track of the last valid label
                     }
                 }
@@ -244,7 +252,7 @@ public class ParseBlock {
 
         // Create and return the block node with all parsed statements
         BlockNode blockNode = new BlockNode(statements, currentIndex, parser);
-        blockNode.labels = blockLabels; // Set the collected labels in the BlockNode
+        blockNode.labels = (blockLabels != null) ? blockLabels : Collections.emptyList();
         if (postBlockStrictOptions != null) {
             blockNode.postBlockStrictOptions = postBlockStrictOptions;
             blockNode.postBlockFeatureFlags = postBlockFeatureFlags;
@@ -253,7 +261,7 @@ public class ParseBlock {
         return new BlockWithScope(blockNode, scopeIndex);
     }
 
-    private static String parseLabel(Parser parser, List<Node> statements, List<String> blockLabels) {
+    private static String parseLabel(Parser parser, List<Node> statements) {
         int currentIndexLabel = parser.tokenIndex;
         String id = TokenUtils.peek(parser).text;
         if (isIsQuoteLikeOperator(id)) {
@@ -279,7 +287,7 @@ public class ParseBlock {
                 }
             }
             statements.add(new LabelNode(id, currentIndexLabel));
-            blockLabels.add(id); // Add each found label to our list
+            // caller manages blockLabels lazily
             parser.parsedLabels = true;
             TokenUtils.consume(parser); // Consume the colon
             return id;
