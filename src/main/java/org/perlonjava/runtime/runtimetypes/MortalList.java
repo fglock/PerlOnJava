@@ -1238,6 +1238,7 @@ public class MortalList {
             releaseTailCallArgElement(elem);
         }
         args.elementsOwned = false;
+        args.traceTrackedElementState("release-tailcall-args");
     }
 
     /**

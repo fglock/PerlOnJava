@@ -4,9 +4,10 @@
 
 **Current checkpoint (2026-11-09):** #1649 remains in Phase 2. The reconciled
 worktree `/private/tmp/issue1649-pr-sync-20261109` is on
-`wip/issue1649-pr-reconciled-20261109`, based at `c431e253f7`; the current
-runtime batch is uncommitted. This turn confirmed that a scalar refalias in an
-array slot acquires a distinct `ARRAY_ALIAS_CELL` owner identity. The existing
+`wip/issue1649-pr-reconciled-20261109` at `92f9446afc`; temporary tracing has
+been removed and only this checkpoint document is modified. This turn confirmed
+that a scalar refalias in an array slot acquires a distinct `ARRAY_ALIAS_CELL`
+owner identity. The existing
 `refalias_array_element_cell_owner.t` regression covers lexical scope exit,
 duplicate aliases, and release after replacing the final alias; it passes on
 system Perl and in the full no-sweeps gate after the owner acquisition path was
@@ -16,13 +17,19 @@ The reconciled full gate reduced seven failures to two. The current
 `JPERL_DISABLE_CORRECTIVE_SWEEPS=1 nice -n 19 make` run failed after 6m44:
 `b_refcount_destroy_aggregate_owner.t` reports 2 instead of 1 for its first
 `B::SV::REFCNT` assertion; the other three B assertions pass. The
-Mojolicious-style rejected-promise test still misses its warning. Its trace
-shows one `PromiseModel` owner left in an unowned temporary array element, with
-scope-exited closure pads; producer/release ownership at the nested list and
-array assignment boundary remains under investigation. Logs:
+Mojolicious-style rejected-promise test still misses its warning. A focused
+no-sweeps make and direct JVM trace reproduce it. The remaining owner is an
+`ARRAY_ELEMENT` slot in a three-element `RuntimeArray` with
+`elementsOwned=false`, `elementsAliased=false`, and no active argument frame.
+It was acquired through `RuntimeArray.setFromList` → `RuntimeList.setFromList`
+at the fixture's array-target assignment. The direct trace did not enter
+tail-call argument release, ruling out the earlier tail-call hypothesis. The
+exact transition that leaves the slot behind remains to be found. Logs:
 `/tmp/issue1649-owner-fix-make.log`,
-`/tmp/issue1649-promise-current-repro.log`, and
+`/tmp/issue1649-promise-array-lifecycle-trace-make.log`,
+`/tmp/issue1649-promise-release-tailcall-trace.log`, and
 `/tmp/issue1649-owner-fix-system-perl.log` (four Perl-level regressions pass).
+The B::SV adjustment remains unvalidated by a focused or full gate.
 Also restored Perl's non-localizing `$#array` behavior, owner-aware shared tied
 storage wrappers, rescued-object processing by current owner identities, and
 the void-context list-assignment path; those regressions pass in this gate.
