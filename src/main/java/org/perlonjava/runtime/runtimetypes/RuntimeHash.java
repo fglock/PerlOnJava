@@ -126,12 +126,6 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         return map;
     }
 
-    void replaceWithEmptySharedStorage() {
-        type = PLAIN_HASH;
-        elements = Collections.synchronizedMap(newElementMap());
-        resetIterator();
-    }
-
     private record HashAliasCellOwner(RuntimeScalar cell, PerlOwnerSlot owner) {}
 
     boolean ownsHashAliasCell(String key, RuntimeScalar cell) {
@@ -201,6 +195,27 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             };
             throw new PerlCompilerException(message);
         }
+    }
+
+    private void traceDestroyedCursorMutation(String key, RuntimeScalar value) {
+        if (!RuntimeBase.refCountTraceEnabled() || !"cursor".equals(key)
+                || perlLifecycleState() != RuntimeBase.PerlLifecycleState.DESTROYED) {
+            return;
+        }
+        RuntimeBase referent = value != null && value.value instanceof RuntimeBase base
+                ? base : null;
+        System.err.println("[DESTROYED-HASH-CURSOR-WRITE] hash="
+                + System.identityHashCode(this) + " generation="
+                + RuntimeBase.traceReferentGeneration(this) + " blessId=" + blessId
+                + " class=" + NameNormalizer.getBlessStr(blessId) + " refCount=" + refCount
+                + " aliasOwners="
+                + ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_ALIAS)
+                + " scalar=" + (value == null ? 0 : System.identityHashCode(value))
+                + " owns=" + (value != null && value.refCountOwned)
+                + " referent=" + (referent == null ? 0 : System.identityHashCode(referent))
+                + " referentGeneration=" + (referent == null ? 0
+                        : RuntimeBase.traceReferentGeneration(referent)));
+        new Throwable().printStackTrace(System.err);
     }
 
     public boolean isHashRestricted() {
@@ -435,6 +450,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 }
             }
             RuntimeScalar result = super.put(key, value);
+            owner.traceDestroyedCursorMutation(key, value);
             if (previous != value) {
                 removeValueIdentity(previous);
                 addValueIdentity(value);
@@ -843,6 +859,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                     addValueIdentity(replacement);
                 }
                 super.put(entry.getKey(), replacement);
+                owner.traceDestroyedCursorMutation(entry.getKey(), replacement);
             }
             if (!m.isEmpty()) stableMethodFieldCacheRevision++;
             for (RuntimeScalar value : m.values()) {
@@ -1169,67 +1186,75 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 // incrementRefCountForContainerStore, which would create unmatched
                 // refCounts that prevent DESTROY from firing.
                 RuntimeArray materializedList = new RuntimeArray();
-                Iterator<RuntimeScalar> iterator = value.iterator();
-                while (iterator.hasNext()) {
-                    materializedList.elements.add(new RuntimeScalar(iterator.next()));
-                }
+                try {
+                    Iterator<RuntimeScalar> iterator = value.iterator();
+                    while (iterator.hasNext()) {
+                        materializedList.elements.add(new RuntimeScalar(iterator.next()));
+                    }
 
-                validateRequireHookAssignments(materializedList);
+                    validateRequireHookAssignments(materializedList);
 
-                // Store the original list size for scalar context
-                int originalSize = materializedList.elements.size();
+                    // Store the original list size for scalar context
+                    int originalSize = materializedList.elements.size();
 
-                // Warn about odd elements
-                if (originalSize % 2 != 0 && !suppressOddAssignmentWarning) {
-                    // Single hash/array reference: "Reference found where even-sized list expected"
-                    // Other odd cases: "Odd number of elements in hash assignment"
-                    String warning;
-                    if (originalSize == 1) {
-                        RuntimeScalar first = materializedList.elements.get(0);
-                        if (first.type == RuntimeScalarType.HASHREFERENCE || first.type == RuntimeScalarType.ARRAYREFERENCE) {
-                            warning = "Reference found where even-sized list expected";
+                    // Warn about odd elements
+                    if (originalSize % 2 != 0 && !suppressOddAssignmentWarning) {
+                        // Single hash/array reference: "Reference found where even-sized list expected"
+                        // Other odd cases: "Odd number of elements in hash assignment"
+                        String warning;
+                        if (originalSize == 1) {
+                            RuntimeScalar first = materializedList.elements.get(0);
+                            if (first.type == RuntimeScalarType.HASHREFERENCE || first.type == RuntimeScalarType.ARRAYREFERENCE) {
+                                warning = "Reference found where even-sized list expected";
+                            } else {
+                                warning = "Odd number of elements in hash assignment";
+                            }
                         } else {
                             warning = "Odd number of elements in hash assignment";
                         }
-                    } else {
-                        warning = "Odd number of elements in hash assignment";
+                        WarnDie.warnWithCategory(
+                                new RuntimeScalar(warning),
+                                RuntimeScalarCache.scalarEmptyString, "misc");
                     }
-                    WarnDie.warnWithCategory(
-                            new RuntimeScalar(warning),
-                            RuntimeScalarCache.scalarEmptyString, "misc");
-                }
 
-                // Clear existing elements but keep the same Map instance to preserve capacity
-                MortalList.deferDestroyForContainerClear(this.elements.values());
-                this.elements.clear();
-                if (this.byteKeys != null) this.byteKeys.clear();
-                // Reset each() iterator so it doesn't throw ConcurrentModificationException
-                // on the next each() call after this hash is re-populated.
-                resetIterator();
+                    // Clear existing elements but keep the same Map instance to preserve capacity
+                    MortalList.deferDestroyForContainerClear(this.elements.values());
+                    this.elements.clear();
+                    if (this.byteKeys != null) this.byteKeys.clear();
+                    // Reset each() iterator so it doesn't throw ConcurrentModificationException
+                    // on the next each() call after this hash is re-populated.
+                    resetIterator();
 
-                // Populate the hash from the materialized list
-                iterator = materializedList.iterator();
-                while (iterator.hasNext()) {
-                    RuntimeScalar keyScalar = iterator.next();
-                    String key = keyScalar.toString();
-                    // Track the key's byte/UTF-8 type for correct semantics in keys()
-                    if (keyScalar.type == BYTE_STRING) {
-                        markKeyByte(key, true);
+                    // Populate the hash from the materialized list
+                    iterator = materializedList.iterator();
+                    while (iterator.hasNext()) {
+                        RuntimeScalar keyScalar = iterator.next();
+                        String key = keyScalar.toString();
+                        // Track the key's byte/UTF-8 type for correct semantics in keys()
+                        if (keyScalar.type == BYTE_STRING) {
+                            markKeyByte(key, true);
+                        }
+                        // Create a new RuntimeScalar to properly handle aliasing and avoid read-only issues
+                        RuntimeScalar val = iterator.hasNext() ? new RuntimeScalar(iterator.next()) : new RuntimeScalar();
+                        storeOwnedElement(key, null, val);
                     }
-                    // Create a new RuntimeScalar to properly handle aliasing and avoid read-only issues
-                    RuntimeScalar val = iterator.hasNext() ? new RuntimeScalar(iterator.next()) : new RuntimeScalar();
-                    storeOwnedElement(key, null, val);
-                }
 
-                // Create a RuntimeArray that wraps this hash
-                // In list context: returns the deduplicated key-value pairs
-                // In scalar context: should return the original list size
-                RuntimeArray result = new RuntimeArray(this);
-                // Store the original size as an annotation for scalar context
-                result.scalarContextSize = originalSize;
-                // Flush deferred DESTROY for refs removed from the container
-                MortalList.flush();
-                yield result;
+                    // Create a RuntimeArray that wraps this hash
+                    // In list context: returns the deduplicated key-value pairs
+                    // In scalar context: should return the original list size
+                    RuntimeArray result = new RuntimeArray(this);
+                    // Store the original size as an annotation for scalar context
+                    result.scalarContextSize = originalSize;
+                    // Flush deferred DESTROY for refs removed from the container
+                    MortalList.flush();
+                    yield result;
+                } finally {
+                    // These scalar copies only stage the RHS while the hash is
+                    // replaced. Keeping them in this unowned Java-side array
+                    // would leave untracked-reference owner slots active after
+                    // the destination has acquired its own value cells.
+                    materializedList.elements.clear();
+                }
             }
             case AUTOVIVIFY_HASH -> {
                 AutovivificationHash.vivify(this);
@@ -1241,33 +1266,37 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 // where @t2 is also tied and we need to fetch values before clearing
                 // Use direct element addition (not push()) — see PLAIN_HASH comment.
                 RuntimeArray materializedList = new RuntimeArray();
-                Iterator<RuntimeScalar> iterator = value.iterator();
-                while (iterator.hasNext()) {
-                    materializedList.elements.add(new RuntimeScalar(iterator.next()));
-                }
+                try {
+                    Iterator<RuntimeScalar> iterator = value.iterator();
+                    while (iterator.hasNext()) {
+                        materializedList.elements.add(new RuntimeScalar(iterator.next()));
+                    }
 
-                // %^H is lexically cloned by perl.  Assigning an empty list
-                // in an inner hint scope therefore detaches that clone from a
-                // tied outer hint hash; it must not dispatch CLEAR on the
-                // outer tie object (which may deliberately omit CLEAR).
-                if (isHintHash && materializedList.elements.isEmpty()) {
-                    elements = newElementMap();
-                    type = PLAIN_HASH;
-                    yield new RuntimeArray();
-                }
+                    // %^H is lexically cloned by perl.  Assigning an empty list
+                    // in an inner hint scope therefore detaches that clone from a
+                    // tied outer hint hash; it must not dispatch CLEAR on the
+                    // outer tie object (which may deliberately omit CLEAR).
+                    if (isHintHash && materializedList.elements.isEmpty()) {
+                        elements = newElementMap();
+                        type = PLAIN_HASH;
+                        yield new RuntimeArray();
+                    }
 
-                // Now clear and repopulate from the materialized list
-                TieHash.tiedClear(this);
-                RuntimeArray result = new RuntimeArray();
-                iterator = materializedList.iterator();
-                while (iterator.hasNext()) {
-                    RuntimeScalar key = iterator.next();
-                    RuntimeScalar val = iterator.hasNext() ? new RuntimeScalar(iterator.next()) : new RuntimeScalar();
-                    TieHash.tiedStore(this, key, val);
-                    RuntimeArray.push(result, key);
-                    RuntimeArray.push(result, val);
+                    // Now clear and repopulate from the materialized list
+                    TieHash.tiedClear(this);
+                    RuntimeArray result = new RuntimeArray();
+                    iterator = materializedList.iterator();
+                    while (iterator.hasNext()) {
+                        RuntimeScalar key = iterator.next();
+                        RuntimeScalar val = iterator.hasNext() ? new RuntimeScalar(iterator.next()) : new RuntimeScalar();
+                        TieHash.tiedStore(this, key, val);
+                        RuntimeArray.push(result, key);
+                        RuntimeArray.push(result, val);
+                    }
+                    yield result;
+                } finally {
+                    materializedList.elements.clear();
                 }
-                yield result;
             }
             case READONLY_HASH -> throw new PerlCompilerException("Modification of a read-only value attempted");
             default -> throw new IllegalStateException("Unknown array type: " + type);

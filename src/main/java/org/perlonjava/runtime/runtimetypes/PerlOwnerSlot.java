@@ -1093,11 +1093,43 @@ public final class PerlOwnerSlot {
             throw new IllegalStateException("counted release requires a counted identity");
         }
         RuntimeScalar owner = countedScalarOwner();
+        traceBaseResultSetOwnerRelease(referent, owner);
         PerlOwnerSlot resourceRelease = RuntimeScalar.detachIoOwnerForDeferredRelease(owner, referent);
         PendingRelease release = new PendingRelease(
                 identity, ++nextReleaseSequence, kind, referent, null, resourceRelease);
         release();
         return release;
+    }
+
+    private void traceBaseResultSetOwnerRelease(RuntimeBase target, RuntimeScalar owner) {
+        if (!RuntimeBase.refCountTraceEnabled() || !(target instanceof RuntimeHash)
+                || target.refCount > 2
+                || !"DBICTest::BaseResultSet".equals(NameNormalizer.getBlessStr(target.blessId))) {
+            return;
+        }
+        RuntimeBase container = owner == null ? null : owner.getContainerOwner();
+        String location = "";
+        if (owner != null && container instanceof RuntimeHash hash && hash.elements != null) {
+            for (var entry : hash.elements.entrySet()) {
+                if (entry.getValue() == owner) {
+                    location = " key=" + entry.getKey();
+                    break;
+                }
+            }
+        } else if (owner != null && container instanceof RuntimeArray array
+                && array.elements != null) {
+            location = " index=" + array.elements.indexOf(owner);
+        }
+        System.err.println("[RESULTSET-COUNTED-SLOT-RELEASE] referent="
+                + System.identityHashCode(target) + " generation="
+                + RuntimeBase.traceReferentGeneration(target) + " refCount=" + target.refCount
+                + " aliasOwners="
+                + target.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_ALIAS)
+                + " slot=" + identity + " kind=" + kind + " owner="
+                + (owner == null ? 0 : System.identityHashCode(owner)) + " ownerActive="
+                + (owner != null && owner.refCountOwned) + " container="
+                + (container == null ? 0 : System.identityHashCode(container)) + location);
+        new Throwable().printStackTrace(System.err);
     }
 
     /**

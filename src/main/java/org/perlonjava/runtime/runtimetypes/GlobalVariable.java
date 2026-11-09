@@ -2073,20 +2073,11 @@ public class GlobalVariable {
     }
 
     public static void retainForeachAlias(RuntimeScalar scalar) {
-        if (scalar != null
-                && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                && scalar.value instanceof RuntimeBase base) {
-            base.foreachAliasCount++;
-        }
+        if (scalar != null) scalar.retainForeachRefCountOwner();
     }
 
     public static void releaseForeachAlias(RuntimeScalar scalar) {
-        if (scalar != null
-                && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                && scalar.value instanceof RuntimeBase base
-                && base.foreachAliasCount > 0) {
-            base.foreachAliasCount--;
-        }
+        if (scalar != null) scalar.releaseForeachRefCountOwner();
     }
 
     /** Retain a foreach reference and return a stable hold for its referent. */

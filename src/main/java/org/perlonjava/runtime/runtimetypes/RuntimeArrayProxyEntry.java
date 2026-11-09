@@ -101,7 +101,7 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
         while (currentKey >= parent.elements.size()) {
             parent.elements.add(null);
         }
-        parent.setAliasedScalarCell(currentKey, referent);
+        parent.elements.set(currentKey, referent);
         parent.markPackageRootedValue(referent);
         this.lvalue = referent;
         this.type = referent.type;

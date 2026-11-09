@@ -1,11 +1,17 @@
 package org.perlonjava.runtime.runtimetypes;
 
 import org.perlonjava.runtime.operators.WarnDie;
+import java.util.Stack;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Represents the value of $#{array}.
  */
 public class RuntimeArraySizeLvalue extends RuntimeBaseProxy {
+    private record SavedSize(int lastIndex, List<RuntimeScalar> tail) {}
+    private final Stack<SavedSize> savedSizes = new Stack<>();
+
     private boolean isOrphaned() {
         return lvalue != null
                 && lvalue.value instanceof RuntimeArray parent
@@ -95,14 +101,19 @@ public class RuntimeArraySizeLvalue extends RuntimeBaseProxy {
 
     @Override
     public void dynamicSaveState() {
-        // Perl treats `local $#array` as an ordinary array-size assignment;
-        // the assignment is not undone when the dynamic scope exits.
+        RuntimeArray parent = lvalue.arrayDeref();
+        int lastIndex = parent.lastElementIndex();
+        savedSizes.push(new SavedSize(lastIndex, new ArrayList<>(parent.elements)));
     }
 
     @Override
     public void dynamicRestoreState() {
-        // In particular, do not restore element wrappers whose counted owner
-        // slots were retired when the localized size assignment removed them.
+        if (!savedSizes.empty() && !isOrphaned()) {
+            RuntimeArray parent = lvalue.arrayDeref();
+            SavedSize saved = savedSizes.pop();
+            parent.elements.clear();
+            parent.elements.addAll(saved.tail);
+        }
     }
 
     @Override
