@@ -522,6 +522,49 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     }
 
     /**
+     * Count current {@code B::SV->{ref}} wrapper slots for this referent.
+     * Native Perl's B objects contain an SV pointer and do not increment the
+     * referent's refcount. PerlOnJava stores that pointer in a hash slot to
+     * keep the Java referent available while the wrapper is in use, so
+     * {@code B::SV::REFCNT} must discount overlapping wrapper slots beyond
+     * the one used for the active query.
+     */
+    public int currentBObjectReferentOwnerCount() {
+        int count = 0;
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (!slot.isActive() || slot.kind() != PerlOwnerSlot.Kind.HASH_ELEMENT) continue;
+            RuntimeScalar owner = slot.countedScalarOwner();
+            if (owner == null || owner.value != this
+                    || !(owner.containerOwner instanceof RuntimeHash hash)) continue;
+            String ownerClass = hash.blessId == 0
+                    ? null : NameNormalizer.getBlessStr(hash.blessId);
+            if (hash.elements.get("ref") == owner
+                    && ownerClass != null && ownerClass.startsWith("B::")) count++;
+        }
+        return count;
+    }
+
+    /** Count temporary referent slots held only by active Perl argument frames. */
+    public int currentArgumentFrameReferentOwnerCount() {
+        PerlRuntime runtime = PerlRuntime.currentOrNull();
+        if (runtime == null) return 0;
+        java.util.Deque<RuntimeArray> activeArgs = runtime.executionState().argsStack;
+        int count = 0;
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (!slot.isActive()) continue;
+            if (slot.kind() == PerlOwnerSlot.Kind.ARGUMENT_CONTAINER) {
+                count++;
+                continue;
+            }
+            RuntimeScalar owner = slot.countedScalarOwner();
+            if (owner != null && owner.value == this
+                    && owner.containerOwner instanceof RuntimeArray array
+                    && activeArgs.contains(array)) count++;
+        }
+        return count;
+    }
+
+    /**
      * Whether current Perl owner identities, apart from the legacy count,
      * prove that this value is still owned. Temporary roots, IO resource leases,
      * and compatibility count pins are not Perl owners.

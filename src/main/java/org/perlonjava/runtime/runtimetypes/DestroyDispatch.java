@@ -915,20 +915,7 @@ public class DestroyDispatch {
      *    and clear their weak refs too
      */
     public static void clearRescuedWeakRefs() {
-        java.util.List<RuntimeBase> rescuedObjects = state().rescuedObjects;
-        if (rescuedObjects.isEmpty()) return;
-        java.util.List<RuntimeBase> snapshot;
-        synchronized (rescuedObjects) {
-            snapshot = new java.util.ArrayList<>(rescuedObjects);
-            rescuedObjects.clear();
-        }
-        MortalList.invalidateExternalRootSnapshot();
-        for (RuntimeBase rescued : snapshot) {
-            WeakRefRegistry.clearWeakRefsTo(rescued);
-            if (rescued instanceof RuntimeHash hash) {
-                deepClearWeakRefs(hash);
-            }
-        }
+        processRescuedObjects();
     }
 
     /**

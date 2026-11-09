@@ -106,6 +106,12 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         return new RuntimeHashElementMap(this);
     }
 
+    void replaceWithEmptySharedStorage() {
+        type = PLAIN_HASH;
+        elements = Collections.synchronizedMap(newElementMap());
+        resetIterator();
+    }
+
     private RuntimeHashElementMap newElementMap(Map<String, RuntimeScalar> values) {
         RuntimeHashElementMap map = new RuntimeHashElementMap(this);
         map.putAll(values);
