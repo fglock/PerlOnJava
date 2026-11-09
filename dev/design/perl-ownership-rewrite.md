@@ -26,12 +26,23 @@ identity and releases it when the final alias is removed. No regression test
 changes were needed in this batch. PR #1938 remains open/draft at
 `1a6555c05ce7ddab547da276413328fab4f9b997`.
 
+The follow-up caller audit found no main-source caller of the legacy
+`MortalList.deferDecrement(RuntimeBase)` hook or the sweep request APIs.
+Production deferred releases pass exact owner-slot tokens; root-based recovery
+in `processDeferredBase` is gated to tokenless compatibility releases.
+`Internals::jperl_gc` and `jperl_gc_quiet` are no-ops. The remaining
+`restoreVerifiedCurrentCountedOwnerSlotRefCount` bridge reads active Perl owner
+identities directly; it does not traverse roots or repair from reachability.
+Keep that bridge until its malformed/legacy-state fixtures are deliberately
+retired. Source audit: `rg` callsite review on candidate tree
+`d26efbd65ea8956ffbec5a53e59e5b24232d6b13`.
+
 ### Next steps
 
 1. Complete the remaining owner-producer/release audit and strict CPAN
    acceptance matrix; add permanent tests for any newly demonstrated gaps.
-2. Update the #1649 claim and PR #1938 with the passing immutable-tree evidence.
-   Keep the issue and PR open until those acceptance items are complete.
+2. Update PR #1938 with the passing immutable-tree evidence after checking its
+   latest CI and base; keep the issue and PR open until acceptance is complete.
 
 The reported Class::MethodMaker tied-array lifetime failure is covered by the
 new project-owned `refcount/generated_tied_array_handler_lifetime.t`: it
