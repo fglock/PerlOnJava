@@ -809,7 +809,7 @@ public class ScopedSymbolTable {
             SymbolTable.SymbolEntry existing = currentScope.getSymbolEntry(name);
             if (existing != null) {
                 // Replace with new entry using the same index
-                currentScope.variableIndex.put(name,
+                currentScope.replaceEntry(name,
                         new SymbolTable.SymbolEntry(existing.index(), name, variableDeclType,
                                 getCurrentPackage(), ast));
             } else {

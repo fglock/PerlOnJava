@@ -117,7 +117,9 @@ public class LargeBlockRefactorer {
         }
 
         BlockNode partitionedBlock = new BlockNode(elements, node.tokenIndex);
-        partitionedBlock.labels.addAll(node.labels);
+        if (!node.labels.isEmpty()) {
+            partitionedBlock.labels = new ArrayList<>(node.labels);
+        }
         partitionedBlock.setAnnotation("blockAlreadyRefactored", true);
         return partitionedBlock;
     }
