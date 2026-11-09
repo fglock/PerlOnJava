@@ -2440,9 +2440,18 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // slot is the edge to decrement.
         RuntimeScalar localCode = GlobalVariable.globalCodeRefs.get(snap.globName);
         RuntimeCode removedLocalCodeForStashRelease = null;
+        PerlOwnerSlot localCodeOwner = localCode == null ? null : localCode.countedOwnerSlot();
+        boolean hasExactLocalCodeOwner = localCode != null && localCode.refCountOwned
+                && localCodeOwner != null && localCodeOwner.isActive()
+                && localCodeOwner.referent() == localCode.value;
         if (localCode != null && (localCode.type & REFERENCE_BIT) != 0
                 && localCode.value instanceof RuntimeBase localBase
-                && !(localBase instanceof RuntimeCode code && code.hasCountedCodeSlots)) {
+                // A CV can have other counted stash slots while this localized
+                // slot still owns its own exact token. Retire that token on
+                // restore; only keep the conservative guard for legacy slots
+                // whose decrement has no identity proof.
+                && (hasExactLocalCodeOwner
+                    || !(localBase instanceof RuntimeCode code && code.hasCountedCodeSlots))) {
             if (localBase instanceof RuntimeCode localCodeObj) {
                 removedLocalCodeForStashRelease = localCodeObj;
             }

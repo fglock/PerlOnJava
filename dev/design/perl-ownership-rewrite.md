@@ -2,7 +2,27 @@
 
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Production sweep callers have been removed; count alignment still uses verified current owner slots while remaining producer gaps are audited.
 
-**Current checkpoint (2026-11-09):** #1649 remains in Phase 2. In
+**Current checkpoint (2026-11-10):** #1649 remains in Phase 2. The deferred
+Mojolicious render regression traced to `RuntimeGlob.dynamicRestoreState`:
+restoring a localized CODE slot skipped release whenever the CV also had any
+counted stash slots, even if that localized scalar carried its own active
+counted owner token. Restore now releases that exact token and keeps the old
+compatibility guard only for slots without an identity proof. The new
+`mojolicious_controller_destroy_after_deferred_render.t` passes 5/5 under
+system Perl, JVM, and interpreter. The complete `nice -n 19 make` gate passed
+in 7m26 on the candidate before the focused backend reruns; logs are
+`/tmp/issue1649-localized-code-owner-make.log`,
+`/tmp/issue1649-deferred-render-fixed-jvm.log`, and
+`/tmp/issue1649-deferred-render-fixed-interpreter.log`.
+
+The strict CPAN acceptance run on source `11da0bf868` exited 2: Catalyst
+failed 11 subtests, DBIx::Class failed 420 subtests, and Mojolicious hit its
+2,400-second soft timeout. The Mojolicious timeout was reproduced at
+`t/mojolicious/longpolling_lite_app.t`; the controller `DESTROY` wait now has a
+project-owned reproducer and fix. Rerun the strict acceptance matrix after
+checking the two non-Mojolicious failure families against standard Perl.
+
+In
 `/private/tmp/issue1649-pr-sync-20261109`, an assignment-result `RuntimeArray`
 was incorrectly recorded as the owning container for scalar cells that the
 assignment targets already own. `RuntimeList.setFromList` and
@@ -39,9 +59,11 @@ retired. Source audit: `rg` callsite review on candidate tree
 
 ### Next steps
 
-1. Complete the remaining owner-producer/release audit and strict CPAN
-   acceptance matrix; add permanent tests for any newly demonstrated gaps.
-2. Update PR #1938 with the passing immutable-tree evidence after checking its
+1. Rerun strict CPAN acceptance after the localized CODE-slot fix and compare
+   Catalyst and DBIx::Class failure families with standard Perl.
+2. Complete the remaining owner-producer/release audit; add permanent tests
+   for any newly demonstrated gaps.
+3. Update PR #1938 with the passing immutable-tree evidence after checking its
    latest CI and base; keep the issue and PR open until acceptance is complete.
 
 The reported Class::MethodMaker tied-array lifetime failure is covered by the
