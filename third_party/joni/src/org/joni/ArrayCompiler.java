@@ -948,6 +948,12 @@ final class ArrayCompiler extends Compiler {
             modTLen = bodyLen;
         }
 
+        if (infinite && qn.lower <= 1 && qn.greedy && !cknOn(ckn)
+                && isCompactExactRepeat(qn)) {
+            return bodyLen * qn.lower + OPSize.PUSH_OR_JUMP_EXACT1_RANGE
+                    + modTLen + OPSize.JUMP;
+        }
+
         int len;
         if (infinite && qn.lower <= 1) {
             if (qn.greedy) {
@@ -1056,6 +1062,18 @@ final class ArrayCompiler extends Compiler {
         } else {
             modTLen = bodyLen;
         }
+        if (infinite && qn.lower <= 1 && qn.greedy && !cknOn(ckn)
+                && isCompactExactRepeat(qn)) {
+            compileRepeatTreeNTimes(qn.target, qn.lower, clearId);
+            addOpcodeRelAddr(OPCode.PUSH_OR_JUMP_EXACT1_RANGE,
+                    modTLen + OPSize.JUMP);
+            StringNode exact = (StringNode) qn.headExact;
+            addBytes(exact.bytes, exact.p, 1);
+            compileRepeatTreeEmptyCheck(qn.target, emptyInfo, clearId);
+            addOpcodeRelAddr(OPCode.JUMP,
+                    -(modTLen + OPSize.JUMP + OPSize.PUSH_OR_JUMP_EXACT1_RANGE));
+            return;
+        }
         if (infinite && qn.lower <= 1) {
             if (qn.greedy) {
                 if (qn.lower == 1) {
@@ -1161,7 +1179,9 @@ final class ArrayCompiler extends Compiler {
             }
 
             if (qn.greedy) {
-                if (qn.headExact != null) {
+                if (isCompactExactRepeat(qn)) {
+                    len += OPSize.PUSH_OR_JUMP_EXACT1_RANGE + modTLen + OPSize.JUMP;
+                } else if (qn.headExact != null) {
                     len += OPSize.PUSH_OR_JUMP_EXACT1 + modTLen + OPSize.JUMP;
                 } else if (qn.nextHeadExact != null && qn.target.getType() != NodeType.CALL) {
                     len += OPSize.PUSH_IF_PEEK_NEXT + modTLen + OPSize.JUMP;
@@ -1251,8 +1271,18 @@ final class ArrayCompiler extends Compiler {
             }
 
             if (qn.greedy) {
-                if (qn.headExact != null) {
-                    addOpcodeRelAddr(OPCode.PUSH_OR_JUMP_EXACT1, modTLen + OPSize.JUMP);
+                if (isCompactExactRepeat(qn)) {
+                    addOpcode(OPCode.PUSH_OR_JUMP_EXACT1_RANGE);
+                    addStateCheckNum(0);
+                    addRelAddr(modTLen + OPSize.JUMP);
+                    addBytes(singleByteRepeatTarget(qn).bytes,
+                            singleByteRepeatTarget(qn).p, 1);
+                    compileRepeatTreeEmptyCheck(qn.target, emptyInfo, clearId);
+                    addOpcodeRelAddr(OPCode.JUMP,
+                            -(modTLen + OPSize.JUMP + OPSize.PUSH_OR_JUMP_EXACT1_RANGE));
+                } else if (qn.headExact != null) {
+                    addOpcodeRelAddr(OPCode.PUSH_OR_JUMP_EXACT1,
+                            modTLen + OPSize.JUMP);
                     StringNode sn = (StringNode)qn.headExact;
                     addBytes(sn.bytes, sn.p, 1);
                     compileRepeatTreeEmptyCheck(qn.target, emptyInfo, clearId);
@@ -1292,6 +1322,35 @@ final class ArrayCompiler extends Compiler {
         } else {
             compileRangeRepeatNode(qn, modTLen, emptyInfo, clearId);
         }
+    }
+
+    /**
+     * A greedy one-byte literal repeat has no internal alternatives. Its
+     * backtracking positions can be stored as one shrinking range rather than
+     * one stack entry per matched byte.
+     */
+    private boolean isCompactExactRepeat(QuantifierNode qn) {
+        if (!qn.greedy || !isRepeatInfinite(qn.upper) || qn.lower > 1
+                || isIgnoreCase(regex.options) || isDynamic(regex.options)) {
+            return false;
+        }
+        StringNode target = singleByteRepeatTarget(qn);
+        return target != null && (target.bytes[target.p] & 0xff) < 0x80;
+    }
+
+    private StringNode singleByteRepeatTarget(QuantifierNode qn) {
+        Node target = qn.target;
+        if (target.getType() == NodeType.STR) {
+            StringNode string = (StringNode) target;
+            return string.length() == 1 ? string : null;
+        }
+        if (target.getType() == NodeType.LIST) {
+            ListNode list = (ListNode) target;
+            return list.tail == null && list.value.getType() == NodeType.STR
+                    && ((StringNode) list.value).length() == 1
+                    ? (StringNode) list.value : null;
+        }
+        return null;
     }
 
     private int compileLengthOptionNode(EncloseNode node) {

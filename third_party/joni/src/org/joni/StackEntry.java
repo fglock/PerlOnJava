@@ -25,6 +25,8 @@ class StackEntry {
     private int activeCallDepth;
     private int callFramePreviousHead = -1;
     private int E1, E2, E3, E4;
+    private int exactRepeatFloor;
+    private boolean exactRepeatAlternative;
     private Object calloutToken;
     private ByteCodeMachine.DynamicContinuation dynamicContinuation;
     private String previousControlMarkName;
@@ -61,6 +63,18 @@ class StackEntry {
     }
     int getPKeep() {
         return E4;
+    }
+    void setExactRepeatFloor(int floor) {
+        exactRepeatFloor = floor;
+    }
+    int getExactRepeatFloor() {
+        return exactRepeatFloor;
+    }
+    void setExactRepeatAlternative(boolean value) {
+        exactRepeatAlternative = value;
+    }
+    boolean isExactRepeatAlternative() {
+        return exactRepeatAlternative;
     }
 
     // second union member
