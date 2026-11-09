@@ -711,6 +711,10 @@ public class RuntimeList extends RuntimeBase {
      * @return The original list.
      */
     public RuntimeArray setFromList(RuntimeList value) {
+        return setFromList(value, true);
+    }
+
+    private RuntimeArray setFromList(RuntimeList value, boolean returnResult) {
         // Fast path: LHS is all simple scalars, RHS is a single RuntimeArray
         // This handles the common case: my ($a, $b) = @_
         if (value.elements.size() == 1 && value.elements.get(0) instanceof RuntimeArray rhsArray) {
@@ -722,7 +726,7 @@ public class RuntimeList extends RuntimeBase {
                 }
             }
             if (allSimpleScalars) {
-                return assignSimpleScalarsFromArray(rhsArray, true);
+                return assignSimpleScalarsFromArray(rhsArray, returnResult);
             }
         }
 
@@ -764,7 +768,7 @@ public class RuntimeList extends RuntimeBase {
         // Avoids O(n^2) from repeated RuntimeArray.shift() which does removeFirst() on ArrayList.
         RuntimeArray rhs = new RuntimeArray();
         rhs.transientListAssignmentRhs = true;
-        RuntimeArray result = new RuntimeArray();
+        RuntimeArray result = returnResult ? new RuntimeArray() : null;
         boolean assignmentCompleted = false;
         try {
             value.addToArray(rhs);
@@ -775,7 +779,7 @@ public class RuntimeList extends RuntimeBase {
 
             // Build result with assigned values (including undef for unassigned scalars)
             // Store original size for scalar context
-            result.scalarContextSize = rhsSize;
+            if (result != null) result.scalarContextSize = rhsSize;
 
             for (RuntimeBase elem : elements) {
                 if (elem instanceof RuntimeScalarReadOnly runtimeScalarReadOnly && !runtimeScalarReadOnly.getDefinedBoolean()) {
@@ -790,7 +794,7 @@ public class RuntimeList extends RuntimeBase {
                     // (it would reflect the post-assignment value rather than the pre-assignment value).
                     boolean useAlias = rhsAlias != null && lhsScalars != null && !lhsScalars.containsKey(rhsAlias);
 
-                    result.elements.add(useAlias ? rhsAlias : rhsValue);
+                    if (result != null) result.elements.add(useAlias ? rhsAlias : rhsValue);
 
                     if (rhsIndex < rhsSize) {
                         // Retire the materialized copy's counted edge and IO lease for the consumed
@@ -808,7 +812,7 @@ public class RuntimeList extends RuntimeBase {
                     }
                     RuntimeScalar assigned = (rhsIndex < rhsSize) ? rhsElements.get(rhsIndex++) : null;
                     runtimeScalar.set(assigned != null ? assigned : new RuntimeScalar());
-                    result.elements.add(runtimeScalar);  // Add reference to the variable itself
+                    if (result != null) result.elements.add(runtimeScalar);  // Add reference to the variable itself
                     // Retire the materialized copy's counted edge and IO lease.
                     // The materialization (addToArray → addToScalar → set → setLarge) incremented
                     // refCount on the copy. The target's set() above created its own increment.
@@ -837,7 +841,7 @@ public class RuntimeList extends RuntimeBase {
                         RuntimeScalar.releaseMaterializedAssignmentCopy(
                                 r, "array-target", result);
                     }
-                    result.elements.addAll(assignedArray.elements);
+                    if (result != null) result.elements.addAll(assignedArray.elements);
                     rhsIndex = rhsSize; // Consume the rest
                 } else if (elem instanceof RuntimeHash runtimeHash) {
                     List<RuntimeScalar> remaining = (rhsIndex < rhsSize)
@@ -853,7 +857,7 @@ public class RuntimeList extends RuntimeBase {
                     // setFromList releases displaced hash slots and acquires current
                     // HASH_ELEMENT identities. Its result also preserves tied-hash
                     // assignment behavior and the assigned key/value list.
-                    result.elements.addAll(assignedHash.elements);
+                    if (result != null) result.elements.addAll(assignedHash.elements);
                     // The RHS materialization is temporary transport; retire its
                     // counted edges and IO leases after the destination acquired slots.
                     for (RuntimeScalar r : remaining) {
@@ -902,7 +906,7 @@ public class RuntimeList extends RuntimeBase {
                 return null;
             }
         }
-        return setFromList(value);
+        return setFromList(value, false);
     }
 
     private RuntimeArray assignSimpleScalarsFromArray(RuntimeArray rhsArray, boolean returnResult) {

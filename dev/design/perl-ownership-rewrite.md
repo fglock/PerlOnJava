@@ -2,40 +2,45 @@
 
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Production sweep callers have been removed; count alignment still uses verified current owner slots while remaining producer gaps are audited.
 
-**Current checkpoint (2026-11-09):** #1649 remains in Phase 2. In worktree
-`/private/tmp/issue1649-latest-rebase-20261109`, branch
-`wip/issue1649-resultset-trace-20261109-142013`, commit `a403219608` fixes a
-JVM/interpreter mismatch in returned-list `foreach` reference counts. Perl
-aliases the existing scalar cell; it does not add another referent owner when
-that cell or a returned list already owns the reference. The interpreter can
-enter the loop while the returned scalar slot's release is queued. The alias
-path now recognizes that exact pending return-slot release instead of counting
-it a second time. Added `foreach_alias_does_not_add_referent_owner.t`.
+**Current checkpoint (2026-11-09):** #1649 remains in Phase 2. The reconciled
+worktree `/private/tmp/issue1649-pr-sync-20261109` is on
+`wip/issue1649-pr-reconciled-20261109`, based at `c431e253f7`; the current
+runtime batch is uncommitted. This turn confirmed that a scalar refalias in an
+array slot acquires a distinct `ARRAY_ALIAS_CELL` owner identity. The existing
+`refalias_array_element_cell_owner.t` regression covers lexical scope exit,
+duplicate aliases, and release after replacing the final alias; it passes on
+system Perl and in the full no-sweeps gate after the owner acquisition path was
+restored in `RuntimeArrayProxyEntry`.
 
-Evidence: `nice -n 19 timeout 1800 make` passed in 6m50
-(`/tmp/issue1649-foreach-pending-return-owner-make.log`). Returned-list
-foreach, direct-array foreach, multivariable/magic foreach, and nested
-argument-alias destroy regressions pass on both backends. The new direct-array
-test and existing returned-list test pass under system Perl. Earlier map and
-grep alias fixes remain covered as recorded below. Production corrective-sweep
-callers remain removed, but the complete owner-producer audit and strict CPAN
-acceptance are still open; DBIx::Class `t/52leaks.t` retains an unresolved
-post-DESTROY owner trace.
+The reconciled full gate reduced seven failures to two. The current
+`JPERL_DISABLE_CORRECTIVE_SWEEPS=1 nice -n 19 make` run failed after 6m44:
+`b_refcount_destroy_aggregate_owner.t` reports 2 instead of 1 for its first
+`B::SV::REFCNT` assertion; the other three B assertions pass. The
+Mojolicious-style rejected-promise test still misses its warning. Its trace
+shows one `PromiseModel` owner left in an unowned temporary array element, with
+scope-exited closure pads; producer/release ownership at the nested list and
+array assignment boundary remains under investigation. Logs:
+`/tmp/issue1649-owner-fix-make.log`,
+`/tmp/issue1649-promise-current-repro.log`, and
+`/tmp/issue1649-owner-fix-system-perl.log` (four Perl-level regressions pass).
+Also restored Perl's non-localizing `$#array` behavior, owner-aware shared tied
+storage wrappers, rescued-object processing by current owner identities, and
+the void-context list-assignment path; those regressions pass in this gate.
 
 PR #1938 remains open/draft at `1a6555c05ce7ddab547da276413328fab4f9b997`.
-The current WIP branch and PR head have diverged from their common master base;
-their direct diff includes existing regression-test deletions. Do not push or
-force-update the PR until the complete patch sets are reconciled. The #1649
-handoff comment now records this checkpoint.
+The reconciled overlay is not ready to publish while these two regressions fail.
+Keep the PR handoff current, preserve the PR-owned tests, and rerun the no-sweeps
+gate only after the B refcount adjustment and temporary-array owner release are
+resolved. Complete producer audit and strict CPAN acceptance remain open.
 
 ### Next steps
 
-1. Reconcile the local continuation with the current PR #1938 head without
-   dropping its existing tests, then refresh PR status and validation evidence.
-2. Trace the retained `BaseResultSet` and storage hash-element owners in DBIx
-   `t/52leaks.t`; batch any related producer fixes before another full gate.
-3. Complete the remaining owner-producer audit and strict CPAN acceptance;
-   keep #1649 and PR #1938 open until those criteria pass.
+1. Finish the remaining `B::SV::REFCNT` adjustment and trace the PromiseModel
+   array-slot owner to its exact producer and release boundary.
+2. Batch the demonstrated ownership fixes, validate focused cases on both
+   backends, then rerun the full no-sweeps gate on an immutable candidate.
+3. Complete the owner-producer audit and strict CPAN acceptance; keep #1649 and
+   PR #1938 open until those criteria pass.
 
 The reported Class::MethodMaker tied-array lifetime failure is covered by the
 new project-owned `refcount/generated_tied_array_handler_lifetime.t`: it

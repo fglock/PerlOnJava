@@ -101,19 +101,14 @@ public class RuntimeArraySizeLvalue extends RuntimeBaseProxy {
 
     @Override
     public void dynamicSaveState() {
-        RuntimeArray parent = lvalue.arrayDeref();
-        int lastIndex = parent.lastElementIndex();
-        savedSizes.push(new SavedSize(lastIndex, new ArrayList<>(parent.elements)));
+        // Perl treats `local $#array` as an ordinary array-size assignment;
+        // the assignment is not undone when the dynamic scope exits.
     }
 
     @Override
     public void dynamicRestoreState() {
-        if (!savedSizes.empty() && !isOrphaned()) {
-            RuntimeArray parent = lvalue.arrayDeref();
-            SavedSize saved = savedSizes.pop();
-            parent.elements.clear();
-            parent.elements.addAll(saved.tail);
-        }
+        // Do not restore element wrappers whose counted owner slots were
+        // retired when the localized size assignment removed them.
     }
 
     @Override

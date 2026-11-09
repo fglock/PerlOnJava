@@ -775,20 +775,19 @@ public class MortalList {
      */
     public static void flushDeferredCaptures() {
         LifecycleRuntimeState state = state();
-        if (state.deferredCaptures.isEmpty()) return;
-        for (RuntimeScalar scalar : state.deferredCaptures) {
-            deferDecrementIfTracked(scalar);
+        if (!state.deferredCaptures.isEmpty()) {
+            for (RuntimeScalar scalar : state.deferredCaptures) {
+                deferDecrementIfTracked(scalar);
+            }
+            state.deferredCaptures.clear();
+            state.deferredCapturesSet.clear();
+            state.deferredCapturesMayBeReady = false;
+            flush();
         }
-        state.deferredCaptures.clear();
-        state.deferredCapturesSet.clear();
-        state.deferredCapturesMayBeReady = false;
-        flush();
 
-        // After flushing deferred captures, clear weak refs for objects that
-        // were rescued by DESTROY (e.g., Schema::DESTROY self-save pattern).
-        // This must happen AFTER the flush above so that all pending refCount
-        // decrements have been processed and before global destruction.
-        DestroyDispatch.clearRescuedWeakRefs();
+        // The rescue registry is bookkeeping, not an owner. Finalization must
+        // check current Perl owner identities even when no captures were queued.
+        DestroyDispatch.processRescuedObjects();
 
     }
 
