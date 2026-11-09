@@ -812,7 +812,7 @@ public class RuntimeList extends RuntimeBase {
                     }
                     RuntimeScalar assigned = (rhsIndex < rhsSize) ? rhsElements.get(rhsIndex++) : null;
                     runtimeScalar.set(assigned != null ? assigned : new RuntimeScalar());
-                    if (result != null) result.elements.add(runtimeScalar);  // Add reference to the variable itself
+                    if (result != null) result.addBorrowedListResultValue(runtimeScalar);
                     // Retire the materialized copy's counted edge and IO lease.
                     // The materialization (addToArray → addToScalar → set → setLarge) incremented
                     // refCount on the copy. The target's set() above created its own increment.
@@ -841,7 +841,7 @@ public class RuntimeList extends RuntimeBase {
                         RuntimeScalar.releaseMaterializedAssignmentCopy(
                                 r, "array-target", result);
                     }
-                    if (result != null) result.elements.addAll(assignedArray.elements);
+                    if (result != null) result.addBorrowedListResultValues(assignedArray.elements);
                     rhsIndex = rhsSize; // Consume the rest
                 } else if (elem instanceof RuntimeHash runtimeHash) {
                     List<RuntimeScalar> remaining = (rhsIndex < rhsSize)
