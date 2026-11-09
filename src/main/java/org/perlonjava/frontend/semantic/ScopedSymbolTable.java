@@ -858,6 +858,25 @@ public class ScopedSymbolTable {
     }
 
     /**
+     * Returns the next available variable register index across all scopes.
+     * Equivalent to (highest variable register + 1), computed in O(1).
+     *
+     * <p>This works because:
+     * - {@link #enterScope} initialises every new scope's {@code index} from its parent, so
+     *   the innermost scope always starts at or above the parent's high-water mark.
+     * - {@link #exitScope} propagates the child's max {@code index} back to the parent, so
+     *   the current top scope always reflects every variable ever allocated.
+     * - {@link SymbolTable#addVariableWithIndex} and {@link SymbolTable#addVariable} keep the
+     *   scope's {@code index} = max(assigned register) + 1.
+     *
+     * <p>Used by {@link org.perlonjava.backend.bytecode.BytecodeCompiler#recycleTemporaryRegisters}
+     * to find the reset point without scanning all visible variables.
+     */
+    public int getTopScopeNextIndex() {
+        return symbolTableStack.peek().index;
+    }
+
+    /**
      * Clears the cache for the getAllVisibleVariables method.
      * This method should be called whenever the symbol table is modified.
      */
