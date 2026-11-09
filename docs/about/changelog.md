@@ -6,6 +6,8 @@ priorities and future plans.
 
 ## Work in progress
 
+- Normalize out-of-range calendar fields in `Time::Piece->strptime`, matching Perl date overflow behavior (#2001).
+
 - Share empty warning-bit and parser-keyword-plugin sentinels across `ScopedSymbolTable` scopes instead of allocating fresh `BitSet` and `LinkedHashMap` instances for every scope entry: `enterScope()`, the constructor, and `snapShot()` now push a static `EMPTY_BITSET`/`EMPTY_PLUGINS` reference when the scope inherits all-default warning state, with copy-on-write in all mutation paths (`enableWarningCategory`, `disableWarningCategory`, `enableFatalWarningCategory`, `enableExperimentalFeatureWarning`, `registerParserKeywordPlugin`). Eliminates ~30 M `BitSet` and ~10 M `LinkedHashMap` allocations per 5 M eval-string iterations, removing both allocation types from the JFR execution-sample profile and halving `ScopedSymbolTable.<init>` sample count.
 
 - Eliminate unbounded `WarningBitsRegistry` growth for interpreter-compiled evals: warning bits are now embedded directly in the `caller()` frame token rather than registered in a global `ConcurrentHashMap`, removing a memory leak and a ~22% `ConcurrentHashMap.transfer` hot spot on repeated `eval STRING`.
