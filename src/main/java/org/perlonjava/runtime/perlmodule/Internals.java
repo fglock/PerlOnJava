@@ -628,6 +628,22 @@ public class Internals extends PerlModuleBase {
             // compensates for the ampersand-call argument alias below.
             int extra = (base.localBindingExists && !compileHintsHash ? 1 : 0)
                     + base.foreachAliasCount;
+            if (rc == 2
+                    && args.size() > 1
+                    && args.get(1).getBoolean()
+                    && DestroyDispatch.isInsideDestroy()
+                    && !ReachabilityWalker.hasLiveStrongScalarReferentOtherThan(base, arg)) {
+                // B::SV's private hash slot is one of the two selective
+                // owners.  Ordinarily it is the temporary owner discounted
+                // below (a single live lexical therefore reports one).  If
+                // there is no independently live scalar pad, the other owner
+                // is a real aggregate slot, as in DBIx::Class Schema's source
+                // registry during DESTROY, and must remain visible to B. This
+                // distinction is only meaningful while DESTROY is active:
+                // outside it, an unregistered lexical can look identical and
+                // must still report its single owner.
+                extra++;
+            }
             // Legacy fudge: anonymous tracked container with no counted
             // owners -- still report 1 to indicate "live SV". Used by
             // Sub::Quote / Moo introspection paths that probe for liveness.
@@ -655,19 +671,6 @@ public class Internals extends PerlModuleBase {
             // slot instead of counting both as Perl owners.
             if (bObjectProbe && base.localBindingExists && !compileHintsHash) {
                 adjust = -1;
-            }
-            if (bObjectProbe) {
-                // Native B wrappers contain only an SV pointer, so none of
-                // their PerlOnJava hash slots count as referent owners. This
-                // includes wrappers left live by an outer DESTROY frame while
-                // a rescued object is queried again.
-                adjust -= base.currentBObjectReferentOwnerCount();
-                // Perl @_ aliases do not add references to their referents.
-                // Our argument containers and their elements are counted
-                // slots, so discount the extra ones while retaining the
-                // existing single-call adjustment above.
-                adjust -= Math.max(0,
-                        base.currentArgumentFrameReferentOwnerCount() - 1);
             }
             return new RuntimeScalar(rc + extra + adjust).getList();
         }

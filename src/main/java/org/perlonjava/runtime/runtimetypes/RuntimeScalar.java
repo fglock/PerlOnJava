@@ -1107,6 +1107,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
     private boolean mortalReturnSnapshot;
     private boolean mortalReturnValueOwner;
+    private RuntimeBase foreachAliasRefCountReferent;
+    private boolean foreachAliasRefCounted;
     private long mortalReturnSourceOwnerIdentity;
     private long mortalReturnSourceReleaseSequence;
     private RuntimeBase mortalReturnSourceReferent;
@@ -1122,6 +1124,57 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     boolean hasMortalReturnSnapshot() {
         return mortalReturnSnapshot;
+    }
+
+    /** Whether the temporary return value still carries its active owner edge. */
+    boolean hasActiveMortalReturnValueOwner() {
+        if (!mortalReturnSnapshot) return false;
+        if (mortalReturnValueOwner) return true;
+        PerlOwnerSlot owner = countedOwnerSlot;
+        if (refCountOwned && owner != null && owner.isActive()
+                && owner.referent() == value) {
+            return true;
+        }
+        // A deferred return-slot release remains the list's owner until it is
+        // actually processed. Interpreted calls can enter foreach while that
+        // release is still queued; counting the alias as well would duplicate
+        // the same Perl-visible owner.
+        return value instanceof RuntimeBase referent
+                && MortalList.pendingCountedReleaseFor(this, referent) != null;
+    }
+
+    void retainForeachRefCountOwner() {
+        if (foreachAliasRefCounted || foreachAliasRefCountReferent != null) {
+            throw new IllegalStateException("foreach refcount owner is already active");
+        }
+        if ((type & RuntimeScalarType.REFERENCE_BIT) == 0
+                || !(value instanceof RuntimeBase referent)) return;
+        foreachAliasRefCountReferent = referent;
+        boolean activeReturnOwner = hasActiveMortalReturnValueOwner();
+        boolean storedCellOwner = hasStorageOwnerForVoidDiscard();
+        foreachAliasRefCounted = !activeReturnOwner && !storedCellOwner;
+        if (referent.refCountTrace && RuntimeBase.refCountTraceEnabled()) {
+            PerlOwnerSlot owner = countedOwnerSlot;
+            System.err.println("[FOREACH-ALIAS-HOLD] scalar="
+                    + System.identityHashCode(this) + " referent="
+                    + System.identityHashCode(referent) + " refCount=" + referent.refCount
+                    + " snapshot=" + mortalReturnSnapshot + " refCountOwned=" + refCountOwned
+                    + " activeReturnOwner=" + activeReturnOwner + " storedCellOwner="
+                    + storedCellOwner + " ownerKind=" + (owner == null ? "none" : owner.kind())
+                    + " ownerActive=" + (owner != null && owner.isActive())
+                    + " aliasCounted=" + foreachAliasRefCounted);
+        }
+        if (foreachAliasRefCounted) referent.foreachAliasCount++;
+    }
+
+    void releaseForeachRefCountOwner() {
+        RuntimeBase referent = foreachAliasRefCountReferent;
+        boolean counted = foreachAliasRefCounted;
+        foreachAliasRefCountReferent = null;
+        foreachAliasRefCounted = false;
+        if (counted && referent != null && referent.foreachAliasCount > 0) {
+            referent.foreachAliasCount--;
+        }
     }
 
     /** Whether this scalar is runtime staging, rather than durable Perl storage. */
@@ -1306,10 +1359,36 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     PerlOwnerSlot.Kind.UNTRACKED_REFERENCE);
             untrackedReferenceOwnerSlot.associateUntrackedScalarOwner(this);
         }
+        RuntimeBase container = getContainerOwner();
+        boolean traceTransientResultSetArrayOwner = RuntimeBase.refCountTraceEnabled()
+                && referent instanceof RuntimeHash
+                && "DBICTest::BaseResultSet".equals(
+                        NameNormalizer.getBlessStr(referent.blessId))
+                && container instanceof RuntimeArray array
+                && !array.hasPerlStrongOwnerIdentity()
+                && !array.localBindingExists
+                && !array.isPackageGlobalRoot
+                && !MyVarCleanupStack.isRegistered(array)
+                && untrackedReferenceOwnerSlot.borrowReferent() != referent;
         // Transfer the existing identity in place. PerlOwnerSlot installs its
         // new referent before releasing the previous one, so cleanup callbacks
         // cannot observe a gap where this scalar's current value has no owner.
         untrackedReferenceOwnerSlot.acquireUntrackedIdentity(referent);
+        if (traceTransientResultSetArrayOwner) {
+            RuntimeArray array = (RuntimeArray) container;
+            System.err.println("[UNOWNED-RESULTSET-ARRAY-OWNER] referent="
+                    + System.identityHashCode(referent) + " generation="
+                    + RuntimeBase.traceReferentGeneration(referent) + " refCount="
+                    + referent.refCount + " scalar=" + System.identityHashCode(this)
+                    + " packageRoot=" + isPackageGlobalRoot + " array="
+                    + System.identityHashCode(array) + " size=" + array.elements.size()
+                    + " arrayRefCount=" + array.refCount + " elementsOwned="
+                    + array.elementsOwned + " elementsAliased=" + array.elementsAliased);
+            StackTraceElement[] stack = new Throwable().getStackTrace();
+            for (int i = 1; i < Math.min(stack.length, 18); i++) {
+                System.err.println("    at " + stack[i]);
+            }
+        }
     }
 
     void releaseUntrackedReferenceOwner(RuntimeBase expectedReferent) {
@@ -1399,7 +1478,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         refreshDetachedGlobValueOwner();
     }
 
-    static final class ArgumentAliasOwner {
+    public static final class ArgumentAliasOwner {
         private final RuntimeScalar scalar;
         private final PerlOwnerSlot ownerSlot;
 
@@ -1416,12 +1495,17 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             return scalar;
         }
 
-        void release() {
+        public void release() {
             scalar.releaseArgumentAliasOwner(ownerSlot);
         }
     }
 
-    synchronized ArgumentAliasOwner retainArgumentAliasOwner() {
+    /**
+     * Retain this scalar cell while Perl code aliases it as an argument or
+     * list-operator topic. This records the referent owner represented by the
+     * alias; it does not copy the scalar or add a second Perl-visible value.
+     */
+    public synchronized ArgumentAliasOwner retainArgumentAliasOwner() {
         PerlOwnerSlot ownerSlot = new PerlOwnerSlot(PerlOwnerSlot.Kind.ARGUMENT_ALIAS);
         if (argumentAliasOwnerSlots == null) argumentAliasOwnerSlots = new ArrayList<>();
         argumentAliasOwnerSlots.add(ownerSlot);

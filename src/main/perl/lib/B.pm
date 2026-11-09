@@ -54,8 +54,8 @@ package B::SV {
         # variable assignment that holds a reference inflates the referent's
         # selective refcount by 1 (via setLargeRefCounted). Instead, use
         # $_[0]/$_[1] (aliases into @_) which don't increment refcount.
-        # This keeps the wrapper's only referent edge in `$self->{ref}`.
-        # The runtime excludes this implementation-only edge from REFCNT.
+        # This keeps the only inflation to the `$self->{ref}` hash slot,
+        # which REFCNT compensates for with its -1 adjustment.
         my $self = bless {}, $_[0];
         $self->{ref} = $_[1];
         return $self;
@@ -64,9 +64,9 @@ package B::SV {
     sub REFCNT {
         # Return the selective refcount via Internals::SvREFCNT.
         #
-        # In PerlOnJava, B::SV stores the reference in $self->{ref}, a tracked
-        # hash element. Native Perl's B object stores only an SV pointer, so
-        # the runtime excludes these wrapper slots from the reported count.
+        # In PerlOnJava, B::SV stores the reference in $self->{ref} which is
+        # a tracked (blessed) hash element. This inflates the referent's
+        # selective refCount by +1 via setLargeRefCounted.
         #
         # In Perl 5, B::svref_2object() stores the SV pointer directly (a C
         # pointer), so it does NOT inflate the referent's refcnt. However,
@@ -76,12 +76,13 @@ package B::SV {
         #   1. Stack/JVM temporaries don't contribute
         #   2. Method call argument copies don't contribute
         #
-        # The runtime accounts for the lower selective count and excludes all
-        # active B wrapper slots, including ones retained by nested queries.
+        # The B::SV inflation (+1) roughly compensates for these deficits,
+        # so we return the raw selective refCount WITHOUT subtracting 1.
         #
         # For Schema::DESTROY's `refcount($source) > 1` check:
         #   - Source with 1 selective ref (e.g., source_registrations only):
-        #     REFCNT = 1 → no rescue ✓, regardless of overlapping wrappers.
+        #     B::SV inflation → 2, REFCNT = 2 → > 1 → rescue ✓
+        #     (In Perl 5 this source also shows > 1 because stack temps add refs)
         #   - Source with 0 selective refs (untracked):
         #     B::SV inflation → 1, REFCNT = 1 → no rescue ✓
         # B's C implementation inspects the referent without creating a Perl

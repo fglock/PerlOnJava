@@ -21,10 +21,8 @@ priorities and future plans.
 - Acquire anonymous IO holder identities for existing scalar and aggregate aliases whenever IO is installed into an existing glob (#1649).
 - Release temporary anonymous IO holder leases with list-assignment scalar owners while preserving handles carried in assignment results (#1649).
 - Finalize cleared aggregates from current owner identities; root reachability no longer preserves an ownerless referent (#1649).
-- Match Perl's `B::SV::REFCNT` during `DESTROY` without counting synthetic argument-frame or overlapping B wrapper owners as external references (#1649).
 - Release `Storable::dclone` results when their last Perl owner is dropped, without leaving an extra counted return helper (#1649).
 - Release compiler, module, and postfix reference-transfer temporaries through their exact counted slot transition, including subroutine return slots, list assignment, hash slices, refalias setup, and Storable hooks (#1649).
-- Discard unused hash-slice list-assignment results in void context so temporary lvalue proxies do not retain asynchronous Promise owners (#1649).
 - Hold an array or hash container through the lifetime of an aliased element argument, including after `shift @_` (#1649).
 - Keep a replacement reference's RHS temporary alive through reentrant cleanup of the overwritten scalar slot (#1649).
 - Preserve tied hash and array magic through aliased element arguments, including `untie` during the callee, and release the handler at frame exit (#1649).
@@ -32,9 +30,6 @@ priorities and future plans.
 - Snapshot glob arguments retained by file-test and stat caches, and retain the anonymous IO lease assigned by `sysopen` (#1649).
 - Copy weakened CODE references into independent strong stash scalars so glob slots acquire and release their own `CODE_SLOT` owner (#1649).
 - Use owner-slot transitions for named CODE vivification and typeglob aliases instead of direct replacement or parallel stash counts (#1649).
-- Preserve container-owner callbacks when `threads::shared` replaces tied arrays and hashes with native shared storage (#1649).
-- Match Perl's non-restoring `local $#array` behavior so removed elements are not revived after their owners are released (#1649).
-- Finalize DESTROY-rescued aggregates from their current owner identities, releasing nested resources through actual slots instead of recursive weak-reference graph walks (#1649).
 
 - Replace the O(N) `getAllVisibleVariables()` scan in `recycleTemporaryRegisters()` (called after every compiled statement) with an O(1) read of `ScopedSymbolTable.getTopScopeNextIndex()`: the innermost scope's `index` field is already the exact high-water mark for all allocated variable registers (maintained by `enterScope`/`exitScope` propagation and `addVariable`/`addVariableWithIndex`), so no full symbol-table traversal is needed. Removes `getHighestVariableRegister` from the JFR execution-sample profile entirely and reduces `recycleTemporaryRegisters` samples from ~138 to ~5, yielding ~11–13% wall-clock speedup on a 2 M-iteration `eval STRING` benchmark (10.67 s vs 12.07 s).
 
@@ -129,7 +124,6 @@ priorities and future plans.
 - Track saved namespace moves with stash owner slots and release them when consumed or when the stale stash dies (#1649).
 - Acquire active lexical owner identities when aggregate registration follows the initial pad bind, and clear weak aggregate observers on normal scope exit (#1649).
 - Release scalar-cell pad owners after lexical cleanup, clearing weak observers at the correct scope exit (#1649).
-- Retain array element refalias scalar cells through explicit array alias owner slots, including alias views and tail-call carriers (#1649).
 - Exclude weak glob aliases from strong-owner backfill; release their anonymous IO holder on weaken and restore it on unweaken (#1649).
 - Release displaced hash-element owners when multi-LHS list assignment replaces a hash tail, through the normal tied and package-root-aware store path (#1649).
 - Release materialized list-assignment owners and restore lexical cleanup when tied hash assignment throws from `STORE` (#1649).
@@ -140,6 +134,7 @@ priorities and future plans.
 - Preserve captured weak referents through semantic closure-pad owner identities; release scalar cells after the last capture and retry weak cleanup after pending owner release (#1649).
 - Defer legacy semantic closure-pad cleanup to its owner-slot release, removing the final capture-path positive-count pin (#1649).
 - Bind signature parameter cells that skip lexical alias resolution into active pads so slurpy aggregates release weak observers at frame exit (#1649).
+
 
 
 

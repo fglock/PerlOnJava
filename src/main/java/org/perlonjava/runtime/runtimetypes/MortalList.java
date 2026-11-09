@@ -775,18 +775,19 @@ public class MortalList {
      */
     public static void flushDeferredCaptures() {
         LifecycleRuntimeState state = state();
-        if (!state.deferredCaptures.isEmpty()) {
-            for (RuntimeScalar scalar : state.deferredCaptures) {
-                deferDecrementIfTracked(scalar);
-            }
-            state.deferredCaptures.clear();
-            state.deferredCapturesSet.clear();
-            state.deferredCapturesMayBeReady = false;
-            flush();
+        if (state.deferredCaptures.isEmpty()) return;
+        for (RuntimeScalar scalar : state.deferredCaptures) {
+            deferDecrementIfTracked(scalar);
         }
+        state.deferredCaptures.clear();
+        state.deferredCapturesSet.clear();
+        state.deferredCapturesMayBeReady = false;
+        flush();
 
-        // After flushing deferred captures, finalize rescued roots whose final
-        // Perl owner left. This also runs when no deferred capture was queued.
+        // After flushing deferred captures, clear weak refs for objects that
+        // were rescued by DESTROY (e.g., Schema::DESTROY self-save pattern).
+        // This must happen AFTER the flush above so that all pending refCount
+        // decrements have been processed and before global destruction.
         DestroyDispatch.clearRescuedWeakRefs();
 
     }
@@ -996,6 +997,28 @@ public class MortalList {
     }
 
     private static void scopeExitCleanupHashBody(RuntimeHash hash, boolean finalRelease) {
+        if (finalRelease && RuntimeBase.refCountTraceEnabled()) {
+            System.err.println("[DESTROY-HASH-CLEANUP] begin hash="
+                    + System.identityHashCode(hash) + " generation="
+                    + RuntimeBase.traceReferentGeneration(hash) + " refCount=" + hash.refCount
+                    + " blessId=" + hash.blessId + " keys=" + hash.elements.size());
+            for (java.util.Map.Entry<String, RuntimeScalar> entry : hash.elements.entrySet()) {
+                RuntimeScalar value = entry.getValue();
+                RuntimeBase referent = value != null && value.value instanceof RuntimeBase base
+                        ? base : null;
+                System.err.println("[DESTROY-HASH-CELL] hash=" + System.identityHashCode(hash)
+                        + " generation=" + RuntimeBase.traceReferentGeneration(hash)
+                        + " key=" + entry.getKey() + " scalar="
+                        + (value == null ? 0 : System.identityHashCode(value))
+                        + " owns=" + (value != null && value.refCountOwned)
+                        + " weak=" + (value != null && WeakRefRegistry.isweak(value))
+                        + " referent=" + (referent == null ? 0 : System.identityHashCode(referent))
+                        + " referentGeneration=" + (referent == null ? 0
+                                : RuntimeBase.traceReferentGeneration(referent))
+                        + " referentRefCount=" + (referent == null ? 0 : referent.refCount)
+                        + " referentBlessId=" + (referent == null ? 0 : referent.blessId));
+            }
+        }
         // Clear localBindingExists: the named variable's scope is ending.
         // This allows subsequent refCount==0 events (from setLargeRefCounted
         // or flush) to correctly trigger callDestroy, since the local
@@ -1009,7 +1032,7 @@ public class MortalList {
         }
         if (!finalRelease && directlyReferences(returned, hash)) return;
         // A live reference keeps the container and its IO element slots alive.
-        if (!finalRelease && (hash.refCount > 0 || hash.hasOwnerSlots()
+        if (!finalRelease && (hash.refCount > 0 || hash.hasCurrentPerlOwnerSlotIdentity()
                 || temporaryRootDirectlyReferences(hash))) return;
         if (hash instanceof RuntimeStash stash) {
             stash.releaseSavedNamespaceMove();
@@ -1115,7 +1138,7 @@ public class MortalList {
             return;
         }
         // Alias arrays such as @_ do not own their original element slots.
-        if (!finalRelease && (arr.refCount > 0 || arr.hasOwnerSlots()
+        if (!finalRelease && (arr.refCount > 0 || arr.hasCurrentPerlOwnerSlotIdentity()
                 || temporaryRootDirectlyReferences(arr) || directlyReferences(returned, arr))) return;
         // A refalias list owns the scalar cells even though those cells are
         // not ordinary copied array values. Retire those cell identities only

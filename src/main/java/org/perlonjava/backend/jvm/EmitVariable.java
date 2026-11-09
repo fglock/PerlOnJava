@@ -1834,10 +1834,9 @@ public class EmitVariable {
                 // The my operator needs to be processed to create the variables first.
                 node.left.accept(emitterVisitor.with(RuntimeContextType.LVALUE_LIST));   // emit the variable (target)
                 mv.visitVarInsn(Opcodes.ALOAD, rhsListSlot);                      // reload RHS list
-                if (isVoidMyScalarListAssignment(ctx, node)
-                        || isVoidHashSliceAssignment(ctx, node)) {
+                if (isVoidMyScalarListAssignment(ctx, node)) {
                     mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                            "org/perlonjava/runtime/runtimetypes/RuntimeBase", "setFromListVoid",
+                            "org/perlonjava/runtime/runtimetypes/RuntimeList", "setFromListVoid",
                             "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)"
                                     + "Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;", false);
                 } else {
@@ -1957,19 +1956,6 @@ public class EmitVariable {
             return innerContext == RuntimeContextType.LIST;
         }
         return false;
-    }
-
-    private static boolean isVoidHashSliceAssignment(
-            EmitterContext ctx, BinaryOperatorNode assignment) {
-        if (ctx.contextType != RuntimeContextType.VOID) return false;
-        Node target = assignment.left;
-        while (target instanceof ListNode list && list.elements.size() == 1) {
-            target = list.elements.getFirst();
-        }
-        return target instanceof BinaryOperatorNode slice
-                && slice.operator.equals("{")
-                && slice.left instanceof OperatorNode hash
-                && hash.operator.equals("@");
     }
 
     private static boolean isVoidMyScalarListAssignment(

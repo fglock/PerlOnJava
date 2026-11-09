@@ -2,131 +2,138 @@
 
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Production sweep callers have been removed; count alignment still uses verified current owner slots while remaining producer gaps are audited.
 
-**Current checkpoint (2026-11-08):** #1649 remains incomplete. PR #1938 is open
-and draft at candidate `e261f8c4bb8269548ae17c83a089175e531d45b8`; runtime
-source is `f6f4f2c2b7`. Focused Promise cleanup passes 2/2 on system Perl and
-both backends without sweeps; upstream Mojolicious promise tests pass 40/40 on
-all three runtimes; the focused mount lifecycle test passes 18/18 on the JVM.
-The no-sweeps full build/unit stage passed in 8m30 as part of
-`JPERL_DISABLE_CORRECTIVE_SWEEPS=1 timeout 30000 nice -n 19 make
-test-cpan-release-acceptance`. The strict CPAN stage completed with exit 2 and
-three target failures. Its cumulative report recorded zero PASS-to-FAIL
-regressions and one upgrade (Template).
+**Current checkpoint (2026-11-09):** #1649 remains in Phase 2. In worktree
+`/private/tmp/issue1649-latest-rebase-20261109`, branch
+`wip/issue1649-resultset-trace-20261109-142013`, commit `a403219608` fixes a
+JVM/interpreter mismatch in returned-list `foreach` reference counts. Perl
+aliases the existing scalar cell; it does not add another referent owner when
+that cell or a returned list already owns the reference. The interpreter can
+enter the loop while the returned scalar slot's release is queued. The alias
+path now recognizes that exact pending return-slot release instead of counting
+it a second time. Added `foreach_alias_does_not_add_referent_owner.t`.
 
-Acceptance results: Template passed 3,180 subtests; Excel::Writer::XLSX passed
-1,247 files / 5,138 tests; DateTime passed 3,592 subtests; PPR passed 1,255
-subtests. Image::ExifTool produced no failure record. Catalyst failed 11/235
-subtests across 176/200 programs, with a cascade from undefined
-`Moose::Meta::Method::Accessor::Native::super`. Mojolicious exceeded its
-40-minute soft limit; `routes.t` failed two WebSocket assertions and the run
-logged repeated missing-`PerlOwnerSlot` cleanup warnings for RuntimeCode.
-Mojolicious 9.54 `t/mojolicious/routes.t` passes 51/51 on system Perl 5.42.2.
-DBIx::Class failed 421/43,411 subtests across 301/325 programs, including
-`END`-time `assert_empty_weakregistry` errors and existing count/GC/diagnostic
-failures. Logs: `/private/tmp/issue1649-cpan-release-e261f8c4bb.log`,
-`/private/tmp/issue1649-merge-master-20261107/build/reports/cpan-release-acceptance.log`,
-`/tmp/cpan_random_logs/20261108-154342-71655/`, and
-`/tmp/issue1649-mojolicious-routes-system-perl.log`. Fresh-home acceptance on
-e261 remains pending.
+Evidence: `nice -n 19 timeout 1800 make` passed in 6m50
+(`/tmp/issue1649-foreach-pending-return-owner-make.log`). Returned-list
+foreach, direct-array foreach, multivariable/magic foreach, and nested
+argument-alias destroy regressions pass on both backends. The new direct-array
+test and existing returned-list test pass under system Perl. Earlier map and
+grep alias fixes remain covered as recorded below. Production corrective-sweep
+callers remain removed, but the complete owner-producer audit and strict CPAN
+acceptance are still open; DBIx::Class `t/52leaks.t` retains an unresolved
+post-DESTROY owner trace.
 
-The producer/release audit identifies eight residual paths, not eight confirmed
-defects: three live owner-ledger transitions (verified current-slot alignment,
-postfix result promotion, stale-sentinel reconciliation guarded by a live
-closure owner); two boundary adapters (localized CODE restore and weak-reference
-legacy adoption); and three legacy/test-only paths (unpaired-decrement root
-recovery, targeted weak-sweep Java helper, legacy closure-capture bridge). No
-ordinary production corrective sweep caller remains. Preserve the live ledger
-transitions; reassess adapters and compatibility helpers only with replacement
-contracts and focused tests. The previous immutable no-sweeps full `make` passed
-in 8m18 on runtime-equivalent source `f6f4f2c2b7`; log:
-`/tmp/make-issue1649-narrow-final-no-sweeps.log`.
-
-Earlier work on this candidate added argument-frame owner accounting to
-`Internals::SvREFCNT` B-object probes and expanded
-`b_refcount_destroy_aggregate_owner.t` to four cases. It passes on all three
-runtimes; the unfixed runtime reported 4 instead of Perl's expected 2 in the
-nested Schema/Source destructor case. Class::MethodMaker `t/array.t` passes
-438/438 on system Perl 5.45.5 and both backends. The project-owned tied-array
-handler lifetime regression fails on the unfixed parent and passes 4/4 on all
-three runtimes. Prior focused evidence is retained in the `/tmp/issue1649-*`
-logs referenced by the earlier commits.
-
-DBIx::Class `t/18insert_default.t` passes all four assertions and its END leak
-check on exact system Perl 5.34. The JVM reaches all assertions, then exits 22
-because the package's END block calls the imported `assert_empty_weakregistry`
-after `namespace::clean` removes its stash entry. The interpreter has a
-separate Hash::Merge failure. A reduced case passes on Perl and fails on the
-current JVM when another module is loaded before the importing package; a
-similarly small helper without that preceding load passes. The trigger is not
-isolated enough to change namespace cleanup. Keep this separate from the
-storage leak assertion and its intermediate `REFCNT` discrepancy. Evidence:
-`/tmp/issue1649-dbix-18insert-host-perl.log`,
-`/tmp/issue1649-dbix-18insert-current-jvm.log`,
-`/tmp/issue1649-dbix-end-binding-{perl,jvm}.log`, and
-`/tmp/issue1649-helper-runmode-{perl,jvm}.log`.
-
-The owner audit still has five retained mechanisms: legacy root recovery
-behind an unpaired decrement hook; verified current-slot count alignment;
-`sweepReleasedWeakReferents()` for direct Java compatibility/test calls;
-localized CODE restore count adoption; and missing-token adoption in
-`WeakRefRegistry.weaken`. Nine inventory entries are audit areas, not nine
-confirmed defects. One mechanism has demonstrated ordinary production traffic:
-exact current-slot alignment. Two others are called from production code only
-for fallback states whose presence in ordinary producer flows is unconfirmed:
-localized CODE restore adoption and `WeakRefRegistry.weaken` missing-token
-adoption. The other two have no production caller: the unpaired-decrement root
-recovery and `sweepReleasedWeakReferents()`. `BytecodeInterpreter.STORE_GLOBAL_CODE`
-and five compiler emission sites write through `globalCodeRefs`, whose
-`GlobalCodeRefMap.put` override installs the stash binding and refreshes the
-CODE-slot owner token. Thus these ordinary bytecode producers have an identified
-acquisition path; the localized restore adapter's tokenless state is only
-exercised by Java compatibility tests that mutate a slot's `type`/`value`
-directly after insertion. A removal experiment for the weaken adapter failed
-three existing Java tests that intentionally construct an already-counted
-scalar without a slot token. Keep these direct-caller compatibility contracts
-while auditing producers; they are not ordinary reachability recovery paths.
-Continue closing proven producer gaps before reassessing the remaining
-compatibility bridges.
-
-The fresh source call-site audit confirms that production code has no caller of
-`MortalList.deferDecrement(RuntimeBase)` and no caller of
-`ReachabilityWalker.sweepReleasedWeakReferents()`; the latter appears only in
-four Java tests. All current `refCountOwned = true` assignments acquire a
-`PerlOwnerSlot` or transfer an existing active slot, apart from the explicit
-legacy-adoption helper. These findings support retaining the test/compatibility
-contracts while continuing to look for a real producer-ordering gap; they do
-not justify removing the active exact-slot alignment bridge.
-
-The next audited producer gap was direct array-element refaliasing:
-`RuntimeArrayProxyEntry.aliasToReference` installed the referenced scalar cell
-without an `ARRAY_ALIAS_CELL` owner identity. The new regression passed 8/8 on
-system Perl, failed on the unfixed JVM and interpreter candidates, and now
-passes 8/8 on both backends. The fix acquires the identity before publishing
-the slot and carries existing cell identities into array alias views and
-tail-call carriers. `nice -n 19 make` passed on this source in 7m23; log:
-`/tmp/issue1649-array-refalias-full-make.log`. The ordinary recovery/adoption
-audit remains at five retained mechanisms; a temporary removal of missing-token
-adoption failed three direct Java tests that construct a counted scalar without
-a slot token. The original implementation is restored. Evidence:
-`/tmp/issue1649-no-weaken-adoption-full-make.log` and XML reports in
-`build/test-results/testUnitShard0/`. Next: classify the current CI failures,
-then continue the producer audit before reassessing any remaining compatibility
-mechanism.
+PR #1938 remains open/draft at `1a6555c05ce7ddab547da276413328fab4f9b997`.
+The current WIP branch and PR head have diverged from their common master base;
+their direct diff includes existing regression-test deletions. Do not push or
+force-update the PR until the complete patch sets are reconciled. The #1649
+handoff comment now records this checkpoint.
 
 ### Next steps
 
-1. Commit and update PR #1938 with this evidence and the current eight-path audit;
-   keep the PR in draft.
-2. Run the required fresh-home release acceptance on e261. Reconcile the three
-   strict CPAN failures against the tracked baseline; do not treat the zero
-   reported regressions as a clean strict gate.
-3. Compare the Mojolicious WebSocket failure and missing-owner warning on the
-   candidate and its parent. If the warning identifies a producer gap, add a
-   permanent focused regression and fix it in one coherent batch before another
-   full build.
-4. After that evidence, batch any proven ownership changes and focused tests,
-   then run one immutable no-sweeps full gate. Keep #1649 open until acceptance
-   and PR evidence are reconciled.
+1. Reconcile the local continuation with the current PR #1938 head without
+   dropping its existing tests, then refresh PR status and validation evidence.
+2. Trace the retained `BaseResultSet` and storage hash-element owners in DBIx
+   `t/52leaks.t`; batch any related producer fixes before another full gate.
+3. Complete the remaining owner-producer audit and strict CPAN acceptance;
+   keep #1649 and PR #1938 open until those criteria pass.
+
+The reported Class::MethodMaker tied-array lifetime failure is covered by the
+new project-owned `refcount/generated_tied_array_handler_lifetime.t`: it
+asserts that a generated tied field retains its handler through `PUSH` and
+`FETCH`, then destroys it on reset. It passes 4/4 with system Perl, JVM, and
+interpreter; logs are `/tmp/issue1649-generated-tie-prove-perl.log`,
+`/tmp/issue1649-generated-tie-jvm.log`, and
+`/tmp/issue1649-generated-tie-interpreter.log`. The reported parent failure is
+documented in the latest #1649 issue comments; this session did not rebuild an
+unfixed parent. The complete `nice -n 19 timeout 1800 make` passes with the new
+test on source snapshot `250fe5cc04` in 8m16; log:
+`/tmp/issue1649-tied-array-owner-audit-make.log`. The full gate rebuilt the
+candidate and ran the Java and Perl unit suites.
+
+The ownership audit confirms that `MortalList.deferDecrementRecursive` remains
+a production cleanup path, but its normal decrements queue exact owner tokens.
+Root-based recovery is gated to a null-token legacy path; repository callers of
+that entry point are Java regression fixtures and compatibility documentation,
+not production. Do not infer that the public method is dead or remove its
+synthetic coverage without a separate compatibility decision. Ordinary
+anonymous IO close remains socket-specific until all IO::File aliases have
+explicit resource-owner coverage.
+
+The localized-CODE restore audit from the #1649 handoff found no production
+producer for the legacy count adoption in `RuntimeGlob.dynamicRestoreState`.
+Production stash writes pass through `GlobalCodeRefMap.put`, which binds the
+stash slot and acquires the current value through the scalar owner transition;
+named sub replacement and typeglob CODE assignment use `RuntimeScalar.set()`.
+`LocalizedGlobCodeOwnerReleaseTest` deliberately bypasses those paths by
+writing `type` and `value` directly, so the restore compatibility branch still
+has an explicit fixture. The Perl-level nested localization test passes 9/9
+under system Perl, JVM, and interpreter; logs are
+`/tmp/issue1649-localized-code-{system-perl,jvm,interpreter}.log`. Keep the
+legacy adapter until its compatibility contract is deliberately retired; it
+does not require a root scan on ordinary stash restoration.
+
+The analogous missing-token adoption in `WeakRefRegistry.weaken` has no normal
+producer in the current runtime: `refCountOwned` becomes true only when a
+`PerlOwnerSlot` is acquired or transferred. Several Java unit fixtures create
+the flag and positive count directly to exercise malformed/legacy states, so
+retain that adapter until those contracts are explicitly retired. The other
+`adoptExistingCountedOwnerForCurrentValue` callers include postfix result
+promotion. That audit found a missing transfer completion when a postfix
+reference is returned from a subroutine: the mortal return slot acquired an
+owner, but the postfix temporary kept its transferred scalar-cell owner. The
+new argument-alias regression covers both `++` and `--`; system Perl, JVM, and
+interpreter pass 12/12. The shared return-slot copy now retires the postfix
+temporary after acquiring the return owner. The bundled full `nice -n 19 make`
+passes in 8m05 on the working tree based on source snapshot `250fe5cc04`,
+including this regression and the tied-array lifetime regression; log:
+`/tmp/issue1649-postfix-return-owner-make.log`. Markdown link check passes
+(827 documents, 0 errors).
+`localized_code_state_owner_release.t` passes 9/9 under all three Perl
+executors; existing `NamedCodeReferenceInstallsCountedSlotOwnerTest` in the
+full make covers the standard bound-slot acquisition/restore route.
+
+The IO owner-source inventory now covers scalar aliases and returns, aggregate
+slots, weak/unweak transitions, argument aliases, borrowed handles, lexical
+cleanup, detached glob components, and the nested-render argument path.
+`io_file_final_owner_closes_during_destroy.t` checks scalar, returned, array,
+hash, weak, and unweakened `IO::File` owners; system Perl, JVM, and interpreter
+pass 25/25, with corrective sweeps disabled on PerlOnJava. The tied-array and
+postfix-argument alias regressions also pass all three executors. The detached
+package-IO-glob test passes 5/5 on system Perl and both backends with sweeps
+disabled; it confirms the deleted glob keeps its IO slot available until an
+explicit close. `borrowed_filehandle_alias.t` and
+`die_after_lexical_filehandle_scope.t` pass all three executors, and the
+nested-render regression passes both PerlOnJava backends (system Perl skips it
+because Template Toolkit is absent).
+
+The audit found that `IO_RESOURCE_HOLDER` leases describe scalar-owned
+anonymous-IO resources, while detached glob components use
+`GLOB_COMPONENT_SLOT` to retain Perl typeglob slots. Those edges have different
+release rules; the current ordinary-handle unregister-only path remains because
+transient IO aliases are not all represented by resource leases. No producer
+gap requiring a new ordinary-handle close transition was demonstrated.
+
+The integrated `JPERL_DISABLE_CORRECTIVE_SWEEPS=1 nice -n 19 timeout 1800
+make` passes in 10m48 on `b027bf9aa4`; log:
+`/tmp/issue1649-integrated-no-sweeps-make.log`. The post-merge acceptance run
+passes 33 files and 1,053 checks on each backend, covering the weak/DESTROY/
+resurrection/cycle/cancellation matrix, #1794, #1860, HTML lifecycle cases,
+and all 23 upstream HTML-Tree 5.07 files. Logs:
+`/tmp/issue1649-integrated-focused-{jvm,interpreter}.log`. Count arithmetic is
+already centralized in `RuntimeBase`/`PerlOwnerSlot`; remaining special cases
+represent distinct Perl edge kinds and resource leases, so further
+centralization should standardize those edge transitions instead of inferring
+ownership from one aggregate count.
+
+### Next steps
+
+1. Restart and finish the fresh-home CPAN acceptance run for the new exact PR
+   head, classifying any failures against system Perl and existing baselines.
+2. Continue the producer/release audit, then review issue #1649 and PR readiness
+   against the no-sweeps acceptance plan.
+3. Keep the root-recovery compatibility adapter isolated to the legacy
+   unpaired decrement API; production release paths carry exact owner tokens
+   and no longer use corrective reachability sweeps.
 
 ### Open questions and blockers
 
@@ -141,8 +148,12 @@ mechanism.
   assertions; DateTime 1.67 `t/00load.t` and `t/01sanity.t` pass 1/1 and 16/16;
   Image::ExifTool 13.55 `t/Unknown.t` passes 3/3. The Catalyst chained action
   and Dancer2-Plugin-DBIx-Class shutdown tests pass on both backends. PR CI is
-  green on Ubuntu and Windows. A prior fresh-home `make test-cpan-release-acceptance` gate completed on merged
-  source `7683d18534`; the current e261 fresh-home acceptance is still pending.
+  green on Ubuntu and Windows. The fresh-home `make test-cpan-release-acceptance`
+  gate has not been completed on this final candidate. The earlier run hit
+  DateTime and Catalyst setup timeouts and Mojolicious had 99/109 programs fail
+  to load because its isolated home lacked `IO::Compress::Gzip`; these are
+  historical run outcomes, not final-candidate suite results. The full gate remains a required final qualification; targeted-file results do
+  not substitute for it.
 - END CVs have queued and active lifetime tests, including aggregate captures,
   nested `exit`, `die`, and callback failure. UNITCHECK/CHECK/INIT lexical-pad
   lifetime is covered separately; the corresponding phaser ownership path is
@@ -153,10 +164,10 @@ mechanism.
   `cpan/Scalar-List-Utils/lib` added to `@INC`; the checkout remains untouched.
   The prior Perl 5.44.0 build remains the oracle for historical HTML-Tree
   integration results.
-- The previously failing HTML-Tree content and incremental parser release
-  assertions now pass 4/4 on the current candidate and host system Perl. The
-  project-owned regression is in `src/test/resources/unit/refcount/`; this
-  lifecycle workload no longer demonstrates a producer gap.
+- The focused `new_from_lol` regression now passes, but HTML-Tree 5.07's
+  content and incremental parser cases still retain two and three elements at
+  the immediate release assertion on both PerlOnJava backends; Perl 5.44 passes
+  all cases. The new parser lifecycle reproducer records this open failure.
 - The Dancer2-Plugin-DBIx-Class `t/01_both_using_rsnames.t` workload now passes
   all six assertions and exits on both backends. The interpreter first exposed
   a `caller->isa` scalar-context bug, fixed in this follow-up, then exceeded a
@@ -1703,10 +1714,10 @@ that currently protects it:
 | Recovery path | Semantic strong edge | Remaining gap before removal |
 |---|---|---|
 | `restoreReachableOwnerCount` | Counted scalar-cell owner slots, formerly mirrored by `activeOwners`, including nested package-array cells | The audited array and hash mutation wrappers mark current storage; their main count-acquiring APIs do so after insertion. The remaining root-snapshot tests exercise earlier count acquisition: `ReachabilityQueryCostTest.deferredOwnerChecksShareOneRootSnapshotPerDrain` calls `incrementRefCountForContainerStore` before adding the scalar to the nested package array, leaving a `SCALAR_CELL` identity; `UnblessedAggregateReachabilitySnapshotTest.repeatedOwnerScalarChecksShareOneRootSnapshotPerDrain` also clears `containerOwner` directly. No production caller with this exact ordering has been identified in the call-site audit so far. These tests preserve the bridge for synthetic/out-of-order states and do not establish a normal store-path defect. |
-| Scalar overwrite (`RuntimeScalar.setLargeRefCounted`) | The scalar cell's old referent edge; new edge is acquired before old release | Scalar-referent cells with a live uncounted lexical/package identity now defer zero-count cleanup to that exact edge. Counted scalar/aggregate slots carry their release token through cleanup; a claimed counted edge without its active token fails before replacement. Root-based branches in `processDeferredBase` require a null release token, and the caller audit finds no production raw-decrement caller. `ActiveLexicalScalarOwnerLifecycleTest` covers overwrite and observer lifetime. |
-| First weaken (`WeakRefRegistry.weaken`) | The scalar cell being weakened and any other current scalar, aggregate, or capture owners | Ordinary tracked owners use current counted-slot identities; general live-CODE and strong-root walks were removed from this path. The missing-token adapter applies only to an inconsistent flagged scalar and remains for Java compatibility fixtures. Package-nested untracked aggregates use exact `UNTRACKED_REFERENCE` identities. The cloned-thread snapshot root and direct CODE pad-constant check remain. `FirstWeakenUsesCurrentPackageOwnerTest`, `WeakeningCountedOwnerSlotTest`, and `PackageNestedUntrackedAggregateReleaseTest` cover current owner identities and weak-observer lifetime. |
-| Unblessed aggregate root snapshot | Array/hash elements reachable through lexical or package storage | The snapshot recovery branch is only entered for a raw unpaired decrement. Ordinary array/hash stores install current element identities; the existing snapshot tests deliberately invoke the raw hook and preserve its Java compatibility contract. No ordinary producer-ordering gap was found in this source audit. |
-| Strong-cycle graph walk | Internal scalar-reference and aggregate-element edges | The CODE weak-referent cycle walk has been removed. `sweepReleasedWeakReferents` retains targeted cycle traversal only for direct Java compatibility/test calls; ordinary releases use owner tokens and final lifecycle dispatch. Self-capture lifetime is covered on both backends. |
+| Scalar overwrite (`RuntimeScalar.setLargeRefCounted`) | The scalar cell's old referent edge; new edge is acquired before old release | Scalar-referent cells with a live uncounted lexical/package identity now defer zero-count cleanup to that exact edge. Counted scalar/aggregate slots still repair identified undercounts. External-root/live-CODE checks and the blessed weak-referent raw-count bridge remain for aggregate referents; trace their producers and final release before removal. `ActiveLexicalScalarOwnerLifecycleTest` covers overwrite and observer lifetime. |
+| First weaken (`WeakRefRegistry.weaken`) | The scalar cell being weakened and any other current scalar, aggregate, or capture owners | Ordinary tracked owners use current counted-slot identities; general live-CODE and strong-root walks were removed from this path. Package-nested untracked aggregates now use exact `UNTRACKED_REFERENCE` identities without a compatibility pin or fabricated count. The cloned-thread snapshot root and direct CODE pad-constant check remain. `FirstWeakenUsesCurrentPackageOwnerTest`, `WeakeningCountedOwnerSlotTest`, and `PackageNestedUntrackedAggregateReleaseTest` cover current owner identities and weak-observer lifetime. |
+| Unblessed aggregate root snapshot | Array/hash elements reachable through lexical or package storage | Normal slots have identities; parser assembly and compatibility mutation paths still need producer-level invariant coverage. `UnblessedAggregateReachabilitySnapshotTest` deliberately exercises the remaining fallback. |
+| Strong-cycle graph walk | Internal scalar-reference and aggregate-element edges | The CODE weak-referent cycle walk has been removed; non-final CODE releases restore from verified current counted slots. Self-capture lifetime is covered on both backends. Audit uncounted cycle edge kinds and producer coverage before removing remaining cycle or cleanup recovery. |
 | Deferred live/global CODE capture walk | Captured scalar cells, aggregate pads, and persistent CODE state | Persistent state cells and aggregates now carry `CODE_STATE` identities; closure captures use `SCALAR_CAPTURE` / `CLOSURE_PAD` slots. The deferred traversal and its unused live/global query helpers are removed. |
 | Nested-call depth pin | Active argument aliases and compiler temporaries | Borrowed aliases and owned argument/return values must remain distinct through unwind and async suspension. |
 | Blessed root snapshots and package cache | Package scalar, aggregate, glob, or CODE slots | Package scalar, array/hash, named IO glob, and CODE stash entries have owner identities. Whole-glob aliases route these components through wrapper maps; thread-clone setup rebuilds owner ledgers after raw-map population and before activation. Remaining root snapshots serve compatibility or diagnostic paths rather than ordinary ownership decisions. |
@@ -1868,37 +1879,22 @@ in 7m27. Log:
 The ordinary `restoreReachableOwnerCount` root fallback remains; its producers
 and final use cases still require audit before removal.
 
-### Retained mechanism rationale
+### Next steps
 
 1. Keep the `restoreReachableOwnerCount` path isolated to its legacy unpaired
-   decrement hook. The call-site audit finds no production caller of
-   `MortalList.deferDecrement(RuntimeBase)`. Every production
-   `deferDecrementIfTracked` caller passes a `RuntimeScalar`, whose active owner
-   slot is captured in a `PendingOwnerRelease`; `RuntimeCode.releaseCaptures`
-   reaches that same scalar-aware path after retiring its capture slot. Thus
-   ordinary production cleanup does not enter `legacyUnpairedDecrement`. The
-   production zero-count lifecycle paths call `queueLifecycleOnlyAtZero`,
-   which creates a non-null completion token without fabricating a released
-   edge; they therefore remain outside the raw unpaired path as well. The
-   only production call to `ReachabilityWalker.isScalarReachable` is through
-   `restoreReachableOwnerCount`; the remaining root-based recovery branches in
-   `processDeferredBase` are likewise guarded by that legacy unpaired path.
-   `finalizeClearedAggregateOwnerAfterScopeExit` may issue a root query only
-   when query statistics are enabled, and ignores its result. `sweepWeakRefs`
-   overloads are compatibility no-ops. `sweepReleasedWeakReferents` still has
-   targeted root/cycle traversal and fixed-point weak-cleanup logic for direct
-   Java compatibility/test calls; a source call-site audit finds no production
-   callers. Keep that distinction explicit and retire the implementation only
-   after its direct callers and tests have a replacement contract. Ordinary
-   runtime cleanup no longer depends on graph sweeps. The post-DESTROY
-   diagnostic capture walk is also not production-scheduled:
-   `sweepPendingAfterOuterDestroy` is only set directly by its Java tests.
+   decrement hook. The current main-source audit finds no production caller of
+   `MortalList.deferDecrement`; production owner releases carry exact slot
+   tokens. `sweepWeakRefs` and `sweepReleasedWeakReferents` also have no
+   production callers, and the public sweep entry points are compatibility
+   no-ops. Ordinary runtime cleanup no longer depends on graph sweeps.
 2. Retain verified owner-slot count alignment while its producer gaps are
    audited. This checks current scalar, aggregate, invocant, and native owner
    identities directly; removing it previously failed lifecycle and Perl-level
    owner tests that explicitly construct undercount/sentinel states. No normal
    producer mismatch was found in this pass. It is not reachability-based
    recovery.
-3. Batch any demonstrated producer/release fixes with focused coverage before
-   rebuilding. The current Phase 2 acceptance and PR status are in the
-   checkpoint at the top of this document.
+3. Continue the remaining producer/release audit outside closure capture, then
+   batch any demonstrated fixes with focused coverage before rebuilding. The
+   branch now includes current `origin/master`; rerun the final no-sweeps gate
+   and acceptance matrix on the exact final candidate after the audit. Recheck
+   issue #1649 and PR #1938 before publication; leave merging to review.

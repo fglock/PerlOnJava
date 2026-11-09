@@ -426,7 +426,8 @@ public final class SharedPerlStorage {
                 // threads::shared replaces an existing aggregate tie with its
                 // own shared storage without invoking CLEAR or UNTIE.
                 if (array.elements instanceof TieArray tie) tie.releaseTiedObject();
-                array.replaceWithEmptySharedStorage();
+                array.type = RuntimeArray.PLAIN_ARRAY;
+                array.elements = Collections.synchronizedList(new ArrayList<>());
                 markShared(array);
                 return;
             }
@@ -438,7 +439,9 @@ public final class SharedPerlStorage {
         if (value instanceof RuntimeHash hash) {
             if (hash.type == RuntimeHash.TIED_HASH) {
                 if (hash.elements instanceof TieHash tie) tie.releaseTiedObject();
-                hash.replaceWithEmptySharedStorage();
+                hash.type = RuntimeHash.PLAIN_HASH;
+                hash.elements = Collections.synchronizedMap(new StableHashMap<>());
+                hash.resetIterator();
                 markShared(hash);
                 return;
             }

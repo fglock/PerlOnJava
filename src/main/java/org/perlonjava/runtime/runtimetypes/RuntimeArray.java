@@ -380,11 +380,6 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         return list;
     }
 
-    void replaceWithEmptySharedStorage() {
-        type = PLAIN_ARRAY;
-        elements = Collections.synchronizedList(newElementList());
-    }
-
     void resetElementListAfterAutovivification() {
         elements = newElementList();
     }
@@ -1026,12 +1021,6 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
 
     private void retainReferenceListAliasCell(RuntimeScalar scalar) {
         if (!referenceListAliasOwnerTracking || scalar == null) return;
-        retainArrayAliasCell(scalar);
-    }
-
-    /** Retain one scalar cell stored by refaliasing into an array slot. */
-    void retainArrayAliasCell(RuntimeScalar scalar) {
-        if (scalar == null) return;
         if (referenceListAliasCellOwners == null) {
             referenceListAliasCellOwners = new IdentityHashMap<>();
         }
@@ -1039,17 +1028,6 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         PerlOwnerSlot owner = new PerlOwnerSlot(PerlOwnerSlot.Kind.ARRAY_ALIAS_CELL);
         owner.acquireArrayAliasCellIdentity(scalar, this);
         referenceListAliasCellOwners.put(scalar, owner);
-    }
-
-    /** Acquire the cell owner before publishing a scalar refalias in this slot. */
-    void setAliasedScalarCell(int index, RuntimeScalar scalar) {
-        retainArrayAliasCell(scalar);
-        try {
-            elements.set(index, scalar);
-        } catch (RuntimeException | Error failure) {
-            reconcileReferenceListAliasCellOwners();
-            throw failure;
-        }
     }
 
     private void reconcileReferenceListAliasCellOwners() {
@@ -2942,13 +2920,12 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         alias.elementsAliased = true;
         alias.elementsOwned = alias.ownedAliasElements != null
                 && !alias.ownedAliasElements.isEmpty();
-        if (referenceListAliasCellOwners != null) {
-            if (referenceListAliasOwnerTracking) {
-                alias.referenceListAliasOwnerTracking = true;
-            }
+        if (referenceListAliasOwnerTracking) {
+            alias.referenceListAliasOwnerTracking = true;
             for (RuntimeScalar cell : elements) {
-                if (referenceListAliasCellOwners.containsKey(cell)) {
-                    alias.retainArrayAliasCell(cell);
+                if (referenceListAliasCellOwners != null
+                        && referenceListAliasCellOwners.containsKey(cell)) {
+                    alias.retainReferenceListAliasCell(cell);
                 }
             }
         }
@@ -3005,13 +2982,12 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 }
             }
         }
-        if (referenceListAliasCellOwners != null) {
-            if (referenceListAliasOwnerTracking) {
-                carrier.referenceListAliasOwnerTracking = true;
-            }
+        if (referenceListAliasOwnerTracking) {
+            carrier.referenceListAliasOwnerTracking = true;
             for (RuntimeScalar element : carrier.elements) {
-                if (referenceListAliasCellOwners.containsKey(element)) {
-                    carrier.retainArrayAliasCell(element);
+                if (referenceListAliasCellOwners != null
+                        && referenceListAliasCellOwners.containsKey(element)) {
+                    carrier.retainReferenceListAliasCell(element);
                 }
             }
         }
