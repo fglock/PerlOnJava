@@ -4,6 +4,7 @@ import org.perlonjava.frontend.analysis.Visitor;
 import org.perlonjava.frontend.parser.Parser;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -63,7 +64,7 @@ public class BlockNode extends AbstractNode {
     public BlockNode(List<Node> elements, int tokenIndex, Parser parser) {
         this.elements = elements;
         this.tokenIndex = tokenIndex;
-        this.labels = new ArrayList<>();
+        this.labels = Collections.emptyList();
         this.labelName = null;
         this.isLoop = false;
     }

@@ -15,14 +15,35 @@ public class SymbolTable {
     // A counter to generate unique indices for variables
     public int index;
 
+    // Non-null when variableIndex is still the shared source map (copy-on-write).
+    // Any mutation via addVariable / addVariableWithIndex triggers a private copy.
+    private Map<String, SymbolEntry> sharedSource;
+
     public SymbolTable(int index) {
         this.index = index;
     }
 
-    /** Copy constructor: shares immutable SymbolEntry values, copies only the HashMap shell. */
+    /**
+     * Copy-on-write constructor: shares the source's variableIndex map until
+     * the first addVariable/addVariableWithIndex call.  The index field is
+     * always private, so exitScope() propagation never corrupts the template.
+     *
+     * Used by ScopedSymbolTable.snapShot() and useInitialTable() to avoid
+     * O(N) HashMap copies on every eval-string parse/compile cycle when the
+     * base scope is read-only (no new variables declared there).
+     */
     public SymbolTable(SymbolTable template) {
-        this.variableIndex = new HashMap<>(template.variableIndex);
-        this.index = template.index;
+        this.variableIndex = template.variableIndex; // shared — no copy
+        this.sharedSource  = template.variableIndex;
+        this.index         = template.index;
+    }
+
+    /** Ensure variableIndex is a private mutable copy before any mutation. */
+    private void ensureOwnMap() {
+        if (sharedSource != null) {
+            variableIndex = new HashMap<>(sharedSource);
+            sharedSource  = null;
+        }
     }
 
     /**
@@ -32,6 +53,7 @@ public class SymbolTable {
      * @return The index of the variable in the symbol table.
      */
     public int addVariable(String name, String variableDeclType, String perlPackage, OperatorNode ast) {
+        ensureOwnMap();
         // Check if the variable is not already in the table
         // XXX TODO under 'no strict', we may need to allow variable redeclaration
         SymbolEntry existing = variableIndex.get(name);
@@ -68,10 +90,17 @@ public class SymbolTable {
 
     public void addVariableWithIndex(
             String name, int specificIndex, String variableDeclType, String perlPackage, OperatorNode ast) {
+        ensureOwnMap();
         variableIndex.put(name, new SymbolEntry(specificIndex, name, variableDeclType, perlPackage, ast));
         if (specificIndex >= index) {
             index = specificIndex + 1;
         }
+    }
+
+    /** Replace an existing entry (used for lexical-sub forward-declaration rewriting). */
+    public void replaceEntry(String name, SymbolEntry entry) {
+        ensureOwnMap();
+        variableIndex.put(name, entry);
     }
 
     private static final SymbolEntry MISSING = new SymbolEntry(-1, null, null, null, null);

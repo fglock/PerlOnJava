@@ -19,6 +19,14 @@ import java.util.*;
 public class BHooksEndOfScope extends PerlModuleBase {
 
     /**
+     * True once B::Hooks::EndOfScope has been initialised (i.e. a module that
+     * uses on_scope_end has been loaded). Until then beginCompileScope /
+     * endCompileScope are no-ops, saving three PerlRuntime.current() / ThreadLocal
+     * lookups and two object allocations per parsed block.
+     */
+    private static volatile boolean enabled = false;
+
+    /**
      * Registry of callbacks keyed by the file that registered them.
      * When a file finishes loading, callbacks registered for that file are fired in LIFO order.
      */
@@ -34,6 +42,7 @@ public class BHooksEndOfScope extends PerlModuleBase {
      * Static initializer called by XSLoader.
      */
     public static void initialize() {
+        enabled = true;
         BHooksEndOfScope module = new BHooksEndOfScope();
         try {
             // Prototype "&" means first argument is a code block
@@ -113,6 +122,7 @@ public class BHooksEndOfScope extends PerlModuleBase {
 
     /** Enter a parser-visible lexical scope. */
     public static void beginCompileScope() {
+        if (!enabled) return;
         state().compileScopes.push(new CompilationRuntimeState.EndOfScopeCompileScope(
                 getCurrentLoadingFile()));
     }
@@ -122,6 +132,7 @@ public class BHooksEndOfScope extends PerlModuleBase {
      * in LIFO order, matching the native hook's ordering.
      */
     public static void endCompileScope() {
+        if (!enabled) return;
         Deque<CompilationRuntimeState.EndOfScopeCompileScope> scopes = state().compileScopes;
         if (scopes.isEmpty()) {
             return;

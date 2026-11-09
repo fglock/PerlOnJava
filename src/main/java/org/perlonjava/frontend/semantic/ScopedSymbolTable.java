@@ -96,8 +96,10 @@ public class ScopedSymbolTable {
         }
     }
 
-    /** Unsynchronized stack backed by ArrayList. Replaces java.util.Stack (Vector-based) to eliminate per-operation monitor overhead in single-threaded compilation paths. */
+    /** Unsynchronized stack backed by ArrayList. Replaces java.util.Stack (Vector-based) to eliminate per-operation monitor overhead in single-threaded compilation paths.
+     *  Initial capacity 2 (vs ArrayList default lazy-init to 10) cuts GC pressure for snapshot ScopedSymbolTables: 16 FastStack fields × Object[2] vs × Object[10]. */
     public static final class FastStack<T> extends ArrayList<T> {
+        public FastStack() { super(2); }
         public void push(T item) { add(item); }
         public T pop() { return remove(size() - 1); }
         public T peek() { return get(size() - 1); }
@@ -173,6 +175,9 @@ public class ScopedSymbolTable {
     private final FastStack<Boolean> inSubroutineBodyStack = new FastStack<>();
     // Cache for the getAllVisibleVariables method
     private Map<Integer, SymbolTable.SymbolEntry> visibleVariablesCache;
+    // Caches for registry methods; cleared together with visibleVariablesCache.
+    private Map<String, Integer> visibleRegistryCache;
+    private Map<String, String>  visibleOurRegistryCache;
     // Cache for getWarningBitsString(); null means stale
     private String cachedWarningBitsString;
     // Pre-built snapshot SymbolTable for fast eval STRING snapshots.
@@ -743,12 +748,23 @@ public class ScopedSymbolTable {
         symbolTableStack.peek().addVariableWithIndex(name, index, variableDeclType, perlPackage, ast);
     }
 
+    /**
+     * Returns a name→register-index map for all variables visible from the current scope.
+     * Iterates scopes directly (innermost first) without building the intermediate sorted
+     * TreeMap that {@link #getAllVisibleVariables()} produces — O(N) HashMap build instead
+     * of O(N log N) TreeMap build + O(N) HashMap copy.  Result is cached until any scope
+     * modification invalidates it via {@link #clearVisibleVariablesCache()}.
+     */
     public Map<String, Integer> getVisibleVariableRegistry() {
+        if (visibleRegistryCache != null) return visibleRegistryCache;
         Map<String, Integer> registry = new HashMap<>();
-        Map<Integer, SymbolTable.SymbolEntry> visible = getAllVisibleVariables();
-        for (SymbolTable.SymbolEntry entry : visible.values()) {
-            registry.put(entry.name(), entry.index());
+        for (int i = symbolTableStack.size() - 1; i >= 0; i--) {
+            for (Map.Entry<String, SymbolTable.SymbolEntry> e :
+                    symbolTableStack.get(i).variableIndex.entrySet()) {
+                registry.putIfAbsent(e.getKey(), e.getValue().index());
+            }
         }
+        visibleRegistryCache = registry;
         return registry;
     }
 
@@ -758,15 +774,24 @@ public class ScopedSymbolTable {
      * even after a `package Foo;` directive inside the eval body, references to
      * `$bar` still resolve through the outer scope's `our $bar` alias to the
      * original package (matching Perl 5 lexical-scoping semantics).
+     * Iterates scopes directly without the intermediate TreeMap; result is cached.
      */
     public Map<String, String> getVisibleOurRegistry() {
+        if (visibleOurRegistryCache != null) return visibleOurRegistryCache;
         Map<String, String> registry = new HashMap<>();
-        Map<Integer, SymbolTable.SymbolEntry> visible = getAllVisibleVariables();
-        for (SymbolTable.SymbolEntry entry : visible.values()) {
-            if ("our".equals(entry.decl()) && entry.perlPackage() != null) {
-                registry.put(entry.name(), entry.perlPackage());
+        Set<String> seen = new HashSet<>();
+        for (int i = symbolTableStack.size() - 1; i >= 0; i--) {
+            for (Map.Entry<String, SymbolTable.SymbolEntry> e :
+                    symbolTableStack.get(i).variableIndex.entrySet()) {
+                if (seen.add(e.getKey())) {
+                    SymbolTable.SymbolEntry entry = e.getValue();
+                    if ("our".equals(entry.decl()) && entry.perlPackage() != null) {
+                        registry.put(e.getKey(), entry.perlPackage());
+                    }
+                }
             }
         }
+        visibleOurRegistryCache = registry;
         return registry;
     }
 
@@ -809,7 +834,7 @@ public class ScopedSymbolTable {
             SymbolTable.SymbolEntry existing = currentScope.getSymbolEntry(name);
             if (existing != null) {
                 // Replace with new entry using the same index
-                currentScope.variableIndex.put(name,
+                currentScope.replaceEntry(name,
                         new SymbolTable.SymbolEntry(existing.index(), name, variableDeclType,
                                 getCurrentPackage(), ast));
             } else {
@@ -858,11 +883,32 @@ public class ScopedSymbolTable {
     }
 
     /**
+     * Returns the next available variable register index across all scopes.
+     * Equivalent to (highest variable register + 1), computed in O(1).
+     *
+     * <p>This works because:
+     * - {@link #enterScope} initialises every new scope's {@code index} from its parent, so
+     *   the innermost scope always starts at or above the parent's high-water mark.
+     * - {@link #exitScope} propagates the child's max {@code index} back to the parent, so
+     *   the current top scope always reflects every variable ever allocated.
+     * - {@link SymbolTable#addVariableWithIndex} and {@link SymbolTable#addVariable} keep the
+     *   scope's {@code index} = max(assigned register) + 1.
+     *
+     * <p>Used by {@link org.perlonjava.backend.bytecode.BytecodeCompiler#recycleTemporaryRegisters}
+     * to find the reset point without scanning all visible variables.
+     */
+    public int getTopScopeNextIndex() {
+        return symbolTableStack.peek().index;
+    }
+
+    /**
      * Clears the cache for the getAllVisibleVariables method.
      * This method should be called whenever the symbol table is modified.
      */
     public void clearVisibleVariablesCache() {
         visibleVariablesCache = null;
+        visibleRegistryCache = null;
+        visibleOurRegistryCache = null;
         cachedSnapTable = null;
     }
 
