@@ -606,10 +606,9 @@ public class StringOperators {
             throw new PerlCompilerException("Can't coerce GLOB to string in string context");
         }
         int blessId = RuntimeScalarType.blessedId(runtimeScalar);
-        int blessId2 = RuntimeScalarType.blessedId(b);
-        if (blessId < 0 || blessId2 < 0) {
+        if (blessId < 0) {
             RuntimeScalar result = OverloadContext.tryTwoArgumentAssignmentOverloadDirect(
-                    runtimeScalar, b, blessId, blessId2, "(.=");
+                    runtimeScalar, b, blessId, "(.=");
             if (result != null) {
                 // Assignment overloads return the value Perl assigns back to
                 // the lvalue. Preserve that reference instead of stringifying it.
