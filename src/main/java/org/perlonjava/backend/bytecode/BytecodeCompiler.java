@@ -6939,31 +6939,6 @@ public class BytecodeCompiler implements Visitor {
     }
 
     /**
-     * Get the highest register index currently used by variables (not temporaries).
-     * This is used to determine the reset point for register recycling.
-     */
-    private int getHighestVariableRegister() {
-        int maxReg = 2;
-        Map<Integer, org.perlonjava.frontend.semantic.SymbolTable.SymbolEntry> visible = symbolTable.getAllVisibleVariables();
-        for (Integer reg : visible.keySet()) {
-            if (reg > maxReg) {
-                maxReg = reg;
-            }
-        }
-
-        // Also check captured variables
-        if (capturedVarIndices != null) {
-            for (Integer reg : capturedVarIndices.values()) {
-                if (reg > maxReg) {
-                    maxReg = reg;
-                }
-            }
-        }
-
-        return maxReg;
-    }
-
-    /**
      * Reset temporary registers after a statement completes.
      * This allows register reuse for the next statement, preventing register exhaustion
      * in large scripts.
@@ -6979,8 +6954,11 @@ public class BytecodeCompiler implements Visitor {
      * to persist must be in a variable, not just a temporary register.
      */
     private void recycleTemporaryRegisters() {
-        // Find highest variable register and reset nextRegister to one past it
-        int highestVarReg = getHighestVariableRegister() + 1;
+        // O(1): symbolTable.getTopScopeNextIndex() == max_variable_register + 1.
+        // The top scope's index is maintained as an exact high-water mark across
+        // all scopes via enterScope/exitScope propagation, so no O(N) variable
+        // scan is needed here.
+        int highestVarReg = Math.max(3, symbolTable.getTopScopeNextIndex());
 
         // CRITICAL: Never lower baseRegisterForStatement below what enterScope() set.
         // This protects registers like foreach iterators that must survive across loop iterations.
