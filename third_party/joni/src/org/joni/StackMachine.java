@@ -240,6 +240,7 @@ abstract class StackMachine extends Matcher implements StackType {
         e.setStatePStrPrev(prev);
         if (USE_CEC) ((SCStackEntry)e).setStateCheck(0);
         e.setPKeep(pkeep);
+        e.setExactRepeatAlternative(false);
         stk++;
     }
 
@@ -261,6 +262,7 @@ abstract class StackMachine extends Matcher implements StackType {
         e.setStatePStrPrev(sprev);
         if (USE_CEC) ((SCStackEntry)e).setStateCheck(stateCheckBuff != null ? snum : 0);
         e.setPKeep(pkeep);
+        e.setExactRepeatAlternative(false);
         stk++;
     }
 
@@ -276,6 +278,17 @@ abstract class StackMachine extends Matcher implements StackType {
 
     protected final void pushAlt(int pat, int s, int prev, int pkeep) {
         push(ALT, pat, s, prev, pkeep);
+    }
+
+    protected final void pushExactRepeatAlt(int pat, int s, int prev, int pkeep,
+                                            int floor, int stateCheckNum) {
+        push(ALT, pat, s, prev, pkeep);
+        StackEntry entry = stack[stk - 1];
+        entry.setExactRepeatAlternative(true);
+        entry.setExactRepeatFloor(floor);
+        if (USE_CEC && stateCheckBuff != null) {
+            ((SCStackEntry) entry).setStateCheck(stateCheckNum);
+        }
     }
 
     protected final void pushBranchAlt(int pat, int s, int prev, int pkeep,

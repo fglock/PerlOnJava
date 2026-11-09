@@ -369,6 +369,14 @@ class ByteCodePrinter {
                 bp++;
                 break;
 
+            case OPCode.PUSH_OR_JUMP_EXACT1_RANGE:
+                mem = code[bp++];
+                addr = code[bp++];
+                sb.append(":(").append(mem).append(',').append(addr).append(')');
+                pString(sb, 1, bp);
+                bp++;
+                break;
+
             case OPCode.LOOK_BEHIND:
                 len = code[bp];
                 bp += OPSize.LENGTH;

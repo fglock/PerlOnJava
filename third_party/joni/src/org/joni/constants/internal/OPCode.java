@@ -171,6 +171,7 @@ public interface OPCode {
     int BACKREFN_PREV                 = 129;          /* Perl self-reference may use prior repeat iteration */
     int BACKREFN_PREV_IC              = 130;          /* case-folded prior repeat self-reference */
     int SCRIPT_RUN                    = 131;          /* validate the current (*script_run:...) span */
+    int PUSH_OR_JUMP_EXACT1_RANGE     = 132;          /* compact alternatives for one-byte repeats */
 
     String[] OpCodeNames = new String[] {
         "finish", /*OP_FINISH*/
@@ -306,6 +307,7 @@ public interface OPCode {
         "backrefn-prev",
         "backrefn-prev-ic",
         "script-run",
+        "push-or-jump-e1-range",
     };
 
     int[] OpCodeArgTypes = new int[] {
@@ -442,5 +444,6 @@ public interface OPCode {
         Arguments.MEMNUM, /*OP_BACKREFN_PREV*/
         Arguments.MEMNUM, /*OP_BACKREFN_PREV_IC*/
         Arguments.NON, /*OP_SCRIPT_RUN*/
+        Arguments.SPECIAL, /*OP_PUSH_OR_JUMP_EXACT1_RANGE*/
     };
 }

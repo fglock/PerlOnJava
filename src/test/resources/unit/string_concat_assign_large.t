@@ -11,6 +11,11 @@ is length $text, 100_000, 'large repeated concat-assignment retains every charac
 is substr($text, 0, 4), 'BCDE', 'large concat-assignment preserves ordering';
 is substr($text, -4), 'BCDE', 'large concat-assignment preserves the suffix';
 
+my $literal = '';
+$literal .= 'x' for 1 .. 100_000;
+is length $literal, 100_000, 'large repeated literal append retains every character';
+is substr($literal, -4), 'xxxx', 'large repeated literal append preserves the suffix';
+
 my $bytes = pack 'C', 0xA5;
 $bytes .= pack('C', 0x5A) for 1 .. 100_000;
 

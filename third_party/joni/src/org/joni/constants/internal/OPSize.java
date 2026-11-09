@@ -42,6 +42,7 @@ public interface OPSize {
     int PUSH                          = (OPCODE + RELADDR);
     int POP                           = OPCODE;
     int PUSH_OR_JUMP_EXACT1           = (OPCODE + RELADDR + 1);
+    int PUSH_OR_JUMP_EXACT1_RANGE     = (OPCODE + STATE_CHECK_NUM + RELADDR + 1);
     int PUSH_IF_PEEK_NEXT             = (OPCODE + RELADDR + 1);
     int REPEAT                        = (OPCODE + REPEATNUM + RELADDR);
     int REPEAT_INC                    = (OPCODE + MEMNUM);

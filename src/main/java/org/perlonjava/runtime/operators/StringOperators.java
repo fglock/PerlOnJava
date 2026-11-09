@@ -620,7 +620,7 @@ public class StringOperators {
         // so overload and tied-scalar assignment semantics remain unchanged.
         if (bytesHintActive()
                 || runtimeScalar.getClass() != RuntimeScalar.class
-                || b.getClass() != RuntimeScalar.class
+                || (b.getClass() != RuntimeScalar.class && !(b instanceof RuntimeScalarReadOnly))
                 || (runtimeScalar.type != RuntimeScalarType.STRING
                     && runtimeScalar.type != RuntimeScalarType.BYTE_STRING)
                 || (RuntimeScalarType.effectiveType(b) != RuntimeScalarType.STRING
