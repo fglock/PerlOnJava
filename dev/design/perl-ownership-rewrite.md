@@ -7,56 +7,59 @@ verified owner-count alignment, the `SvREFCNT` live-scalar scan, and final CPAN
 acceptance. Existing lifecycle, aggregate, IO, CODE, weak-reference, thread,
 and HTML-Tree regressions pass on both backends with corrective sweeps disabled.
 
-**Current checkpoint (2026-11-10):** #1649 remains active; PR #1938 is
-open/draft at `25c9d9b2340d3c37f007177680f590b616b57995`. On isolated branch
-`wip/issue1649-temp-root-handoff-20261110` (agent/session `/root`, Codex
-continuation), a new regression proves an implicit
-sub return can leak a temporary root: `prepareScopeReturn` replaces the return
-local after `EmitBlock` pushes it, then generated cleanup tries to pop the new
-snapshot. The regression failed on the unfixed PR head (one failure in 1,573
-tests; `/private/tmp/issue1649-temp-root-parent-test-unit.log`) and passes after
-the emitter keeps the pushed root in a separate local. The focused unit shard
-passes 3/3, including JVM and interpreter execution; log:
-`/private/tmp/issue1649-temp-root-fixed-focused-test-unit.log`.
+**Current checkpoint (2026-11-11):** #1649 remains active; PR #1938 is
+open/draft at `25c9d9b2340d3c37f007177680f590b616b57995`. Candidate branch
+`fix/issue1649-rescued-weakrefs-20261110` is based on local commit `c9ebc735`,
+which fixes an implicit sub return leaking a temporary root: `prepareScopeReturn`
+replaces the return local after `EmitBlock` pushes it, so cleanup previously
+popped a different value. A project unit regression failed on the exact PR
+parent and passes after the emitter retains the pushed object separately;
+parent log: `/private/tmp/issue1649-rescued-owner-parent-final.log`.
 
-The lvalue-return edge was checked separately: the new
-`lvalue_sub_returns_local_reference.t` passes 3/3 on system Perl, JVM, and
-interpreter with sweeps disabled. `DBIx::Class` `t/100populate.t` passes in the
-interpreter with sweeps disabled. In the latest no-sweeps DBIx run,
-`t/100populate.t` passes 108/108; its earlier four-GC-failure checkpoint is
-stale. The temporary-root query is a live identity scan used by four cleanup
-paths. It descends only through expression-list/array wrappers and checks a
+The remaining temporary-root traversal is a live identity scan used by four
+cleanup paths. It descends expression-list/array wrappers and checks each
 scalar's direct referent; deeper descendants rely on their own element owner
-slots. Caching descendants would require mutation hooks across broad mutable
-container APIs, so no wider traversal rewrite is justified by current evidence.
+slots. A cached descendant index would require broad mutation hooks, and no
+current evidence justifies that wider rewrite. The old four-failure report for
+DBIx `t/100populate.t` is stale: the latest no-sweeps run passes 108/108, and
+`t/61findnot.t` passes 25/25. The latter had exposed quiet-END weak observers
+left in a rescued Schema/Storage/DBH cycle. Source commit
+`fa6eae0636e71223c3ef741ba35e2a76f042e089` processes ownerless rescues, then
+clears weak observers only for rescue-only graphs. It preserves package,
+queued-END, active-code, and independently live owner-slot roots while leaving
+strong Perl edges intact. Internal owner slots whose sources are in the rescued
+graph do not make a cycle an independent root.
+`RescuedWeakRefsBeforeEndTest` covers rescue-only cycles, direct and nested
+independent roots, active and queued END captures, and an external live owner
+slot. The focused unit gate passes in 29 seconds on `fa6eae06`, log:
+`/private/tmp/issue1649-rescued-owner-review-focused.log`. No-sweeps DBIx
+`t/61findnot.t` and `t/100populate.t` pass 25/25 and 108/108; logs:
+`/private/tmp/issue1649-dbix-t61-review3.log` and
+`/private/tmp/issue1649-dbix-t100-review3.log`.
 
-The same DBIx run still has four `t/61findnot.t` quiet-END weak-registry
-failures for Schema, Storage and DBH. A separate post-assertion weak probe sees
-Schema and Storage clear, so a ResultSet cache fix is unsupported. In
-`t/52leaks.t`, the main symbol-table check retains ResultSet/row/cache objects;
-the quiet END check separately reports DBH/Storage/Schema and a few CODE
-objects. The current owner probe passes its target through Perl and adds
-argument-alias slots, so its trace is not decisive. A next diagnostic should
-read weak-registry referents from Java without accepting a target argument.
+The remaining `t/52leaks.t` failure is separate and precedes END. The test's
+known rescued Schema → Storage → DBH → CachedKids → bound_params cycle accounts
+for some reports, but not for rootless Artist/CD rows. A focused owner snapshot
+found an active `UNTRACKED_REFERENCE` slot on a CD whose weak scalar carrier is
+already gone, plus a sibling slot held by an unowned temporary array. Acquisition
+traces to `RuntimeArrayElementList.add` via `DBIx::Class::ResultSource.pm:18204`;
+the stale slot's release path remains to be traced. Scanner evidence:
+`/private/tmp/issue1649-dbix-t52-owner-scan.log` and
+`/private/tmp/issue1649-dbix-t52-cd-acquire-trace.log`; original failure:
+`/tmp/cpan_random_logs/20261110-200208-96731/failures/DBIx-Class--from--DBIx-Class.log`.
+The full sweep audit found no production `deferDecrement` caller; public
+compatibility helpers and `jperl_freetmps` remain. `Internals::svRefcnt` still
+scans live scalar wrappers, and exact owner-slot count alignment remains
+production behavior.
 
-The full sweep audit found no production `deferDecrement` caller; count
-recovery remains behind that legacy public API. `sweepReleasedWeakReferents`
-still performs a public root walk for Java test callers. Perl-facing sweep
-stubs must remain for DBI and compatibility; `jperl_freetmps` is still real
-cleanup. `Internals::svRefcnt` still scans live scalar wrappers, and exact
-owner-slot count alignment remains production behavior.
-
-The required `nice -n 19 timeout 3600 make` gate passed in 6m42 on this
-candidate; log: `/private/tmp/issue1649-temp-root-final-make.log`.
-
-Acceptance source: `/private/tmp/issue1649-cpan-release-acceptance-nosweeps-20261110.log`; the `t/52leaks.t` trace is in `/tmp/cpan_random_logs/20261110-200208-96731/failures/DBIx-Class--from--DBIx-Class.log`.
-
-Ubuntu and Windows CI pass on the current PR head; aggregate CodeQL reports
-the unrelated unchanged RSA-key-size alert. Next: trace a failing `t/52leaks`
-owner without diagnostic strong references; decide which test-only sweep APIs
-and legacy fallback can be retired; complete the producer/count-alignment
-audit; rerun CPAN acceptance after its DBIx ownership failures are resolved.
-Keep PR #1938 open/draft until those checks pass.
+The last observed PR checks have Ubuntu and Windows passing; aggregate CodeQL
+reports the unchanged RSA-key-size alert. GitHub issue-comment API access is
+currently failing, so current claims could not be reconciled for publication.
+Next: run one immutable full `nice -n 19 timeout 3600 make`, then repeat targeted
+DBIx acceptance on its JAR. `make check-links` passes, 574 checked links and no
+errors; log: `/private/tmp/issue1649-rescued-owner-checklinks-final.log`. Trace
+the rootless `t/52leaks.t` owner as a separate acceptance blocker. Publish only
+after issue claim state is available; keep PR #1938 open/draft.
 
 The reported Class::MethodMaker tied-array lifetime failure is covered by the
 new project-owned `refcount/generated_tied_array_handler_lifetime.t`: it
@@ -1902,20 +1905,13 @@ and final use cases still require audit before removal.
 
 ### Next steps
 
-1. Keep the `restoreReachableOwnerCount` path isolated to its legacy unpaired
-   decrement hook. The current main-source audit finds no production caller of
-   `MortalList.deferDecrement`; production owner releases carry exact slot
-   tokens. `sweepWeakRefs` and `sweepReleasedWeakReferents` also have no
-   production callers, and the public sweep entry points are compatibility
-   no-ops. Ordinary runtime cleanup no longer depends on graph sweeps.
-2. Retain verified owner-slot count alignment while its producer gaps are
-   audited. This checks current scalar, aggregate, invocant, and native owner
-   identities directly; removing it previously failed lifecycle and Perl-level
-   owner tests that explicitly construct undercount/sentinel states. No normal
-   producer mismatch was found in this pass. It is not reachability-based
-   recovery.
-3. Continue the remaining producer/release audit outside closure capture, then
-   batch any demonstrated fixes with focused coverage before rebuilding. The
-   branch now includes current `origin/master`; rerun the final no-sweeps gate
-   and acceptance matrix on the exact final candidate after the audit. Recheck
-   issue #1649 and PR #1938 before publication; leave merging to review.
+1. Complete the rescued-graph boundary fix with the immutable full gate and
+   targeted DBIx acceptance on that exact JAR. Preserve the temporary-root
+   identity regression and independently rooted observer cases.
+2. Diagnose the rootless Artist/CD `UNTRACKED_REFERENCE` release reported by
+   `t/52leaks.t` separately from its documented rescued Schema/DBI cache cycle;
+   add project-owned coverage if a missed release is confirmed.
+3. Continue the remaining producer/release audit outside closure capture,
+   retaining verified owner-slot count alignment while its producers are
+   audited. Reconcile issue #1649 claims and PR #1938 before publication; leave
+   merging to review.
