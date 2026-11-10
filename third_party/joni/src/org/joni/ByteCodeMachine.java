@@ -441,6 +441,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
                 case OPCode.POP:                        opPop();                   continue;
                 case OPCode.PUSH_OR_JUMP_EXACT1:        opPushOrJumpExact1();      continue;
+                case OPCode.PUSH_OR_JUMP_EXACT1_RANGE:  opPushOrJumpExact1Range();  continue;
                 case OPCode.PUSH_IF_PEEK_NEXT:          opPushIfPeekNext();        continue;
 
                 case OPCode.REPEAT:                     opRepeat();                continue;
@@ -618,6 +619,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
                 case OPCode.POP:                        opPop();                   continue;
                 case OPCode.PUSH_OR_JUMP_EXACT1:        opPushOrJumpExact1();      continue;
+                case OPCode.PUSH_OR_JUMP_EXACT1_RANGE:  opPushOrJumpExact1Range();  continue;
                 case OPCode.PUSH_IF_PEEK_NEXT:          opPushIfPeekNext();        continue;
 
                 case OPCode.REPEAT:                     opRepeat();                continue;
@@ -3176,6 +3178,58 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         ip += addr + 1;
     }
 
+    private void opPushOrJumpExact1Range() {
+        int stateCheckNum = code[ip++];
+        int addr = code[ip++];
+        int continuation = ip + 1 + addr;
+        if (stateCheckNum == 0) {
+            int repeatFloor = s;
+            if (s >= range || code[ip] != bytes[s]) {
+                ip += addr + 1;
+                return;
+            }
+            int candidate = s;
+            int candidatePrev = sprev;
+            do {
+                candidate = s;
+                candidatePrev = sprev;
+                sprev = s++;
+            } while (s < range && code[ip] == bytes[s]);
+            ip++;
+            pushExactRepeatAlt(continuation, candidate, candidatePrev, pkeep,
+                    repeatFloor, 0);
+            ip = continuation;
+            return;
+        }
+        if (stateCheckNum > 0 && stateCheckVal(s, stateCheckNum)) {
+            opFail();
+            return;
+        }
+        if (s < range && code[ip] == bytes[s]) {
+            ip++;
+            StackEntry repeatAlternative = null;
+            for (int index = stk - 1; index >= 0; index--) {
+                StackEntry entry = stack[index];
+                if (entry.type == STATE_CHECK_MARK) continue;
+                if (entry.type == ALT && entry.isExactRepeatAlternative()
+                        && entry.getStatePCode() == continuation) {
+                    repeatAlternative = entry;
+                }
+                break;
+            }
+            if (repeatAlternative != null) {
+                repeatAlternative.setStatePStr(s);
+                repeatAlternative.setStatePStrPrev(sprev);
+                repeatAlternative.setPKeep(pkeep);
+                return;
+            }
+            pushExactRepeatAlt(continuation, s, sprev, pkeep, s, stateCheckNum);
+            return;
+        }
+        if (stateCheckNum > 0) pushStateCheck(s, stateCheckNum);
+        ip += addr + 1;
+    }
+
     private void opPushIfPeekNext() {
         int addr = code[ip++];
         // The next-head optimization is derived from the lexical successor of
@@ -4081,6 +4135,32 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 }
                 continuation.abort();
                 continue;
+            }
+
+            if (e.type == ALT && e.isExactRepeatAlternative()) {
+                int candidate = e.getStatePStr();
+                int candidatePrev = e.getStatePStrPrev();
+                int nextCandidate = candidatePrev;
+                int stateCheckNum = USE_CEC
+                        ? ((SCStackEntry) e).getStateCheck() : 0;
+                if (nextCandidate >= e.getExactRepeatFloor()) {
+                    e.setStatePStr(nextCandidate);
+                    e.setStatePStrPrev(enc.prevCharHead(
+                            bytes, str, nextCandidate, end));
+                    stk++;
+                    if (stateCheckNum > 0) {
+                        pushStateCheck(candidate, stateCheckNum);
+                    }
+                } else if (stateCheckNum > 0) {
+                    e.type = STATE_CHECK_MARK;
+                    e.setStatePStr(candidate);
+                    stk++;
+                }
+                ip = e.getStatePCode();
+                s = candidate;
+                sprev = candidatePrev;
+                pkeep = e.getPKeep();
+                return;
             }
 
             ip    = e.getStatePCode();

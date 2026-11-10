@@ -374,32 +374,26 @@ public class OverloadContext {
     }
 
     /**
-     * Tries only an explicitly defined assignment overload.  Unlike the
-     * generic binary-overload driver, a missing method does not invoke
-     * {@code nomethod} or enforce the package fallback policy; callers may
-     * continue with the corresponding non-assignment operator or its native
-     * behavior.  When the left operand supplies the mutator, preserve Perl's
-     * copy-constructor semantics before invoking it.
+     * Tries only an explicitly defined assignment overload on the writable
+     * left operand. Unlike the generic binary-overload driver, a missing
+     * method does not invoke {@code nomethod} or enforce the package fallback
+     * policy; callers may continue with the corresponding non-assignment
+     * operator or its native behavior. Preserve Perl's copy-constructor
+     * semantics before invoking a left-operand mutator. The right operand's
+     * assignment overload is not eligible: Perl falls back to its ordinary
+     * binary overload instead of mutating the right operand.
      *
      * @return The explicit assignment-overload result, or {@code null} when
-     *         neither operand defines it.
+     *         the left operand has no explicit assignment overload.
      */
     public static RuntimeScalar tryTwoArgumentAssignmentOverloadDirect(
-            RuntimeScalar arg1, RuntimeScalar arg2, int blessId, int blessId2,
-            String overloadName) {
+            RuntimeScalar arg1, RuntimeScalar arg2, int blessId, String overloadName) {
         if (blessId < 0) {
             OverloadContext ctx1 = prepare(blessId);
             if (ctx1 != null && ctx1.hasOverload(overloadName)) {
                 ctx1.copyForMutator(arg1);
                 return ctx1.tryOverload(
                         overloadName, new RuntimeArray(arg1, arg2, scalarFalse));
-            }
-        }
-        if (blessId2 < 0) {
-            OverloadContext ctx2 = prepare(blessId2);
-            if (ctx2 != null && ctx2.hasOverload(overloadName)) {
-                return ctx2.tryOverload(
-                        overloadName, new RuntimeArray(arg2, arg1, scalarTrue));
             }
         }
         return null;
@@ -456,9 +450,12 @@ public class OverloadContext {
             }
         }
         if (blessId2 < 0) {
-            // Try swapped overload
+            // A compound assignment applies to its writable left operand. A
+            // right-hand object's `+=`/`*=` method must not run on that
+            // object; after assignment overload lookup, try its ordinary
+            // binary overload through autogeneration instead.
             ctx2 = prepare(blessId2);
-            if (ctx2 != null) {
+            if (ctx2 != null && !isCompoundAssignment(overloadName)) {
                 RuntimeScalar result = ctx2.tryOverload(overloadName, new RuntimeArray(arg2, arg1, scalarTrue));
                 if (result != null) return result;
             }
@@ -510,6 +507,14 @@ public class OverloadContext {
             return null;
         }
         return null;
+    }
+
+    private static boolean isCompoundAssignment(String overloadName) {
+        return switch (overloadName) {
+            case "(+=", "(-=", "(*=", "(/=", "(%=", "(.=", "(&=", "(|=", "(^=",
+                    "(<<=", "(>>=" -> true;
+            default -> false;
+        };
     }
 
     public RuntimeScalar tryOverloadNomethod(RuntimeScalar runtimeScalar, String methodName) {

@@ -8,6 +8,7 @@ import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
 import java.time.format.DateTimeParseException;
+import java.time.format.ResolverStyle;
 import java.time.temporal.ChronoField;
 import java.util.*;
 import java.util.regex.Matcher;
@@ -98,7 +99,11 @@ public class TimePiece extends PerlModuleBase {
             DateTimeFormatter formatter = new DateTimeFormatterBuilder()
                     .parseLenient()
                     .appendPattern(javaPattern)
-                    .toFormatter(Locale.getDefault());
+                    // Perl's strptime accepts out-of-range date fields and
+                    // normalizes them through timegm/timelocal. SMART (the
+                    // Java default) clamps 2010-02-31 to February 28 instead.
+                    .toFormatter(Locale.getDefault())
+                    .withResolverStyle(ResolverStyle.LENIENT);
             
             // Try to parse - we need to handle partial dates
             LocalDateTime parsedDateTime = parseFlexible(dateString, formatter, javaPattern);
