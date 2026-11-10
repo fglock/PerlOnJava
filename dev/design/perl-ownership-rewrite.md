@@ -23,12 +23,12 @@ both pass their full suites under system Perl with isolated prerequisites:
 3,784 tests in 200 files and 13,305 tests in 314 files, respectively. This
 establishes that the reported failures are POJ-specific. A reduced DBIx
 reproducer using its actual `DBICTest::Util::LeakTracer` export also passes on
-system Perl but fails on POJ when the imported helper is called from an `END`
-block after `namespace::clean`; the same shape with a small plain Exporter
-module passes on both. This narrows the issue to imported-CV/`END` behavior but
-does not yet establish a refcount or glob-owner defect. The Catalyst `super`
-failure also remains unroot-caused. Do not classify either CPAN family as
-fixed by the localized CODE-slot change.
+system Perl but fails on both POJ backends when the imported helper is called
+from an `END` block after `namespace::clean`; the same shape with a small plain
+Exporter module passes on both. This narrows the issue to imported-CV/`END`
+behavior but does not yet establish a refcount or glob-owner defect. The
+Catalyst `super` failure also remains unroot-caused. Do not classify either
+CPAN family as fixed by the localized CODE-slot change.
 
 The targeted strict CPAN matrix was then run on commit `4535a2a063` (runtime
 source `c507afe36e`): Catalyst again failed 11/235 subtests, DBIx::Class failed
