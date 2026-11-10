@@ -58,12 +58,27 @@ assertions), including `foreach_alias_does_not_add_referent_owner.t`,
 `refalias_array_element_cell_owner.t`, and
 `scalar_reference_contents_alias_lifetime.t`.
 
-Alias semantics are covered distinctly: copying a reference into a new scalar
-creates another referent owner; a scalar alias shares its source cell and does
-not count the referent twice. A refalias array slot has its own cell-owner
-identity and releases it when the final alias is removed. No regression test
-changes were needed in this batch. PR #1938 remains open/draft at
-`1a6555c05ce7ddab547da276413328fab4f9b997`.
+Alias semantics have two separate counts: aliasing a scalar cell retains the
+cell, while the reference stored in that cell does not gain a second referent
+owner. System Perl also increments the aliased cell's native SV count, which
+POJ's approximate `B::SV::REFCNT` helper does not expose. The lifecycle gap was
+that a scalar refalias target's lexical pad entry still owned its prior cell
+after the register was rebound. Source commit `4ce671e11e` on
+`wip/issue1649-alias-cell-refcnt-20261110-044406` updates both execution paths
+to transfer the cleanup registration and bind the alias name to the shared
+cell. The new
+`refcount/lexical_scalar_refalias_owner_lifetime.t` passes 4/4 under system
+Perl, JVM, and interpreter; the existing hash alias test passes 45/45 on both
+POJ backends. The full `nice -n 19 make` passes in 6m43; logs:
+`/tmp/issue1649-lexical-scalar-refalias-system-perl.log`,
+`/tmp/issue1649-lexical-refalias-owner-final-make.log`,
+`/tmp/issue1649-lexical_scalar_refalias_owner_lifetime.t-verified-jvm.log`,
+`/tmp/issue1649-lexical_scalar_refalias_owner_lifetime.t-verified-interpreter.log`,
+`/tmp/issue1649-issue_1649_hash_alias_cell_owner.t-verified-jvm.log`, and
+`/tmp/issue1649-issue_1649_hash_alias_cell_owner.t-verified-interpreter.log`.
+JVM `eval` exception unwind is a separate unresolved lexical-alias cleanup
+case; keep it in the next exact-name unwind audit. PR #1938 remains open/draft
+at `1a6555c05ce7ddab547da276413328fab4f9b997`.
 
 The follow-up caller audit found no main-source caller of the legacy
 `MortalList.deferDecrement(RuntimeBase)` hook or the sweep request APIs.
@@ -78,14 +93,17 @@ retired. Source audit: `rg` callsite review on candidate tree
 
 ### Next steps
 
-1. Isolate the DBIx imported-CV/`END` discrepancy and Catalyst `super` failure;
+1. Trace exact lexical names through `MyVarCleanupStack.unwindTo` and cover
+   scalar refalias exception unwind on JVM; keep system-Perl behavior and
+   interpreter parity in the regression.
+2. Isolate the DBIx imported-CV/`END` discrepancy and Catalyst `super` failure;
    only fold a fix into #1649 if the cause is in Perl ownership or glob
    semantics. Add project-owned regression coverage for any runtime defect.
-2. Continue the remaining owner-producer/release audit and batch any proven
+3. Continue the remaining owner-producer/release audit and batch any proven
    ownership fixes before the next full build. The strict matrix is complete
    for the current candidate; rerun it after any source change, using local
    socket access for Mojolicious acceptance.
-3. Refresh PR #1938 and the #1649 handoff after checking current GitHub state
+4. Refresh PR #1938 and the #1649 handoff after checking current GitHub state
    and base; keep both open until the remaining ownership audit and acceptance
    questions are resolved.
 
