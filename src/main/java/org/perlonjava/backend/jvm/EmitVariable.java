@@ -1668,8 +1668,32 @@ public class EmitVariable {
                                             "Unexpected state refalias target: " + varNode.operator);
                                 }
                             } else {
+                                // Move this lexical's exceptional-cleanup
+                                // registration to the cell it now aliases.
+                                mv.visitInsn(Opcodes.DUP);
+                                mv.visitVarInsn(Opcodes.ALOAD, symEntry.index());
+                                mv.visitInsn(Opcodes.SWAP);
+                                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                                        "org/perlonjava/runtime/runtimetypes/MyVarCleanupStack",
+                                        "replace",
+                                        "(Ljava/lang/Object;Ljava/lang/Object;)V",
+                                        false);
                                 mv.visitInsn(Opcodes.DUP);
                                 mv.visitVarInsn(Opcodes.ASTORE, symEntry.index());
+                                // Refaliasing replaces the cell bound to this
+                                // lexical name. Transfer its active pad owner
+                                // to the shared cell before the source name
+                                // can leave scope.
+                                new OperatorNode("__SUB__", null, varNode.tokenIndex)
+                                        .accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                                mv.visitVarInsn(Opcodes.ALOAD, symEntry.index());
+                                mv.visitInsn(Opcodes.SWAP);
+                                mv.visitLdcInsn(varName);
+                                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                                        "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                                        "bindActiveLexical",
+                                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)V",
+                                        false);
                             }
 
                             if (pooledRhs) {

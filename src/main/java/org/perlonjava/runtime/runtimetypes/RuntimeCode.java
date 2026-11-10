@@ -1459,6 +1459,20 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
             return 0;
         }
+
+        private int removeAllLexicalCells(RuntimeBase cell) {
+            if (cells == null) return 0;
+            int removed = 0;
+            for (Map.Entry<String, RuntimeBase> entry
+                    : new ArrayList<>(cells.entrySet())) {
+                if (entry.getValue() == cell) {
+                    remove(entry.getKey());
+                    removed++;
+                }
+            }
+            return removed;
+        }
+
     }
     @SuppressWarnings("unchecked")
     private static Deque<ActiveLexicalFrame> activeLexicalFrames(
@@ -2285,6 +2299,28 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         return false;
     }
+
+    /** Release every pad name for a cell after its final lexical registration leaves. */
+    static int releaseAllActiveLexicalOwners(RuntimeBase cell) {
+        if (!(cell instanceof RuntimeArray || cell instanceof RuntimeHash
+                || cell instanceof RuntimeScalar scalar && scalar.referencedByScalarReference)
+                || PerlRuntime.currentOrNull() == null) return 0;
+        ExecutionRuntimeState state = PerlRuntime.current().executionState();
+        int removed = 0;
+        for (ActiveLexicalFrame frame : activeLexicalFrames(state)) {
+            removed += frame.removeAllLexicalCells(cell);
+        }
+        for (Map.Entry<String, RuntimeBase> entry
+                : new ArrayList<>(state.topLevelLexicals.entrySet())) {
+            if (entry.getValue() != cell) continue;
+            state.topLevelLexicals.remove(entry.getKey());
+            PerlOwnerSlot ownerSlot = state.topLevelLexicalOwnerSlots.remove(entry.getKey());
+            if (ownerSlot != null) ownerSlot.release();
+            removed++;
+        }
+        return removed;
+    }
+
 
     /**
      * Select eval STRING captures for Perl's package-DB rule. An eval run by

@@ -3878,6 +3878,15 @@ public class CompileAssignment {
                                 bytecodeCompiler.emitReg(targetReg);
                                 bytecodeCompiler.emitReg(sourceReg);
                             }
+                            if (!bytecodeCompiler.isStateVariable(varName)) {
+                                // Refaliasing makes this lexical name another
+                                // owner of the shared cell. Keep its pad
+                                // identity attached to the aliased cell so the
+                                // source lexical can leave scope without
+                                // releasing the final owner.
+                                bytecodeCompiler.emitActiveLexicalBinding(
+                                        targetReg, varName);
+                            }
                             // `\$left = \$right` is itself a reference
                             // expression.  Keep the original RHS reference
                             // for callers such as foo(\$left = \$right),
