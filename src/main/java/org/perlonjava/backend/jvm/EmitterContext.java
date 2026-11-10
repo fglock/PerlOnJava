@@ -137,6 +137,10 @@ public class EmitterContext {
     public Map<String, Integer> evalCachedVariableRegistry;
     /** ourVariableRegistry for InterpretedCode — built once from compilerSymbolTableTemplate. */
     public Map<String, String> evalCachedOurVariableRegistry;
+    /** Pooled ScopedSymbolTable for the cached eval path; reused across 2M+ warm-path compilations.
+     *  After each compilation symbolTable is at depth 1 with all caches cleared by exitScope(),
+     *  so it can be handed back to the next BytecodeCompiler without any explicit reset. */
+    public ScopedSymbolTable evalCachedSymbolTable;
 
     /**
      * Constructs a new EmitterContext with the specified parameters.

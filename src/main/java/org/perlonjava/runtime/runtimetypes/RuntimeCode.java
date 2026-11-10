@@ -5619,6 +5619,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     }
                     ctx.evalCachedVariableRegistry = cachedVarReg;
                     ctx.evalCachedOurVariableRegistry = cachedOurReg.isEmpty() ? null : cachedOurReg;
+                    // Create the pooled ScopedSymbolTable once; reused on every warm-path eval.
+                    ctx.evalCachedSymbolTable = new ScopedSymbolTable();
                 }
                 BytecodeCompiler compiler = new BytecodeCompiler(
                         evalCompilerOptions.fileName,
@@ -5629,7 +5631,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         ctx.evalCachedCapturedOurVarNames,
                         ctx.evalCachedNextRegister,
                         ctx.evalCachedVariableRegistry,
-                        ctx.evalCachedOurVariableRegistry);
+                        ctx.evalCachedOurVariableRegistry,
+                        ctx.evalCachedSymbolTable);
                 compiler.setCompilePackage(evalCurrentPackage);
                 interpretedCode = compiler.compile(ast, evalCtx);
                 compiledSuccessfully = true;

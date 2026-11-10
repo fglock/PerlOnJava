@@ -267,7 +267,9 @@ public class BytecodeCompiler implements Visitor {
     // Replaces the old variableScopes Stack + allDeclaredVariables flat map.
     // Using ScopedSymbolTable gives us proper scope-aware variable lookups and
     // getAllVisibleVariables()/getVisibleVariableRegistry() for per-eval-site snapshots.
-    final ScopedSymbolTable symbolTable = new ScopedSymbolTable();
+    // Non-final so the cached eval constructor can inject a pooled instance instead of
+    // creating a fresh one for each of 2M warm-path eval compilations.
+    ScopedSymbolTable symbolTable;
     // Goto label support: maps label names to their PC addresses for intra-function goto.
     // pendingGotos tracks forward references (goto before label) needing patch-up.
     // These are null by default; initialized lazily in compile() only when goto/labels are present.
@@ -677,6 +679,7 @@ public class BytecodeCompiler implements Visitor {
         this.sourceName = sourceName;
         this.sourceLine = sourceLine;
         this.errorUtil = errorUtil;
+        this.symbolTable = new ScopedSymbolTable();
 
         // Initialize symbolTable with the 3 reserved registers
         symbolTable.addVariableWithIndex("this", 0, "reserved");
@@ -737,6 +740,7 @@ public class BytecodeCompiler implements Visitor {
         this.sourceName = sourceName;
         this.sourceLine = sourceLine;
         this.errorUtil = errorUtil;
+        this.symbolTable = new ScopedSymbolTable();
 
         // Initialize symbolTable with the 3 reserved registers
         symbolTable.addVariableWithIndex("this", 0, "reserved");
@@ -807,11 +811,17 @@ public class BytecodeCompiler implements Visitor {
                             Set<String> cachedCapturedOurVarNames,
                             int cachedNextRegister,
                             Map<String, Integer> prebuiltVariableRegistry,
-                            Map<String, String> prebuiltOurVariableRegistry) {
+                            Map<String, String> prebuiltOurVariableRegistry,
+                            ScopedSymbolTable pooledSymbolTable) {
         this.sourceName = sourceName;
         this.sourceLine = sourceLine;
         this.errorUtil = errorUtil;
         this.isEvalString = true;
+        // Reuse the pooled SST instead of allocating a fresh one.
+        // After the previous compilation, exitScope() left all caches cleared and
+        // all pragma stacks at depth 1; compile() resets the 7 stacks it owns, and
+        // useInitialTable() below resets the variable table.
+        this.symbolTable = pooledSymbolTable;
         // One HashMap copy replaces N addVariableWithIndex calls + N SymbolEntry allocations
         symbolTable.useInitialTable(cachedCompilerSymbolTable);
         // Share read-only structures (never mutated after eval STRING construction)
