@@ -13,27 +13,35 @@ existing order. `end_imported_cv_survives_namespace_clean.t` passes 1/1 under
 system Perl, JVM, and interpreter. The unfixed candidate failed on JVM with
 exit 22 and passed on interpreter. Evidence is in `/tmp/issue1649-end-cv-*`.
 
-The source fix is committed as `36c5a1f277`; its immutable no-sweeps full gate
-is running from `/private/tmp/issue1649-dbix-end-cv` with log
-`/tmp/issue1649-owner-order-no-sweeps-make.log`. PR #1938 remains open and
-draft. Current master was merged into the separate PR integration worktree in
-commit `717b23b383`; the pending-owner fix is applied there for final
-integration. The earlier attempt to rebase would have replayed 679 historical
-commits, so it was aborted before altering the PR branch. Do not publish until
-the full gate finishes and the exact integrated candidate passes its final
+The integrated PR commit `7916c8e1e416ddce1785ebe4fbecae9fc5da93c0` includes
+current master and the fix. Its no-sweeps `nice -n 19 timeout 1800 make` gate
+passed in 6m32 (`/tmp/issue1649-integrated-no-sweeps-make.log`); the Markdown
+link check passed with 574 links and zero errors. The strict CPAN batch on
+this same source exited 1: DBIx::Class failed 704/43,694 subtests, mainly
+object-GC expectations plus an undefined `carp_unique`; Catalyst failed
+11/235 with Moose's undefined `super`; Mojolicious's system-Perl baseline
+failed 4 tests in `t/mojo/log.t` colorized-log assertions, so it had no POJ
+comparison. Logs are `/tmp/issue1649-integrated-strict-cpan.log` and
+`/tmp/cpan_random_logs/20261110-125016-44992/`. The focused imported-CV END
+regression still passes on system Perl, JVM, and interpreter.
+
+PR #1938 is open/draft. Its runtime candidate is this integrated commit;
+current master was merged in `717b23b383`. A rebase was aborted before
+altering the PR branch because Git scheduled 679 historical commits for
+replay. The exact integrated candidate has passed its full no-sweeps and link
 gates.
 
 ### Next steps
 
-1. Finish the active no-sweeps full gate; retain its complete log and record
-   the exact source SHA and result.
-2. Complete integration of the pending-owner fix into the current PR branch,
-   review the combined diff, then run one full no-sweeps `make` and the strict
-   CPAN acceptance batch on that immutable integrated source.
-3. Finish the remaining producer/release audit and classify the known Catalyst
-   and environment-sensitive Mojolicious results. Then refresh PR #1938 and
-   the #1649 handoff with exact commits, logs, remaining gaps, and acceptance
-   criteria; leave the PR open for review.
+1. Continue the producer/release audit and determine whether remaining DBIx
+   object-GC expectations and `carp_unique`, and Catalyst's Moose `super`
+   behavior, are ownership defects within #1649. Add project-owned regression
+   coverage for any confirmed PerlOnJava defect.
+2. Rerun Mojolicious after isolating the system-Perl colorized-log baseline;
+   the current run provides no POJ comparison for that module.
+3. Review CI on PR #1938, triage the existing CodeQL RSA key-size alert, and
+   keep the PR open/draft until the remaining audit and acceptance work is
+   resolved.
 
 The reported Class::MethodMaker tied-array lifetime failure is covered by the
 new project-owned `refcount/generated_tied_array_handler_lifetime.t`: it
