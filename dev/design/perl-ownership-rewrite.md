@@ -84,19 +84,24 @@ Earlier lifetime logs:
 `/tmp/issue1649-lexical_scalar_refalias_owner_lifetime.t-verified-interpreter.log`,
 `/tmp/issue1649-issue_1649_hash_alias_cell_owner.t-verified-jvm.log`, and
 `/tmp/issue1649-issue_1649_hash_alias_cell_owner.t-verified-interpreter.log`.
-JVM `eval` exception unwind remains unresolved. System Perl and the interpreter
-pass the four-case temporary probe, while JVM on `4ce671e11e` destroys the
-referent as the eval block exits. Tracing shows the eval frame owns the
-`$alias` pad entry and releases it from `ActiveLexicalFrame.clearForReuse`;
-rebinding the active pad entry alone kept the referent alive but left the
-outer JVM `$alias` register undefined, and dropping it then leaked the
-referent. That experiment was reverted and no failing test was retained. The
-next fix must write a refalias cell replacement through to its declaring pad,
-not only repair cleanup metadata. Evidence: `/tmp/issue1649-refalias-eval-unwind-system.log`,
+Eval exception cleanup is now covered by `refalias_cell_refcount.t`: it
+unregisters the exact active lexical name on both backends, with the
+interpreter using retained register-to-name metadata for exceptional cleanup.
+The separate JVM nested-eval refalias write-through/identity case remains
+unresolved. System Perl and the interpreter pass the four-case temporary
+probe, while JVM on `4ce671e11e` destroys the referent as the eval block exits.
+Tracing shows the eval frame owns the `$alias` pad entry and releases it from
+`ActiveLexicalFrame.clearForReuse`; rebinding the active pad entry alone kept
+the referent alive but left the outer JVM `$alias` register undefined, and
+dropping it then leaked the referent. That experiment was reverted and no
+failing test was retained. The next fix must write a refalias cell replacement
+through to its declaring pad, not only repair cleanup metadata. Evidence:
+`/tmp/issue1649-refalias-eval-unwind-system.log`,
 `/tmp/issue1649-refalias-eval-unwind-interpreter.log`,
 `/tmp/issue1649-alias-decrement-source-trace.log`, and
 `/tmp/issue1649-refalias-eval-identity-jvm.log`. PR #1938 remains open/draft
-at `1a6555c05ce7ddab547da276413328fab4f9b997`.
+at `efd6fa8e3d7935821fdbeb4494783c30754f5fc3`; GitHub reports a conflict with
+the current base.
 
 The follow-up caller audit found no main-source caller of the legacy
 `MortalList.deferDecrement(RuntimeBase)` hook or the sweep request APIs.
@@ -124,9 +129,9 @@ retired. Source audit: `rg` callsite review on candidate tree
    only fold a fix into #1649 if the cause is in Perl ownership or glob
    semantics. Add project-owned regression coverage for any runtime defect.
 3. Continue the remaining owner-producer/release audit and batch any proven
-   ownership fixes before the next full build. The strict matrix is complete
-   for the current candidate; rerun it after any source change, using local
-   socket access for Mojolicious acceptance.
+   ownership fixes before the next full build. The strict CPAN matrix has not
+   been rerun on the current candidate; run it after source changes, using
+   local socket access for Mojolicious acceptance.
 4. Refresh PR #1938 and the #1649 handoff after checking current GitHub state
    and base; keep both open until the remaining ownership audit and acceptance
    questions are resolved.
