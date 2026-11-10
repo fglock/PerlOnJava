@@ -51,6 +51,13 @@ final class CompiledDirectCallSite {
     void visibleCodeSlotChanged(RuntimeScalar previous, RuntimeScalar replacement) {
         if (compileTimePinned) return;
         if (replacement != null) {
+            // namespace::clean removes the imported CODE entry by deleting
+            // its glob, then restores the other glob components. That restore
+            // can materialize a fresh, undefined CODE slot. Existing call
+            // sites still refer to the CV compiled before cleanup; an empty
+            // placeholder is not a replacement CV and must not retire their
+            // owner.
+            if (previous == null && !RuntimeCode.isCodeDefined(replacement)) return;
             releaseRetiredTarget();
             return;
         }

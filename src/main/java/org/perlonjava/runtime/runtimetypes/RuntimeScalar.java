@@ -2048,7 +2048,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     PerlOwnerSlot.PendingRelease deferCountedOwnerRelease(RuntimeBase referent) {
-        return releaseCountedOwnerIdentity(referent, null, false);
+        return releaseCountedOwnerIdentity(referent, null, false, true);
     }
 
     /**
@@ -2058,6 +2058,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      */
     PerlOwnerSlot.PendingRelease releaseCountedOwnerIdentity(
             RuntimeBase referent, String releaseSite, boolean releaseTrace) {
+        return releaseCountedOwnerIdentity(referent, releaseSite, releaseTrace, false);
+    }
+
+    private PerlOwnerSlot.PendingRelease releaseCountedOwnerIdentity(
+            RuntimeBase referent, String releaseSite, boolean releaseTrace,
+            boolean publishPendingOwnerBeforeRelease) {
         PerlOwnerSlot slot = countedOwnerSlot;
         if (slot == null) {
             return null;
@@ -2065,7 +2071,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (!refCountOwned || !slot.isActive() || slot.referent() != referent
                 || slot.countedScalarOwner() != this
                 || !PerlOwnerSlot.isCountedKind(slot.kind())) return null;
-        PerlOwnerSlot.PendingRelease release = slot.releaseCountedIdentity();
+        PerlOwnerSlot.PendingRelease release =
+                slot.releaseCountedIdentity(publishPendingOwnerBeforeRelease);
         if (release == null) return null;
         refCountOwned = false;
         if (releaseTrace) referent.releaseOwner(this, releaseSite);

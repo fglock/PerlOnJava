@@ -1088,17 +1088,29 @@ public final class PerlOwnerSlot {
 
     /** Retire this edge and carry its identity through one deferred decrement. */
     public synchronized PendingRelease releaseCountedIdentity() {
+        return releaseCountedIdentity(false);
+    }
+
+    /**
+     * Retire this edge after publishing its pending-release identity. The owner
+     * observer runs synchronously from {@link #release()}; a CODE owner must see
+     * the pending return edge before its last active scalar slot is detached.
+     */
+    synchronized PendingRelease releaseCountedIdentity(boolean pendingOwnerRelease) {
         if (referent == null) return null;
         if (nativeOwner || legacyCaptureCount != 0) {
             throw new IllegalStateException("counted release requires a counted identity");
         }
+        RuntimeBase releasedReferent = referent;
         RuntimeScalar owner = countedScalarOwner();
-        traceBaseResultSetOwnerRelease(referent, owner);
-        PerlOwnerSlot resourceRelease = RuntimeScalar.detachIoOwnerForDeferredRelease(owner, referent);
-        PendingRelease release = new PendingRelease(
-                identity, ++nextReleaseSequence, kind, referent, null, resourceRelease);
+        traceBaseResultSetOwnerRelease(releasedReferent, owner);
+        PerlOwnerSlot resourceRelease = RuntimeScalar.detachIoOwnerForDeferredRelease(
+                owner, releasedReferent);
+        PendingRelease pending = new PendingRelease(
+                identity, ++nextReleaseSequence, kind, releasedReferent, null, resourceRelease);
+        if (pendingOwnerRelease) releasedReferent.registerPendingOwnerRelease(pending);
         release();
-        return release;
+        return pending;
     }
 
     private void traceBaseResultSetOwnerRelease(RuntimeBase target, RuntimeScalar owner) {
