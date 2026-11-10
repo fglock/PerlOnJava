@@ -81,6 +81,7 @@ priorities and future plans.
 - Release aggregate closure captures without decrementing another owner's counted edge (#1649).
 - Disable corrective sweeps by default while migrating to explicit reference ownership; retain temporary scalar call and mortal return values through their caller boundaries, and balance argument, scalar-cell, closure, aggregate, package scalar/array/hash roots, tied-handler, shared-view, named CODE, persistent state, and destructor lifetimes (#1649).
 - Keep queued END callbacks live through their current queue owner and active-code handoff, without a synthetic positive count (#1649).
+- Publish pending return-owner identities before detaching counted scalar slots, preserving imported END callbacks through queue publication (#1649).
 - Validate counted scalar-cell owners through current array and hash storage during deferred cleanup, avoiding root snapshots for migrated edges (#1649).
 - Track persistent CV scalar, array, hash, and refalias state bindings with `CODE_STATE` owner identities, including replacement and cloning; remove deferred live/global CODE capture recovery traversal (#1649).
 - Use live scalar-owner slots to preserve nested untracked aggregates on first weaken, avoid package-root walks, and clear weak observers at final release (#1649).

@@ -480,7 +480,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                 || ownerSlotCount(PerlOwnerSlot.Kind.SCALAR_REFERENCE_CONTENTS) != 0;
     }
 
-    private synchronized void registerPendingOwnerRelease(
+    synchronized void registerPendingOwnerRelease(
             PerlOwnerSlot.PendingRelease release) {
         pendingOwnerReleases++;
         if (release != null && release.kind() == PerlOwnerSlot.Kind.RETURN_VALUE) {
@@ -1243,8 +1243,8 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             // Compatibility for synthetic or pre-tracking scalars only. The
             // validation above ensures a real tracked owner cannot use this.
             owner.refCountOwned = false;
+            registerPendingOwnerRelease(null);
         }
-        registerPendingOwnerRelease(slotRelease);
         if (!refCountTrace || !REFCOUNT_TRACE_ENV) {
             return new PendingOwnerRelease(
                     System.identityHashCode(owner), 0, "counted owner-slot", queueSite, slotRelease);

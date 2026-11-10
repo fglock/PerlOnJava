@@ -4852,7 +4852,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             String name, String className, int siteIndex) {
         RuntimeCode active = getActiveCodeAt(0);
         return active == null
-                ? GlobalVariable.getGlobalCodeRefForDirectCall(name)
+                ? GlobalVariable.resolveRegisteredCompiledDirectCallSite(name, siteIndex)
                 : active.resolveCompiledDirectCallSite(className, siteIndex, name);
     }
 

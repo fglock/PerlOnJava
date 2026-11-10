@@ -2,139 +2,38 @@
 
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Production sweep callers have been removed; count alignment still uses verified current owner slots while remaining producer gaps are audited.
 
-**Current checkpoint (2026-11-10):** #1649 remains in Phase 2. The deferred
-Mojolicious render regression traced to `RuntimeGlob.dynamicRestoreState`:
-restoring a localized CODE slot skipped release whenever the CV also had any
-counted stash slots, even if that localized scalar carried its own active
-counted owner token. Restore now releases that exact token and keeps the old
-compatibility guard only for slots without an identity proof. The new
-`mojolicious_controller_destroy_after_deferred_render.t` passes 5/5 under
-system Perl, JVM, and interpreter. The complete `nice -n 19 make` gate passed
-in 7m26 on the candidate before the focused backend reruns; logs are
-`/tmp/issue1649-localized-code-owner-make.log`,
-`/tmp/issue1649-deferred-render-fixed-jvm.log`, and
-`/tmp/issue1649-deferred-render-fixed-interpreter.log`.
+**Current checkpoint (2026-11-10):** #1649 remains in Phase 2. The latest
+DBIx imported-CV/`END` regression came from an owner-release ordering gap:
+`RuntimeBase.queueOwnerRelease` detached the counted scalar slot before it
+registered the pending return owner. The synchronous release observer could
+then clear the compiled direct-call site before the END queue published its
+owner. `PerlOwnerSlot.releaseCountedIdentity(boolean)` now registers the
+pending identity before detaching that slot; immediate releases retain their
+existing order. `end_imported_cv_survives_namespace_clean.t` passes 1/1 under
+system Perl, JVM, and interpreter. The unfixed candidate failed on JVM with
+exit 22 and passed on interpreter. Evidence is in `/tmp/issue1649-end-cv-*`.
 
-The strict CPAN acceptance run on source `11da0bf868` exited 2: Catalyst
-failed 11 subtests, DBIx::Class failed 420 subtests, and Mojolicious hit its
-2,400-second soft timeout. The Mojolicious controller `DESTROY` wait now has a
-project-owned reproducer and fix. Pristine Catalyst and DBIx::Class distributions
-both pass their full suites under system Perl with isolated prerequisites:
-3,784 tests in 200 files and 13,305 tests in 314 files, respectively. This
-establishes that the reported failures are POJ-specific. A reduced DBIx
-reproducer using its actual `DBICTest::Util::LeakTracer` export also passes on
-system Perl but fails on both POJ backends when the imported helper is called
-from an `END` block after `namespace::clean`; the same shape with a small plain
-Exporter module passes on both. This narrows the issue to imported-CV/`END`
-behavior but does not yet establish a refcount or glob-owner defect. The
-Catalyst `super` failure also remains unroot-caused. Do not classify either
-CPAN family as fixed by the localized CODE-slot change.
-
-The targeted strict CPAN matrix was then run on commit `4535a2a063` (runtime
-source `c507afe36e`): Catalyst again failed 11/235 subtests, DBIx::Class failed
-420/43,410, and Mojolicious completed with 39/1,651 failures. Most Mojolicious
-failures were loopback bind errors from the restricted runner; other failures
-included an unavailable `Crypt::KeyDerivation::pbkdf2`. With local socket access,
-the upstream `t/mojolicious/longpolling_lite_app.t` passes all 15 subtests on
-both system Perl and the candidate JVM, including controller destruction after
-deferred rendering. Logs: `/tmp/issue1649-candidate-strict-cpan.log`,
-`/tmp/issue1649-longpolling-system-perl-network.log`, and
-`/tmp/issue1649-longpolling-candidate-jvm-network.log`.
-
-In
-`/private/tmp/issue1649-pr-sync-20261109`, an assignment-result `RuntimeArray`
-was incorrectly recorded as the owning container for scalar cells that the
-assignment targets already own. `RuntimeList.setFromList` and
-`RuntimeArray.setFromList` now append these cells through a borrowed-result path,
-which preserves package-root and ISA bookkeeping without replacing their real
-container owner. Temporary tracing has been removed. The full
-`JPERL_DISABLE_CORRECTIVE_SWEEPS=1 nice -n 19 make` gate passed in 6m41 on tree
-`d26efbd65ea8956ffbec5a53e59e5b24232d6b13`; log:
-`/tmp/issue1649-no-sweeps-ccf99843d3.log`. The commit was then amended only to
-correct its message; final commit `14e3a36b0111f8b5cd3b09ff2da2505e942f6781`
-has the same tree. The gate includes the Mojolicious Promise warning and mount
-regressions. Four alias/refcount regressions pass under system Perl (68
-assertions), including `foreach_alias_does_not_add_referent_owner.t`,
-`refalias_array_element_cell_owner.t`, and
-`scalar_reference_contents_alias_lifetime.t`.
-
-Alias semantics have two separate counts: refaliasing increments the shared
-scalar cell's `B::SV::REFCNT`, while the reference stored in that cell does not
-gain a second referent owner. The existing runtime already reports the cell
-count increase on both backends. A new test found the JVM retained that count
-after the alias left a block, and an eval exception skipped the active-pad
-unbind on both backends. The interpreter also lacked retained names for
-block-scoped scalar registers during exceptional cleanup. The JVM scope emitter
-now unbinds the exact lexical name; compiled eval cleanup records those names,
-and bytecode cleanup uses the retained register-to-name map before releasing
-the slot. The stable-cell write-through case from source commit `4ce671e11e` on
-`wip/issue1649-alias-cell-refcnt-20261110-044406` continues to transfer lexical
-cleanup registration to the shared cell. The new
-`refcount/lexical_scalar_refalias_owner_lifetime.t` passes 4/4 under system
-Perl, JVM, and interpreter; the existing hash alias test passes 45/45 on both
-POJ backends. The new `refcount/refalias_cell_refcount.t` passes 6/6 on system
-Perl, JVM, and interpreter. The no-sweeps `nice -n 19 timeout 1800 make` gate
-passes in 11m10; focused logs are
-`/tmp/issue1649-refalias-cell-refcount-{prove,jvm-final,interpreter-final}.log`,
-and the full gate is `/tmp/issue1649-refalias-cell-refcount-final-make.log`.
-Earlier lifetime logs:
-`/tmp/issue1649-lexical-scalar-refalias-system-perl.log`,
-`/tmp/issue1649-lexical-refalias-owner-final-make.log`,
-`/tmp/issue1649-lexical_scalar_refalias_owner_lifetime.t-verified-jvm.log`,
-`/tmp/issue1649-lexical_scalar_refalias_owner_lifetime.t-verified-interpreter.log`,
-`/tmp/issue1649-issue_1649_hash_alias_cell_owner.t-verified-jvm.log`, and
-`/tmp/issue1649-issue_1649_hash_alias_cell_owner.t-verified-interpreter.log`.
-Eval exception cleanup is now covered by `refalias_cell_refcount.t`: it
-unregisters the exact active lexical name on both backends, with the
-interpreter using retained register-to-name metadata for exceptional cleanup.
-The separate JVM nested-eval refalias write-through/identity case remains
-unresolved. System Perl and the interpreter pass the four-case temporary
-probe, while JVM on `4ce671e11e` destroys the referent as the eval block exits.
-Tracing shows the eval frame owns the `$alias` pad entry and releases it from
-`ActiveLexicalFrame.clearForReuse`; rebinding the active pad entry alone kept
-the referent alive but left the outer JVM `$alias` register undefined, and
-dropping it then leaked the referent. That experiment was reverted and no
-failing test was retained. The next fix must write a refalias cell replacement
-through to its declaring pad, not only repair cleanup metadata. Evidence:
-`/tmp/issue1649-refalias-eval-unwind-system.log`,
-`/tmp/issue1649-refalias-eval-unwind-interpreter.log`,
-`/tmp/issue1649-alias-decrement-source-trace.log`, and
-`/tmp/issue1649-refalias-eval-identity-jvm.log`. PR #1938 remains open/draft
-at `efd6fa8e3d7935821fdbeb4494783c30754f5fc3`; GitHub reports a conflict with
-the current base.
-
-The follow-up caller audit found no main-source caller of the legacy
-`MortalList.deferDecrement(RuntimeBase)` hook or the sweep request APIs.
-Production deferred releases pass exact owner-slot tokens; root-based recovery
-in `processDeferredBase` is gated to tokenless compatibility releases.
-The targeted `ReachabilityWalker.sweepReleasedWeakReferents` helper has no
-main-source caller either. `ReachabilityWalker.isScalarReachable` is used by
-the tokenless count-recovery bridge and diagnostic tracing; it is not an
-ordinary release fallback. Exact count alignment through
-`restoreVerifiedCurrentCountedOwnerSlotRefCount` remains a separate direct
-owner-slot check, not a root walk.
-`Internals::jperl_gc` and `jperl_gc_quiet` are no-ops. The remaining
-`restoreVerifiedCurrentCountedOwnerSlotRefCount` bridge reads active Perl owner
-identities directly; it does not traverse roots or repair from reachability.
-Keep that bridge until its malformed/legacy-state fixtures are deliberately
-retired. Source audit: `rg` callsite review on candidate tree
-`d26efbd65ea8956ffbec5a53e59e5b24232d6b13`.
+The source fix is committed as `36c5a1f277`; its immutable no-sweeps full gate
+is running from `/private/tmp/issue1649-dbix-end-cv` with log
+`/tmp/issue1649-owner-order-no-sweeps-make.log`. PR #1938 remains open and
+draft. Current master was merged into the separate PR integration worktree in
+commit `717b23b383`; the pending-owner fix is applied there for final
+integration. The earlier attempt to rebase would have replayed 679 historical
+commits, so it was aborted before altering the PR branch. Do not publish until
+the full gate finishes and the exact integrated candidate passes its final
+gates.
 
 ### Next steps
 
-1. Trace refalias assignment from a nested JVM eval frame back to the
-   declaring lexical pad; add a permanent scalar-alias exception-unwind test
-   only when alias identity, lifetime, and final release pass all backends.
-2. Isolate the DBIx imported-CV/`END` discrepancy and Catalyst `super` failure;
-   only fold a fix into #1649 if the cause is in Perl ownership or glob
-   semantics. Add project-owned regression coverage for any runtime defect.
-3. Continue the remaining owner-producer/release audit and batch any proven
-   ownership fixes before the next full build. The strict CPAN matrix has not
-   been rerun on the current candidate; run it after source changes, using
-   local socket access for Mojolicious acceptance.
-4. Refresh PR #1938 and the #1649 handoff after checking current GitHub state
-   and base; keep both open until the remaining ownership audit and acceptance
-   questions are resolved.
+1. Finish the active no-sweeps full gate; retain its complete log and record
+   the exact source SHA and result.
+2. Complete integration of the pending-owner fix into the current PR branch,
+   review the combined diff, then run one full no-sweeps `make` and the strict
+   CPAN acceptance batch on that immutable integrated source.
+3. Finish the remaining producer/release audit and classify the known Catalyst
+   and environment-sensitive Mojolicious results. Then refresh PR #1938 and
+   the #1649 handoff with exact commits, logs, remaining gaps, and acceptance
+   criteria; leave the PR open for review.
 
 The reported Class::MethodMaker tied-array lifetime failure is covered by the
 new project-owned `refcount/generated_tied_array_handler_lifetime.t`: it
