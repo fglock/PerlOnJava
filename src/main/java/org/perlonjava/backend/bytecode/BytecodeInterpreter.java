@@ -261,6 +261,7 @@ public class BytecodeInterpreter {
             if (reg == null) continue;
             if (reg instanceof RuntimeScalar scalar) {
                 RuntimeScalar.scopeExitCleanup(scalar);
+                unbindActiveLexicalNamesForRegister(code, i, reg);
                 needsFlush = true;
             } else if (reg instanceof RuntimeHash hash) {
                 MortalList.scopeExitCleanupHash(hash);
@@ -274,6 +275,15 @@ public class BytecodeInterpreter {
             registers[i] = null;
         }
         return needsFlush;
+    }
+
+    /** Remove named pad entries for one local when an exception skips normal unbind opcodes. */
+    private static void unbindActiveLexicalNamesForRegister(
+            InterpretedCode code, int register, RuntimeBase cell) {
+        if (code == null || cell == null) return;
+        for (String name : code.myScalarNamesByRegister.getOrDefault(register, java.util.List.of())) {
+            RuntimeCode.unbindCurrentActiveLexical(cell, name);
+        }
     }
 
     /**
@@ -3987,6 +3997,7 @@ public class BytecodeInterpreter {
                                 if (reg == null) continue;
                                 if (reg instanceof RuntimeScalar rs) {
                                     RuntimeScalar.scopeExitCleanup(rs);
+                                    unbindActiveLexicalNamesForRegister(code, i, reg);
                                     needsFlush = true;
                                 } else if (reg instanceof RuntimeHash rh) {
                                     MortalList.scopeExitCleanupHash(rh);
@@ -4124,6 +4135,7 @@ public class BytecodeInterpreter {
                     if (reg == null) continue;
                     if (reg instanceof RuntimeScalar rs) {
                         RuntimeScalar.scopeExitCleanup(rs);
+                        unbindActiveLexicalNamesForRegister(code, i, reg);
                         needsFlush = true;
                     } else if (reg instanceof RuntimeHash rh) {
                         MortalList.scopeExitCleanupHash(rh);

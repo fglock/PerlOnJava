@@ -56,6 +56,8 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
     public int maxRegisters;               // Number of registers needed
     public RuntimeBase[] capturedVars;     // Closure support (captured from outer scope)
     public final Map<String, Integer> variableRegistry; // Variable name → register index (for eval STRING)
+    /** All lexical scalar names by register, including names from exited compiler scopes. */
+    public Map<Integer, List<String>> myScalarNamesByRegister = Map.of();
     public final List<Map<String, Integer>> evalSiteRegistries; // Per-eval-site variable registries
     public final List<Map<String, OperatorNode>> evalSiteLexicalSubroutineBindings;
     public final List<Map<String, ParserKeywordPlugin>> evalSiteParserKeywordPlugins;
@@ -635,6 +637,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
                 this.deparseSourceText
         );
         copy.installPadConstants(this.padConstants);
+        copy.setMyScalarNamesByRegister(this.myScalarNamesByRegister);
         copy.prototype = this.prototype;
         copy.isConstantCv = this.isConstantCv;
         copy.isLexicalConstantCv = this.isLexicalConstantCv;
@@ -733,6 +736,19 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
                 this.closedOverVariables.put(entry.getKey(), capturedVars[capturedIndex]);
             }
         }
+    }
+
+    /** Preserve lexical names needed to unbind exact pad entries during exceptional unwind. */
+    public void setMyScalarNamesByRegister(Map<Integer, List<String>> namesByRegister) {
+        if (namesByRegister == null || namesByRegister.isEmpty()) {
+            myScalarNamesByRegister = Map.of();
+            return;
+        }
+        Map<Integer, List<String>> copy = new java.util.LinkedHashMap<>();
+        for (Map.Entry<Integer, List<String>> entry : namesByRegister.entrySet()) {
+            copy.put(entry.getKey(), List.copyOf(entry.getValue()));
+        }
+        myScalarNamesByRegister = Map.copyOf(copy);
     }
 
     private void validateAsyncSignature(RuntimeArray args) {

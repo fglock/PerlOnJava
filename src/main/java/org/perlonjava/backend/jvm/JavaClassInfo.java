@@ -292,6 +292,10 @@ public class JavaClassInfo {
      */
     public List<Integer> evalCleanupLocals;
 
+    /** Active-pad names paired with scalar locals for exact eval unwind cleanup. */
+    public Map<Integer, String> evalCleanupScalarNames;
+
+
     /** Active chained-method invocant local slots for direct control-flow exits. */
     public final Deque<Integer> activeMethodInvocantHoldSlots = new ArrayDeque<>();
 
