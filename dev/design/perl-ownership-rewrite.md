@@ -17,10 +17,18 @@ in 7m26 on the candidate before the focused backend reruns; logs are
 
 The strict CPAN acceptance run on source `11da0bf868` exited 2: Catalyst
 failed 11 subtests, DBIx::Class failed 420 subtests, and Mojolicious hit its
-2,400-second soft timeout. The Mojolicious timeout was reproduced at
-`t/mojolicious/longpolling_lite_app.t`; the controller `DESTROY` wait now has a
-project-owned reproducer and fix. Rerun the strict acceptance matrix after
-checking the two non-Mojolicious failure families against standard Perl.
+2,400-second soft timeout. The Mojolicious controller `DESTROY` wait now has a
+project-owned reproducer and fix. Pristine Catalyst and DBIx::Class distributions
+both pass their full suites under system Perl with isolated prerequisites:
+3,784 tests in 200 files and 13,305 tests in 314 files, respectively. This
+establishes that the reported failures are POJ-specific. A reduced DBIx
+reproducer using its actual `DBICTest::Util::LeakTracer` export also passes on
+system Perl but fails on POJ when the imported helper is called from an `END`
+block after `namespace::clean`; the same shape with a small plain Exporter
+module passes on both. This narrows the issue to imported-CV/`END` behavior but
+does not yet establish a refcount or glob-owner defect. The Catalyst `super`
+failure also remains unroot-caused. Do not classify either CPAN family as
+fixed by the localized CODE-slot change.
 
 In
 `/private/tmp/issue1649-pr-sync-20261109`, an assignment-result `RuntimeArray`
@@ -59,12 +67,15 @@ retired. Source audit: `rg` callsite review on candidate tree
 
 ### Next steps
 
-1. Rerun strict CPAN acceptance after the localized CODE-slot fix and compare
-   Catalyst and DBIx::Class failure families with standard Perl.
-2. Complete the remaining owner-producer/release audit; add permanent tests
-   for any newly demonstrated gaps.
-3. Update PR #1938 with the passing immutable-tree evidence after checking its
-   latest CI and base; keep the issue and PR open until acceptance is complete.
+1. Isolate the DBIx imported-CV/`END` discrepancy and Catalyst `super` failure;
+   only fold a fix into #1649 if the cause is in Perl ownership or glob
+   semantics. Add project-owned regression coverage for any runtime defect.
+2. Rerun the strict CPAN acceptance matrix on the exact candidate after the
+   localized CODE-slot fix, then complete the remaining owner-producer/release
+   audit with any proven fixes batched before another full build.
+3. Refresh PR #1938 and the #1649 handoff with immutable candidate evidence
+   after checking current GitHub state and base; keep both open until
+   acceptance is complete.
 
 The reported Class::MethodMaker tied-array lifetime failure is covered by the
 new project-owned `refcount/generated_tied_array_handler_lifetime.t`: it
