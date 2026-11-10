@@ -276,6 +276,99 @@ public class ReachabilityWalker {
     }
 
     /**
+     * Snapshot terminal lifecycle roots without treating the rescued-object
+     * registry or owner slots inside rescued cycles as independent roots.
+     * Current owner slots count only when their source is independently live.
+     * The caller drains expression temporaries before this boundary check.
+     */
+    static Set<RuntimeBase> walkEndBoundaryRootsExcludingRescued() {
+        Set<RuntimeBase> roots = Collections.newSetFromMap(new IdentityHashMap<>());
+        roots.addAll(walkEndBlockRoots());
+
+        ReachabilityWalker walker = new ReachabilityWalker().withCodeCaptures(true);
+        java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
+        for (RuntimeScalar scalar : GlobalVariable.globalVariableValuesView()) {
+            walker.visitScalar(scalar, todo);
+        }
+        for (Map.Entry<String, RuntimeArray> entry : GlobalVariable.globalArrayEntriesView()) {
+            if (!isNonOwningDebugArgsArray(entry.getKey())) {
+                walker.addReachable(entry.getValue(), todo);
+            }
+        }
+        for (RuntimeHash hash : GlobalVariable.globalHashValuesView()) {
+            walker.addReachable(hash, todo);
+        }
+        for (RuntimeCode active : PerlRuntime.current().executionState().activeCodeStack) {
+            walker.addReachable(active, todo);
+        }
+        for (List<RuntimeScalar> args : RuntimeCode.snapshotPristineArgsStack()) {
+            for (RuntimeScalar arg : args) {
+                walker.addReachable(arg, todo);
+                walker.visitScalar(arg, todo);
+            }
+        }
+        for (RuntimeBase referent : WeakRefRegistry.snapshotWeakRefReferents()) {
+            if (referent.hasPendingReturnOwner()) {
+                walker.addReachable(referent, todo);
+            }
+        }
+        walker.bfs(todo, true);
+        Set<RuntimeBase> independentRoots = Collections.newSetFromMap(new IdentityHashMap<>());
+        independentRoots.addAll(roots);
+        independentRoots.addAll(walker.reachable);
+
+        // Current owner slots are independent roots only when their source
+        // is independently live and outside the rescued graph. A slot can be
+        // current inside a rootless strong cycle, so current slot identity by
+        // itself does not prove independent liveness.
+        Set<RuntimeBase> rescuedGraph = Collections.newSetFromMap(new IdentityHashMap<>());
+        ReachabilityWalker rescuedWalker = new ReachabilityWalker().withCodeCaptures(true);
+        java.util.ArrayDeque<RuntimeBase> rescuedTodo = new java.util.ArrayDeque<>();
+        for (RuntimeBase rescued : DestroyDispatch.snapshotRescuedForWalk()) {
+            rescuedWalker.addReachable(rescued, rescuedTodo);
+        }
+        rescuedWalker.bfs(rescuedTodo, true);
+        rescuedGraph.addAll(rescuedWalker.reachable);
+        for (RuntimeBase referent : rescuedGraph) {
+            for (PerlOwnerSlot slot : referent.ownerSlotSnapshot()) {
+                if (!DestroyDispatch.isCurrentPerlOwnerSlot(referent, slot)) continue;
+                RuntimeBase ownerSource = slot.endBoundaryOwnerSource();
+                if (isRescueGraphOwnerSource(ownerSource, rescuedGraph)
+                        || !isIndependentEndBoundaryOwnerSource(ownerSource, independentRoots)) {
+                    continue;
+                }
+                walker.addReachable(referent, todo);
+                break;
+            }
+        }
+        walker.bfs(todo, true);
+        roots.addAll(walker.reachable);
+        return roots;
+    }
+
+    private static boolean isRescueGraphOwnerSource(
+            RuntimeBase ownerSource, Set<RuntimeBase> rescuedGraph) {
+        if (ownerSource == null) return false;
+        if (rescuedGraph.contains(ownerSource)) return true;
+        return ownerSource instanceof RuntimeScalar scalar
+                && scalar.hasContainerOwnerIn(rescuedGraph);
+    }
+
+    private static boolean isIndependentEndBoundaryOwnerSource(
+            RuntimeBase ownerSource, Set<RuntimeBase> independentRoots) {
+        if (ownerSource == null || independentRoots.contains(ownerSource)) return true;
+        if (ownerSource instanceof RuntimeScalar scalar) {
+            return MyVarCleanupStack.isLive(scalar) && !scalar.scopeExited
+                    && !WeakRefRegistry.isweak(scalar);
+        }
+        if (ownerSource instanceof RuntimeArray || ownerSource instanceof RuntimeHash) {
+            return MyVarCleanupStack.isRegistered(ownerSource)
+                    || GlobalVariable.isPackageRootedAggregate(ownerSource);
+        }
+        return false;
+    }
+
+    /**
      * Return the graph that must remain live while END blocks execute.
      *
      * Package CODE slots and queued END blocks are the only seeds. Captures

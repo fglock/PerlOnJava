@@ -298,7 +298,7 @@ public class DestroyDispatch {
             // and is still in the rescuedObjects list, skip cleanup entirely. The weak
             // refs and internal fields must remain intact because the phantom chain
             // (or other code) may still access the object through its weak refs.
-            // Proper cleanup happens at END time via clearRescuedWeakRefs.
+            // Weak observers are cleared at END via clearRescuedWeakRefsAtEndBoundary.
             if (state().rescuedObjects.contains(referent)) {
                 referent.markPerlResurrected();
                 return;
@@ -899,23 +899,33 @@ public class DestroyDispatch {
         }
     }
 
-    /**
-     * Clear weak refs for all objects that were rescued by DESTROY.
-     * Called by MortalList.flushDeferredCaptures() before END blocks run.
-     * <p>
-     * This deferred approach is necessary because clearing weak refs immediately
-     * after rescue would destroy back-references from sibling objects that are
-     * still needed (e.g., other ResultSources' $source->{schema} weak refs).
-     * By deferring until just before END blocks, all test code has finished
-     * executing and the back-references are no longer needed.
-     * <p>
-     * For each rescued object:
-     * 1. Clear its own weak refs (for DBIC's leak tracer registry)
-     * 2. Deep-sweep its hash contents for nested blessed objects (Storage, DBI::db)
-     *    and clear their weak refs too
-     */
+    /** Process rescued objects that no longer have current Perl owner identities. */
     public static void clearRescuedWeakRefs() {
         processRescuedObjects();
+    }
+
+    /**
+     * Finalize ownerless rescued objects, then clear weak observers into any
+     * rescued graphs that remain live at the END boundary. Strong Perl edges
+     * stay intact so END callbacks can still use the rescued objects.
+     */
+    public static void clearRescuedWeakRefsAtEndBoundary() {
+        processRescuedObjects();
+        java.util.List<RuntimeBase> rescuedObjects = snapshotRescuedForWalk();
+        if (rescuedObjects.isEmpty()) return;
+        Set<RuntimeBase> independentRoots =
+                ReachabilityWalker.walkEndBoundaryRootsExcludingRescued();
+        for (RuntimeBase rescued : rescuedObjects) {
+            if (independentRoots.contains(rescued)) continue;
+            WeakRefRegistry.clearWeakRefsTo(rescued);
+            if (rescued instanceof RuntimeHash hash) {
+                Set<RuntimeBase> visited =
+                        Collections.newSetFromMap(new IdentityHashMap<>());
+                visited.add(rescued);
+                deepClearWeakRefsExcludingIndependentRoots(
+                        hash, 5, rescued, independentRoots, visited);
+            }
+        }
     }
 
     /**
@@ -998,6 +1008,30 @@ public class DestroyDispatch {
      */
     private static void deepClearWeakRefs(RuntimeHash hash) {
         deepClearWeakRefsImpl(hash, 5, null);
+    }
+
+    private static void deepClearWeakRefsExcludingIndependentRoots(
+            RuntimeHash hash, int maxDepth, RuntimeBase excludedRoot,
+            Set<RuntimeBase> independentRoots, Set<RuntimeBase> visited) {
+        if (maxDepth <= 0) return;
+        for (RuntimeScalar value : hash.elements.values()) {
+            if (value == null
+                    || (value.type & RuntimeScalarType.REFERENCE_BIT) == 0
+                    || !(value.value instanceof RuntimeBase base)
+                    || base == excludedRoot
+                    || independentRoots.contains(base)
+                    || !visited.add(base)) {
+                continue;
+            }
+            if (base.blessId != 0) {
+                WeakRefRegistry.clearWeakRefsTo(base);
+            }
+            if (base instanceof RuntimeHash nestedHash) {
+                deepClearWeakRefsExcludingIndependentRoots(
+                        nestedHash, maxDepth - 1, excludedRoot,
+                        independentRoots, visited);
+            }
+        }
     }
 
     /**

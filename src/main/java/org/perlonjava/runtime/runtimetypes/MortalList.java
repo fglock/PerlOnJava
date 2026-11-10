@@ -785,14 +785,15 @@ public class MortalList {
             flush();
         }
 
-        // The rescue registry is bookkeeping, not an owner. Finalization must
-        // check current Perl owner identities even when no captures were queued.
-        DestroyDispatch.processRescuedObjects();
+        // Finalize ownerless rescues and clear weak observers into surviving
+        // rescued graphs after END has finished.
+        DestroyDispatch.clearRescuedWeakRefsAtEndBoundary();
 
     }
 
-    /** Compatibility hook; captured owners now leave through explicit slots. */
+    /** Clear weak observers for rescued graphs before Perl END callbacks inspect them. */
     public static void flushDeferredCapturesBeforeEnd() {
+        DestroyDispatch.clearRescuedWeakRefsAtEndBoundary();
     }
 
     /**

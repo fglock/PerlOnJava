@@ -252,6 +252,24 @@ public final class PerlOwnerSlot {
         return referent;
     }
 
+    /** Owning Perl storage or CODE source, when this slot records one. */
+    RuntimeBase endBoundaryOwnerSource() {
+        return switch (kind) {
+            case SCALAR_CAPTURE, CLOSURE_PAD, CODE_STATE -> captureOwner();
+            case ARRAY_ALIAS_CELL -> arrayAliasOwner();
+            case HASH_ALIAS_CELL -> hashAliasOwner();
+            case GLOB_COMPONENT_SLOT -> globComponentOwner();
+            case IO_RESOURCE_HOLDER -> resourceScalarOwner();
+            case SUSPENDED_FRAME -> suspendedScalarOwner();
+            case SCALAR_REFERENCE_CONTENTS -> {
+                RuntimeScalar owner = scalarContentsOwner();
+                yield owner != null ? owner : scalarReferenceCell();
+            }
+            case UNTRACKED_REFERENCE -> untrackedScalarOwner();
+            default -> countedScalarOwner();
+        };
+    }
+
     /** Source cell for a suspended-frame owner, if that register is scalar-backed. */
     public synchronized RuntimeScalar suspendedScalarOwner() {
         return suspendedScalarOwner == null ? null : suspendedScalarOwner.get();
