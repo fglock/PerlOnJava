@@ -63,8 +63,31 @@ dependant distributions. Use the bulk mode for a ranked shortlist, and the
 targeted mode to verify individual candidates. A low count supports deferring
 an XS port; it does not by itself prove that a failure is environmental or
 that a high-count module is easy to port. If the lookup fails, retry once with
-the cache refreshed; if it still cannot obtain data, record the lookup as
-blocked and do not claim that the dependency count is zero.
+the cache refreshed. If MetaCPAN's reverse-dependency service is unreachable,
+try its REST endpoint directly before recording the lookup as blocked:
+
+```text
+https://fastapi.metacpan.org/v1/reverse_dependencies/module/<URL-encoded-module>?size=1000&page=1
+```
+
+For example, encode `PerlIO::eol` as `PerlIO%3A%3Aeol`. Follow pagination when
+the response's `total` exceeds the number of returned records. Count unique
+`distribution` values only after filtering to released records (`maturity` is
+`released`) with a matching dependency whose `phase` is `runtime` and whose
+`relationship` is `requires`. Exclude test/build/develop phases and optional
+relationships. Report the recent count using a stated, consistent window
+(five years by default), and give representative distribution names. Do not
+use the endpoint's unfiltered `total` as the runtime count.
+
+If both the targeted script and direct endpoint fail, a locally available
+CPAN release-metadata corpus can be scanned as another fallback: parse each
+released distribution's `META.json`/`META.yml`, apply the same runtime,
+required-dependency and unique-distribution rules, and record the corpus date
+and coverage. A module index such as `02packages.details.txt` maps modules to
+distributions but does not contain prerequisite relationships, so it cannot
+provide this count by itself. If no usable metadata source is available,
+record the lookup as blocked and do not claim that the dependency count is
+zero.
 
 If system Perl cannot pass all tests, do not create an issue. Record the
 environmental or upstream reason instead.
