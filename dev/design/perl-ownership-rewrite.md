@@ -30,6 +30,17 @@ does not yet establish a refcount or glob-owner defect. The Catalyst `super`
 failure also remains unroot-caused. Do not classify either CPAN family as
 fixed by the localized CODE-slot change.
 
+The targeted strict CPAN matrix was then run on commit `4535a2a063` (runtime
+source `c507afe36e`): Catalyst again failed 11/235 subtests, DBIx::Class failed
+420/43,410, and Mojolicious completed with 39/1,651 failures. Most Mojolicious
+failures were loopback bind errors from the restricted runner; other failures
+included an unavailable `Crypt::KeyDerivation::pbkdf2`. With local socket access,
+the upstream `t/mojolicious/longpolling_lite_app.t` passes all 15 subtests on
+both system Perl and the candidate JVM, including controller destruction after
+deferred rendering. Logs: `/tmp/issue1649-candidate-strict-cpan.log`,
+`/tmp/issue1649-longpolling-system-perl-network.log`, and
+`/tmp/issue1649-longpolling-candidate-jvm-network.log`.
+
 In
 `/private/tmp/issue1649-pr-sync-20261109`, an assignment-result `RuntimeArray`
 was incorrectly recorded as the owning container for scalar cells that the
@@ -70,12 +81,13 @@ retired. Source audit: `rg` callsite review on candidate tree
 1. Isolate the DBIx imported-CV/`END` discrepancy and Catalyst `super` failure;
    only fold a fix into #1649 if the cause is in Perl ownership or glob
    semantics. Add project-owned regression coverage for any runtime defect.
-2. Rerun the strict CPAN acceptance matrix on the exact candidate after the
-   localized CODE-slot fix, then complete the remaining owner-producer/release
-   audit with any proven fixes batched before another full build.
-3. Refresh PR #1938 and the #1649 handoff with immutable candidate evidence
-   after checking current GitHub state and base; keep both open until
-   acceptance is complete.
+2. Continue the remaining owner-producer/release audit and batch any proven
+   ownership fixes before the next full build. The strict matrix is complete
+   for the current candidate; rerun it after any source change, using local
+   socket access for Mojolicious acceptance.
+3. Refresh PR #1938 and the #1649 handoff after checking current GitHub state
+   and base; keep both open until the remaining ownership audit and acceptance
+   questions are resolved.
 
 The reported Class::MethodMaker tied-array lifetime failure is covered by the
 new project-owned `refcount/generated_tied_array_handler_lifetime.t`: it
