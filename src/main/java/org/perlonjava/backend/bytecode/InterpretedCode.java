@@ -92,27 +92,17 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
     // Created lazily on first use (after packageName/subName are set)
     public volatile InterpreterState.InterpreterFrame cachedFrame;
 
-    // Cached register array for non-recursive calls (avoids allocation)
-    // Thread-safe via ThreadLocal for multi-threaded execution
-    private final ThreadLocal<RuntimeBase[]> cachedRegisters = new ThreadLocal<>();
-    // Flag to track if cached registers are currently in use (for recursion detection)
-    private final ThreadLocal<Boolean> registersInUse = ThreadLocal.withInitial(() -> false);
-
     /**
-     * Get a register array for execution. Returns cached array if not in use (common case),
-     * otherwise allocates a new one (recursive call).
+     * Allocate a fresh register array for execution.
      */
     public RuntimeBase[] getRegisters() {
-        // Disable register pooling for now - it causes subtle bugs with stale values
-        // TODO: Investigate why Arrays.fill(regs, null) doesn't fully fix the issue
         return new RuntimeBase[maxRegisters];
     }
 
     /**
-     * Release the register array after execution completes.
+     * No-op: register pooling was removed; kept for call-site compatibility.
      */
     public void releaseRegisters() {
-        registersInUse.set(false);
     }
 
     // Lexical pragma state (for eval STRING to inherit)
@@ -245,7 +235,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
                             String warningBitsString,
                             boolean reuseDeparseSourceText,
                             String inheritedDeparseSourceText) {
-        super(null, new java.util.ArrayList<>());
+        super(null, java.util.Collections.emptyList());
         this.bytecode = bytecode;
         this.constants = constants;
         this.stringPool = stringPool;

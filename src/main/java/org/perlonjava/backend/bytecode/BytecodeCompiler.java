@@ -267,7 +267,9 @@ public class BytecodeCompiler implements Visitor {
     // Replaces the old variableScopes Stack + allDeclaredVariables flat map.
     // Using ScopedSymbolTable gives us proper scope-aware variable lookups and
     // getAllVisibleVariables()/getVisibleVariableRegistry() for per-eval-site snapshots.
-    final ScopedSymbolTable symbolTable = new ScopedSymbolTable();
+    // Non-final so the cached eval constructor can inject a pooled instance instead of
+    // creating a fresh one for each of 2M warm-path eval compilations.
+    ScopedSymbolTable symbolTable;
     // Goto label support: maps label names to their PC addresses for intra-function goto.
     // pendingGotos tracks forward references (goto before label) needing patch-up.
     // These are null by default; initialized lazily in compile() only when goto/labels are present.
@@ -545,13 +547,13 @@ public class BytecodeCompiler implements Visitor {
     private final Map<String, Integer> stringPoolIndex = new HashMap<>(16);  // O(1) lookup
     private final Map<Object, Integer> constantPoolIndex = new HashMap<>(16);  // O(1) lookup
     // Scope index stack for proper ScopedSymbolTable.exitScope() calls
-    private final Stack<Integer> scopeIndices = new Stack<>();
+    private final Deque<Integer> scopeIndices = new ArrayDeque<>();
     // Stack to save/restore register state when entering/exiting scopes
-    private final Stack<Integer> savedNextRegister = new Stack<>();
-    private final Stack<Integer> savedBaseRegister = new Stack<>();
+    private final Deque<Integer> savedNextRegister = new ArrayDeque<>();
+    private final Deque<Integer> savedBaseRegister = new ArrayDeque<>();
     // Loop label stack for last/next/redo control flow
     // Each entry tracks loop boundaries and optional label
-    private final Stack<LoopInfo> loopStack = new Stack<>();
+    private final List<LoopInfo> loopStack = new ArrayList<>(4);
     private int loopConditionDepth;
     // Unlike the generic loop stack, this excludes synthetic eval/bare-block
     // control frames.  A goto may enter a label in a foreach body only when
@@ -621,6 +623,10 @@ public class BytecodeCompiler implements Visitor {
     // separately from the register table because closure analysis may first
     // materialize a reference as a lexical before the body reaches `local`.
     private Set<String> capturedOurVariableNames = new HashSet<>();
+    // Pre-built variable registries for the cached eval path.  Built once in the cold path
+    // from the compilerSymbolTableTemplate and shared read-only across all warm-path evals.
+    private Map<String, Integer> prebuiltVariableRegistry;
+    private Map<String, String> prebuiltOurVariableRegistry;
     // EmitterContext for strict checks and other compile-time options
     private EmitterContext emitterContext;
     // Register allocation
@@ -673,6 +679,7 @@ public class BytecodeCompiler implements Visitor {
         this.sourceName = sourceName;
         this.sourceLine = sourceLine;
         this.errorUtil = errorUtil;
+        this.symbolTable = new ScopedSymbolTable();
 
         // Initialize symbolTable with the 3 reserved registers
         symbolTable.addVariableWithIndex("this", 0, "reserved");
@@ -733,6 +740,7 @@ public class BytecodeCompiler implements Visitor {
         this.sourceName = sourceName;
         this.sourceLine = sourceLine;
         this.errorUtil = errorUtil;
+        this.symbolTable = new ScopedSymbolTable();
 
         // Initialize symbolTable with the 3 reserved registers
         symbolTable.addVariableWithIndex("this", 0, "reserved");
@@ -801,11 +809,19 @@ public class BytecodeCompiler implements Visitor {
                             SymbolTable cachedCompilerSymbolTable,
                             Map<String, Integer> cachedCapturedVarIndices,
                             Set<String> cachedCapturedOurVarNames,
-                            int cachedNextRegister) {
+                            int cachedNextRegister,
+                            Map<String, Integer> prebuiltVariableRegistry,
+                            Map<String, String> prebuiltOurVariableRegistry,
+                            ScopedSymbolTable pooledSymbolTable) {
         this.sourceName = sourceName;
         this.sourceLine = sourceLine;
         this.errorUtil = errorUtil;
         this.isEvalString = true;
+        // Reuse the pooled SST instead of allocating a fresh one.
+        // After the previous compilation, exitScope() left all caches cleared and
+        // all pragma stacks at depth 1; compile() resets the 7 stacks it owns, and
+        // useInitialTable() below resets the variable table.
+        this.symbolTable = pooledSymbolTable;
         // One HashMap copy replaces N addVariableWithIndex calls + N SymbolEntry allocations
         symbolTable.useInitialTable(cachedCompilerSymbolTable);
         // Share read-only structures (never mutated after eval STRING construction)
@@ -814,6 +830,9 @@ public class BytecodeCompiler implements Visitor {
         this.nextRegister = cachedNextRegister;
         this.maxRegisterEverUsed = cachedNextRegister - 1;
         this.baseRegisterForStatement = cachedNextRegister;
+        // Pre-built from template once (cold path); shared read-only across warm-path evals
+        this.prebuiltVariableRegistry = prebuiltVariableRegistry;
+        this.prebuiltOurVariableRegistry = prebuiltOurVariableRegistry;
     }
 
     /**
@@ -1672,12 +1691,16 @@ public class BytecodeCompiler implements Visitor {
         // At this point all inner scopes have exited, so getVisibleVariableRegistry()
         // returns only the outermost scope variables. Per-eval-site registries
         // (stored in evalSiteRegistries) provide the correct scope-aware mappings.
-        Map<String, Integer> variableRegistry = symbolTable.getVisibleVariableRegistry();
+        // On the warm cached eval path these are pre-built from the template (no HashMap alloc).
+        Map<String, Integer> variableRegistry = prebuiltVariableRegistry != null
+                ? prebuiltVariableRegistry : symbolTable.getVisibleVariableRegistry();
         // Parallel `our` registry (name → declaring package). Used by eval STRING
         // to restore the caller's `our` aliases in the eval's compile-time
         // symbol table — critical for correct resolution when the eval body
         // changes package via `package Foo;` before referencing an outer `our`.
-        Map<String, String> ourVariableRegistry = symbolTable.getVisibleOurRegistry();
+        Map<String, String> ourVariableRegistry = prebuiltVariableRegistry != null
+                ? (prebuiltOurVariableRegistry != null ? prebuiltOurVariableRegistry : Collections.emptyMap())
+                : symbolTable.getVisibleOurRegistry();
 
         // Extract strict/feature/warning flags for eval STRING inheritance
         int strictOptions = 0;
@@ -2086,7 +2109,7 @@ public class BytecodeCompiler implements Visitor {
             // teardown for nested when bodies.  Preserve the enclosing block
             // scope as the cleanup lower bound for both local backends.
             blockLoopInfo.cleanupScopeIndex = scopeIndices.peek();
-            loopStack.push(blockLoopInfo);
+            loopStack.add(blockLoopInfo);
         }
 
         int lastMeaningfulIndex = -1;
@@ -2279,7 +2302,7 @@ public class BytecodeCompiler implements Visitor {
             for (int pc : blockLoopInfo.redoPcs) {
                 patchJump(pc, blockLoopStartPc);
             }
-            loopStack.pop();
+            loopStack.remove(loopStack.size() - 1);
         }
 
         // A surrounding labeled-block dispatcher may need to enter this
@@ -8195,7 +8218,7 @@ public class BytecodeCompiler implements Visitor {
             emit(addToStringPool(lexicalLoopVarNames.get(i)));
         }
         LoopInfo loopInfo = new LoopInfo(node.labelName, bodyStartPc, true);
-        loopStack.push(loopInfo);
+        loopStack.add(loopInfo);
         loopInfo.cleanupScopeIndex = symbolTable.currentScopeIndex() + 1;
         if (node.body != null && evalStringHasLocalOrDefer && FindDeclarationVisitor.containsLocalOrDefer(node.body)) {
             loopInfo.dynamicLocalLevelReg = allocateRegister();
@@ -8495,7 +8518,7 @@ public class BytecodeCompiler implements Visitor {
         }
 
         // Step 13: Pop loop info and exit scope
-        loopStack.pop();
+        loopStack.remove(loopStack.size() - 1);
         exitScope(true);  // safe to flush — foreach loop, not subroutine body
 
         emit(Opcodes.POP_CONTROL_BLOCK);
@@ -8591,7 +8614,7 @@ public class BytecodeCompiler implements Visitor {
             loopInfo.resultReg = outerResultReg;
             loopInfo.context = currentCallContext;
             loopInfo.dynamicLocalLevelReg = blockLocalLevelReg;
-            loopStack.push(loopInfo);
+            loopStack.add(loopInfo);
 
             int nonLocalExitPc = -1;
             enterScope();
@@ -8622,7 +8645,7 @@ public class BytecodeCompiler implements Visitor {
             }
 
             // Pop loop info and patch jump targets
-            loopStack.pop();
+            loopStack.remove(loopStack.size() - 1);
             // Patch redo PCs to jump to body start
             for (int pc2 : loopInfo.redoPcs) {
                 patchJump(pc2, bodyStartPc);
@@ -8724,7 +8747,7 @@ public class BytecodeCompiler implements Visitor {
         LoopInfo loopInfo = new LoopInfo(node.labelName, loopStartPc, !node.isDoWhile);
         loopInfo.dynamicLocalLevelReg = for3LocalLevelReg;
         loopInfo.regexSaveReg = loopRegexSaveReg;
-        loopStack.push(loopInfo);
+        loopStack.add(loopInfo);
 
         int loopEndJumpPc = -1;
         int redoTargetPc = loopStartPc;
@@ -8892,7 +8915,7 @@ public class BytecodeCompiler implements Visitor {
         }
 
         // Step 12: Pop loop info
-        loopStack.pop();
+        loopStack.remove(loopStack.size() - 1);
 
         emit(Opcodes.POP_CONTROL_BLOCK);
 

@@ -5603,6 +5603,24 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     ctx.evalCachedCapturedVarIndices = capturedVarIndices;
                     ctx.evalCachedCapturedOurVarNames = capturedOurVarNames;
                     ctx.evalCachedNextRegister = maxRegister + 1;
+                    // Build variableRegistry and ourVariableRegistry once from the template.
+                    // symbolTable.getVisibleVariableRegistry() at depth-1 returns the same set;
+                    // caching here avoids 2 HashMap allocations per warm-path eval.
+                    Map<String, Integer> cachedVarReg =
+                            new HashMap<>(compilerSymbolTableTemplate.variableIndex.size() + 4);
+                    Map<String, String> cachedOurReg = new HashMap<>();
+                    for (Map.Entry<String, SymbolTable.SymbolEntry> e :
+                            compilerSymbolTableTemplate.variableIndex.entrySet()) {
+                        cachedVarReg.put(e.getKey(), e.getValue().index());
+                        SymbolTable.SymbolEntry se = e.getValue();
+                        if ("our".equals(se.decl()) && se.perlPackage() != null) {
+                            cachedOurReg.put(e.getKey(), se.perlPackage());
+                        }
+                    }
+                    ctx.evalCachedVariableRegistry = cachedVarReg;
+                    ctx.evalCachedOurVariableRegistry = cachedOurReg.isEmpty() ? null : cachedOurReg;
+                    // Create the pooled ScopedSymbolTable once; reused on every warm-path eval.
+                    ctx.evalCachedSymbolTable = new ScopedSymbolTable();
                 }
                 BytecodeCompiler compiler = new BytecodeCompiler(
                         evalCompilerOptions.fileName,
@@ -5611,7 +5629,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         ctx.evalCachedCompilerSymbolTable,
                         ctx.evalCachedCapturedVarIndices,
                         ctx.evalCachedCapturedOurVarNames,
-                        ctx.evalCachedNextRegister);
+                        ctx.evalCachedNextRegister,
+                        ctx.evalCachedVariableRegistry,
+                        ctx.evalCachedOurVariableRegistry,
+                        ctx.evalCachedSymbolTable);
                 compiler.setCompilePackage(evalCurrentPackage);
                 interpretedCode = compiler.compile(ast, evalCtx);
                 compiledSuccessfully = true;
