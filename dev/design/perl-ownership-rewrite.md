@@ -2,46 +2,55 @@
 
 **Status:** Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07 `t/refloop.t` passes 8/8 on both backends with corrective sweeps disabled. The full HTML-Tree suite passes 23 files and 989 checks on both backends. `@DB::args` now stores the selected source scalar cells directly, avoiding detached untracked-reference owners. Visible named package IO globs carry a `PACKAGE_GLOB_SLOT` identity through replacement and removal; detached typeglob snapshots and whole-namespace moves now carry explicit component owners before stash slots are removed, including through scalarization of a namespace move. `Symbol::gensym` globs are excluded from package stash ownership and retire their hidden lookup entry after their last IO owner closes. Unblessed array and hash cycles now remain live through their actual element-owner slots; deferred cleanup no longer restores a positive count from a cycle walk. CODE self-capture cleanup restores from verified counted slots rather than a graph walk. Aggregate closure capture release no longer decrements another owner's counted edge. Shared proxy release, ithread weak-slot resurrection, PadWalker rebinding, active CODE ownership, compiled/pinned/localized CODE slot reset, visible stash CODE ownership, and async cleanup regressions pass on both backends. Aggregate clear and replacement now queue IO holder release with scalar referent cleanup. Weak aliases of blessed anonymous globs are excluded from scalar owner backfill, release their IO holder on weaken, and restore it on unweaken. Rescued-object processing now consults live Perl owner identities, and a promoted weak slot gets a second `DESTROY` when its final owner leaves. Production sweep callers have been removed; count alignment still uses verified current owner slots while remaining producer gaps are audited.
 
-**Current checkpoint (2026-11-10):** #1649 remains in Phase 2. The latest
-DBIx imported-CV/`END` regression came from an owner-release ordering gap:
-`RuntimeBase.queueOwnerRelease` detached the counted scalar slot before it
-registered the pending return owner. The synchronous release observer could
-then clear the compiled direct-call site before the END queue published its
-owner. `PerlOwnerSlot.releaseCountedIdentity(boolean)` now registers the
-pending identity before detaching that slot; immediate releases retain their
-existing order. `end_imported_cv_survives_namespace_clean.t` passes 1/1 under
-system Perl, JVM, and interpreter. The unfixed candidate failed on JVM with
-exit 22 and passed on interpreter. Evidence is in `/tmp/issue1649-end-cv-*`.
+**Current checkpoint (2026-11-10):** #1649 remains in Phase 2. The pending
+return-owner ordering fix is integrated in PR commit
+`7916c8e1e416ddce1785ebe4fbecae9fc5da93c0`; it registers a pending identity
+before detaching the counted scalar slot, preserving imported CVs through END
+queue publication. `end_imported_cv_survives_namespace_clean.t` passes 1/1 on
+system Perl, JVM, and interpreter; its unfixed JVM candidate failed with exit
+22. Evidence: `/tmp/issue1649-end-cv-*`.
 
-The integrated PR commit `7916c8e1e416ddce1785ebe4fbecae9fc5da93c0` includes
-current master and the fix. Its no-sweeps `nice -n 19 timeout 1800 make` gate
-passed in 6m32 (`/tmp/issue1649-integrated-no-sweeps-make.log`); the Markdown
-link check passed with 574 links and zero errors. The strict CPAN batch on
-this same source exited 1: DBIx::Class failed 704/43,694 subtests, mainly
-object-GC expectations plus an undefined `carp_unique`; Catalyst failed
-11/235 with Moose's undefined `super`; Mojolicious's system-Perl baseline
-failed 4 tests in `t/mojo/log.t` colorized-log assertions, so it had no POJ
-comparison. Logs are `/tmp/issue1649-integrated-strict-cpan.log` and
-`/tmp/cpan_random_logs/20261110-125016-44992/`. The focused imported-CV END
-regression still passes on system Perl, JVM, and interpreter.
+The DBIx `t/34exception_action.t` failure exposed a separate lifetime gap.
+Its imported `carp_unique` call is inside a reusable `eval {}` block. Eval
+block optrees were excluded from the parent CV's embedded pad-constant tree
+because their generated name is `(eval)`, so the active frame's release
+removed the only compiled callsite after the first invocation. `EmitSubroutine`
+now makes try/catch eval blocks parent-owned optrees. The new
+`eval_block_callsite_survives_namespace_clean.t` passes 6/6 on system Perl,
+JVM, and interpreter; the unfixed JVM candidate failed 4/6 after its first
+call. The actual DBIx test now passes 9/9 on the JVM. A unit-test-local
+`namespace::clean` shim removes the imported CODE slot at CHECK time so the
+regression does not depend on an installed CPAN module on Windows.
 
-PR #1938 is open/draft. Its runtime candidate is this integrated commit;
-current master was merged in `717b23b383`. A rebase was aborted before
-altering the PR branch because Git scheduled 679 historical commits for
-replay. The exact integrated candidate has passed its full no-sweeps and link
-gates.
+The full `nice -n 19 make` passes in 7m39 on the local candidate; log:
+`/tmp/issue1649-eval-block-callsite-fix-make.log`. The follow-up strict CPAN
+batch has not yet been rerun. The previous batch exited 1: DBIx::Class failed
+704/43,694 subtests, mainly object-GC expectations plus the now-fixed
+`carp_unique` case; Catalyst failed 11/235 with Moose's undefined `super`;
+Mojolicious's system-Perl baseline failed 4 tests in `t/mojo/log.t` colorized
+log assertions, so it had no POJ comparison. Evidence:
+`/tmp/issue1649-integrated-strict-cpan.log` and
+`/tmp/cpan_random_logs/20261110-125016-44992/`.
+
+PR #1938 is open/draft at head `0c985c289ca17e0fd0a8e7bc44dbabeadc6e12ba`;
+this local candidate is on branch
+`wip/issue1649-windows-namespace-clean-20261110` and is not pushed yet. The
+previous Windows CI failure was the missing `namespace::clean` test dependency;
+Ubuntu was cancelled. CodeQL flags an unchanged RSA key-size line in
+`CryptOpenSSLRSA.java`, separate from this change. The earlier integrated
+candidate passed its full no-sweeps gate and link check.
 
 ### Next steps
 
-1. Continue the producer/release audit and determine whether remaining DBIx
-   object-GC expectations and `carp_unique`, and Catalyst's Moose `super`
-   behavior, are ownership defects within #1649. Add project-owned regression
-   coverage for any confirmed PerlOnJava defect.
-2. Rerun Mojolicious after isolating the system-Perl colorized-log baseline;
-   the current run provides no POJ comparison for that module.
-3. Review CI on PR #1938, triage the existing CodeQL RSA key-size alert, and
-   keep the PR open/draft until the remaining audit and acceptance work is
-   resolved.
+1. Run `make check-links`, commit and push the local fix, then verify Windows
+   and Ubuntu CI on the updated PR head.
+2. Continue the producer/release audit and determine whether the remaining
+   DBIx object-GC expectations and Catalyst's Moose `super` behavior are
+   ownership defects; add project-owned regression coverage for confirmed
+   PerlOnJava defects.
+3. Rerun the strict CPAN batch and isolate Mojolicious's system-Perl baseline
+   failures. Keep PR #1938 open/draft until remaining audit and acceptance
+   work is resolved; triage the unchanged CodeQL alert separately.
 
 The reported Class::MethodMaker tied-array lifetime failure is covered by the
 new project-owned `refcount/generated_tied_array_handler_lifetime.t`: it

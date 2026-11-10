@@ -455,11 +455,15 @@ public class EmitSubroutine {
             if (padConstants.length != 0 || !embeddedPadConstants.isEmpty()) {
                 RuntimeCode.registerPadConstants(subCtx.javaClassInfo.javaClassName,
                         padConstants, embeddedPadConstants, embeddedPadDescendants);
-                boolean embeddedAnonymousOptree = !node.useTryCatch
-                        && (node.name == null || node.name.equals("<anon>")
+                // Eval-block code is still a persistent part of its parent
+                // CV's compiled body. The try/catch wrapper changes how the
+                // block executes, not who owns its direct-call sites and pad
+                // constants across repeated executions.
+                boolean embeddedAnonymousOptree = node.useTryCatch
+                            || node.name == null || node.name.equals("<anon>")
                             || node.getBooleanAnnotation("isMapGrepBlock")
                             || node.getBooleanAnnotation("inheritsSelfReference")
-                            || node.getBooleanAnnotation("regexCallbackPseudoBlock"));
+                            || node.getBooleanAnnotation("regexCallbackPseudoBlock");
                 if (embeddedAnonymousOptree && ctx.javaClassInfo != null) {
                     ctx.javaClassInfo.addEmbeddedPadConstants(
                             subCtx.javaClassInfo.javaClassName,
