@@ -1282,6 +1282,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return new ArrayList<>(containerOwners);
     }
 
+    boolean hasContainerOwnerIn(Set<RuntimeBase> candidates) {
+        for (RuntimeBase owner : containerOwnerSnapshot()) {
+            if (candidates.contains(owner)) return true;
+        }
+        return false;
+    }
+
     private synchronized List<RuntimeBase> prepopulatedPackageAggregateOwnerSnapshot() {
         return new ArrayList<>(prepopulatedPackageAggregateOwners);
     }
