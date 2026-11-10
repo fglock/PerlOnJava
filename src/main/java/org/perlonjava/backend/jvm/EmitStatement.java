@@ -127,7 +127,9 @@ public class EmitStatement {
                 ? ctx.symbolTable.getMyArrayIndicesInScope(scopeIndex)
                 : withoutCaptured(ctx, ctx.symbolTable.getMyArrayIndicesInScope(scopeIndex));
 
-        // Record my-variable indices for eval exception cleanup.
+        java.util.Map<Integer, String> scalarNames =
+                ctx.symbolTable.getMyScalarNamesInScope(scopeIndex);
+        // Record my-variable indices and scalar pad names for eval exception cleanup.
         // When evalCleanupLocals is non-null (set by EmitterMethodCreator for eval blocks),
         // we record all my-variable local indices so the catch handler can emit cleanup
         // for variables whose normal SCOPE_EXIT_CLEANUP was skipped by die.
@@ -135,6 +137,9 @@ public class EmitStatement {
             ctx.javaClassInfo.evalCleanupLocals.addAll(scalarIndices);
             ctx.javaClassInfo.evalCleanupLocals.addAll(hashIndices);
             ctx.javaClassInfo.evalCleanupLocals.addAll(arrayIndices);
+            if (ctx.javaClassInfo.evalCleanupScalarNames != null) {
+                ctx.javaClassInfo.evalCleanupScalarNames.putAll(scalarNames);
+            }
         }
 
         // Fast path: when CleanupNeededVisitor proved the sub has no
@@ -203,6 +208,21 @@ public class EmitStatement {
                         "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V",
                         false);
             }
+        }
+        // The JVM keeps one RuntimeScalar cell for refaliased lexical names.
+        // Retire the exact pad binding as that name leaves scope; ordinary
+        // unregister only sees the shared cell identity and cannot distinguish
+        // it from another still-live lexical name for the same cell.
+        for (int idx : scalarIndices) {
+            String name = scalarNames.get(idx);
+            if (name == null) continue;
+            ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
+            ctx.mv.visitLdcInsn(name);
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "unbindCurrentActiveLexical",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;Ljava/lang/String;)V",
+                    false);
         }
         // Phase 1b: Walk hash/array variables for nested blessed references.
         // When a hash/array goes out of scope, any blessed refs stored inside

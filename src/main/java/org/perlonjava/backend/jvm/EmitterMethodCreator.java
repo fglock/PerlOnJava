@@ -831,6 +831,7 @@ public class EmitterMethodCreator implements Opcodes {
             // Recorded my-variable local indices for eval exception cleanup.
             // Populated during ast.accept(visitor) when useTryCatch is true.
             java.util.List<Integer> evalCleanupLocals = null;
+            java.util.Map<Integer, String> evalCleanupScalarNames = null;
             int evalArgumentDepthSlot = -1;
             int evalMethodInvocantDepthSlot = -1;
             int evalMortalMarkDepthSlot = -1;
@@ -903,12 +904,15 @@ public class EmitterMethodCreator implements Opcodes {
                 // when die unwinds through the eval (exception handler).
                 // Enable recording of my-variable indices for eval exception cleanup.
                 ctx.javaClassInfo.evalCleanupLocals = new java.util.ArrayList<>();
+                ctx.javaClassInfo.evalCleanupScalarNames = new java.util.HashMap<>();
 
                 ast.accept(visitor);
 
                 // Snapshot and disable recording of my-variable indices.
                 evalCleanupLocals = ctx.javaClassInfo.evalCleanupLocals;
+                evalCleanupScalarNames = ctx.javaClassInfo.evalCleanupScalarNames;
                 ctx.javaClassInfo.evalCleanupLocals = null;
+                ctx.javaClassInfo.evalCleanupScalarNames = null;
 
                 // Normal fallthrough return: spill and jump with empty operand stack.
                 mv.visitVarInsn(Opcodes.ASTORE, returnValueSlot);
@@ -1242,6 +1246,17 @@ public class EmitterMethodCreator implements Opcodes {
                                 "org/perlonjava/runtime/runtimetypes/MortalList",
                                 "evalExceptionScopeCleanup",
                                 "(Ljava/lang/Object;)V", false);
+                        String variableName = evalCleanupScalarNames == null
+                                ? null : evalCleanupScalarNames.get(localIdx);
+                        if (variableName != null) {
+                            mv.visitVarInsn(Opcodes.ALOAD, localIdx);
+                            mv.visitLdcInsn(variableName);
+                            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                                    "unbindCurrentActiveLexical",
+                                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;Ljava/lang/String;)V",
+                                    false);
+                        }
                         mv.visitVarInsn(Opcodes.ALOAD, localIdx);
                         mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                                 "org/perlonjava/runtime/runtimetypes/MyVarCleanupStack",

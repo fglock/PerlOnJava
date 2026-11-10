@@ -4538,6 +4538,24 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
     }
 
+    /** Unbind the innermost exact name/cell binding when a backend unwinds a scope. */
+    public static void unbindCurrentActiveLexical(RuntimeBase cell, String variableName) {
+        if (cell == null || variableName == null || PerlRuntime.currentOrNull() == null) return;
+        PerlRuntime runtime = PerlRuntime.current();
+        for (ActiveLexicalFrame frame : activeLexicalFrames(runtime.executionState())) {
+            if (frame.cells().get(variableName) == cell) {
+                frame.remove(variableName);
+                return;
+            }
+        }
+        if (runtime.executionState().topLevelLexicals.get(variableName) == cell) {
+            runtime.executionState().topLevelLexicals.remove(variableName);
+            PerlOwnerSlot ownerSlot = runtime.executionState().topLevelLexicalOwnerSlots
+                    .remove(variableName);
+            if (ownerSlot != null) ownerSlot.release();
+        }
+    }
+
     /**
      * Generated storage for a bodyless lexical sub is an undefined scalar,
      * but calls through it require Perl's named-sub diagnostic.  Normal

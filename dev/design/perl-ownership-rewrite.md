@@ -58,18 +58,26 @@ assertions), including `foreach_alias_does_not_add_referent_owner.t`,
 `refalias_array_element_cell_owner.t`, and
 `scalar_reference_contents_alias_lifetime.t`.
 
-Alias semantics have two separate counts: aliasing a scalar cell retains the
-cell, while the reference stored in that cell does not gain a second referent
-owner. System Perl also increments the aliased cell's native SV count, which
-POJ's approximate `B::SV::REFCNT` helper does not expose. The lifecycle gap was
-that a scalar refalias target's lexical pad entry still owned its prior cell
-after the register was rebound. Source commit `4ce671e11e` on
-`wip/issue1649-alias-cell-refcnt-20261110-044406` updates both execution paths
-to transfer the cleanup registration and bind the alias name to the shared
-cell. The new
+Alias semantics have two separate counts: refaliasing increments the shared
+scalar cell's `B::SV::REFCNT`, while the reference stored in that cell does not
+gain a second referent owner. The existing runtime already reports the cell
+count increase on both backends. A new test found the JVM retained that count
+after the alias left a block, and an eval exception skipped the active-pad
+unbind on both backends. The interpreter also lacked retained names for
+block-scoped scalar registers during exceptional cleanup. The JVM scope emitter
+now unbinds the exact lexical name; compiled eval cleanup records those names,
+and bytecode cleanup uses the retained register-to-name map before releasing
+the slot. The stable-cell write-through case from source commit `4ce671e11e` on
+`wip/issue1649-alias-cell-refcnt-20261110-044406` continues to transfer lexical
+cleanup registration to the shared cell. The new
 `refcount/lexical_scalar_refalias_owner_lifetime.t` passes 4/4 under system
 Perl, JVM, and interpreter; the existing hash alias test passes 45/45 on both
-POJ backends. The full `nice -n 19 make` passes in 6m43; logs:
+POJ backends. The new `refcount/refalias_cell_refcount.t` passes 6/6 on system
+Perl, JVM, and interpreter. The no-sweeps `nice -n 19 timeout 1800 make` gate
+passes in 11m10; focused logs are
+`/tmp/issue1649-refalias-cell-refcount-{prove,jvm-final,interpreter-final}.log`,
+and the full gate is `/tmp/issue1649-refalias-cell-refcount-final-make.log`.
+Earlier lifetime logs:
 `/tmp/issue1649-lexical-scalar-refalias-system-perl.log`,
 `/tmp/issue1649-lexical-refalias-owner-final-make.log`,
 `/tmp/issue1649-lexical_scalar_refalias_owner_lifetime.t-verified-jvm.log`,
@@ -94,6 +102,12 @@ The follow-up caller audit found no main-source caller of the legacy
 `MortalList.deferDecrement(RuntimeBase)` hook or the sweep request APIs.
 Production deferred releases pass exact owner-slot tokens; root-based recovery
 in `processDeferredBase` is gated to tokenless compatibility releases.
+The targeted `ReachabilityWalker.sweepReleasedWeakReferents` helper has no
+main-source caller either. `ReachabilityWalker.isScalarReachable` is used by
+the tokenless count-recovery bridge and diagnostic tracing; it is not an
+ordinary release fallback. Exact count alignment through
+`restoreVerifiedCurrentCountedOwnerSlotRefCount` remains a separate direct
+owner-slot check, not a root walk.
 `Internals::jperl_gc` and `jperl_gc_quiet` are no-ops. The remaining
 `restoreVerifiedCurrentCountedOwnerSlotRefCount` bridge reads active Perl owner
 identities directly; it does not traverse roots or repair from reachability.

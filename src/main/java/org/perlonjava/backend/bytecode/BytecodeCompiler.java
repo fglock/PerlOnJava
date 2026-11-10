@@ -271,6 +271,9 @@ public class BytecodeCompiler implements Visitor {
     // Non-final so the cached eval constructor can inject a pooled instance instead of
     // creating a fresh one for each of 2M warm-path eval compilations.
     ScopedSymbolTable symbolTable;
+    /** Names for lexical scalar registers, retained after their scopes leave the symbol table. */
+    private final Map<Integer, java.util.LinkedHashSet<String>> myScalarNamesByRegister =
+            new LinkedHashMap<>();
     // Goto label support: maps label names to their PC addresses for intra-function goto.
     // pendingGotos tracks forward references (goto before label) needing patch-up.
     // These are null by default; initialized lazily in compile() only when goto/labels are present.
@@ -1192,6 +1195,11 @@ public class BytecodeCompiler implements Visitor {
         // Gather variable indices to determine if cleanup is needed.
         java.util.List<Integer> scalarIndices = myScalarCleanupIndicesInScope(scopeIdx);
         java.util.Map<Integer, String> scalarNames = symbolTable.getMyScalarNamesInScope(scopeIdx);
+        for (Map.Entry<Integer, String> entry : scalarNames.entrySet()) {
+            myScalarNamesByRegister.computeIfAbsent(
+                    entry.getKey(), ignored -> new java.util.LinkedHashSet<>())
+                    .add(entry.getValue());
+        }
         java.util.List<Integer> hashIndices = myHashCleanupIndicesInScope(scopeIdx);
         java.util.List<Integer> arrayIndices = myArrayCleanupIndicesInScope(scopeIdx);
 
@@ -1867,6 +1875,12 @@ public class BytecodeCompiler implements Visitor {
                 evalSitePragmaFlags.isEmpty() ? null : evalSitePragmaFlags,
                 warningBitsString
         );
+        Map<Integer, java.util.List<String>> lexicalNames = new LinkedHashMap<>();
+        for (Map.Entry<Integer, java.util.LinkedHashSet<String>> entry
+                : myScalarNamesByRegister.entrySet()) {
+            lexicalNames.put(entry.getKey(), new ArrayList<>(entry.getValue()));
+        }
+        code.setMyScalarNamesByRegister(lexicalNames);
         List<RuntimeBase> ownedPadConstants = new ArrayList<>(padConstants);
         for (Object constant : constants) {
             RuntimeCode nestedCode = constant instanceof RuntimeCode codeConstant

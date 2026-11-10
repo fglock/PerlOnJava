@@ -366,6 +366,7 @@ public class RuntimeGraphCloner {
                     source.warningBitsString);
         }
         copyBase(source, target);
+        target.setMyScalarNamesByRegister(source.myScalarNamesByRegister);
         clones.put(source, target);
         target.ourVariableRegistry = source.ourVariableRegistry;
         target.declaredOurVariables = source.declaredOurVariables;
