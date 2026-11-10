@@ -134,6 +134,15 @@ public class MyVarCleanupStack {
      * @param var the RuntimeScalar/Array/Hash previously registered
      */
     public static void unregister(Object var) {
+        unregister(var, true);
+    }
+
+    /** Remove a registration after the exact named lexical owner was unbound. */
+    public static void unregisterAfterActiveLexicalUnbind(Object var) {
+        unregister(var, false);
+    }
+
+    private static void unregister(Object var, boolean releaseActiveOwner) {
         if (var == null) return;
         // Block-scoped my-vars pop in reverse declaration order, so
         // scan from the top of the stack for a fast amortized match.
@@ -151,7 +160,12 @@ public class MyVarCleanupStack {
                     // callers that release a lexical slot directly.
                     base.localBindingExists = false;
                 }
-                releaseActiveAggregateOwnerAfterCleanup(var);
+                if (releaseActiveOwner) {
+                    releaseActiveAggregateOwnerAfterCleanup(var);
+                } else if (var instanceof RuntimeBase base
+                        && !MyVarCleanupStack.isRegistered(base)) {
+                    RuntimeCode.releaseAllActiveLexicalOwners(base);
+                }
                 noteVarLeftScope(var);
                 return;
             }
@@ -254,7 +268,12 @@ public class MyVarCleanupStack {
                 || (!(base instanceof RuntimeArray) && !(base instanceof RuntimeHash)
                     && !(base instanceof RuntimeScalar scalar
                         && scalar.referencedByScalarReference))) return;
-        RuntimeCode.releaseActiveLexicalOwner(base);
+        // Multiple lexical names may alias the same cell. Keep its pad owners
+        // while any such lexical registration remains; the last registration
+        // retires all pad bindings left by normal or exceptional scope exit.
+        if (!MyVarCleanupStack.isRegistered(base)) {
+            RuntimeCode.releaseAllActiveLexicalOwners(base);
+        }
     }
 
     /**

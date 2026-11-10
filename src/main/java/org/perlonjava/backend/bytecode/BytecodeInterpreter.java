@@ -612,6 +612,10 @@ public class BytecodeInterpreter {
                                 frame.releaseSuspendedOwnerForRegister(reg);
                                 if (!scopeCleanupBatches.isEmpty()) {
                                     scopeCleanupBatches.peek().add(reg);
+                                } else if (pc < bytecode.length
+                                        && bytecode[pc] == Opcodes.UNBIND_ACTIVE_LEXICAL) {
+                                    // Preserve the cell for the following
+                                    // exact-name pad unbind.
                                 } else {
                                     MyVarCleanupStack.unregister(slot);
                                     registers[reg] = null;
@@ -621,7 +625,10 @@ public class BytecodeInterpreter {
                             case Opcodes.UNBIND_ACTIVE_LEXICAL -> {
                                 int reg = bytecode[pc++];
                                 int nameIdx = bytecode[pc++];
-                                code.unbindActiveLexical(code.stringPool[nameIdx], registers[reg]);
+                                RuntimeBase slot = registers[reg];
+                                code.unbindActiveLexical(code.stringPool[nameIdx], slot);
+                                MyVarCleanupStack.unregisterAfterActiveLexicalUnbind(slot);
+                                registers[reg] = null;
                             }
 
                             case Opcodes.SNAPSHOT_SCOPE_RESULT -> {
@@ -1037,7 +1044,10 @@ public class BytecodeInterpreter {
                                 int dest = bytecode[pc++];
                                 int src = bytecode[pc++];
                                 RuntimeBase srcVal = registers[src];
-                                registers[dest] = isImmutableProxy(srcVal) ? ensureMutableScalar(srcVal) : srcVal;
+                                RuntimeBase aliasValue = isImmutableProxy(srcVal)
+                                        ? ensureMutableScalar(srcVal) : srcVal;
+                                MyVarCleanupStack.replace(registers[dest], aliasValue);
+                                registers[dest] = aliasValue;
                             }
 
                             case Opcodes.ALIAS_LVALUE_REFERENCE -> {
