@@ -133,6 +133,10 @@ public class EmitterContext {
     public Set<String> evalCachedCapturedOurVarNames;
     /** nextRegister value to use for BytecodeCompiler on the cached path. */
     public int evalCachedNextRegister;
+    /** variableRegistry for InterpretedCode — built once from compilerSymbolTableTemplate. */
+    public Map<String, Integer> evalCachedVariableRegistry;
+    /** ourVariableRegistry for InterpretedCode — built once from compilerSymbolTableTemplate. */
+    public Map<String, String> evalCachedOurVariableRegistry;
 
     /**
      * Constructs a new EmitterContext with the specified parameters.
