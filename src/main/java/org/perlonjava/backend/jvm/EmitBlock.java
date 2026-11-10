@@ -965,12 +965,15 @@ public class EmitBlock {
         }
         boolean protectReturnedWeakOwner = returnedLvalueSlot >= 0
                 && emitterVisitor.ctx.javaClassInfo.cleanupNeeded;
+        int protectedReturnRootSlot = -1;
         if (protectReturnedWeakOwner) {
-            // A weakly observed local may also be the implicit sub return.
-            // Keep that return value as an explicit root while lexical cleanup
-            // runs so noteVarLeftScope can avoid a global reachability sweep
-            // during the caller's callback dispatch.
+            // Scope cleanup may replace returnedLvalueSlot with a prepared
+            // return snapshot. Keep the original value in a separate local so
+            // the exact root pushed here is also the one popped below.
+            protectedReturnRootSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
             mv.visitVarInsn(Opcodes.ALOAD, returnedLvalueSlot);
+            mv.visitVarInsn(Opcodes.ASTORE, protectedReturnRootSlot);
+            mv.visitVarInsn(Opcodes.ALOAD, protectedReturnRootSlot);
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/MortalList",
                     "pushTemporaryRoot",
@@ -981,7 +984,7 @@ public class EmitBlock {
                 returnedLvalueSlot, markAtScopeEntry);
         if (returnedLvalueSlot >= 0) {
             if (protectReturnedWeakOwner) {
-                mv.visitVarInsn(Opcodes.ALOAD, returnedLvalueSlot);
+                mv.visitVarInsn(Opcodes.ALOAD, protectedReturnRootSlot);
                 mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                         "org/perlonjava/runtime/runtimetypes/MortalList",
                         "popTemporaryRoot",
