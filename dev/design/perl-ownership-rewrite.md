@@ -22,10 +22,11 @@ after 1/108 assertions in about 90s and is not a result.
 
 A new `TemporaryRootNestedReturnMutationTest` records that changing a
 reference inside a `RuntimeControlFlowList` return list changes which referent
-the active temporary root protects. It passed in a full Make run on the local
-working tree in 9m28 (`/tmp/issue1649-temp-root-nested-return-mutation-make.log`);
-commit it with this checkpoint and rerun the gate on the immutable commit
-before publishing.
+the active temporary root protects. It passes in full Make on immutable commit
+`d42c4bd885` in 8m47
+(`/tmp/issue1649-temp-root-nested-return-mutation-committed-make.log`). The
+fallback remains necessary; this regression locks the mutation behavior a
+future owner-edge implementation must preserve.
 
 The remaining `temporaryRootDirectlyReferences` traversal is required for
 targets nested in temporary expression lists and control-flow return lists;
@@ -41,12 +42,12 @@ on the first batch were fixed in `7628f5c39b`.
 
 Current master is integrated; the merge only changed generated CPAN report
 snapshots and removed those stale files from the PR diff. Platform CI on the
-published head passed: Ubuntu 36m38 and Windows 41m41. Individual CodeQL
-analyses and dependency submissions passed. Aggregate CodeQL fails on a high
-key-size alert at `CryptOpenSSLRSA.java:203`, which is not in the PR's changed
-files. The PR description and issue handoff contain the CI result. Commit the
-new regression with this checkpoint, rerun `make`, then publish and wait at
-least six minutes before checking CI for the new head.
+previous published head (`efae36a0c7`, before this regression) passed: Ubuntu
+36m38 and Windows 41m41. Individual CodeQL analyses and dependency submissions
+passed; aggregate CodeQL fails on a high key-size alert at
+`CryptOpenSSLRSA.java:203`, outside the PR's changed files. Publish the
+validated test/checkpoint commits, keep the PR draft, and wait at least six
+minutes before checking CI for the new head.
 
 The reported Class::MethodMaker tied-array lifetime failure is covered by the
 new project-owned `refcount/generated_tied_array_handler_lifetime.t`: it
