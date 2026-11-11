@@ -193,7 +193,16 @@ public class MortalList {
         if (value instanceof RuntimeScalar scalar) {
             return directlyReferences(scalar, target);
         }
-        if (!(value instanceof RuntimeList) && !(value instanceof RuntimeArray)) return false;
+        if (value instanceof RuntimeArray array) {
+            // Array elements are scalar cells, so this query only checks each
+            // direct referent. It never recurses through the array graph and
+            // needs no per-query cycle set.
+            for (RuntimeScalar element : array.elements) {
+                if (element != null && directlyReferences(element, target)) return true;
+            }
+            return false;
+        }
+        if (!(value instanceof RuntimeList)) return false;
         return directlyReferences(value, target, new IdentityHashMap<>());
     }
 
