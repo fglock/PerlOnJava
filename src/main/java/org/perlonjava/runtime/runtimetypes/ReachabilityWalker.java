@@ -2400,7 +2400,7 @@ public class ReachabilityWalker {
     }
 
     public static boolean isReachableFromTemporaryRoots(RuntimeBase target) {
-        if (target == null) return false;
+        if (target == null || !MortalList.hasTemporaryRoots()) return false;
         ReachabilityWalker walker = new ReachabilityWalker();
         java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
         for (RuntimeBase tempRoot : MortalList.snapshotTemporaryRoots()) {
