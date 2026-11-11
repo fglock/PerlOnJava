@@ -1076,10 +1076,11 @@ public class MortalList {
         // An aggregate borrowed through @_ belongs to its caller. Its current
         // frame can end while the caller's lexical is still live.
         if (!finalRelease && RuntimeCode.deferCleanupForActiveArgumentAggregate(hash)) return;
-        scopeExitCleanupHashBody(hash, finalRelease);
+        scopeExitCleanupHashBody(hash, returned, finalRelease);
     }
 
-    private static void scopeExitCleanupHashBody(RuntimeHash hash, boolean finalRelease) {
+    private static void scopeExitCleanupHashBody(
+            RuntimeHash hash, RuntimeBase returned, boolean finalRelease) {
         if (finalRelease && RuntimeBase.refCountTraceEnabled()) {
             System.err.println("[DESTROY-HASH-CLEANUP] begin hash="
                     + System.identityHashCode(hash) + " generation="
