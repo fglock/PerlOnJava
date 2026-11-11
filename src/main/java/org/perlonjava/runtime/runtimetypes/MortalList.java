@@ -1321,7 +1321,12 @@ public class MortalList {
      */
     private static boolean preserveEscapedScalarCellValueOwner(RuntimeScalar cell) {
         if (cell == null) return false;
-        if (!cell.referencedByScalarReference || !cell.hasScalarCellOwner()) return false;
+        if (!cell.referencedByScalarReference
+                || (!cell.localBindingExists
+                    && !cell.hasPendingReturnOwner()
+                    && !cell.hasScalarCellStorageOwnerSlotIdentity())) {
+            return false;
+        }
 
         PerlOwnerSlot slot = cell.countedOwnerSlot();
         if (!cell.refCountOwned || slot == null || !slot.isActive()

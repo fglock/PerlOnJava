@@ -1375,7 +1375,6 @@ public final class PerlOwnerSlot {
                 || scalar.localBindingExists
                 || MyVarCleanupStack.isRegistered(scalar)
                 || scalar.hasScalarCellOwner()
-                || scalar.hasCurrentAggregateStorageOwner()
                 || PerlRuntime.currentOrNull() == null) {
             return;
         }
