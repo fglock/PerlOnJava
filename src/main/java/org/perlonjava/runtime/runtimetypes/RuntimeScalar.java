@@ -1842,7 +1842,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return true;
     }
 
-    private boolean hasCurrentAggregateStorageOwner() {
+    boolean hasCurrentAggregateStorageOwner() {
         for (RuntimeBase owner : containerOwnerSnapshot()) {
             if (isStoredInAnyContainer(owner)) return true;
         }

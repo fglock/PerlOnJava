@@ -17,7 +17,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Tag("unit")
 class TemporaryRootOwnerSlotTest {
     private static final class CountingHashValues extends AbstractMap<String, RuntimeScalar> {
+        private final RuntimeScalar value;
         private int valuesCalls;
+
+        private CountingHashValues() {
+            this(null);
+        }
+
+        private CountingHashValues(RuntimeScalar value) {
+            this.value = value;
+        }
 
         @Override
         public Set<Entry<String, RuntimeScalar>> entrySet() {
@@ -27,7 +36,7 @@ class TemporaryRootOwnerSlotTest {
         @Override
         public Collection<RuntimeScalar> values() {
             valuesCalls++;
-            return Collections.emptyList();
+            return value == null ? Collections.emptyList() : List.of(value);
         }
     }
 
@@ -159,6 +168,52 @@ class TemporaryRootOwnerSlotTest {
                 assertTrue(ReachabilityWalker.isReachableFromTemporaryRoots(referent));
                 assertEquals(0, nestedValues.valuesCalls,
                         "a direct root edge must not traverse the referent's hash descendants");
+            } finally {
+                MortalList.popTemporaryRoot(root);
+            }
+        }
+    }
+
+    @Test
+    void directHashTemporaryRootEdgeSkipsReferentGraphWalk() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeHash referent = new RuntimeHash();
+            CountingHashValues nestedValues = new CountingHashValues();
+            referent.elements = nestedValues;
+            RuntimeHash root = new RuntimeHash();
+            root.elements.put("child", referent.createReference());
+
+            MortalList.pushTemporaryRoot(root);
+            try {
+                assertTrue(ReachabilityWalker.isReachableFromTemporaryRoots(referent));
+                assertEquals(0, nestedValues.valuesCalls,
+                        "a direct hash-root edge must not traverse the referent's descendants");
+            } finally {
+                MortalList.popTemporaryRoot(root);
+            }
+        }
+    }
+
+    @Test
+    void directListTemporaryRootEdgeSkipsNestedAggregateGraphWalk() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeHash target = new RuntimeHash();
+            RuntimeHash nested = new RuntimeHash();
+            CountingHashValues nestedValues = new CountingHashValues(target.createReference());
+            nested.elements = nestedValues;
+            RuntimeList root = new RuntimeList();
+            root.elements.add(nested.createReference());
+
+            MortalList.pushTemporaryRoot(root);
+            try {
+                assertFalse(MortalList.temporaryRootDirectlyReferences(target));
+                assertEquals(0, nestedValues.valuesCalls,
+                        "a direct list-root check must not enumerate nested aggregate values");
+                assertTrue(ReachabilityWalker.isReachableFromTemporaryRoots(target));
+                assertTrue(nestedValues.valuesCalls > 0,
+                        "the compatibility reachability query still follows nested values");
             } finally {
                 MortalList.popTemporaryRoot(root);
             }
