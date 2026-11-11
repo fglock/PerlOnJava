@@ -7,13 +7,15 @@ verified owner-count alignment, the `SvREFCNT` live-scalar scan, and final CPAN
 acceptance. Existing lifecycle, aggregate, IO, CODE, weak-reference, thread,
 and HTML-Tree regressions pass on both backends with corrective sweeps disabled.
 
-**Current checkpoint (2026-11-11):** Issue #1649 remains active. The candidate
-is on `fix/issue1649-temp-root-list-20261111` at `4e84cdad70`; this commit
-contains the implementation and regression tests, preserved first on
-`wip/issue1649-preflight-20261111-083047`. PR #1938 remains open and draft at
-`5ea904972685d42e063b41e8faf63f4c29142d95`. Its Ubuntu and Windows builds and
-individual CodeQL analysis jobs pass; the aggregate CodeQL check still reports
-failure. The candidate has not yet been pushed.
+**Current checkpoint (2026-11-11):** Issue #1649 remains active. PR #1938 is
+open and draft on `wip/alias-cell-ownership-20261030-185849`; implementation
+commit `4e84cdad70` and the first checkpoint refresh `c0edb90946` are published
+there. The local snapshot remains on
+`wip/issue1649-preflight-20261111-083047`. Before the update, CI at
+`5ea904972685d42e063b41e8faf63f4c29142d95` had passing Ubuntu and Windows
+builds and individual CodeQL analysis jobs, with the aggregate CodeQL check
+failed. Checks for the updated PR head are pending; wait at least six minutes
+after the last push before polling again.
 
 The fix follows temporary control-flow return values through reachability and
 diagnostic walks, preserves exact local-array return roots through cleanup and
@@ -31,8 +33,9 @@ async syntax). Rebuilt-candidate DBIx `t/100populate.t` and the system-Perl
 oracle each pass 108/108 (`/tmp/issue1649-dbix-t100-integrated-candidate.log`
 and `/tmp/issue1649-dbix-t100-system-perl.log`). The older four-failure report
 is stale. Keep the PR open/draft, push the tested candidate, then wait at least
-six minutes before the next CI refresh. Continue the separate `t/52leaks.t`
-owner-slot audit only if it remains in the refreshed issue handoff.
+six minutes after the latest push before the next CI refresh. Continue the
+separate `t/52leaks.t` owner-slot audit only if it remains in the refreshed
+issue handoff.
 
 The reported Class::MethodMaker tied-array lifetime failure is covered by the
 new project-owned `refcount/generated_tied_array_handler_lifetime.t`: it
@@ -1878,8 +1881,8 @@ and final use cases still require audit before removal.
 
 ### Next steps
 
-1. Push `4e84cdad70` and the refreshed checkpoint to PR #1938, keeping it open
-   and draft; after at least six minutes, refresh its CI status once.
+1. Publish this checkpoint correction to PR #1938, keeping it open and draft;
+   after at least six minutes, refresh its CI status once.
 2. Reconcile the updated issue handoff. Continue the separate `t/52leaks.t`
    owner-slot audit only if it remains in scope.
 3. Keep the remaining owner-producer and release audit active; review and merge
