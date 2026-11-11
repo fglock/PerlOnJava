@@ -202,8 +202,21 @@ public class MortalList {
             }
             return false;
         }
+        if (value instanceof RuntimeHash hash) return directlyReferencesHash(hash, target);
         if (!(value instanceof RuntimeList)) return false;
-        return directlyReferences(value, target, new IdentityHashMap<>());
+        RuntimeList list = (RuntimeList) value;
+        if (list instanceof RuntimeControlFlowList flow
+                && directlyReferences(flow.getReturnValue(), target)) return true;
+        // A temporary list directly owns its scalar values. Nested aggregates
+        // keep their own element slots, so don't traverse their descendant
+        // graph here; the full reachability query can still inspect it if a
+        // compatibility caller needs that broader answer.
+        for (RuntimeBase element : list.elements) {
+            if (element == target) return true;
+            if (element instanceof RuntimeScalar scalar
+                    && directlyReferences(scalar, target)) return true;
+        }
+        return false;
     }
 
     private static boolean directlyReferences(RuntimeScalar scalar, RuntimeBase target) {
@@ -211,6 +224,18 @@ public class MortalList {
                 && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
                 && scalar.value instanceof RuntimeBase referent
                 && referent == target;
+    }
+
+    private static boolean directlyReferencesHash(RuntimeHash hash, RuntimeBase target) {
+        // Special variables compute their values from external state; the
+        // general walker handles those dynamic ownership rules.
+        if (hash.elements == null || hash.elements instanceof HashSpecialVariable) return false;
+        if (hash.elements instanceof TieHash tieHash
+                && directlyReferences(tieHash.getSelf(), target)) return true;
+        for (RuntimeScalar element : hash.elements.values()) {
+            if (element != null && directlyReferences(element, target)) return true;
+        }
+        return false;
     }
 
     private static boolean directlyReferences(RuntimeBase value, RuntimeBase target,
@@ -236,6 +261,8 @@ public class MortalList {
             for (RuntimeScalar element : array.elements) {
                 if (directlyReferences(element, target, visited)) return true;
             }
+        } else if (value instanceof RuntimeHash hash) {
+            return directlyReferencesHash(hash, target);
         }
         return false;
     }
@@ -1145,6 +1172,7 @@ public class MortalList {
         List<RuntimeScalar> valuesInDestructionOrder = new ArrayList<>(hash.elements.values());
         Collections.reverse(valuesInDestructionOrder);
         for (RuntimeScalar val : valuesInDestructionOrder) {
+            if (preserveEscapedScalarCellValueOwner(val)) continue;
             deferDecrementRecursive(val);
         }
     }
@@ -1239,6 +1267,10 @@ public class MortalList {
             if (arr.ownedAliasElements == null || arr.ownedAliasElements.isEmpty()) return;
             RuntimeScalar[] owned = arr.ownedAliasElements.toArray(new RuntimeScalar[0]);
             for (RuntimeScalar elem : owned) {
+                if (preserveEscapedScalarCellValueOwner(elem)) {
+                    arr.forgetOwnedAliasElement(elem);
+                    continue;
+                }
                 deferDecrementRecursive(elem);
                 arr.forgetOwnedAliasElement(elem);
             }
@@ -1276,8 +1308,31 @@ public class MortalList {
         }
         if (!needsWalk) return;
         for (RuntimeScalar elem : arr.elements) {
+            if (preserveEscapedScalarCellValueOwner(elem)) continue;
             deferDecrementRecursive(elem);
         }
+    }
+
+    /**
+     * Keep a scalar cell's existing value edge after its aggregate storage
+     * goes away if a Perl scalar reference still owns that cell. The counted
+     * slot moves from aggregate storage to the cell itself; the final cell
+     * owner release will then retire the same count through scope cleanup.
+     */
+    private static boolean preserveEscapedScalarCellValueOwner(RuntimeScalar cell) {
+        if (cell == null) return false;
+        if (cell.hasCurrentAggregateStorageOwner()) return true;
+        if (!cell.referencedByScalarReference || !cell.hasScalarCellOwner()) return false;
+
+        PerlOwnerSlot slot = cell.countedOwnerSlot();
+        if (cell.refCountOwned && slot != null && slot.isActive()
+                && slot.countedScalarOwner() == cell
+                && slot.referent() == cell.value
+                && (slot.kind() == PerlOwnerSlot.Kind.ARRAY_ELEMENT
+                    || slot.kind() == PerlOwnerSlot.Kind.HASH_ELEMENT)) {
+            slot.reclassifyCountedIdentity(PerlOwnerSlot.Kind.SCALAR_CELL);
+        }
+        return true;
     }
 
     public static void releaseTailCallArgs(RuntimeArray args) {
