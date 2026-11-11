@@ -7,30 +7,29 @@ helper used by Java tests, verified owner-count alignment, the `SvREFCNT`
 live-scalar scan, and final CPAN acceptance. Existing lifecycle, aggregate, IO, CODE, weak-reference, thread,
 and HTML-Tree regressions pass on both backends with corrective sweeps disabled.
 
-**Current checkpoint (2026-11-11 13:48 UTC):** Issue #1649 remains active. PR
-#1938 remains open and draft; published runtime commit `f25cfc7e50` adds a
-direct-array temporary-root fast path and focused Java coverage. The
-three temporary-root fast paths now skip the empty-stack walker, avoid a
-visited map for scalar/leaf roots, and avoid a visited map for array roots,
-whose elements are checked as direct scalar referents. Nested `RuntimeList`
-roots keep cycle tracking and mutation behavior.
+**Current checkpoint (2026-11-11 14:10 UTC):** Issue #1649 remains active. PR
+#1938 is open and draft at published head `1ad70b2524`. Local source commit
+`e278301da6` adds a positive fast path to temporary-root reachability: direct
+strong scalar/array/list edges return before walking the referent's descendants;
+nested object paths still use the graph walker. The focused test proves a direct
+array edge does not enumerate the referent hash. The earlier empty-stack,
+scalar/leaf and array-root fast paths remain in place, with nested mutable
+`RuntimeList` traversal retained.
 
-Full `nice -n 19 timeout 3600 make` passed on the local candidate in 13m42;
-`TemporaryRootOwnerSlotTest` passed 5/5, including the new direct-array case.
-Log: `/tmp/issue1649-temp-array-root-fastpath-make.log`. The slow run shared
-CPU with another active Make in `PerlOnJava5` and a CPAN test; this candidate's
-Make and Java workers were lowered to maximum niceness while running. The
-previous full gates passed in 6m35 and 6m39. Re-running DBIx
-`t/100populate.t` after the f25 working-tree build passed 108/108 on JVM in
-29s (`/tmp/issue1649-dbix-t100-f25-jvm.log`); system Perl passes 108/108.
-The interpreter run reached 1/108 in five minutes and is inconclusive.
+`nice -n 19 timeout 3600 make` passed in 11m56 on the tree that became
+`e278301da6`; `TemporaryRootOwnerSlotTest` passed 6/6. Log:
+`/tmp/issue1649-direct-temp-root-fastpath-make.log`. DBIx
+`t/100populate.t` passed 108/108 on the rebuilt JVM in about 30s; log:
+`/tmp/issue1649-dbix-t100-direct-temp-root-fastpath-jvm.log`. System Perl also
+passes 108/108. The earlier interpreter run reached 1/108 in five minutes and
+is inconclusive; no DBIx object-GC defect is reproduced on the current JVM.
 
-The previous PR head `c3c9e57a98` passed Ubuntu and Windows build/thread gates.
-At 13:47 UTC, checks for docs head `1ad70b2524` showed four analyses and both
-dependency submissions passing; CodeQL failed on the unchanged RSA key-size
-call at `CryptOpenSSLRSA.java:203`. No Gradle platform workflow was listed for
-this head. The RSA policy and 1024-bit compatibility decision is tracked
-separately in [issue #2031](https://github.com/fglock/PerlOnJava/issues/2031).
+At 14:03 UTC, checks on published head `1ad70b2524` showed analyses and
+dependency submissions passing, CodeQL failing on the unchanged RSA key-size
+call at `CryptOpenSSLRSA.java:203`, and no current-head Gradle platform run.
+The prior head `c3c9e57a98` passed Ubuntu and Windows build/thread gates. RSA
+policy and 1024-bit compatibility are tracked separately in
+[issue #2031](https://github.com/fglock/PerlOnJava/issues/2031).
 
 The END cleanup traversal and nested-list traversal remain semantically needed
 with current proofs: rescued objects must stay usable through END, nested
@@ -137,8 +136,8 @@ ownership from one aggregate count.
 
 ### Next steps
 
-1. After at least six minutes, poll head `1ad70b2524` and verify whether the
-   Gradle platform workflow starts; keep PR #1938 open and draft.
+1. Publish the tested source and checkpoint updates, keep PR #1938 open and
+   draft, and check CI again after at least six minutes.
 2. Continue the END owner-source audit. Replace nested-hash discovery only
    after the reverse proof covers every strong source, preserves the five-hash
    bound, distinguishes independent roots, and has focused lifecycle coverage.
