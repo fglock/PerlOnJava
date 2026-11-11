@@ -6,6 +6,8 @@ priorities and future plans.
 
 ## Work in progress
 
+- Bundle the `indirect` pragma and restore `Sys::Syslog` `openlog`, POSIX `:float_h`, and `Want::howmany` compatibility (#2016, #2022, #2020, #2014).
+- Bound RSA key generation to 1024–8192 bits, preserving explicitly requested 1024-bit legacy compatibility while documenting its security limitation (#2031).
 - Prevent active overload-handler redispatch, expose subroutine arguments through English `@ARG`, keep deleted namespaces absent after scalar reads, and compare false Neo4j boolean properties consistently with JSON booleans (#2007, #2006, #1980, #2017).
 - Normalize out-of-range calendar fields in `Time::Piece->strptime`, matching Perl date overflow behavior (#2001).
 - Reduce GC pressure in inner `eval STRING` compilation: replace `FastStack<T>`'s default lazy ArrayList initialisation (first-push allocates `Object[10]`) with an explicit `super(2)` constructor, cutting per-stack array allocation 5× for the 16 `FastStack` fields in each snapshot `ScopedSymbolTable`; replace the O(N log N) `getAllVisibleVariables()` `TreeMap`+`HashSet` build inside `getVisibleVariableRegistry()` and `getVisibleOurRegistry()` with direct O(N) iteration of `symbolTableStack` using `putIfAbsent` for shadowing, caching results until the next `clearVisibleVariablesCache()` invalidation — eliminating `TreeMap.put`, `TreeMap.successor`, and `HashSet.add` allocations from the JFR execution-sample profile for inner eval compilation.

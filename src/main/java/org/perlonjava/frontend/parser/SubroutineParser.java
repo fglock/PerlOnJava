@@ -419,15 +419,8 @@ public class SubroutineParser {
                 // when the class is not loaded, since the enclosing subroutine
                 // might never be invoked (for example platform-specific code).
                 if (sourceSubName.equals("new") && token.text.equals("->")) {
-                    return new BinaryOperatorNode(
-                            "->",
-                            new IdentifierNode(packageName, currentIndex2),
-                            new BinaryOperatorNode("(",
-                                    new OperatorNode("&",
-                                            new IdentifierNode(sourceSubName, currentIndex2),
-                                            currentIndex),
-                                    new ListNode(currentIndex), currentIndex2),
-                            currentIndex2);
+                    return makeIndirectCall(parser, new IdentifierNode(packageName, currentIndex2),
+                            sourceSubName, new ListNode(currentIndex), currentIndex2, currentIndex);
                 }
                 // Not a known subroutine, check if it's valid indirect object syntax
                 if (!isKnownSub && !isLexicalSub && isValidIndirectMethod(packageName)) {
@@ -442,15 +435,8 @@ public class SubroutineParser {
                         } else {
                             arguments = consumeArgsWithPrototype(parser, "@");
                         }
-                        return new BinaryOperatorNode(
-                                "->",
-                                new IdentifierNode(packageName, currentIndex2),
-                                new BinaryOperatorNode("(",
-                                        new OperatorNode("&",
-                                                new IdentifierNode(sourceSubName, currentIndex2),
-                                                currentIndex),
-                                        arguments, currentIndex2),
-                                currentIndex2);
+                        return makeIndirectCall(parser, new IdentifierNode(packageName, currentIndex2),
+                                sourceSubName, arguments, currentIndex2, currentIndex);
                     }
                     // Followed by an infix operator (e.g. `new Foo or die`,
                     // `new Foo && bar`) or a statement terminator: parse as a
@@ -502,15 +488,8 @@ public class SubroutineParser {
                             || token.text.equals(":")
                             || token.type == LexerTokenType.EOF;
                     if (isSafeInfix || isTerminator) {
-                        return new BinaryOperatorNode(
-                                "->",
-                                new IdentifierNode(packageName, currentIndex2),
-                                new BinaryOperatorNode("(",
-                                        new OperatorNode("&",
-                                                new IdentifierNode(sourceSubName, currentIndex2),
-                                                currentIndex),
-                                        new ListNode(currentIndex), currentIndex2),
-                                currentIndex2);
+                        return makeIndirectCall(parser, new IdentifierNode(packageName, currentIndex2),
+                                sourceSubName, new ListNode(currentIndex), currentIndex2, currentIndex);
                     }
                 }
 
@@ -551,15 +530,8 @@ public class SubroutineParser {
                         arguments = consumeArgsWithPrototype(parser, "@");
                     }
                     // Create method call: $classVar->method(args)
-                    return new BinaryOperatorNode(
-                            "->",
-                            classVar,
-                            new BinaryOperatorNode("(",
-                                    new OperatorNode("&",
-                                            new IdentifierNode(subName, currentIndex2),
-                                            currentIndex),
-                                    arguments, currentIndex2),
-                            currentIndex2);
+                    return makeIndirectCall(parser, classVar, subName, arguments,
+                            currentIndex2, currentIndex);
                 }
                 // Not indirect object syntax - backtrack
                 parser.tokenIndex = currentIndex2;
@@ -665,11 +637,8 @@ public class SubroutineParser {
                                         consumeArgsWithPrototype(parser, "@").elements);
                             }
                             ListNode methodArguments = new ListNode(leadingMethodArguments, currentIndex);
-                            Node methodCall = new BinaryOperatorNode("(",
-                                    new OperatorNode("&", nameNode, currentIndex),
-                                    methodArguments,
-                                    currentIndex);
-                            return new BinaryOperatorNode("->", object, methodCall, currentIndex);
+                            return makeIndirectCall(parser, object, nameNode.name, methodArguments,
+                                    currentIndex, currentIndex);
                         }
                     }
                     // Not indirect object syntax - treat the parsed arg as a regular call
@@ -775,12 +744,8 @@ public class SubroutineParser {
                     }
 
                     // Create method call: invocant->method(args)
-                    Node methodCall = new BinaryOperatorNode("(",
-                            new OperatorNode("&", nameNode, currentIndex),
-                            arguments,
-                            currentIndex);
-                    BinaryOperatorNode indirectBlockCall = new BinaryOperatorNode(
-                            "->", invocant, methodCall, currentIndex);
+                    BinaryOperatorNode indirectBlockCall = (BinaryOperatorNode) makeIndirectCall(
+                            parser, invocant, subName, arguments, currentIndex, currentIndex);
                     indirectBlockCall.setAnnotation("indirectBlockMethod", true);
                     return indirectBlockCall;
                 }
@@ -1008,6 +973,51 @@ public class SubroutineParser {
             return true;
         }
         return false;
+    }
+
+    private static Node makeIndirectCall(Parser parser, Node invocant, String method,
+                                         ListNode arguments, int tokenIndex, int methodIndex) {
+        RuntimeScalar policyHint = HintHashRegistry.getCompileTimeHint("indirect/policy");
+        String policy = policyHint == null ? "" : policyHint.toString();
+        RuntimeScalar hook = HintHashRegistry.getCompileTimeHint("indirect/hook");
+        if (policy.isEmpty()) {
+            RuntimeScalar globalPolicy = GlobalVariable.getGlobalVariable("indirect::GLOBAL_POLICY");
+            policy = globalPolicy == null ? "" : globalPolicy.toString();
+            if (policy.equals("hook")) {
+                hook = GlobalVariable.getGlobalVariable("indirect::GLOBAL_HOOK");
+            }
+        }
+        if (!policy.isEmpty() && !policy.equals("off")) {
+            var location = parser.ctx.errorUtil.getSourceLocationAccurate(methodIndex);
+            String object = invocant instanceof IdentifierNode identifier
+                    ? identifier.name : invocant.toString();
+            String message = "Indirect call of method \"" + method + "\" on object \"" + object
+                    + "\" at " + location.fileName() + " line " + location.lineNumber();
+            if (policy.equals("fatal")) {
+                throw new PerlCompilerException(message + ".\n");
+            }
+            if (policy.equals("hook") && hook != null
+                    && (hook.type == RuntimeScalarType.CODE
+                    || (hook.type == RuntimeScalarType.REFERENCE
+                    && hook.value instanceof RuntimeScalar ref
+                    && ref.type == RuntimeScalarType.CODE))) {
+                RuntimeArray hookArgs = new RuntimeArray();
+                RuntimeArray.push(hookArgs, new RuntimeScalar(object));
+                RuntimeArray.push(hookArgs, new RuntimeScalar(method));
+                RuntimeArray.push(hookArgs, new RuntimeScalar(location.fileName()));
+                RuntimeArray.push(hookArgs, new RuntimeScalar(location.lineNumber()));
+                RuntimeCode.apply(hook, hookArgs, RuntimeContextType.VOID);
+            }
+            else if (policy.equals("warn")) {
+                WarnDie.warn(new RuntimeScalar(message + "."),
+                        new RuntimeScalar(""), location.fileName(), location.lineNumber());
+            }
+        }
+
+        return new BinaryOperatorNode("->", invocant,
+                new BinaryOperatorNode("(",
+                        new OperatorNode("&", new IdentifierNode(method, methodIndex), methodIndex),
+                        arguments, tokenIndex), tokenIndex);
     }
 
     private static Node parseIndirectMethodCall(Parser parser, IdentifierNode nameNode) {

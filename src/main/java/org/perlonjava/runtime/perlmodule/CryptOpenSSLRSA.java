@@ -48,6 +48,8 @@ public class CryptOpenSSLRSA extends PerlModuleBase {
 
     private static final String CLASS_NAME = "Crypt::OpenSSL::RSA";
     private static final String STATE_KEY = "_rsa_state";
+    private static final int MIN_RSA_KEY_BITS = 1024;
+    private static final int MAX_RSA_KEY_BITS = 8192;
 
     // Register Bouncy Castle as a JCE provider once, so that signature
     // algorithms the JDK doesn't ship (e.g. RIPEMD160withRSA, WhirlpoolwithRSA,
@@ -194,12 +196,25 @@ public class CryptOpenSSLRSA extends PerlModuleBase {
                     new RuntimeScalar("\n"));
         }
         String cls = args.get(0).toString();
-        int bits = args.get(1).getInt();
+        int bits;
+        try {
+            bits = validateRsaKeySize(args.get(1));
+        } catch (IllegalArgumentException e) {
+            die(new RuntimeScalar(e.getMessage()), new RuntimeScalar("\n"));
+            return scalarFalse.getList();
+        }
         try {
             KeyPairGenerator kpg = KeyPairGenerator.getInstance("RSA");
             // NB: Java's default RSA exponent is 65537; honouring a custom $exp
             // would require RSAKeyGenParameterSpec with a BigInteger — not worth
             // the dependency on args.get(2) being a valid public exponent for OAuth.
+            // NIST SP 800-131A Rev. 2 requires RSA moduli of at least 2048
+            // bits for signature generation. Keep the upstream API's explicit
+            // 1024-bit request as a legacy compatibility exception; it is not
+            // suitable for generating keys for new security-sensitive uses.
+            // The 8192-bit cap bounds provider work for caller-controlled sizes.
+            // codeql[java/insufficient-key-size]
+
             kpg.initialize(bits);
             KeyPair kp = kpg.generateKeyPair();
             State st = new State();
@@ -210,6 +225,38 @@ public class CryptOpenSSLRSA extends PerlModuleBase {
             die(new RuntimeScalar("generate_key failed: " + e.getMessage()),
                     new RuntimeScalar("\n"));
             return scalarFalse.getList();
+        }
+    }
+
+    private static int validateRsaKeySize(RuntimeScalar requestedBits) {
+        String message = "RSA key size must be an integer from " + MIN_RSA_KEY_BITS
+                + " through " + MAX_RSA_KEY_BITS + " bits, in multiples of 8"
+                + " (1024-bit generation is retained for legacy compatibility)";
+        try {
+            BigInteger bitCount;
+            int type = RuntimeScalarType.effectiveType(requestedBits);
+            if (type == RuntimeScalarType.INTEGER || type == RuntimeScalarType.DOUBLE) {
+                double number = requestedBits.getDouble();
+                if (!Double.isFinite(number) || number < MIN_RSA_KEY_BITS
+                        || number > MAX_RSA_KEY_BITS || number != Math.rint(number)) {
+                    throw new IllegalArgumentException(message);
+                }
+                bitCount = BigInteger.valueOf((long) number);
+            } else {
+                String text = requestedBits.toString().trim();
+                if (text.length() > 5 || !text.matches("\\+?[0-9]+")) {
+                    throw new IllegalArgumentException(message);
+                }
+                bitCount = new BigInteger(text.startsWith("+") ? text.substring(1) : text);
+            }
+            if (bitCount.compareTo(BigInteger.valueOf(MIN_RSA_KEY_BITS)) < 0
+                    || bitCount.compareTo(BigInteger.valueOf(MAX_RSA_KEY_BITS)) > 0
+                    || bitCount.mod(BigInteger.valueOf(8)).signum() != 0) {
+                throw new IllegalArgumentException(message);
+            }
+            return bitCount.intValueExact();
+        } catch (ArithmeticException | NumberFormatException e) {
+            throw new IllegalArgumentException(message);
         }
     }
 
