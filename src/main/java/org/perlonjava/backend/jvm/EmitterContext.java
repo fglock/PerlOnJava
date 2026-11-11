@@ -164,6 +164,15 @@ public class EmitterContext {
     /** Pooled loop-info stack (balanced after each compile). */
     public java.util.List<Object>  evalCachedLoopStack;
 
+    // ---- Pooled BytecodeCompiler auxiliary deques (round 22) ----
+    // All three are empty after every clean compile; clear() is O(0), avoiding 3 allocations.
+    /** Pooled eval-return target register stack (empty after each clean compile). */
+    public java.util.Deque<Integer> evalCachedEvalReturnTargetRegs;
+    /** Pooled eval-return goto-patch-positions stack; elements are {@code List<Integer>}. */
+    public java.util.Deque<Object> evalCachedEvalReturnGotoPatchPositions;
+    /** Pooled try-finally return-target stack; elements are {@code TryFinallyReturnTarget}. */
+    public java.util.Deque<Object> evalCachedTryFinallyReturnTargets;
+
     /**
      * Constructs a new EmitterContext with the specified parameters.
      *

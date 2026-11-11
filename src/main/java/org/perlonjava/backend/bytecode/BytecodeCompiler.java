@@ -663,11 +663,13 @@ public class BytecodeCompiler implements Visitor {
     // Nesting depth inside eval blocks (goto &sub from eval is prohibited)
     // 0 = not in eval block, >0 = inside eval block(s)
     int evalBlockDepth;
-    private final ArrayDeque<Integer> evalReturnTargetRegs = new ArrayDeque<>();
-    private final ArrayDeque<List<Integer>> evalReturnGotoPatchPositions = new ArrayDeque<>();
+    // Non-final + no field initializer: pooled by cached-eval constructor (round 22).
+    private Deque<Integer> evalReturnTargetRegs;
+    private Deque<List<Integer>> evalReturnGotoPatchPositions;
     // A return inside a try/finally expression must first run the finally
     // block, then escape its synthetic wrapper as a non-local return.
-    private final ArrayDeque<TryFinallyReturnTarget> tryFinallyReturnTargets = new ArrayDeque<>();
+    // Non-final + no field initializer: pooled by cached-eval constructor (round 22).
+    private Deque<TryFinallyReturnTarget> tryFinallyReturnTargets;
     private record TryFinallyReturnTarget(int valueReg, int pendingReg,
                                           List<Integer> gotoPatchPositions) {}
     // Counter tracking nesting depth inside finally blocks (control flow out of finally is prohibited)
@@ -700,6 +702,9 @@ public class BytecodeCompiler implements Visitor {
         this.savedNextRegister = new ArrayDeque<>();
         this.savedBaseRegister = new ArrayDeque<>();
         this.loopStack = new ArrayList<>(4);
+        this.evalReturnTargetRegs = new ArrayDeque<>();
+        this.evalReturnGotoPatchPositions = new ArrayDeque<>();
+        this.tryFinallyReturnTargets = new ArrayDeque<>();
     }
 
     // Legacy constructor for backward compatibility
@@ -871,6 +876,14 @@ public class BytecodeCompiler implements Visitor {
         // LoopInfo is a package-private inner type; stored as List<Object> in EmitterContext.
         this.loopStack = (List<LoopInfo>) (List<?>) evalCtx.evalCachedLoopStack;
         this.loopStack.clear();
+        // Round 22: pool the 3 auxiliary deques; all three are empty after a clean compile
+        // so clear() is O(0) and avoids the 3 ArrayDeque allocations per warm-path eval.
+        this.evalReturnTargetRegs = evalCtx.evalCachedEvalReturnTargetRegs;
+        this.evalReturnTargetRegs.clear();
+        this.evalReturnGotoPatchPositions = (Deque<List<Integer>>) (Deque<?>) evalCtx.evalCachedEvalReturnGotoPatchPositions;
+        this.evalReturnGotoPatchPositions.clear();
+        this.tryFinallyReturnTargets = (Deque<TryFinallyReturnTarget>) (Deque<?>) evalCtx.evalCachedTryFinallyReturnTargets;
+        this.tryFinallyReturnTargets.clear();
     }
 
     /**

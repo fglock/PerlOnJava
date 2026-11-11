@@ -5265,7 +5265,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             RuntimeArray args,
             int callContext) throws Throwable {
 
-        try (PerlRuntime.Binding runtimeBinding = PerlRuntime.current().bind()) {
+        // Fast path: eval STRING is always invoked from inside a running Perl program that
+        // has already bound the PerlRuntime.  Skipping the re-entrant bind/unbind avoids
+        // two object allocations (BindingFrame + Binding) and ~6 ThreadLocal operations
+        // per warm-path eval iteration.  The outer binding keeps the runtime alive.
+        // Fallback: bind normally when called from a Java context with no prior binding.
+        PerlRuntime pr = PerlRuntime.currentOrNull();
+        try (PerlRuntime.Binding runtimeBinding = pr != null ? null : PerlRuntime.current().bind()) {
         PerlLanguageProvider.CompilationLockGuard compilationLock =
                 PerlLanguageProvider.acquireCompilationLock();
         try {
@@ -5639,6 +5645,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     ctx.evalCachedSavedNextRegister = new ArrayDeque<>();
                     ctx.evalCachedSavedBaseRegister = new ArrayDeque<>();
                     ctx.evalCachedLoopStack = new ArrayList<>(4);
+                    ctx.evalCachedEvalReturnTargetRegs = new ArrayDeque<>();
+                    ctx.evalCachedEvalReturnGotoPatchPositions = new ArrayDeque<>();
+                    ctx.evalCachedTryFinallyReturnTargets = new ArrayDeque<>();
                 }
                 BytecodeCompiler compiler = new BytecodeCompiler(
                         evalCompilerOptions.fileName,
