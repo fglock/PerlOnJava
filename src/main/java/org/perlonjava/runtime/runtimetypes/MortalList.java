@@ -969,6 +969,20 @@ public class MortalList {
      */
     public static void deferDecrementIfNotCaptured(RuntimeScalar scalar) {
         if (!isActive() || scalar == null) return;
+        PerlOwnerSlot countedOwner = scalar.countedOwnerSlot();
+        if (scalar.refCountOwned
+                && ((scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                    || scalar.type == RuntimeScalarType.GLOB)
+                && scalar.value instanceof RuntimeBase referent
+                && countedOwner != null
+                && (countedOwner.kind() == PerlOwnerSlot.Kind.ARRAY_ELEMENT
+                    || countedOwner.kind() == PerlOwnerSlot.Kind.HASH_ELEMENT)
+                && scalar.isCurrentAggregateElementOwner(referent, countedOwner)) {
+            // A foreach lexical aliases the aggregate's scalar cell. Scope
+            // cleanup must not retire that cell's persistent container edge
+            // as though the alias owned a second reference.
+            return;
+        }
         if (scalar.hasClosureCaptureOwner()
                 || (scalar.referencedByScalarReference && scalar.localBindingExists)) {
             // Delegate to scopeExitCleanup which handles:
