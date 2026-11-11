@@ -5457,8 +5457,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
                 evalCompilerOptions.fileName = evalFilename;
                 warnSignatureArgsInEval(evalString, evalFilename);
-                // Create parser context
-                ScopedSymbolTable parseSymbolTable = capturedSymbolTable.snapShot();
+                // Create parser context.
+                // Warm path: reuse the pooled SST (it is at depth 1 after the previous
+                // parse() exited its scope cleanly).  Cold path or after an error:
+                // build a fresh snapshot from the eval site's captured symbol table.
+                ScopedSymbolTable parseSymbolTable =
+                        ctx.evalCachedParseSymbolTable != null
+                                ? ctx.evalCachedParseSymbolTable
+                                : capturedSymbolTable.snapShot();
                 parseSymbolTable.setCurrentPackage(
                         evalCurrentPackage, ClassRegistry.isClass(evalCurrentPackage));
                 String lexicalEvalWarningBits = parseSymbolTable.getWarningBitsString();
@@ -5621,6 +5627,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     ctx.evalCachedOurVariableRegistry = cachedOurReg.isEmpty() ? null : cachedOurReg;
                     // Create the pooled ScopedSymbolTable once; reused on every warm-path eval.
                     ctx.evalCachedSymbolTable = new ScopedSymbolTable();
+                    // Cache the parse-phase SST too (at depth 1 after parse() returned cleanly).
+                    ctx.evalCachedParseSymbolTable = parseSymbolTable;
                 }
                 BytecodeCompiler compiler = new BytecodeCompiler(
                         evalCompilerOptions.fileName,
@@ -5659,6 +5667,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
 
             } catch (Throwable e) {
+                // A parse or compile error may have left parseSymbolTable at
+                // depth > 1 (partial scope).  Invalidate so the next call
+                // gets a fresh snapshot rather than a dirty SST.
+                ctx.evalCachedParseSymbolTable = null;
                 // Dynamic `use Test::More skip_all => ...` executes its
                 // import while this eval string is parsed. Preserve exit()
                 // through the interpreter eval compiler instead of recording

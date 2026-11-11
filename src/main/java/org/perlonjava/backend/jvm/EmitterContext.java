@@ -141,6 +141,10 @@ public class EmitterContext {
      *  After each compilation symbolTable is at depth 1 with all caches cleared by exitScope(),
      *  so it can be handed back to the next BytecodeCompiler without any explicit reset. */
     public ScopedSymbolTable evalCachedSymbolTable;
+    /** Pooled ScopedSymbolTable for the parse phase of cached eval STRING; at depth 1 between
+     *  calls because parser.parse() enters exactly one scope and exits it before returning.
+     *  Null means not yet cached or invalidated by a compile error. */
+    public ScopedSymbolTable evalCachedParseSymbolTable;
 
     /**
      * Constructs a new EmitterContext with the specified parameters.
