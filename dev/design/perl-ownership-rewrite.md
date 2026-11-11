@@ -39,13 +39,18 @@ passes 4/4 under system Perl, JVM, and interpreter. System Perl validation is
 in `/tmp/issue1649-nested-file-temp-system-perl.log`; focused backend results
 are in `/tmp/issue1649-nested-file-temp-current-{jvm,interpreter}.log`.
 
-The remaining temporary-root traversal is the legacy unpaired, unblessed
-aggregate fallback. Its descendant graph may mutate through shared containers,
-so a second-query removal needs mutation-versioned snapshots. END hash discovery
-and mutable return-list traversal remain under separate owner-source audits.
-The `Internals::SvREFCNT` scan is independent of END and stays until lexical
-scalar ownership has complete coverage. RSA API limits remain tracked in
-[issue #2031](https://github.com/fglock/PerlOnJava/issues/2031).
+The 2026-11-11 callsite audit found that nested temporary-root graph traversal
+is reachable only through the legacy unpaired-release compatibility branches
+and the test-only released-weak sweep API. `walkEndBlockRoots()` is called by
+the old sweep implementation or Java fixtures; the public sweep entry points
+are compatibility no-ops. Production temporary roots and queued END callbacks
+use explicit owner identities. Keep the traversal helpers and compatibility
+fixtures until their API contracts are deliberately retired, but do not treat
+them as a remaining default-production sweep dependency. The
+`Internals::SvREFCNT` live-scalar scan is still a separate production query and
+stays until lexical scalar ownership has complete coverage. Exact-head CPAN
+acceptance and the legacy unpaired-release contract remain open. RSA API limits
+remain tracked in [issue #2031](https://github.com/fglock/PerlOnJava/issues/2031).
 
 Immediate action: keep PR #1938 open and draft, and poll checks for its latest
 published head no earlier than six minutes after each update.
@@ -149,10 +154,10 @@ ownership from one aggregate count.
 
 1. Check CI for the latest published head at six-minute or longer intervals;
    keep PR #1938 open and draft.
-2. Preserve END and temporary-root walks until owner-slot completeness and
-   mutation-safe descendant ownership have focused coverage.
-3. Keep the `SvREFCNT` scan separate from END until lexical scalar ownership
-   has a completeness guarantee.
+2. Resolve the legacy unpaired-release contract; its root recovery has no
+   production Java caller, but remains covered by compatibility fixtures.
+3. Keep the production `SvREFCNT` scan until lexical scalar ownership has a
+   completeness guarantee, and complete fresh-home exact-head CPAN acceptance.
 
 ### Open questions and blockers
 
