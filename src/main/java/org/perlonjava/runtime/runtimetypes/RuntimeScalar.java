@@ -2496,7 +2496,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     source.releaseDetachedComponentsIfUnowned();
                 }
             }
-            }
         }
         this.value = value;
         this.scalarStoredGlob = value != null;
