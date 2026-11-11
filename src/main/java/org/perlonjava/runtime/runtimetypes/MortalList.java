@@ -188,22 +188,32 @@ public class MortalList {
     }
 
     private static boolean directlyReferences(RuntimeBase value, RuntimeBase target) {
+        if (value == target) return true;
+        if (value == null) return false;
+        if (value instanceof RuntimeScalar scalar) {
+            return directlyReferences(scalar, target);
+        }
+        if (!(value instanceof RuntimeList) && !(value instanceof RuntimeArray)) return false;
         return directlyReferences(value, target, new IdentityHashMap<>());
+    }
+
+    private static boolean directlyReferences(RuntimeScalar scalar, RuntimeBase target) {
+        return !WeakRefRegistry.isweak(scalar)
+                && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                && scalar.value instanceof RuntimeBase referent
+                && referent == target;
     }
 
     private static boolean directlyReferences(RuntimeBase value, RuntimeBase target,
                                               IdentityHashMap<RuntimeBase, Boolean> visited) {
         if (value == target) return true;
         if (value == null || visited.put(value, Boolean.TRUE) != null) return false;
-        if (value instanceof RuntimeScalar scalar
-                && !WeakRefRegistry.isweak(scalar)
-                && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                && scalar.value instanceof RuntimeBase referent) {
+        if (value instanceof RuntimeScalar scalar) {
             // The reference owns its referent through the slot ledger. Its
             // descendants are owned by their own element slots; searching
             // through that graph here duplicates reference counting and can
             // traverse all Moose metadata on every lexical scope exit.
-            return referent == target;
+            return directlyReferences(scalar, target);
         }
         if (value instanceof RuntimeList list) {
             if (list instanceof RuntimeControlFlowList flow

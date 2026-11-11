@@ -85,4 +85,22 @@ class TemporaryRootOwnerSlotTest {
             assertEquals(List.of(), MortalList.snapshotTemporaryRoots());
         }
     }
+
+    @Test
+    void scalarTemporaryRootMatchesOnlyItsDirectStrongReferent() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeHash referent = new RuntimeHash();
+            RuntimeScalar reference = referent.createAnonymousReference();
+            RuntimeHash unrelated = new RuntimeHash();
+
+            MortalList.pushTemporaryRoot(reference);
+            try {
+                assertTrue(MortalList.temporaryRootDirectlyReferences(referent));
+                assertFalse(MortalList.temporaryRootDirectlyReferences(unrelated));
+            } finally {
+                MortalList.popTemporaryRoot(reference);
+            }
+        }
+    }
 }
