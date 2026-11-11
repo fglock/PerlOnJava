@@ -2401,6 +2401,11 @@ public class ReachabilityWalker {
 
     public static boolean isReachableFromTemporaryRoots(RuntimeBase target) {
         if (target == null || !MortalList.hasTemporaryRoots()) return false;
+        // Direct scalar/array/list edges are common while a caller finishes
+        // cleanup around a temporary expression. Prove those without opening
+        // the referent's full descendant graph; nested hash/object paths still
+        // use the walker below.
+        if (MortalList.temporaryRootDirectlyReferences(target)) return true;
         ReachabilityWalker walker = new ReachabilityWalker();
         java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
         for (RuntimeBase tempRoot : MortalList.snapshotTemporaryRoots()) {
