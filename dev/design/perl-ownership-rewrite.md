@@ -15,21 +15,25 @@ thread, and HTML-Tree regressions pass with corrective sweeps disabled.
 **Current checkpoint (2026-11-11):** Issue #1649 remains active. PR #1938 is
 open and draft at remote head `cb13674885`. The isolated candidate branch
 `wip/issue1649-live-master-20261111` is rebased on live `master`
-`daa2d54d81`; source commit `325eaa29f6` carries the returned-hash cleanup
-handoff fix. The rebase completed all 723 replay positions. It preserved the
-live-master eval metadata and symbol-table caches, returned-hash IO-owner
-protection, and the current 2026-11-11 CPAN report snapshot; the older
-2026-11-10 report-only snapshot was superseded and skipped.
+`daa2d54d81`; validated source is `15458951351f24e80e2eacd3162e20738c419997`.
+The rebase completed all 723 replay positions. It preserved the live-master
+eval metadata and symbol-table caches, returned-hash IO-owner protection, and
+the current 2026-11-11 CPAN report snapshot; the older 2026-11-10 report-only
+snapshot was superseded and skipped. Two rebase merge artifacts—a duplicated
+`ScopedSymbolTable` helper block and a redundant brace in the detached-glob
+constructor—were corrected before acceptance.
 
 The Exporter regression fix eagerly loads `Exporter::Heavy` from the initial
 `Exporter.pm` load. System Perl passes the new 2-assertion regression; the
 focused make gate and five affected unit files pass on both PerlOnJava backends.
 Evidence is in `/tmp/issue1649-exporter-preload-focused-make.log` and
 `/tmp/issue1649-{jvm,interpreter}-{exporter_to_level_first_lazy_require,file_stat_signature_args_warning,line_directive_core_operators,time_localtime_core,user_pwent_grent_modules}.log`.
-On the prior candidate based on stale master `da6dfe13bd`, the full `make` passed
-in 7m46 and DBIx::Class `t/100populate.t` passed 108/108 with no LeakTracer
-references. Those results do not qualify the live-master candidate; its full
-gate and exact `t/100populate.t` rerun are pending.
+On the rebased candidate, `nice -n 19 timeout 3600 make` passed in 7m28
+(`/tmp/issue1649-live-master-final-make-1545895135.log`) and DBIx::Class
+`t/100populate.t` passed all 108 assertions with no LeakTracer references
+(`/tmp/issue1649-dbix-t100-live-master-1545895135.log`). This reproduces the
+earlier DBIx pass on the exact live-master candidate; the historical four
+object-GC failures do not reproduce here.
 
 The remaining temporary-root traversal is the legacy unpaired, unblessed
 aggregate fallback. Its descendant graph may mutate through shared containers,
@@ -39,9 +43,9 @@ The `Internals::SvREFCNT` scan is independent of END and stays until lexical
 scalar ownership has complete coverage. RSA API limits remain tracked in
 [issue #2031](https://github.com/fglock/PerlOnJava/issues/2031).
 
-Immediate action: run the full gate and DBIx `t/100populate.t` against this
-candidate, then update the existing issue claim and force-update PR #1938 while
-keeping it open and draft. Check CI at least six minutes after publication.
+Immediate action: update the existing issue claim and force-update PR #1938 to
+this validated candidate while keeping it open and draft. Check CI at least six
+minutes after publication.
 
 The final callsite search found no production caller for the legacy
 `MortalList.deferDecrement` entry point; its root-recovery behavior is exercised
@@ -140,13 +144,11 @@ ownership from one aggregate count.
 
 ### Next steps
 
-1. Run `nice -n 19 timeout 3600 make` and DBIx::Class `t/100populate.t` on
-   source `325eaa29f6` plus this checkpoint update.
-2. Update the existing #1649 claim and publish the validated branch to PR #1938;
+1. Update the existing #1649 claim and publish the validated branch to PR #1938;
    keep the PR open and draft, then check CI at least six minutes later.
-3. Preserve END and temporary-root walks until owner-slot completeness and
+2. Preserve END and temporary-root walks until owner-slot completeness and
    mutation-safe descendant ownership have focused coverage.
-4. Keep the `SvREFCNT` scan separate from END until lexical scalar ownership
+3. Keep the `SvREFCNT` scan separate from END until lexical scalar ownership
    has a completeness guarantee.
 
 ### Open questions and blockers
