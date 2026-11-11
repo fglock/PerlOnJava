@@ -8,26 +8,28 @@ acceptance. Existing lifecycle, aggregate, IO, CODE, weak-reference, thread,
 and HTML-Tree regressions pass on both backends with corrective sweeps disabled.
 
 **Current checkpoint (2026-11-11):** Issue #1649 remains active. PR #1938 is
-open and draft at `02cad0390770f92cba2cebd3a9301e69abd34bd4` on
-`fix/issue1649-end-boundary-owner-proof`. The local uncommitted fast path in
-`ReachabilityWalker.isReachableFromTemporaryRoots` now returns before creating
-a walker, queue, or root snapshot when the current runtime has no temporary
+open and draft at `b65fbdd083b614621c0d4049e3aecf351569e929` on
+`fix/issue1649-end-boundary-owner-proof`. The fast path in
+`ReachabilityWalker.isReachableFromTemporaryRoots` returns before creating a
+walker, queue, or root snapshot when the current runtime has no temporary
 leases. Nonempty stacks retain the existing graph walk, including nested
 return-list mutation behavior. Full `nice -n 19 timeout 3600 make` passed on
-this working tree in 6m35 (`/tmp/issue1649-temp-root-empty-fastpath-make.log`);
+the working tree producing this commit in 6m35
+(`/tmp/issue1649-temp-root-empty-fastpath-make.log`);
 `TemporaryRootNestedReturnMutationTest` passed, and `make check-links` passed
 with 830 documents and zero errors (`/tmp/issue1649-temp-root-empty-fastpath-links.log`).
 DBIx `t/100populate.t` and system Perl each pass 108/108. A direct interpreter
 run reached only 1/108 assertions after five minutes and was stopped; it is
 inconclusive, not a failure (`/tmp/issue1649-dbix-t100-interpreter-current.log`).
 
-The last successful CI poll for head `02cad039` showed Ubuntu and Windows
-pending, individual CodeQL analyses and dependency submissions passing, and
-aggregate CodeQL failing. Later polls could not connect to GitHub's API. The
-prior head `efae36a0c7` had Ubuntu and Windows pass; its aggregate CodeQL alert
-was a high key-size finding at `CryptOpenSSLRSA.java:203`, outside the PR's
-changed files. No conclusion has been obtained about whether the current
-CodeQL failure is the same alert.
+CI for pushed head `b65fbdd083` was polled at 12:01 UTC. Ubuntu and Windows
+were pending; the CodeQL check completed neutral because one default Java/Kotlin
+configuration present on master was not found, so CodeQL could not determine
+alerts introduced by this PR. The Java analysis was pending; actions, C/C++,
+Python, Gradle submission, and Maven submission passed. The previous head
+`02cad039` had aggregate CodeQL fail, and an earlier head `efae36a0c7` had
+Ubuntu/Windows pass with a high key-size alert at `CryptOpenSSLRSA.java:203`,
+outside the PR's changed files. Poll again no earlier than 12:07 UTC.
 
 The full rescued-graph helper `walkEndBoundaryRootsExcludingRescued` is
 test-only now, while END cleanup still follows nested hash values up to depth
@@ -134,8 +136,8 @@ ownership from one aggregate count.
    tested commit when GitHub connectivity is available.
 2. Finish DBIx interpreter investigation only if a useful bounded workload can
    distinguish a runtime defect from the slow 10,000-row populate operation.
-3. Resume CI polling no sooner than six minutes after the latest attempt and
-   refresh the PR and issue checkpoint when new evidence is available.
+3. Resume CI polling no earlier than 12:07 UTC and refresh the PR and issue
+   checkpoint when new evidence is available.
 4. Keep the root-recovery compatibility adapter isolated to the legacy
    unpaired decrement API; production release paths carry exact owner tokens
    and no longer use corrective reachability sweeps.
