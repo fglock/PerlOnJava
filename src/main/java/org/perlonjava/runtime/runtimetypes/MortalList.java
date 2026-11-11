@@ -130,23 +130,35 @@ public class MortalList {
 
     public static void pushTemporaryRoot(RuntimeBase root) {
         if (root != null) {
-            state().temporaryRoots.push(root);
+            state().temporaryRoots.push(new LifecycleRuntimeState.TemporaryRootLease(root));
         }
     }
 
     public static void popTemporaryRoot(RuntimeBase root) {
         if (root != null) {
-            ArrayDeque<RuntimeBase> roots = state().temporaryRoots;
-            if (!roots.isEmpty() && roots.peek() == root) {
-                roots.pop();
-            } else {
-                roots.removeFirstOccurrence(root);
+            ArrayDeque<LifecycleRuntimeState.TemporaryRootLease> roots = state().temporaryRoots;
+            if (!roots.isEmpty() && roots.peek().root() == root) {
+                roots.pop().release();
+                return;
+            }
+            var iterator = roots.iterator();
+            while (iterator.hasNext()) {
+                LifecycleRuntimeState.TemporaryRootLease lease = iterator.next();
+                if (lease.root() == root) {
+                    iterator.remove();
+                    lease.release();
+                    return;
+                }
             }
         }
     }
 
     public static java.util.List<RuntimeBase> snapshotTemporaryRoots() {
-        return new java.util.ArrayList<>(state().temporaryRoots);
+        ArrayList<RuntimeBase> roots = new ArrayList<>();
+        for (LifecycleRuntimeState.TemporaryRootLease lease : state().temporaryRoots) {
+            roots.add(lease.root());
+        }
+        return roots;
     }
 
     public static boolean hasTemporaryRoots() {
@@ -163,13 +175,14 @@ public class MortalList {
         if (depth < 0) {
             throw new IllegalArgumentException("Invalid temporary root depth: " + depth);
         }
-        ArrayDeque<RuntimeBase> roots = state().temporaryRoots;
-        while (roots.size() > depth) roots.pop();
+        ArrayDeque<LifecycleRuntimeState.TemporaryRootLease> roots = state().temporaryRoots;
+        while (roots.size() > depth) roots.pop().release();
     }
 
     static boolean temporaryRootDirectlyReferences(RuntimeBase target) {
-        for (RuntimeBase root : state().temporaryRoots) {
-            if (directlyReferences(root, target)) return true;
+        if (target != null && target.hasTemporaryRootOwnerSlotIdentity()) return true;
+        for (LifecycleRuntimeState.TemporaryRootLease lease : state().temporaryRoots) {
+            if (directlyReferences(lease.root(), target)) return true;
         }
         return false;
     }
@@ -209,7 +222,8 @@ public class MortalList {
     }
 
     public static void clearTemporaryRoots() {
-        state().temporaryRoots.clear();
+        ArrayDeque<LifecycleRuntimeState.TemporaryRootLease> roots = state().temporaryRoots;
+        while (!roots.isEmpty()) roots.pop().release();
         invalidateAllRootSnapshots();
     }
 
@@ -2110,11 +2124,16 @@ public class MortalList {
                 // that edge does not participate in the legacy referent count.
                 // Keep weak observers until the exact stash entry is removed.
                 base.deferFinalReleaseToUncountedOwnerSlots();
-            } else if (!legacyUnpairedDecrement
-                    && base.hasCurrentUncountedPerlOwnerSlotIdentity()) {
-                // A current lexical, package, alias, or resource slot can keep
-                // the referent alive without contributing to the selective
-                // count. Carry its lifecycle obligation on that exact identity.
+            } else if (base.hasCurrentUncountedPerlOwnerSlotIdentity()
+                    && (!legacyUnpairedDecrement
+                        || base.verifiedCurrentCountedOwnerSlotCount() == 0)) {
+                // A current lexical, package, alias, or resource slot proves
+                // that the referent still has a Perl owner, even when a legacy
+                // unpaired decrement cannot identify the edge being released.
+                // For legacy releases, use this fast path only when there are
+                // no current counted slots whose count must also be restored.
+                // Carry the lifecycle obligation on the exact identity instead
+                // of rebuilding a root graph to rediscover the uncounted owner.
                 base.deferFinalReleaseToUncountedOwnerSlots();
             } else if (isFinalCountedReferentRelease(base, ownerRelease)) {
                 // This decrement retired an identified scalar/element edge.
