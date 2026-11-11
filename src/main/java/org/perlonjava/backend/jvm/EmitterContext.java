@@ -146,6 +146,24 @@ public class EmitterContext {
      *  Null means not yet cached or invalidated by a compile error. */
     public ScopedSymbolTable evalCachedParseSymbolTable;
 
+    // ---- Pooled BytecodeCompiler collections (round 21) ----
+    // Each list/deque is empty after a successful compile(); we clear() and reuse
+    // the backing arrays instead of allocating new ones on every warm-path eval.
+    /** Pooled bytecode instruction list; cleared and reused per warm-path compile. */
+    public java.util.List<Integer> evalCachedBytecodeList;
+    /** Pooled constants list (runtime objects referenced from bytecode). */
+    public java.util.List<Object>  evalCachedConstants;
+    /** Pooled string-pool list (interned string literals). */
+    public java.util.List<String>  evalCachedStringPool;
+    /** Pooled scope-entry-point stack (balanced after each compile). */
+    public java.util.Deque<Integer> evalCachedScopeIndices;
+    /** Pooled saved-register stack for scope entry (balanced after each compile). */
+    public java.util.Deque<Integer> evalCachedSavedNextRegister;
+    /** Pooled saved-base-register stack for scope entry (balanced after each compile). */
+    public java.util.Deque<Integer> evalCachedSavedBaseRegister;
+    /** Pooled loop-info stack (balanced after each compile). */
+    public java.util.List<Object>  evalCachedLoopStack;
+
     /**
      * Constructs a new EmitterContext with the specified parameters.
      *

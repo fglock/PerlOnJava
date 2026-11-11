@@ -260,9 +260,10 @@ public class BytecodeCompiler implements Visitor {
         }
     }
 
-    // Pre-allocate with reasonable initial capacity to reduce resizing
-    // Typical small eval/subroutine needs 20-50 bytecodes, 5-10 constants, 3-8 strings
-    final List<Integer> bytecode = new ArrayList<>(64);
+    // Pre-allocated with reasonable initial capacity to reduce resizing.
+    // Non-final + no field initializer: the cached-eval constructor clears and reuses
+    // pooled instances (round 21); regular constructors allocate them explicitly.
+    List<Integer> bytecode;
     // Scoped symbol table for variable tracking, package/class tracking, and eval STRING support.
     // Replaces the old variableScopes Stack + allDeclaredVariables flat map.
     // Using ScopedSymbolTable gives us proper scope-aware variable lookups and
@@ -542,18 +543,20 @@ public class BytecodeCompiler implements Visitor {
     // Source information
     final String sourceName;
     final int sourceLine;
-    private final List<Object> constants = new ArrayList<>(16);
-    private final List<String> stringPool = new ArrayList<>(16);
+    // Non-final + no field initializer: pooled on the cached eval path (round 21).
+    private List<Object> constants;
+    private List<String> stringPool;
     private final Map<String, Integer> stringPoolIndex = new HashMap<>(16);  // O(1) lookup
     private final Map<Object, Integer> constantPoolIndex = new HashMap<>(16);  // O(1) lookup
     // Scope index stack for proper ScopedSymbolTable.exitScope() calls
-    private final Deque<Integer> scopeIndices = new ArrayDeque<>();
+    // Non-final + no field initializer: pooled by cached-eval constructor (round 21).
+    private Deque<Integer> scopeIndices;
     // Stack to save/restore register state when entering/exiting scopes
-    private final Deque<Integer> savedNextRegister = new ArrayDeque<>();
-    private final Deque<Integer> savedBaseRegister = new ArrayDeque<>();
+    private Deque<Integer> savedNextRegister;
+    private Deque<Integer> savedBaseRegister;
     // Loop label stack for last/next/redo control flow
     // Each entry tracks loop boundaries and optional label
-    private final List<LoopInfo> loopStack = new ArrayList<>(4);
+    private List<LoopInfo> loopStack;
     private int loopConditionDepth;
     // Unlike the generic loop stack, this excludes synthetic eval/bare-block
     // control frames.  A goto may enter a label in a foreach body only when
@@ -680,11 +683,23 @@ public class BytecodeCompiler implements Visitor {
         this.sourceLine = sourceLine;
         this.errorUtil = errorUtil;
         this.symbolTable = new ScopedSymbolTable();
+        initMutableCollections();
 
         // Initialize symbolTable with the 3 reserved registers
         symbolTable.addVariableWithIndex("this", 0, "reserved");
         symbolTable.addVariableWithIndex("@_", 1, "reserved");
         symbolTable.addVariableWithIndex("wantarray", 2, "reserved");
+    }
+
+    /** Allocate the mutable collections used by regular (non-pooled) constructors. */
+    private void initMutableCollections() {
+        this.bytecode = new ArrayList<>(64);
+        this.constants = new ArrayList<>(16);
+        this.stringPool = new ArrayList<>(16);
+        this.scopeIndices = new ArrayDeque<>();
+        this.savedNextRegister = new ArrayDeque<>();
+        this.savedBaseRegister = new ArrayDeque<>();
+        this.loopStack = new ArrayList<>(4);
     }
 
     // Legacy constructor for backward compatibility
@@ -741,6 +756,7 @@ public class BytecodeCompiler implements Visitor {
         this.sourceLine = sourceLine;
         this.errorUtil = errorUtil;
         this.symbolTable = new ScopedSymbolTable();
+        initMutableCollections();
 
         // Initialize symbolTable with the 3 reserved registers
         symbolTable.addVariableWithIndex("this", 0, "reserved");
@@ -803,8 +819,12 @@ public class BytecodeCompiler implements Visitor {
      * Cached-path constructor for repeated eval STRING invocations from the same eval site.
      * Skips all per-variable iteration by using a pre-built SymbolTable template and
      * sharing the pre-built capturedVarIndices / capturedOurVariableNames directly.
+     * Also reuses the 7 mutable collections cached on evalCtx (round 21): clear()-ing
+     * them keeps the backing arrays across 2M+ warm-path compiles instead of
+     * allocating fresh ArrayList/ArrayDeque objects every time.
      * Called from RuntimeCode.evalStringWithInterpreter when the per-site cache is warm.
      */
+    @SuppressWarnings("unchecked")
     public BytecodeCompiler(String sourceName, int sourceLine, ErrorMessageUtil errorUtil,
                             SymbolTable cachedCompilerSymbolTable,
                             Map<String, Integer> cachedCapturedVarIndices,
@@ -812,7 +832,7 @@ public class BytecodeCompiler implements Visitor {
                             int cachedNextRegister,
                             Map<String, Integer> prebuiltVariableRegistry,
                             Map<String, String> prebuiltOurVariableRegistry,
-                            ScopedSymbolTable pooledSymbolTable) {
+                            EmitterContext evalCtx) {
         this.sourceName = sourceName;
         this.sourceLine = sourceLine;
         this.errorUtil = errorUtil;
@@ -821,7 +841,7 @@ public class BytecodeCompiler implements Visitor {
         // After the previous compilation, exitScope() left all caches cleared and
         // all pragma stacks at depth 1; compile() resets the 7 stacks it owns, and
         // useInitialTable() below resets the variable table.
-        this.symbolTable = pooledSymbolTable;
+        this.symbolTable = evalCtx.evalCachedSymbolTable;
         // One HashMap copy replaces N addVariableWithIndex calls + N SymbolEntry allocations
         symbolTable.useInitialTable(cachedCompilerSymbolTable);
         // Share read-only structures (never mutated after eval STRING construction)
@@ -833,6 +853,24 @@ public class BytecodeCompiler implements Visitor {
         // Pre-built from template once (cold path); shared read-only across warm-path evals
         this.prebuiltVariableRegistry = prebuiltVariableRegistry;
         this.prebuiltOurVariableRegistry = prebuiltOurVariableRegistry;
+        // Reuse pooled mutable collections from the per-site cache (round 21).
+        // clear() resets size to 0 but keeps the backing array, avoiding 7 allocations
+        // per warm-path eval (previously >3 KB of ArrayList/ArrayDeque per compile).
+        this.bytecode = evalCtx.evalCachedBytecodeList;
+        this.bytecode.clear();
+        this.constants = evalCtx.evalCachedConstants;
+        this.constants.clear();
+        this.stringPool = evalCtx.evalCachedStringPool;
+        this.stringPool.clear();
+        this.scopeIndices = evalCtx.evalCachedScopeIndices;
+        this.scopeIndices.clear();
+        this.savedNextRegister = evalCtx.evalCachedSavedNextRegister;
+        this.savedNextRegister.clear();
+        this.savedBaseRegister = evalCtx.evalCachedSavedBaseRegister;
+        this.savedBaseRegister.clear();
+        // LoopInfo is a package-private inner type; stored as List<Object> in EmitterContext.
+        this.loopStack = (List<LoopInfo>) (List<?>) evalCtx.evalCachedLoopStack;
+        this.loopStack.clear();
     }
 
     /**

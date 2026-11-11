@@ -5629,6 +5629,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     ctx.evalCachedSymbolTable = new ScopedSymbolTable();
                     // Cache the parse-phase SST too (at depth 1 after parse() returned cleanly).
                     ctx.evalCachedParseSymbolTable = parseSymbolTable;
+                    // Create pooled BytecodeCompiler collections once (round 21).
+                    // The cached constructor clears these before each compile, keeping the
+                    // backing arrays alive across 2M+ iterations instead of reallocating.
+                    ctx.evalCachedBytecodeList = new ArrayList<>(64);
+                    ctx.evalCachedConstants = new ArrayList<>(16);
+                    ctx.evalCachedStringPool = new ArrayList<>(16);
+                    ctx.evalCachedScopeIndices = new ArrayDeque<>();
+                    ctx.evalCachedSavedNextRegister = new ArrayDeque<>();
+                    ctx.evalCachedSavedBaseRegister = new ArrayDeque<>();
+                    ctx.evalCachedLoopStack = new ArrayList<>(4);
                 }
                 BytecodeCompiler compiler = new BytecodeCompiler(
                         evalCompilerOptions.fileName,
@@ -5640,7 +5650,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         ctx.evalCachedNextRegister,
                         ctx.evalCachedVariableRegistry,
                         ctx.evalCachedOurVariableRegistry,
-                        ctx.evalCachedSymbolTable);
+                        ctx); // round 21: ctx supplies pooledSST + 7 pooled collections
                 compiler.setCompilePackage(evalCurrentPackage);
                 interpretedCode = compiler.compile(ast, evalCtx);
                 compiledSuccessfully = true;
