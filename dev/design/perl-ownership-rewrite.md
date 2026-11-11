@@ -1,50 +1,47 @@
 # Perl-compatible ownership rewrite
 
 **Status:** Phase 1 is complete; Phase 2 is active. Default production cleanup
-no longer calls corrective reachability sweeps. Remaining boundaries are the
-legacy null-token compatibility API (no production callsites), a public sweep
-helper used by Java tests, verified owner-count alignment, the `SvREFCNT`
-live-scalar scan, and final CPAN acceptance. Existing lifecycle, aggregate, IO, CODE, weak-reference, thread,
-and HTML-Tree regressions pass on both backends with corrective sweeps disabled.
+no longer calls corrective reachability sweeps. Remaining boundaries include
+the legacy null-token compatibility API, verified owner-count alignment, the
+temporary-root fallback traversal, the `SvREFCNT` live-scalar scan, and final
+CPAN acceptance. Existing lifecycle, aggregate, IO, CODE, weak-reference,
+thread, and HTML-Tree regressions pass with corrective sweeps disabled.
 
-**Current checkpoint (2026-11-11 14:55 UTC):** Issue #1649 remains active. PR
-#1938 is open and draft at published head `323a1b1eda`; local source commit
-`b31d11a619` is Make-validated and ready to publish. It adds an exact empty
-weak-observer-registry fast path at END, after rescued-object processing, so a
-runtime with no weak observers skips the owner proof and nested hash walk while
-keeping rescued objects queued. The new test confirms both the skipped walk
-and rescue preservation. The previously published `e278301da6` fast path
-returns early on direct temporary-root edges; the empty-stack, scalar/leaf,
-and direct-array paths remain. Nested mutable `RuntimeList` and END hash walks
-remain when their semantics require indirect graph discovery.
+| Phase | Status | Acceptance |
+| --- | --- | --- |
+| Phase 1: remove default corrective sweeps | Complete | Full no-sweeps gates and lifecycle coverage are recorded below. |
+| Phase 2: retire reachability fallbacks | Active | Owner-source proofs and exact-head CPAN acceptance remain. |
 
-`nice -n 19 timeout 3600 make` passed in 12m10 on the tree that became
-`b31d11a619`; `RescuedWeakRefsEmptyRegistryFastPathTest` passed 1/1. Log:
-`/tmp/issue1649-end-empty-weak-registry-fastpath-make.log`. The earlier
-`e278301da6` candidate passed DBIx `t/100populate.t` 108/108 plus its five
-LeakTracer checks; system Perl also passed 108/108. The historical failing
-logs had all 108 imported assertions passing before three or four extra
-LeakTracer assertions retained Storage, DBH, or Schema objects. The focused
-project-owned `dev/modules/dbix_storage_weak_release.t` passes 1/1 on the b31
-tree with system Perl, JVM, and interpreter, each with no LeakTracer references;
-logs: `/tmp/issue1649-dbix-storage-weak-release-b31-{system-perl,jvm,interpreter}.log`.
-The earlier full interpreter `t/100populate.t` run reached 1/108 in five
-minutes and remains inconclusive.
+**Current checkpoint (2026-11-11 18:05 UTC):** Issue #1649 remains active.
+PR #1938 is open and draft; the local rebase candidate is `063ab6724b`, based
+on `origin/master` `6007aa65d4`. It is not yet published. The rebase exposed
+first-import failures in `Exporter::Heavy` callers. Loading Exporter's helper
+when `Exporter.pm` is first loaded keeps `export_to_level` at the expected
+caller depth. The focused make gate passes, and the five affected unit files
+pass on both JVM and interpreter backends. Logs are
+`/tmp/issue1649-exporter-preload-focused-make.log` and
+`/tmp/issue1649-{jvm,interpreter}-{exporter_to_level_first_lazy_require,file_stat_signature_args_warning,line_directive_core_operators,time_localtime_core,user_pwent_grent_modules}.log`.
 
-At 14:46 UTC, published head `323a1b1eda` still had four analyses and both
-dependency submissions passing, CodeQL failing on the unchanged RSA key-size
-call at `CryptOpenSSLRSA.java:203`, and no Gradle platform run. The prior head
-`c3c9e57a98` passed Ubuntu and Windows build/thread gates. RSA policy and
-1024-bit compatibility are tracked separately in
+On the same candidate JAR, DBIx::Class `t/100populate.t` passes 108/108 and
+LeakTracer reports no retained references. The project-owned
+`dev/modules/dbix_storage_weak_release.t` also passes on both backends with
+five references checked and none retained. Evidence:
+`/tmp/issue1649-dbix-t100-current-exporter-preload.log` and
+`/tmp/issue1649-dbix-storage-weak-release-current-{jvm,interpreter}.log`.
+The exact-head full `nice -n 19 timeout 3600 make` remains pending.
+
+The remaining temporary-root decision path is the legacy unpaired,
+unblessed-aggregate fallback. Its nested scalar, array/hash, list, control-flow,
+and code/capture edges can change while shared arrays mutate; removing its
+second negative query needs versioned snapshots across those mutation sites.
+The END hash traversal and mutable return-list traversal also remain until the
+owner-source proof is complete. `Internals::SvREFCNT` is separate from END:
+the lexical scan still lacks complete owner-slot coverage. Keep these
+traversals until focused tests establish their replacement.
+
+The latest remote PR head has not been updated with `063ab6724b`, so its CI
+status does not qualify the rebased candidate. RSA policy remains tracked in
 [issue #2031](https://github.com/fglock/PerlOnJava/issues/2031).
-
-The END cleanup traversal and nested-list traversal remain semantically needed
-with current proofs: rescued objects must stay usable through END, nested
-mutable return lists must be followed, and owner-source completeness is not
-established. The `Internals::SvREFCNT` lexical scan is separate from END and
-also lacks a completeness guarantee: a registered scalar can hold a tracked
-referent without a current owner slot. Keep these paths until the owner-source
-and slot-coverage proofs have focused tests.
 
 The final callsite search found no production caller for the legacy
 `MortalList.deferDecrement` entry point; its root-recovery behavior is exercised
@@ -143,17 +140,13 @@ ownership from one aggregate count.
 
 ### Next steps
 
-1. Publish `b31d11a619` and the checkpoint updates, keep PR #1938 open and
-   draft, and check CI again after at least six minutes.
-2. Continue the END owner-source audit. Replace nested-hash discovery only
-   after the reverse proof covers every strong source, preserves the five-hash
-   bound, distinguishes independent roots, and has focused lifecycle coverage.
-3. Keep nested temporary-list recursion while mutable return values are only
-   represented by their outer lease. A mutation-aware descendant owner model
-   is needed before removing that traversal.
-4. Leave the `SvREFCNT` live-scalar scan until lexical scalar ownership has a
-   completeness guarantee. Revisit DBIx interpreter timing only if a bounded
-   workload can isolate a runtime defect from the 10,000-row populate work.
+1. Run the full `nice -n 19 timeout 3600 make` gate on the rebased candidate.
+2. Keep PR #1938 open and draft; publish the validated commits and update its
+   issue claim, then refresh CI after at least six minutes.
+3. Preserve END and temporary-root graph walks until owner-slot completeness
+   and mutation-safe descendant ownership have focused coverage.
+4. Keep the `SvREFCNT` scan separate from END and retain it until lexical
+   scalar ownership has a completeness guarantee.
 
 ### Open questions and blockers
 
@@ -1898,12 +1891,3 @@ in 7m27. Log:
 `/private/tmp/issue-1649-owner-ledger-no-sweeps-0ff00785a.log`.
 The ordinary `restoreReachableOwnerCount` root fallback remains; its producers
 and final use cases still require audit before removal.
-
-### Next steps
-
-1. Publish this checkpoint correction to PR #1938, keeping it open and draft;
-   after at least six minutes, refresh its CI status once.
-2. Reconcile the updated issue handoff. Continue the separate `t/52leaks.t`
-   owner-slot audit only if it remains in scope.
-3. Keep the remaining owner-producer and release audit active; review and merge
-   remain for the project maintainers.
