@@ -8,8 +8,9 @@ acceptance. Existing lifecycle, aggregate, IO, CODE, weak-reference, thread,
 and HTML-Tree regressions pass on both backends with corrective sweeps disabled.
 
 **Current checkpoint (2026-11-11):** Issue #1649 remains active. PR #1938 is
-open and draft on `wip/alias-cell-ownership-20261030-185849`; the remote head
-is `9d6cd1098a`. The tested local candidate is `7628f5c39b` on
+open and draft on `wip/alias-cell-ownership-20261030-185849`; the published
+head is `944ba19e30` and is mergeable. The tested runtime candidate is
+`7628f5c39b` on
 `fix/issue1649-end-boundary-owner-proof`, two implementation commits ahead.
 Its full `nice -n 19 timeout 3600 make` gate passed in 13m21
 (`/tmp/issue1649-batch-7628-full-make.log`), and the focused issue fixture
@@ -34,10 +35,12 @@ separate compatibility path and remains until strong lexical references are
 proven to have current owner-slot identities. The earlier four Java failures
 on the first batch were fixed in `7628f5c39b`.
 
-The PR body still needs the tested-batch evidence and refreshed next steps.
-Publish the candidate, keep the PR open/draft, then wait at least six minutes
-after the push before refreshing CI status. Latest checked PR CI before this
-candidate had no Ubuntu/Windows rows and a failed aggregate CodeQL check.
+The candidate is published, the PR body and active #1649 handoff comment are
+refreshed, and current master is integrated. The merge only changed generated
+CPAN report snapshots and left runtime sources unchanged. CI for the published
+head has not yet been refreshed; wait at least six minutes after the latest
+push before polling. The last observed checks on the prior head had no
+Ubuntu/Windows rows and a failed aggregate CodeQL check.
 
 The reported Class::MethodMaker tied-array lifetime failure is covered by the
 new project-owned `refcount/generated_tied_array_handler_lifetime.t`: it
