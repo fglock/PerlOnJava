@@ -8,25 +8,27 @@ acceptance. Existing lifecycle, aggregate, IO, CODE, weak-reference, thread,
 and HTML-Tree regressions pass on both backends with corrective sweeps disabled.
 
 **Current checkpoint (2026-11-11):** Issue #1649 remains active. PR #1938 is
-open and draft on `wip/alias-cell-ownership-20261030-185849`; the published
-branch is mergeable. Runtime changes at `7628f5c39b` store temporary roots as
-exact owner leases and narrow the legacy unpaired-release fast path to direct
-live lexical scalar owners, retaining aggregate-root recovery after four
-snapshot regressions exposed that compatibility requirement. Its full
-`nice -n 19 timeout 3600 make` passed in 13m21
-(`/tmp/issue1649-batch-7628-full-make.log`); the focused issue shard passed in
-1m54 (`/tmp/issue1649-batch-7628-shard0.log`). DBIx `t/100populate.t` and
-system Perl each pass 108/108 (`/tmp/issue1649-dbix-t100-7628.log` and
+open and draft on `wip/alias-cell-ownership-20261030-185849`. Runtime changes
+at `7628f5c39b` store temporary roots as exact owner leases and narrow the
+legacy unpaired-release fast path to direct live lexical scalar owners,
+retaining aggregate-root recovery after four snapshot regressions exposed that
+compatibility requirement. Its full `nice -n 19 timeout 3600 make` passed in
+13m21 (`/tmp/issue1649-batch-7628-full-make.log`); the focused issue shard
+passed in 1m54 (`/tmp/issue1649-batch-7628-shard0.log`). DBIx
+`t/100populate.t` and system Perl each pass 108/108
+(`/tmp/issue1649-dbix-t100-7628.log` and
 `/tmp/issue1649-dbix-t100-system-perl.log`). An interpreter attempt was stopped
 after 1/108 assertions in about 90s and is not a result.
 
 A new `TemporaryRootNestedReturnMutationTest` records that changing a
 reference inside a `RuntimeControlFlowList` return list changes which referent
-the active temporary root protects. It passes in full Make on immutable commit
-`d42c4bd885` in 8m47
-(`/tmp/issue1649-temp-root-nested-return-mutation-committed-make.log`). The
-fallback remains necessary; this regression locks the mutation behavior a
-future owner-edge implementation must preserve.
+the active temporary root protects. It passes in full Make on immutable merge
+commit `4f373fe835` in 9m12
+(`/tmp/issue1649-master-eval-sync-4f373fe-make.log`). That merge integrates
+master's eval-STRING compiler optimizations; the BytecodeCompiler conflict was
+resolved by retaining `padConstants` while accepting the pooled compiler
+collections. The fallback remains necessary; this regression locks the
+mutation behavior a future owner-edge implementation must preserve.
 
 The remaining `temporaryRootDirectlyReferences` traversal is required for
 targets nested in temporary expression lists and control-flow return lists;
@@ -40,14 +42,14 @@ separate compatibility path and remains until strong lexical references are
 proven to have current owner-slot identities. The earlier four Java failures
 on the first batch were fixed in `7628f5c39b`.
 
-Current master is integrated; the merge only changed generated CPAN report
-snapshots and removed those stale files from the PR diff. Platform CI on the
-previous published head (`efae36a0c7`, before this regression) passed: Ubuntu
-36m38 and Windows 41m41. Individual CodeQL analyses and dependency submissions
+Master's report refresh and eval-STRING optimization merges are integrated.
+Platform CI on the previous published head (`efae36a0c7`) passed: Ubuntu 36m38
+and Windows 41m41. Individual CodeQL analyses and dependency submissions
 passed; aggregate CodeQL fails on a high key-size alert at
-`CryptOpenSSLRSA.java:203`, outside the PR's changed files. Publish the
-validated test/checkpoint commits, keep the PR draft, and wait at least six
-minutes before checking CI for the new head.
+`CryptOpenSSLRSA.java:203`, outside the PR's changed files. The latest local
+merge commit passes the full Make gate. Publish it with the checkpoint, keep
+the PR draft, and wait at least six minutes before checking CI for the new
+head.
 
 The reported Class::MethodMaker tied-array lifetime failure is covered by the
 new project-owned `refcount/generated_tied_array_handler_lifetime.t`: it
