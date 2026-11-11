@@ -31,6 +31,14 @@ clears weak observers only for rescue-only graphs. It preserves package,
 queued-END, active-code, and independently live owner-slot roots while leaving
 strong Perl edges intact. Internal owner slots whose sources are in the rescued
 graph do not make a cycle an independent root.
+
+The separate temporary-root graph fallback now traverses `RuntimeList` values
+in `ReachabilityWalker.bfs`, and `findPathTo` reports the same list edges. A
+rooted list result therefore preserves its strong referents during that legacy
+fallback and remains visible in diagnostics. The focused
+`TemporaryReturnOwnerTraversalTest` passes on commit `9a0869374d`, as does the
+full `nice -n 19 timeout 3600 make` gate in 6m59; log:
+`/tmp/issue1649-pr1938-temp-root-list-make.log`.
 `RescuedWeakRefsBeforeEndTest` covers rescue-only cycles, direct and nested
 independent roots, active and queued END captures, and an external live owner
 slot. The focused unit gate passes in 29 seconds on `fa6eae06`, log:
