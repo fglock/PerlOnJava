@@ -1962,6 +1962,15 @@ public class GlobalVariable {
      */
     public static RuntimeArray getGlobalArray(String key) {
         boolean isaArray = key.endsWith("::ISA");
+        // English exports @ARG as a typeglob alias for @_.  Resolve the alias
+        // to the active call frame before consulting the package-global array
+        // table; @_ itself is frame-local and must not be copied into a stash
+        // slot when accessed through an alias.
+        String canonicalGlobName = resolveGlobAlias(key);
+        if (!canonicalGlobName.equals(key) && canonicalGlobName.endsWith("::_")) {
+            RuntimeArray currentArgs = RuntimeCode.getCurrentArgs();
+            if (currentArgs != null) return currentArgs;
+        }
         if (!stashAliases.isEmpty()) {
             String resolvedKey = resolveAliasedFqn(key);
             if (resolvedKey != key) {

@@ -129,7 +129,11 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
                 }
             }
         } else if (this.mode == Id.STASH) {
-            String prefix = stashGlobNameFor(String.valueOf(key));
+            String name = String.valueOf(key);
+            String prefix = stashGlobNameFor(name);
+            if (isFreedStashNamespace(prefix)) {
+                return new RuntimeStashEntry(prefix, false);
+            }
             // System.out.println("Get Key " + prefix);
             if (containsNamespace(GlobalVariable.scalarSlots(), prefix) ||
                     containsNamespace(GlobalVariable.globalArrays, prefix) ||
@@ -305,6 +309,11 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
                 && !hasNonScalarSortSlot(namespace + entryKey)) {
             return;
         }
+        if (entryKey.endsWith("::")
+                && GlobalVariable.isStashPackageFreed(
+                        stashGlobNameForEntryKey(namespace, entryKey, key))) {
+            return;
+        }
         if (uniqueKeys.add(entryKey)) {
             entries.add(new StashEntryName(entryKey, stashGlobNameForEntryKey(namespace, entryKey, key)));
         }
@@ -476,6 +485,9 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
 
     private boolean stashContainsEntry(String name) {
         String prefix = namespace + name;
+        if (isFreedStashNamespace(prefix)) {
+            return false;
+        }
         if (containsAnySlotWithPrefix(prefix)) {
             return true;
         }
@@ -502,6 +514,9 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
     }
 
     private boolean containsAnySlotWithPrefix(String prefix) {
+        if (isFreedStashNamespace(prefix)) {
+            return false;
+        }
         return containsNamespace(GlobalVariable.scalarSlots(), prefix) ||
                 containsNamespace(GlobalVariable.globalArrays, prefix) ||
                 containsNamespace(GlobalVariable.globalHashes, prefix) ||
@@ -509,6 +524,10 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
                 GlobalVariable.isEvalPromotedCompactStashEntry(prefix) ||
                 GlobalVariable.containsVisibleGlobalIORefWithPrefix(prefix) ||
                 containsNamespace(GlobalVariable.globalFormatRefs, prefix);
+    }
+
+    private static boolean isFreedStashNamespace(String prefix) {
+        return prefix.endsWith("::") && GlobalVariable.isStashPackageFreed(prefix);
     }
 
     private boolean containsVisibleCodeWithPrefix(String prefix) {

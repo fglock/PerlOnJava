@@ -5,6 +5,9 @@ import org.perlonjava.runtime.debugger.DebugHooks;
 import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 
+import java.util.HashSet;
+import java.util.IdentityHashMap;
+import java.util.Set;
 import java.util.function.Function;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeContextType.SCALAR;
@@ -53,6 +56,38 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
  */
 public class OverloadContext {
     private static final boolean TRACE_OVERLOAD_CONTEXT = false;
+
+    /**
+     * Active operator handlers, keyed by Perl referent identity and overload
+     * name. Perl suppresses redispatch of the same active handler while still
+     * allowing other overloads and other objects to dispatch normally.
+     */
+    private static final ThreadLocal<IdentityHashMap<Object, Set<String>>> ACTIVE_OVERLOADS =
+            ThreadLocal.withInitial(IdentityHashMap::new);
+
+    private static Object overloadReceiverIdentity(RuntimeArray args) {
+        if (args == null || args.size() == 0) return null;
+        RuntimeScalar receiver = args.get(0);
+        return receiver.value != null ? receiver.value : receiver;
+    }
+
+    private static boolean enterActiveOverload(Object receiver, String methodName) {
+        if (receiver == null) return true;
+        IdentityHashMap<Object, Set<String>> active = ACTIVE_OVERLOADS.get();
+        Set<String> methods = active.computeIfAbsent(receiver, ignored -> new HashSet<>());
+        return methods.add(methodName);
+    }
+
+    private static void leaveActiveOverload(Object receiver, String methodName) {
+        if (receiver == null) return;
+        IdentityHashMap<Object, Set<String>> active = ACTIVE_OVERLOADS.get();
+        Set<String> methods = active.get(receiver);
+        if (methods != null) {
+            methods.remove(methodName);
+            if (methods.isEmpty()) active.remove(receiver);
+        }
+        if (active.isEmpty()) ACTIVE_OVERLOADS.remove();
+    }
 
     /**
      * The Perl class name of the blessed object
@@ -587,32 +622,40 @@ public class OverloadContext {
             }
         }
         
-        // Execute found method with provided arguments
-        // Perl's debugger observes overloaded method calls through DB::sub just
-        // like ordinary subroutine calls. Routing here also lets the debugger's
-        // recursion guard suppress overloads invoked from inside DB::sub itself.
-        RuntimeList result = DebugHooks.dispatchOverloadedSubroutine(
-                perlMethod, perlMethodArgs, SCALAR, perlClassName + "::" + methodName);
-        if (result == null) {
-            result = RuntimeCode.apply(perlMethod, perlMethodArgs, SCALAR);
+        Object receiverIdentity = overloadReceiverIdentity(perlMethodArgs);
+        if (!enterActiveOverload(receiverIdentity, methodName)) {
+            return null;
         }
-        
-        // Handle TAILCALL markers from `goto $coderef` with trampoline loop
-        while (result instanceof RuntimeControlFlowList) {
-            RuntimeControlFlowList flow = (RuntimeControlFlowList) result;
-            if (flow.getControlFlowType() == ControlFlowType.TAILCALL) {
-                // Execute the tail call
-                RuntimeScalar codeRef = flow.getTailCallCodeRef();
-                RuntimeArray args = flow.getTailCallArgs();
-                result = RuntimeCode.apply(codeRef, args, SCALAR);
-            } else {
-                // Not a TAILCALL - other control flow types (LAST/NEXT/REDO/GOTO)
-                // should propagate up, but for overload context we just return the first element
-                break;
+        try {
+            // Execute found method with provided arguments
+            // Perl's debugger observes overloaded method calls through DB::sub just
+            // like ordinary subroutine calls. Routing here also lets the debugger's
+            // recursion guard suppress overloads invoked from inside DB::sub itself.
+            RuntimeList result = DebugHooks.dispatchOverloadedSubroutine(
+                    perlMethod, perlMethodArgs, SCALAR, perlClassName + "::" + methodName);
+            if (result == null) {
+                result = RuntimeCode.apply(perlMethod, perlMethodArgs, SCALAR);
             }
+
+            // Handle TAILCALL markers from `goto $coderef` with trampoline loop
+            while (result instanceof RuntimeControlFlowList) {
+                RuntimeControlFlowList flow = (RuntimeControlFlowList) result;
+                if (flow.getControlFlowType() == ControlFlowType.TAILCALL) {
+                    // Execute the tail call
+                    RuntimeScalar codeRef = flow.getTailCallCodeRef();
+                    RuntimeArray args = flow.getTailCallArgs();
+                    result = RuntimeCode.apply(codeRef, args, SCALAR);
+                } else {
+                    // Not a TAILCALL - other control flow types (LAST/NEXT/REDO/GOTO)
+                    // should propagate up, but for overload context we just return the first element
+                    break;
+                }
+            }
+
+            return result.getFirst();
+        } finally {
+            leaveActiveOverload(receiverIdentity, methodName);
         }
-        
-        return result.getFirst();
     }
     
     /**
