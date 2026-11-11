@@ -14,7 +14,8 @@ which fixes an implicit sub return leaking a temporary root: `prepareScopeReturn
 replaces the return local after `EmitBlock` pushes it, so cleanup previously
 popped a different value. A project unit regression failed on the exact PR
 parent and passes after the emitter retains the pushed object separately;
-parent log: `/private/tmp/issue1649-rescued-owner-parent-final.log`.
+parent log: `/private/tmp/issue1649-rescued-owner-parent-final.log`. Local code
+commits `c9ebc735` and `fa6eae06` are based on PR head and remain unpublished.
 
 The remaining temporary-root traversal is a live identity scan used by four
 cleanup paths. It descends expression-list/array wrappers and checks each
@@ -34,8 +35,10 @@ independent roots, active and queued END captures, and an external live owner
 slot. The focused unit gate passes in 29 seconds on `fa6eae06`, log:
 `/private/tmp/issue1649-rescued-owner-review-focused.log`. No-sweeps DBIx
 `t/61findnot.t` and `t/100populate.t` pass 25/25 and 108/108; logs:
-`/private/tmp/issue1649-dbix-t61-review3.log` and
-`/private/tmp/issue1649-dbix-t100-review3.log`.
+`/private/tmp/issue1649-dbix-t61-full-gate.log` and
+`/private/tmp/issue1649-dbix-t100-full-gate.log`. The full no-sweeps
+`nice -n 19 timeout 3600 make` passes in 7m15 on `4d0b2363`; log:
+`/private/tmp/issue1649-rescued-owner-full-make.log`.
 
 The remaining `t/52leaks.t` failure is separate and precedes END. The test's
 known rescued Schema → Storage → DBH → CachedKids → bound_params cycle accounts
@@ -55,11 +58,10 @@ production behavior.
 The last observed PR checks have Ubuntu and Windows passing; aggregate CodeQL
 reports the unchanged RSA-key-size alert. GitHub issue-comment API access is
 currently failing, so current claims could not be reconciled for publication.
-Next: run one immutable full `nice -n 19 timeout 3600 make`, then repeat targeted
-DBIx acceptance on its JAR. `make check-links` passes, 574 checked links and no
-errors; log: `/private/tmp/issue1649-rescued-owner-checklinks-final.log`. Trace
-the rootless `t/52leaks.t` owner as a separate acceptance blocker. Publish only
-after issue claim state is available; keep PR #1938 open/draft.
+`make check-links` passes, 574 checked links and no errors; log:
+`/private/tmp/issue1649-rescued-owner-checklinks-final.log`. Next: trace the
+rootless `t/52leaks.t` owner as a separate acceptance blocker, recheck current
+issue claims before publishing the local branch, and keep PR #1938 open/draft.
 
 The reported Class::MethodMaker tied-array lifetime failure is covered by the
 new project-owned `refcount/generated_tied_array_handler_lifetime.t`: it
