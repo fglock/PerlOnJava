@@ -13,9 +13,9 @@ thread, and HTML-Tree regressions pass with corrective sweeps disabled.
 | Phase 2: retire reachability fallbacks | Active | Owner-source proofs and exact-head CPAN acceptance remain. |
 
 **Current checkpoint (2026-11-11):** Issue #1649 remains active. PR #1938 is
-open and draft at remote head `cdc75a1d51`; the validated local candidate is
-pending publication. Branch `wip/issue1649-live-master-20261111` is rebased on
-live `master` `3590efc959`; current runtime and test source is
+open and draft at head `4af1bde6f5`. Branch
+`wip/issue1649-live-master-20261111` is rebased on live `master`
+`3590efc959`; runtime and test source is
 `afbccd283febd27fb953dabf977d583df4d79585`. The rebase completed all 726 replay
 positions. It preserved the live-master eval metadata and symbol-table caches,
 returned-hash IO-owner protection, parser fixes, and the current 2026-11-11
@@ -48,9 +48,8 @@ The `Internals::SvREFCNT` scan is independent of END and stays until lexical
 scalar ownership has complete coverage. RSA API limits remain tracked in
 [issue #2031](https://github.com/fglock/PerlOnJava/issues/2031).
 
-Immediate action: update the existing issue claim and force-update PR #1938 to
-this validated candidate while keeping it open and draft. Check CI at least six
-minutes after publication.
+Immediate action: keep PR #1938 open and draft, and poll checks for its latest
+published head no earlier than six minutes after each update.
 
 The final callsite search found no production caller for the legacy
 `MortalList.deferDecrement` entry point; its root-recovery behavior is exercised
@@ -149,8 +148,8 @@ ownership from one aggregate count.
 
 ### Next steps
 
-1. Update the existing #1649 claim and publish the validated branch to PR #1938;
-   keep the PR open and draft, then check CI at least six minutes later.
+1. Check CI for the latest published head at six-minute or longer intervals;
+   keep PR #1938 open and draft.
 2. Preserve END and temporary-root walks until owner-slot completeness and
    mutation-safe descendant ownership have focused coverage.
 3. Keep the `SvREFCNT` scan separate from END until lexical scalar ownership
