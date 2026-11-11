@@ -26,12 +26,14 @@ assertions after five minutes and
 was stopped; it is inconclusive, not a failure
 (`/tmp/issue1649-dbix-t100-interpreter-current.log`).
 
-The published PR head `190d64c742` was polled at 12:16 UTC. Ubuntu and Windows
-were pending; CodeQL failed on the high RSA key-size alert at unchanged
-`CryptOpenSSLRSA.java:203`; all four individual analyses and both dependency
-submissions passed. The later head `7690d56977` adds this checkpoint and has
-not yet been polled. The alert is outside the PR's changed files. Poll the
-current head no earlier than 12:26 UTC.
+The published PR head `c3c9e57a98` was polled at 12:53 UTC. Ubuntu and Windows
+were still running their Make steps; CodeQL failed on the high RSA key-size
+alert at unchanged `CryptOpenSSLRSA.java:203`; all four individual analyses
+and both dependency submissions passed. The alert is outside the PR's changed
+files. It targets the caller-supplied bit length, and the compatibility test
+`crypt_openssl_rsa_pkcs1_padding.t` requests 1024 bits; changing that minimum
+would alter the existing API and is outside this ownership batch. Poll again no
+earlier than 12:59 UTC.
 
 The full rescued-graph helper `walkEndBoundaryRootsExcludingRescued` is
 test-only now, while END cleanup still follows nested hash values up to depth
@@ -134,7 +136,7 @@ ownership from one aggregate count.
 
 ### Next steps
 
-1. Poll CI for the latest PR head no earlier than 12:26 UTC; keep PR #1938 open
+1. Poll CI for the latest PR head no earlier than 12:59 UTC; keep PR #1938 open
    and draft.
 2. Finish DBIx interpreter investigation only if a useful bounded workload can
    distinguish a runtime defect from the slow 10,000-row populate operation.
