@@ -1216,6 +1216,7 @@ public class BytecodeCompiler implements Visitor {
             emit(preserveImplicitReturn
                     ? Opcodes.RETURN_SCOPE_CLEANUP_HASH : Opcodes.SCOPE_EXIT_CLEANUP_HASH);
             emitReg(reg);
+            if (preserveImplicitReturn) emitReg(lastResultReg);
         }
         for (int reg : arrayIndices) {
             emit(preserveImplicitReturn

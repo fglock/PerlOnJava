@@ -970,6 +970,15 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
 
     private RuntimeScalar independentSlot(String key, RuntimeScalar value) {
         if (value == null) return new RuntimeScalar();
+        // Hash elements are independent Perl scalar slots. A non-socket
+        // anonymous IO value needs a slot owner of its own so cleanup of the
+        // expression temporary cannot close the handle still stored here.
+        if (value.type == RuntimeScalarType.GLOBREFERENCE
+                && value.value instanceof RuntimeGlob) {
+            RuntimeScalar slot = independentSlotCopy(value);
+            RuntimeScalar.retainUnstashedFileIoForHashSlot(slot);
+            return slot;
+        }
         // A scalar slot may be shared by a pure-Perl map operation while its
         // referent is intentionally shared. Keep the referent, but allocate a
         // new slot whenever this wrapper already belongs to another hash (or

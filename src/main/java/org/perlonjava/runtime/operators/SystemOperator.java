@@ -6,6 +6,7 @@ import org.perlonjava.runtime.ForkOpenState;
 import org.perlonjava.runtime.io.IOHandle;
 import org.perlonjava.runtime.io.LayeredIOHandle;
 import org.perlonjava.runtime.io.ProcessInputHandle;
+import org.perlonjava.runtime.io.StandardIO;
 import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.nativ.NativeUtils;
 import org.perlonjava.runtime.nativ.ffm.FFMPosix;
@@ -16,6 +17,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.ByteArrayInputStream;
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
@@ -921,9 +923,7 @@ public class SystemOperator {
 
             boolean inheritedTerminalStdin = inheritTerminalStdin(processBuilder);
             process = processBuilder.start();
-            if (!inheritedTerminalStdin) {
-                closeChildStdin(process);
-            }
+            forwardOrCloseChildStdin(process, inheritedTerminalStdin);
 
             final Process finalProcess = process;
             final StringBuilder finalOutput = output;
@@ -1019,9 +1019,7 @@ public class SystemOperator {
 
             boolean inheritedTerminalStdin = inheritTerminalStdin(processBuilder);
             process = processBuilder.start();
-            if (!inheritedTerminalStdin) {
-                closeChildStdin(process);
-            }
+            forwardOrCloseChildStdin(process, inheritedTerminalStdin);
 
             // Route stdout and stderr through Perl handles so that
             // Perl-level redirections are honored
@@ -1077,9 +1075,7 @@ public class SystemOperator {
 
             boolean inheritedTerminalStdin = inheritTerminalStdin(processBuilder);
             process = processBuilder.start();
-            if (!inheritedTerminalStdin) {
-                closeChildStdin(process);
-            }
+            forwardOrCloseChildStdin(process, inheritedTerminalStdin);
 
             final Process finalProcess = process;
             final StringBuilder finalOutput = output;
@@ -1182,6 +1178,13 @@ public class SystemOperator {
     }
 
     private static boolean inheritTerminalStdin(ProcessBuilder processBuilder) {
+        RuntimeIO perlStdin = RuntimeIO.getStdin();
+        if (perlStdin != null && perlStdin.ioHandle != null
+                && !(perlStdin.ioHandle instanceof StandardIO)) {
+            // Perl may have redirected fd 0 to a file or duplicate. The JVM's
+            // native fd 0 is then stale; forward the current Perl handle below.
+            return false;
+        }
         try {
             if (FFMPosix.get().isatty(0) != 0) {
                 processBuilder.redirectInput(ProcessBuilder.Redirect.INHERIT);
@@ -1191,6 +1194,34 @@ public class SystemOperator {
             // Keep non-interactive pipe behavior if the platform cannot check fd 0.
         }
         return false;
+    }
+
+    private static void forwardOrCloseChildStdin(Process process, boolean inheritedTerminalStdin) {
+        if (inheritedTerminalStdin) {
+            return;
+        }
+        RuntimeIO perlStdin = RuntimeIO.getStdin();
+        IOHandle input = perlStdin == null ? null : perlStdin.ioHandle;
+        if (input == null || input instanceof StandardIO) {
+            closeChildStdin(process);
+            return;
+        }
+
+        Thread inputThread = new Thread(() -> {
+            try (OutputStream childInput = process.getOutputStream()) {
+                while (true) {
+                    String chunk = input.read(8192, StandardCharsets.ISO_8859_1).toString();
+                    if (chunk.isEmpty()) {
+                        break;
+                    }
+                    childInput.write(chunk.getBytes(StandardCharsets.ISO_8859_1));
+                }
+            } catch (IOException ignored) {
+                // A child may exit before consuming all redirected input.
+            }
+        }, "perlonjava-child-stdin");
+        inputThread.setDaemon(true);
+        inputThread.start();
     }
 
     /**

@@ -702,9 +702,10 @@ public class BytecodeInterpreter {
 
                             case Opcodes.RETURN_SCOPE_CLEANUP_HASH -> {
                                 int reg = bytecode[pc++];
+                                int returnReg = bytecode[pc++];
                                 RuntimeBase slot = registers[reg];
                                 if (slot instanceof RuntimeHash rh) {
-                                    MortalList.scopeExitCleanupHash(rh);
+                                    MortalList.scopeExitCleanupHash(rh, registers[returnReg]);
                                 }
                             }
 

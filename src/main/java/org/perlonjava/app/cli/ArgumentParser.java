@@ -361,12 +361,28 @@ public class ArgumentParser {
         if (tokens.length == 0) {
             return;
         }
+        if (isPerlInterpreterWithTrailingSemicolon(tokens[0])) {
+            // Some test scripts have a typo in the interpreter token (for
+            // example, "#!/usr/bin/perl;"). When PerlOnJava is already
+            // running the script, treat that token as the active Perl
+            // interpreter instead of trying to exec a path ending in ';'.
+            processPerlShebangSwitches(
+                    shebangLine.replaceFirst(";(?=\\s|$)", ""), parsedArgs);
+            return;
+        }
         if (isPerlOnJavaExecutable(Paths.get(tokens[0]))) {
             // Same binary as this runtime (e.g. "#!/path/to/jperl"): compile here; do not re-exec.
             return;
         }
         List<String> cmd = buildShebangCommand(tokens);
         delegateToShebangInterpreter(args, cmd, index);
+    }
+
+    private static boolean isPerlInterpreterWithTrailingSemicolon(String token) {
+        int separator = Math.max(token.lastIndexOf('/'), token.lastIndexOf('\\'));
+        String name = token.substring(separator + 1);
+        return Pattern.compile("perl(?:\\d+(?:\\.\\d+)*)?(?:\\.exe)?;",
+                Pattern.CASE_INSENSITIVE).matcher(name).matches();
     }
 
     /** Apply Perl switches from an in-memory script's shebang without invoking an alternate interpreter. */

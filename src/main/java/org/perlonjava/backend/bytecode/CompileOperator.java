@@ -1445,6 +1445,7 @@ public class CompileOperator {
                 for (int idx : hashIdxs) {
                     bytecodeCompiler.emit(Opcodes.RETURN_SCOPE_CLEANUP_HASH);
                     bytecodeCompiler.emitReg(idx);
+                    bytecodeCompiler.emitReg(exprReg);
                 }
                 java.util.List<Integer> arrayIdxs = bytecodeCompiler.symbolTable.getMyArrayIndicesInScope(0);
                 for (int idx : arrayIdxs) {

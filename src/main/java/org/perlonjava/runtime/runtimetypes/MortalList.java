@@ -651,6 +651,11 @@ public class MortalList {
      * arrays/hashes). Called at scope exit for {@code my %hash} variables.
      */
     public static void scopeExitCleanupHash(RuntimeHash hash) {
+        scopeExitCleanupHash(hash, null);
+    }
+
+    /** Scope-exit cleanup with a return value whose hash references must survive. */
+    public static void scopeExitCleanupHash(RuntimeHash hash, RuntimeBase returned) {
         if (!isActive() || hash == null) return;
         // An aggregate borrowed through @_ belongs to its caller.  Its
         // current frame can end while the caller's lexical is still live;
@@ -669,7 +674,11 @@ public class MortalList {
             hash.scopeExited = true;
             return;
         }
+        if (directlyReferences(returned, hash)) return;
         // A live reference keeps the container and its IO element slots alive.
+        // Do not release anonymous filehandle ownership before this check: a
+        // returned \%hash can keep its slots alive even when the interpreter's
+        // selective refcount has not been incremented.
         if (hash.refCount > 0 || temporaryRootDirectlyReferences(hash)) return;
         for (RuntimeScalar val : hash.elements.values()) {
             RuntimeScalar.releaseIoOwner(val);

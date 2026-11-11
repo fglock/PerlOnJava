@@ -85,7 +85,7 @@ sub new_from_fd {
 
 sub close {
     my $fh = shift;
-    close($fh);
+    CORE::close($fh);
 }
 
 sub eof {
@@ -298,7 +298,7 @@ sub fdopen {
     # IO::Handle has no stream yet, and CORE::close would emit the spurious
     # "close() on unopened filehandle" warning that core IO::Handle::fdopen
     # avoids.
-    close($fh) if defined fileno($fh);
+    CORE::close($fh) if defined fileno($fh);
 
     # Duplicate the file descriptor
     if (open($fh, "$open_mode&=", $fd)) {
@@ -498,7 +498,7 @@ sub DESTROY {
     # alone cannot close a blessed IO::Handle when its Perl owner goes away.
     # Close here to preserve Perl's scope-exit behavior for IO::Socket objects
     # and other handles whose IO slot lives on the blessed glob.
-    close($fh) if defined fileno($fh);
+    CORE::close($fh) if defined fileno($fh);
 }
 
 1;
