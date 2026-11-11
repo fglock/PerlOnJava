@@ -488,6 +488,9 @@ public class EmitVariable {
 
             // Note: @_ is lexical in PerlOnJava (unlike standard Perl where it's package-scoped)
             boolean isDeclared = symbolEntry != null;
+            String ourPackageReference = node.getAnnotation("ourPackage") instanceof String packageName
+                    ? packageName
+                    : null;
 
             // A variable is lexical if it was declared with my/state.
             // 'our' variables have special handling:
@@ -512,6 +515,8 @@ public class EmitVariable {
                 // If there's a symbol entry (e.g., from 'our' declaration), use its package
                 if (symbolEntry != null) {
                     name = NameNormalizer.normalizeVariableName(name, symbolEntry.perlPackage());
+                } else if (ourPackageReference != null) {
+                    name = NameNormalizer.normalizeVariableName(name, ourPackageReference);
                 }
 
                 // ===== STRICT VARS LOGIC =====
@@ -551,7 +556,9 @@ public class EmitVariable {
                 }
 
                 // Check if this is an 'our' declaration (not in BEGIN capture) - these create global vars
-                boolean isOurDeclaration = isDeclared && symbolEntry.decl().equals("our") && !isOurInBeginCapture;
+                boolean isOurDeclaration = (isDeclared && symbolEntry.decl().equals("our")
+                        && !isOurInBeginCapture)
+                        || ourPackageReference != null;
 
                 // Compute createIfNotExists flag - determines if variable can be auto-vivified
                 boolean createIfNotExists = name.contains("::")  // Fully qualified: $Package::var

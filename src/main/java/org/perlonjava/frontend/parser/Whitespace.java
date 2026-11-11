@@ -122,7 +122,7 @@ public class Whitespace {
                     return tokenIndex; // Stop processing and return current index
 
                 case IDENTIFIER:
-                    if (token.text.equals("__END__") || token.text.equals("__DATA__")) {
+                    if (DataSection.isSourceMarker(tokens, tokenIndex)) {
                         return DataSection.parseDataSection(parser, tokenIndex, tokens, token);
                     }
                     return tokenIndex; // Stop processing and return current index

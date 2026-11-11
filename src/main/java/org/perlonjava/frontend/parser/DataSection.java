@@ -176,6 +176,36 @@ public class DataSection {
     }
 
     /**
+     * Returns whether an identifier token is a source-level DATA/END marker.
+     * Markers are recognized only at the start of a physical line (optionally
+     * qualified with CORE::) and when they occupy the rest of that line.
+     */
+    static boolean isSourceMarker(List<LexerToken> tokens, int markerIndex) {
+        if (markerIndex < 0 || markerIndex >= tokens.size()) return false;
+        LexerToken marker = tokens.get(markerIndex);
+        if (marker.type != LexerTokenType.IDENTIFIER
+                || !(marker.text.equals("__DATA__") || marker.text.equals("__END__"))) {
+            return false;
+        }
+
+        int lineStartToken = markerIndex;
+        if (markerIndex >= 2
+                && tokens.get(markerIndex - 1).type == LexerTokenType.OPERATOR
+                && tokens.get(markerIndex - 1).text.equals("::")
+                && tokens.get(markerIndex - 2).type == LexerTokenType.IDENTIFIER
+                && tokens.get(markerIndex - 2).text.equals("CORE")) {
+            lineStartToken = markerIndex - 2;
+        }
+        for (int i = lineStartToken - 1; i >= 0; i--) {
+            LexerToken previous = tokens.get(i);
+            if (previous.type == LexerTokenType.WHITESPACE) continue;
+            if (previous.type == LexerTokenType.NEWLINE) break;
+            return false;
+        }
+        return isStandaloneMarker(tokens, markerIndex);
+    }
+
+    /**
      * Reads a possibly qualified package name starting at {@code index}.
      *
      * @param tokens the token list
