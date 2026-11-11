@@ -7,28 +7,35 @@ helper used by Java tests, verified owner-count alignment, the `SvREFCNT`
 live-scalar scan, and final CPAN acceptance. Existing lifecycle, aggregate, IO, CODE, weak-reference, thread,
 and HTML-Tree regressions pass on both backends with corrective sweeps disabled.
 
-**Current checkpoint (2026-11-11 14:10 UTC):** Issue #1649 remains active. PR
-#1938 is open and draft at published head `1ad70b2524`. Local source commit
-`e278301da6` adds a positive fast path to temporary-root reachability: direct
-strong scalar/array/list edges return before walking the referent's descendants;
-nested object paths still use the graph walker. The focused test proves a direct
-array edge does not enumerate the referent hash. The earlier empty-stack,
-scalar/leaf and array-root fast paths remain in place, with nested mutable
-`RuntimeList` traversal retained.
+**Current checkpoint (2026-11-11 14:55 UTC):** Issue #1649 remains active. PR
+#1938 is open and draft at published head `323a1b1eda`; local source commit
+`b31d11a619` is Make-validated and ready to publish. It adds an exact empty
+weak-observer-registry fast path at END, after rescued-object processing, so a
+runtime with no weak observers skips the owner proof and nested hash walk while
+keeping rescued objects queued. The new test confirms both the skipped walk
+and rescue preservation. The previously published `e278301da6` fast path
+returns early on direct temporary-root edges; the empty-stack, scalar/leaf,
+and direct-array paths remain. Nested mutable `RuntimeList` and END hash walks
+remain when their semantics require indirect graph discovery.
 
-`nice -n 19 timeout 3600 make` passed in 11m56 on the tree that became
-`e278301da6`; `TemporaryRootOwnerSlotTest` passed 6/6. Log:
-`/tmp/issue1649-direct-temp-root-fastpath-make.log`. DBIx
-`t/100populate.t` passed 108/108 on the rebuilt JVM in about 30s; log:
-`/tmp/issue1649-dbix-t100-direct-temp-root-fastpath-jvm.log`. System Perl also
-passes 108/108. The earlier interpreter run reached 1/108 in five minutes and
-is inconclusive; no DBIx object-GC defect is reproduced on the current JVM.
+`nice -n 19 timeout 3600 make` passed in 12m10 on the tree that became
+`b31d11a619`; `RescuedWeakRefsEmptyRegistryFastPathTest` passed 1/1. Log:
+`/tmp/issue1649-end-empty-weak-registry-fastpath-make.log`. The earlier
+`e278301da6` candidate passed DBIx `t/100populate.t` 108/108 plus its five
+LeakTracer checks; system Perl also passed 108/108. The historical failing
+logs had all 108 imported assertions passing before three or four extra
+LeakTracer assertions retained Storage, DBH, or Schema objects. The focused
+project-owned `dev/modules/dbix_storage_weak_release.t` passes 1/1 on the b31
+tree with system Perl, JVM, and interpreter, each with no LeakTracer references;
+logs: `/tmp/issue1649-dbix-storage-weak-release-b31-{system-perl,jvm,interpreter}.log`.
+The earlier full interpreter `t/100populate.t` run reached 1/108 in five
+minutes and remains inconclusive.
 
-At 14:03 UTC, checks on published head `1ad70b2524` showed analyses and
+At 14:46 UTC, published head `323a1b1eda` still had four analyses and both
 dependency submissions passing, CodeQL failing on the unchanged RSA key-size
-call at `CryptOpenSSLRSA.java:203`, and no current-head Gradle platform run.
-The prior head `c3c9e57a98` passed Ubuntu and Windows build/thread gates. RSA
-policy and 1024-bit compatibility are tracked separately in
+call at `CryptOpenSSLRSA.java:203`, and no Gradle platform run. The prior head
+`c3c9e57a98` passed Ubuntu and Windows build/thread gates. RSA policy and
+1024-bit compatibility are tracked separately in
 [issue #2031](https://github.com/fglock/PerlOnJava/issues/2031).
 
 The END cleanup traversal and nested-list traversal remain semantically needed
@@ -136,7 +143,7 @@ ownership from one aggregate count.
 
 ### Next steps
 
-1. Publish the tested source and checkpoint updates, keep PR #1938 open and
+1. Publish `b31d11a619` and the checkpoint updates, keep PR #1938 open and
    draft, and check CI again after at least six minutes.
 2. Continue the END owner-source audit. Replace nested-hash discovery only
    after the reverse proof covers every strong source, preserves the five-hash
