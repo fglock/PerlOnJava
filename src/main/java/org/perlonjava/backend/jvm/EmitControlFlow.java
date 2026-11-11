@@ -575,8 +575,15 @@ public class EmitControlFlow {
         if (!allScalarIndices.isEmpty() || !hashIndices.isEmpty() || !arrayIndices.isEmpty()) {
             JavaClassInfo.SpillRef spillRef = ctx.javaClassInfo.acquireSpillRefOrAllocate(ctx.symbolTable);
             ctx.javaClassInfo.storeSpillRef(ctx.mv, spillRef);
+            int protectedReturnRootSlot = -1;
             if (protectsLexicalAggregate) {
+                // Array cleanup may replace spillRef with a prepared copy of
+                // the return value. Keep the exact original root in a stable
+                // local so the matching pop cannot leave it on the temp stack.
+                protectedReturnRootSlot = ctx.symbolTable.allocateLocalVariable();
                 ctx.javaClassInfo.loadSpillRef(ctx.mv, spillRef);
+                ctx.mv.visitVarInsn(Opcodes.ASTORE, protectedReturnRootSlot);
+                ctx.mv.visitVarInsn(Opcodes.ALOAD, protectedReturnRootSlot);
                 ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                         "org/perlonjava/runtime/runtimetypes/MortalList",
                         "pushTemporaryRoot",
@@ -634,7 +641,7 @@ public class EmitControlFlow {
                         false);
             }
             if (protectsLexicalAggregate) {
-                ctx.javaClassInfo.loadSpillRef(ctx.mv, spillRef);
+                ctx.mv.visitVarInsn(Opcodes.ALOAD, protectedReturnRootSlot);
                 ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                         "org/perlonjava/runtime/runtimetypes/MortalList",
                         "popTemporaryRoot",

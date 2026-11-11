@@ -520,6 +520,10 @@ public final class PerlRuntime implements AutoCloseable {
                 if (activeBindings.get() != 0) {
                     throw new IllegalStateException("PerlRuntime reset requires all bindings to be closed");
                 }
+                if (executionState.hasSuspendedOwnerRootProviders()) {
+                    throw new IllegalStateException(
+                            "PerlRuntime reset requires suspended async frames to finish");
+                }
                 if (threadRegistry.size() != 0) {
                     throw new IllegalStateException("PerlRuntime reset requires all child threads to finish");
                 }
@@ -1018,14 +1022,14 @@ public final class PerlRuntime implements AutoCloseable {
 
     private void installInitialStandardGlob(String name, RuntimeIO io) {
         RuntimeGlob glob = new RuntimeGlob(name);
-        glob.IO = new RuntimeScalar(io);
+        glob.replaceIOScalar(new RuntimeScalar(io));
         standardIOGlobs.put(name, glob);
     }
 
     private void updateStandardGlobHandle(String name, RuntimeIO io) {
         RuntimeGlob glob = standardIOGlobs.get(name);
         if (glob != null) {
-            glob.IO = new RuntimeScalar(io);
+            glob.replaceIOScalar(new RuntimeScalar(io));
         }
     }
 

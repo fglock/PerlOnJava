@@ -2925,10 +2925,10 @@ public class IOOperator {
 
             // Create RuntimeIO objects for the handles
             RuntimeIO readerIO = new RuntimeIO();
-            readerIO.ioHandle = readerHandle;
+            readerIO.replaceIOHandle(readerHandle);
 
             RuntimeIO writerIO = new RuntimeIO();
-            writerIO.ioHandle = writerHandle;
+            writerIO.replaceIOHandle(writerHandle);
 
             // Handle autovivification for read handle (like open() does)
             RuntimeGlob readGlob = null;
@@ -3786,14 +3786,14 @@ public class IOOperator {
         }
         RuntimeIO borrowed = new RuntimeIO();
         if (source.ioHandle instanceof BorrowedIOHandle existingBorrow) {
-            borrowed.ioHandle = BorrowedIOHandle.addBorrow(existingBorrow);
+            borrowed.replaceIOHandle(BorrowedIOHandle.addBorrow(existingBorrow));
         } else {
             // The lexical source handle may leave scope immediately after this
             // open(). Replace it with the source half of a shared lifecycle so
             // GC cleanup cannot close the delegate while this alias is live.
             BorrowedIOHandle[] pair = BorrowedIOHandle.createPair(source.ioHandle);
-            source.ioHandle = pair[0];
-            borrowed.ioHandle = pair[1];
+            source.replaceIOHandle(pair[0]);
+            borrowed.replaceIOHandle(pair[1]);
         }
         borrowed.currentLineNumber = source.currentLineNumber;
         // Share the source's fileno (parsimonious dup = same fd)
@@ -3821,7 +3821,7 @@ public class IOOperator {
 
         if (original.ioHandle instanceof DupIOHandle existingDup) {
             // Already reference-counted — add another dup sharing the same delegate
-            duplicate.ioHandle = DupIOHandle.addDup(existingDup);
+            duplicate.replaceIOHandle(DupIOHandle.addDup(existingDup));
         } else {
             // First duplication — wrap both original and duplicate in DupIOHandles
             // so they share a refcount and get distinct filenos.
@@ -3854,11 +3854,11 @@ public class IOOperator {
             DupIOHandle[] pair = DupIOHandle.createPair(dupTarget, origFd);
 
             if (layeredWrapper != null) {
-                original.ioHandle = cloneLayeredHandle(layeredWrapper, pair[0]);
-                duplicate.ioHandle = cloneLayeredHandle(layeredWrapper, pair[1]);
+                original.replaceIOHandle(cloneLayeredHandle(layeredWrapper, pair[0]));
+                duplicate.replaceIOHandle(cloneLayeredHandle(layeredWrapper, pair[1]));
             } else {
-                original.ioHandle = pair[0];  // Replace original's handle with refcounted wrapper
-                duplicate.ioHandle = pair[1]; // New handle with unique fd
+                original.replaceIOHandle(pair[0]);  // Replace with refcounted wrapper
+                duplicate.replaceIOHandle(pair[1]); // New handle with unique fd
             }
         }
 
@@ -4004,11 +4004,11 @@ public class IOOperator {
                 socket2.setDatagramPeer(socket1);
 
                 RuntimeIO io1 = new RuntimeIO();
-                io1.ioHandle = socket1;
+                io1.replaceIOHandle(socket1);
                 io1.assignFileno();
 
                 RuntimeIO io2 = new RuntimeIO();
-                io2.ioHandle = socket2;
+                io2.replaceIOHandle(socket2);
                 io2.assignFileno();
 
                 setSocketOnHandle(sock1Handle, io1);
@@ -4065,11 +4065,11 @@ public class IOOperator {
 
             // Create RuntimeIO objects for both sockets using NIO channels
             RuntimeIO io1 = new RuntimeIO();
-            io1.ioHandle = socket1;
+            io1.replaceIOHandle(socket1);
             io1.assignFileno();
 
             RuntimeIO io2 = new RuntimeIO();
-            io2.ioHandle = socket2;
+            io2.replaceIOHandle(socket2);
             io2.assignFileno();
 
             // Set IO slot on each handle, following the same pattern as socket()

@@ -1,6 +1,9 @@
 package org.perlonjava.runtime.runtimetypes;
 
 import java.lang.ref.WeakReference;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -78,6 +81,8 @@ public final class PerlOwnerSlot {
     private final RuntimeScalar padCell;
     private final long identity = NEXT_ID.incrementAndGet();
     private RuntimeBase referent;
+    /** Weak provenance for runtime-owned edges with one or more Perl sources. */
+    private final List<EndBoundaryOwnerSource> endBoundaryOwnerSources = new ArrayList<>();
     /** Scalar cell that owns an untracked value edge; weak to avoid retaining its source. */
     private WeakReference<RuntimeScalar> untrackedScalarOwner;
     /** Weak back-reference to the scalar implementing a counted cell owner. */
@@ -110,6 +115,15 @@ public final class PerlOwnerSlot {
     private int legacyCaptureCount;
     private volatile boolean nativeOwner;
     private long nextReleaseSequence;
+
+    private static final class EndBoundaryOwnerSource {
+        private final WeakReference<RuntimeBase> source;
+        private int references = 1;
+
+        private EndBoundaryOwnerSource(RuntimeBase source) {
+            this.source = new WeakReference<>(source);
+        }
+    }
 
     /** Provenance token carried with one queued legacy decrement. */
     public static final class PendingRelease {
@@ -252,10 +266,57 @@ public final class PerlOwnerSlot {
         return referent;
     }
 
-    /** Owning Perl storage or CODE source, when this slot records one. */
-    RuntimeBase endBoundaryOwnerSource() {
-        return switch (kind) {
-            case SCALAR_CAPTURE, CLOSURE_PAD, CODE_STATE -> captureOwner();
+    /** Associate a runtime-owned edge with the object that stores it. */
+    public synchronized void associateEndBoundaryOwnerSource(RuntimeBase source) {
+        if (source == null) return;
+        for (Iterator<EndBoundaryOwnerSource> iterator = endBoundaryOwnerSources.iterator();
+                iterator.hasNext();) {
+            EndBoundaryOwnerSource existing = iterator.next();
+            RuntimeBase current = existing.source.get();
+            if (current == null) {
+                iterator.remove();
+            } else if (current == source) {
+                existing.references++;
+                return;
+            }
+        }
+        endBoundaryOwnerSources.add(new EndBoundaryOwnerSource(source));
+    }
+
+    /** Retire one association for a shared runtime-owned edge. */
+    public synchronized void releaseEndBoundaryOwnerSource(RuntimeBase source) {
+        if (source == null) return;
+        for (Iterator<EndBoundaryOwnerSource> iterator = endBoundaryOwnerSources.iterator();
+                iterator.hasNext();) {
+            EndBoundaryOwnerSource existing = iterator.next();
+            RuntimeBase current = existing.source.get();
+            if (current == null) {
+                iterator.remove();
+            } else if (current == source) {
+                if (--existing.references == 0) iterator.remove();
+                return;
+            }
+        }
+    }
+
+    /** Owner objects for this edge; null provenance is never an independent root. */
+    synchronized List<RuntimeBase> endBoundaryOwnerSources() {
+        if (!endBoundaryOwnerSources.isEmpty()) {
+            List<RuntimeBase> snapshot = new ArrayList<>(endBoundaryOwnerSources.size());
+            for (Iterator<EndBoundaryOwnerSource> iterator = endBoundaryOwnerSources.iterator();
+                    iterator.hasNext();) {
+                RuntimeBase source = iterator.next().source.get();
+                if (source == null) iterator.remove();
+                else snapshot.add(source);
+            }
+            return snapshot;
+        }
+        RuntimeBase source = switch (kind) {
+            case SCALAR_CAPTURE, CODE_STATE -> captureOwner();
+            case CLOSURE_PAD -> {
+                RuntimeCode code = captureOwner();
+                yield code != null ? code : padCell;
+            }
             case ARRAY_ALIAS_CELL -> arrayAliasOwner();
             case HASH_ALIAS_CELL -> hashAliasOwner();
             case GLOB_COMPONENT_SLOT -> globComponentOwner();
@@ -266,8 +327,19 @@ public final class PerlOwnerSlot {
                 yield owner != null ? owner : scalarReferenceCell();
             }
             case UNTRACKED_REFERENCE -> untrackedScalarOwner();
+            case IO_VIA_LAYER, REGEX_CALLBACK, TIED_HASH_ITERATOR_KEY,
+                    CODE_PAD_CONSTANT, GLOB_VALUE, STASH_NAMESPACE_MOVE,
+                    PACKAGE_SCALAR_SLOT, PACKAGE_AGGREGATE_SLOT, PACKAGE_GLOB_SLOT,
+                    ACTIVE_LEXICAL, ACTIVE_CODE, TEMPORARY_ROOT -> null;
             default -> countedScalarOwner();
         };
+        return source == null ? List.of() : List.of(source);
+    }
+
+    /** Owning Perl storage or CODE source, when this slot records one. */
+    RuntimeBase endBoundaryOwnerSource() {
+        List<RuntimeBase> sources = endBoundaryOwnerSources();
+        return sources.isEmpty() ? null : sources.getFirst();
     }
 
     /** Source cell for a suspended-frame owner, if that register is scalar-backed. */
@@ -524,7 +596,7 @@ public final class PerlOwnerSlot {
     }
 
     /** Record one compiled CODE optree's strong reference to a pad constant. */
-    synchronized void acquireCodePadConstantIdentity(RuntimeBase target) {
+    synchronized void acquireCodePadConstantIdentity(RuntimeBase target, RuntimeCode owner) {
         if (kind != Kind.CODE_PAD_CONSTANT) {
             throw new IllegalStateException("pad-constant acquisition requires a CODE-pad slot");
         }
@@ -536,6 +608,7 @@ public final class PerlOwnerSlot {
             throw new IllegalStateException("pad-constant slot has pending legacy releases");
         }
         transferWithoutRuntimeRoot(target, false);
+        associateEndBoundaryOwnerSource(owner);
     }
 
     /** Record one package array/hash table entry as an identity-owned aggregate root. */
@@ -594,7 +667,7 @@ public final class PerlOwnerSlot {
     }
 
     /** Record a stash field's strong edge to its deferred namespace move. */
-    synchronized void acquireStashNamespaceMoveIdentity(RuntimeGlob target) {
+    synchronized void acquireStashNamespaceMoveIdentity(RuntimeGlob target, RuntimeStash owner) {
         if (kind != Kind.STASH_NAMESPACE_MOVE) {
             throw new IllegalStateException("stash namespace-move acquisition requires a stash-move slot");
         }
@@ -603,10 +676,11 @@ public final class PerlOwnerSlot {
             throw new IllegalStateException("stash namespace-move slot has pending legacy releases");
         }
         transferWithoutRuntimeRoot(target, true);
+        associateEndBoundaryOwnerSource(owner);
     }
 
     /** Record one scalar value's edge to a detached glob snapshot. */
-    synchronized void acquireGlobValueIdentity(RuntimeGlob target) {
+    synchronized void acquireGlobValueIdentity(RuntimeGlob target, RuntimeScalar owner) {
         if (kind != Kind.GLOB_VALUE) {
             throw new IllegalStateException("glob-value acquisition requires a glob-value slot");
         }
@@ -615,6 +689,7 @@ public final class PerlOwnerSlot {
             throw new IllegalStateException("glob-value slot has pending legacy releases");
         }
         transferWithoutRuntimeRoot(target, false);
+        associateEndBoundaryOwnerSource(owner);
     }
 
     /** Record one active lexical pad entry that owns a scalar referent or aggregate. */
@@ -1268,6 +1343,7 @@ public final class PerlOwnerSlot {
         globComponentOwner = null;
         arrayAliasOwner = null;
         hashAliasOwner = null;
+        endBoundaryOwnerSources.clear();
         ownerRuntime = null;
         ownerRuntimeState = null;
         if (previous != null && registeredInOwnerLedger) previous.removeOwnerSlot(this);

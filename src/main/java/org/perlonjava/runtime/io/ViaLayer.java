@@ -17,6 +17,10 @@ import org.perlonjava.runtime.runtimetypes.RuntimeScalarCache;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 
 import java.nio.charset.Charset;
+import java.lang.ref.WeakReference;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
 
 /**
  * Perl-implemented PerlIO layer, created by :via(...).
@@ -45,6 +49,7 @@ public class ViaLayer implements IOLayer {
     /** Owner identity for the Java layer's retained Perl {@code PUSHED} value. */
     static final class SelfReferenceOwner {
         final PerlOwnerSlot ownerSlot;
+        private final List<WeakReference<RuntimeIO>> ownerRuntimeIOs = new ArrayList<>();
         private boolean released;
 
         private SelfReferenceOwner(RuntimeBase referent) {
@@ -65,9 +70,44 @@ public class ViaLayer implements IOLayer {
             return ownerSlot;
         }
 
-        void release() {
+        synchronized void addRuntimeIOOwner(RuntimeIO runtimeIO) {
+            if (released || runtimeIO == null) return;
+            for (Iterator<WeakReference<RuntimeIO>> iterator = ownerRuntimeIOs.iterator();
+                    iterator.hasNext();) {
+                RuntimeIO current = iterator.next().get();
+                if (current == null) {
+                    iterator.remove();
+                } else if (current == runtimeIO) {
+                    return;
+                }
+            }
+            ownerRuntimeIOs.add(new WeakReference<>(runtimeIO));
+            runtimeIO.associateViaLayerOwner(ownerSlot);
+        }
+
+        synchronized void removeRuntimeIOOwner(RuntimeIO runtimeIO) {
+            if (runtimeIO == null) return;
+            for (Iterator<WeakReference<RuntimeIO>> iterator = ownerRuntimeIOs.iterator();
+                    iterator.hasNext();) {
+                RuntimeIO current = iterator.next().get();
+                if (current == null) {
+                    iterator.remove();
+                } else if (current == runtimeIO) {
+                    iterator.remove();
+                    current.releaseViaLayerOwner(ownerSlot);
+                    return;
+                }
+            }
+        }
+
+        synchronized void release() {
             if (released) return;
             released = true;
+            for (WeakReference<RuntimeIO> owner : ownerRuntimeIOs) {
+                RuntimeIO runtimeIO = owner.get();
+                if (runtimeIO != null) runtimeIO.releaseViaLayerOwner(ownerSlot);
+            }
+            ownerRuntimeIOs.clear();
             ownerSlot.releaseNativeOwner();
         }
     }
@@ -336,6 +376,16 @@ public class ViaLayer implements IOLayer {
 
     private void holdSelfReference() {
         selfReferenceOwner = SelfReferenceOwner.retain(self);
+    }
+
+    void addRuntimeIOOwner(RuntimeIO runtimeIO) {
+        SelfReferenceOwner owner = selfReferenceOwner;
+        if (owner != null) owner.addRuntimeIOOwner(runtimeIO);
+    }
+
+    void removeRuntimeIOOwner(RuntimeIO runtimeIO) {
+        SelfReferenceOwner owner = selfReferenceOwner;
+        if (owner != null) owner.removeRuntimeIOOwner(runtimeIO);
     }
 
     private void releaseSelfReference() {

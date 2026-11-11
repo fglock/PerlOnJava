@@ -41,7 +41,7 @@ public class RuntimeStash extends RuntimeHash {
                 throw new IllegalArgumentException("saved namespace move has no captured slots");
             }
             nextOwner = new PerlOwnerSlot(PerlOwnerSlot.Kind.STASH_NAMESPACE_MOVE);
-            nextOwner.acquireStashNamespaceMoveIdentity(moveOwner);
+            nextOwner.acquireStashNamespaceMoveIdentity(moveOwner, this);
         }
 
         RuntimeGlob previousMove = savedNamespaceMove;

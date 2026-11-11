@@ -14,6 +14,9 @@ priorities and future plans.
 - Retain eval-block direct-call targets with their parent CV across repeated execution (#1649).
 - Preserve temporary-root identity across implicit return preparation so scope cleanup pops the root it pushed (#1649).
 - Follow strong references held by temporary list returns during root reachability checks (#1649).
+- Preserve control-flow return payloads and pending suspended-frame owners during END-boundary root checks; trim temporary roots skipped by exceptional call and eval unwinds (#1649).
+- Root current package CODE slots by stash identity, including anonymous and eval-defined closures, and ignore detached glob slots after their aliases move (#1649).
+- Track IO handle replacement and executable regex callback owners through their current runtime slots (#1649).
 - Clear weak observers from rescued object graphs at the END boundary while preserving independently rooted objects and strong Perl edges (#1649).
 - Normalize out-of-range calendar fields in `Time::Piece->strptime`, matching Perl date overflow behavior (#2001).
 - Reduce GC pressure in inner `eval STRING` compilation: replace `FastStack<T>`'s default lazy ArrayList initialisation (first-push allocates `Object[10]`) with an explicit `super(2)` constructor, cutting per-stack array allocation 5× for the 16 `FastStack` fields in each snapshot `ScopedSymbolTable`; replace the O(N log N) `getAllVisibleVariables()` `TreeMap`+`HashSet` build inside `getVisibleVariableRegistry()` and `getVisibleOurRegistry()` with direct O(N) iteration of `symbolTableStack` using `putIfAbsent` for shadowing, caching results until the next `clearVisibleVariablesCache()` invalidation — eliminating `TreeMap.put`, `TreeMap.successor`, and `HashSet.add` allocations from the JFR execution-sample profile for inner eval compilation.

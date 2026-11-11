@@ -860,9 +860,9 @@ public class RuntimeGraphCloner {
         // glob handles cross the snapshot using the same explicit resource policy
         // as lexical and aggregate-held handles.
         if (source.IO != null && source.IO.value instanceof RuntimeIO) {
-            target.IO = (RuntimeScalar) cloneValue(source.IO);
+            target.replaceIOScalar((RuntimeScalar) cloneValue(source.IO));
         } else {
-            target.IO = new RuntimeScalar();
+            target.replaceIOScalar(new RuntimeScalar());
         }
         return target;
     }
@@ -904,8 +904,8 @@ public class RuntimeGraphCloner {
         // Shared transports replace the parent's raw owner with its lease. For
         // wrapper stacks this also ensures the parent and child have independent
         // layer state over the same underlying transport.
-        source.ioHandle = pair.parent();
-        target.ioHandle = pair.child();
+        source.replaceIOHandle(pair.parent());
+        target.replaceIOHandle(pair.child());
         try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
             RuntimeIO.addHandle(target.ioHandle);
         }

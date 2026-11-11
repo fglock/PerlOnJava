@@ -4798,7 +4798,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         for (RuntimeBase constant : constants) {
             if (constant == null) continue;
             PerlOwnerSlot owner = new PerlOwnerSlot(PerlOwnerSlot.Kind.CODE_PAD_CONSTANT);
-            owner.acquireCodePadConstantIdentity(constant);
+            owner.acquireCodePadConstantIdentity(constant, this);
             padConstantOwnerSlots.add(owner);
         }
     }
@@ -10232,6 +10232,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // the caller (e.g., bless mortal entries for method chain
             // temporaries like Foo->new()->method()).
             MortalList.pushMark();
+            int temporaryRootDepth = MortalList.temporaryRootDepth();
             // Holds the tailcall target if the body returns one. Populated
             // inside the try block; after the finally runs we loop back
             // to the top of apply() instead of recursing, preventing
@@ -10366,7 +10367,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // A non-local return exits this invocation even when it is
                 // propagated to an enclosing subroutine. Retire this frame's
                 // lexicals before deciding which boundary consumes the value.
-                MyVarCleanupStack.unwindTo(cleanupMark);
+                try {
+                    MyVarCleanupStack.unwindTo(cleanupMark);
+                } catch (RuntimeException | Error cleanupFailure) {
+                    // The transfer stopped propagating because cleanup failed.
+                    MortalList.restoreTemporaryRootDepth(temporaryRootDepth);
+                    throw cleanupFailure;
+                }
                 if (e.targetCode != null && e.targetCode != code) {
                     throw e;
                 }
@@ -10377,27 +10384,42 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // Consume at normal subroutine and eval-block boundaries.
                 // Perl treats `return` inside eval { ... } as the eval value,
                 // including when it originates from a nested map/grep block.
-                RuntimeList result = e.returnValue != null ? e.returnValue.getList() : new RuntimeList();
-                RuntimeList returned = coerceScalarCallResult(
-                        result, effectiveContext, callContext, !isLvalueCode(code));
-                if (effectiveContext == RuntimeContextType.VOID) {
-                    MortalList.mortalizeForVoidDiscard(returned);
-                    flushAfterScopeExit = true;
-                } else if (containsNoReference(returned)) {
-                    flushAfterScopeExit = true;
+                try {
+                    RuntimeList result = e.returnValue != null ? e.returnValue.getList() : new RuntimeList();
+                    RuntimeList returned = coerceScalarCallResult(
+                            result, effectiveContext, callContext, !isLvalueCode(code));
+                    if (effectiveContext == RuntimeContextType.VOID) {
+                        MortalList.mortalizeForVoidDiscard(returned);
+                        flushAfterScopeExit = true;
+                    } else if (containsNoReference(returned)) {
+                        flushAfterScopeExit = true;
+                    }
+                    MyVarCleanupStack.releaseOrTransferSocketOwnersOnReturn(
+                            cleanupMark, returned);
+                    return returned;
+                } finally {
+                    // The matching frame has materialized the transfer into
+                    // its outgoing return slots. Trim roots only after that
+                    // ownership is established, before the frame's final flush.
+                    MortalList.restoreTemporaryRootDepth(temporaryRootDepth);
                 }
-                MyVarCleanupStack.releaseOrTransferSocketOwnersOnReturn(
-                        cleanupMark, returned);
-                return returned;
             } catch (RuntimeException e) {
-                e = WarnDie.maybeInvokeUnhandledDieHandler(e);
-                // On die: run scopeExitCleanup for my-variables whose normal
-                // SCOPE_EXIT_CLEANUP bytecodes were skipped by the exception.
-                // PerlExitException (exit()) is excluded — global destruction handles it.
-                if (!(e instanceof PerlExitException)
-                        && !(e instanceof PerlThreadExitException)) {
-                    MyVarCleanupStack.unwindTo(cleanupMark);
-                    MortalList.flush();
+                try {
+                    e = WarnDie.maybeInvokeUnhandledDieHandler(e);
+                    // On die: run scopeExitCleanup for my-variables whose normal
+                    // SCOPE_EXIT_CLEANUP bytecodes were skipped by the exception.
+                    // PerlExitException (exit()) is excluded — global destruction handles it.
+                    if (!(e instanceof PerlExitException)
+                            && !(e instanceof PerlThreadExitException)) {
+                        MyVarCleanupStack.unwindTo(cleanupMark);
+                        MortalList.flush();
+                    }
+                } finally {
+                    // A generated return block can install a temporary root
+                    // before lexical cleanup. If cleanup itself throws, its
+                    // normal emitted pop is skipped; do not leak that root
+                    // into the caller's later object-GC checks.
+                    MortalList.restoreTemporaryRootDepth(temporaryRootDepth);
                 }
                 throw e;
             } finally {

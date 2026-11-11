@@ -282,45 +282,14 @@ public class ReachabilityWalker {
      * The caller drains expression temporaries before this boundary check.
      */
     static Set<RuntimeBase> walkEndBoundaryRootsExcludingRescued() {
-        Set<RuntimeBase> roots = Collections.newSetFromMap(new IdentityHashMap<>());
-        roots.addAll(walkEndBlockRoots());
+        Set<RuntimeBase> independentRoots =
+                Collections.newSetFromMap(new IdentityHashMap<>());
+        addEndBoundaryDirectRoots(independentRoots);
 
-        ReachabilityWalker walker = new ReachabilityWalker().withCodeCaptures(true);
-        java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
-        for (RuntimeScalar scalar : GlobalVariable.globalVariableValuesView()) {
-            walker.visitScalar(scalar, todo);
-        }
-        for (Map.Entry<String, RuntimeArray> entry : GlobalVariable.globalArrayEntriesView()) {
-            if (!isNonOwningDebugArgsArray(entry.getKey())) {
-                walker.addReachable(entry.getValue(), todo);
-            }
-        }
-        for (RuntimeHash hash : GlobalVariable.globalHashValuesView()) {
-            walker.addReachable(hash, todo);
-        }
-        for (RuntimeCode active : PerlRuntime.current().executionState().activeCodeStack) {
-            walker.addReachable(active, todo);
-        }
-        for (List<RuntimeScalar> args : RuntimeCode.snapshotPristineArgsStack()) {
-            for (RuntimeScalar arg : args) {
-                walker.addReachable(arg, todo);
-                walker.visitScalar(arg, todo);
-            }
-        }
-        for (RuntimeBase referent : WeakRefRegistry.snapshotWeakRefReferents()) {
-            if (referent.hasPendingReturnOwner()) {
-                walker.addReachable(referent, todo);
-            }
-        }
-        walker.bfs(todo, true);
-        Set<RuntimeBase> independentRoots = Collections.newSetFromMap(new IdentityHashMap<>());
-        independentRoots.addAll(roots);
-        independentRoots.addAll(walker.reachable);
-
-        // Current owner slots are independent roots only when their source
-        // is independently live and outside the rescued graph. A slot can be
-        // current inside a rootless strong cycle, so current slot identity by
-        // itself does not prove independent liveness.
+        // Enumerate the rescued graph only to find its independently rooted
+        // members. Ordinary roots are validated directly, then owner edges are
+        // followed backwards from each candidate instead of walking every
+        // object reachable from every global root.
         Set<RuntimeBase> rescuedGraph = Collections.newSetFromMap(new IdentityHashMap<>());
         ReachabilityWalker rescuedWalker = new ReachabilityWalker().withCodeCaptures(true);
         java.util.ArrayDeque<RuntimeBase> rescuedTodo = new java.util.ArrayDeque<>();
@@ -329,43 +298,294 @@ public class ReachabilityWalker {
         }
         rescuedWalker.bfs(rescuedTodo, true);
         rescuedGraph.addAll(rescuedWalker.reachable);
+        IdentityHashMap<RuntimeBase, Boolean> ownerPathMemo = new IdentityHashMap<>();
         for (RuntimeBase referent : rescuedGraph) {
-            for (PerlOwnerSlot slot : referent.ownerSlotSnapshot()) {
-                if (!DestroyDispatch.isCurrentPerlOwnerSlot(referent, slot)) continue;
-                RuntimeBase ownerSource = slot.endBoundaryOwnerSource();
-                if (isRescueGraphOwnerSource(ownerSource, rescuedGraph)
-                        || !isIndependentEndBoundaryOwnerSource(ownerSource, independentRoots)) {
-                    continue;
-                }
-                walker.addReachable(referent, todo);
-                break;
+            if (hasIndependentEndBoundaryOwnerPath(
+                    referent, independentRoots, ownerPathMemo)) {
+                independentRoots.add(referent);
             }
         }
-        walker.bfs(todo, true);
-        roots.addAll(walker.reachable);
-        return roots;
+        return independentRoots;
     }
 
-    private static boolean isRescueGraphOwnerSource(
-            RuntimeBase ownerSource, Set<RuntimeBase> rescuedGraph) {
-        if (ownerSource == null) return false;
-        if (rescuedGraph.contains(ownerSource)) return true;
-        return ownerSource instanceof RuntimeScalar scalar
-                && scalar.hasContainerOwnerIn(rescuedGraph);
+    private static void addEndBoundaryDirectRoots(Set<RuntimeBase> roots) {
+        GlobalRuntimeState state = GlobalVariable.currentGlobalRuntimeState();
+        for (Map.Entry<String, RuntimeScalar> entry : state.scalarValues().entrySet()) {
+            if (!isLivePackageSlotName(entry.getKey())) continue;
+            PerlOwnerSlot slot = state.packageScalarOwnerSlots().get(entry.getKey());
+            if (isCurrentPackageRootSlot(
+                    entry.getValue(), slot, PerlOwnerSlot.Kind.PACKAGE_SCALAR_SLOT)) {
+                addEndBoundaryScalarRoot(roots, entry.getValue());
+            }
+        }
+        addPackageAggregateRoots(
+                roots, state.arrayValues(), state.packageArrayOwnerSlots(), true);
+        addPackageAggregateRoots(
+                roots, state.hashValues(), state.packageHashOwnerSlots(), false);
+        addPackageIoRoots(roots, state);
+
+        // Named package subs and queued END blocks have a small, explicit set
+        // of semantic captures. Seed those edges without expanding their
+        // captured arrays and hashes.
+        for (Map.Entry<String, RuntimeScalar> entry : GlobalVariable.globalCodeRefs.entrySet()) {
+            RuntimeScalar codeRef = entry.getValue();
+            if (codeRef == null || !(codeRef.value instanceof RuntimeCode code)
+                    || !isCurrentPackageCodeSlot(entry.getKey(), codeRef)) {
+                continue;
+            }
+            addEndBoundaryScalarRoot(roots, codeRef);
+            addEndBoundaryCodeRoots(code, roots);
+        }
+        RuntimeArray endBlocks = SpecialBlock.getEndBlocks();
+        for (RuntimeScalar codeRef : endBlocks.elements.toArray(RuntimeScalar[]::new)) {
+            if (codeRef != null && codeRef.value instanceof RuntimeCode code
+                    && SpecialBlock.hasPendingEndBlock(code)) {
+                addEndBoundaryScalarRoot(roots, codeRef);
+                addEndBoundaryCodeRoots(code, roots);
+            }
+        }
+
+        PerlRuntime runtime = PerlRuntime.current();
+        for (RuntimeCode active : runtime.executionState().activeCodeStack) {
+            addActiveEndBoundaryCodeRoots(active, roots);
+        }
+        for (RuntimeScalar self : runtime.executionState().activeJvmSelfReferences) {
+            addEndBoundaryScalarRoot(roots, self);
+        }
+        for (List<RuntimeScalar> args : RuntimeCode.snapshotPristineArgsStack()) {
+            for (RuntimeScalar arg : args) addEndBoundaryScalarRoot(roots, arg);
+        }
+        for (RuntimeScalar pendingReturn : MortalList.snapshotPendingUntrackedReturnOwners()) {
+            addEndBoundaryScalarRoot(roots, pendingReturn);
+        }
+        for (RuntimeBase suspendedOwner : runtime.executionState().snapshotSuspendedOwnerRoots()) {
+            addEndBoundaryBaseRoot(roots, suspendedOwner);
+        }
+        for (Object liveVar : MyVarCleanupStack.snapshotLiveVars()) {
+            if (liveVar instanceof RuntimeBase lexical) {
+                addLiveLexicalEndBoundaryRoot(lexical, roots);
+            }
+        }
+        for (RuntimeBase lexical : RuntimeCode.snapshotAllActiveLexicals().values()) {
+            if (RuntimeCode.isActiveLexicalCell(lexical)
+                    && MyVarCleanupStack.isRegistered(lexical)) {
+                addLiveLexicalEndBoundaryRoot(lexical, roots);
+            }
+        }
+        for (RuntimeBase referent : WeakRefRegistry.snapshotWeakRefReferents()) {
+            if (referent.hasPendingReturnOwner()) roots.add(referent);
+        }
     }
 
-    private static boolean isIndependentEndBoundaryOwnerSource(
-            RuntimeBase ownerSource, Set<RuntimeBase> independentRoots) {
-        if (ownerSource == null || independentRoots.contains(ownerSource)) return true;
-        if (ownerSource instanceof RuntimeScalar scalar) {
-            return MyVarCleanupStack.isLive(scalar) && !scalar.scopeExited
-                    && !WeakRefRegistry.isweak(scalar);
+    private static boolean isCurrentPackageRootSlot(
+            RuntimeBase value, PerlOwnerSlot slot, PerlOwnerSlot.Kind kind) {
+        return value != null && slot != null && slot.isActive()
+                && slot.kind() == kind && slot.referent() == value;
+    }
+
+    private static void addPackageAggregateRoots(
+            Set<RuntimeBase> roots,
+            Map<String, ? extends RuntimeBase> values,
+            Map<String, PerlOwnerSlot> ownerSlots,
+            boolean arrays) {
+        for (Map.Entry<String, ? extends RuntimeBase> entry : values.entrySet()) {
+            if (!isLivePackageSlotName(entry.getKey())) continue;
+            if (arrays && isNonOwningDebugArgsArray(entry.getKey())) continue;
+            RuntimeBase aggregate = entry.getValue();
+            PerlOwnerSlot slot = ownerSlots.get(entry.getKey());
+            if (isCurrentPackageRootSlot(
+                    aggregate, slot, PerlOwnerSlot.Kind.PACKAGE_AGGREGATE_SLOT)) {
+                roots.add(aggregate);
+            }
         }
-        if (ownerSource instanceof RuntimeArray || ownerSource instanceof RuntimeHash) {
-            return MyVarCleanupStack.isRegistered(ownerSource)
-                    || GlobalVariable.isPackageRootedAggregate(ownerSource);
+    }
+
+    private static void addPackageIoRoots(Set<RuntimeBase> roots, GlobalRuntimeState state) {
+        for (Map.Entry<String, RuntimeGlob> entry : state.ioSlots().entrySet()) {
+            if (!isLivePackageSlotName(entry.getKey())) continue;
+            if (state.hiddenIoSlotsAfterStashDelete().contains(entry.getKey())) continue;
+            RuntimeGlob glob = entry.getValue();
+            PerlOwnerSlot slot = state.packageIoGlobOwnerSlots().get(entry.getKey());
+            if (isCurrentPackageRootSlot(
+                    glob, slot, PerlOwnerSlot.Kind.PACKAGE_GLOB_SLOT)) {
+                glob.refreshIOOwnerStateForEndBoundary();
+                roots.add(glob);
+            }
         }
+        PerlRuntime runtime = PerlRuntime.current();
+        for (String name : runtime.standardIOGlobNames()) {
+            if (!runtime.isStandardIOGlobVisible(name)) continue;
+            RuntimeGlob glob = runtime.standardIOGlob(name);
+            if (glob != null) {
+                glob.refreshIOOwnerStateForEndBoundary();
+                roots.add(glob);
+            }
+        }
+    }
+
+    private static boolean isCurrentPackageCodeSlot(String name, RuntimeScalar codeRef) {
+        // The installed stash CODE slot is the ownership evidence. The CV's
+        // source metadata can still say __ANON__ or (eval) after a closure is
+        // assigned to a named package slot.
+        return isLivePackageSlotName(name)
+                && GlobalVariable.globalCodeRefs.get(name) == codeRef;
+    }
+
+    private static boolean isLivePackageSlotName(String name) {
+        if (name == null) return false;
+        if (!name.startsWith("\u0000glob-identity-")) return true;
+        // Detached glob identities exist only to preserve aliases through a
+        // localized replacement. Once no current alias targets the identity,
+        // its saved table entries are implementation leftovers, not roots.
+        return GlobalVariable.globAliases.containsValue(name);
+    }
+
+    private static void addEndBoundaryCodeRoots(RuntimeCode code, Set<RuntimeBase> roots) {
+        roots.add(code);
+        for (RuntimeScalar state : code.stateVariable.values()) {
+            addEndBoundaryScalarRoot(roots, state);
+        }
+        for (RuntimeArray state : code.stateArray.values()) {
+            if (state != null) roots.add(state);
+        }
+        for (RuntimeHash state : code.stateHash.values()) {
+            if (state != null) roots.add(state);
+        }
+        if (code.closedOverVariables != null) {
+            for (RuntimeBase captured : code.closedOverVariables.values()) {
+                addEndBoundaryBaseRoot(roots, captured);
+            }
+        }
+    }
+
+    private static void addActiveEndBoundaryCodeRoots(
+            RuntimeCode code, Set<RuntimeBase> roots) {
+        if (code == null) return;
+        addEndBoundaryCodeRoots(code, roots);
+        if (code.capturedScalars != null) {
+            for (RuntimeScalar captured : code.capturedScalars) {
+                addEndBoundaryScalarRoot(roots, captured);
+            }
+        }
+        if (code.capturedAggregates != null) {
+            for (RuntimeBase captured : code.capturedAggregates) {
+                addEndBoundaryBaseRoot(roots, captured);
+            }
+        }
+        visitReflectiveCodeScalars(code, scalar -> addEndBoundaryScalarRoot(roots, scalar));
+        visitReflectiveCodeBases(code, roots::add);
+    }
+
+    private static void addLiveLexicalEndBoundaryRoot(
+            RuntimeBase lexical, Set<RuntimeBase> roots) {
+        if (lexical == null || lexical.scopeExited) return;
+        if (lexical instanceof RuntimeScalar scalar) {
+            if (!MyVarCleanupStack.isRegistered(scalar)) return;
+            addEndBoundaryScalarRoot(roots, scalar);
+        } else if (MyVarCleanupStack.isRegistered(lexical)) {
+            roots.add(lexical);
+        }
+    }
+
+    private static void addEndBoundaryBaseRoot(Set<RuntimeBase> roots, RuntimeBase value) {
+        if (value == null) return;
+        if (value instanceof RuntimeScalar scalar) addEndBoundaryScalarRoot(roots, scalar);
+        else roots.add(value);
+    }
+
+    private static void addEndBoundaryScalarRoot(Set<RuntimeBase> roots, RuntimeScalar scalar) {
+        if (scalar == null) return;
+        roots.add(scalar);
+        if (!WeakRefRegistry.isweak(scalar)
+                && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                && scalar.value instanceof RuntimeBase referent) {
+            roots.add(referent);
+        }
+    }
+
+    private static boolean hasIndependentEndBoundaryOwnerPath(
+            RuntimeBase target,
+            Set<RuntimeBase> directRoots,
+            IdentityHashMap<RuntimeBase, Boolean> memo) {
+        Boolean cached = memo.get(target);
+        if (cached != null) return cached;
+
+        Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        IdentityHashMap<RuntimeBase, RuntimeBase> predecessor = new IdentityHashMap<>();
+        java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
+        seen.add(target);
+        todo.add(target);
+        while (!todo.isEmpty()) {
+            RuntimeBase current = todo.removeFirst();
+            Boolean currentMemo = memo.get(current);
+            if (directRoots.contains(current) || Boolean.TRUE.equals(currentMemo)) {
+                markEndBoundaryOwnerPath(current, predecessor, memo);
+                return true;
+            }
+            if (Boolean.FALSE.equals(currentMemo)) continue;
+
+            if (current instanceof RuntimeScalar scalar) {
+                for (RuntimeBase container : scalar.endBoundaryContainerOwners()) {
+                    enqueueEndBoundaryOwner(container, current, seen, predecessor, todo);
+                }
+            }
+            if (current instanceof RuntimeIO io) {
+                for (RuntimeGlob glob : io.endBoundaryOwnerGlobs()) {
+                    enqueueEndBoundaryOwner(glob, current, seen, predecessor, todo);
+                }
+            }
+            for (PerlOwnerSlot slot : current.ownerSlotSnapshot()) {
+                if (!isCurrentEndBoundaryOwnerPathSlot(current, slot, directRoots)) continue;
+                for (RuntimeBase ownerSource : slot.endBoundaryOwnerSources()) {
+                    enqueueEndBoundaryOwner(ownerSource, current, seen, predecessor, todo);
+                }
+            }
+        }
+        for (RuntimeBase reached : seen) memo.put(reached, false);
         return false;
+    }
+
+    private static boolean isCurrentEndBoundaryOwnerPathSlot(
+            RuntimeBase referent, PerlOwnerSlot slot, Set<RuntimeBase> directRoots) {
+        if (slot == null || !slot.isActive() || slot.referent() != referent
+                || !PerlOwnerSlot.isPerlOwnerKind(slot.kind())) return false;
+        switch (slot.kind()) {
+            case PACKAGE_SCALAR_SLOT, PACKAGE_AGGREGATE_SLOT, PACKAGE_GLOB_SLOT,
+                    ACTIVE_LEXICAL, ACTIVE_CODE, TEMPORARY_ROOT,
+                    ARGUMENT_ALIAS, RETURN_VALUE -> {
+                return false;
+            }
+            case ARGUMENT_VALUE -> {
+                RuntimeScalar source = slot.countedScalarOwner();
+                return source != null && directRoots.contains(source);
+            }
+            default -> {
+                if (!DestroyDispatch.isCurrentPerlOwnerSlot(referent, slot)) return false;
+                return !slot.endBoundaryOwnerSources().isEmpty();
+            }
+        }
+    }
+
+    private static void enqueueEndBoundaryOwner(
+            RuntimeBase owner,
+            RuntimeBase child,
+            Set<RuntimeBase> seen,
+            IdentityHashMap<RuntimeBase, RuntimeBase> predecessor,
+            java.util.ArrayDeque<RuntimeBase> todo) {
+        if (owner == null || !seen.add(owner)) return;
+        predecessor.put(owner, child);
+        todo.addLast(owner);
+    }
+
+    private static void markEndBoundaryOwnerPath(
+            RuntimeBase root,
+            IdentityHashMap<RuntimeBase, RuntimeBase> predecessor,
+            IdentityHashMap<RuntimeBase, Boolean> memo) {
+        RuntimeBase current = root;
+        while (current != null) {
+            memo.put(current, true);
+            current = predecessor.get(current);
+        }
     }
 
     /**
@@ -380,19 +600,10 @@ public class ReachabilityWalker {
         ReachabilityWalker walker = new ReachabilityWalker();
         java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
 
-        for (RuntimeScalar codeRef : GlobalVariable.globalCodeRefValuesView()) {
-            if (codeRef == null || !(codeRef.value instanceof RuntimeCode code)) continue;
-
-            // The registry also contains anonymous/eval compilation artifacts.
-            // Those are implementation caches, not Perl package CODE roots;
-            // following them would retain every lexical conservatively captured
-            // for eval STRING. A genuinely callable package sub has a stable
-            // package/sub name and remains a valid path for END to invoke.
-            if (code.subName == null || code.subName.isEmpty()
-                    || code.subName.equals("__ANON__")
-                    || code.packageName == null || code.packageName.isEmpty()
-                    || code.packageName.startsWith("(eval")
-                    || (code.cvStartFile != null && code.cvStartFile.startsWith("(eval"))) {
+        for (Map.Entry<String, RuntimeScalar> entry : GlobalVariable.globalCodeRefs.entrySet()) {
+            RuntimeScalar codeRef = entry.getValue();
+            if (codeRef == null || !(codeRef.value instanceof RuntimeCode code)
+                    || !isCurrentPackageCodeSlot(entry.getKey(), codeRef)) {
                 continue;
             }
             walker.visitScalar(codeRef, todo);
@@ -488,6 +699,13 @@ public class ReachabilityWalker {
                 // containers, but a returned list can be held as a temporary
                 // root while its caller finishes scope cleanup. Follow its
                 // strong values for that lease just like aggregate elements.
+                if (list instanceof RuntimeControlFlowList flow
+                        && flow.getReturnValue() != null) {
+                    addReachable(flow.getReturnValue(), todo);
+                    if (flow.getReturnValue() instanceof RuntimeScalar scalar) {
+                        visitScalar(scalar, todo);
+                    }
+                }
                 for (RuntimeBase value : list.elements) {
                     addReachable(value, todo);
                     if (value instanceof RuntimeScalar scalar) {
@@ -873,6 +1091,16 @@ public class ReachabilityWalker {
                 }
             } else if (cur instanceof RuntimeList list) {
                 int idx = 0;
+                if (list instanceof RuntimeControlFlowList flow
+                        && flow.getReturnValue() != null) {
+                    String path = curPath + "<return-value>";
+                    RuntimeBase returnValue = flow.getReturnValue();
+                    if (returnValue instanceof RuntimeScalar scalar) {
+                        visitScalarPath(scalar, path, howReached, todo);
+                    } else if (howReached.putIfAbsent(returnValue, path) == null) {
+                        todo.add(returnValue);
+                    }
+                }
                 for (RuntimeBase value : list.elements) {
                     String path = curPath + "[" + (idx++) + "]";
                     if (value instanceof RuntimeScalar scalar) {

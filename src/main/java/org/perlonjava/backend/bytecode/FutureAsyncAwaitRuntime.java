@@ -98,14 +98,19 @@ public final class FutureAsyncAwaitRuntime {
             }
             return;
         }
-        // Future::AsyncAwait requires cancellation to flow from the Future returned by
-        // the async sub to the Future currently being awaited.  Do this for every
-        // suspension segment, since a resumed frame may await a different Future.
-        call(outer, "AWAIT_CHAIN_CANCEL",
-                new RuntimeArray(suspension.awaited), RuntimeContextType.VOID);
-
         PerlRuntime runtime = PerlRuntime.current();
-        RuntimeCode callback = new RuntimeCode((callbackArgs, callbackContext) -> {
+        suspension.frame.registerEndBoundaryOwnerRoots(runtime.executionState());
+
+        AtomicBoolean callbackEntered = new AtomicBoolean();
+        try {
+            // Future::AsyncAwait requires cancellation to flow from the Future returned by
+            // the async sub to the Future currently being awaited.  Do this for every
+            // suspension segment, since a resumed frame may await a different Future.
+            call(outer, "AWAIT_CHAIN_CANCEL",
+                    new RuntimeArray(suspension.awaited), RuntimeContextType.VOID);
+
+            RuntimeCode callback = new RuntimeCode((callbackArgs, callbackContext) -> {
+            callbackEntered.set(true);
             // Capture the callback's dynamic warning handler before enqueueing.
             // Nested Future completions can defer this resume until after the
             // readiness callback (and its localized %SIG scope) has returned.
@@ -123,9 +128,20 @@ public final class FutureAsyncAwaitRuntime {
                 }
             });
             return new RuntimeList();
-        }, null).bindCallbackTo(runtime);
-        call(suspension.awaited, "AWAIT_ON_READY",
-                new RuntimeArray(new RuntimeScalar(callback)), RuntimeContextType.VOID);
+            }, null).bindCallbackTo(runtime);
+            call(suspension.awaited, "AWAIT_ON_READY",
+                    new RuntimeArray(new RuntimeScalar(callback)), RuntimeContextType.VOID);
+        } catch (RuntimeException | Error attachFailure) {
+            if (!callbackEntered.get()) {
+                state.terminal.set(true);
+                try {
+                    suspension.releaseAwaitedOwner();
+                } finally {
+                    cleanupAbandonedFrame(suspension.frame);
+                }
+            }
+            throw attachFailure;
+        }
     }
 
     private static void resume(InterpreterSuspension suspension, AwaitState state,
