@@ -36,10 +36,11 @@ on the first batch were fixed in `7628f5c39b`.
 
 The candidate is published, the PR body and active #1649 handoff comment are
 refreshed, and current master is integrated. The merge only changed generated
-CPAN report snapshots and left runtime sources unchanged. CI for the published
-head has not yet been refreshed; wait at least six minutes after the latest
-push before polling. The last observed checks on the prior head had no
-Ubuntu/Windows rows and a failed aggregate CodeQL check.
+CPAN report snapshots and left runtime sources unchanged. The first CI poll of
+the current code candidate (`6e66062038`, 10:03 UTC) showed Ubuntu and Windows
+pending, individual CodeQL analyses passing, and aggregate CodeQL failing on a
+high key-size alert at `CryptOpenSSLRSA.java:203`. That path is not in the PR's
+changed-file list. Wait at least six minutes between future CI polls.
 
 The reported Class::MethodMaker tied-array lifetime failure is covered by the
 new project-owned `refcount/generated_tied_array_handler_lifetime.t`: it
