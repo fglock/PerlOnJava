@@ -1,13 +1,13 @@
 # Perl-compatible ownership rewrite
 
 **Status:** Phase 1 is complete; Phase 2 is active. Default production cleanup
-no longer calls corrective reachability sweeps. Remaining items are the legacy
-null-token recovery path, an active public sweep helper used by Java tests,
-verified owner-count alignment, the `SvREFCNT` live-scalar scan, and final CPAN
-acceptance. Existing lifecycle, aggregate, IO, CODE, weak-reference, thread,
+no longer calls corrective reachability sweeps. Remaining boundaries are the
+legacy null-token compatibility API (no production callsites), a public sweep
+helper used by Java tests, verified owner-count alignment, the `SvREFCNT`
+live-scalar scan, and final CPAN acceptance. Existing lifecycle, aggregate, IO, CODE, weak-reference, thread,
 and HTML-Tree regressions pass on both backends with corrective sweeps disabled.
 
-**Current checkpoint (2026-11-11 13:38 UTC):** Issue #1649 remains active. PR
+**Current checkpoint (2026-11-11 13:48 UTC):** Issue #1649 remains active. PR
 #1938 remains open and draft; published runtime commit `f25cfc7e50` adds a
 direct-array temporary-root fast path and focused Java coverage. The
 three temporary-root fast paths now skip the empty-stack walker, avoid a
@@ -20,15 +20,16 @@ Full `nice -n 19 timeout 3600 make` passed on the local candidate in 13m42;
 Log: `/tmp/issue1649-temp-array-root-fastpath-make.log`. The slow run shared
 CPU with another active Make in `PerlOnJava5` and a CPAN test; this candidate's
 Make and Java workers were lowered to maximum niceness while running. The
-previous full gates passed in 6m35 and 6m39. DBIx `t/100populate.t` remains
-108/108 on JVM and system Perl; the interpreter run reached 1/108 in five
-minutes and is inconclusive.
+previous full gates passed in 6m35 and 6m39. Re-running DBIx
+`t/100populate.t` after the f25 working-tree build passed 108/108 on JVM in
+29s (`/tmp/issue1649-dbix-t100-f25-jvm.log`); system Perl passes 108/108.
+The interpreter run reached 1/108 in five minutes and is inconclusive.
 
 The previous PR head `c3c9e57a98` passed Ubuntu and Windows build/thread gates.
-At 13:36 UTC, checks for `f25cfc7e50` showed CodeQL failing on the same RSA key
-size alert at unchanged `CryptOpenSSLRSA.java:203`; four analysis jobs and both
-dependency submissions passed. No Gradle platform workflow was listed for
-`f25cfc7e50` yet. The policy and 1024-bit compatibility decision is tracked
+At 13:47 UTC, checks for docs head `1ad70b2524` showed four analyses and both
+dependency submissions passing; CodeQL failed on the unchanged RSA key-size
+call at `CryptOpenSSLRSA.java:203`. No Gradle platform workflow was listed for
+this head. The RSA policy and 1024-bit compatibility decision is tracked
 separately in [issue #2031](https://github.com/fglock/PerlOnJava/issues/2031).
 
 The END cleanup traversal and nested-list traversal remain semantically needed
@@ -38,6 +39,13 @@ established. The `Internals::SvREFCNT` lexical scan is separate from END and
 also lacks a completeness guarantee: a registered scalar can hold a tracked
 referent without a current owner slot. Keep these paths until the owner-source
 and slot-coverage proofs have focused tests.
+
+The final callsite search found no production caller for the legacy
+`MortalList.deferDecrement` entry point; its root-recovery behavior is exercised
+by Java compatibility tests. `ReachabilityWalker.sweepReleasedWeakReferents`
+is also referenced only by Java tests, while public `sweepWeakRefs` and Perl
+sweep wrappers are compatibility no-ops. Keep these test/API surfaces separate
+from the production sweep-removal acceptance target.
 
 The reported Class::MethodMaker tied-array lifetime failure is covered by the
 new project-owned `refcount/generated_tied_array_handler_lifetime.t`: it
@@ -129,8 +137,8 @@ ownership from one aggregate count.
 
 ### Next steps
 
-1. Publish this link-checked documentation checkpoint and verify whether the
-   Gradle platform workflow starts for PR #1938; keep it open and draft.
+1. After at least six minutes, poll head `1ad70b2524` and verify whether the
+   Gradle platform workflow starts; keep PR #1938 open and draft.
 2. Continue the END owner-source audit. Replace nested-hash discovery only
    after the reverse proof covers every strong source, preserves the five-hash
    bound, distinguishes independent roots, and has focused lifecycle coverage.
