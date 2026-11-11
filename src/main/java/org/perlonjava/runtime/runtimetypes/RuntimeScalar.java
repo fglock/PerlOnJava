@@ -2181,6 +2181,20 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         scalar.ioOwner = true;
     }
 
+    /** Retain a non-socket anonymous IO handle copied into a hash element slot. */
+    public static void retainUnstashedFileIoForHashSlot(RuntimeScalar scalar) {
+        if (scalar == null || scalar.type != GLOBREFERENCE
+                || !(scalar.value instanceof RuntimeGlob glob)
+                || !isUnstashedIoGlob(glob) || !hasLiveIo(glob)) {
+            return;
+        }
+        RuntimeScalar ioSlot = glob.getIO();
+        if (ioSlot != null && ioSlot.value instanceof RuntimeIO io
+                && !isSocketIOHandle(io.ioHandle)) {
+            retainUnstashedIoForDurableSlot(scalar);
+        }
+    }
+
     /** Copy a returned anonymous-IO alias without stealing its source holder token. */
     static RuntimeScalar copyReturnedIoAlias(RuntimeScalar source) {
         if (source == null || source.type != GLOBREFERENCE

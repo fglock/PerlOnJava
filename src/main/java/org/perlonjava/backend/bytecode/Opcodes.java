@@ -2493,7 +2493,7 @@ public class Opcodes {
     /**
      * Explicit-return cleanup for a my-hash register.
      * Walks hash values for tracked references but keeps the register readable by RETURN.
-     * Format: RETURN_SCOPE_CLEANUP_HASH reg
+     * Format: RETURN_SCOPE_CLEANUP_HASH reg returnReg
      */
     public static final short RETURN_SCOPE_CLEANUP_HASH = 495;
 
