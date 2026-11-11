@@ -161,32 +161,6 @@ public class ScopedSymbolTable {
         return m;
     }
 
-    // Shared empty sentinels: pushed onto warning/plugin stacks when state is all-default.
-    // Any mutation path replaces the sentinel with a fresh copy first (copy-on-write).
-    static final BitSet EMPTY_BITSET = new BitSet();
-    static final LinkedHashMap<String, ParserKeywordPlugin> EMPTY_PLUGINS = new LinkedHashMap<>();
-
-    /** Copy-on-write for warning BitSet stacks: replaces the sentinel with a fresh BitSet
-     *  before the caller mutates it. No-op when the top is already a real (non-sentinel) BitSet. */
-    private static BitSet cowBitSet(FastStack<BitSet> stack) {
-        BitSet bs = stack.peek();
-        if (bs == EMPTY_BITSET) {
-            bs = new BitSet();
-            stack.set(stack.size() - 1, bs);
-        }
-        return bs;
-    }
-
-    /** Copy-on-write for the parser-keyword-plugins map stack. */
-    private Map<String, ParserKeywordPlugin> cowPlugins() {
-        Map<String, ParserKeywordPlugin> m = parserKeywordPluginsStack.peek();
-        if (m == EMPTY_PLUGINS) {
-            m = new LinkedHashMap<>();
-            parserKeywordPluginsStack.set(parserKeywordPluginsStack.size() - 1, m);
-        }
-        return m;
-    }
-
     // Stack to manage warning categories for each scope
     public final FastStack<BitSet> warningFlagsStack = new FastStack<>();
     // Stack to track explicitly disabled warning categories (for proper $^W interaction)
