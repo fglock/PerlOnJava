@@ -42,14 +42,23 @@ separate compatibility path and remains until strong lexical references are
 proven to have current owner-slot identities. The earlier four Java failures
 on the first batch were fixed in `7628f5c39b`.
 
-Master's report refresh and eval-STRING optimization merges are integrated.
-Platform CI on the previous published head (`efae36a0c7`) passed: Ubuntu 36m38
-and Windows 41m41. Individual CodeQL analyses and dependency submissions
-passed; aggregate CodeQL fails on a high key-size alert at
-`CryptOpenSSLRSA.java:203`, outside the PR's changed files. The latest local
-merge commit passes the full Make gate. Publish it with the checkpoint, keep
-the PR draft, and wait at least six minutes before checking CI for the new
-head.
+Master's report refresh and eval-STRING optimization merges are integrated and
+published with the passing full Make candidate. Platform CI on the previous
+published head (`efae36a0c7`) passed: Ubuntu 36m38 and Windows 41m41.
+Individual CodeQL analyses and dependency submissions passed; aggregate CodeQL
+fails on a high key-size alert at `CryptOpenSSLRSA.java:203`, outside the PR's
+changed files. CI for the current head has not yet been polled; wait at least
+six minutes after the latest push.
+
+The reverse-owner alternative to `deepClearWeakRefsExcludingIndependentRoots`
+is not ready to replace the forward walk. A reverse path needs the referent's
+current slot, its source scalar, and the containing hash; some owner kinds have
+no source, and explicit owner associations can override inferred sources. It
+must also distinguish rescued-graph membership from independent END roots,
+preserve the five-hash limit, and avoid unrelated weak referents. A global
+weak-referent scan with per-object owner searches may cost more than the
+existing bounded walk. Keep the forward path until a bounded exact-edge proof
+has focused coverage and a measured cost.
 
 The reported Class::MethodMaker tied-array lifetime failure is covered by the
 new project-owned `refcount/generated_tied_array_handler_lifetime.t`: it
