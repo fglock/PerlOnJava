@@ -339,6 +339,13 @@ public class Variable {
             // Normal variable: create a simple variable reference node
             OperatorNode result = new OperatorNode(sigil,
                     new IdentifierNode(varName, parser.tokenIndex), parser.tokenIndex);
+            SymbolTable.SymbolEntry ourBinding = parser.ctx.symbolTable.getSymbolEntry(sigil + varName);
+            if (ourBinding != null && "our".equals(ourBinding.decl())) {
+                // Preserve the package alias on a parsed `our` reference. Some
+                // declaration initializers are emitted in a separate context
+                // before the declaration's symbol-table scope is active.
+                result.setAnnotation("ourPackage", ourBinding.perlPackage());
+            }
             if (sigil.equals("*")) {
                 result.setAnnotation("explicitGlobDereference", true);
             }

@@ -384,7 +384,10 @@ public class SubroutineParser {
             // Allow if:
             // - Marked as package (true), OR
             // - Unknown (null) but NOT followed by '(' - like 'new NonExistentClass'
-            if ((isPackage != null && !isPackage)
+            boolean qualifiedNewClass = sourceSubName.equals("new")
+                    && packageName.contains("::")
+                    && !packageName.endsWith("::");
+            if ((isPackage != null && !isPackage && !qualifiedNewClass)
                     || (isPackage == null && !isKnownSub && token.text.equals("(") && !packageName.contains("::") && subExists)
                     || (subExists && packageName.contains("::") && token.text.equals("(")
                         && !(isPackage != null && isPackage)
@@ -398,7 +401,8 @@ public class SubroutineParser {
                     // Perl keeps the direct sub call: `foo Bar, baz` is
                     // `foo("Bar", "baz")`, not `Bar->foo(), "baz"`. If Bar is a
                     // known package we still accept indirect-object syntax above.
-                    || (subExists && isPackage == null && !isKnownSub && isDirectBarewordArgumentBoundary(token))
+                    || (subExists && isPackage == null && !isKnownSub
+                        && isDirectBarewordArgumentBoundary(token) && !qualifiedNewClass)
                     // If packageName is not a known class and the next token is itself a
                     // bareword identifier, then `packageName` is more likely a method name
                     // (e.g. `new`) rather than a class — and the inner `packageName IDENT`
@@ -419,11 +423,13 @@ public class SubroutineParser {
                 // when the class is not loaded, since the enclosing subroutine
                 // might never be invoked (for example platform-specific code).
                 if (sourceSubName.equals("new") && token.text.equals("->")) {
-                    return makeIndirectCall(parser, new IdentifierNode(packageName, currentIndex2),
+                    return makeIndirectCall(parser,
+                            indirectObjectPackageNode(packageName, sourceSubName, currentIndex2),
                             sourceSubName, new ListNode(currentIndex), currentIndex2, currentIndex);
                 }
                 // Not a known subroutine, check if it's valid indirect object syntax
-                if (!isKnownSub && !isLexicalSub && isValidIndirectMethod(packageName)) {
+                if ((!isKnownSub || qualifiedNewClass)
+                        && !isLexicalSub && isValidIndirectMethod(packageName)) {
                     if (!(token.text.equals("->") || token.text.equals("=>")
                             || (INFIX_OP.contains(token.text) && !qualifiedNamedArgument
                                 && !hashDereferenceArgument && !qualifiedConstantArgument))) {
@@ -435,7 +441,8 @@ public class SubroutineParser {
                         } else {
                             arguments = consumeArgsWithPrototype(parser, "@");
                         }
-                        return makeIndirectCall(parser, new IdentifierNode(packageName, currentIndex2),
+                        return makeIndirectCall(parser,
+                                indirectObjectPackageNode(packageName, sourceSubName, currentIndex2),
                                 sourceSubName, arguments, currentIndex2, currentIndex);
                     }
                     // Followed by an infix operator (e.g. `new Foo or die`,
@@ -488,7 +495,8 @@ public class SubroutineParser {
                             || token.text.equals(":")
                             || token.type == LexerTokenType.EOF;
                     if (isSafeInfix || isTerminator) {
-                        return makeIndirectCall(parser, new IdentifierNode(packageName, currentIndex2),
+                        return makeIndirectCall(parser,
+                                indirectObjectPackageNode(packageName, sourceSubName, currentIndex2),
                                 sourceSubName, new ListNode(currentIndex), currentIndex2, currentIndex);
                     }
                 }
@@ -933,6 +941,17 @@ public class SubroutineParser {
         return isValidIndirectMethod(subName, null);
     }
 
+    private static Node indirectObjectPackageNode(String packageName, String methodName, int tokenIndex) {
+        // In `new Package::Class`, Perl treats the qualified invocant as the
+        // class-name string even when that package has not been loaded yet.
+        // Treating it as an IdentifierNode makes strict-subs reject it while a
+        // lazily compiled method body is resolved before the class is loaded.
+        if (methodName.equals("new") && packageName.contains("::") && !packageName.endsWith("::")) {
+            return new StringNode(packageName, tokenIndex);
+        }
+        return new IdentifierNode(packageName, tokenIndex);
+    }
+
     /**
      * An unresolved call followed by a bareword fat-comma key is an ordinary
      * unparenthesized subroutine call, as in {@code recursive value => $x}.
@@ -989,8 +1008,14 @@ public class SubroutineParser {
         }
         if (!policy.isEmpty() && !policy.equals("off")) {
             var location = parser.ctx.errorUtil.getSourceLocationAccurate(methodIndex);
-            String object = invocant instanceof IdentifierNode identifier
-                    ? identifier.name : invocant.toString();
+            String object;
+            if (invocant instanceof IdentifierNode identifier) {
+                object = identifier.name;
+            } else if (invocant instanceof StringNode string) {
+                object = string.value;
+            } else {
+                object = invocant.toString();
+            }
             String message = "Indirect call of method \"" + method + "\" on object \"" + object
                     + "\" at " + location.fileName() + " line " + location.lineNumber();
             if (policy.equals("fatal")) {

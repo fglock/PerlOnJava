@@ -2929,13 +2929,21 @@ public class CompileAssignment {
                     } else {
                         // Global variable
                         // Check strict vars before assignment
-                        if (bytecodeCompiler.shouldBlockGlobalUnderStrictVars(varName)) {
+                        String ourPackageReference = leftOp.getAnnotation("ourPackage") instanceof String packageName
+                                ? packageName
+                                : null;
+                        if (ourPackageReference == null
+                                && bytecodeCompiler.shouldBlockGlobalUnderStrictVars(varName)) {
                             bytecodeCompiler.throwCompilerException("Global symbol \"" + varName + "\" requires explicit package name");
                         }
 
                         // Strip sigil and normalize name (e.g., "$x" → "main::x")
                         String bareVarName = varName.substring(1);  // Remove sigil
-                        String normalizedName = NameNormalizer.normalizeVariableName(bareVarName, bytecodeCompiler.getCurrentPackage());
+                        String normalizedName = NameNormalizer.normalizeVariableName(
+                                bareVarName,
+                                ourPackageReference != null
+                                        ? ourPackageReference
+                                        : bytecodeCompiler.getCurrentPackage());
                         int nameIdx = bytecodeCompiler.addToStringPool(normalizedName);
                         bytecodeCompiler.emit(Opcodes.STORE_GLOBAL_SCALAR);
                         bytecodeCompiler.emit(nameIdx);

@@ -6048,6 +6048,20 @@ public class BytecodeCompiler implements Visitor {
             // Scalar variable dereference: $x
             if (node.operand instanceof IdentifierNode) {
                 String varName = "$" + ((IdentifierNode) node.operand).name;
+                String ourPackageReference = node.getAnnotation("ourPackage") instanceof String packageName
+                        ? packageName
+                        : null;
+                if (ourPackageReference != null && !hasVariable(varName)) {
+                    String globalName = NameNormalizer.normalizeVariableName(
+                            varName.substring(1), ourPackageReference);
+                    int nameIdx = addToStringPool(globalName);
+                    int rd = allocateRegister();
+                    emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                    emitReg(rd);
+                    emit(nameIdx);
+                    lastResultReg = rd;
+                    return;
+                }
 
                 // See StatementParser.bindPostfixStatementLexicals().  The
                 // declaration AST has already allocated its stable bytecode

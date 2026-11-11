@@ -768,6 +768,38 @@ public class OperatorParser {
         }
 
         // Create OperatorNode ($, @, %), ListNode (includes undef), SubroutineNode
+        // An `our` alias is visible inside its initializer. Register a simple
+        // target before parsing it so strict-vars resolution of an initializer
+        // such as `our $V = $V = 119` sees the package alias on the RHS.
+        String earlyOurTarget = null;
+        if (operator.equals("our")) {
+            int targetIndex = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
+            if (targetIndex < parser.tokens.size()) {
+                String sigil = parser.tokens.get(targetIndex).text;
+                if ((sigil.equals("$") || sigil.equals("@") || sigil.equals("%"))
+                        && targetIndex + 1 < parser.tokens.size()
+                        && parser.tokens.get(targetIndex + 1).type == IDENTIFIER) {
+                    String name = parser.tokens.get(targetIndex + 1).text;
+                    boolean simpleName = !name.contains("::")
+                            && (targetIndex + 2 >= parser.tokens.size()
+                                || !parser.tokens.get(targetIndex + 2).text.equals("::"));
+                    int afterName = Whitespace.skipWhitespace(parser, targetIndex + 2, parser.tokens);
+                    String variable = sigil + name;
+                    if (simpleName && afterName < parser.tokens.size()
+                            && parser.tokens.get(afterName).text.equals("=")
+                            && parser.ctx.symbolTable.getSymbolEntry(variable) == null) {
+                        parser.ctx.symbolTable.addVariable(variable, "our_initializer", null);
+                        if (sigil.equals("$")) {
+                            String fullName = NameNormalizer.normalizeVariableName(
+                                    name, parser.ctx.symbolTable.getCurrentPackage());
+                            GlobalVariable.getGlobalVariable(fullName);
+                        }
+                        earlyOurTarget = variable;
+                    }
+                }
+            }
+        }
+
         // Suppress strict vars check while parsing the variable being declared
         boolean savedParsingDeclaration = parser.parsingDeclaration;
         parser.parsingDeclaration = true;
@@ -867,6 +899,13 @@ public class OperatorParser {
                             operandNode.setAnnotation("isDeclaredReference", true);
                         }
                         addVariableToScope(parser.ctx, operator, operandNode, declarationSourceIndex);
+                        if (earlyOurTarget != null
+                                && element instanceof OperatorNode declaredTarget
+                                && declaredTarget.operand instanceof IdentifierNode declaredName
+                                && (declaredTarget.operator + declaredName.name).equals(earlyOurTarget)) {
+                            parser.ctx.symbolTable.replaceVariable(
+                                    earlyOurTarget, "our", declaredTarget);
+                        }
                         transformedElements.add(element);
                     }
                 } else {
@@ -892,6 +931,9 @@ public class OperatorParser {
                 operandNode.setAnnotation("isDeclaredReference", true);
             }
             addVariableToScope(parser.ctx, operator, operandNode, declarationSourceIndex);
+            if (earlyOurTarget != null) {
+                parser.ctx.symbolTable.replaceVariable(earlyOurTarget, "our", operandNode);
+            }
         }
 
         OperatorNode decl = new OperatorNode(operator, operand, currentIndex);
