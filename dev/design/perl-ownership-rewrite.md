@@ -8,34 +8,36 @@ acceptance. Existing lifecycle, aggregate, IO, CODE, weak-reference, thread,
 and HTML-Tree regressions pass on both backends with corrective sweeps disabled.
 
 **Current checkpoint (2026-11-11):** Issue #1649 remains active. PR #1938 is
-open and draft on `wip/alias-cell-ownership-20261030-185849`; implementation
-commit `4e84cdad70` and the first checkpoint refresh `c0edb90946` are published
-there. The local snapshot remains on
-`wip/issue1649-preflight-20261111-083047`. Before the update, CI at
-`5ea904972685d42e063b41e8faf63f4c29142d95` had passing Ubuntu and Windows
-builds and individual CodeQL analysis jobs, with the aggregate CodeQL check
-failed. Checks for the updated PR head are pending; wait at least six minutes
-after the last push before polling again.
+open and draft on `wip/alias-cell-ownership-20261030-185849`; the remote head
+is `9d6cd1098a`. The tested local candidate is `7628f5c39b` on
+`fix/issue1649-end-boundary-owner-proof`, two implementation commits ahead.
+Its full `nice -n 19 timeout 3600 make` gate passed in 13m21
+(`/tmp/issue1649-batch-7628-full-make.log`), and the focused issue fixture
+shard passed in 1m54 (`/tmp/issue1649-batch-7628-shard0.log`). Rebuilt-candidate
+DBIx `t/100populate.t` and system Perl each pass 108/108 assertions
+(`/tmp/issue1649-dbix-t100-7628.log` and
+`/tmp/issue1649-dbix-t100-system-perl.log`); the earlier DBIx failure report is
+stale. The tested batch stores temporary roots as exact owner leases and
+narrows the legacy unpaired-release fast path to direct live lexical scalar
+owners, retaining aggregate-root recovery after four snapshot regressions
+exposed that compatibility requirement.
 
-The fix follows temporary control-flow return values through reachability and
-diagnostic walks, preserves exact local-array return roots through cleanup and
-exception unwinding, and tracks independent package CODE, suspended-frame, IO,
-and regex callback owners to END boundaries. It adds four Java regressions and
-two Perl-level fixtures, with the runtime change recorded under Work in
-progress in the changelog.
+The remaining `temporaryRootDirectlyReferences` traversal is required for
+targets nested in temporary expression lists and control-flow return lists;
+those children do not have the outer list's lease identity. The full rescued
+graph helper `walkEndBoundaryRootsExcludingRescued` is test-only now, while END
+cleanup still follows nested hash values up to depth five to clear weak
+observers without releasing strong fields. Cascaded DESTROY cannot replace
+that boundary pass directly because rescued objects with live Perl owners must
+remain usable through END. `Internals::SvREFCNT`'s live lexical scan is a
+separate compatibility path and remains until strong lexical references are
+proven to have current owner-slot identities. The earlier four Java failures
+on the first batch were fixed in `7628f5c39b`.
 
-Evidence on the integrated candidate: `nice -n 19 timeout 3600 make` passed in
-7m13 (`/tmp/issue1649-integrated-make2.log`); `nice -n 19 make check-links`
-passed with zero errors (`/tmp/issue1649-check-links.log`). The nested callback
-fixture passes 4/4 on system Perl, JVM, and interpreter; the suspended async
-fixture passes 6/6 on both PerlOnJava backends (system Perl skips unsupported
-async syntax). Rebuilt-candidate DBIx `t/100populate.t` and the system-Perl
-oracle each pass 108/108 (`/tmp/issue1649-dbix-t100-integrated-candidate.log`
-and `/tmp/issue1649-dbix-t100-system-perl.log`). The older four-failure report
-is stale. Keep the PR open/draft, push the tested candidate, then wait at least
-six minutes after the latest push before the next CI refresh. Continue the
-separate `t/52leaks.t` owner-slot audit only if it remains in the refreshed
-issue handoff.
+The PR body still needs the tested-batch evidence and refreshed next steps.
+Publish the candidate, keep the PR open/draft, then wait at least six minutes
+after the push before refreshing CI status. Latest checked PR CI before this
+candidate had no Ubuntu/Windows rows and a failed aggregate CodeQL check.
 
 The reported Class::MethodMaker tied-array lifetime failure is covered by the
 new project-owned `refcount/generated_tied_array_handler_lifetime.t`: it
