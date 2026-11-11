@@ -103,4 +103,24 @@ class TemporaryRootOwnerSlotTest {
             }
         }
     }
+
+    @Test
+    void arrayTemporaryRootMatchesDirectStrongElements() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeHash referent = new RuntimeHash();
+            RuntimeScalar reference = referent.createAnonymousReference();
+            RuntimeHash unrelated = new RuntimeHash();
+            RuntimeArray root = new RuntimeArray();
+            root.elements.add(reference);
+
+            MortalList.pushTemporaryRoot(root);
+            try {
+                assertTrue(MortalList.temporaryRootDirectlyReferences(referent));
+                assertFalse(MortalList.temporaryRootDirectlyReferences(unrelated));
+            } finally {
+                MortalList.popTemporaryRoot(root);
+            }
+        }
+    }
 }
