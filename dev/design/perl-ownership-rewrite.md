@@ -12,36 +12,36 @@ thread, and HTML-Tree regressions pass with corrective sweeps disabled.
 | Phase 1: remove default corrective sweeps | Complete | Full no-sweeps gates and lifecycle coverage are recorded below. |
 | Phase 2: retire reachability fallbacks | Active | Owner-source proofs and exact-head CPAN acceptance remain. |
 
-**Current checkpoint (2026-11-11 18:05 UTC):** Issue #1649 remains active.
-PR #1938 is open and draft; the local rebase candidate is `063ab6724b`, based
-on `origin/master` `6007aa65d4`. It is not yet published. The rebase exposed
-first-import failures in `Exporter::Heavy` callers. Loading Exporter's helper
-when `Exporter.pm` is first loaded keeps `export_to_level` at the expected
-caller depth. The focused make gate passes, and the five affected unit files
-pass on both JVM and interpreter backends. Logs are
-`/tmp/issue1649-exporter-preload-focused-make.log` and
+**Current checkpoint (2026-11-11):** Issue #1649 remains active. PR #1938 is
+open and draft at remote head `cb13674885`. The isolated candidate branch
+`wip/issue1649-live-master-20261111` is rebased on live `master`
+`daa2d54d81`; source commit `325eaa29f6` carries the returned-hash cleanup
+handoff fix. The rebase completed all 723 replay positions. It preserved the
+live-master eval metadata and symbol-table caches, returned-hash IO-owner
+protection, and the current 2026-11-11 CPAN report snapshot; the older
+2026-11-10 report-only snapshot was superseded and skipped.
+
+The Exporter regression fix eagerly loads `Exporter::Heavy` from the initial
+`Exporter.pm` load. System Perl passes the new 2-assertion regression; the
+focused make gate and five affected unit files pass on both PerlOnJava backends.
+Evidence is in `/tmp/issue1649-exporter-preload-focused-make.log` and
 `/tmp/issue1649-{jvm,interpreter}-{exporter_to_level_first_lazy_require,file_stat_signature_args_warning,line_directive_core_operators,time_localtime_core,user_pwent_grent_modules}.log`.
+On the prior candidate based on stale master `da6dfe13bd`, the full `make` passed
+in 7m46 and DBIx::Class `t/100populate.t` passed 108/108 with no LeakTracer
+references. Those results do not qualify the live-master candidate; its full
+gate and exact `t/100populate.t` rerun are pending.
 
-On the same candidate JAR, DBIx::Class `t/100populate.t` passes 108/108 and
-LeakTracer reports no retained references. The project-owned
-`dev/modules/dbix_storage_weak_release.t` also passes on both backends with
-five references checked and none retained. Evidence:
-`/tmp/issue1649-dbix-t100-current-exporter-preload.log` and
-`/tmp/issue1649-dbix-storage-weak-release-current-{jvm,interpreter}.log`.
-The exact-head full `nice -n 19 timeout 3600 make` remains pending.
-
-The remaining temporary-root decision path is the legacy unpaired,
-unblessed-aggregate fallback. Its nested scalar, array/hash, list, control-flow,
-and code/capture edges can change while shared arrays mutate; removing its
-second negative query needs versioned snapshots across those mutation sites.
-The END hash traversal and mutable return-list traversal also remain until the
-owner-source proof is complete. `Internals::SvREFCNT` is separate from END:
-the lexical scan still lacks complete owner-slot coverage. Keep these
-traversals until focused tests establish their replacement.
-
-The latest remote PR head has not been updated with `063ab6724b`, so its CI
-status does not qualify the rebased candidate. RSA policy remains tracked in
+The remaining temporary-root traversal is the legacy unpaired, unblessed
+aggregate fallback. Its descendant graph may mutate through shared containers,
+so a second-query removal needs mutation-versioned snapshots. END hash discovery
+and mutable return-list traversal remain under separate owner-source audits.
+The `Internals::SvREFCNT` scan is independent of END and stays until lexical
+scalar ownership has complete coverage. RSA API limits remain tracked in
 [issue #2031](https://github.com/fglock/PerlOnJava/issues/2031).
+
+Immediate action: run the full gate and DBIx `t/100populate.t` against this
+candidate, then update the existing issue claim and force-update PR #1938 while
+keeping it open and draft. Check CI at least six minutes after publication.
 
 The final callsite search found no production caller for the legacy
 `MortalList.deferDecrement` entry point; its root-recovery behavior is exercised
@@ -140,13 +140,14 @@ ownership from one aggregate count.
 
 ### Next steps
 
-1. Run the full `nice -n 19 timeout 3600 make` gate on the rebased candidate.
-2. Keep PR #1938 open and draft; publish the validated commits and update its
-   issue claim, then refresh CI after at least six minutes.
-3. Preserve END and temporary-root graph walks until owner-slot completeness
-   and mutation-safe descendant ownership have focused coverage.
-4. Keep the `SvREFCNT` scan separate from END and retain it until lexical
-   scalar ownership has a completeness guarantee.
+1. Run `nice -n 19 timeout 3600 make` and DBIx::Class `t/100populate.t` on
+   source `325eaa29f6` plus this checkpoint update.
+2. Update the existing #1649 claim and publish the validated branch to PR #1938;
+   keep the PR open and draft, then check CI at least six minutes later.
+3. Preserve END and temporary-root walks until owner-slot completeness and
+   mutation-safe descendant ownership have focused coverage.
+4. Keep the `SvREFCNT` scan separate from END until lexical scalar ownership
+   has a completeness guarantee.
 
 ### Open questions and blockers
 
