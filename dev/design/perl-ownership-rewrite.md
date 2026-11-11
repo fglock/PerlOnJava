@@ -8,57 +8,37 @@ acceptance. Existing lifecycle, aggregate, IO, CODE, weak-reference, thread,
 and HTML-Tree regressions pass on both backends with corrective sweeps disabled.
 
 **Current checkpoint (2026-11-11):** Issue #1649 remains active. PR #1938 is
-open and draft on `wip/alias-cell-ownership-20261030-185849`. Runtime changes
-at `7628f5c39b` store temporary roots as exact owner leases and narrow the
-legacy unpaired-release fast path to direct live lexical scalar owners,
-retaining aggregate-root recovery after four snapshot regressions exposed that
-compatibility requirement. Its full `nice -n 19 timeout 3600 make` passed in
-13m21 (`/tmp/issue1649-batch-7628-full-make.log`); the focused issue shard
-passed in 1m54 (`/tmp/issue1649-batch-7628-shard0.log`). DBIx
-`t/100populate.t` and system Perl each pass 108/108
-(`/tmp/issue1649-dbix-t100-7628.log` and
-`/tmp/issue1649-dbix-t100-system-perl.log`). An interpreter attempt was stopped
-after 1/108 assertions in about 90s and is not a result.
+open and draft at `02cad0390770f92cba2cebd3a9301e69abd34bd4` on
+`fix/issue1649-end-boundary-owner-proof`. The local uncommitted fast path in
+`ReachabilityWalker.isReachableFromTemporaryRoots` now returns before creating
+a walker, queue, or root snapshot when the current runtime has no temporary
+leases. Nonempty stacks retain the existing graph walk, including nested
+return-list mutation behavior. Full `nice -n 19 timeout 3600 make` passed on
+this working tree in 6m35 (`/tmp/issue1649-temp-root-empty-fastpath-make.log`);
+`TemporaryRootNestedReturnMutationTest` passed, and `make check-links` passed
+with 830 documents and zero errors (`/tmp/issue1649-temp-root-empty-fastpath-links.log`).
+DBIx `t/100populate.t` and system Perl each pass 108/108. A direct interpreter
+run reached only 1/108 assertions after five minutes and was stopped; it is
+inconclusive, not a failure (`/tmp/issue1649-dbix-t100-interpreter-current.log`).
 
-A new `TemporaryRootNestedReturnMutationTest` records that changing a
-reference inside a `RuntimeControlFlowList` return list changes which referent
-the active temporary root protects. It passes in full Make on immutable merge
-commit `4f373fe835` in 9m12
-(`/tmp/issue1649-master-eval-sync-4f373fe-make.log`). That merge integrates
-master's eval-STRING compiler optimizations; the BytecodeCompiler conflict was
-resolved by retaining `padConstants` while accepting the pooled compiler
-collections. The fallback remains necessary; this regression locks the
-mutation behavior a future owner-edge implementation must preserve.
+The last successful CI poll for head `02cad039` showed Ubuntu and Windows
+pending, individual CodeQL analyses and dependency submissions passing, and
+aggregate CodeQL failing. Later polls could not connect to GitHub's API. The
+prior head `efae36a0c7` had Ubuntu and Windows pass; its aggregate CodeQL alert
+was a high key-size finding at `CryptOpenSSLRSA.java:203`, outside the PR's
+changed files. No conclusion has been obtained about whether the current
+CodeQL failure is the same alert.
 
-The remaining `temporaryRootDirectlyReferences` traversal is required for
-targets nested in temporary expression lists and control-flow return lists;
-those children do not have the outer list's lease identity. The full rescued
-graph helper `walkEndBoundaryRootsExcludingRescued` is test-only now, while END
-cleanup still follows nested hash values up to depth five to clear weak
-observers without releasing strong fields. Cascaded DESTROY cannot replace
-that boundary pass directly because rescued objects with live Perl owners must
-remain usable through END. `Internals::SvREFCNT`'s live lexical scan is a
-separate compatibility path and remains until strong lexical references are
-proven to have current owner-slot identities. The earlier four Java failures
-on the first batch were fixed in `7628f5c39b`.
-
-Master's report refresh and eval-STRING optimization merges are integrated and
-published with the passing full Make candidate. Platform CI on the previous
-published head (`efae36a0c7`) passed: Ubuntu 36m38 and Windows 41m41.
-Individual CodeQL analyses and dependency submissions passed; aggregate CodeQL
-fails on a high key-size alert at `CryptOpenSSLRSA.java:203`, outside the PR's
-changed files. CI for the current head has not yet been polled; wait at least
-six minutes after the latest push.
-
-The reverse-owner alternative to `deepClearWeakRefsExcludingIndependentRoots`
-is not ready to replace the forward walk. A reverse path needs the referent's
-current slot, its source scalar, and the containing hash; some owner kinds have
-no source, and explicit owner associations can override inferred sources. It
-must also distinguish rescued-graph membership from independent END roots,
-preserve the five-hash limit, and avoid unrelated weak referents. A global
-weak-referent scan with per-object owner searches may cost more than the
-existing bounded walk. Keep the forward path until a bounded exact-edge proof
-has focused coverage and a measured cost.
+The full rescued-graph helper `walkEndBoundaryRootsExcludingRescued` is
+test-only now, while END cleanup still follows nested hash values up to depth
+five to clear weak observers without releasing strong fields. Cascaded DESTROY
+cannot replace that boundary pass directly because rescued objects with live
+Perl owners must remain usable through END. `Internals::SvREFCNT`'s live lexical
+scan is a separate compatibility path. The reverse-owner alternative to
+`deepClearWeakRefsExcludingIndependentRoots` remains unproven: it must establish
+exact current slot and container edges, preserve the five-hash limit, and
+distinguish rescued-graph membership from independent roots. Keep the forward
+walk until that bounded proof has focused coverage and measured cost.
 
 The reported Class::MethodMaker tied-array lifetime failure is covered by the
 new project-owned `refcount/generated_tied_array_handler_lifetime.t`: it
@@ -150,11 +130,13 @@ ownership from one aggregate count.
 
 ### Next steps
 
-1. Restart and finish the fresh-home CPAN acceptance run for the new exact PR
-   head, classifying any failures against system Perl and existing baselines.
-2. Continue the producer/release audit, then review issue #1649 and PR readiness
-   against the no-sweeps acceptance plan.
-3. Keep the root-recovery compatibility adapter isolated to the legacy
+1. Commit the tested temporary-root fast path and checkpoint, then publish the
+   tested commit when GitHub connectivity is available.
+2. Finish DBIx interpreter investigation only if a useful bounded workload can
+   distinguish a runtime defect from the slow 10,000-row populate operation.
+3. Resume CI polling no sooner than six minutes after the latest attempt and
+   refresh the PR and issue checkpoint when new evidence is available.
+4. Keep the root-recovery compatibility adapter isolated to the legacy
    unpaired decrement API; production release paths carry exact owner tokens
    and no longer use corrective reachability sweeps.
 
