@@ -8,8 +8,8 @@ acceptance. Existing lifecycle, aggregate, IO, CODE, weak-reference, thread,
 and HTML-Tree regressions pass on both backends with corrective sweeps disabled.
 
 **Current checkpoint (2026-11-11):** Issue #1649 remains active. PR #1938
-remains open and draft at published head `190d64c742`. Local source/test commit
-`08f764c6c9` adds two narrow
+remains open and draft. Published source/test commits `b65fbdd083` and
+`08f764c6c9` add two narrow
 fast paths: `ReachabilityWalker.isReachableFromTemporaryRoots` returns before
 building a walker when the current runtime has no temporary leases, and
 `MortalList.directlyReferences` checks scalar/leaf roots without allocating a
@@ -21,17 +21,17 @@ semantics. Full `nice -n 19 timeout 3600 make` passed on its working tree in
 gate passed in 6m35 (`/tmp/issue1649-temp-root-empty-fastpath-make.log`).
 `make check-links` passed with 830 documents and zero errors
 (`/tmp/issue1649-leaf-fastpath-checkpoint-links.log`). DBIx `t/100populate.t`
-and system Perl each pass 108/108. A
-direct interpreter run reached only 1/108 assertions after five minutes and
+and system Perl each pass 108/108. A direct interpreter run reached only 1/108
+assertions after five minutes and
 was stopped; it is inconclusive, not a failure
 (`/tmp/issue1649-dbix-t100-interpreter-current.log`).
 
-The latest published PR head `190d64c742` was polled at 12:16 UTC. Ubuntu and
-Windows were pending; CodeQL failed on the high RSA key-size alert at unchanged
+The published PR head `190d64c742` was polled at 12:16 UTC. Ubuntu and Windows
+were pending; CodeQL failed on the high RSA key-size alert at unchanged
 `CryptOpenSSLRSA.java:203`; all four individual analyses and both dependency
-submissions passed. The prior `02cad039` check had the same CodeQL failure;
-this alert is outside the PR's changed files. Poll the new head no sooner than
-six minutes after publishing it.
+submissions passed. The later head `7690d56977` adds this checkpoint and has
+not yet been polled. The alert is outside the PR's changed files. Poll the
+current head no earlier than 12:26 UTC.
 
 The full rescued-graph helper `walkEndBoundaryRootsExcludingRescued` is
 test-only now, while END cleanup still follows nested hash values up to depth
@@ -134,12 +134,11 @@ ownership from one aggregate count.
 
 ### Next steps
 
-1. Check links, commit the checkpoint for `08f764c6c9`, and publish the tested
-   source/test change while keeping PR #1938 open and draft.
+1. Poll CI for the latest PR head no earlier than 12:26 UTC; keep PR #1938 open
+   and draft.
 2. Finish DBIx interpreter investigation only if a useful bounded workload can
    distinguish a runtime defect from the slow 10,000-row populate operation.
-3. Wait at least six minutes after publishing before polling the new CI head,
-   then refresh the PR and issue checkpoint when new evidence is available.
+3. Refresh the PR and issue checkpoint when new evidence is available.
 4. Keep the root-recovery compatibility adapter isolated to the legacy
    unpaired decrement API; production release paths carry exact owner tokens
    and no longer use corrective reachability sweeps.
