@@ -96,13 +96,43 @@ public class ScopedSymbolTable {
         }
     }
 
-    /** Unsynchronized stack backed by ArrayList. Replaces java.util.Stack (Vector-based) to eliminate per-operation monitor overhead in single-threaded compilation paths.
-     *  Initial capacity 2 (vs ArrayList default lazy-init to 10) cuts GC pressure for snapshot ScopedSymbolTables: 16 FastStack fields × Object[2] vs × Object[10]. */
-    public static final class FastStack<T> extends ArrayList<T> {
-        public FastStack() { super(2); }
-        public void push(T item) { add(item); }
-        public T pop() { return remove(size() - 1); }
-        public T peek() { return get(size() - 1); }
+    /** Minimal array-backed stack. Replaces the ArrayList extension to eliminate per-operation
+     *  overhead (modCount, bounds check, arraycopy guard) that ArrayList carries even when
+     *  removing the last element. push/pop/peek are direct array reads/writes. */
+    public static final class FastStack<T> {
+        private Object[] data;
+        private int size;
+
+        public FastStack() { data = new Object[2]; }
+
+        public void push(T item) {
+            if (size == data.length) data = java.util.Arrays.copyOf(data, Math.max(size * 2, 4));
+            data[size++] = item;
+        }
+
+        @SuppressWarnings("unchecked")
+        public T pop() {
+            T item = (T) data[--size];
+            data[size] = null;   // release reference for GC
+            return item;
+        }
+
+        @SuppressWarnings("unchecked")
+        public T peek() { return (T) data[size - 1]; }
+
+        public int size() { return size; }
+        public boolean isEmpty() { return size == 0; }
+
+        @SuppressWarnings("unchecked")
+        public T get(int i) { return (T) data[i]; }
+
+        public void set(int i, T v) { data[i] = v; }
+
+        public void clear() {
+            // null slots so GC can reclaim contents
+            java.util.Arrays.fill(data, 0, size, null);
+            size = 0;
+        }
     }
 
     // Shared empty sentinels: pushed onto warning/plugin stacks when state is all-default.
@@ -1247,20 +1277,21 @@ public class ScopedSymbolTable {
         sb.append("ScopedSymbolTable {\n");
 
         sb.append("  stack: [\n");
-        for (SymbolTable symbolTable : symbolTableStack) {
-            sb.append("    ").append(symbolTable.toString()).append(",\n");
+        for (int i = 0; i < symbolTableStack.size(); i++) {
+            sb.append("    ").append(symbolTableStack.get(i).toString()).append(",\n");
         }
         sb.append("  ],\n");
 
         sb.append("  packageStack: [\n");
-        for (PackageInfo pkg : packageStack) {
+        for (int i = 0; i < packageStack.size(); i++) {
+            PackageInfo pkg = packageStack.get(i);
             sb.append("    ").append(pkg.packageName).append(" ").append(pkg.isClass).append(",\n");
         }
         sb.append("  ],\n");
 
         sb.append("  subroutineStack: [\n");
-        for (String sub : subroutineStack) {
-            sb.append("    \"").append(sub).append("\",\n");
+        for (int i = 0; i < subroutineStack.size(); i++) {
+            sb.append("    \"").append(subroutineStack.get(i)).append("\",\n");
         }
         sb.append("  ],\n");
 

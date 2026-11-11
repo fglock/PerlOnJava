@@ -48,21 +48,25 @@ public class SpecialBlockParser {
 
     private static ScopedSymbolTable.FastStack<BitSet> cloneBitSetStack(ScopedSymbolTable.FastStack<BitSet> source) {
         ScopedSymbolTable.FastStack<BitSet> copy = new ScopedSymbolTable.FastStack<>();
-        for (BitSet flags : source) {
-            copy.push((BitSet) flags.clone());
+        for (int i = 0; i < source.size(); i++) {
+            copy.push((BitSet) source.get(i).clone());
         }
         return copy;
     }
 
     private static ScopedSymbolTable.FastStack<Integer> cloneIntegerStack(ScopedSymbolTable.FastStack<Integer> source) {
         ScopedSymbolTable.FastStack<Integer> copy = new ScopedSymbolTable.FastStack<>();
-        copy.addAll(source);
+        for (int i = 0; i < source.size(); i++) {
+            copy.push(source.get(i));
+        }
         return copy;
     }
 
     private static <T> void restoreStack(ScopedSymbolTable.FastStack<T> target, ScopedSymbolTable.FastStack<T> source) {
         target.clear();
-        target.addAll(source);
+        for (int i = 0; i < source.size(); i++) {
+            target.push(source.get(i));
+        }
     }
 
     public static ScopedSymbolTable getCurrentScope() {
@@ -320,11 +324,11 @@ public class SpecialBlockParser {
             java.util.BitSet disabledFlags = (java.util.BitSet) parser.ctx.symbolTable.warningDisabledStack.peek().clone();
             int hintHashSnapshotId = HintHashRegistry.snapshotCurrentHintHash();
             CompilerFlagNode flagNode = new CompilerFlagNode(
-                    (java.util.BitSet) parser.ctx.symbolTable.warningFlagsStack.getLast().clone(),
+                    (java.util.BitSet) parser.ctx.symbolTable.warningFlagsStack.peek().clone(),
                     fatalFlags,
                     disabledFlags,
-                    parser.ctx.symbolTable.featureFlagsStack.getLast(),
-                    parser.ctx.symbolTable.strictOptionsStack.getLast(),
+                    parser.ctx.symbolTable.featureFlagsStack.peek(),
+                    parser.ctx.symbolTable.strictOptionsStack.peek(),
                     warningScopeId,
                     hintHashSnapshotId,
                     parser.tokenIndex);
