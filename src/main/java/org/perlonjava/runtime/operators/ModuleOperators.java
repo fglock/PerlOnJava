@@ -850,8 +850,19 @@ public class ModuleOperators {
         // InterpreterState.currentPackage is now updated by `package Foo;`
         // declarations in the JVM backend (see EmitOperator.handlePackageOperator).
         CallerStack.CallerInfo loadCaller = CallerStack.peek(0);
-        parsedArgs.initialPackage = loadCaller != null
-                ? loadCaller.packageName()
+        String callerPackage = loadCaller == null ? null : loadCaller.packageName();
+        // A non-main caller frame is the most precise context for runtime
+        // require and for `use`, which pushes its parser package explicitly.
+        // Compile-time special blocks can leave a main-package frame on the
+        // stack while requireInPackage has already supplied a non-main package
+        // through InterpreterState.currentPackage; do not let that stale main
+        // frame erase the explicit package context.
+        parsedArgs.initialPackage = callerPackage != null
+                && !callerPackage.isEmpty()
+                && (!"main".equals(callerPackage)
+                        || savedPackage == null || savedPackage.isEmpty()
+                        || "main".equals(savedPackage))
+                ? callerPackage
                 : savedPackage;
         
         // Save and clear %^H (hints hash) to prevent hint leakage into required modules.
