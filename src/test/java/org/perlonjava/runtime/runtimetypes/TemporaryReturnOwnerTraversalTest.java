@@ -85,4 +85,27 @@ class TemporaryReturnOwnerTraversalTest {
             }
         }
     }
+
+    @Test
+    void temporaryReturnListKeepsStrongReferentsReachableUntilPopped() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeHash target = new RuntimeHash();
+            RuntimeList expression = new RuntimeList();
+            expression.elements.add(target.createReference());
+
+            MortalList.pushTemporaryRoot(expression);
+            try {
+                assertTrue(ReachabilityWalker.isReachableFromTemporaryRoots(target));
+                java.util.List<String> path = ReachabilityWalker.findPathTo(target);
+                assertNotNull(path);
+                assertTrue(path.getFirst().contains("<temp-root#"), path.toString());
+            } finally {
+                MortalList.popTemporaryRoot(expression);
+            }
+
+            assertFalse(ReachabilityWalker.isReachableFromTemporaryRoots(target));
+            assertNull(ReachabilityWalker.findPathTo(target));
+        }
+    }
 }

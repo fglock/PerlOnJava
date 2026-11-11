@@ -483,6 +483,17 @@ public class ReachabilityWalker {
                     addReachable(v, todo);
                     visitScalar(v, todo);
                 }
+            } else if (cur instanceof RuntimeList list) {
+                // RuntimeList values are expression results rather than Perl
+                // containers, but a returned list can be held as a temporary
+                // root while its caller finishes scope cleanup. Follow its
+                // strong values for that lease just like aggregate elements.
+                for (RuntimeBase value : list.elements) {
+                    addReachable(value, todo);
+                    if (value instanceof RuntimeScalar scalar) {
+                        visitScalar(scalar, todo);
+                    }
+                }
             } else if (cur instanceof RuntimeCode code) {
                 if (!hasWalkableCodeEdges(code, walkCaptures)) {
                     continue;
@@ -859,6 +870,17 @@ public class ReachabilityWalker {
                 }
                 for (RuntimeScalar v : a.elements) {
                     visitScalarPath(v, curPath + "[" + (idx++) + "]", howReached, todo);
+                }
+            } else if (cur instanceof RuntimeList list) {
+                int idx = 0;
+                for (RuntimeBase value : list.elements) {
+                    String path = curPath + "[" + (idx++) + "]";
+                    if (value instanceof RuntimeScalar scalar) {
+                        visitScalarPath(scalar, path, howReached, todo);
+                    } else if (value != null
+                            && howReached.putIfAbsent(value, path) == null) {
+                        todo.add(value);
+                    }
                 }
             } else if (cur instanceof RuntimeCode code) {
                 if (code.closedOverVariables != null) {
