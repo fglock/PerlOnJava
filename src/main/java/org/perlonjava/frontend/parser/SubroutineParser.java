@@ -1008,8 +1008,14 @@ public class SubroutineParser {
         }
         if (!policy.isEmpty() && !policy.equals("off")) {
             var location = parser.ctx.errorUtil.getSourceLocationAccurate(methodIndex);
-            String object = invocant instanceof IdentifierNode identifier
-                    ? identifier.name : invocant.toString();
+            String object;
+            if (invocant instanceof IdentifierNode identifier) {
+                object = identifier.name;
+            } else if (invocant instanceof StringNode string) {
+                object = string.value;
+            } else {
+                object = invocant.toString();
+            }
             String message = "Indirect call of method \"" + method + "\" on object \"" + object
                     + "\" at " + location.fileName() + " line " + location.lineNumber();
             if (policy.equals("fatal")) {
