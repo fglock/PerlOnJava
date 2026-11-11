@@ -13,27 +13,32 @@ thread, and HTML-Tree regressions pass with corrective sweeps disabled.
 | Phase 2: retire reachability fallbacks | Active | Owner-source proofs and exact-head CPAN acceptance remain. |
 
 **Current checkpoint (2026-11-11):** Issue #1649 remains active. PR #1938 is
-open and draft at remote head `cb13674885`. The isolated candidate branch
-`wip/issue1649-live-master-20261111` is rebased on live `master`
-`daa2d54d81`; validated source is `15458951351f24e80e2eacd3162e20738c419997`.
-The rebase completed all 723 replay positions. It preserved the live-master
-eval metadata and symbol-table caches, returned-hash IO-owner protection, and
-the current 2026-11-11 CPAN report snapshot; the older 2026-11-10 report-only
-snapshot was superseded and skipped. Two rebase merge artifacts—a duplicated
-`ScopedSymbolTable` helper block and a redundant brace in the detached-glob
-constructor—were corrected before acceptance.
+open and draft at remote head `cdc75a1d51`; the validated local candidate is
+pending publication. Branch `wip/issue1649-live-master-20261111` is rebased on
+live `master` `3590efc959`; current runtime and test source is
+`afbccd283febd27fb953dabf977d583df4d79585`. The rebase completed all 726 replay
+positions. It preserved the live-master eval metadata and symbol-table caches,
+returned-hash IO-owner protection, parser fixes, and the current 2026-11-11
+CPAN report snapshot; the older 2026-11-10 report-only snapshot was superseded
+and skipped. Two rebase merge artifacts—a duplicated `ScopedSymbolTable`
+helper block and a redundant brace in the detached-glob constructor—were
+corrected before acceptance.
 
 The Exporter regression fix eagerly loads `Exporter::Heavy` from the initial
 `Exporter.pm` load. System Perl passes the new 2-assertion regression; the
 focused make gate and five affected unit files pass on both PerlOnJava backends.
 Evidence is in `/tmp/issue1649-exporter-preload-focused-make.log` and
 `/tmp/issue1649-{jvm,interpreter}-{exporter_to_level_first_lazy_require,file_stat_signature_args_warning,line_directive_core_operators,time_localtime_core,user_pwent_grent_modules}.log`.
-On the rebased candidate, `nice -n 19 timeout 3600 make` passed in 7m28
-(`/tmp/issue1649-live-master-final-make-1545895135.log`) and DBIx::Class
+On the current candidate, `nice -n 19 timeout 3600 make` passed in 6m48
+(`/tmp/issue1649-live-master-current-make-afbccd283f.log`) and DBIx::Class
 `t/100populate.t` passed all 108 assertions with no LeakTracer references
-(`/tmp/issue1649-dbix-t100-live-master-1545895135.log`). This reproduces the
-earlier DBIx pass on the exact live-master candidate; the historical four
-object-GC failures do not reproduce here.
+(`/tmp/issue1649-dbix-t100-final-afbccd283f.log`). The historical four object-GC
+failures do not reproduce. The nested File::Temp owner case reported in #2015
+now has project coverage in
+`src/test/resources/unit/refcount/nested_hash_or_assign_file_temp_owner.t`; it
+passes 4/4 under system Perl, JVM, and interpreter. System Perl validation is
+in `/tmp/issue1649-nested-file-temp-system-perl.log`; focused backend results
+are in `/tmp/issue1649-nested-file-temp-current-{jvm,interpreter}.log`.
 
 The remaining temporary-root traversal is the legacy unpaired, unblessed
 aggregate fallback. Its descendant graph may mutate through shared containers,
