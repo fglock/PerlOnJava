@@ -7,42 +7,32 @@ verified owner-count alignment, the `SvREFCNT` live-scalar scan, and final CPAN
 acceptance. Existing lifecycle, aggregate, IO, CODE, weak-reference, thread,
 and HTML-Tree regressions pass on both backends with corrective sweeps disabled.
 
-**Current checkpoint (2026-11-11):** #1649 remains active; PR #1938 was last
-verified open/draft at `26dcb51c47b5e41b2b990a30aa5aecf11badef72`, with Ubuntu
-and Windows passing. Aggregate CodeQL failed on the existing RSA-key-size alert
-in `CryptOpenSSLRSA.java:203`, outside this change. The user refreshed the PR
-description and issue handoff; use those as current external evidence. A later
-live refresh could not connect to GitHub.
+**Current checkpoint (2026-11-11):** Issue #1649 remains active. The candidate
+is on `fix/issue1649-temp-root-list-20261111` at `4e84cdad70`; this commit
+contains the implementation and regression tests, preserved first on
+`wip/issue1649-preflight-20261111-083047`. PR #1938 remains open and draft at
+`5ea904972685d42e063b41e8faf63f4c29142d95`. Its Ubuntu and Windows builds and
+individual CodeQL analysis jobs pass; the aggregate CodeQL check still reports
+failure. The candidate has not yet been pushed.
 
-Candidate branch `fix/issue1649-temp-root-list-20261111` is based on that PR
-head. Commit `9a0869374d` adds `RuntimeList` edges to both
-`ReachabilityWalker.bfs` and `findPathTo`, because temporary roots may hold
-returned lists whose elements strongly reference objects. The focused
-`TemporaryReturnOwnerTraversalTest` checks reachability and diagnostic paths
-while rooted, then verifies both disappear after the root is popped. An
-independent review found no issue. The focused test and full
-`nice -n 19 timeout 3600 make` gate pass on exact source `9a0869374d`; the full
-gate took 6m59. Log: `/tmp/issue1649-pr1938-temp-root-list-make.log`. Commit
-`b433262af4` records the implementation and changelog entry. The branch was
-fast-forwarded to the existing PR branch; CI on the updated branch is pending.
+The fix follows temporary control-flow return values through reachability and
+diagnostic walks, preserves exact local-array return roots through cleanup and
+exception unwinding, and tracks independent package CODE, suspended-frame, IO,
+and regex callback owners to END boundaries. It adds four Java regressions and
+two Perl-level fixtures, with the runtime change recorded under Work in
+progress in the changelog.
 
-The earlier DBIx `t/100populate.t` four-failure report is stale: the saved
-no-sweeps run reports 108/108 and `t/61findnot.t` reports 25/25. These targeted
-logs contain TAP results but not a source SHA, so they are evidence of the
-resolved failure, not exact-candidate validation. The full build gate above
-does not run those CPAN tests. The known `t/52leaks.t` owner-slot failure is a
-separate follow-up: rootless Artist/CD rows remain, with an active
-`UNTRACKED_REFERENCE` slot whose weak scalar carrier is gone and a sibling slot
-held by an unowned temporary array. Acquisition traces to
-`RuntimeArrayElementList.add` via `DBIx::Class::ResultSource.pm:18204`; the
-stale slot's release path remains to be traced. Scanner evidence:
-`/private/tmp/issue1649-dbix-t52-owner-scan.log` and
-`/private/tmp/issue1649-dbix-t52-cd-acquire-trace.log`.
-
-The temporary-root traversal fix is published to the existing PR. Wait at least
-six minutes after the update before checking CI, keep PR #1938 open/draft, and
-continue `t/52leaks.t` only if the refreshed handoff keeps it in scope. Preserve
-the exact source identity in any additional DBIx test evidence.
+Evidence on the integrated candidate: `nice -n 19 timeout 3600 make` passed in
+7m13 (`/tmp/issue1649-integrated-make2.log`); `nice -n 19 make check-links`
+passed with zero errors (`/tmp/issue1649-check-links.log`). The nested callback
+fixture passes 4/4 on system Perl, JVM, and interpreter; the suspended async
+fixture passes 6/6 on both PerlOnJava backends (system Perl skips unsupported
+async syntax). Rebuilt-candidate DBIx `t/100populate.t` and the system-Perl
+oracle each pass 108/108 (`/tmp/issue1649-dbix-t100-integrated-candidate.log`
+and `/tmp/issue1649-dbix-t100-system-perl.log`). The older four-failure report
+is stale. Keep the PR open/draft, push the tested candidate, then wait at least
+six minutes before the next CI refresh. Continue the separate `t/52leaks.t`
+owner-slot audit only if it remains in the refreshed issue handoff.
 
 The reported Class::MethodMaker tied-array lifetime failure is covered by the
 new project-owned `refcount/generated_tied_array_handler_lifetime.t`: it
@@ -1888,13 +1878,9 @@ and final use cases still require audit before removal.
 
 ### Next steps
 
-1. Complete the rescued-graph boundary fix with the immutable full gate and
-   targeted DBIx acceptance on that exact JAR. Preserve the temporary-root
-   identity regression and independently rooted observer cases.
-2. Diagnose the rootless Artist/CD `UNTRACKED_REFERENCE` release reported by
-   `t/52leaks.t` separately from its documented rescued Schema/DBI cache cycle;
-   add project-owned coverage if a missed release is confirmed.
-3. Continue the remaining producer/release audit outside closure capture,
-   retaining verified owner-slot count alignment while its producers are
-   audited. Reconcile issue #1649 claims and PR #1938 before publication; leave
-   merging to review.
+1. Push `4e84cdad70` and the refreshed checkpoint to PR #1938, keeping it open
+   and draft; after at least six minutes, refresh its CI status once.
+2. Reconcile the updated issue handoff. Continue the separate `t/52leaks.t`
+   owner-slot audit only if it remains in scope.
+3. Keep the remaining owner-producer and release audit active; review and merge
+   remain for the project maintainers.
