@@ -8,9 +8,8 @@ acceptance. Existing lifecycle, aggregate, IO, CODE, weak-reference, thread,
 and HTML-Tree regressions pass on both backends with corrective sweeps disabled.
 
 **Current checkpoint (2026-11-11):** Issue #1649 remains active. PR #1938 is
-open and draft on `wip/alias-cell-ownership-20261030-185849`; the published
-head is `944ba19e30` and is mergeable. The tested runtime candidate is
-`7628f5c39b` on
+open and draft on `wip/alias-cell-ownership-20261030-185849`; the branch is
+published and mergeable. The tested runtime candidate is `7628f5c39b` on
 `fix/issue1649-end-boundary-owner-proof`, two implementation commits ahead.
 Its full `nice -n 19 timeout 3600 make` gate passed in 13m21
 (`/tmp/issue1649-batch-7628-full-make.log`), and the focused issue fixture
