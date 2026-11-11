@@ -1324,14 +1324,16 @@ public class MortalList {
         if (!cell.referencedByScalarReference || !cell.hasScalarCellOwner()) return false;
 
         PerlOwnerSlot slot = cell.countedOwnerSlot();
-        if (cell.refCountOwned && slot != null && slot.isActive()
-                && slot.countedScalarOwner() == cell
-                && slot.referent() == cell.value
-                && (slot.kind() == PerlOwnerSlot.Kind.ARRAY_ELEMENT
-                    || slot.kind() == PerlOwnerSlot.Kind.HASH_ELEMENT)) {
-            slot.reclassifyCountedIdentity(PerlOwnerSlot.Kind.SCALAR_CELL);
+        if (!cell.refCountOwned || slot == null || !slot.isActive()
+                || slot.countedScalarOwner() != cell || slot.referent() != cell.value) {
+            return false;
         }
-        return true;
+        if (slot.kind() == PerlOwnerSlot.Kind.ARRAY_ELEMENT
+                || slot.kind() == PerlOwnerSlot.Kind.HASH_ELEMENT) {
+            slot.reclassifyCountedIdentity(PerlOwnerSlot.Kind.SCALAR_CELL);
+            return true;
+        }
+        return slot.kind() == PerlOwnerSlot.Kind.SCALAR_CELL;
     }
 
     public static void releaseTailCallArgs(RuntimeArray args) {
