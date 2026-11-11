@@ -23,8 +23,8 @@ while rooted, then verifies both disappear after the root is popped. An
 independent review found no issue. The focused test and full
 `nice -n 19 timeout 3600 make` gate pass on exact source `9a0869374d`; the full
 gate took 6m59. Log: `/tmp/issue1649-pr1938-temp-root-list-make.log`. Commit
-`b433262af4` records this state and the changelog entry. The candidate has not
-yet been published to the PR branch.
+`b433262af4` records the implementation and changelog entry. The branch was
+fast-forwarded to the existing PR branch; CI on the updated branch is pending.
 
 The earlier DBIx `t/100populate.t` four-failure report is stale: the saved
 no-sweeps run reports 108/108 and `t/61findnot.t` reports 25/25. These targeted
@@ -39,8 +39,8 @@ stale slot's release path remains to be traced. Scanner evidence:
 `/private/tmp/issue1649-dbix-t52-owner-scan.log` and
 `/private/tmp/issue1649-dbix-t52-cd-acquire-trace.log`.
 
-The temporary-root traversal fix is ready for the existing PR. After publishing,
-wait at least six minutes before checking CI, keep PR #1938 open/draft, and
+The temporary-root traversal fix is published to the existing PR. Wait at least
+six minutes after the update before checking CI, keep PR #1938 open/draft, and
 continue `t/52leaks.t` only if the refreshed handoff keeps it in scope. Preserve
 the exact source identity in any additional DBIx test evidence.
 
