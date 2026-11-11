@@ -153,6 +153,20 @@ public class MortalList {
         return !state().temporaryRoots.isEmpty();
     }
 
+    /** Current expression-root depth for an exception boundary. */
+    public static int temporaryRootDepth() {
+        return state().temporaryRoots.size();
+    }
+
+    /** Drop temporary roots added after an exception boundary was entered. */
+    public static void restoreTemporaryRootDepth(int depth) {
+        if (depth < 0) {
+            throw new IllegalArgumentException("Invalid temporary root depth: " + depth);
+        }
+        ArrayDeque<RuntimeBase> roots = state().temporaryRoots;
+        while (roots.size() > depth) roots.pop();
+    }
+
     static boolean temporaryRootDirectlyReferences(RuntimeBase target) {
         for (RuntimeBase root : state().temporaryRoots) {
             if (directlyReferences(root, target)) return true;
@@ -179,6 +193,10 @@ public class MortalList {
             return referent == target;
         }
         if (value instanceof RuntimeList list) {
+            if (list instanceof RuntimeControlFlowList flow
+                    && directlyReferences(flow.getReturnValue(), target, visited)) {
+                return true;
+            }
             for (RuntimeBase element : list.elements) {
                 if (directlyReferences(element, target, visited)) return true;
             }
@@ -682,6 +700,11 @@ public class MortalList {
         LifecycleRuntimeState state = state();
         markBoundaryWork(state);
         state.pendingUntrackedReturnOwnerReleases.add(scalar);
+    }
+
+    /** Snapshot return cells held until the caller's lifecycle boundary. */
+    static java.util.List<RuntimeScalar> snapshotPendingUntrackedReturnOwners() {
+        return new java.util.ArrayList<>(state().pendingUntrackedReturnOwnerReleases);
     }
 
     /**

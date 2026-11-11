@@ -374,7 +374,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         PerlOwnerSlot nextSlot = null;
         if (next != null) {
             nextSlot = new PerlOwnerSlot(PerlOwnerSlot.Kind.GLOB_VALUE);
-            nextSlot.acquireGlobValueIdentity(next);
+            nextSlot.acquireGlobValueIdentity(next, this);
         }
         PerlOwnerSlot previousSlot = detachedGlobValueOwnerSlot;
         detachedGlobValueOwnerSlot = nextSlot;
@@ -1280,6 +1280,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     private synchronized List<RuntimeBase> containerOwnerSnapshot() {
         return new ArrayList<>(containerOwners);
+    }
+
+    /** Current aggregates that store this scalar cell, for reverse owner walks. */
+    synchronized List<RuntimeBase> endBoundaryContainerOwners() {
+        List<RuntimeBase> owners = new ArrayList<>();
+        for (RuntimeBase owner : containerOwners) {
+            if (owner != null && isStoredInAnyContainer(owner)) owners.add(owner);
+        }
+        return owners;
     }
 
     boolean hasContainerOwnerIn(Set<RuntimeBase> candidates) {

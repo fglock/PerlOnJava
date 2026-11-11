@@ -3004,6 +3004,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             PerlOwnerSlot slot = new PerlOwnerSlot(
                     PerlOwnerSlot.Kind.TIED_HASH_ITERATOR_KEY);
             slot.acquireCountedNativeOwner(base, "RuntimeTiedHashIterator retains key");
+            slot.associateEndBoundaryOwnerSource(RuntimeHash.this);
             return slot;
         }
 

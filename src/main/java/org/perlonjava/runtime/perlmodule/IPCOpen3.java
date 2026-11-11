@@ -654,7 +654,7 @@ public class IPCOpen3 extends PerlModuleBase {
      */
     private static void setupWriteHandle(RuntimeScalar handleRef, OutputStream out) {
         RuntimeIO io = new RuntimeIO();
-        io.ioHandle = new ProcessOutputHandle(out);
+        io.replaceIOHandle(new ProcessOutputHandle(out));
 
         // Dereference to get the inner value
         RuntimeScalar inner;
@@ -689,7 +689,7 @@ public class IPCOpen3 extends PerlModuleBase {
      */
     private static void setupReadHandle(RuntimeScalar handleRef, InputStream in, Process process) {
         RuntimeIO io = new RuntimeIO();
-        io.ioHandle = new ProcessInputHandle(in, process);
+        io.replaceIOHandle(new ProcessInputHandle(in, process));
 
         // Dereference to get the inner value
         RuntimeScalar inner;

@@ -15,10 +15,48 @@ import java.util.Set;
 
 /** Per-interpreter execution and dynamic-scope state migrated in Phase 5. */
 public final class ExecutionRuntimeState {
+    /** Supplies roots held by a suspended interpreter continuation. */
+    public interface SuspendedOwnerRootProvider {
+        List<RuntimeBase> snapshotSuspendedOwnerRoots();
+    }
+
     final PerlRuntime ownerRuntime;
+    private final IdentityHashMap<SuspendedOwnerRootProvider, Boolean>
+            suspendedOwnerRootProviders = new IdentityHashMap<>();
 
     ExecutionRuntimeState(PerlRuntime ownerRuntime) {
         this.ownerRuntime = ownerRuntime;
+    }
+
+    /** Register one live continuation whose frame slots are end-boundary roots. */
+    public synchronized void registerSuspendedOwnerRootProvider(
+            SuspendedOwnerRootProvider provider) {
+        if (provider != null) suspendedOwnerRootProviders.put(provider, Boolean.TRUE);
+    }
+
+    /** Retire one continuation after its frame owners have been released. */
+    public synchronized void unregisterSuspendedOwnerRootProvider(
+            SuspendedOwnerRootProvider provider) {
+        if (provider != null) suspendedOwnerRootProviders.remove(provider);
+    }
+
+    /** Snapshot roots from the registered continuations without holding this lock in providers. */
+    public List<RuntimeBase> snapshotSuspendedOwnerRoots() {
+        List<SuspendedOwnerRootProvider> providers;
+        synchronized (this) {
+            providers = new ArrayList<>(suspendedOwnerRootProviders.keySet());
+        }
+        List<RuntimeBase> roots = new ArrayList<>();
+        for (SuspendedOwnerRootProvider provider : providers) {
+            List<RuntimeBase> providerRoots = provider.snapshotSuspendedOwnerRoots();
+            if (providerRoots != null) roots.addAll(providerRoots);
+        }
+        return roots;
+    }
+
+    /** Whether reset would discard a still-live suspended continuation. */
+    public synchronized boolean hasSuspendedOwnerRootProviders() {
+        return !suspendedOwnerRootProviders.isEmpty();
     }
 
     /** Set once the interpreter enters its global destruction phase. */
