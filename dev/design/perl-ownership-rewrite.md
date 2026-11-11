@@ -13,7 +13,7 @@ thread, and HTML-Tree regressions pass with corrective sweeps disabled.
 | Phase 2: retire reachability fallbacks | Active | Owner-source proofs and exact-head CPAN acceptance remain. |
 
 **Current checkpoint (2026-11-11):** Issue #1649 remains active. PR #1938 is
-open and draft at head `4af1bde6f5`. Branch
+open and draft at head `49c55313e6`. Branch
 `wip/issue1649-live-master-20261111` is rebased on live `master`
 `3590efc959`; runtime and test source is
 `afbccd283febd27fb953dabf977d583df4d79585`. The rebase completed all 726 replay
