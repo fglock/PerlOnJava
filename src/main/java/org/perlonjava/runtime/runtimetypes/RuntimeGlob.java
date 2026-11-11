@@ -79,9 +79,9 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             GlobSlotSnapshot snapshot = globSlotStack.get(i);
             String name = snapshot.globName();
             if (snapshot.argsStackDepth() == currentArgsDepth
-                    && name != null
-                    && name.endsWith("::_")) {
-                RuntimeArray array = GlobalVariable.globalArrays.get(name);
+                    && isUnderscoreGlobName(name)) {
+                String canonicalName = GlobalVariable.resolveGlobAlias(name);
+                RuntimeArray array = GlobalVariable.globalArrays.get(canonicalName);
                 if (array != null) return array;
             }
         }
@@ -95,7 +95,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             GlobSlotSnapshot snapshot = globSlotStack().get(i);
             String name = snapshot.globName();
             if (snapshot.argsStackDepth() == currentArgsDepth
-                    && name != null && name.endsWith("::_")) {
+                    && isUnderscoreGlobName(name)) {
                 return true;
             }
         }
@@ -103,7 +103,9 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     }
 
     private static boolean isUnderscoreGlobName(String name) {
-        return "_".equals(name) || "main::_".equals(name);
+        if (name == null) return false;
+        String canonicalName = GlobalVariable.resolveGlobAlias(name);
+        return "_".equals(canonicalName) || "main::_".equals(canonicalName);
     }
 
     // The name of the typeglob
@@ -1458,9 +1460,12 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 // invocation, not the package-global @_ slot.  This also
                 // preserves the frame-local array through a returned glob
                 // slot reference.
-                if (isUnderscoreGlobName(this.globName)
+                String underscoreGlobName = GlobalVariable.resolveGlobAlias(this.globName);
+                if (isUnderscoreGlobName(underscoreGlobName)
                         && !PerlRuntime.current().executionState()
                                 .explicitlyUndefinedGlobArraySlots.contains(this.globName)
+                        && !PerlRuntime.current().executionState()
+                                .explicitlyUndefinedGlobArraySlots.contains(underscoreGlobName)
                         && !isUnderscoreGlobLocalizedForCurrentCall()) {
                     RuntimeArray currentArgs = RuntimeCode.getCurrentArgs();
                     if (currentArgs != null) {

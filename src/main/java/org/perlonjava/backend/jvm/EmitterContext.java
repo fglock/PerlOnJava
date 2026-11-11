@@ -141,6 +141,37 @@ public class EmitterContext {
      *  After each compilation symbolTable is at depth 1 with all caches cleared by exitScope(),
      *  so it can be handed back to the next BytecodeCompiler without any explicit reset. */
     public ScopedSymbolTable evalCachedSymbolTable;
+    /** Pooled ScopedSymbolTable for the parse phase of cached eval STRING; at depth 1 between
+     *  calls because parser.parse() enters exactly one scope and exits it before returning.
+     *  Null means not yet cached or invalidated by a compile error. */
+    public ScopedSymbolTable evalCachedParseSymbolTable;
+
+    // ---- Pooled BytecodeCompiler collections (round 21) ----
+    // Each list/deque is empty after a successful compile(); we clear() and reuse
+    // the backing arrays instead of allocating new ones on every warm-path eval.
+    /** Pooled bytecode instruction list; cleared and reused per warm-path compile. */
+    public java.util.List<Integer> evalCachedBytecodeList;
+    /** Pooled constants list (runtime objects referenced from bytecode). */
+    public java.util.List<Object>  evalCachedConstants;
+    /** Pooled string-pool list (interned string literals). */
+    public java.util.List<String>  evalCachedStringPool;
+    /** Pooled scope-entry-point stack (balanced after each compile). */
+    public java.util.Deque<Integer> evalCachedScopeIndices;
+    /** Pooled saved-register stack for scope entry (balanced after each compile). */
+    public java.util.Deque<Integer> evalCachedSavedNextRegister;
+    /** Pooled saved-base-register stack for scope entry (balanced after each compile). */
+    public java.util.Deque<Integer> evalCachedSavedBaseRegister;
+    /** Pooled loop-info stack (balanced after each compile). */
+    public java.util.List<Object>  evalCachedLoopStack;
+
+    // ---- Pooled BytecodeCompiler auxiliary deques (round 22) ----
+    // All three are empty after every clean compile; clear() is O(0), avoiding 3 allocations.
+    /** Pooled eval-return target register stack (empty after each clean compile). */
+    public java.util.Deque<Integer> evalCachedEvalReturnTargetRegs;
+    /** Pooled eval-return goto-patch-positions stack; elements are {@code List<Integer>}. */
+    public java.util.Deque<Object> evalCachedEvalReturnGotoPatchPositions;
+    /** Pooled try-finally return-target stack; elements are {@code TryFinallyReturnTarget}. */
+    public java.util.Deque<Object> evalCachedTryFinallyReturnTargets;
 
     /**
      * Constructs a new EmitterContext with the specified parameters.

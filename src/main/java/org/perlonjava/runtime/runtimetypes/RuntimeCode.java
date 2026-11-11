@@ -5265,7 +5265,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             RuntimeArray args,
             int callContext) throws Throwable {
 
-        try (PerlRuntime.Binding runtimeBinding = PerlRuntime.current().bind()) {
+        // Fast path: eval STRING is always invoked from inside a running Perl program that
+        // has already bound the PerlRuntime.  Skipping the re-entrant bind/unbind avoids
+        // two object allocations (BindingFrame + Binding) and ~6 ThreadLocal operations
+        // per warm-path eval iteration.  The outer binding keeps the runtime alive.
+        // Fallback: bind normally when called from a Java context with no prior binding.
+        PerlRuntime pr = PerlRuntime.currentOrNull();
+        try (PerlRuntime.Binding runtimeBinding = pr != null ? null : PerlRuntime.current().bind()) {
         PerlLanguageProvider.CompilationLockGuard compilationLock =
                 PerlLanguageProvider.acquireCompilationLock();
         try {
@@ -5457,8 +5463,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
                 evalCompilerOptions.fileName = evalFilename;
                 warnSignatureArgsInEval(evalString, evalFilename);
-                // Create parser context
-                ScopedSymbolTable parseSymbolTable = capturedSymbolTable.snapShot();
+                // Create parser context.
+                // Warm path: reuse the pooled SST (it is at depth 1 after the previous
+                // parse() exited its scope cleanly).  Cold path or after an error:
+                // build a fresh snapshot from the eval site's captured symbol table.
+                ScopedSymbolTable parseSymbolTable =
+                        ctx.evalCachedParseSymbolTable != null
+                                ? ctx.evalCachedParseSymbolTable
+                                : capturedSymbolTable.snapShot();
                 parseSymbolTable.setCurrentPackage(
                         evalCurrentPackage, ClassRegistry.isClass(evalCurrentPackage));
                 String lexicalEvalWarningBits = parseSymbolTable.getWarningBitsString();
@@ -5621,6 +5633,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     ctx.evalCachedOurVariableRegistry = cachedOurReg.isEmpty() ? null : cachedOurReg;
                     // Create the pooled ScopedSymbolTable once; reused on every warm-path eval.
                     ctx.evalCachedSymbolTable = new ScopedSymbolTable();
+                    // Cache the parse-phase SST too (at depth 1 after parse() returned cleanly).
+                    ctx.evalCachedParseSymbolTable = parseSymbolTable;
+                    // Create pooled BytecodeCompiler collections once (round 21).
+                    // The cached constructor clears these before each compile, keeping the
+                    // backing arrays alive across 2M+ iterations instead of reallocating.
+                    ctx.evalCachedBytecodeList = new ArrayList<>(64);
+                    ctx.evalCachedConstants = new ArrayList<>(16);
+                    ctx.evalCachedStringPool = new ArrayList<>(16);
+                    ctx.evalCachedScopeIndices = new ArrayDeque<>();
+                    ctx.evalCachedSavedNextRegister = new ArrayDeque<>();
+                    ctx.evalCachedSavedBaseRegister = new ArrayDeque<>();
+                    ctx.evalCachedLoopStack = new ArrayList<>(4);
+                    ctx.evalCachedEvalReturnTargetRegs = new ArrayDeque<>();
+                    ctx.evalCachedEvalReturnGotoPatchPositions = new ArrayDeque<>();
+                    ctx.evalCachedTryFinallyReturnTargets = new ArrayDeque<>();
                 }
                 BytecodeCompiler compiler = new BytecodeCompiler(
                         evalCompilerOptions.fileName,
@@ -5632,7 +5659,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         ctx.evalCachedNextRegister,
                         ctx.evalCachedVariableRegistry,
                         ctx.evalCachedOurVariableRegistry,
-                        ctx.evalCachedSymbolTable);
+                        ctx); // round 21: ctx supplies pooledSST + 7 pooled collections
                 compiler.setCompilePackage(evalCurrentPackage);
                 interpretedCode = compiler.compile(ast, evalCtx);
                 compiledSuccessfully = true;
@@ -5659,6 +5686,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
 
             } catch (Throwable e) {
+                // A parse or compile error may have left parseSymbolTable at
+                // depth > 1 (partial scope).  Invalidate so the next call
+                // gets a fresh snapshot rather than a dirty SST.
+                ctx.evalCachedParseSymbolTable = null;
                 // Dynamic `use Test::More skip_all => ...` executes its
                 // import while this eval string is parsed. Preserve exit()
                 // through the interpreter eval compiler instead of recording

@@ -180,6 +180,29 @@ public class CompareOperators {
         return arg1.toString().equals(arg2.toString());
     }
 
+    private static boolean isJsonBoolean(RuntimeScalar scalar) {
+        while (scalar.type == RuntimeScalarType.READONLY_SCALAR) {
+            scalar = (RuntimeScalar) scalar.value;
+        }
+        if (!RuntimeScalarType.isReference(scalar) || !(scalar.value instanceof RuntimeBase referent)) {
+            return false;
+        }
+        String className = NameNormalizer.getBlessStr(referent.blessId);
+        return "JSON::PP::Boolean".equals(className)
+                || "Cpanel::JSON::XS::Boolean".equals(className)
+                || "JSON::XS::Boolean".equals(className);
+    }
+
+    private static RuntimeScalar compareJsonBoolean(RuntimeScalar left, RuntimeScalar right) {
+        if (RuntimeScalarType.effectiveType(left) == RuntimeScalarType.BOOLEAN && isJsonBoolean(right)) {
+            return getScalarBoolean(left.getBooleanNoOverload() == right.getBoolean());
+        }
+        if (RuntimeScalarType.effectiveType(right) == RuntimeScalarType.BOOLEAN && isJsonBoolean(left)) {
+            return getScalarBoolean(left.getBoolean() == right.getBooleanNoOverload());
+        }
+        return null;
+    }
+
     /**
      * Gets the location string for warning messages using caller().
      * Uses caller(1) to skip past internal frames and find user code location.
@@ -694,6 +717,9 @@ public class CompareOperators {
             // throwIfFallbackDenied is a no-op.
             throwIfFallbackDenied(runtimeScalar, blessId, arg2, blessId2, "eq");
         }
+
+        RuntimeScalar jsonBooleanResult = compareJsonBoolean(runtimeScalar, arg2);
+        if (jsonBooleanResult != null) return jsonBooleanResult;
 
         return getScalarBoolean(stringEquals(runtimeScalar, arg2));
     }
