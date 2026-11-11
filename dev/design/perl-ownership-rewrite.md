@@ -7,44 +7,37 @@ verified owner-count alignment, the `SvREFCNT` live-scalar scan, and final CPAN
 acceptance. Existing lifecycle, aggregate, IO, CODE, weak-reference, thread,
 and HTML-Tree regressions pass on both backends with corrective sweeps disabled.
 
-**Current checkpoint (2026-11-11):** Issue #1649 remains active. PR #1938
-remains open and draft. Published source/test commits `b65fbdd083` and
-`08f764c6c9` add two narrow
-fast paths: `ReachabilityWalker.isReachableFromTemporaryRoots` returns before
-building a walker when the current runtime has no temporary leases, and
-`MortalList.directlyReferences` checks scalar/leaf roots without allocating a
-visited map. List and array roots keep cycle tracking and nested mutation
-semantics. Full `nice -n 19 timeout 3600 make` passed on its working tree in
-6m39 (`/tmp/issue1649-temp-root-leaf-fastpath-make.log`);
-`TemporaryRootOwnerSlotTest` passed 4/4 and
-`TemporaryRootNestedReturnMutationTest` passed. The earlier empty-stack-only
-gate passed in 6m35 (`/tmp/issue1649-temp-root-empty-fastpath-make.log`).
-`make check-links` passed with 830 documents and zero errors
-(`/tmp/issue1649-leaf-fastpath-checkpoint-links.log`). DBIx `t/100populate.t`
-and system Perl each pass 108/108. A direct interpreter run reached only 1/108
-assertions after five minutes and
-was stopped; it is inconclusive, not a failure
-(`/tmp/issue1649-dbix-t100-interpreter-current.log`).
+**Current checkpoint (2026-11-11 13:38 UTC):** Issue #1649 remains active. PR
+#1938 remains open and draft; published runtime commit `f25cfc7e50` adds a
+direct-array temporary-root fast path and focused Java coverage. The
+three temporary-root fast paths now skip the empty-stack walker, avoid a
+visited map for scalar/leaf roots, and avoid a visited map for array roots,
+whose elements are checked as direct scalar referents. Nested `RuntimeList`
+roots keep cycle tracking and mutation behavior.
 
-The published PR head `c3c9e57a98` was polled at 12:53 UTC. Ubuntu and Windows
-were still running their Make steps; CodeQL failed on the high RSA key-size
-alert at unchanged `CryptOpenSSLRSA.java:203`; all four individual analyses
-and both dependency submissions passed. The alert is outside the PR's changed
-files. It targets the caller-supplied bit length, and the compatibility test
-`crypt_openssl_rsa_pkcs1_padding.t` requests 1024 bits; changing that minimum
-would alter the existing API and is outside this ownership batch. Poll again no
-earlier than 12:59 UTC.
+Full `nice -n 19 timeout 3600 make` passed on the local candidate in 13m42;
+`TemporaryRootOwnerSlotTest` passed 5/5, including the new direct-array case.
+Log: `/tmp/issue1649-temp-array-root-fastpath-make.log`. The slow run shared
+CPU with another active Make in `PerlOnJava5` and a CPAN test; this candidate's
+Make and Java workers were lowered to maximum niceness while running. The
+previous full gates passed in 6m35 and 6m39. DBIx `t/100populate.t` remains
+108/108 on JVM and system Perl; the interpreter run reached 1/108 in five
+minutes and is inconclusive.
 
-The full rescued-graph helper `walkEndBoundaryRootsExcludingRescued` is
-test-only now, while END cleanup still follows nested hash values up to depth
-five to clear weak observers without releasing strong fields. Cascaded DESTROY
-cannot replace that boundary pass directly because rescued objects with live
-Perl owners must remain usable through END. `Internals::SvREFCNT`'s live lexical
-scan is a separate compatibility path. The reverse-owner alternative to
-`deepClearWeakRefsExcludingIndependentRoots` remains unproven: it must establish
-exact current slot and container edges, preserve the five-hash limit, and
-distinguish rescued-graph membership from independent roots. Keep the forward
-walk until that bounded proof has focused coverage and measured cost.
+The previous PR head `c3c9e57a98` passed Ubuntu and Windows build/thread gates.
+At 13:36 UTC, checks for `f25cfc7e50` showed CodeQL failing on the same RSA key
+size alert at unchanged `CryptOpenSSLRSA.java:203`; four analysis jobs and both
+dependency submissions passed. No Gradle platform workflow was listed for
+`f25cfc7e50` yet. The policy and 1024-bit compatibility decision is tracked
+separately in [issue #2031](https://github.com/fglock/PerlOnJava/issues/2031).
+
+The END cleanup traversal and nested-list traversal remain semantically needed
+with current proofs: rescued objects must stay usable through END, nested
+mutable return lists must be followed, and owner-source completeness is not
+established. The `Internals::SvREFCNT` lexical scan is separate from END and
+also lacks a completeness guarantee: a registered scalar can hold a tracked
+referent without a current owner slot. Keep these paths until the owner-source
+and slot-coverage proofs have focused tests.
 
 The reported Class::MethodMaker tied-array lifetime failure is covered by the
 new project-owned `refcount/generated_tied_array_handler_lifetime.t`: it
@@ -136,14 +129,17 @@ ownership from one aggregate count.
 
 ### Next steps
 
-1. Poll CI for the latest PR head no earlier than 12:59 UTC; keep PR #1938 open
-   and draft.
-2. Finish DBIx interpreter investigation only if a useful bounded workload can
-   distinguish a runtime defect from the slow 10,000-row populate operation.
-3. Refresh the PR and issue checkpoint when new evidence is available.
-4. Keep the root-recovery compatibility adapter isolated to the legacy
-   unpaired decrement API; production release paths carry exact owner tokens
-   and no longer use corrective reachability sweeps.
+1. Publish this link-checked documentation checkpoint and verify whether the
+   Gradle platform workflow starts for PR #1938; keep it open and draft.
+2. Continue the END owner-source audit. Replace nested-hash discovery only
+   after the reverse proof covers every strong source, preserves the five-hash
+   bound, distinguishes independent roots, and has focused lifecycle coverage.
+3. Keep nested temporary-list recursion while mutable return values are only
+   represented by their outer lease. A mutation-aware descendant owner model
+   is needed before removing that traversal.
+4. Leave the `SvREFCNT` live-scalar scan until lexical scalar ownership has a
+   completeness guarantee. Revisit DBIx interpreter timing only if a bounded
+   workload can isolate a runtime defect from the 10,000-row populate work.
 
 ### Open questions and blockers
 
