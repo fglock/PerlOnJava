@@ -3,7 +3,7 @@ package Sys::Syslog;
 use strict;
 use warnings;
 use Carp qw(croak);
-use Exporter 'import';
+use Exporter ();
 use XSLoader ();
 
 our $VERSION = '0.36';
@@ -33,9 +33,19 @@ $EXPORT_TAGS{DEFAULT} = $EXPORT_TAGS{standard};
 
 our @EXPORT = @{ $EXPORT_TAGS{standard} };
 our @EXPORT_OK = (
+    @{ $EXPORT_TAGS{standard} },
     @{ $EXPORT_TAGS{extended} },
     @{ $EXPORT_TAGS{macros} },
 );
+
+# Preserve the import caller when Sys::Syslog is loaded dynamically by a
+# module-loader such as Test::More::use_ok. Exporter::import is wrapped so
+# its caller frame is Sys::Syslog itself, hence the one-level adjustment.
+sub import {
+    my $pkg = shift;
+    local $Exporter::ExportLevel = 1;
+    Exporter::import($pkg, @_);
+}
 
 XSLoader::load('Sys::Syslog', $VERSION);
 

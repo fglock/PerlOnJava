@@ -849,7 +849,10 @@ public class ModuleOperators {
         // explicit `package` statement runs in the caller's package.
         // InterpreterState.currentPackage is now updated by `package Foo;`
         // declarations in the JVM backend (see EmitOperator.handlePackageOperator).
-        parsedArgs.initialPackage = savedPackage;
+        CallerStack.CallerInfo loadCaller = CallerStack.peek(0);
+        parsedArgs.initialPackage = loadCaller != null
+                ? loadCaller.packageName()
+                : savedPackage;
         
         // Save and clear %^H (hints hash) to prevent hint leakage into required modules.
         // In Perl >= 5.11 (which we emulate), hints don't leak into require'd files.

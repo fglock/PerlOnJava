@@ -13,6 +13,7 @@ use Exporter 'import';
 
 our $VERSION = '0.29';
 our @EXPORT = qw(want rreturn lnoreturn wantref want_ref);
+our @EXPORT_OK = qw(howmany);
 
 sub want {
     my @wanted = map { split } @_;
@@ -32,6 +33,15 @@ sub want {
         return 0 unless $matches;
     }
     return 1;
+}
+
+# Return the number of values the immediate caller can use. Perl's public
+# wantarray API exposes list/scalar/void context but not fixed list arity; as
+# in Wanted, an unconstrained list context is represented by undef.
+sub howmany {
+    my $gimme = (caller(0))[5];
+    return 0 unless defined $gimme;
+    return $gimme ? undef : 1;
 }
 
 sub rreturn { return wantarray ? @_ : $_[-1] }
