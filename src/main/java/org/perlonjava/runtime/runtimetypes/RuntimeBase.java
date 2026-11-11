@@ -642,6 +642,24 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         return false;
     }
 
+    /**
+     * Whether a live lexical scalar directly owns this referent through the
+     * untracked-reference bridge, without an intervening aggregate slot.
+     */
+    boolean hasCurrentUntrackedLexicalScalarOwnerSlotIdentity() {
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (!slot.isActive()
+                    || slot.kind() != PerlOwnerSlot.Kind.UNTRACKED_REFERENCE) continue;
+            RuntimeScalar owner = slot.untrackedScalarOwner();
+            if (owner == null || owner.getContainerOwner() != null
+                    || owner.scopeExited || !MyVarCleanupStack.isRegistered(owner)) {
+                continue;
+            }
+            if (DestroyDispatch.isCurrentPerlOwnerSlot(this, slot)) return true;
+        }
+        return false;
+    }
+
     /** Whether any active Perl owner slot still proves a current storage edge. */
     boolean hasCurrentPerlOwnerSlotIdentity() {
         for (PerlOwnerSlot slot : ownerSlotSnapshot()) {

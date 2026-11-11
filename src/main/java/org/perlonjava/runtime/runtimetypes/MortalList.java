@@ -2126,12 +2126,15 @@ public class MortalList {
                 base.deferFinalReleaseToUncountedOwnerSlots();
             } else if (base.hasCurrentUncountedPerlOwnerSlotIdentity()
                     && (!legacyUnpairedDecrement
-                        || base.verifiedCurrentCountedOwnerSlotCount() == 0)) {
+                        || (base.verifiedCurrentCountedOwnerSlotCount() == 0
+                            && base.hasCurrentUntrackedLexicalScalarOwnerSlotIdentity()))) {
                 // A current lexical, package, alias, or resource slot proves
                 // that the referent still has a Perl owner, even when a legacy
                 // unpaired decrement cannot identify the edge being released.
-                // For legacy releases, use this fast path only when there are
-                // no current counted slots whose count must also be restored.
+                // For legacy releases, use this fast path only when a live
+                // lexical scalar directly owns the referent and no counted
+                // slots need restoration. Package-rooted aggregate edges can
+                // still require the compatibility root proof below.
                 // Carry the lifecycle obligation on the exact identity instead
                 // of rebuilding a root graph to rediscover the uncounted owner.
                 base.deferFinalReleaseToUncountedOwnerSlots();
