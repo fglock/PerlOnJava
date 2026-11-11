@@ -8,19 +8,24 @@ acceptance. Existing lifecycle, aggregate, IO, CODE, weak-reference, thread,
 and HTML-Tree regressions pass on both backends with corrective sweeps disabled.
 
 **Current checkpoint (2026-11-11):** Issue #1649 remains active. PR #1938 is
-open and draft on `wip/alias-cell-ownership-20261030-185849`; the branch is
-published and mergeable. The tested runtime candidate is `7628f5c39b` on
-`fix/issue1649-end-boundary-owner-proof`, two implementation commits ahead.
-Its full `nice -n 19 timeout 3600 make` gate passed in 13m21
-(`/tmp/issue1649-batch-7628-full-make.log`), and the focused issue fixture
-shard passed in 1m54 (`/tmp/issue1649-batch-7628-shard0.log`). Rebuilt-candidate
-DBIx `t/100populate.t` and system Perl each pass 108/108 assertions
-(`/tmp/issue1649-dbix-t100-7628.log` and
-`/tmp/issue1649-dbix-t100-system-perl.log`); the earlier DBIx failure report is
-stale. The tested batch stores temporary roots as exact owner leases and
-narrows the legacy unpaired-release fast path to direct live lexical scalar
-owners, retaining aggregate-root recovery after four snapshot regressions
-exposed that compatibility requirement.
+open and draft on `wip/alias-cell-ownership-20261030-185849`; the published
+branch is mergeable. Runtime changes at `7628f5c39b` store temporary roots as
+exact owner leases and narrow the legacy unpaired-release fast path to direct
+live lexical scalar owners, retaining aggregate-root recovery after four
+snapshot regressions exposed that compatibility requirement. Its full
+`nice -n 19 timeout 3600 make` passed in 13m21
+(`/tmp/issue1649-batch-7628-full-make.log`); the focused issue shard passed in
+1m54 (`/tmp/issue1649-batch-7628-shard0.log`). DBIx `t/100populate.t` and
+system Perl each pass 108/108 (`/tmp/issue1649-dbix-t100-7628.log` and
+`/tmp/issue1649-dbix-t100-system-perl.log`). An interpreter attempt was stopped
+after 1/108 assertions in about 90s and is not a result.
+
+A new `TemporaryRootNestedReturnMutationTest` records that changing a
+reference inside a `RuntimeControlFlowList` return list changes which referent
+the active temporary root protects. It passed in a full Make run on the local
+working tree in 9m28 (`/tmp/issue1649-temp-root-nested-return-mutation-make.log`);
+commit it with this checkpoint and rerun the gate on the immutable commit
+before publishing.
 
 The remaining `temporaryRootDirectlyReferences` traversal is required for
 targets nested in temporary expression lists and control-flow return lists;
@@ -34,13 +39,14 @@ separate compatibility path and remains until strong lexical references are
 proven to have current owner-slot identities. The earlier four Java failures
 on the first batch were fixed in `7628f5c39b`.
 
-The candidate is published, the PR body and active #1649 handoff comment are
-refreshed, and current master is integrated. The merge only changed generated
-CPAN report snapshots and left runtime sources unchanged. The first CI poll of
-the current code candidate (`6e66062038`, 10:03 UTC) showed Ubuntu and Windows
-pending, individual CodeQL analyses passing, and aggregate CodeQL failing on a
-high key-size alert at `CryptOpenSSLRSA.java:203`. That path is not in the PR's
-changed-file list. Wait at least six minutes between future CI polls.
+Current master is integrated; the merge only changed generated CPAN report
+snapshots and removed those stale files from the PR diff. Platform CI on the
+published head passed: Ubuntu 36m38 and Windows 41m41. Individual CodeQL
+analyses and dependency submissions passed. Aggregate CodeQL fails on a high
+key-size alert at `CryptOpenSSLRSA.java:203`, which is not in the PR's changed
+files. The PR description and issue handoff contain the CI result. Commit the
+new regression with this checkpoint, rerun `make`, then publish and wait at
+least six minutes before checking CI for the new head.
 
 The reported Class::MethodMaker tied-array lifetime failure is covered by the
 new project-owned `refcount/generated_tied_array_handler_lifetime.t`: it
