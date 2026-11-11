@@ -7,73 +7,42 @@ verified owner-count alignment, the `SvREFCNT` live-scalar scan, and final CPAN
 acceptance. Existing lifecycle, aggregate, IO, CODE, weak-reference, thread,
 and HTML-Tree regressions pass on both backends with corrective sweeps disabled.
 
-**Current checkpoint (2026-11-11):** #1649 remains active; PR #1938 is
-open/draft at `c9cc1b573da463ebfc98c294ee5e45d5658fa55c`. Candidate branch
-`fix/issue1649-rescued-weakrefs-20261110` is based on local commit `c9ebc735`,
-which fixes an implicit sub return leaking a temporary root: `prepareScopeReturn`
-replaces the return local after `EmitBlock` pushes it, so cleanup previously
-popped a different value. A project unit regression failed on the exact PR
-parent and passes after the emitter retains the pushed object separately;
-parent log: `/private/tmp/issue1649-rescued-owner-parent-final.log`. Commits
-`c9ebc735` and `fa6eae06` are pushed to the existing PR branch; PR remains draft.
-The post-push CI run has not been polled yet.
+**Current checkpoint (2026-11-11):** #1649 remains active; PR #1938 was last
+verified open/draft at `26dcb51c47b5e41b2b990a30aa5aecf11badef72`, with Ubuntu
+and Windows passing. Aggregate CodeQL failed on the existing RSA-key-size alert
+in `CryptOpenSSLRSA.java:203`, outside this change. The user refreshed the PR
+description and issue handoff; use those as current external evidence. A later
+live refresh could not connect to GitHub.
 
-The remaining temporary-root traversal is a live identity scan used by four
-cleanup paths. It descends expression-list/array wrappers and checks each
-scalar's direct referent; deeper descendants rely on their own element owner
-slots. A cached descendant index would require broad mutation hooks, and no
-current evidence justifies that wider rewrite. The old four-failure report for
-DBIx `t/100populate.t` is stale: the latest no-sweeps run passes 108/108, and
-`t/61findnot.t` passes 25/25. The latter had exposed quiet-END weak observers
-left in a rescued Schema/Storage/DBH cycle. Source commit
-`fa6eae0636e71223c3ef741ba35e2a76f042e089` processes ownerless rescues, then
-clears weak observers only for rescue-only graphs. It preserves package,
-queued-END, active-code, and independently live owner-slot roots while leaving
-strong Perl edges intact. Internal owner slots whose sources are in the rescued
-graph do not make a cycle an independent root.
+Candidate branch `fix/issue1649-temp-root-list-20261111` is based on that PR
+head. Commit `9a0869374d` adds `RuntimeList` edges to both
+`ReachabilityWalker.bfs` and `findPathTo`, because temporary roots may hold
+returned lists whose elements strongly reference objects. The focused
+`TemporaryReturnOwnerTraversalTest` checks reachability and diagnostic paths
+while rooted, then verifies both disappear after the root is popped. An
+independent review found no issue. The focused test and full
+`nice -n 19 timeout 3600 make` gate pass on exact source `9a0869374d`; the full
+gate took 6m59. Log: `/tmp/issue1649-pr1938-temp-root-list-make.log`. Commit
+`b433262af4` records this state and the changelog entry. The candidate has not
+yet been published to the PR branch.
 
-The separate temporary-root graph fallback now traverses `RuntimeList` values
-in `ReachabilityWalker.bfs`, and `findPathTo` reports the same list edges. A
-rooted list result therefore preserves its strong referents during that legacy
-fallback and remains visible in diagnostics. The focused
-`TemporaryReturnOwnerTraversalTest` passes on commit `9a0869374d`, as does the
-full `nice -n 19 timeout 3600 make` gate in 6m59; log:
-`/tmp/issue1649-pr1938-temp-root-list-make.log`.
-`RescuedWeakRefsBeforeEndTest` covers rescue-only cycles, direct and nested
-independent roots, active and queued END captures, and an external live owner
-slot. The focused unit gate passes in 29 seconds on `fa6eae06`, log:
-`/private/tmp/issue1649-rescued-owner-review-focused.log`. No-sweeps DBIx
-`t/61findnot.t` and `t/100populate.t` pass 25/25 and 108/108; logs:
-`/private/tmp/issue1649-dbix-t61-full-gate.log` and
-`/private/tmp/issue1649-dbix-t100-full-gate.log`. The full no-sweeps
-`nice -n 19 timeout 3600 make` passes in 7m15 on `4d0b2363`; log:
-`/private/tmp/issue1649-rescued-owner-full-make.log`.
-
-The remaining `t/52leaks.t` failure is separate and precedes END. The test's
-known rescued Schema → Storage → DBH → CachedKids → bound_params cycle accounts
-for some reports, but not for rootless Artist/CD rows. A focused owner snapshot
-found an active `UNTRACKED_REFERENCE` slot on a CD whose weak scalar carrier is
-already gone, plus a sibling slot held by an unowned temporary array. Acquisition
-traces to `RuntimeArrayElementList.add` via `DBIx::Class::ResultSource.pm:18204`;
-the stale slot's release path remains to be traced. Scanner evidence:
+The earlier DBIx `t/100populate.t` four-failure report is stale: the saved
+no-sweeps run reports 108/108 and `t/61findnot.t` reports 25/25. These targeted
+logs contain TAP results but not a source SHA, so they are evidence of the
+resolved failure, not exact-candidate validation. The full build gate above
+does not run those CPAN tests. The known `t/52leaks.t` owner-slot failure is a
+separate follow-up: rootless Artist/CD rows remain, with an active
+`UNTRACKED_REFERENCE` slot whose weak scalar carrier is gone and a sibling slot
+held by an unowned temporary array. Acquisition traces to
+`RuntimeArrayElementList.add` via `DBIx::Class::ResultSource.pm:18204`; the
+stale slot's release path remains to be traced. Scanner evidence:
 `/private/tmp/issue1649-dbix-t52-owner-scan.log` and
-`/private/tmp/issue1649-dbix-t52-cd-acquire-trace.log`; original failure:
-`/tmp/cpan_random_logs/20261110-200208-96731/failures/DBIx-Class--from--DBIx-Class.log`.
-The full sweep audit found no production `deferDecrement` caller; public
-compatibility helpers and `jperl_freetmps` remain. `Internals::svRefcnt` still
-scans live scalar wrappers, and exact owner-slot count alignment remains
-production behavior.
+`/private/tmp/issue1649-dbix-t52-cd-acquire-trace.log`.
 
-Ubuntu and Windows passed on prior PR head `25c9d9b2`; aggregate CodeQL reported
-the unchanged RSA-key-size alert. GitHub issue-comment API access is currently
-failing, so current claims could not be reconciled. Updating the PR description
-also failed because `api.github.com` is unreachable; its current body still
-shows the old head and stale `t/100populate.t` failures.
-`make check-links` passes, 574 checked links and no errors; log:
-`/private/tmp/issue1649-rescued-owner-checklinks-final.log`. Next: trace the
-rootless `t/52leaks.t` owner as a separate acceptance blocker, wait at least six
-minutes after the push before checking CI, and retry the PR description update
-when GitHub API access returns. Keep PR #1938 open/draft.
+The temporary-root traversal fix is ready for the existing PR. After publishing,
+wait at least six minutes before checking CI, keep PR #1938 open/draft, and
+continue `t/52leaks.t` only if the refreshed handoff keeps it in scope. Preserve
+the exact source identity in any additional DBIx test evidence.
 
 The reported Class::MethodMaker tied-array lifetime failure is covered by the
 new project-owned `refcount/generated_tied_array_handler_lifetime.t`: it
