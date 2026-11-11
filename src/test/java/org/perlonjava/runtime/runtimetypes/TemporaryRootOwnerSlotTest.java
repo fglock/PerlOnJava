@@ -3,7 +3,12 @@ package org.perlonjava.runtime.runtimetypes;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
+import java.util.AbstractMap;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -11,6 +16,21 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("unit")
 class TemporaryRootOwnerSlotTest {
+    private static final class CountingHashValues extends AbstractMap<String, RuntimeScalar> {
+        private int valuesCalls;
+
+        @Override
+        public Set<Entry<String, RuntimeScalar>> entrySet() {
+            return Collections.emptySet();
+        }
+
+        @Override
+        public Collection<RuntimeScalar> values() {
+            valuesCalls++;
+            return Collections.emptyList();
+        }
+    }
+
     @Test
     void duplicateAndNonLifoPopsReleaseTheMatchingRootLeases() {
         PerlRuntime runtime = new PerlRuntime();
@@ -118,6 +138,27 @@ class TemporaryRootOwnerSlotTest {
             try {
                 assertTrue(MortalList.temporaryRootDirectlyReferences(referent));
                 assertFalse(MortalList.temporaryRootDirectlyReferences(unrelated));
+            } finally {
+                MortalList.popTemporaryRoot(root);
+            }
+        }
+    }
+
+    @Test
+    void directArrayTemporaryRootEdgeSkipsReferentGraphWalk() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeHash referent = new RuntimeHash();
+            CountingHashValues nestedValues = new CountingHashValues();
+            referent.elements = nestedValues;
+            RuntimeArray root = new RuntimeArray();
+            root.elements.add(referent.createReference());
+
+            MortalList.pushTemporaryRoot(root);
+            try {
+                assertTrue(ReachabilityWalker.isReachableFromTemporaryRoots(referent));
+                assertEquals(0, nestedValues.valuesCalls,
+                        "a direct root edge must not traverse the referent's hash descendants");
             } finally {
                 MortalList.popTemporaryRoot(root);
             }
