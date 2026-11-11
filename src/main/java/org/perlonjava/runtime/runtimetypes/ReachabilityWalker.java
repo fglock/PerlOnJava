@@ -282,9 +282,8 @@ public class ReachabilityWalker {
      * The caller drains expression temporaries before this boundary check.
      */
     static Set<RuntimeBase> walkEndBoundaryRootsExcludingRescued() {
-        Set<RuntimeBase> independentRoots =
-                Collections.newSetFromMap(new IdentityHashMap<>());
-        addEndBoundaryDirectRoots(independentRoots);
+        EndBoundaryOwnerProof ownerProof = endBoundaryOwnerProof();
+        Set<RuntimeBase> independentRoots = ownerProof.directRoots();
 
         // Enumerate the rescued graph only to find its independently rooted
         // members. Ordinary roots are validated directly, then owner edges are
@@ -298,14 +297,39 @@ public class ReachabilityWalker {
         }
         rescuedWalker.bfs(rescuedTodo, true);
         rescuedGraph.addAll(rescuedWalker.reachable);
-        IdentityHashMap<RuntimeBase, Boolean> ownerPathMemo = new IdentityHashMap<>();
         for (RuntimeBase referent : rescuedGraph) {
-            if (hasIndependentEndBoundaryOwnerPath(
-                    referent, independentRoots, ownerPathMemo)) {
+            if (ownerProof.hasIndependentOwnerPath(referent)) {
                 independentRoots.add(referent);
             }
         }
         return independentRoots;
+    }
+
+    /** Build a memoized owner-path proof for one END-boundary cleanup pass. */
+    static EndBoundaryOwnerProof endBoundaryOwnerProof() {
+        Set<RuntimeBase> directRoots =
+                Collections.newSetFromMap(new IdentityHashMap<>());
+        addEndBoundaryDirectRoots(directRoots);
+        return new EndBoundaryOwnerProof(directRoots);
+    }
+
+    static final class EndBoundaryOwnerProof {
+        private final Set<RuntimeBase> directRoots;
+        private final IdentityHashMap<RuntimeBase, Boolean> ownerPathMemo =
+                new IdentityHashMap<>();
+
+        private EndBoundaryOwnerProof(Set<RuntimeBase> directRoots) {
+            this.directRoots = directRoots;
+        }
+
+        Set<RuntimeBase> directRoots() {
+            return directRoots;
+        }
+
+        boolean hasIndependentOwnerPath(RuntimeBase referent) {
+            return hasIndependentEndBoundaryOwnerPath(
+                    referent, directRoots, ownerPathMemo);
+        }
     }
 
     private static void addEndBoundaryDirectRoots(Set<RuntimeBase> roots) {

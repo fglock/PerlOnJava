@@ -43,7 +43,7 @@ final class LifecycleRuntimeState {
     // are per referent because several independent pad slots can own one base.
     final IdentityHashMap<RuntimeBase, Integer> positiveOwnerReferents = new IdentityHashMap<>();
     boolean deferredCapturesMayBeReady;
-    final ArrayDeque<RuntimeBase> temporaryRoots = new ArrayDeque<>();
+    final ArrayDeque<TemporaryRootLease> temporaryRoots = new ArrayDeque<>();
     private static final int INITIAL_MARK_CAPACITY = 16;
     int[] marks = new int[INITIAL_MARK_CAPACITY];
     int[] tiedReleaseMarks = new int[INITIAL_MARK_CAPACITY];
@@ -121,6 +121,32 @@ final class LifecycleRuntimeState {
     final ScalarRefRegistry.WeakIdentityMap<Throwable> scalarRegisterStacks =
             new ScalarRefRegistry.WeakIdentityMap<>();
 
+    /** One expression-root stack entry and its exact temporary owner identity. */
+    static final class TemporaryRootLease {
+        private final RuntimeBase root;
+        private final PerlOwnerSlot ownerSlot;
+
+        TemporaryRootLease(RuntimeBase root) {
+            this.root = root;
+            if (root.refCount == Integer.MIN_VALUE) {
+                // Preserve snapshot visibility without resurrecting a destroyed value.
+                this.ownerSlot = null;
+            } else {
+                PerlOwnerSlot owner = new PerlOwnerSlot(PerlOwnerSlot.Kind.TEMPORARY_ROOT);
+                owner.acquireTemporaryRootIdentity(root);
+                this.ownerSlot = owner;
+            }
+        }
+
+        RuntimeBase root() {
+            return root;
+        }
+
+        void release() {
+            if (ownerSlot != null) ownerSlot.release();
+        }
+    }
+
     void clear() {
         mortalActive = true;
         for (int i = 0; i < pending.size(); i++) {
@@ -150,7 +176,7 @@ final class LifecycleRuntimeState {
             positiveOwnerReferents.clear();
         }
         deferredCapturesMayBeReady = false;
-        temporaryRoots.clear();
+        while (!temporaryRoots.isEmpty()) temporaryRoots.pop().release();
         markDepth = 0;
         flushing = false;
         reachabilityDrainDepth = 0;

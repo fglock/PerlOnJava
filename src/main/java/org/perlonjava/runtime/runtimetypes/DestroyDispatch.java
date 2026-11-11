@@ -913,17 +913,17 @@ public class DestroyDispatch {
         processRescuedObjects();
         java.util.List<RuntimeBase> rescuedObjects = snapshotRescuedForWalk();
         if (rescuedObjects.isEmpty()) return;
-        Set<RuntimeBase> independentRoots =
-                ReachabilityWalker.walkEndBoundaryRootsExcludingRescued();
+        ReachabilityWalker.EndBoundaryOwnerProof ownerProof =
+                ReachabilityWalker.endBoundaryOwnerProof();
         for (RuntimeBase rescued : rescuedObjects) {
-            if (independentRoots.contains(rescued)) continue;
+            if (ownerProof.hasIndependentOwnerPath(rescued)) continue;
             WeakRefRegistry.clearWeakRefsTo(rescued);
             if (rescued instanceof RuntimeHash hash) {
                 Set<RuntimeBase> visited =
                         Collections.newSetFromMap(new IdentityHashMap<>());
                 visited.add(rescued);
                 deepClearWeakRefsExcludingIndependentRoots(
-                        hash, 5, rescued, independentRoots, visited);
+                        hash, 5, rescued, ownerProof, visited);
             }
         }
     }
@@ -1012,14 +1012,15 @@ public class DestroyDispatch {
 
     private static void deepClearWeakRefsExcludingIndependentRoots(
             RuntimeHash hash, int maxDepth, RuntimeBase excludedRoot,
-            Set<RuntimeBase> independentRoots, Set<RuntimeBase> visited) {
+            ReachabilityWalker.EndBoundaryOwnerProof ownerProof,
+            Set<RuntimeBase> visited) {
         if (maxDepth <= 0) return;
         for (RuntimeScalar value : hash.elements.values()) {
             if (value == null
                     || (value.type & RuntimeScalarType.REFERENCE_BIT) == 0
                     || !(value.value instanceof RuntimeBase base)
                     || base == excludedRoot
-                    || independentRoots.contains(base)
+                    || ownerProof.hasIndependentOwnerPath(base)
                     || !visited.add(base)) {
                 continue;
             }
@@ -1029,7 +1030,7 @@ public class DestroyDispatch {
             if (base instanceof RuntimeHash nestedHash) {
                 deepClearWeakRefsExcludingIndependentRoots(
                         nestedHash, maxDepth - 1, excludedRoot,
-                        independentRoots, visited);
+                        ownerProof, visited);
             }
         }
     }
