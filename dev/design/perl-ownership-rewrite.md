@@ -7,29 +7,31 @@ verified owner-count alignment, the `SvREFCNT` live-scalar scan, and final CPAN
 acceptance. Existing lifecycle, aggregate, IO, CODE, weak-reference, thread,
 and HTML-Tree regressions pass on both backends with corrective sweeps disabled.
 
-**Current checkpoint (2026-11-11):** Issue #1649 remains active. PR #1938 is
-open and draft at `b65fbdd083b614621c0d4049e3aecf351569e929` on
-`fix/issue1649-end-boundary-owner-proof`. The fast path in
-`ReachabilityWalker.isReachableFromTemporaryRoots` returns before creating a
-walker, queue, or root snapshot when the current runtime has no temporary
-leases. Nonempty stacks retain the existing graph walk, including nested
-return-list mutation behavior. Full `nice -n 19 timeout 3600 make` passed on
-the working tree producing this commit in 6m35
-(`/tmp/issue1649-temp-root-empty-fastpath-make.log`);
-`TemporaryRootNestedReturnMutationTest` passed, and `make check-links` passed
-with 830 documents and zero errors (`/tmp/issue1649-temp-root-empty-fastpath-links.log`).
-DBIx `t/100populate.t` and system Perl each pass 108/108. A direct interpreter
-run reached only 1/108 assertions after five minutes and was stopped; it is
-inconclusive, not a failure (`/tmp/issue1649-dbix-t100-interpreter-current.log`).
+**Current checkpoint (2026-11-11):** Issue #1649 remains active. PR #1938
+remains open and draft at published head `190d64c742`. Local source/test commit
+`08f764c6c9` adds two narrow
+fast paths: `ReachabilityWalker.isReachableFromTemporaryRoots` returns before
+building a walker when the current runtime has no temporary leases, and
+`MortalList.directlyReferences` checks scalar/leaf roots without allocating a
+visited map. List and array roots keep cycle tracking and nested mutation
+semantics. Full `nice -n 19 timeout 3600 make` passed on its working tree in
+6m39 (`/tmp/issue1649-temp-root-leaf-fastpath-make.log`);
+`TemporaryRootOwnerSlotTest` passed 4/4 and
+`TemporaryRootNestedReturnMutationTest` passed. The earlier empty-stack-only
+gate passed in 6m35 (`/tmp/issue1649-temp-root-empty-fastpath-make.log`).
+`make check-links` passed with 830 documents and zero errors
+(`/tmp/issue1649-leaf-fastpath-checkpoint-links.log`). DBIx `t/100populate.t`
+and system Perl each pass 108/108. A
+direct interpreter run reached only 1/108 assertions after five minutes and
+was stopped; it is inconclusive, not a failure
+(`/tmp/issue1649-dbix-t100-interpreter-current.log`).
 
-CI for pushed head `b65fbdd083` was polled at 12:01 UTC. Ubuntu and Windows
-were pending; the CodeQL check completed neutral because one default Java/Kotlin
-configuration present on master was not found, so CodeQL could not determine
-alerts introduced by this PR. The Java analysis was pending; actions, C/C++,
-Python, Gradle submission, and Maven submission passed. The previous head
-`02cad039` had aggregate CodeQL fail, and an earlier head `efae36a0c7` had
-Ubuntu/Windows pass with a high key-size alert at `CryptOpenSSLRSA.java:203`,
-outside the PR's changed files. Poll again no earlier than 12:07 UTC.
+The latest published PR head `190d64c742` was polled at 12:16 UTC. Ubuntu and
+Windows were pending; CodeQL failed on the high RSA key-size alert at unchanged
+`CryptOpenSSLRSA.java:203`; all four individual analyses and both dependency
+submissions passed. The prior `02cad039` check had the same CodeQL failure;
+this alert is outside the PR's changed files. Poll the new head no sooner than
+six minutes after publishing it.
 
 The full rescued-graph helper `walkEndBoundaryRootsExcludingRescued` is
 test-only now, while END cleanup still follows nested hash values up to depth
@@ -132,12 +134,12 @@ ownership from one aggregate count.
 
 ### Next steps
 
-1. Commit the tested temporary-root fast path and checkpoint, then publish the
-   tested commit when GitHub connectivity is available.
+1. Check links, commit the checkpoint for `08f764c6c9`, and publish the tested
+   source/test change while keeping PR #1938 open and draft.
 2. Finish DBIx interpreter investigation only if a useful bounded workload can
    distinguish a runtime defect from the slow 10,000-row populate operation.
-3. Resume CI polling no earlier than 12:07 UTC and refresh the PR and issue
-   checkpoint when new evidence is available.
+3. Wait at least six minutes after publishing before polling the new CI head,
+   then refresh the PR and issue checkpoint when new evidence is available.
 4. Keep the root-recovery compatibility adapter isolated to the legacy
    unpaired decrement API; production release paths carry exact owner tokens
    and no longer use corrective reachability sweeps.
