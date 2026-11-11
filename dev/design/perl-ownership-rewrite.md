@@ -8,14 +8,15 @@ acceptance. Existing lifecycle, aggregate, IO, CODE, weak-reference, thread,
 and HTML-Tree regressions pass on both backends with corrective sweeps disabled.
 
 **Current checkpoint (2026-11-11):** #1649 remains active; PR #1938 is
-open/draft at `25c9d9b2340d3c37f007177680f590b616b57995`. Candidate branch
+open/draft at `c9cc1b573da463ebfc98c294ee5e45d5658fa55c`. Candidate branch
 `fix/issue1649-rescued-weakrefs-20261110` is based on local commit `c9ebc735`,
 which fixes an implicit sub return leaking a temporary root: `prepareScopeReturn`
 replaces the return local after `EmitBlock` pushes it, so cleanup previously
 popped a different value. A project unit regression failed on the exact PR
 parent and passes after the emitter retains the pushed object separately;
-parent log: `/private/tmp/issue1649-rescued-owner-parent-final.log`. Local code
-commits `c9ebc735` and `fa6eae06` are based on PR head and remain unpublished.
+parent log: `/private/tmp/issue1649-rescued-owner-parent-final.log`. Commits
+`c9ebc735` and `fa6eae06` are pushed to the existing PR branch; PR remains draft.
+The post-push CI run has not been polled yet.
 
 The remaining temporary-root traversal is a live identity scan used by four
 cleanup paths. It descends expression-list/array wrappers and checks each
@@ -55,13 +56,16 @@ compatibility helpers and `jperl_freetmps` remain. `Internals::svRefcnt` still
 scans live scalar wrappers, and exact owner-slot count alignment remains
 production behavior.
 
-The last observed PR checks have Ubuntu and Windows passing; aggregate CodeQL
-reports the unchanged RSA-key-size alert. GitHub issue-comment API access is
-currently failing, so current claims could not be reconciled for publication.
+Ubuntu and Windows passed on prior PR head `25c9d9b2`; aggregate CodeQL reported
+the unchanged RSA-key-size alert. GitHub issue-comment API access is currently
+failing, so current claims could not be reconciled. Updating the PR description
+also failed because `api.github.com` is unreachable; its current body still
+shows the old head and stale `t/100populate.t` failures.
 `make check-links` passes, 574 checked links and no errors; log:
 `/private/tmp/issue1649-rescued-owner-checklinks-final.log`. Next: trace the
-rootless `t/52leaks.t` owner as a separate acceptance blocker, recheck current
-issue claims before publishing the local branch, and keep PR #1938 open/draft.
+rootless `t/52leaks.t` owner as a separate acceptance blocker, wait at least six
+minutes after the push before checking CI, and retry the PR description update
+when GitHub API access returns. Keep PR #1938 open/draft.
 
 The reported Class::MethodMaker tied-array lifetime failure is covered by the
 new project-owned `refcount/generated_tied_array_handler_lifetime.t`: it
