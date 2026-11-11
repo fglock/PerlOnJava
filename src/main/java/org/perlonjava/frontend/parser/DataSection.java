@@ -142,12 +142,12 @@ public class DataSection {
             }
             switch (token.text) {
                 case "__DATA__" -> {
-                    if (atLineStart && isStandaloneMarker(tokens, i)) return pending;
+                    if (isStandaloneMarker(tokens, i)) return pending;
                 }
                 case "__END__" -> {
                     // A non-top-level __END__ stops parsing but does not populate
                     // a DATA handle - see parseDataSection().
-                    if (atLineStart && isStandaloneMarker(tokens, i)) {
+                    if (isStandaloneMarker(tokens, i)) {
                         return parser.isTopLevelScript ? "main" : null;
                     }
                 }
@@ -177,8 +177,9 @@ public class DataSection {
 
     /**
      * Returns whether an identifier token is a source-level DATA/END marker.
-     * Markers are recognized only at the start of a physical line (optionally
-     * qualified with CORE::) and when they occupy the rest of that line.
+     * Markers are recognized when they occupy the rest of a physical line,
+     * optionally qualified with CORE::. Perl also accepts an unqualified
+     * terminal marker after code on the same line.
      */
     static boolean isSourceMarker(List<LexerToken> tokens, int markerIndex) {
         if (markerIndex < 0 || markerIndex >= tokens.size()) return false;
@@ -189,18 +190,22 @@ public class DataSection {
         }
 
         int lineStartToken = markerIndex;
+        boolean qualified = false;
         if (markerIndex >= 2
                 && tokens.get(markerIndex - 1).type == LexerTokenType.OPERATOR
                 && tokens.get(markerIndex - 1).text.equals("::")
                 && tokens.get(markerIndex - 2).type == LexerTokenType.IDENTIFIER
                 && tokens.get(markerIndex - 2).text.equals("CORE")) {
             lineStartToken = markerIndex - 2;
+            qualified = true;
         }
-        for (int i = lineStartToken - 1; i >= 0; i--) {
-            LexerToken previous = tokens.get(i);
-            if (previous.type == LexerTokenType.WHITESPACE) continue;
-            if (previous.type == LexerTokenType.NEWLINE) break;
-            return false;
+        if (qualified) {
+            for (int i = lineStartToken - 1; i >= 0; i--) {
+                LexerToken previous = tokens.get(i);
+                if (previous.type == LexerTokenType.WHITESPACE) continue;
+                if (previous.type == LexerTokenType.NEWLINE) break;
+                return false;
+            }
         }
         return isStandaloneMarker(tokens, markerIndex);
     }
