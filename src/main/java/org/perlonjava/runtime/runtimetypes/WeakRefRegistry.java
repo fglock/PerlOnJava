@@ -31,6 +31,11 @@ public class WeakRefRegistry {
         return state().weakRefsExist;
     }
 
+    /** Whether this runtime currently has any registered weak observers. */
+    public static boolean hasAnyWeakRefs() {
+        return !state().referentToWeakRefs.isEmpty();
+    }
+
     /**
      * Special refCount value for objects that have weak refs but whose strong
      * refs can't be counted accurately. Used in two cases:

@@ -911,6 +911,10 @@ public class DestroyDispatch {
      */
     public static void clearRescuedWeakRefsAtEndBoundary() {
         processRescuedObjects();
+        // The lifecycle flag is conservative and remains true after the first
+        // weaken(). The registry map is the exact current observer set, so an
+        // empty map proves the nested rescue graph has no weak refs to clear.
+        if (!WeakRefRegistry.hasAnyWeakRefs()) return;
         java.util.List<RuntimeBase> rescuedObjects = snapshotRescuedForWalk();
         if (rescuedObjects.isEmpty()) return;
         ReachabilityWalker.EndBoundaryOwnerProof ownerProof =
