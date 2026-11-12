@@ -17,9 +17,15 @@ open and draft at `790210706c5851ab673ef462ba08c9c2c4310974`. The full
 `nice -n 19 timeout 3600 make` passed on runtime/test source `b20dc9441a` in
 7m51 (`/tmp/issue1649-pr1938-owner-slot-svrefcnt-final-b20dc9441a.log`). The
 only commit after b20 through 790 is a documentation checkpoint. On 790, all
-CI checks pass, including Ubuntu and Windows. The fresh-home CPAN release gate
-passed `Excel::Writer::XLSX` (1,247 files, 5,138 tests); it is now running
-Mojolicious. Its full log is
+CI checks pass, including Ubuntu and Windows. Fresh-home CPAN run
+`20261112-030837-47205` passed `Excel::Writer::XLSX` (1,247 files, 5,138
+tests), PPR (1,255 subtests), and Image::ExifTool (113 files, 600 tests).
+Mojolicious failed 4/3,662 subtests across five files; initial evidence points
+to unsupported fork, missing CryptX PBKDF2, and Lite-app class/import gaps.
+System-Perl comparison is pending. The run is now in DBIx::Class; `t/100populate.t`
+is `ok`, but `t/52leaks.t` reports 323/334 retained-object assertions,
+including callback CODE refs first seen in `Storage::DBI::_dbh_last_insert_id`.
+The full module summary is pending. The acceptance log is
 `/private/tmp/issue1649-pr1938-route-fix-20261112/build/reports/cpan-release-acceptance.log`.
 
 Delivered runtime fixes include the Mojolicious aggregate-element owner
@@ -30,12 +36,13 @@ both PerlOnJava backends. The new hash-field `SvREFCNT` regression passes on
 system Perl 5.45.4, JVM, and interpreter. Logs are recorded above and in the
 acceptance evidence section below.
 
-The previous DBIx::Class leak failures were real on older snapshots. Current
-runtime evidence is clean: `t/100populate.t` passes 108/108 on JVM with no
+Previous DBIx::Class `t/100populate.t` leak failures were real on older
+snapshots. The prior fixed-candidate run passes 108/108 on JVM with no
 LeakTracer refs, and the focused storage-release test passes on JVM and
-interpreter. The full interpreter run timed out before useful TAP; it is
-inconclusive. Let the active fresh-home acceptance run provide the next DBIx
-result.
+interpreter. The full interpreter run timed out before useful TAP and is
+inconclusive. The current full CPAN run independently passes `t/100populate.t`
+but reveals broad `t/52leaks.t` retention; trace its callback-owner path after
+the current gate drains.
 
 The temporary-root BFS is confined to the legacy unpaired decrement recovery;
 normal production cleanup carries exact owner-release tokens. Its public Java
@@ -45,7 +52,8 @@ descendant ancestry needed to replace nested BFS (including `RuntimeList`
 edges). Retiring the traversal requires that provenance or a separate
 compatibility decision. An orphan recursive direct-reference helper has been
 removed on local branch `wip/issue1649-unused-root-helper-20261112` at
-`6e44afdf8a`; full validation is pending after the immutable CPAN gate.
+`6e44afdf8a`. Full `nice -n 19 timeout 1800 make` passed on branch head
+`12417775a6` in 16m51 (`/tmp/issue1649-unused-root-helper-make.log`).
 
 Remaining Phase 2 work is producer-by-producer proof for exact owner-count
 alignment, then retirement of only those repairs whose normal producer paths
@@ -56,10 +64,11 @@ alive for END callbacks; cascaded `DESTROY` alone cannot replace it. The
 `SvREFCNT` lexical scan is retired. RSA API limits remain tracked in
 [issue #2031](https://github.com/fglock/PerlOnJava/issues/2031).
 
-Next: finish the exact-head fresh-home CPAN gate, validate the local helper
-cleanup with `nice -n 19 make`, then publish only if that gate passes. Keep PR
-#1938 open and draft, and poll its platform CI no more often than every six
-minutes.
+Next: collect the DBIx module summary, compare the Mojolicious failures under
+system Perl after active gates drain, and trace the DBIx callback CODE retention
+before making a source fix. Keep PR #1938 open and draft; publish the validated
+helper cleanup only after the current acceptance evidence is classified.
+Continue polling CI no more often than every six minutes.
 
 The final callsite search found no production caller for the legacy
 `MortalList.deferDecrement` entry point; its root-recovery behavior is exercised
