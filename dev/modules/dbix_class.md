@@ -44,15 +44,21 @@ done | sort
 
 | File | Count | Status |
 |------|-------|--------|
-| `t/52leaks.t` | 7 (tests 12-18) | Deep — refCount inflation in DBIC LeakTracer's `visit_refs` + ResultSource back-ref chain. Needs refCount-inflation audit; hasn't reproduced in simpler tests |
-| `t/52leaks.t` (line 430, harness-only) | **NEW — INVESTIGATE NEXT** | "Unable to perform storage-dependent operations with a detached result source (source 'Artist' is not associated with a schema)". Test passes standalone (11/11 in 46s) but raises this exception when run as part of `./jcpan -t DBIx::Class` after ~20 prior tests. Schema's weak ref to ResultSource (or RS's strong ref to schema?) is being cleared *prematurely* — DESTROY firing on the schema while a child resultset still expects it. Different failure mode from tests 12-18 (which is a leak, this is over-eager DESTROY). See "Investigation Plan: Schema-Detached Bug" below. |
+| `t/52leaks.t` | 7 (tests 12-18) | Open on candidate `36b9205453`: six objects belong to one Artist/CD/Schema/ResultSource graph; test 18 is a separate nested-dclone hash. The former line-430 phantom-chain failure now passes; current root cause is unconfirmed. See Fix 10 current evidence below. |
+| `t/52leaks.t` (diagnostic after test 18) | Classified | After the seven failed weak-registry checks, LeakTracer's Dumper raises a detached `Artist` ResultSource error at `Data::Dumper.pm` line 339. This is formatting fallout; the earlier phantom-chain assertions 1-8 pass on candidate `36b9205453`. |
 | `t/storage/txn_scope_guard.t` | 1 (test 18) | Needs DESTROY resurrection semantics (strong ref via @DB::args after MIN_VALUE). Tried refCount-reset approach — caused infinite DESTROY loops when __WARN__ handler re-triggers captures. Needs architectural redesign (separate "destroying" state from MIN_VALUE sentinel) |
 
 `t/storage/txn.t` — **FIXED** (90/90 pass) via Fix 10m (eq/ne fallback semantics).
 
 ---
 
-## Investigation Plan: Schema-Detached Bug in t/52leaks.t (line 430) — IN PROGRESS
+## Historical Investigation: Schema-Detached Bug in t/52leaks.t (line 430)
+
+The pre-candidate line-430 runtime failure is no longer reproduced on
+`36b9205453`; assertions 1-8, including the phantom chain, pass. The detached
+ResultSource exception in the current run happens after assertion 18 fails,
+while LeakTracer's Dumper formats that retained clone. The notes below describe
+the earlier failure and remain for context only.
 
 ### Symptom
 
@@ -576,11 +582,32 @@ can't ship a regression behind that flag.
 
 All 7 fail at line 526 `assert_empty_weakregistry` — weak refs still `defined`.
 
+### Current evidence (2026-11-12)
+
+On candidate `36b9205453`, the callback/argument-frame regression is fixed and
+the full repository `make` passes. DBIx `t/100populate.t` passes 108/108 with
+no LeakTracer refs. In `t/52leaks.t`, assertions 1-8 (including the phantom
+chain through line 440) pass; only object-collection checks 12-18 remain.
+Checks 12-17 refer to the original connected Artist/CD/schema/source graph;
+check 18 refers to the independently cloned `basic rerefrozen` hash. The
+detached-source exception happens after check 18 fails, while LeakTracer formats
+the object, so it does not establish a runtime failure in phantom chaining.
+
+System Perl with the local DBIx dependency directory completes the ordinary
+leak check. Its two reference-cycle cases are marked TODO and its optional
+persistent-process checks are skipped. The current PerlOnJava failures still
+need diagnosis; the system comparison does not prove a shared root cause.
+
+Next, inspect current owner-slot identities for checks 12-17 and separately
+trace the nested-dclone hash for check 18. Make the diagnostic fail-soft before
+`Devel::FindRef` tracking so Dumper cannot abort that inspection. Add focused
+project-owned regressions only after those two owner paths are isolated.
+
 ### Key Timing Constraint
 
 Assertion runs **during test execution** (line 526), not in an END block. `clearAllBlessedWeakRefs()` (END-time sweep) is too late.
 
-### Root Cause: Parent Container Inflation
+### Earlier hypothesis: Parent Container Inflation (unconfirmed)
 
 `$base_collection` (parent anonymous hash) has refCount inflated by JVM temporaries from:
 - `visit_refs()` deep walk (passes hashref as function arg)
@@ -590,16 +617,23 @@ Assertion runs **during test execution** (line 526), not in an END block. `clear
 
 When scope exits, scalar releases 1 reference but hash stays at refCount > 0. `callDestroy` never fires → `scopeExitCleanupHash` never walks elements → weak refs persist.
 
-**Implication**: Fixes that hook into callDestroy/scopeExit for the parent hash are blocked because it never dies. Our minimal reproducers (`/tmp/dbic_like.pl`, `/tmp/blessed_leak.pl`, `/tmp/circular_leak.pl`) no longer leak, but the real DBIC pattern still does.
+This was a working hypothesis from earlier runs, not a confirmed explanation
+for the current seven failures. Owner-slot traces are still needed before
+concluding that the parent hash itself remains live or that a broader collector
+is required.
 
 ### Diagnostic Facts
 
 - **B::REFCNT inflates by +1** vs actual: `B::svref_2object($x)->REFCNT` calls `Internals::SvREFCNT($self->{ref})` which bumps via B::SV's blessed hash slot. Failure inventory values are actual refCount + 1 (or 0 when refCount = MIN_VALUE).
 - **Unicode confirmed irrelevant**: t/52leaks.t uses only ASCII data.
 
-### Next Steps
+### Earlier blocked assessment (superseded)
 
-Both remaining failures (t/52leaks.t tests 12-18 and t/storage/txn_scope_guard.t test 18) hit **fundamental limitations** of PerlOnJava's selective refCounting that can't be solved without a major architectural change:
+The following assessment predates candidate `36b9205453` and is retained as
+history, not as the current diagnosis. It classified both remaining failures
+(`t/52leaks.t` tests 12-18 and `t/storage/txn_scope_guard.t` test 18) as
+fundamental selective-refcounting limitations before the current owner-slot
+traces were available:
 
 #### Why t/52leaks.t tests 12-18 Are Blocked
 
@@ -630,7 +664,9 @@ Either:
 
 See [`dev/design/refcount_alignment_plan.md`](../design/refcount_alignment_plan.md) for a phased plan that implements both.
 
-Deferred until such architectural work becomes practical.
+That deferral was based on the earlier, unconfirmed hypothesis and is
+superseded. Diagnose current owner-slot paths before deciding whether broader
+architecture work is needed.
 
 ### Historical notes (previously attempted)
 

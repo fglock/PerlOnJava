@@ -3,8 +3,8 @@
 **Status:** Phase 1 is complete; Phase 2 is active. Default production cleanup
 no longer calls corrective reachability sweeps. Remaining boundaries include
 the legacy null-token compatibility API, verified owner-count alignment, the
-temporary-root fallback traversal, the `SvREFCNT` live-scalar scan, and final
-CPAN acceptance. Existing lifecycle, aggregate, IO, CODE, weak-reference,
+temporary-root fallback traversal, targeted END-boundary weak retirement, and
+final CPAN acceptance. Existing lifecycle, aggregate, IO, CODE, weak-reference,
 thread, and HTML-Tree regressions pass with corrective sweeps disabled.
 
 | Phase | Status | Acceptance |
@@ -13,36 +13,30 @@ thread, and HTML-Tree regressions pass with corrective sweeps disabled.
 | Phase 2: retire reachability fallbacks | Active | Owner-source proofs and exact-head CPAN acceptance remain. |
 
 **Current checkpoint (2026-11-12):** Issue #1649 remains active. PR #1938 is
-open and draft at `790210706c5851ab673ef462ba08c9c2c4310974`. The full
-`nice -n 19 timeout 3600 make` passed on runtime/test source `b20dc9441a` in
-7m51 (`/tmp/issue1649-pr1938-owner-slot-svrefcnt-final-b20dc9441a.log`). The
-only commit after b20 through 790 is a documentation checkpoint. On 790, all
-CI checks pass, including Ubuntu and Windows. Fresh-home CPAN run
-`20261112-030837-47205` passed `Excel::Writer::XLSX` (1,247 files, 5,138
-tests), PPR (1,255 subtests), and Image::ExifTool (113 files, 600 tests).
-Mojolicious failed 4/3,662 subtests across five files; initial evidence points
-to unsupported fork, missing CryptX PBKDF2, and Lite-app class/import gaps.
-System-Perl comparison is pending. The run is now in DBIx::Class; `t/100populate.t`
-is `ok`, but `t/52leaks.t` reports 323/334 retained-object assertions,
-including callback CODE refs first seen in `Storage::DBI::_dbh_last_insert_id`.
-The full module summary is pending. The acceptance log is
-`/private/tmp/issue1649-pr1938-route-fix-20261112/build/reports/cpan-release-acceptance.log`.
+open and draft at `790210706c5851ab673ef462ba08c9c2c4310974`; all checks on
+that head pass, including Ubuntu and Windows. Local candidate
+`36b9205453` adds weak-CODE cleanup at final argument-container transfer. Its
+Java diagnostic regression reports argument-stack depth and owner-slot state;
+the Perl companion passes 6/6 under system Perl. Full `nice -n 19 make` passes
+on the candidate in 13m08 (`/tmp/issue1649-36b9205453-make.log`), and DBIx
+`t/100populate.t` passes 108/108 (`/tmp/issue1649-36b9205453-DBIx-100populate.log`).
 
-Delivered runtime fixes include the Mojolicious aggregate-element owner
-lifetime correction and replacement of the `SvREFCNT` live-lexical scan with
-validated owner-slot lookup. The route regression passes 14/14 on system Perl,
-JVM, and interpreter; upstream Mojolicious `routes.t` passes 51 subtests on
-both PerlOnJava backends. The new hash-field `SvREFCNT` regression passes on
-system Perl 5.45.4, JVM, and interpreter. Logs are recorded above and in the
-acceptance evidence section below.
-
-Previous DBIx::Class `t/100populate.t` leak failures were real on older
-snapshots. The prior fixed-candidate run passes 108/108 on JVM with no
-LeakTracer refs, and the focused storage-release test passes on JVM and
-interpreter. The full interpreter run timed out before useful TAP and is
-inconclusive. The current full CPAN run independently passes `t/100populate.t`
-but reveals broad `t/52leaks.t` retention; trace its callback-owner path after
-the current gate drains.
+The candidate's direct `t/52leaks.t` run still fails seven object-collection
+assertions (tests 12–18). It passes the earlier phantom-chain assertions 1–8;
+the detached `Artist` ResultSource exception occurs only afterward while
+LeakTracer's Dumper formats failed assertion 18 (`Data::Dumper.pm` line 339),
+so it is diagnostic fallout rather than the earlier line-430 runtime failure
+(`/tmp/issue1649-36b9205453-DBIx-52leaks.log`). Tests 12–17 retain one connected
+Artist/CD/Schema/ResultSource graph; test 18 is an independently cloned hash.
+System Perl with the local DBIx dependency path completes the ordinary leak
+check; its two reference-cycle cases are existing TODOs and optional
+persistent-process tests are skipped
+(`/tmp/issue1649-system-perl-52leaks-with-local-lib.log`). The callback
+regression is separate from these remaining DBIx owner/collection gaps.
+Exact-head CPAN acceptance remains open. Mojolicious' route fix and the
+`SvREFCNT` live-lexical scan replacement are already covered by system-Perl and
+both-backend regressions. The RSA API policy is tracked in
+[issue #2031](https://github.com/fglock/PerlOnJava/issues/2031).
 
 The temporary-root BFS is confined to the legacy unpaired decrement recovery;
 normal production cleanup carries exact owner-release tokens. Its public Java
@@ -64,11 +58,11 @@ alive for END callbacks; cascaded `DESTROY` alone cannot replace it. The
 `SvREFCNT` lexical scan is retired. RSA API limits remain tracked in
 [issue #2031](https://github.com/fglock/PerlOnJava/issues/2031).
 
-Next: collect the DBIx module summary, compare the Mojolicious failures under
-system Perl after active gates drain, and trace the DBIx callback CODE retention
-before making a source fix. Keep PR #1938 open and draft; publish the validated
-helper cleanup only after the current acceptance evidence is classified.
-Continue polling CI no more often than every six minutes.
+Next: publish the locally validated candidate to the existing draft PR so CI
+can validate it, then trace the seven `t/52leaks.t` collection failures in a
+separate local change. Keep exact-head CPAN acceptance open until those failures
+and the detached ResultSource behavior are classified. Continue polling CI no
+more often than every six minutes.
 
 The final callsite search found no production caller for the legacy
 `MortalList.deferDecrement` entry point; its root-recovery behavior is exercised
