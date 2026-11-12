@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.util.AbstractMap;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -250,6 +251,46 @@ class TemporaryRootOwnerSlotTest {
                 root.elements.clear();
                 parent.elements.clear();
                 nested.elements.clear();
+            }
+        }
+    }
+
+    @Test
+    void deepOrdinaryOwnerAncestryProvesTemporaryRootWithoutGraphWalk() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeHash target = new RuntimeHash();
+            List<RuntimeArray> chain = new ArrayList<>();
+            RuntimeArray top = new RuntimeArray();
+            top.localBindingExists = true;
+            top.elements.add(target.createReference());
+            chain.add(top);
+
+            for (int i = 0; i < 19; i++) {
+                RuntimeArray parent = new RuntimeArray();
+                parent.localBindingExists = true;
+                parent.elements.add(top.createReference());
+                chain.add(parent);
+                top = parent;
+            }
+
+            RuntimeHash opaque = new RuntimeHash();
+            CountingHashValues opaqueValues = new CountingHashValues();
+            opaque.elements = opaqueValues;
+            RuntimeArray root = new RuntimeArray();
+            root.localBindingExists = true;
+            root.elements.add(opaque.createReference());
+            root.elements.add(top.createReference());
+
+            MortalList.pushTemporaryRoot(root);
+            try {
+                assertTrue(ReachabilityWalker.isReachableFromTemporaryRoots(target));
+                assertEquals(0, opaqueValues.valuesCalls,
+                        "a current owner chain deeper than the former limit should not trigger BFS");
+            } finally {
+                MortalList.popTemporaryRoot(root);
+                root.elements.clear();
+                for (RuntimeArray array : chain) array.elements.clear();
             }
         }
     }

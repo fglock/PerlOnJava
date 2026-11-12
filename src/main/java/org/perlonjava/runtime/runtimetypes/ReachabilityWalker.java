@@ -2433,29 +2433,25 @@ public class ReachabilityWalker {
         return walker.reachable.contains(target);
     }
 
-    private static final int MAX_TEMPORARY_ROOT_OWNER_ANCESTRY_DEPTH = 16;
     private static final int MAX_TEMPORARY_ROOT_OWNER_ANCESTRY_NODES = 64;
     private static final int MAX_TEMPORARY_ROOT_DIRECT_ROOTS = 256;
     private static final int MAX_TEMPORARY_ROOT_DIRECT_EDGES = 4096;
 
-    private record TemporaryRootOwnerAncestor(RuntimeBase value, int depth) {}
-
     /** Positive-only proof through current owner slots into direct temporary roots. */
     private static boolean hasTemporaryRootOwnerAncestryPath(RuntimeBase target) {
-        java.util.ArrayDeque<TemporaryRootOwnerAncestor> todo = new java.util.ArrayDeque<>();
+        java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
         Set<RuntimeBase> seen = java.util.Collections.newSetFromMap(new IdentityHashMap<>());
         Set<RuntimeBase> candidates = java.util.Collections.newSetFromMap(new IdentityHashMap<>());
         candidates.add(target);
-        appendTemporaryRootOwnerAncestors(target, 0, todo);
+        appendTemporaryRootOwnerAncestors(target, todo);
 
         int visited = 0;
         while (!todo.isEmpty() && visited < MAX_TEMPORARY_ROOT_OWNER_ANCESTRY_NODES) {
-            TemporaryRootOwnerAncestor ancestor = todo.removeFirst();
-            RuntimeBase value = ancestor.value();
+            RuntimeBase value = todo.removeFirst();
             if (!seen.add(value)) continue;
             visited++;
             candidates.add(value);
-            appendTemporaryRootOwnerAncestors(value, ancestor.depth(), todo);
+            appendTemporaryRootOwnerAncestors(value, todo);
         }
         return MortalList.temporaryRootsDirectlyReferenceAny(
                 candidates, MAX_TEMPORARY_ROOT_DIRECT_ROOTS,
@@ -2463,9 +2459,7 @@ public class ReachabilityWalker {
     }
 
     private static void appendTemporaryRootOwnerAncestors(
-            RuntimeBase value, int depth,
-            java.util.ArrayDeque<TemporaryRootOwnerAncestor> todo) {
-        if (depth >= MAX_TEMPORARY_ROOT_OWNER_ANCESTRY_DEPTH) return;
+            RuntimeBase value, java.util.ArrayDeque<RuntimeBase> todo) {
         Set<PerlOwnerSlot> ownerSlots = value.ownerSlotSnapshot(
                 MAX_TEMPORARY_ROOT_OWNER_ANCESTRY_NODES);
         for (PerlOwnerSlot slot : ownerSlots) {
@@ -2477,7 +2471,7 @@ public class ReachabilityWalker {
                     // The live wrapper owns this exact scalar cell, whose
                     // current reference value is the referent. A direct root
                     // edge to the cell therefore proves the whole chain.
-                    todo.addLast(new TemporaryRootOwnerAncestor(scalarCell, depth + 1));
+                    todo.addLast(scalarCell);
                 }
                 continue;
             }
@@ -2491,7 +2485,7 @@ public class ReachabilityWalker {
                         && DestroyDispatch.isCurrentPerlOwnerSlot(value, slot)) {
                     // A root may hold a reference to the current scalar cell
                     // or tied-handler owner without directly holding its value.
-                    todo.addLast(new TemporaryRootOwnerAncestor(scalarOwner, depth + 1));
+                    todo.addLast(scalarOwner);
                 }
                 continue;
             }
@@ -2503,14 +2497,14 @@ public class ReachabilityWalker {
                     // A current capture identity connects this pad value to
                     // its CODE owner. A direct temporary-root edge to that
                     // CODE proves reachability without opening its captures.
-                    todo.addLast(new TemporaryRootOwnerAncestor(captureOwner, depth + 1));
+                    todo.addLast(captureOwner);
                 }
                 continue;
             }
             if (slot.kind() == PerlOwnerSlot.Kind.CODE_STATE) {
                 RuntimeCode stateOwner = slot.captureOwner();
                 if (stateOwner != null && stateOwner.hasCurrentStateOwner(value, slot)) {
-                    todo.addLast(new TemporaryRootOwnerAncestor(stateOwner, depth + 1));
+                    todo.addLast(stateOwner);
                 }
                 continue;
             }
@@ -2519,7 +2513,7 @@ public class ReachabilityWalker {
                 if (arrayOwner != null
                         && DestroyDispatch.isCurrentPerlOwnerSlot(value, slot)
                         && arrayOwner.ownsReferenceListAliasCellOwner(slot, value)) {
-                    todo.addLast(new TemporaryRootOwnerAncestor(arrayOwner, depth + 1));
+                    todo.addLast(arrayOwner);
                 }
                 continue;
             }
@@ -2528,7 +2522,7 @@ public class ReachabilityWalker {
                 if (hashOwner != null && value instanceof RuntimeScalar scalar
                         && DestroyDispatch.isCurrentPerlOwnerSlot(value, slot)
                         && hashOwner.ownsHashAliasCellOwner(slot, scalar)) {
-                    todo.addLast(new TemporaryRootOwnerAncestor(hashOwner, depth + 1));
+                    todo.addLast(hashOwner);
                 }
                 continue;
             }
@@ -2536,7 +2530,7 @@ public class ReachabilityWalker {
                 if (DestroyDispatch.isCurrentPerlOwnerSlot(value, slot)) {
                     for (RuntimeBase codeOwner : slot.endBoundaryOwnerSources()) {
                         if (codeOwner instanceof RuntimeCode) {
-                            todo.addLast(new TemporaryRootOwnerAncestor(codeOwner, depth + 1));
+                            todo.addLast(codeOwner);
                         }
                     }
                 }
@@ -2551,8 +2545,7 @@ public class ReachabilityWalker {
                     // A current aggregate edge can prove the owner chain at
                     // the container. Otherwise a direct root edge to this
                     // scalar cell still proves its current untracked value.
-                    todo.addLast(new TemporaryRootOwnerAncestor(
-                            container == null ? scalarOwner : container, depth + 1));
+                    todo.addLast(container == null ? scalarOwner : container);
                 }
                 continue;
             }
@@ -2563,7 +2556,7 @@ public class ReachabilityWalker {
             if (scalarOwner == null) continue;
             RuntimeBase container = scalarOwner.currentTemporaryRootAggregateOwner(value, slot);
             if (container != null) {
-                todo.addLast(new TemporaryRootOwnerAncestor(container, depth + 1));
+                todo.addLast(container);
             }
         }
     }
