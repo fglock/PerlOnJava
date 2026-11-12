@@ -1830,6 +1830,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 || hasActiveCodeOwner()
                 || hasCallTransferOwner()
                 || hasCurrentPerlOwnerSlotsOtherThan(excludedOwner)
+                || (PerlRuntime.currentOrNull() != null && SpecialBlock.hasPendingEndBlock(this))
                 || isConstantCv
                 || constantValue != null;
     }
@@ -1844,6 +1845,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         && !WeakRefRegistry.isweak(owner)
                         && (owner.type & RuntimeScalarType.REFERENCE_BIT) != 0
                         && owner.value == this) return true;
+            } else if (slot.kind() == PerlOwnerSlot.Kind.SCALAR_CELL) {
+                RuntimeScalar owner = slot.countedScalarOwner();
+                if (owner != null
+                        && (owner.isCurrentCountedScalarOwner(this, slot)
+                            || owner.isUnregisteredCountedScalarCellOwner(this, slot))) {
+                    return true;
+                }
             } else if (DestroyDispatch.isCurrentPerlOwnerSlot(this, slot)) {
                 return true;
             }
