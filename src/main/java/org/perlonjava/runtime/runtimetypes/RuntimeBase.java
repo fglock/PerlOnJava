@@ -703,7 +703,11 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     boolean hasCurrentPerlStorageOwner() {
         PerlRuntime runtime = PerlRuntime.currentOrNull();
         if (refCount > 0 || localBindingExists || hasClosureCaptureOwner()
-                || hasPendingReturnOwner()) {
+                || hasPendingReturnOwner()
+                || ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_VALUE) != 0
+                || ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_CONTAINER) != 0
+                || ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_TIE_HANDLER) != 0
+                || ownerSlotCount(PerlOwnerSlot.Kind.RETURN_VALUE) != 0) {
             return true;
         }
         if ((this instanceof RuntimeArray || this instanceof RuntimeHash)

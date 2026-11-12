@@ -201,6 +201,7 @@ class TransientAggregateHoldIsNotDurableOwnerTest {
             boolean markActive = true;
             try {
                 staged.add(new RuntimeScalar(closure));
+                staged.toRuntimeArray();
 
                 assertTrue(closure.hasCallTransferOwner());
                 closure.requestCaptureReleaseWhenUnowned();
