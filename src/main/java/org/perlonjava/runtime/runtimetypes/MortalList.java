@@ -1215,10 +1215,15 @@ public class MortalList {
             hash.scopeExited = true;
             return;
         }
-        if (!finalRelease && directlyReferences(returned, hash)) return;
         // A live reference keeps the container and its IO element slots alive.
-        if (!finalRelease && (hash.refCount > 0 || hash.hasCurrentPerlOwnerSlotIdentity()
-                || temporaryRootDirectlyReferences(hash))) return;
+        if (!finalRelease) {
+            boolean temporaryRooted = temporaryRootDirectlyReferences(hash);
+            if (directlyReferences(returned, hash) || hash.refCount > 0
+                    || hash.hasCurrentPerlOwnerSlotIdentity() || temporaryRooted) {
+                if (temporaryRooted) deferAggregateRefreshUntilTemporaryRootsLeave(hash);
+                return;
+            }
+        }
         if (hash instanceof RuntimeStash stash) {
             stash.releaseSavedNamespaceMove();
         }
@@ -1324,8 +1329,14 @@ public class MortalList {
             return;
         }
         // Alias arrays such as @_ do not own their original element slots.
-        if (!finalRelease && (arr.refCount > 0 || arr.hasCurrentPerlOwnerSlotIdentity()
-                || temporaryRootDirectlyReferences(arr) || directlyReferences(returned, arr))) return;
+        if (!finalRelease) {
+            boolean temporaryRooted = temporaryRootDirectlyReferences(arr);
+            if (arr.refCount > 0 || arr.hasCurrentPerlOwnerSlotIdentity()
+                    || temporaryRooted || directlyReferences(returned, arr)) {
+                if (temporaryRooted) deferAggregateRefreshUntilTemporaryRootsLeave(arr);
+                return;
+            }
+        }
         // A refalias list owns the scalar cells even though those cells are
         // not ordinary copied array values. Retire those cell identities only
         // when this RuntimeArray itself is no longer Perl-owned.
