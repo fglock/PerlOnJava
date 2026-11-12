@@ -31,7 +31,7 @@ class RescuedWeakRefsEmptyRegistryFastPathTest {
     }
 
     @Test
-    void emptyWeakRegistrySkipsNestedRescuedHashWalk() {
+    void preEndOwnerProcessingDoesNotEnumerateRescuedGraph() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeHash rescued = new RuntimeHash();
@@ -40,10 +40,10 @@ class RescuedWeakRefsEmptyRegistryFastPathTest {
             runtime.lifecycleState.rescuedObjects.add(rescued);
 
             assertFalse(WeakRefRegistry.hasAnyWeakRefs());
-            DestroyDispatch.clearRescuedWeakRefsAtEndBoundary();
+            MortalList.flushDeferredCapturesBeforeEnd();
 
             assertEquals(0, nestedValues.valuesCalls,
-                    "the END boundary must skip rescue-graph traversal without observers");
+                    "END processing uses owner state without walking nested values");
             assertTrue(DestroyDispatch.isRescued(rescued),
                     "the optimization must preserve the rescued object through END");
         }

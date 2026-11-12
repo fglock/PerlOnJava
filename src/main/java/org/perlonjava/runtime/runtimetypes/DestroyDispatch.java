@@ -288,11 +288,8 @@ public class DestroyDispatch {
         // subsequent callDestroy invocations just do cleanup (weak ref clearing +
         // cascade) without re-calling the Perl DESTROY method.
         if (referent.destroyFired) {
-            // If this object was rescued by DESTROY (e.g., Schema::DESTROY self-save)
-            // and is still in the rescuedObjects list, skip cleanup entirely. The weak
-            // refs and internal fields must remain intact because the phantom chain
-            // (or other code) may still access the object through its weak refs.
-            // Weak observers are cleared at END via clearRescuedWeakRefsAtEndBoundary.
+            // A DESTROY-rescued object stays intact while its current Perl owner
+            // slots remain. The rescue queue only schedules this exact owner check.
             if (state().rescuedObjects.contains(referent)) {
                 referent.markPerlResurrected();
                 return;
@@ -837,21 +834,10 @@ public class DestroyDispatch {
     }
 
     /**
-     * Process rescued objects at block scope exit (called from {@link MortalList#popAndFlush}).
-     * <p>
-     * Rescued objects are kept alive during the scope where they were rescued (e.g., during
-     * the DBIC phantom chain). At block scope exit, we check if they are ready for cleanup:
-     * <ul>
-     *   <li>refCount == 1: The rescue container's counted reference is the only one left.
-     *       No code path holds a live reference to the object.</li>
-     *   <li>refCount == MIN_VALUE: The weaken cascade already brought refCount to 0, and
-     *       callDestroy was called but skipped because the object was in rescuedObjects.
-     *       The object is definitely dead and needs cleanup.</li>
-     * </ul>
-     * <p>
-     * For each such object, we remove it from rescuedObjects and call callDestroy, which
-     * (now that the object is no longer in rescuedObjects) will clear weak refs and cascade
-     * into elements. This ensures DBIC's leak tracer sees the weak refs as undef.
+     * Recheck objects preserved after Perl DESTROY because their destructor may have
+     * installed a new owner slot. The rescue list schedules these checks but is not itself
+     * a Perl owner. An object with no current Perl owner can finish destruction now;
+     * otherwise it stays queued until a later owner release.
      */
     public static void processRescuedObjects() {
         java.util.List<RuntimeBase> rescuedObjects = state().rescuedObjects;
@@ -896,34 +882,6 @@ public class DestroyDispatch {
     /** Process rescued objects that no longer have current Perl owner identities. */
     public static void clearRescuedWeakRefs() {
         processRescuedObjects();
-    }
-
-    /**
-     * Finalize ownerless rescued objects, then clear weak observers into any
-     * rescued graphs that remain live at the END boundary. Strong Perl edges
-     * stay intact so END callbacks can still use the rescued objects.
-     */
-    public static void clearRescuedWeakRefsAtEndBoundary() {
-        processRescuedObjects();
-        // The lifecycle flag is conservative and remains true after the first
-        // weaken(). The registry map is the exact current observer set, so an
-        // empty map proves the nested rescue graph has no weak refs to clear.
-        if (!WeakRefRegistry.hasAnyWeakRefs()) return;
-        java.util.List<RuntimeBase> rescuedObjects = snapshotRescuedForWalk();
-        if (rescuedObjects.isEmpty()) return;
-        ReachabilityWalker.EndBoundaryOwnerProof ownerProof =
-                ReachabilityWalker.endBoundaryOwnerProof();
-        for (RuntimeBase rescued : rescuedObjects) {
-            if (ownerProof.hasIndependentOwnerPath(rescued)) continue;
-            WeakRefRegistry.clearWeakRefsTo(rescued);
-            if (rescued instanceof RuntimeHash hash) {
-                Set<RuntimeBase> visited =
-                        Collections.newSetFromMap(new IdentityHashMap<>());
-                visited.add(rescued);
-                deepClearWeakRefsExcludingIndependentRoots(
-                        hash, 5, rescued, ownerProof, visited);
-            }
-        }
     }
 
     /**
@@ -1006,31 +964,6 @@ public class DestroyDispatch {
      */
     private static void deepClearWeakRefs(RuntimeHash hash) {
         deepClearWeakRefsImpl(hash, 5, null);
-    }
-
-    private static void deepClearWeakRefsExcludingIndependentRoots(
-            RuntimeHash hash, int maxDepth, RuntimeBase excludedRoot,
-            ReachabilityWalker.EndBoundaryOwnerProof ownerProof,
-            Set<RuntimeBase> visited) {
-        if (maxDepth <= 0) return;
-        for (RuntimeScalar value : hash.elements.values()) {
-            if (value == null
-                    || (value.type & RuntimeScalarType.REFERENCE_BIT) == 0
-                    || !(value.value instanceof RuntimeBase base)
-                    || base == excludedRoot
-                    || ownerProof.hasIndependentOwnerPath(base)
-                    || !visited.add(base)) {
-                continue;
-            }
-            if (base.blessId != 0) {
-                WeakRefRegistry.clearWeakRefsTo(base);
-            }
-            if (base instanceof RuntimeHash nestedHash) {
-                deepClearWeakRefsExcludingIndependentRoots(
-                        nestedHash, maxDepth - 1, excludedRoot,
-                        ownerProof, visited);
-            }
-        }
     }
 
     /**

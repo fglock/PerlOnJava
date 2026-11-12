@@ -955,15 +955,15 @@ public class MortalList {
             flush();
         }
 
-        // Finalize ownerless rescues and clear weak observers into surviving
-        // rescued graphs after END has finished.
-        DestroyDispatch.clearRescuedWeakRefsAtEndBoundary();
+        // Release rescued lifecycle bookkeeping from current Perl owner slots
+        // after END. The queue itself is not a Perl owner.
+        DestroyDispatch.processRescuedObjects();
 
     }
 
-    /** Clear weak observers for rescued graphs before Perl END callbacks inspect them. */
+    /** Process rescued objects from current Perl owner slots before END callbacks. */
     public static void flushDeferredCapturesBeforeEnd() {
-        DestroyDispatch.clearRescuedWeakRefsAtEndBoundary();
+        DestroyDispatch.processRescuedObjects();
     }
 
     /**
