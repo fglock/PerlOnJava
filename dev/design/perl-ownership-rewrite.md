@@ -12,48 +12,53 @@ thread, and HTML-Tree regressions pass with corrective sweeps disabled.
 | Phase 1: remove default corrective sweeps | Complete | Full no-sweeps gates and lifecycle coverage are recorded below. |
 | Phase 2: retire reachability fallbacks | Active | Owner-source proofs and exact-head CPAN acceptance remain. |
 
-**Current checkpoint (2026-11-11):** Issue #1649 remains active. PR #1938 is
-open and draft. Branch `wip/issue1649-live-master-20261111` is rebased on live
-`master` `3590efc959`; runtime and test source is
-`afbccd283febd27fb953dabf977d583df4d79585`. The rebase completed all 726 replay
-positions. It preserved the live-master eval metadata and symbol-table caches,
-returned-hash IO-owner protection, parser fixes, and the current 2026-11-11
-CPAN report snapshot; the older 2026-11-10 report-only snapshot was superseded
-and skipped. Two rebase merge artifacts—a duplicated `ScopedSymbolTable`
-helper block and a redundant brace in the detached-glob constructor—were
-corrected before acceptance.
+**Current checkpoint (2026-11-12):** Issue #1649 remains active. PR #1938 is
+open and draft at `6a2a834ffb050c9417e57384243c375d8de5ca86`; its Ubuntu and
+Windows jobs and CodeQL checks passed on that prior head. Candidate commit
+`73a749d7438d7bc431c9d7380c62828d01f6826d` is a direct descendant in isolated
+worktree `/private/tmp/issue1649-pr1938-route-fix-20261112` and is ready for
+publication after this checkpoint update.
 
-The Exporter regression fix eagerly loads `Exporter::Heavy` from the initial
-`Exporter.pm` load. System Perl passes the new 2-assertion regression; the
-focused make gate and five affected unit files pass on both PerlOnJava backends.
-Evidence is in `/tmp/issue1649-exporter-preload-focused-make.log` and
-`/tmp/issue1649-{jvm,interpreter}-{exporter_to_level_first_lazy_require,file_stat_signature_args_warning,line_directive_core_operators,time_localtime_core,user_pwent_grent_modules}.log`.
-On the current candidate, `nice -n 19 timeout 3600 make` passed in 6m48
-(`/tmp/issue1649-live-master-current-make-afbccd283f.log`) and DBIx::Class
-`t/100populate.t` passed all 108 assertions with no LeakTracer references
-(`/tmp/issue1649-dbix-t100-final-afbccd283f.log`). The historical four object-GC
-failures do not reproduce. The nested File::Temp owner case reported in #2015
-now has project coverage in
-`src/test/resources/unit/refcount/nested_hash_or_assign_file_temp_owner.t`; it
-passes 4/4 under system Perl, JVM, and interpreter. System Perl validation is
-in `/tmp/issue1649-nested-file-temp-system-perl.log`; focused backend results
-are in `/tmp/issue1649-nested-file-temp-current-{jvm,interpreter}.log`.
+The candidate fixes a real production owner-lifetime gap found in Mojolicious:
+`for my $child` aliases an `ARRAY_ELEMENT` cell, and lexical cleanup must not
+retire the aggregate's stored edge as though it were a separate lexical
+owner. `MortalList.deferDecrementIfNotCaptured` now preserves a current
+aggregate-element identity. New project coverage
+`mojo_route_weak_parent_lifetime.t` passes 14/14 under system Perl, JVM, and
+interpreter. Upstream Mojolicious `routes.t` passes 51 subtests on both
+PerlOnJava backends. The unfixed-parent failure is recorded in
+`/tmp/issue1649-mojo-route-jvm-parent.log`. Exact-candidate logs:
+`/tmp/issue1649-pr1938-mojo-route-{jvm,interpreter}-73a749.log`,
+`/tmp/issue1649-pr1938-mojo-routes-upstream-{jvm,interpreter}-73a749.log`, and
+`/tmp/issue1649-mojo-route-system-perl-resume.txt`.
 
-The 2026-11-11 callsite audit found that nested temporary-root graph traversal
-is reachable only through the legacy unpaired-release compatibility branches
-and the test-only released-weak sweep API. `walkEndBlockRoots()` is called by
-the old sweep implementation or Java fixtures; the public sweep entry points
-are compatibility no-ops. Production temporary roots and queued END callbacks
-use explicit owner identities. Keep the traversal helpers and compatibility
-fixtures until their API contracts are deliberately retired, but do not treat
-them as a remaining default-production sweep dependency. The
-`Internals::SvREFCNT` live-scalar scan is still a separate production query and
-stays until lexical scalar ownership has complete coverage. Exact-head CPAN
-acceptance and the legacy unpaired-release contract remain open. RSA API limits
-remain tracked in [issue #2031](https://github.com/fglock/PerlOnJava/issues/2031).
+The exact PR-tree `nice -n 19 timeout 3600 make` passes in 7m7 on `73a749d743`
+(`/tmp/issue1649-pr1938-route-fix-make-73a749d743.log`). DBIx::Class
+`t/100populate.t` passes 108/108 on JVM with no LeakTracer refs, and the
+project weak-release test passes on both backends with no retained refs. The
+10-minute interpreter `t/100populate.t` attempt timed out before useful TAP
+progress; this is not a GC-failure result. Evidence is in
+`/tmp/issue1649-pr1938-dbix-t100-jvm-73a749.log` and
+`/tmp/issue1649-pr1938-dbix-storage-{jvm,interpreter}-73a749.log`.
 
-Immediate action: keep PR #1938 open and draft, and poll checks for its latest
-published head no earlier than six minutes after each update.
+Phase 1 is complete: routine production lifecycle cleanup no longer invokes
+corrective full-graph sweeps. Phase 2 remains, but its boundaries are now
+separated: (1) legacy unpaired `MortalList.deferDecrement` root recovery has no
+production Java caller and remains only as a compatibility contract; (2)
+count-alignment repairs still need producer-by-producer proof before removal;
+(3) bounded root walks remain in aggregate/return cleanup fallbacks and need
+owner-slot replacements; (4) the END-boundary rescued-graph walk clears weak
+observers nested below rescued objects and cannot be replaced by cascaded
+`DESTROY` alone; and (5) the `SvREFCNT` scalar-reachability query supplies
+observable Perl API counts, independently of END processing. Preserve the END
+walk until an explicit nested weak-retirement event exists. Fresh-home exact-
+head CPAN acceptance remains required. RSA API limits remain tracked in
+[issue #2031](https://github.com/fglock/PerlOnJava/issues/2031).
+
+Next: publish this fast-forward candidate, keep PR #1938 open and draft, and
+check its CI no sooner than six minutes after publication. Continue local
+owner-source audits while CI runs; do not treat the outstanding interpreter
+timeout as a DBIx GC failure.
 
 The final callsite search found no production caller for the legacy
 `MortalList.deferDecrement` entry point; its root-recovery behavior is exercised
@@ -152,12 +157,14 @@ ownership from one aggregate count.
 
 ### Next steps
 
-1. Check CI for the latest published head at six-minute or longer intervals;
-   keep PR #1938 open and draft.
-2. Resolve the legacy unpaired-release contract; its root recovery has no
-   production Java caller, but remains covered by compatibility fixtures.
-3. Keep the production `SvREFCNT` scan until lexical scalar ownership has a
-   completeness guarantee, and complete fresh-home exact-head CPAN acceptance.
+1. Publish candidate `73a749d743` as a fast-forward to the existing PR branch;
+   retain open/draft status and poll its checks at six-minute or longer
+   intervals.
+2. Continue the production caller audit for owner-count repairs and aggregate
+   root fallbacks; keep `END` cleanup and `SvREFCNT` count semantics as distinct
+   boundaries.
+3. Complete fresh-home exact-head CPAN acceptance after the remaining owner
+   paths are qualified.
 
 ### Open questions and blockers
 
