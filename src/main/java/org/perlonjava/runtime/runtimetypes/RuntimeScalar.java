@@ -719,7 +719,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (owner == null || isSharedImmutableLiteralWithoutOwnerTracking()) return;
         reconcileContainerOwnerAfterMutation(owner);
         if (MortalList.deferAggregateRefreshUntilTemporaryRootsLeave(owner)) return;
-        if (isStoredInContainer(owner)) updateUntrackedReferenceOwner(true);
+        if (isStoredInContainer(owner)) {
+            RuntimeBase referent = (type & RuntimeScalarType.REFERENCE_BIT) != 0
+                    && value instanceof RuntimeBase base ? base : null;
+            updateUntrackedReferenceOwner(referent, true);
+        }
     }
 
     private void removeContainerOwnerTracking(RuntimeBase expectedOwner) {
