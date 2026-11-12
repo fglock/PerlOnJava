@@ -13,15 +13,16 @@ thread, and HTML-Tree regressions pass with corrective sweeps disabled.
 | Phase 2: retire reachability fallbacks | Active | Owner-source proofs and exact-head CPAN acceptance remain. |
 
 **Current checkpoint (2026-11-12):** Sweep-removal work remains active under
-#2043. PR #1938 remains open and draft. The latest CI check on previous remote
-head `ade3cd83cf` showed Ubuntu and Windows still running, with analysis and
-dependency jobs passing. Candidate branch
-`wip/issue2043-closure-owner-batch-20261112` is at source commit
-`6f75fe1496`. The candidate proves temporary-root ownership
-through ordinary array/hash slots, current `SCALAR_REFERENCE_CONTENTS` slots,
-closure capture slots, compiled CODE pad-constant slots, CODE state bindings,
-and current array refalias slots before opening the fallback graph walk. The
-fallback remains for incomplete or unsupported owner paths.
+#2043. PR #1938 remains open and draft. The latest CI poll on remote head
+`5ab0d9fdd1` (2026-11-12 19:56 UTC) showed Ubuntu and Windows still running;
+analysis and dependency jobs passed. Candidate branch
+`wip/issue2043-closure-owner-batch-20261112` now includes source commit
+`4f36959221`. The candidate proves temporary-root ownership through ordinary
+array/hash slots, current `SCALAR_REFERENCE_CONTENTS` slots, closure capture
+slots, compiled CODE pad-constant slots, CODE state bindings, current array
+refalias slots, and current `SCALAR_CELL` and `CODE_SLOT` owners before opening
+the fallback graph walk. Unknown or incomplete owner paths still use the
+fallback.
 
 The new `UnownedTemporaryArrayAggregateOwnerTest` reproduces stale
 `UNTRACKED_REFERENCE` owners after scope cleanup returns under a root lease.
@@ -45,6 +46,17 @@ on the exact source content committed as `6f75fe1496`, based on `ade3cd83cf`
 (`/private/tmp/issue2043-owner-kind-batch-make.log`). On this candidate, DBIx
 `t/100populate.t` passes 108/108 and LeakTracer finds no retained references
 (`/private/tmp/issue2043-dbix-t100-048bf8c615.log`).
+
+`TemporaryRootCountedCellOwnerTest` covers temporary roots that hold a
+reference to a current scalar cell or stash CODE slot, rather than directly
+holding its value. The deliberately opaque hash is inserted first so the test
+counts any fallback enumeration. Both cases pass on source commit
+`4f36959221`, and both fail on parent `5ab0d9fdd1` only because the fallback
+enumerates that hash once. The focused logs are
+`/private/tmp/issue2043-counted-cell-owner-focused.log` and
+`/private/tmp/issue2043-counted-cell-owner-parent-focused.log`; the full
+`nice -n 19 timeout 2400 make` passes in 7m17 on the committed source content
+(`/private/tmp/issue2043-counted-cell-owner-full-make.log`).
 
 DBIx `t/52leaks.t` still fails collection checks 12–18 and aborts when
 Data::Dumper formats a detached ResultSource
