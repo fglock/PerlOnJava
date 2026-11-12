@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("unit")
@@ -129,6 +131,11 @@ class WeakCodeRefAggregateRootTest {
             RuntimeCode code = new RuntimeCode(null, java.util.List.of());
             RuntimeScalar strongCodeRef = new RuntimeScalar(code);
             MyVarCleanupStack.register(strongCodeRef);
+            PerlOwnerSlot strongOwner = strongCodeRef.untrackedReferenceOwnerSlot();
+            assertNotNull(strongOwner,
+                    "the lexical's direct value edge is recorded by an owner slot");
+            assertTrue(strongOwner.isActive());
+            assertSame(code, strongOwner.referent());
             RuntimeScalar weakCodeRef = new RuntimeScalar(code);
             WeakRefRegistry.weaken(weakCodeRef);
 
