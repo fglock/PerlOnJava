@@ -29,12 +29,23 @@ construct queued-END and active-code captures with explicit capture owner
 slots. The exact source gate `nice -n 19 make` passes on `91b291deb7` in 6m48;
 full output is `/tmp/issue2043-end-owner-make-retry.log`.
 
-The DBIx::Class `t/52leaks.t` collection checks 12–18 remain unresolved on the
-previous candidate. The detached `ResultSource` exception follows those failed
-checks while LeakTracer formats the retained object; it is not a confirmed
-independent failure. Root cause is still unproven. Production reachability
-fallbacks also remain: null-token deferred releases in `MortalList`, the
-remaining END-block root walk, and the `ReachabilityWalker` sweep engine.
+The DBIx::Class `t/52leaks.t` remains the next behavior blocker. On exact
+candidate `91b291deb7`, the raw cached CPAN tarball fails collection checks
+12–26 after its ordinary checks 1–8 pass. System Perl with the installed
+DBIx dependencies passes its ordinary leak check and skips the two optional
+persistent-process checks. This is a baseline comparison, not the patched
+CPAN release gate. A temporary owner-trace run shows retained `UNTRACKED_REFERENCE`
+slots without a live scalar carrier and child `HASH_ELEMENT` edges through
+aggregate holders. That is a lead to verify, not a confirmed root cause. The
+later detached `ResultSource` exception occurs while LeakTracer formats failed
+references and is not a confirmed independent failure. Logs:
+`/tmp/issue2043-dbic-52leaks-91b291deb7.log`,
+`/tmp/issue2043-dbic-52leaks-system-perl.log`, and
+`/tmp/issue2043-dbic-52leaks-ownertrace-91b291deb7.log`.
+
+Production reachability fallbacks also remain: null-token deferred releases in
+`MortalList`, the remaining END-block root walk, and the `ReachabilityWalker`
+sweep engine.
 
 Next, reproduce the DBIx owner paths separately for checks 12–17 and the
 nested-clone check 18, add a project-owned system-Perl-verified behavior
