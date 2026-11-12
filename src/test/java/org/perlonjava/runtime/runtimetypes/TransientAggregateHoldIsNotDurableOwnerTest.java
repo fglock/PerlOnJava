@@ -127,7 +127,9 @@ class TransientAggregateHoldIsNotDurableOwnerTest {
             RuntimeScalar codeCell = new RuntimeScalar(closure);
             RuntimeArray temporary = new RuntimeArray();
             temporary.localBindingExists = true;
-            temporary.elements.add(codeCell);
+            RuntimeList initialValues = new RuntimeList();
+            initialValues.elements.add(codeCell);
+            temporary.setFromList(initialValues);
             temporary.localBindingExists = false;
             RuntimeCode.CallArguments staged = RuntimeCode.newCallArguments(1);
 
@@ -163,6 +165,56 @@ class TransientAggregateHoldIsNotDurableOwnerTest {
                 if (markActive) MortalList.popAndFlush();
                 if (RuntimeCode.isActiveCode(closure)) RuntimeCode.popActiveCode(closure);
             }
+        }
+    }
+
+    @Test
+    void transitiveTemporaryRootDefersAggregateAndCaptureCleanup() {
+        try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
+            RuntimeCode closure = new RuntimeCode((args, context) -> new RuntimeList(), null);
+            closure.refCount = -1;
+            RuntimeScalar capturedPad = new RuntimeScalar(42);
+            PerlOwnerSlot captureOwner = capturedPad.retainClosureCaptureSlot(closure);
+            closure.capturedScalars = new RuntimeScalar[] {capturedPad};
+            closure.capturedScalarOwnerSlots = new PerlOwnerSlot[] {captureOwner};
+
+            RuntimeScalar codeCell = new RuntimeScalar(closure);
+            RuntimeArray inner = new RuntimeArray();
+            RuntimeList innerValues = new RuntimeList();
+            innerValues.elements.add(codeCell);
+            inner.setFromList(innerValues);
+            RuntimeArray middle = new RuntimeArray();
+            RuntimeList middleValues = new RuntimeList();
+            middleValues.elements.add(inner.createReference());
+            middle.setFromList(middleValues);
+            RuntimeArray root = new RuntimeArray();
+            RuntimeList rootValues = new RuntimeList();
+            rootValues.elements.add(middle.createReference());
+            root.setFromList(rootValues);
+
+            RuntimeCode.CallArguments staged = RuntimeCode.newCallArguments(1);
+            MortalList.pushTemporaryRoot(root);
+            try {
+                assertFalse(MortalList.temporaryRootDirectlyReferences(inner),
+                        "the temporary root does not directly own the transferred inner array");
+                staged.add(codeCell);
+                closure.requestCaptureReleaseWhenUnowned();
+                staged.finish();
+
+                assertTrue(captureOwner.isActive(),
+                        "a nested temporary-root path keeps closure captures live");
+                assertEquals(1,
+                        closure.ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE));
+            } finally {
+                staged.finish();
+                MortalList.popTemporaryRoot(root);
+            }
+
+            assertNull(closure.capturedScalars,
+                    "queued cleanup retires captures after the last temporary root leaves");
+            assertFalse(captureOwner.isActive());
+            assertEquals(0,
+                    closure.ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE));
         }
     }
 

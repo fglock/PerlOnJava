@@ -305,7 +305,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * Perl owner of an aggregate. The container's direct cells are the exact
      * affected edges; no transitive runtime-root traversal is needed.
      */
-    private static void refreshUntrackedCellsAfterContainerTransfer(RuntimeBase container) {
+    static void refreshUntrackedCellsAfterContainerTransfer(RuntimeBase container) {
+        if (MortalList.deferAggregateRefreshUntilTemporaryRootsLeave(container)) return;
         if (container == null || container.hasCurrentPerlStorageOwner()
                 || container.hasTemporaryRootOwnerSlotIdentity()) return;
         if (container instanceof RuntimeArray array) {
@@ -1972,6 +1973,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     private void finishRequestedCaptureRelease() {
+        if (!captureReleaseRequested) return;
+        if (MortalList.deferCaptureReleaseUntilTemporaryRootsLeave(this)) return;
         if (!captureReleaseRequested
                 || hasPerlOwnerForCaptureOtherThan(null)
                 || SpecialBlock.hasPendingEndBlock(this)
@@ -1980,6 +1983,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         captureReleaseRequested = false;
         releaseCaptures();
+    }
+
+    void finishRequestedCaptureReleaseAfterTemporaryRootsLeave() {
+        finishRequestedCaptureRelease();
     }
 
     public static RuntimeCode getActiveCodeAt(int depth) {
