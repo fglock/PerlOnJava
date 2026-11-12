@@ -313,7 +313,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         MortalList.deferDestroyForContainerClear(added);
     }
 
-    private void refreshUntrackedElementOwners() {
+    void refreshUntrackedElementOwners() {
         if (elements == null) return;
         for (RuntimeScalar value : elements.values()) {
             if (value != null) value.reconcileContainerOwnerAfterMutation(this);
