@@ -1206,7 +1206,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         boolean liveOwningContainer;
         RuntimeBase currentOwner = containerOwner;
         if (currentOwner != null && isStoredInContainer(currentOwner)) {
-            boolean liveContainerOwner = currentOwner.hasPerlStrongOwner()
+            boolean liveContainerOwner = currentOwner.hasPersistentPerlStrongOwnerIdentity()
                     || GlobalVariable.isPackageRootedAggregate(currentOwner)
                     || (runtime != null && MyVarCleanupStack.isRegistered(currentOwner));
             if (!requireLiveContainer || liveContainerOwner) return true;
@@ -1239,7 +1239,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     if (containerOwner == owner) containerOwner = null;
                     continue;
                 }
-                boolean liveContainerOwner = owner.hasPerlStrongOwner()
+                boolean liveContainerOwner = owner.hasPersistentPerlStrongOwnerIdentity()
                         || GlobalVariable.isPackageRootedAggregate(owner)
                         || (runtime != null && MyVarCleanupStack.isRegistered(owner));
                 if (!requireLiveContainer || liveContainerOwner) liveOwningContainer = true;

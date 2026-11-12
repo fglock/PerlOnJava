@@ -201,10 +201,6 @@ public class SubUtil extends PerlModuleBase {
         // Mark the CV as explicitly renamed so B::svref_2object()->GV->NAME
         // honors the assigned name even when no matching stash entry exists.
         code.explicitlyRenamed = true;
-        // Try::Tiny calls set_subname only for the naming side effect. Do not
-        // materialize a one-element result list in void context: its temporary
-        // CODE scalar can otherwise retain the closure after the caller drops it.
-        if (ctx == RuntimeContextType.VOID) return new RuntimeList();
         return codeRef.getList();
     }
 
