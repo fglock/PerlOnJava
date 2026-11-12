@@ -320,6 +320,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     static final class TailCallArgumentOwners {
         private final RuntimeArray sourceArguments;
         private final java.util.ArrayList<RuntimeScalar.ArgumentAliasOwner> owners;
+        private RuntimeArray ownedArgs;
 
         private TailCallArgumentOwners(RuntimeArray sourceArguments,
                 java.util.List<RuntimeScalar.ArgumentAliasOwner> owners) {
@@ -351,7 +352,26 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
 
         void releaseRemaining() {
-            rethrowCleanupFailure(releaseArgumentAliasOwners(owners, null));
+            Throwable failure = releaseArgumentAliasOwners(owners, null);
+            RuntimeArray pendingOwnedArgs = ownedArgs;
+            if (pendingOwnedArgs != null) {
+                try {
+                    cleanupTailCallArgs(pendingOwnedArgs);
+                    ownedArgs = null;
+                } catch (Throwable cleanupFailure) {
+                    if (failure == null) failure = cleanupFailure;
+                    else if (failure != cleanupFailure) failure.addSuppressed(cleanupFailure);
+                }
+            }
+            rethrowCleanupFailure(failure);
+        }
+
+        private void attachOwnedArgs(RuntimeArray ownedArgs) {
+            if (ownedArgs == null) return;
+            if (this.ownedArgs != null) {
+                throw new IllegalStateException("tail-call argument owners already have owned args");
+            }
+            this.ownedArgs = ownedArgs;
         }
     }
 
@@ -10336,6 +10356,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     RuntimeArray tailArgs = cfList.getTailCallArgs();
                     nextTailArgs = tailArgs != null ? tailArgs : curArgs;
                     nextTailArgumentOwners = cfList.marker.argumentOwners;
+                    // The external resolver retires ownedArgs itself after the
+                    // replacement call. This internal trampoline transfers that
+                    // cleanup into the argument-owner handoff so it survives until
+                    // the next frame has adopted the argument cells.
+                    if (cfList.marker.ownedArgs != null) {
+                        if (nextTailArgumentOwners == null) {
+                            nextTailArgumentOwners = new TailCallArgumentOwners(
+                                    nextTailArgs, List.of());
+                        }
+                        nextTailArgumentOwners.attachOwnedArgs(cfList.marker.ownedArgs);
+                    }
                     // Retire only deferred owners belonging to the source
                     // argument frame before its replacement runs.  The broad
                     // scope flush below deliberately cannot do this: it must

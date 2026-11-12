@@ -44,9 +44,11 @@ final class LifecycleRuntimeState {
     final IdentityHashMap<RuntimeBase, Integer> positiveOwnerReferents = new IdentityHashMap<>();
     boolean deferredCapturesMayBeReady;
     final ArrayDeque<TemporaryRootLease> temporaryRoots = new ArrayDeque<>();
-    final Set<RuntimeBase> deferredTemporaryRootAggregateRefreshes =
+    final ArrayDeque<RuntimeBase> deferredTemporaryRootAggregateRefreshes = new ArrayDeque<>();
+    final Set<RuntimeBase> deferredTemporaryRootAggregateRefreshSet =
             Collections.newSetFromMap(new IdentityHashMap<>());
-    final Set<RuntimeCode> deferredTemporaryRootCaptureReleases =
+    final ArrayDeque<RuntimeCode> deferredTemporaryRootCaptureReleases = new ArrayDeque<>();
+    final Set<RuntimeCode> deferredTemporaryRootCaptureReleaseSet =
             Collections.newSetFromMap(new IdentityHashMap<>());
     boolean drainingTemporaryRootCleanup;
     private static final int INITIAL_MARK_CAPACITY = 16;
@@ -181,10 +183,13 @@ final class LifecycleRuntimeState {
             positiveOwnerReferents.clear();
         }
         deferredCapturesMayBeReady = false;
-        while (!temporaryRoots.isEmpty()) temporaryRoots.pop().release();
-        MortalList.drainDeferredTemporaryRootCleanup(this);
-        deferredTemporaryRootAggregateRefreshes.clear();
-        deferredTemporaryRootCaptureReleases.clear();
+        while (true) {
+            while (!temporaryRoots.isEmpty()) temporaryRoots.pop().release();
+            MortalList.drainDeferredTemporaryRootCleanup(this);
+            if (temporaryRoots.isEmpty()
+                    && deferredTemporaryRootAggregateRefreshes.isEmpty()
+                    && deferredTemporaryRootCaptureReleases.isEmpty()) break;
+        }
         markDepth = 0;
         flushing = false;
         reachabilityDrainDepth = 0;

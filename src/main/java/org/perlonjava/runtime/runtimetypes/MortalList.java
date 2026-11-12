@@ -257,7 +257,9 @@ public class MortalList {
         if (container == null) return false;
         LifecycleRuntimeState state = state();
         if (state.temporaryRoots.isEmpty()) return false;
-        state.deferredTemporaryRootAggregateRefreshes.add(container);
+        if (state.deferredTemporaryRootAggregateRefreshSet.add(container)) {
+            state.deferredTemporaryRootAggregateRefreshes.addLast(container);
+        }
         markBoundaryWork(state);
         return true;
     }
@@ -267,7 +269,9 @@ public class MortalList {
         if (code == null) return false;
         LifecycleRuntimeState state = state();
         if (state.temporaryRoots.isEmpty()) return false;
-        state.deferredTemporaryRootCaptureReleases.add(code);
+        if (state.deferredTemporaryRootCaptureReleaseSet.add(code)) {
+            state.deferredTemporaryRootCaptureReleases.addLast(code);
+        }
         markBoundaryWork(state);
         return true;
     }
@@ -278,29 +282,35 @@ public class MortalList {
         state.drainingTemporaryRootCleanup = true;
         try {
             while (state.temporaryRoots.isEmpty()) {
-                RuntimeBase container = takeFirstIdentity(
-                        state.deferredTemporaryRootAggregateRefreshes);
+                RuntimeBase container = state.deferredTemporaryRootAggregateRefreshes.pollFirst();
                 if (container != null) {
-                    RuntimeCode.refreshUntrackedCellsAfterContainerTransfer(container);
+                    state.deferredTemporaryRootAggregateRefreshSet.remove(container);
+                    try {
+                        RuntimeCode.refreshUntrackedCellsAfterContainerTransfer(container);
+                    } catch (RuntimeException | Error cleanupFailure) {
+                        if (state.deferredTemporaryRootAggregateRefreshSet.add(container)) {
+                            state.deferredTemporaryRootAggregateRefreshes.addFirst(container);
+                        }
+                        throw cleanupFailure;
+                    }
                     continue;
                 }
-                RuntimeCode code = takeFirstIdentity(
-                        state.deferredTemporaryRootCaptureReleases);
+                RuntimeCode code = state.deferredTemporaryRootCaptureReleases.pollFirst();
                 if (code == null) break;
-                code.finishRequestedCaptureReleaseAfterTemporaryRootsLeave();
+                state.deferredTemporaryRootCaptureReleaseSet.remove(code);
+                try {
+                    code.finishRequestedCaptureReleaseAfterTemporaryRootsLeave();
+                } catch (RuntimeException | Error cleanupFailure) {
+                    if (state.deferredTemporaryRootCaptureReleaseSet.add(code)) {
+                        state.deferredTemporaryRootCaptureReleases.addFirst(code);
+                    }
+                    throw cleanupFailure;
+                }
             }
         } finally {
             state.drainingTemporaryRootCleanup = false;
             refreshBoundaryWork(state);
         }
-    }
-
-    private static <T> T takeFirstIdentity(Set<T> values) {
-        var iterator = values.iterator();
-        if (!iterator.hasNext()) return null;
-        T value = iterator.next();
-        iterator.remove();
-        return value;
     }
 
     /**
