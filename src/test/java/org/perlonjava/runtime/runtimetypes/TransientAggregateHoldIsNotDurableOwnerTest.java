@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("unit")
@@ -82,6 +83,45 @@ class TransientAggregateHoldIsNotDurableOwnerTest {
 
             assertTrue(cell.hasLiveDurableStrongValueSlot(),
                     "all current containers are considered, not only the latest hint");
+        }
+    }
+
+    @Test
+    void untrackedClosureInTemporaryArrayDoesNotBlockCaptureRetirement() {
+        try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
+            RuntimeCode closure = new RuntimeCode((args, context) -> new RuntimeList(), null);
+            closure.refCount = -1;
+            closure.capturedScalars = new RuntimeScalar[0];
+            RuntimeScalar codeCell = new RuntimeScalar(closure);
+            RuntimeArray temporary = new RuntimeArray();
+            temporary.elements.add(codeCell);
+
+            assertTrue(closure.hasUntrackedReferenceOwnerSlotIdentity());
+            assertFalse(closure.hasPerlOwnerForCaptureOtherThan(null),
+                    "an unowned aggregate cell is not a durable capture owner");
+            closure.requestCaptureReleaseWhenUnowned();
+
+            assertNull(closure.capturedScalars,
+                    "the stale untracked scalar edge must not keep captures alive");
+        }
+    }
+
+    @Test
+    void durableArrayCellKeepsClosureCapturesAlive() {
+        try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
+            RuntimeCode closure = new RuntimeCode((args, context) -> new RuntimeList(), null);
+            closure.refCount = -1;
+            closure.capturedScalars = new RuntimeScalar[0];
+            RuntimeScalar codeCell = new RuntimeScalar(closure);
+            RuntimeArray persistent = new RuntimeArray();
+            persistent.localBindingExists = true;
+            persistent.elements.add(codeCell);
+
+            assertTrue(closure.hasPerlOwnerForCaptureOtherThan(null));
+            closure.requestCaptureReleaseWhenUnowned();
+
+            assertTrue(closure.capturedScalars != null,
+                    "a durable scalar cell must continue to retain its closure captures");
         }
     }
 }
