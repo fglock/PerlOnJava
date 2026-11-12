@@ -514,10 +514,17 @@ public class GlobalVariable {
             GlobalRuntimeState state = globalState();
             boolean newKey = !delegate().containsKey(key);
             markStashEntryVisible(key);
-            markPackageGlobalRoot(value);
+            // List operators own their current topic alias through the active
+            // argument frame. Preserve the saved package slot for restoration,
+            // and do not turn the temporary alias into a package owner.
+            boolean temporaryScalarAlias = value instanceof RuntimeScalar scalar
+                    && temporaryGlobalAliases().get(key) == scalar;
+            if (!temporaryScalarAlias) markPackageGlobalRoot(value);
             T previous = delegate().put(key, value);
-            updatePackageScalarOwner(state, key,
-                    value instanceof RuntimeScalar scalar ? scalar : null);
+            if (!temporaryScalarAlias) {
+                updatePackageScalarOwner(state, key,
+                        value instanceof RuntimeScalar scalar ? scalar : null);
+            }
             updatePackageAggregateOwner(state, key, value);
             noteScalarBindingMutation();
             if (newKey) {
