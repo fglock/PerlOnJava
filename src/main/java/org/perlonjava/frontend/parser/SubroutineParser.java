@@ -289,6 +289,14 @@ public class SubroutineParser {
         if (!subExists && !isNewMethod && !isMethod) {
             subExists = GlobalVariable.existsGlobalCodeRefAsScalar(fullName).getBoolean();
         }
+        // Exporter can install a placeholder CODE slot for an AUTOLOAD-backed
+        // symbol before that subroutine has been materialized.  Such imported
+        // names are callable barewords in Perl even though the slot is not yet
+        // defined; the interpreter parser must honor the import marker just as
+        // it does a concrete or forward-declared CV.
+        if (!subExists && !isMethod && GlobalVariable.isSubs.containsKey(fullName)) {
+            subExists = true;
+        }
         // A named function's body is parsed before its final RuntimeCode is
         // installed. Treat a call back to that same declaration as a direct
         // subroutine call so an initial scalar argument is not mistaken for

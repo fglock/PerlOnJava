@@ -339,6 +339,19 @@ public class CompileOperator {
             bc.throwCompilerException("matchRegex requires pattern and flags");
             return;
         }
+        int stringReg = -1;
+        if (args.elements.size() > 2) {
+            Node target = args.elements.get(2);
+            if (target instanceof StringNode literal) {
+                stringReg = bc.compileStableRegexLiteral(literal);
+            } else {
+                // Perl evaluates a bound match's left operand before the
+                // interpolated pattern. The target may mutate variables used
+                // by the pattern, so preserve that order in the emitted code.
+                bc.compileNode(target, -1, RuntimeContextType.SCALAR);
+                stringReg = bc.lastResultReg;
+            }
+        }
         // A static match literal has no Perl-visible qr// value: it is consumed
         // immediately by MATCH_REGEX.  Keep one wrapper per call site so the
         // interpreter does not clone the cached native program on every trip
@@ -367,16 +380,7 @@ public class CompileOperator {
         bc.emit(regexWarningBitsIndex(bc, node));
         bc.emit(0);
         bc.emit(namedCharacterExpansionIndex(bc, node, args));
-        int stringReg;
-        if (args.elements.size() > 2) {
-            Node target = args.elements.get(2);
-            if (target instanceof StringNode literal) {
-                stringReg = bc.compileStableRegexLiteral(literal);
-            } else {
-                bc.compileNode(target, -1, RuntimeContextType.SCALAR);
-                stringReg = bc.lastResultReg;
-            }
-        } else {
+        if (args.elements.size() <= 2) {
             stringReg = loadDefaultUnderscore(bc);
         }
         int rd = bc.allocateOutputRegister();

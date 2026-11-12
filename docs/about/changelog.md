@@ -10,6 +10,8 @@ priorities and future plans.
 
 - Reduce per-eval allocation and compilation overhead in the `eval STRING` hot path: make five `Parser` collection fields lazy (allocated only when first written, saving ~5 `ArrayDeque`/`HashMap` objects for simple evals); extract an inline `Set.of(9-element)` in `ParsePrimary` to a `private static final` constant; encode the `useInteger` annotation as two bit-flags in `AbstractNode.internalAnnotationFlags`, eliminating a per-AST-node `HashMap` entry and its `get` lookup for every arithmetic/bitwise operator; make `ErrorMessageUtil.literalQuoteRanges`, `JavaClassInfo.gotoLabelStack`, and `JavaClassInfo.finallyLabelScopes` lazy; and guard the five reference-alias matchers in `CompileAssignment.compileAssignmentOperator` behind a pre-check so the common `my $x = value` path skips all five calls. Net result: ~4.8% throughput gain on a 1 M-iteration `eval STRING` benchmark (62 492 → ~65 500 evals/s).
 
+- Add `B::GV::FILE` and `LINE` source location introspection (#1284).
+- Evaluate bound regex targets before pattern interpolation, recognize imported AUTOLOAD-backed placeholders, and preserve anonymous caller names and arguments through eval and method frames (#1377, #1548).
 - Bundle the `indirect` pragma and restore `Sys::Syslog` `openlog`, POSIX `:float_h`, and `Want::howmany` compatibility (#2016, #2022, #2020, #2014).
 - Bound RSA key generation to 1024–8192 bits, preserving explicitly requested 1024-bit legacy compatibility while documenting its security limitation (#2031).
 - Forward redirected Perl stdin to child processes, load `IO::Handle` without ambiguous `close` warnings, and accept trailing semicolons in Perl shebangs (#2023, #2024, #2018).
