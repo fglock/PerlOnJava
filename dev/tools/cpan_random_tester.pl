@@ -382,6 +382,7 @@ my $new_pass     = 0;
 my $new_fail     = 0;
 my $new_skip     = 0;
 my $new_perl_fail = 0;
+my $not_tested   = 0;
 my $upgraded     = 0;   # FAIL→PASS transitions
 my $regressed    = 0;   # PASS→FAIL transitions from explicit re-tests
 my $record_pass_regressions = ($retest_age > 0 || $modules_arg ne '' || $sliding_window);
@@ -433,8 +434,31 @@ for my $module (@selected) {
         );
     }
 
+    # A CPAN source download failure means no test result exists for the
+    # selected distribution. Keep it out of the compatibility failure report
+    # so a temporary network outage is not presented as a PerlOnJava defect.
+    my $target_result = target_result_for_module(
+        $module, \@all_results, \%module_to_dist,
+    );
+    my $download_error = !$target_result
+        ? cpan_target_download_failure_from_file(
+            $log_path, $module, $module_to_dist{$module},
+        )
+        : '';
+    if ($download_error) {
+        printf "  (not tested: CPAN could not download distribution: %s)\n\n",
+            $download_error;
+        $not_tested++;
+        push @strict_failures, "$module: CPAN download failed ($download_error)"
+            if $strict_exit;
+        @all_results = grep { ($_->{module} // '') ne $module } @all_results;
+        if (!@all_results) {
+            next;
+        }
+    }
+
     # If nothing parsed, check for special cases before recording failure
-    if (!@all_results) {
+    if (!@all_results && !$download_error) {
         my $unresolved_reason = cpan_unresolved_selector_reason_from_file($log_path, $module);
         if ($unresolved_reason) {
             printf "  (not tested: %s)\n\n", $unresolved_reason;
@@ -464,7 +488,7 @@ for my $module (@selected) {
     apply_standard_perl_oracle(\@all_results, $module_max_runtime)
         if $perl_oracle eq 'failures';
 
-    if ($strict_exit) {
+    if ($strict_exit && !$download_error) {
         my $target_result = target_result_for_module(
             $module, \@all_results, \%module_to_dist,
         );
@@ -498,6 +522,8 @@ finalize_report_state();
 print "=" x 70, "\n";
 printf "This run:   %d targets | +%d pass | +%d fail | +%d skip | +%d Perl fail | %d upgraded (FAIL->PASS) | %d regressed (PASS->FAIL)\n",
     $target_count, $new_pass, $new_fail, $new_skip, $new_perl_fail, $upgraded, $regressed;
+printf "Not tested: %d targets (for example, CPAN download failures)\n", $not_tested
+    if $not_tested;
 printf "Cumulative: %d pass | %d fail | %d skip | %d Perl fail | %d total\n",
     scalar keys %pass_modules, scalar keys %fail_modules,
     scalar keys %skip_modules, scalar keys %perl_fail_modules,
@@ -1354,6 +1380,39 @@ sub cpan_unresolved_selector_reason_from_file {
     }
     close $fh;
     return '';
+}
+
+# Recognize a failed fetch of the selected distribution before the test block
+# starts. Requiring CPAN's "Giving up on" line for that archive avoids turning
+# unrelated dependency/network messages into a false target classification.
+sub cpan_target_download_failure_from_file {
+    my ($path, $module, $distribution) = @_;
+    return '' unless defined $path && -f $path && defined $module;
+
+    my $archive = '';
+    if (defined $distribution && length $distribution) {
+        ($archive) = $distribution =~ m{([^/]+\.(?:tar\.gz|tgz))$};
+    }
+    return '' unless length $archive;
+
+    open my $fh, '<', $path or return '';
+    my $fetch_error = '';
+    my $target_fetch_abandoned = 0;
+    while (my $line = <$fh>) {
+        if ($line =~ /HTTP::Tiny failed with an internal error:\s*(.+)/i
+            || $line =~ /(?:Could not connect|Connection timed out|No route to host|Network is unreachable)\b[: ]*(.*)/i) {
+            $fetch_error = $1 || 'network error';
+            $fetch_error =~ s/\s+$//;
+        }
+        if ($fetch_error && $line =~ /Giving up on ['"]?[^\s'" ]*\Q$archive\E['"]?/i) {
+            $target_fetch_abandoned = 1;
+            last;
+        }
+    }
+    close $fh;
+    return '' unless $target_fetch_abandoned;
+    $fetch_error =~ s/\s*\z//;
+    return $fetch_error || 'source download failed';
 }
 
 # Parse --modules argument: either comma-separated list or file path
