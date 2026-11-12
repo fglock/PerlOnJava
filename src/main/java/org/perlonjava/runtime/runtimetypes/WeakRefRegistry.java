@@ -323,13 +323,6 @@ public class WeakRefRegistry {
     static void onStrongOwnerSlotReleased(RuntimeBase referent) {
         if (referent instanceof RuntimeCode code) {
             code.releasePadConstantsForUntrackedOwnerSlot();
-            // Untracked CODE refs do not transition through a final count.
-            // Recheck weak observers at the owner-slot boundary instead.
-            if (code.refCount == -1
-                    && PerlRuntime.currentOrNull() != null
-                    && hasWeakRefsTo(code)) {
-                clearWeakRefsTo(code);
-            }
         }
         boolean zeroCountOwnerSlotsExhausted = referent != null
                 && referent.refCount == 0
