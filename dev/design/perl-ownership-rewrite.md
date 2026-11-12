@@ -13,12 +13,14 @@ thread, and HTML-Tree regressions pass with corrective sweeps disabled.
 | Phase 2: retire reachability fallbacks | Active | Owner-source proofs and exact-head CPAN acceptance remain. |
 
 **Current checkpoint (2026-11-12):** Sweep-removal work remains active under
-#2043. PR #1938 is open and draft at remote head `6c743e23f3`; the latest check
-showed Ubuntu passing and Windows still running. Candidate branch
-`wip/issue2043-closure-owner-batch-20261112` is at source commit `28b4031876`.
-The candidate proves temporary-root ownership through ordinary array/hash
-slots, current `SCALAR_REFERENCE_CONTENTS` slots, closure capture slots, and
-compiled CODE pad-constant slots before opening the fallback graph walk. The
+#2043. PR #1938 remains open and draft. The latest CI check on previous remote
+head `ade3cd83cf` showed Ubuntu and Windows still running, with analysis and
+dependency jobs passing. Candidate branch
+`wip/issue2043-closure-owner-batch-20261112` is at source commit
+`6f75fe1496`. The candidate proves temporary-root ownership
+through ordinary array/hash slots, current `SCALAR_REFERENCE_CONTENTS` slots,
+closure capture slots, compiled CODE pad-constant slots, CODE state bindings,
+and current array refalias slots before opening the fallback graph walk. The
 fallback remains for incomplete or unsupported owner paths.
 
 The new `UnownedTemporaryArrayAggregateOwnerTest` reproduces stale
@@ -32,12 +34,15 @@ scalar-reference cell while an opaque hash branch remains unvisited. Its
 focused make target passes in 29 seconds; the full gate on `23b34a7315` passes
 in 7m46 (`/private/tmp/issue2043-scalar-contents-make-23b34a7315.log`). The new
 `TemporaryRootClosureCaptureOwnerTest` checks scalar and aggregate capture slots
-plus compiled pad constants, and asserts that an opaque hash branch is not
-enumerated. All three tests pass in the focused target
-(`/private/tmp/issue2043-closure-capture-isolated-focused.log`); the full
-`nice -n 19 timeout 2400 make` passes in 9m27 on the exact source state based on
-`6c743e23f3` (`/private/tmp/issue2043-closure-owner-isolated-make.log`). On this
-candidate, DBIx
+plus compiled pad constants. `TemporaryRootCodeStateOwnerTest` verifies current
+scalar, array, and hash state bindings, while
+`TemporaryRootArrayAliasOwnerTest` verifies the exact aliased-cell slot in its
+owning array. Each test asserts that an opaque hash branch is not enumerated.
+The three closure/pad tests pass in the focused target
+(`/private/tmp/issue2043-closure-capture-isolated-focused.log`); all five new
+owner-path tests pass in the full `nice -n 19 timeout 2400 make` gate in 8m04
+on the exact source content committed as `6f75fe1496`, based on `ade3cd83cf`
+(`/private/tmp/issue2043-owner-kind-batch-make.log`). On this candidate, DBIx
 `t/100populate.t` passes 108/108 and LeakTracer finds no retained references
 (`/private/tmp/issue2043-dbix-t100-048bf8c615.log`).
 
@@ -55,15 +60,14 @@ after 159 MB of trace output; compressed evidence is
 fix as a bounded diagnostic result, not as resolution of the DBIx failure.
 Exact-head CPAN acceptance remains open.
 
-Next: publish `28b4031876` and the updated checkpoint to the existing PR branch,
-keeping PR #1938 open and draft. Continue auditing only owner paths that can be
-validated against their current storage identity. For DBIx `t/52leaks.t`, add
-boundary diagnostics only when they can distinguish a direct temporary root
-from a nested aggregate owner; the current traces do not establish a
-temporary-root cause. Poll CI at intervals of six minutes or longer. Keep
-END-boundary weak retirement until an equivalent owner event preserves rescued
-objects through END callbacks. The `SvREFCNT` lexical scan is retired. RSA API
-limits remain tracked in [issue #2031](https://github.com/fglock/PerlOnJava/issues/2031).
+Next: continue auditing only owner paths that can be validated against their
+current storage identity. For DBIx `t/52leaks.t`, add boundary diagnostics only
+when they can distinguish a direct temporary root from a nested aggregate
+owner; the current traces do not establish a temporary-root cause. Poll CI at
+intervals of six minutes or longer. Keep END-boundary weak retirement until an
+equivalent owner event preserves rescued objects through END callbacks. The
+`SvREFCNT` lexical scan is retired. RSA API limits remain tracked in
+[issue #2031](https://github.com/fglock/PerlOnJava/issues/2031).
 The final callsite search found no production caller for the legacy
 `MortalList.deferDecrement` entry point; its root-recovery behavior is exercised
 by Java compatibility tests. `ReachabilityWalker.sweepReleasedWeakReferents`
@@ -161,12 +165,11 @@ ownership from one aggregate count.
 
 ### Next steps
 
-1. Publish source commit `28b4031876` and the refreshed checkpoint as a
-   fast-forward to the existing PR branch; retain open/draft status and poll
-   its checks at six-minute or longer intervals.
-2. Continue auditing current-owner proofs and aggregate temporary-root
+1. Continue auditing current-owner proofs and aggregate temporary-root
    fallbacks; keep `END` cleanup and `SvREFCNT` count semantics as distinct
    boundaries.
+2. Instrument DBIx `t/52leaks.t` cleanup when the trace can distinguish a
+   direct temporary root from a nested aggregate owner.
 3. Complete fresh-home exact-head CPAN acceptance after the remaining owner
    paths are qualified.
 
