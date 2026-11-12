@@ -1916,7 +1916,9 @@ public class MortalList {
         // the lexical view frequently, while package roots often stay stable;
         // rebuilding a combined graph here repeats the full package walk for
         // each cleanup batch during module loading and request handling.
-        boolean reachable = isReachableFromExternalRootCached(base);
+        // Temporary roots were checked above. Continue with persistent roots
+        // directly instead of repeating the same temporary-root graph walk.
+        boolean reachable = isReachableFromPersistentRootCached(base);
         if (drainActive) {
             boolean incomplete = state.externalRootSnapshot == null
                     || !state.externalRootSnapshot.complete()
