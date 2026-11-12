@@ -226,14 +226,17 @@ class TemporaryRootOwnerSlotTest {
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeHash target = new RuntimeHash();
             RuntimeArray nested = new RuntimeArray();
+            nested.localBindingExists = true;
             nested.elements.add(target.createReference());
             RuntimeHash parent = new RuntimeHash();
+            parent.localBindingExists = true;
             parent.elements.put("nested", nested.createReference());
 
             RuntimeHash opaque = new RuntimeHash();
             CountingHashValues opaqueValues = new CountingHashValues();
             opaque.elements = opaqueValues;
             RuntimeArray root = new RuntimeArray();
+            root.localBindingExists = true;
             root.elements.add(parent.createReference());
             root.elements.add(opaque.createReference());
 
