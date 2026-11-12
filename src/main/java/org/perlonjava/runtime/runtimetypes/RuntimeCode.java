@@ -7332,6 +7332,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     int reportedSeparator = subName.lastIndexOf("::");
                     int activeSeparator = activeName == null ? -1 : activeName.lastIndexOf("::");
                     if (reportedSeparator >= 0 && activeSeparator >= 0
+                            && !activeName.endsWith("::__ANON__")
                             && subName.substring(reportedSeparator + 2)
                                     .equals(activeName.substring(activeSeparator + 2))) {
                         subName = activeName;
@@ -7413,6 +7414,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
 
                 if (subName != null && subName.endsWith("::__ANON__")
+                        && previousFrameIsEval
                         && activeCode instanceof org.perlonjava.backend.bytecode.InterpretedCode) {
                     String activeSubName = callerSubNameForCode(activeCode);
                     if (activeSubName != null && activeSubName.endsWith("::__ANON__")) {
