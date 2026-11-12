@@ -152,6 +152,32 @@ class WeakCodeRefAggregateRootTest {
     }
 
     @Test
+    void liveLexicalOwnerSurvivesAliasedAggregateStorageCheck() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeCode code = new RuntimeCode(null, java.util.List.of());
+            code.refCount = 0;
+            RuntimeScalar strongCodeRef = new RuntimeScalar(code);
+            RuntimeScalar.acquireCountedOwnerForCurrentValue(strongCodeRef, code,
+                    PerlOwnerSlot.Kind.ARRAY_ELEMENT,
+                    "WeakCodeRefAggregateRootTest aliased lexical owner");
+            RuntimeArray elements = new RuntimeArray();
+            elements.elements.add(strongCodeRef);
+            elements.elementsAliased = true;
+            MyVarCleanupStack.register(strongCodeRef);
+
+            try {
+                assertTrue(ReachabilityWalker.hasLiveStrongScalarReferent(code),
+                        "a registered lexical remains a direct strong owner through an aliased array view");
+                assertFalse(ReachabilityWalker.hasLiveStrongScalarReferentOtherThan(
+                        code, strongCodeRef));
+            } finally {
+                MyVarCleanupStack.unregister(strongCodeRef);
+            }
+        }
+    }
+
+    @Test
     void externalRootSnapshotWalksCapturedScalarsFromInstalledCode() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {

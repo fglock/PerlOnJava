@@ -1759,19 +1759,22 @@ public class ReachabilityWalker {
         for (PerlOwnerSlot slot : target.ownerSlotSnapshot()) {
             if (!slot.isActive() || slot.referent() != target) continue;
             RuntimeScalar owner;
-            boolean currentOwner;
+            boolean ownerSlotMatches;
             if (slot.kind() == PerlOwnerSlot.Kind.UNTRACKED_REFERENCE) {
                 owner = slot.untrackedScalarOwner();
-                currentOwner = owner != null
-                        && owner.untrackedReferenceOwnerSlot() == slot
-                        && owner.hasLiveDurableStrongValueSlot();
+                ownerSlotMatches = owner != null
+                        && owner.untrackedReferenceOwnerSlot() == slot;
             } else {
                 owner = slot.countedScalarOwner();
-                currentOwner = owner != null
-                        && (owner.isCurrentAggregateElementOwner(target, slot)
-                            || owner.isCurrentCountedScalarOwner(target, slot));
+                // Lexical registration and the scalar's direct current value
+                // prove this owner even when it aliases an aggregate cell
+                // whose container is itself an aliased view. Aggregate-slot
+                // membership alone would reject that live lexical owner.
+                ownerSlotMatches = owner != null
+                        && owner.countedOwnerSlot() == slot
+                        && owner.refCountOwned;
             }
-            if (currentOwner && owner != excluded
+            if (ownerSlotMatches && owner != excluded
                     && MyVarCleanupStack.isRegistered(owner)
                     && !WeakRefRegistry.isweak(owner)
                     && !owner.scopeExited
