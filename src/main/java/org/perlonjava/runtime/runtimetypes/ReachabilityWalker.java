@@ -2533,9 +2533,22 @@ public class ReachabilityWalker {
                 }
                 continue;
             }
+            if (slot.kind() == PerlOwnerSlot.Kind.UNTRACKED_REFERENCE) {
+                RuntimeScalar scalarOwner = slot.untrackedScalarOwner();
+                if (scalarOwner != null
+                        && DestroyDispatch.isCurrentPerlOwnerSlot(value, slot)) {
+                    RuntimeBase container = scalarOwner.currentTemporaryRootAggregateOwner(
+                            value, slot);
+                    // A current aggregate edge can prove the owner chain at
+                    // the container. Otherwise a direct root edge to this
+                    // scalar cell still proves its current untracked value.
+                    todo.addLast(new TemporaryRootOwnerAncestor(
+                            container == null ? scalarOwner : container, depth + 1));
+                }
+                continue;
+            }
             RuntimeScalar scalarOwner = switch (slot.kind()) {
                 case ARRAY_ELEMENT, HASH_ELEMENT -> slot.countedScalarOwner();
-                case UNTRACKED_REFERENCE -> slot.untrackedScalarOwner();
                 default -> null;
             };
             if (scalarOwner == null) continue;
