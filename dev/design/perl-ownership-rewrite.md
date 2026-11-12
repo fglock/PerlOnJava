@@ -13,52 +13,57 @@ thread, and HTML-Tree regressions pass with corrective sweeps disabled.
 | Phase 2: retire reachability fallbacks | Active | Owner-source proofs and exact-head CPAN acceptance remain. |
 
 **Current checkpoint (2026-11-12):** Issue #1649 remains active. PR #1938 is
-open and draft at `6a2a834ffb050c9417e57384243c375d8de5ca86`; its Ubuntu and
-Windows jobs and CodeQL checks passed on that prior head. Candidate commit
-`73a749d7438d7bc431c9d7380c62828d01f6826d` is a direct descendant in isolated
-worktree `/private/tmp/issue1649-pr1938-route-fix-20261112` and is ready for
-publication after this checkpoint update.
+open and draft at `c0f421aecaa382cabb461ef5569456564779e7e2`; Ubuntu, Windows,
+and CodeQL checks all passed on that head. Candidate `b20dc9441a82efc1fe61132053c4ea068d2462e3`
+is a direct descendant in isolated worktree
+`/private/tmp/issue1649-pr1938-route-fix-20261112` and is ready for a
+fast-forward publication after this checkpoint is committed.
 
-The candidate fixes a real production owner-lifetime gap found in Mojolicious:
+The candidate includes a production owner-lifetime fix found in Mojolicious:
 `for my $child` aliases an `ARRAY_ELEMENT` cell, and lexical cleanup must not
 retire the aggregate's stored edge as though it were a separate lexical
-owner. `MortalList.deferDecrementIfNotCaptured` now preserves a current
-aggregate-element identity. New project coverage
-`mojo_route_weak_parent_lifetime.t` passes 14/14 under system Perl, JVM, and
-interpreter. Upstream Mojolicious `routes.t` passes 51 subtests on both
-PerlOnJava backends. The unfixed-parent failure is recorded in
-`/tmp/issue1649-mojo-route-jvm-parent.log`. Exact-candidate logs:
+owner. `MortalList.deferDecrementIfNotCaptured` now preserves the live
+aggregate-element identity. `mojo_route_weak_parent_lifetime.t` passes 14/14
+under system Perl, JVM, and interpreter; Mojolicious `routes.t` passes 51
+subtests on both PerlOnJava backends. Evidence:
+`/tmp/issue1649-pr1938-route-fix-make-73a749d743.log`,
 `/tmp/issue1649-pr1938-mojo-route-{jvm,interpreter}-73a749.log`,
 `/tmp/issue1649-pr1938-mojo-routes-upstream-{jvm,interpreter}-73a749.log`, and
 `/tmp/issue1649-mojo-route-system-perl-resume.txt`.
 
-The exact PR-tree `nice -n 19 timeout 3600 make` passes in 7m7 on `73a749d743`
-(`/tmp/issue1649-pr1938-route-fix-make-73a749d743.log`). DBIx::Class
-`t/100populate.t` passes 108/108 on JVM with no LeakTracer refs, and the
-project weak-release test passes on both backends with no retained refs. The
-10-minute interpreter `t/100populate.t` attempt timed out before useful TAP
-progress; this is not a GC-failure result. Evidence is in
+The production `SvREFCNT` field-result adjustment now checks only active owner
+slots for the queried referent, rather than scanning every live lexical. It
+validates counted and untracked slot identity, active lexical registration,
+strong value, and direct referent equality. `svrefcnt_method_result_hash_owner.t`
+passes under system Perl 5.45.4, JVM, and interpreter; the existing
+`class_method_field_refcount.t` passes on JVM. JUnit coverage also exercises an
+aliased aggregate-held lexical. The full `nice -n 19 timeout 3600 make` passes
+on immutable `b20dc9441a` in 7m51:
+`/tmp/issue1649-pr1938-owner-slot-svrefcnt-final-b20dc9441a.log`.
+
+DBIx::Class `t/100populate.t` passes 108/108 on JVM with no LeakTracer refs;
+the 10-minute interpreter attempt timed out before useful TAP and is
+inconclusive. The focused DBIx weak-release test passes on both backends with
+no retained refs. Evidence is in
 `/tmp/issue1649-pr1938-dbix-t100-jvm-73a749.log` and
 `/tmp/issue1649-pr1938-dbix-storage-{jvm,interpreter}-73a749.log`.
 
-Phase 1 is complete: routine production lifecycle cleanup no longer invokes
-corrective full-graph sweeps. Phase 2 remains, but its boundaries are now
-separated: (1) legacy unpaired `MortalList.deferDecrement` root recovery has no
-production Java caller and remains only as a compatibility contract; (2)
-count-alignment repairs still need producer-by-producer proof before removal;
-(3) bounded root walks remain in aggregate/return cleanup fallbacks and need
-owner-slot replacements; (4) the END-boundary rescued-graph walk clears weak
-observers nested below rescued objects and cannot be replaced by cascaded
-`DESTROY` alone; and (5) the `SvREFCNT` scalar-reachability query supplies
-observable Perl API counts, independently of END processing. Preserve the END
-walk until an explicit nested weak-retirement event exists. Fresh-home exact-
-head CPAN acceptance remains required. RSA API limits remain tracked in
+Phase 1 is complete: routine production cleanup no longer invokes corrective
+full-graph sweeps. Remaining work is exact-head fresh-home CPAN acceptance and
+producer-by-producer proof before removing count-alignment repairs. The
+unpaired `MortalList.deferDecrement` root recovery has no production Java
+caller; keep its compatibility surface and tests until that contract is
+retired. `walkEndBlockRoots()` remains behind old sweep code and Java fixtures.
+The distinct END-boundary rescued-graph cleanup still clears nested weak
+observers while preserving rescued objects for END callbacks; cascaded
+`DESTROY` alone does not express that event. The `SvREFCNT` lexical scan is no
+longer a remaining traversal. RSA API limits remain tracked in
 [issue #2031](https://github.com/fglock/PerlOnJava/issues/2031).
 
-Next: publish this fast-forward candidate, keep PR #1938 open and draft, and
-check its CI no sooner than six minutes after publication. Continue local
-owner-source audits while CI runs; do not treat the outstanding interpreter
-timeout as a DBIx GC failure.
+Next: publish the fast-forward candidate, keep PR #1938 open and draft, and
+check its new CI no sooner than six minutes after publication. Continue the
+count-alignment producer audit while CI runs; do not treat the interpreter
+timeout as a reproduced DBIx GC failure.
 
 The final callsite search found no production caller for the legacy
 `MortalList.deferDecrement` entry point; its root-recovery behavior is exercised
@@ -157,7 +162,7 @@ ownership from one aggregate count.
 
 ### Next steps
 
-1. Publish candidate `73a749d743` as a fast-forward to the existing PR branch;
+1. Publish candidate `b20dc9441a` as a fast-forward to the existing PR branch;
    retain open/draft status and poll its checks at six-minute or longer
    intervals.
 2. Continue the production caller audit for owner-count repairs and aggregate
