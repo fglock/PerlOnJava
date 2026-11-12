@@ -12,43 +12,41 @@ thread, and HTML-Tree regressions pass with corrective sweeps disabled.
 | Phase 1: remove default corrective sweeps | Complete | Full no-sweeps gates and lifecycle coverage are recorded below. |
 | Phase 2: retire reachability fallbacks | Active | Owner-source proofs and exact-head CPAN acceptance remain. |
 
-**Current checkpoint (2026-11-12):** Issue #1649 remains active. PR #1938 is
-open and draft at `61530ed55594014aee0021713ff1d4910fe1f2d1`; its published
-checks pass, including Ubuntu and Windows. Local candidate branch
-`wip/issue1649-temp-root-query-fastpath-20261112` is at `5a0738c354`. Its only
-production edit, `284374d424`, deduplicates adjacent blessed fallback branches;
-the measurement-only query remains because `ReachabilityQueryCostTest` requires
-it. Full `nice -n 19 timeout 1800 make` passes in 10m14
-(`/tmp/issue1649-5a0738c354-make.log`), and DBIx `t/100populate.t` passes
-108/108 with no LeakTracer findings (`/tmp/issue1649-5a0738c354-DBIx-100populate.log`).
+**Current checkpoint (2026-11-12):** Sweep-removal work remains active under
+#2043; PR #1938 is open and draft at remote head `ecbf1978c6`, with all reported
+checks green, including Ubuntu and Windows. Candidate branch
+`wip/issue2043-batch-20261112` is at `048bf8c615`, five commits beyond that
+head. It adds a bounded positive proof through ordinary array/hash owner slots
+and a deferred refresh for untracked aggregate cells when scope cleanup meets
+a direct temporary-root lease. The fallback graph walk remains for incomplete
+or unsupported owner paths.
 
-Two project-owned diagnostics now cover the DBIx-shaped owner graphs. The raw
-acyclic Schema/Storage/ResultSource/Artist/CD graph and its clone/double-clone
-pass 21/21 on system Perl and both no-sweeps backends. A separate Schema and
-ResultSource destructor-rescue handoff passes 7/7 on the same paths. Their
-logs are `/tmp/issue1649-dbic-result-graph-*` and
-`/tmp/issue1649-dbic-rescued-graph-*`; test files are
-`src/test/resources/unit/refcount/dbic_result_graph_collection_diagnostic.t`
-and `src/test/resources/unit/refcount/dbic_rescued_graph_collection_diagnostic.t`.
+The new `UnownedTemporaryArrayAggregateOwnerTest` reproduces stale
+`UNTRACKED_REFERENCE` owners after scope cleanup returns under a root lease.
+Its unfixed-parent shard failed only this test (1,623 tests, one failure); the
+candidate full `nice -n 19 timeout 2400 make` passes in 7m41. Logs:
+`/private/tmp/issue2043-scope-exit-parent-test.log` and
+`/private/tmp/issue2043-batch-make-048bf8c615.log`. On this candidate, DBIx
+`t/100populate.t` passes 108/108 and LeakTracer finds no retained references
+(`/private/tmp/issue2043-dbix-t100-048bf8c615.log`).
 
-Unmodified DBIx `t/52leaks.t` still fails checks 12–18 and then aborts while
-Dumper formats the detached ResultSource (`/tmp/issue1649-5a0738c354-DBIx-52leaks-unmodified.log`). A temporary reporter copy that bypasses Dumper reaches all 35 checks and finds 23 object-collection failures; a no-trace copy reports the same 23 on both local `5a0738c354` and published-runtime `36b9205453`. This is pre-existing evidence, not a regression from the local change. Owner snapshots show live lexical/argument owners and a Schema in the rescue registry, but the precise root cause is unresolved. System Perl's ordinary leak check passes with its two expected cycle TODOs and optional persistent-process checks skipped (`/tmp/issue1649-system-perl-52leaks-with-local-lib.log`).
+DBIx `t/52leaks.t` still fails collection checks 12–18 and aborts when
+Data::Dumper formats a detached ResultSource
+(`/private/tmp/issue2043-dbix-t52-048bf8c615.log`). Owner traces include
+untracked scalar cells in a 60-element array, matching the new test's owner
+shape, but do not show whether that array was directly under a temporary-root
+lease at scope exit. Treat the candidate fix as a bounded diagnostic result,
+not as resolution of the DBIx failure. Exact-head CPAN acceptance remains
+open.
 
-Temporary-root BFS remains only on the two legacy tokenless release fallbacks.
-`TemporaryRootFallbackSingleTraversalTest` and
-`TemporaryRootOwnerSlotTest.directListTemporaryRootEdgeSkipsNestedAggregateGraphWalk`
-require nested traversal; removing it needs descendant ancestry in owner
-provenance. The public Java compatibility API and nested-root tests remain.
-`restoreReachableOwnerCount` is still behind the unpaired compatibility path.
-END-boundary cleanup remains necessary to clear nested weak observers while
-preserving rescued objects through END callbacks; cascaded `DESTROY` alone
-does not replace it. The `SvREFCNT` lexical scan is retired. RSA API limits
-remain tracked in [issue #2031](https://github.com/fglock/PerlOnJava/issues/2031).
-
-Next: publish the locally validated branch to draft PR #1938 and wait for its
-CI, then continue tracing DBIx's remaining object/clone roots and producer
-proofs. Exact-head CPAN acceptance remains open. Poll CI every six minutes or
-longer.
+Next: instrument the failing cleanup boundary to distinguish direct from
+transitive temporary-root ancestry, then fix and cover the confirmed owner
+path. Continue retiring the temporary-root fallback only where explicit owner
+provenance proves reachability; keep END-boundary weak retirement until an
+equivalent owner event preserves rescued objects through END callbacks. The
+`SvREFCNT` lexical scan is retired. RSA API limits remain tracked in
+[issue #2031](https://github.com/fglock/PerlOnJava/issues/2031). Keep PR #1938
+open and draft; poll CI no more than once every six minutes.
 The final callsite search found no production caller for the legacy
 `MortalList.deferDecrement` entry point; its root-recovery behavior is exercised
 by Java compatibility tests. `ReachabilityWalker.sweepReleasedWeakReferents`
