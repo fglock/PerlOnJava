@@ -1031,10 +1031,20 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     }
 
     void refreshUntrackedElementOwners() {
+        refreshUntrackedElementOwners(false);
+    }
+
+    void refreshUntrackedElementOwnersAfterTransfer() {
+        refreshUntrackedElementOwners(true);
+    }
+
+    private void refreshUntrackedElementOwners(boolean afterTransfer) {
         if (elements == null) return;
         for (RuntimeScalar value : new ArrayList<>(elements)) {
             if (MortalList.deferAggregateRefreshUntilTemporaryRootsLeave(this)) return;
-            if (value != null) value.reconcileContainerOwnerAfterAggregateTransfer(this);
+            if (value == null) continue;
+            if (afterTransfer) value.reconcileContainerOwnerAfterAggregateTransfer(this);
+            else value.reconcileContainerOwnerAfterMutation(this);
         }
     }
 

@@ -310,15 +310,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (container == null || container.hasCurrentPerlStorageOwner()
                 || container.hasTemporaryRootOwnerSlotIdentity()) return;
         if (container instanceof RuntimeArray array) {
-            array.refreshUntrackedElementOwners();
+            array.refreshUntrackedElementOwnersAfterTransfer();
         } else if (container instanceof RuntimeHash hash) {
-            hash.refreshUntrackedElementOwners();
+            hash.refreshUntrackedElementOwnersAfterTransfer();
         }
     }
 
     /** Active {@code @_} value owners held while a {@code goto &sub} changes frames. */
     static final class TailCallArgumentOwners {
-        private final RuntimeArray sourceArguments;
+        private RuntimeArray sourceArguments;
         private final java.util.ArrayList<RuntimeScalar.ArgumentAliasOwner> owners;
         private RuntimeArray ownedArgs;
 
@@ -348,11 +348,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     it.remove();
                 }
             }
+            // The handoff has been matched against the replacement frame. Do
+            // not keep the abandoned source @_ array alive through the owner
+            // token after its scalar-cell aliases have moved.
+            sourceArguments = null;
             return adopted;
         }
 
         void releaseRemaining() {
             Throwable failure = releaseArgumentAliasOwners(owners, null);
+            sourceArguments = null;
             RuntimeArray pendingOwnedArgs = ownedArgs;
             if (pendingOwnedArgs != null) {
                 try {
@@ -10352,28 +10357,37 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 if (result instanceof RuntimeControlFlowList cfList
                         && cfList.getControlFlowType() == ControlFlowType.TAILCALL) {
                     returnedTailCall = true;
+                    ControlFlowMarker marker = cfList.marker;
                     nextTailCode = cfList.getTailCallCodeRef();
                     RuntimeArray tailArgs = cfList.getTailCallArgs();
                     nextTailArgs = tailArgs != null ? tailArgs : curArgs;
-                    nextTailArgumentOwners = cfList.marker.argumentOwners;
+                    nextTailArgumentOwners = marker.argumentOwners;
                     // The external resolver retires ownedArgs itself after the
                     // replacement call. This internal trampoline transfers that
                     // cleanup into the argument-owner handoff so it survives until
                     // the next frame has adopted the argument cells.
-                    if (cfList.marker.ownedArgs != null) {
+                    if (marker.ownedArgs != null) {
                         if (nextTailArgumentOwners == null) {
                             nextTailArgumentOwners = new TailCallArgumentOwners(
                                     nextTailArgs, List.of());
                         }
-                        nextTailArgumentOwners.attachOwnedArgs(cfList.marker.ownedArgs);
+                        nextTailArgumentOwners.attachOwnedArgs(marker.ownedArgs);
                     }
                     // Retire only deferred owners belonging to the source
                     // argument frame before its replacement runs.  The broad
                     // scope flush below deliberately cannot do this: it must
                     // leave caller-owned weak-schema aliases intact.
-                    MortalList.drainPendingTailCallArgs(
-                            tailArgs, cfList.marker.argumentFrame, null);
-                    MortalList.releaseLastOwnedTailCallArgs(tailArgs);
+                    try {
+                        MortalList.drainPendingTailCallArgs(
+                                tailArgs, marker.argumentFrame, null);
+                        MortalList.releaseLastOwnedTailCallArgs(tailArgs);
+                    } finally {
+                        // The consumed marker is transient control flow. It
+                        // must not retain the abandoned @_ cells or pristine
+                        // frame snapshot if a surrounding runtime root keeps
+                        // the control-flow list alive briefly.
+                        marker.clearTailCallHandoff();
+                    }
                     // Fall through to finally; outer loop will re-enter apply()
                     // with the new code ref. We stay inside this apply()
                     // invocation, so enterCall/exitCall depth tracking is
@@ -11413,11 +11427,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public static RuntimeList resolveTailCalls(RuntimeList result, int callContext) {
         while (result instanceof RuntimeControlFlowList cfList
                 && cfList.getControlFlowType() == ControlFlowType.TAILCALL) {
-            RuntimeScalar codeRef = cfList.getTailCallCodeRef();
-            RuntimeArray  args    = cfList.getTailCallArgs();
+            ControlFlowMarker marker = cfList.marker;
+            RuntimeScalar tailCodeRef = cfList.getTailCallCodeRef();
+            RuntimeScalar codeRef = tailCodeRef;
+            RuntimeArray args = cfList.getTailCallArgs();
             // args may theoretically be null (defensive); treat as empty args list
             RuntimeArray tailArgs = args != null ? args : new RuntimeArray();
-            String namedTarget = cfList.marker.namedTarget;
+            Object argumentFrame = marker.argumentFrame;
+            RuntimeArray ownedArgs = marker.ownedArgs;
+            String namedTarget = marker.namedTarget;
             if (namedTarget != null) {
                 codeRef = GlobalVariable.getGlobalCodeRefForFreshLookup(namedTarget);
                 // A fresh missing stash entry can be represented either by an
@@ -11428,21 +11446,25 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         && codeRef.value instanceof RuntimeCode code
                         && hasAutoload(code);
                 if (!isCodeDefined(codeRef) && !hasTargetAutoload) {
-                    cleanupTailCallArgs(cfList.marker.ownedArgs);
-                    cleanupTailCallCodeRef(cfList.getTailCallCodeRef());
+                    try {
+                        cleanupTailCallArgs(ownedArgs);
+                        cleanupTailCallCodeRef(tailCodeRef);
+                    } finally {
+                        marker.clearTailCallHandoff();
+                    }
                     throw new PerlCompilerException("Goto undefined subroutine &" + namedTarget
-                            + " at " + cfList.marker.fileName + " line " + cfList.marker.lineNumber);
+                            + " at " + marker.fileName + " line " + marker.lineNumber);
                 }
             }
             try {
                 if (isCurrentSortComparatorBlock()
-                        && cfList.marker.tailCallFromSortComparator) {
+                        && marker.tailCallFromSortComparator) {
                     throw sortTailCallError();
                 }
-                if (cfList.marker.evalScope != null) {
-                    throw new PerlCompilerException("Can't goto subroutine from an " + cfList.marker.evalScope);
+                if (marker.evalScope != null) {
+                    throw new PerlCompilerException("Can't goto subroutine from an " + marker.evalScope);
                 }
-                TailCallArgumentOwners argumentOwners = cfList.marker.argumentOwners;
+                TailCallArgumentOwners argumentOwners = marker.argumentOwners;
                 ExecutionRuntimeState executionState =
                         PerlRuntime.current().executionState();
                 executionState.pendingTailCallArgumentOwners.push(argumentOwners);
@@ -11457,18 +11479,25 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     argumentOwners.releaseRemaining();
                 }
             } catch (RuntimeException e) {
-                cleanupTailCallArgs(cfList.marker.ownedArgs);
-                cleanupTailCallCodeRef(cfList.getTailCallCodeRef());
+                try {
+                    cleanupTailCallArgs(ownedArgs);
+                    cleanupTailCallCodeRef(tailCodeRef);
+                } finally {
+                    marker.clearTailCallHandoff();
+                }
                 throw e;
             }
             // Drain only queued decrements whose original owner is an alias
             // in the abandoned source @_ frame. This keeps caller-owned
             // referents (including DBIC schema aliases) out of the handoff.
-            MortalList.drainPendingTailCallArgs(
-                    cfList.getTailCallArgs(), cfList.marker.argumentFrame, result);
-            MortalList.releaseLastOwnedTailCallArgs(cfList.getTailCallArgs());
-            cleanupTailCallArgs(cfList.marker.ownedArgs);
-            cleanupTailCallCodeRef(cfList.getTailCallCodeRef());
+            try {
+                MortalList.drainPendingTailCallArgs(tailArgs, argumentFrame, result);
+                MortalList.releaseLastOwnedTailCallArgs(tailArgs);
+                cleanupTailCallArgs(ownedArgs);
+                cleanupTailCallCodeRef(tailCodeRef);
+            } finally {
+                marker.clearTailCallHandoff();
+            }
         }
         return result;
     }
