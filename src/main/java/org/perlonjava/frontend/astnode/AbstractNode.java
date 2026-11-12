@@ -56,11 +56,11 @@ public abstract class AbstractNode implements Node {
 
     public void setAnnotation(String key, Object value) {
         if (value instanceof Boolean boolVal) {
-            if ("blockAlreadyRefactored".equals(key)) {
+            if (key == "blockAlreadyRefactored") {
                 if (boolVal) internalAnnotationFlags |= FLAG_BLOCK_ALREADY_REFACTORED;
                 return;
             }
-            if ("useInteger".equals(key)) {
+            if (key == "useInteger") {
                 internalAnnotationFlags |= FLAG_USE_INTEGER_CHECKED;
                 if (boolVal) internalAnnotationFlags |= FLAG_USE_INTEGER_VALUE;
                 return;
@@ -81,10 +81,10 @@ public abstract class AbstractNode implements Node {
     }
 
     public Object getAnnotation(String key) {
-        if ("blockAlreadyRefactored".equals(key)) {
+        if (key == "blockAlreadyRefactored") {
             return (internalAnnotationFlags & FLAG_BLOCK_ALREADY_REFACTORED) != 0;
         }
-        if ("useInteger".equals(key)) {
+        if (key == "useInteger") {
             if ((internalAnnotationFlags & FLAG_USE_INTEGER_CHECKED) == 0) return null;
             return (internalAnnotationFlags & FLAG_USE_INTEGER_VALUE) != 0;
         }
