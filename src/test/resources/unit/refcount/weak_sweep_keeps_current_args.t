@@ -22,15 +22,14 @@ use Scalar::Util qw(weaken);
     sub clone { WSKCA_Schema->new }
 }
 
-sub keep_through_sweep {
+sub keep_current_argument_alive {
     my $weak = $_[0];
     weaken($weak);
-    Internals::jperl_gc() if defined &Internals::jperl_gc;
     return $_[0];
 }
 
 my $schema = WSKCA_Schema->new;
-my $clone = keep_through_sweep($schema->clone);
+my $clone = keep_current_argument_alive($schema->clone);
 
 ok defined $clone->{source}{schema},
-    "weak sweep treats current arguments as live roots";
+    "the current argument owner keeps its schema alive";

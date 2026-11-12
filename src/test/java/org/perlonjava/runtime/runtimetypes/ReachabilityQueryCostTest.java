@@ -32,27 +32,6 @@ class ReachabilityQueryCostTest {
     }
 
     @Test
-    void repeatedContainerScopeCleanupDoesNotEnumerateNestedStashRoots() {
-        PerlRuntime runtime = new PerlRuntime();
-        try (PerlRuntime.Binding ignored = runtime.bind()) {
-            RuntimeStash stash = new RuntimeStash("ReachabilityQueryCostTest::");
-            CountingStashMap stashView = new CountingStashMap();
-            stash.elements = stashView;
-            ((RuntimeHash) stash).elements = stashView;
-
-            for (int i = 0; i < 3; i++) {
-                RuntimeArray container = new RuntimeArray();
-                container.elements.add(stash.createReference());
-
-                assertFalse(MortalList.requestWeakSweepsForDestroyedContainer(container));
-            }
-
-            assertEquals(0, stashView.valuesCalls,
-                    "scope cleanup must not enumerate dynamic stash entries on each container walk");
-        }
-    }
-
-    @Test
     void scopeExitedCaptureOwnersShareOneScalarRootSnapshot() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {

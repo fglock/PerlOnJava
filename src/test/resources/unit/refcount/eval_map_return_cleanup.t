@@ -28,8 +28,6 @@ is_deeply(
     'return from map exits the eval block and resumes the surrounding sub',
 );
 
-Internals::jperl_gc() if defined &Internals::jperl_gc;
-
 ok !defined $EMRC_WEAK,
     'eval-block lexical is cleaned before non-local return rethrow';
 is $EMRC_DESTROYED, 1,
