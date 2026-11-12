@@ -40,7 +40,6 @@ class ClosureAggregateOwnerIdentityReleaseTest {
                 assertEquals(0, measurement.stats().snapshotsBuilt);
             } finally {
                 WeakRefRegistry.removeWeakRef(weakCode, closure);
-                MortalList.invalidateAllRootSnapshots();
             }
         }
     }

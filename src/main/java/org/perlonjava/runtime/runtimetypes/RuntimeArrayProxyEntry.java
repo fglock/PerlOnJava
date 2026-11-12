@@ -97,7 +97,6 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
             throw new PerlCompilerException(
                     "Modification of non-creatable array value attempted, subscript " + diagnosticKey);
         }
-        parent.notePackageRootMutation();
         while (currentKey >= parent.elements.size()) {
             parent.elements.add(null);
         }
@@ -122,7 +121,6 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
             throw new PerlCompilerException(
                     "Modification of non-creatable array value attempted, subscript " + diagnosticKey);
         }
-        parent.notePackageRootMutation();
         while (currentKey >= parent.elements.size()) parent.elements.add(null);
         parent.elements.set(currentKey, reference);
         parent.markPackageRootedValue(reference);
@@ -136,7 +134,6 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
     public RuntimeScalar undefine() {
         vivify();
         parent.markPackageRootedValue(lvalue);
-        parent.notePackageRootMutation();
         return super.undefine();
     }
 
@@ -188,7 +185,6 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
             List<RuntimeScalar> elements = parent.elements;
 
             // Expand the array if needed
-            parent.notePackageRootMutation();
             while (currentKey >= elements.size()) {
                 elements.add(null); // Add null placeholders
             }
@@ -269,7 +265,6 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
             RuntimeScalar previousState = dynamicStateStack.pop();
             boolean removedStoredOwner = false;
             if (previousState == null) {
-                parent.notePackageRootMutation();
                 // Element didn't exist before.
                 // Retire the exact stored cell after removing it, through the
                 // same owner-slot deferred release used by delete/pop/shift.
@@ -315,7 +310,6 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
                 return;
             }
             if (parent.elements.size() > previousSize) {
-                parent.notePackageRootMutation();
             }
             while (parent.elements.size() > previousSize) {
                 parent.elements.removeLast();

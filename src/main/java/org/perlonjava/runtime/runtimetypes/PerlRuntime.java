@@ -211,7 +211,6 @@ public final class PerlRuntime implements AutoCloseable {
         synchronized (state) {
             state.positiveOwnerReferents.merge(referent, 1, Integer::sum);
         }
-        MortalList.invalidateAllRootSnapshots();
         return state;
     }
 
@@ -224,7 +223,6 @@ public final class PerlRuntime implements AutoCloseable {
             if (count <= 1) state.positiveOwnerReferents.remove(referent);
             else state.positiveOwnerReferents.put(referent, count - 1);
         }
-        MortalList.invalidateAllRootSnapshots();
     }
 
     private void retainRootSnapshot(RootSnapshot snapshot) {
@@ -788,27 +786,14 @@ public final class PerlRuntime implements AutoCloseable {
     }
 
     private void runCloneHooks() {
-        lifecycleState.weakSweepSuppressionDepth++;
-        try {
-            for (String fqn : new TreeSet<>(globalState.codeRefs().keySet())) {
-                if (!fqn.endsWith("::CLONE") || fqn.endsWith("::CLONE_SKIP")) continue;
-                RuntimeScalar hook = globalState.codeRefs().get(fqn);
-                if (hook == null || !(hook.value instanceof RuntimeCode code) || !code.defined()) continue;
-                String packageName = fqn.substring(0, fqn.length() - "::CLONE".length());
-                RuntimeCode.apply(hook, new RuntimeArray(new RuntimeScalar(packageName)),
-                        RuntimeContextType.VOID);
-            }
-        } finally {
-            lifecycleState.weakSweepSuppressionDepth--;
+        for (String fqn : new TreeSet<>(globalState.codeRefs().keySet())) {
+            if (!fqn.endsWith("::CLONE") || fqn.endsWith("::CLONE_SKIP")) continue;
+            RuntimeScalar hook = globalState.codeRefs().get(fqn);
+            if (hook == null || !(hook.value instanceof RuntimeCode code) || !code.defined()) continue;
+            String packageName = fqn.substring(0, fqn.length() - "::CLONE".length());
+            RuntimeCode.apply(hook, new RuntimeArray(new RuntimeScalar(packageName)),
+                    RuntimeContextType.VOID);
         }
-    }
-
-    void beginThreadEntrySnapshotGrace() {
-        lifecycleState.weakSweepSuppressionDepth++;
-    }
-
-    void endThreadEntrySnapshotGrace() {
-        lifecycleState.weakSweepSuppressionDepth--;
     }
 
     /** Release runtime-owned I/O, alarms, signals, and lifecycle registries. */

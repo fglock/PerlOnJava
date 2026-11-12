@@ -1,6 +1,5 @@
 package org.perlonjava.runtime.runtimetypes;
 
-import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
@@ -13,9 +12,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class PackageAggregateValueOwnerSlotTest {
     @Test
     void prepopulatedPackageArrayOwnsUncountedValueWithoutSweeps() {
-        Assumptions.assumeFalse(ReachabilityWalker.correctiveSweepsEnabled(),
-                "package aggregate value ownership must not depend on corrective sweeps");
-
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeScalar referent = new RuntimeScalar("package aggregate referent");
@@ -69,9 +65,6 @@ class PackageAggregateValueOwnerSlotTest {
 
     @Test
     void prepopulatedPackageHashOwnsUncountedValueWithoutSweeps() {
-        Assumptions.assumeFalse(ReachabilityWalker.correctiveSweepsEnabled(),
-                "package aggregate value ownership must not depend on corrective sweeps");
-
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeScalar referent = new RuntimeScalar("package hash referent");
@@ -125,9 +118,6 @@ class PackageAggregateValueOwnerSlotTest {
 
     @Test
     void packageAggregateValuesOwnArrayAndHashReferentsWithoutSweeps() {
-        Assumptions.assumeFalse(ReachabilityWalker.correctiveSweepsEnabled(),
-                "package aggregate value ownership must not depend on corrective sweeps");
-
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             assertPackageAggregateValueKeepsReferentAlive(
@@ -141,9 +131,6 @@ class PackageAggregateValueOwnerSlotTest {
 
     @Test
     void crossContainerAliasKeepsOneValueOwnerUntilItsFinalPackageSlotLeaves() {
-        Assumptions.assumeFalse(ReachabilityWalker.correctiveSweepsEnabled(),
-                "cross-container alias ownership must not depend on corrective sweeps");
-
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeArray packageArray = new RuntimeArray();

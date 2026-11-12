@@ -70,7 +70,12 @@ class UnblessedScalarCellOwnerSlotRepairTest {
 
     @Test
     void scalarOverwriteRestoresFromSurvivingScalarCellWithoutRootWalk() {
-        exerciseScalarCellRepair();
+        exerciseScalarCellRepair(false);
+    }
+
+    @Test
+    void deferredReleaseRestoresFromSurvivingScalarCellWithoutRootWalk() {
+        exerciseScalarCellRepair(true);
     }
 
     @Test
@@ -127,7 +132,7 @@ class UnblessedScalarCellOwnerSlotRepairTest {
         }
     }
 
-    private void exerciseScalarCellRepair() {
+    private void exerciseScalarCellRepair(boolean deferRelease) {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             boolean previousMortalListState = MortalList.isActive();
@@ -146,11 +151,16 @@ class UnblessedScalarCellOwnerSlotRepairTest {
 
                 assertEquals(2, target.refCount);
                 assertEquals(2, target.ownerSlotCount(PerlOwnerSlot.Kind.SCALAR_CELL));
-                target.refCount = 1; // Model a transient legacy-count undercount.
 
                 try (MortalList.ReachabilityQueryMeasurement measurement =
                              MortalList.measureReachabilityQueries()) {
-                    firstOwner.set(new RuntimeScalar());
+                    if (deferRelease) {
+                        MortalList.pushMark();
+                        MortalList.deferDecrementIfTracked(firstOwner);
+                        MortalList.popAndFlush();
+                    } else {
+                        firstOwner.set(new RuntimeScalar());
+                    }
 
                     assertEquals(1, target.refCount);
                     assertTrue(WeakRefRegistry.isweak(weakObserver));

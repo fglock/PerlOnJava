@@ -1,6 +1,5 @@
 package org.perlonjava.runtime.runtimetypes;
 
-import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
@@ -13,9 +12,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class WeaklyTrackedUndefOwnerSlotTest {
     @Test
     void undefiningOneUntrackedCellPreservesTheOtherOwnerUntilItsRelease() {
-        Assumptions.assumeFalse(ReachabilityWalker.correctiveSweepsEnabled(),
-                "the owner-slot transition must work without corrective sweeps");
-
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeArray target = new RuntimeArray();

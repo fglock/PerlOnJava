@@ -101,7 +101,6 @@ public class MyVarCleanupStack {
         stack().add(var);
         if (var != null) {
             registeredCounts().merge(var, 1, Integer::sum);
-            MortalList.invalidateLiveRootSnapshot();
         }
         if (var instanceof RuntimeScalar scalar) scalar.refreshUntrackedReferenceOwner();
         if (var instanceof RuntimeBase base) {
@@ -114,7 +113,6 @@ public class MyVarCleanupStack {
      * cache. Root diagnostics now read the authoritative registration map.
      */
     public static synchronized void snapshotStackToLiveCounts() {
-        MortalList.invalidateLiveRootSnapshot();
     }
 
     /**
@@ -151,7 +149,6 @@ public class MyVarCleanupStack {
             if (stack.get(i) == var) {
                 stack.remove(i);
                 decRegisteredCount(var);
-                MortalList.invalidateLiveRootSnapshot();
                 if (var instanceof RuntimeBase base
                         && (base instanceof RuntimeArray || base instanceof RuntimeHash)
                         && !isRegistered(var)) {
@@ -187,7 +184,6 @@ public class MyVarCleanupStack {
                 stack.set(i, newVar);
                 decCount(registeredCounts, oldVar);
                 registeredCounts.merge(newVar, 1, Integer::sum);
-                MortalList.invalidateLiveRootSnapshot();
                 if (oldVar instanceof RuntimeScalar scalar) {
                     scalar.refreshUntrackedReferenceOwner();
                 }
@@ -251,7 +247,6 @@ public class MyVarCleanupStack {
     }
 
     private static void unwindTo(int mark, ArrayList<Object> stack) {
-        if (stack.size() > mark) MortalList.invalidateLiveRootSnapshot();
         for (int i = stack.size() - 1; i >= mark; i--) {
             Object var = stack.removeLast();
             if (var != null) {
@@ -293,7 +288,6 @@ public class MyVarCleanupStack {
     }
 
     private static void popMark(int mark, ArrayList<Object> stack) {
-        if (stack.size() > mark) MortalList.invalidateLiveRootSnapshot();
         while (stack.size() > mark) {
             Object var = stack.removeLast();
             if (var != null) {

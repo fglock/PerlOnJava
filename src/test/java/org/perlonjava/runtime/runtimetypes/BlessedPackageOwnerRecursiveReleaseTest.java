@@ -72,7 +72,6 @@ class BlessedPackageOwnerRecursiveReleaseTest {
             } finally {
                 WeakRefRegistry.clearWeakRefsTo(child);
                 GlobalVariable.globalArrays.remove(globalName);
-                MortalList.invalidateAllRootSnapshots();
             }
         }
     }

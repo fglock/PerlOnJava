@@ -13,63 +13,18 @@ import java.util.NoSuchElementException;
 import java.util.Set;
 import java.lang.ref.WeakReference;
 
-/**
- * Phase 4 (refcount_alignment_plan.md): On-demand reachability walker.
- * <p>
- * Walks the live object graph from Perl-visible roots and identifies which
- * objects in the weak-ref registry are unreachable. Clears weak refs for
- * those objects, simulating Perl 5's refcount-based collection when
- * PerlOnJava's selective refCount has drifted due to JVM temporaries.
- * <p>
- * Roots:
- * <ul>
- *   <li>{@link GlobalVariable#globalVariables} — package scalars ($pkg::name)</li>
- *   <li>{@link GlobalVariable#globalArrays} — package arrays (@pkg::name)</li>
- *   <li>{@link GlobalVariable#globalHashes} — package hashes (%pkg::name)</li>
- *   <li>{@link GlobalVariable#globalCodeRefs} — package subs</li>
- *   <li>Rescued objects from {@link DestroyDispatch}</li>
- * </ul>
- * <p>
- * Not yet walked (TODO):
- * <ul>
- *   <li>Live lexicals in the call stack — JVM doesn't easily expose these.
- *       Mitigated by assuming a short-lived sweep runs during/after Perl code
- *       completes a unit of work (e.g., every N flushes).</li>
- *   <li>Closures that capture lexicals — we walk them via their CODE refs but
- *       not into the captured variables directly.</li>
- * </ul>
- */
+/** Read-only root and owner diagnostics. Lifecycle decisions use owner slots. */
 public class ReachabilityWalker {
-    /** Runtime cleanup must use owner releases; retain walker diagnostics only. */
-    private static final boolean CORRECTIVE_SWEEPS_DISABLED = true;
-
-    static boolean correctiveSweepsEnabled() {
-        return !CORRECTIVE_SWEEPS_DISABLED;
-    }
-
     private static final String WALKER_TRACE_CLASS =
             System.getenv("JPERL_WALKER_TRACE_CLASS");
-
-    private Set<RuntimeBase> weakWitnessTargets;
-    private final IdentityHashMap<RuntimeBase, RuntimeCode> weakWitnessCaptureRoots =
-            new IdentityHashMap<>();
-    private final IdentityHashMap<RuntimeBase, WeakRootWitness> discoveredWeakRootWitnesses =
-            new IdentityHashMap<>();
-    private int discoveredLexicalCodeWitnesses;
-
-    record WeakRootWitness(WeakReference<RuntimeCode> rootCode,
-                           WeakReference<RuntimeBase> capturedAggregate,
-                           WeakReference<RuntimeScalar> ownerScalar,
-                           WeakReference<RuntimeBase> referent,
-                           boolean liveLexicalScalar) {}
 
     private record ReflectiveCaptureFields(
             java.lang.reflect.Field[] scalars,
             java.lang.reflect.Field[] bases) {}
 
     // Generated closure implementations have a stable class layout. Cache
-    // the captured scalar/base fields per class so repeated weak-reference
-    // sweeps do not redo reflective discovery on the callback path.
+    // captured fields per class so repeated diagnostic queries avoid reflective
+    // discovery.
     private static final ClassValue<ReflectiveCaptureFields> REFLECTIVE_CAPTURE_FIELDS =
             new ClassValue<>() {
                 @Override
@@ -108,10 +63,9 @@ public class ReachabilityWalker {
     // the same live scalar slots.
     private boolean useLexicalSeeds = true;
 
-    // Ordinary sweeps must retain values that are still in expression
-    // temporaries. A targeted sweep requested by destruction of that very
-    // temporary must be able to exclude those stale JVM register roots: Perl's
-    // FREETMPS has already released them at the statement boundary.
+    // Root diagnostics ordinarily retain expression temporaries. A targeted
+    // query can exclude stale runtime temporary roots after Perl's FREETMPS
+    // boundary has released them.
     private boolean useTemporaryRoots = true;
 
     /** Enable walking closures' captured scalars. */
@@ -128,11 +82,6 @@ public class ReachabilityWalker {
 
     public ReachabilityWalker withTemporaryRoots(boolean v) {
         this.useTemporaryRoots = v;
-        return this;
-    }
-
-    ReachabilityWalker withWeakWitnessTargets(Set<RuntimeBase> targets) {
-        this.weakWitnessTargets = targets;
         return this;
     }
 
@@ -191,8 +140,8 @@ public class ReachabilityWalker {
         }
         // An executing anonymous closure is a live Perl root even when no
         // package/global slot refers to its CODE value. Statement-boundary
-        // sweeps run inside RuntimeCode.apply(); follow that active closure's
-        // captures before deciding that a blessed referent is unreachable.
+        // Diagnostics can run inside RuntimeCode.apply(); include that active
+        // closure's captures when tracing its current roots.
         // Test2::AsyncSubtest exposes this with a weak hub back-reference: the
         // child entry closure is the sole strong owner of $self while it runs.
         for (RuntimeCode active : new ArrayList<>(
@@ -223,7 +172,7 @@ public class ReachabilityWalker {
         for (RuntimeHash hash : GlobalVariable.globalHashValuesView()) {
             addReachable(hash, todo);
         }
-        for (RuntimeBase rescued : DestroyDispatch.snapshotRescuedForWalk()) {
+        for (RuntimeBase rescued : DestroyDispatch.snapshotRescuedForDiagnostics()) {
             addReachable(rescued, todo);
         }
         // Explicit owner slots carry semantic Perl ownership even when the
@@ -234,12 +183,9 @@ public class ReachabilityWalker {
             addReachable(ownerReferent, todo);
         }
         if (useLexicalSeeds) {
-            // Phase D-W1 (walker_gate_dbic_minimal.t): seed from live
-            // my-vars themselves (RuntimeArray / RuntimeHash that the
-            // user declared with `my @arr` / `my %hash`). Without this,
-            // the auto-sweep's reachability check misses top-level
-            // arrays/hashes — their elements end up flagged unreachable
-            // and DESTROY fires on still-held blessed objects.
+            // Seed from live my-vars themselves (RuntimeArray / RuntimeHash
+            // declared with `my @arr` / `my %hash`) so a diagnostic query
+            // reports the current Perl roots.
             //
             // Mirrors the seeding already in `isReachableFromRoots()`.
             // Order matters: RuntimeScalar IS-A RuntimeBase, so the
@@ -248,12 +194,11 @@ public class ReachabilityWalker {
             // and arrays, missing the scalar's referent. The previous
             // ScalarRefRegistry seed was redundant: every scalar accepted
             // by its MyVarCleanupStack.isLive check is present in this list.
-            // Use this one live-slot snapshot to avoid copying and rescanning
-            // the ref-scalar registry during every complete weak sweep.
+            // Use this one live-slot snapshot instead of copying and rescanning
+            // the scalar registry for this diagnostic query.
             for (Object liveVar : MyVarCleanupStack.snapshotLiveVars()) {
                 if (liveVar instanceof RuntimeScalar sc) {
                     if (WeakRefRegistry.isweak(sc)) continue;
-                    recordWeakLiveLexicalScalarWitness(sc);
                     addReachable(sc, todo);
                     visitScalar(sc, todo);
                 } else if (liveVar instanceof RuntimeBase rb) {
@@ -273,412 +218,6 @@ public class ReachabilityWalker {
         bfs(todo, walkCodeCaptures);
 
         return withInstalledGlobalCodeRoots();
-    }
-
-    /**
-     * Snapshot terminal lifecycle roots without treating the rescued-object
-     * registry or owner slots inside rescued cycles as independent roots.
-     * Current owner slots count only when their source is independently live.
-     * The caller drains expression temporaries before this boundary check.
-     */
-    static Set<RuntimeBase> walkEndBoundaryRootsExcludingRescued() {
-        EndBoundaryOwnerProof ownerProof = endBoundaryOwnerProof();
-        Set<RuntimeBase> independentRoots = ownerProof.directRoots();
-
-        // Enumerate the rescued graph only to find its independently rooted
-        // members. Ordinary roots are validated directly, then owner edges are
-        // followed backwards from each candidate instead of walking every
-        // object reachable from every global root.
-        Set<RuntimeBase> rescuedGraph = Collections.newSetFromMap(new IdentityHashMap<>());
-        ReachabilityWalker rescuedWalker = new ReachabilityWalker().withCodeCaptures(true);
-        java.util.ArrayDeque<RuntimeBase> rescuedTodo = new java.util.ArrayDeque<>();
-        for (RuntimeBase rescued : DestroyDispatch.snapshotRescuedForWalk()) {
-            rescuedWalker.addReachable(rescued, rescuedTodo);
-        }
-        rescuedWalker.bfs(rescuedTodo, true);
-        rescuedGraph.addAll(rescuedWalker.reachable);
-        for (RuntimeBase referent : rescuedGraph) {
-            if (ownerProof.hasIndependentOwnerPath(referent)) {
-                independentRoots.add(referent);
-            }
-        }
-        return independentRoots;
-    }
-
-    /** Build a memoized owner-path proof for one END-boundary cleanup pass. */
-    static EndBoundaryOwnerProof endBoundaryOwnerProof() {
-        Set<RuntimeBase> directRoots =
-                Collections.newSetFromMap(new IdentityHashMap<>());
-        addEndBoundaryDirectRoots(directRoots);
-        return new EndBoundaryOwnerProof(directRoots);
-    }
-
-    static final class EndBoundaryOwnerProof {
-        private final Set<RuntimeBase> directRoots;
-        private final IdentityHashMap<RuntimeBase, Boolean> ownerPathMemo =
-                new IdentityHashMap<>();
-
-        private EndBoundaryOwnerProof(Set<RuntimeBase> directRoots) {
-            this.directRoots = directRoots;
-        }
-
-        Set<RuntimeBase> directRoots() {
-            return directRoots;
-        }
-
-        boolean hasIndependentOwnerPath(RuntimeBase referent) {
-            return hasIndependentEndBoundaryOwnerPath(
-                    referent, directRoots, ownerPathMemo);
-        }
-    }
-
-    private static void addEndBoundaryDirectRoots(Set<RuntimeBase> roots) {
-        GlobalRuntimeState state = GlobalVariable.currentGlobalRuntimeState();
-        for (Map.Entry<String, RuntimeScalar> entry : state.scalarValues().entrySet()) {
-            if (!isLivePackageSlotName(entry.getKey())) continue;
-            PerlOwnerSlot slot = state.packageScalarOwnerSlots().get(entry.getKey());
-            if (isCurrentPackageRootSlot(
-                    entry.getValue(), slot, PerlOwnerSlot.Kind.PACKAGE_SCALAR_SLOT)) {
-                addEndBoundaryScalarRoot(roots, entry.getValue());
-            }
-        }
-        addPackageAggregateRoots(
-                roots, state.arrayValues(), state.packageArrayOwnerSlots(), true);
-        addPackageAggregateRoots(
-                roots, state.hashValues(), state.packageHashOwnerSlots(), false);
-        addPackageIoRoots(roots, state);
-
-        // Named package subs and queued END blocks have a small, explicit set
-        // of semantic captures. Seed those edges without expanding their
-        // captured arrays and hashes.
-        for (Map.Entry<String, RuntimeScalar> entry : GlobalVariable.globalCodeRefs.entrySet()) {
-            RuntimeScalar codeRef = entry.getValue();
-            if (codeRef == null || !(codeRef.value instanceof RuntimeCode code)
-                    || !isCurrentPackageCodeSlot(entry.getKey(), codeRef)) {
-                continue;
-            }
-            addEndBoundaryScalarRoot(roots, codeRef);
-            addEndBoundaryCodeRoots(code, roots);
-        }
-        RuntimeArray endBlocks = SpecialBlock.getEndBlocks();
-        for (RuntimeScalar codeRef : endBlocks.elements.toArray(RuntimeScalar[]::new)) {
-            if (codeRef != null && codeRef.value instanceof RuntimeCode code
-                    && SpecialBlock.hasPendingEndBlock(code)) {
-                addEndBoundaryScalarRoot(roots, codeRef);
-                addEndBoundaryCodeRoots(code, roots);
-            }
-        }
-
-        PerlRuntime runtime = PerlRuntime.current();
-        for (RuntimeCode active : runtime.executionState().activeCodeStack) {
-            addActiveEndBoundaryCodeRoots(active, roots);
-        }
-        for (RuntimeScalar self : runtime.executionState().activeJvmSelfReferences) {
-            addEndBoundaryScalarRoot(roots, self);
-        }
-        for (List<RuntimeScalar> args : RuntimeCode.snapshotPristineArgsStack()) {
-            for (RuntimeScalar arg : args) addEndBoundaryScalarRoot(roots, arg);
-        }
-        for (RuntimeScalar pendingReturn : MortalList.snapshotPendingUntrackedReturnOwners()) {
-            addEndBoundaryScalarRoot(roots, pendingReturn);
-        }
-        for (RuntimeBase suspendedOwner : runtime.executionState().snapshotSuspendedOwnerRoots()) {
-            addEndBoundaryBaseRoot(roots, suspendedOwner);
-        }
-        for (Object liveVar : MyVarCleanupStack.snapshotLiveVars()) {
-            if (liveVar instanceof RuntimeBase lexical) {
-                addLiveLexicalEndBoundaryRoot(lexical, roots);
-            }
-        }
-        for (RuntimeBase lexical : RuntimeCode.snapshotAllActiveLexicals().values()) {
-            if (RuntimeCode.isActiveLexicalCell(lexical)
-                    && MyVarCleanupStack.isRegistered(lexical)) {
-                addLiveLexicalEndBoundaryRoot(lexical, roots);
-            }
-        }
-        for (RuntimeBase referent : WeakRefRegistry.snapshotWeakRefReferents()) {
-            if (referent.hasPendingReturnOwner()) roots.add(referent);
-        }
-    }
-
-    private static boolean isCurrentPackageRootSlot(
-            RuntimeBase value, PerlOwnerSlot slot, PerlOwnerSlot.Kind kind) {
-        return value != null && slot != null && slot.isActive()
-                && slot.kind() == kind && slot.referent() == value;
-    }
-
-    private static void addPackageAggregateRoots(
-            Set<RuntimeBase> roots,
-            Map<String, ? extends RuntimeBase> values,
-            Map<String, PerlOwnerSlot> ownerSlots,
-            boolean arrays) {
-        for (Map.Entry<String, ? extends RuntimeBase> entry : values.entrySet()) {
-            if (!isLivePackageSlotName(entry.getKey())) continue;
-            if (arrays && isNonOwningDebugArgsArray(entry.getKey())) continue;
-            RuntimeBase aggregate = entry.getValue();
-            PerlOwnerSlot slot = ownerSlots.get(entry.getKey());
-            if (isCurrentPackageRootSlot(
-                    aggregate, slot, PerlOwnerSlot.Kind.PACKAGE_AGGREGATE_SLOT)) {
-                roots.add(aggregate);
-            }
-        }
-    }
-
-    private static void addPackageIoRoots(Set<RuntimeBase> roots, GlobalRuntimeState state) {
-        for (Map.Entry<String, RuntimeGlob> entry : state.ioSlots().entrySet()) {
-            if (!isLivePackageSlotName(entry.getKey())) continue;
-            if (state.hiddenIoSlotsAfterStashDelete().contains(entry.getKey())) continue;
-            RuntimeGlob glob = entry.getValue();
-            PerlOwnerSlot slot = state.packageIoGlobOwnerSlots().get(entry.getKey());
-            if (isCurrentPackageRootSlot(
-                    glob, slot, PerlOwnerSlot.Kind.PACKAGE_GLOB_SLOT)) {
-                glob.refreshIOOwnerStateForEndBoundary();
-                roots.add(glob);
-            }
-        }
-        PerlRuntime runtime = PerlRuntime.current();
-        for (String name : runtime.standardIOGlobNames()) {
-            if (!runtime.isStandardIOGlobVisible(name)) continue;
-            RuntimeGlob glob = runtime.standardIOGlob(name);
-            if (glob != null) {
-                glob.refreshIOOwnerStateForEndBoundary();
-                roots.add(glob);
-            }
-        }
-    }
-
-    private static boolean isCurrentPackageCodeSlot(String name, RuntimeScalar codeRef) {
-        // The installed stash CODE slot is the ownership evidence. The CV's
-        // source metadata can still say __ANON__ or (eval) after a closure is
-        // assigned to a named package slot.
-        return isLivePackageSlotName(name)
-                && GlobalVariable.globalCodeRefs.get(name) == codeRef;
-    }
-
-    private static boolean isLivePackageSlotName(String name) {
-        if (name == null) return false;
-        if (!name.startsWith("\u0000glob-identity-")) return true;
-        // Detached glob identities exist only to preserve aliases through a
-        // localized replacement. Once no current alias targets the identity,
-        // its saved table entries are implementation leftovers, not roots.
-        return GlobalVariable.globAliases.containsValue(name);
-    }
-
-    private static void addEndBoundaryCodeRoots(RuntimeCode code, Set<RuntimeBase> roots) {
-        roots.add(code);
-        for (RuntimeScalar state : code.stateVariable.values()) {
-            addEndBoundaryScalarRoot(roots, state);
-        }
-        for (RuntimeArray state : code.stateArray.values()) {
-            if (state != null) roots.add(state);
-        }
-        for (RuntimeHash state : code.stateHash.values()) {
-            if (state != null) roots.add(state);
-        }
-        if (code.closedOverVariables != null) {
-            for (RuntimeBase captured : code.closedOverVariables.values()) {
-                addEndBoundaryBaseRoot(roots, captured);
-            }
-        }
-    }
-
-    private static void addActiveEndBoundaryCodeRoots(
-            RuntimeCode code, Set<RuntimeBase> roots) {
-        if (code == null) return;
-        addEndBoundaryCodeRoots(code, roots);
-        if (code.capturedScalars != null) {
-            for (RuntimeScalar captured : code.capturedScalars) {
-                addEndBoundaryScalarRoot(roots, captured);
-            }
-        }
-        if (code.capturedAggregates != null) {
-            for (RuntimeBase captured : code.capturedAggregates) {
-                addEndBoundaryBaseRoot(roots, captured);
-            }
-        }
-        visitReflectiveCodeScalars(code, scalar -> addEndBoundaryScalarRoot(roots, scalar));
-        visitReflectiveCodeBases(code, roots::add);
-    }
-
-    private static void addLiveLexicalEndBoundaryRoot(
-            RuntimeBase lexical, Set<RuntimeBase> roots) {
-        if (lexical == null || lexical.scopeExited) return;
-        if (lexical instanceof RuntimeScalar scalar) {
-            if (!MyVarCleanupStack.isRegistered(scalar)) return;
-            addEndBoundaryScalarRoot(roots, scalar);
-        } else if (MyVarCleanupStack.isRegistered(lexical)) {
-            roots.add(lexical);
-        }
-    }
-
-    private static void addEndBoundaryBaseRoot(Set<RuntimeBase> roots, RuntimeBase value) {
-        if (value == null) return;
-        if (value instanceof RuntimeScalar scalar) addEndBoundaryScalarRoot(roots, scalar);
-        else roots.add(value);
-    }
-
-    private static void addEndBoundaryScalarRoot(Set<RuntimeBase> roots, RuntimeScalar scalar) {
-        if (scalar == null) return;
-        roots.add(scalar);
-        if (!WeakRefRegistry.isweak(scalar)
-                && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                && scalar.value instanceof RuntimeBase referent) {
-            roots.add(referent);
-        }
-    }
-
-    private static boolean hasIndependentEndBoundaryOwnerPath(
-            RuntimeBase target,
-            Set<RuntimeBase> directRoots,
-            IdentityHashMap<RuntimeBase, Boolean> memo) {
-        Boolean cached = memo.get(target);
-        if (cached != null) return cached;
-
-        Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
-        IdentityHashMap<RuntimeBase, RuntimeBase> predecessor = new IdentityHashMap<>();
-        java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
-        seen.add(target);
-        todo.add(target);
-        while (!todo.isEmpty()) {
-            RuntimeBase current = todo.removeFirst();
-            Boolean currentMemo = memo.get(current);
-            if (directRoots.contains(current) || Boolean.TRUE.equals(currentMemo)) {
-                markEndBoundaryOwnerPath(current, predecessor, memo);
-                return true;
-            }
-            if (Boolean.FALSE.equals(currentMemo)) continue;
-
-            if (current instanceof RuntimeScalar scalar) {
-                for (RuntimeBase container : scalar.endBoundaryContainerOwners()) {
-                    enqueueEndBoundaryOwner(container, current, seen, predecessor, todo);
-                }
-            }
-            if (current instanceof RuntimeIO io) {
-                for (RuntimeGlob glob : io.endBoundaryOwnerGlobs()) {
-                    enqueueEndBoundaryOwner(glob, current, seen, predecessor, todo);
-                }
-            }
-            for (PerlOwnerSlot slot : current.ownerSlotSnapshot()) {
-                if (!isCurrentEndBoundaryOwnerPathSlot(current, slot, directRoots)) continue;
-                for (RuntimeBase ownerSource : slot.endBoundaryOwnerSources()) {
-                    enqueueEndBoundaryOwner(ownerSource, current, seen, predecessor, todo);
-                }
-            }
-        }
-        for (RuntimeBase reached : seen) memo.put(reached, false);
-        return false;
-    }
-
-    private static boolean isCurrentEndBoundaryOwnerPathSlot(
-            RuntimeBase referent, PerlOwnerSlot slot, Set<RuntimeBase> directRoots) {
-        if (slot == null || !slot.isActive() || slot.referent() != referent
-                || !PerlOwnerSlot.isPerlOwnerKind(slot.kind())) return false;
-        switch (slot.kind()) {
-            case PACKAGE_SCALAR_SLOT, PACKAGE_AGGREGATE_SLOT, PACKAGE_GLOB_SLOT,
-                    ACTIVE_LEXICAL, ACTIVE_CODE, TEMPORARY_ROOT,
-                    ARGUMENT_ALIAS, RETURN_VALUE -> {
-                return false;
-            }
-            case ARGUMENT_VALUE -> {
-                RuntimeScalar source = slot.countedScalarOwner();
-                return source != null && directRoots.contains(source);
-            }
-            default -> {
-                if (!DestroyDispatch.isCurrentPerlOwnerSlot(referent, slot)) return false;
-                return !slot.endBoundaryOwnerSources().isEmpty();
-            }
-        }
-    }
-
-    private static void enqueueEndBoundaryOwner(
-            RuntimeBase owner,
-            RuntimeBase child,
-            Set<RuntimeBase> seen,
-            IdentityHashMap<RuntimeBase, RuntimeBase> predecessor,
-            java.util.ArrayDeque<RuntimeBase> todo) {
-        if (owner == null || !seen.add(owner)) return;
-        predecessor.put(owner, child);
-        todo.addLast(owner);
-    }
-
-    private static void markEndBoundaryOwnerPath(
-            RuntimeBase root,
-            IdentityHashMap<RuntimeBase, RuntimeBase> predecessor,
-            IdentityHashMap<RuntimeBase, Boolean> memo) {
-        RuntimeBase current = root;
-        while (current != null) {
-            memo.put(current, true);
-            current = predecessor.get(current);
-        }
-    }
-
-    /**
-     * Return the graph that must remain live while END blocks execute.
-     *
-     * Package CODE slots and queued END blocks are the only seeds. Captures
-     * are followed from both: they are real Perl ownership paths at this
-     * lifecycle boundary, unlike the conservative lexical seeds used by the
-     * general weak-reference sweep.
-     */
-    static Set<RuntimeBase> walkEndBlockRoots() {
-        ReachabilityWalker walker = new ReachabilityWalker();
-        java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
-
-        for (Map.Entry<String, RuntimeScalar> entry : GlobalVariable.globalCodeRefs.entrySet()) {
-            RuntimeScalar codeRef = entry.getValue();
-            if (codeRef == null || !(codeRef.value instanceof RuntimeCode code)
-                    || !isCurrentPackageCodeSlot(entry.getKey(), codeRef)) {
-                continue;
-            }
-            walker.visitScalar(codeRef, todo);
-        }
-        walker.addReachable(SpecialBlock.getEndBlocks(), todo);
-        walker.bfsEndBlockRoots(todo);
-        return walker.reachable;
-    }
-
-    /**
-     * Traverse only semantic closure edges for END lifetime decisions.
-     * RuntimeCode.capturedScalars and reflective capture arrays also contain
-     * transient eval STRING captures attached while named code executes; those
-     * implementation edges must not extend a file lexical's Perl lifetime.
-     * closedOverVariables is populated from the closure's explicit lexical
-     * environment by both generated and interpreted backends.
-     */
-    private void bfsEndBlockRoots(java.util.ArrayDeque<RuntimeBase> todo) {
-        while (!todo.isEmpty()) {
-            RuntimeBase cur = todo.removeFirst();
-            if (cur instanceof RuntimeHash hash) {
-                if (hash.elements instanceof HashSpecialVariable) continue;
-                for (RuntimeScalar value : hash.elements.values()) {
-                    addReachable(value, todo);
-                    visitScalar(value, todo);
-                }
-            } else if (cur instanceof RuntimeArray array) {
-                // A child thread can run this lifecycle walk while another
-                // thread mutates a shared array. Iterating the live ArrayList
-                // leaks its fail-fast ConcurrentModificationException into
-                // thread teardown (seen in threads/t/free2.t). Traverse a
-                // point-in-time copy instead; the graph walk is advisory and
-                // must tolerate concurrent updates to shared Perl values.
-                for (RuntimeScalar value : array.elements.toArray(RuntimeScalar[]::new)) {
-                    addReachable(value, todo);
-                    visitScalar(value, todo);
-                }
-            } else if (cur instanceof RuntimeCode code) {
-                visitCodeStateVariables(code, todo);
-                if (code.closedOverVariables != null) {
-                    for (RuntimeBase captured : code.closedOverVariables.values()) {
-                        addReachable(captured, todo);
-                        if (captured instanceof RuntimeScalar scalar) {
-                            visitScalar(scalar, todo);
-                        }
-                    }
-                }
-            } else if (cur instanceof RuntimeScalar scalar) {
-                visitScalar(scalar, todo);
-            }
-        }
     }
 
     private void bfs(java.util.ArrayDeque<RuntimeBase> todo, boolean walkCaptures) {
@@ -714,7 +253,6 @@ public class ReachabilityWalker {
                 // shared array. Never expose ArrayList's fail-fast iterator
                 // to concurrent Perl updates.
                 for (RuntimeScalar v : a.elements.toArray(RuntimeScalar[]::new)) {
-                    recordWeakArraySlotWitness(a, v);
                     addReachable(v, todo);
                     visitScalar(v, todo);
                 }
@@ -746,8 +284,8 @@ public class ReachabilityWalker {
                 // Exception: Sub::Defer/Sub::Quote deferred wrappers keep a
                 // weak backref to the CODE object itself. If such a CODE ref
                 // is reachable through package metadata (not a direct stash
-                // entry), its captured info array is a real strong Perl edge
-                // and must survive the weak sweep.
+                // entry), its captured info array belongs in the diagnostic
+                // root set.
                 if (walkCaptures || WeakRefRegistry.hasWeakRefsTo(code)) {
                     visitCodeCaptures(code, todo);
                 } else if (code.capturedAggregates != null) {
@@ -814,7 +352,7 @@ public class ReachabilityWalker {
 
     /**
      * Terminal installed CODE refs remain roots, but storing each one in the
-     * per-sweep identity set is redundant. Expose them through a union view so
+     * per-query identity set is redundant. Expose them through a union view so
      * ordinary reachability checks still see the exact complete root set.
      */
     private Set<RuntimeBase> withInstalledGlobalCodeRoots() {
@@ -879,8 +417,8 @@ public class ReachabilityWalker {
      * <p>State variables are semantic strong Perl roots for as long as their
      * owning CODE remains installed. They are not closure-capture metadata,
      * so they must be traversed even when capture walking is deliberately
-     * disabled. Omitting these edges lets a weak-reference sweep destroy a
-     * still-live state singleton, as used by Mojo::IOLoop.</p>
+     * disabled. Omitting these edges would make diagnostics miss a live state
+     * singleton, as used by Mojo::IOLoop.</p>
      */
     private void visitCodeStateVariables(RuntimeCode code,
                                          java.util.ArrayDeque<RuntimeBase> todo) {
@@ -911,61 +449,11 @@ public class ReachabilityWalker {
             addReachable(cap, todo);
             visitScalar(cap, todo);
         });
-        visitReflectiveCodeBases(code, base -> {
-            if (weakWitnessTargets != null
-                    && code.captureFieldsRecorded
-                    && GlobalVariable.installedGlobalCodeRefsView().contains(code)
-                    && base instanceof RuntimeArray array
-                    && isSupportedWitnessArray(array)) {
-                weakWitnessCaptureRoots.putIfAbsent(array, code);
-            }
-            addReachable(base, todo);
-        });
+        visitReflectiveCodeBases(code, base -> addReachable(base, todo));
         // InterpretedCode.capturedVars is immutable execution-frame metadata.
         // Captured entries can remain there after their lexical lifetime has
         // ended and releaseCaptures has removed them from the semantic owner
         // lists. Only capturedScalars/capturedAggregates describe live owners.
-    }
-
-    private void recordWeakArraySlotWitness(RuntimeArray array, RuntimeScalar ownerScalar) {
-        if (weakWitnessTargets == null || ownerScalar == null
-                || !isSupportedWitnessArray(array)
-                || WeakRefRegistry.isweak(ownerScalar)
-                || (ownerScalar.type & RuntimeScalarType.REFERENCE_BIT) == 0
-                || !(ownerScalar.value instanceof RuntimeBase referent)
-                || !weakWitnessTargets.contains(referent)) {
-            return;
-        }
-        RuntimeCode rootCode = weakWitnessCaptureRoots.get(array);
-        if (rootCode != null) {
-            discoveredWeakRootWitnesses.putIfAbsent(referent,
-                    new WeakRootWitness(new WeakReference<>(rootCode),
-                            new WeakReference<>(array), new WeakReference<>(ownerScalar),
-                            new WeakReference<>(referent), false));
-        }
-    }
-
-    private void recordWeakLiveLexicalScalarWitness(RuntimeScalar ownerScalar) {
-        if (weakWitnessTargets == null || ownerScalar.scopeExited
-                || (ownerScalar.type & RuntimeScalarType.REFERENCE_BIT) == 0
-                || !(ownerScalar.value instanceof RuntimeBase referent)
-                || (!weakWitnessTargets.contains(referent)
-                && !(referent instanceof RuntimeCode))) {
-            return;
-        }
-        if (!weakWitnessTargets.contains(referent)
-                && !discoveredWeakRootWitnesses.containsKey(referent)
-                && discoveredLexicalCodeWitnesses >= 128) {
-            return;
-        }
-        if (discoveredWeakRootWitnesses.putIfAbsent(referent,
-                new WeakRootWitness(new WeakReference<>(null),
-                        new WeakReference<>(null), new WeakReference<>(ownerScalar),
-                        new WeakReference<>(referent), true)) == null
-                && referent instanceof RuntimeCode
-                && !weakWitnessTargets.contains(referent)) {
-            discoveredLexicalCodeWitnesses++;
-        }
     }
 
     private static boolean isSupportedWitnessArray(RuntimeArray array) {
@@ -1025,7 +513,7 @@ public class ReachabilityWalker {
             argsFrameIdx++;
         }
         int rescuedIdx = 0;
-        for (RuntimeBase rescued : DestroyDispatch.snapshotRescuedForWalk()) {
+        for (RuntimeBase rescued : DestroyDispatch.snapshotRescuedForDiagnostics()) {
             if (howReached.putIfAbsent(rescued, "<rescued#" + (rescuedIdx++) + ">") == null) {
                 todo.add(rescued);
             }
@@ -1038,7 +526,7 @@ public class ReachabilityWalker {
             seedPath(sc, "<hint-hash#" + (hhIdx++) + ">", howReached, todo);
         }
         // Phase B1: seed from ScalarRefRegistry (same as walk()) so the
-        // trace matches what sweepWeakRefs sees.
+        // trace matches the other diagnostic root queries.
         // Phase I: force GC before snapshotting so stale
         // (already-Java-unreachable) entries don't produce misleading
         // "live-lexical" paths in diagnostic traces.
@@ -1161,7 +649,7 @@ public class ReachabilityWalker {
                     if (howReached.putIfAbsent(state.getValue(), path) == null) todo.add(state.getValue());
                 }
                 // Phase I: mirror the main walker — follow closure captures
-                // so findPathTo traces through the same graph as sweepWeakRefs.
+                // so findPathTo traces through the same graph as root queries.
                 if (code.capturedScalars != null) {
                     int i = 0;
                     String name = code.packageName == null ? "?" : code.packageName;
@@ -1238,33 +726,6 @@ public class ReachabilityWalker {
         if (reachable.add(b)) {
             todo.addLast(b);
         }
-    }
-
-    /**
-     * Return true if {@code target} can reach itself through strong Perl
-     * references. Weak scalars are ignored. This models Perl's refcount
-     * behavior for self-cycles: they remain alive even when no package/global
-     * root points at them.
-     */
-    public static boolean hasStrongCycle(RuntimeBase target) {
-        if (target == null) return false;
-        final int MAX_VISITS = 50_000;
-        Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
-        java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
-
-        if (enqueueStrongEdges(target, target, seen, todo)) {
-            return true;
-        }
-
-        int visits = 0;
-        while (!todo.isEmpty() && visits < MAX_VISITS) {
-            RuntimeBase cur = todo.removeFirst();
-            visits++;
-            if (enqueueStrongEdges(cur, target, seen, todo)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     /**
@@ -1541,7 +1002,7 @@ public class ReachabilityWalker {
      * clear; bootstrap dies.
      * <p>
      * BFS with a hard step cap so the cost stays bounded (the worst
-     * case is the same nodes-visited bound as a full sweep, which is
+     * case is the same nodes-visited bound as a full diagnostic walk, which is
      * fine because flush is already O(pending) per call).
      *
      * @param target the object to check for reachability
@@ -1677,7 +1138,7 @@ public class ReachabilityWalker {
                     seedTarget(scalar, null, seen, todo, stats);
                 }
             }
-            for (RuntimeBase rescued : DestroyDispatch.snapshotRescuedForWalk()) {
+            for (RuntimeBase rescued : DestroyDispatch.snapshotRescuedForDiagnostics()) {
                 if (!budget.visitEdge()) break rootScan;
                 if (seen.add(rescued)) {
                     todo.addLast(rescued);
@@ -1728,22 +1189,6 @@ public class ReachabilityWalker {
                 budget.edgesVisited);
     }
 
-    /**
-     * Lightweight fallback for {@link WeakRefRegistry#weaken}: check whether a
-     * target is still reachable from a JVM-live scalar even when that scalar is
-     * not a counted owner. Test2::Tools::Refcount weakens a local probe copy
-     * before reading B::REFCNT; if selective refcounting has drifted to zero,
-     * clearing every weak callback at that point is premature while the caller's
-     * lexical still points at the object.
-     *
-     * <p>This is deliberately separate from the normal sweep/root query. It
-     * force-prunes stale weak-map keys first, only follows non-weak scalars, and
-     * is used only at the immediate weaken() zero-count decision.</p>
-     */
-    public static boolean isReachableFromLiveScalarRegistry(RuntimeBase target) {
-        return isReachableFromLiveScalarRegistry(target, ScalarRefRegistry.forceGcAndSnapshot());
-    }
-
     public static boolean hasLiveStrongScalarReferent(RuntimeBase target) {
         return hasLiveStrongScalarReferentOtherThan(target, null);
     }
@@ -1751,11 +1196,6 @@ public class ReachabilityWalker {
     public static boolean hasLiveStrongScalarReferentOtherThan(
             RuntimeBase target, RuntimeScalar excluded) {
         if (target == null) return false;
-        // Query only scalar cells that currently own this referent. The prior
-        // lexical-registry scan was used by SvREFCNT's returned-hash adjustment
-        // and scaled with every live lexical, even when this referent had no
-        // such owners. Owner slots already index the candidate cells and let
-        // us validate their current value and storage identity directly.
         for (PerlOwnerSlot slot : target.ownerSlotSnapshot()) {
             if (!slot.isActive() || slot.referent() != target) continue;
             RuntimeScalar owner;
@@ -1766,10 +1206,6 @@ public class ReachabilityWalker {
                         && owner.untrackedReferenceOwnerSlot() == slot;
             } else {
                 owner = slot.countedScalarOwner();
-                // Lexical registration and the scalar's direct current value
-                // prove this owner even when it aliases an aggregate cell
-                // whose container is itself an aliased view. Aggregate-slot
-                // membership alone would reject that live lexical owner.
                 ownerSlotMatches = owner != null
                         && owner.countedOwnerSlot() == slot
                         && owner.refCountOwned;
@@ -1785,409 +1221,6 @@ public class ReachabilityWalker {
         return false;
     }
 
-    static boolean isReachableFromLiveScalarRegistry(RuntimeBase target,
-                                                     java.util.List<RuntimeScalar> roots) {
-        if (target == null) return false;
-        final int MAX_VISITS = MAX_ROOT_SNAPSHOT_VISITS;
-
-        Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
-        java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
-
-        for (RuntimeScalar sc : roots) {
-            if (sc == null) continue;
-            if (sc.hasClosureCaptureOwner()) continue;
-            if (WeakRefRegistry.isweak(sc)) continue;
-            if (sc.scopeExited) continue;
-            if (followScalar(sc, target, seen, todo)) return true;
-        }
-
-        int visits = 0;
-        while (!todo.isEmpty() && visits < MAX_VISITS) {
-            RuntimeBase cur = todo.removeFirst();
-            visits++;
-            if (cur == target) return true;
-            if (cur instanceof RuntimeStash) continue;
-            if (cur instanceof RuntimeHash h) {
-                if (h.elements instanceof TieHash tieHash
-                        && followScalar(tieHash.getSelf(), target, seen, todo)) {
-                    return true;
-                }
-                for (RuntimeScalar v : h.elements.values()) {
-                    if (followScalar(v, target, seen, todo)) return true;
-                }
-            } else if (cur instanceof RuntimeArray a) {
-                for (RuntimeScalar v : a.elements) {
-                    if (followScalar(v, target, seen, todo)) return true;
-                }
-            }
-        }
-        return !todo.isEmpty();
-    }
-
-    /**
-     * D-W6.14: check if a specific RuntimeScalar instance is reachable
-     * from package globals or live lexical roots. Used at refCount→0
-     * transitions to verify that counted owner slots whose current storage
-     * is not otherwise proven still belong to live Perl roots.
-     *
-     * Walks containers and verifies whether the specific scalar
-     * identity can be reached. Critical: walks INTO scalars (so
-     * a my-var holding a hash-ref leads us into the hash to find
-     * its element scalars).
-     */
-    public static boolean isScalarReachable(RuntimeScalar target) {
-        if (target == null) return false;
-        ReachabilityQueryStats stats = MortalList.activeReachabilityQueryStats();
-        if (stats != null) stats.scalarReachabilityQueries++;
-
-        // Most calls come from reference assignment's weak-owner guard. Avoid
-        // rebuilding and traversing the complete package-root graph when the
-        // owning scalar has a directly verifiable root.
-        if (!target.scopeExited && MyVarCleanupStack.isRegistered(target)) {
-            return true;
-        }
-        if (target.isStoredInRegisteredContainerOwner()) {
-            return true;
-        }
-        RuntimeBase container = target.containerOwner;
-        if (container instanceof RuntimeHash hash
-                && hash.isPackageRootedHash()
-                && hash.elements.containsValue(target)) {
-            return true;
-        }
-        if (container instanceof RuntimeArray array
-                && array.isPackageGlobalRoot
-                && array.elements.contains(target)) {
-            return true;
-        }
-        if (target.isPackageGlobalRoot
-                && (GlobalVariable.scalarSlots().containsValue(target)
-                    || GlobalVariable.globalCodeRefs.containsValue(target))) {
-            return true;
-        }
-        if (MortalList.isScalarReachableThroughRootedContainer(target)) {
-            return true;
-        }
-        Boolean drainSnapshotResult =
-                MortalList.isScalarReachableFromDrainSnapshot(target);
-        if (drainSnapshotResult != null) return drainSnapshotResult;
-        if (stats != null) stats.scalarReachabilityRootWalks++;
-        final int MAX_VISITS = MAX_ROOT_SNAPSHOT_VISITS;
-
-        Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
-        java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
-
-        // D-W6.16 strict: PACKAGE-GLOBAL ROOTS ONLY.
-        //
-        // The walker's purpose at MortalList.flush refCount→0 is to
-        // distinguish "object held by a real long-lived root" (e.g.,
-        // `our %METAS` cache, package method tables) from "object's
-        // reachability is via expiring lexicals or temporaries".
-        //
-        // Including my-vars / ScalarRefRegistry as seeds over-rescues
-        // DBIC row objects whose only owners are intermediate my-vars
-        // in DBIC's internal method dispatches (still in MyVarCleanupStack
-        // until the dispatch returns, but logically should be released
-        // for refcount accounting).
-        //
-        // Restricting seeds to package globals matches what
-        // Class::MOP/Moose actually need: their metaclasses live in
-        // `our %METAS`, accessible through globalHashes. DBIC's per-row
-        // cycles aren't reachable via package globals → not rescued
-        // → DESTROY fires correctly.
-        for (RuntimeScalar codeRef : GlobalVariable.globalCodeRefValuesView()) {
-            if (codeRef == target) return true;
-            if (codeRef != null && seen.add(codeRef)) todo.addLast(codeRef);
-        }
-        for (RuntimeScalar scalar : GlobalVariable.globalVariableValuesView()) {
-            if (scalar == target) return true;
-            if (scalar != null && seen.add(scalar)) todo.addLast(scalar);
-        }
-        for (Map.Entry<String, RuntimeArray> e : GlobalVariable.globalArrayEntriesView()) {
-            if (isNonOwningDebugArgsArray(e.getKey())) continue;
-            if (e.getValue() != null && seen.add(e.getValue())) todo.addLast(e.getValue());
-        }
-        for (RuntimeHash hash : GlobalVariable.globalHashValuesView()) {
-            if (hash != null && seen.add(hash)) todo.addLast(hash);
-        }
-
-        // D-W6.16: live my-vars (currently-active lexical scopes).
-        // These represent persistent scalar references in ACTIVE
-        // execution scopes — the "my $schema = ..." at file scope is
-        // here; transient method-call argument scalars are NOT
-        // (they get unwound when the method returns).
-        for (Object liveVar : MyVarCleanupStack.snapshotLiveVars()) {
-            if (liveVar == target) return true;
-            if (liveVar instanceof RuntimeBase rb && seen.add(rb)) todo.addLast(rb);
-        }
-
-        int visits = 0;
-        while (!todo.isEmpty() && visits < MAX_VISITS) {
-            RuntimeBase cur = todo.removeFirst();
-            visits++;
-            // A RuntimeStash is a synthetic view across the global slot maps,
-            // all of which were seeded above. Walking its values both creates
-            // transient glob proxies and rescans every global symbol for each
-            // refcount transition.
-            if (cur instanceof RuntimeStash) {
-                continue;
-            } else if (cur instanceof RuntimeHash hash) {
-                if (hash.elements instanceof HashSpecialVariable) continue;
-                // A tied hash's Java Map facade does not expose the values
-                // retained by its pure-Perl handler.  Follow the handler
-                // object, then its arrays/hashes, so an owner scalar stored by
-                // implementations such as Tie::IxHash is recognized as a real
-                // strong path.  Without this edge, undefining a different
-                // strong scalar can clear weak back-references prematurely.
-                if (hash.elements instanceof TieHash tieHash) {
-                    RuntimeScalar self = tieHash.getSelf();
-                    if (self == target) return true;
-                    if (self != null && !WeakRefRegistry.isweak(self)
-                            && seen.add(self)) {
-                        todo.addLast(self);
-                    }
-                }
-                for (RuntimeScalar val : hash.elements.values()) {
-                    if (val == null) continue;
-                    // Skip weak refs — they don't keep their referent alive.
-                    if (WeakRefRegistry.isweak(val)) continue;
-                    if (val == target) return true;
-                    if (seen.add(val)) todo.addLast(val);
-                }
-            } else if (cur instanceof RuntimeArray arr) {
-                for (RuntimeScalar elem : arr.elements) {
-                    if (elem == null) continue;
-                    if (WeakRefRegistry.isweak(elem)) continue;
-                    if (elem == target) return true;
-                    if (seen.add(elem)) todo.addLast(elem);
-                }
-            } else if (cur instanceof RuntimeScalar sc) {
-                if (WeakRefRegistry.isweak(sc)) continue;
-                if ((sc.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                        && sc.value instanceof RuntimeBase rb
-                        && seen.add(rb)) todo.addLast(rb);
-            } else if (cur instanceof RuntimeCode code) {
-                if (code.closedOverVariables != null) {
-                    for (RuntimeBase captured : code.closedOverVariables.values()) {
-                        if (captured == null) continue;
-                        if (captured instanceof RuntimeScalar scalar
-                                && WeakRefRegistry.isweak(scalar)) {
-                            continue;
-                        }
-                        if (captured == target) return true;
-                        if (seen.add(captured)) todo.addLast(captured);
-                    }
-                }
-                if (code.capturedScalars != null) {
-                    for (RuntimeScalar cap : code.capturedScalars) {
-                        if (cap == null) continue;
-                        if (WeakRefRegistry.isweak(cap)) continue;
-                        if (cap == target) return true;
-                        if (seen.add(cap)) todo.addLast(cap);
-                    }
-                }
-                if (code.capturedAggregates != null) {
-                    for (RuntimeBase cap : code.capturedAggregates) {
-                        if (cap == target) return true;
-                        if (seen.add(cap)) todo.addLast(cap);
-                    }
-                }
-                final boolean[] foundReflectiveCapture = {false};
-                visitReflectiveCodeScalars(code, cap -> {
-                    if (foundReflectiveCapture[0]) return;
-                    if (cap == null || WeakRefRegistry.isweak(cap)) return;
-                    if (cap == target) {
-                        foundReflectiveCapture[0] = true;
-                    } else if (seen.add(cap)) {
-                        todo.addLast(cap);
-                    }
-                });
-                if (foundReflectiveCapture[0]) return true;
-                visitReflectiveCodeBases(code, base -> {
-                    if (seen.add(base)) {
-                        todo.addLast(base);
-                    }
-                });
-            } else if (cur instanceof RuntimeRegex regex) {
-                for (RuntimeCode callback : regex.executableCallbackCodes()) {
-                    if (seen.add(callback)) todo.addLast(callback);
-                }
-            }
-        }
-        return !todo.isEmpty();
-    }
-
-    /**
-     * Identity set for scalar reachability queries during one cleanup drain.
-     * It follows the same package and active-lexical roots and strong edges as
-     * {@link #isScalarReachable(RuntimeScalar)}, allowing owner scalars to be
-     * checked against one bounded traversal.
-     */
-    static final class ScalarRootReachabilitySnapshot {
-        private final Set<RuntimeScalar> reachable;
-        private final boolean complete;
-
-        private ScalarRootReachabilitySnapshot(Set<RuntimeScalar> reachable,
-                                               boolean complete) {
-            this.reachable = reachable;
-            this.complete = complete;
-        }
-
-        boolean isReachable(RuntimeScalar target) {
-            // A capped traversal cannot prove that an unvisited owner scalar
-            // is unreachable. Preserve it until a complete boundary scan.
-            return target != null && (!complete || reachable.contains(target));
-        }
-
-        boolean complete() {
-            return complete;
-        }
-    }
-
-    static ScalarRootReachabilitySnapshot scalarReachabilitySnapshot() {
-        ReachabilityQueryStats stats = MortalList.activeReachabilityQueryStats();
-        if (stats != null) {
-            stats.snapshotsBuilt++;
-            stats.scalarReachabilityRootWalks++;
-        }
-        Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>(512));
-        Set<RuntimeScalar> reachableScalars =
-                Collections.newSetFromMap(new IdentityHashMap<>(512));
-        java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
-
-        for (RuntimeScalar scalar : GlobalVariable.globalCodeRefValuesView()) {
-            addScalarReachabilityRoot(scalar, seen, reachableScalars, todo, stats);
-        }
-        for (RuntimeScalar scalar : GlobalVariable.globalVariableValuesView()) {
-            addScalarReachabilityRoot(scalar, seen, reachableScalars, todo, stats);
-        }
-        for (Map.Entry<String, RuntimeArray> entry : GlobalVariable.globalArrayEntriesView()) {
-            if (isNonOwningDebugArgsArray(entry.getKey())) continue;
-            addScalarReachabilityRoot(entry.getValue(), seen, reachableScalars, todo, stats);
-        }
-        for (RuntimeHash hash : GlobalVariable.globalHashValuesView()) {
-            addScalarReachabilityRoot(hash, seen, reachableScalars, todo, stats);
-        }
-        for (Object liveVar : MyVarCleanupStack.snapshotLiveVars()) {
-            if (liveVar instanceof RuntimeBase base) {
-                addScalarReachabilityRoot(base, seen, reachableScalars, todo, stats);
-            }
-        }
-
-        final int maxVisits = MAX_ROOT_SNAPSHOT_VISITS;
-        int visits = 0;
-        while (!todo.isEmpty() && visits < maxVisits) {
-            RuntimeBase current = todo.removeFirst();
-            visits++;
-            if (stats != null) stats.nodesVisited++;
-            if (current instanceof RuntimeStash) {
-                continue;
-            } else if (current instanceof RuntimeHash hash) {
-                if (hash.elements instanceof HashSpecialVariable) continue;
-                if (hash.elements instanceof TieHash tieHash) {
-                    addScalarReachabilityEdge(tieHash.getSelf(), seen,
-                            reachableScalars, todo, stats, true, true);
-                }
-                for (RuntimeScalar value : hash.elements.values()) {
-                    addScalarReachabilityEdge(value, seen,
-                            reachableScalars, todo, stats, true, false);
-                }
-            } else if (current instanceof RuntimeArray array) {
-                for (RuntimeScalar value : array.elements) {
-                    addScalarReachabilityEdge(value, seen,
-                            reachableScalars, todo, stats, true, false);
-                }
-            } else if (current instanceof RuntimeScalar scalar) {
-                if (stats != null) stats.edgesInspected++;
-                if (!WeakRefRegistry.isweak(scalar)
-                        && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                        && scalar.value instanceof RuntimeBase base) {
-                    if (base instanceof RuntimeScalar referencedScalar) {
-                        reachableScalars.add(referencedScalar);
-                    }
-                    if (seen.add(base)) todo.addLast(base);
-                }
-            } else if (current instanceof RuntimeCode code) {
-                if (code.closedOverVariables != null) {
-                    for (RuntimeBase captured : code.closedOverVariables.values()) {
-                        if (stats != null) stats.edgesInspected++;
-                        if (captured instanceof RuntimeScalar scalar
-                                && WeakRefRegistry.isweak(scalar)) continue;
-                        addScalarReachabilityEdge(captured, seen,
-                                reachableScalars, todo, null, true, false);
-                    }
-                }
-                if (code.capturedScalars != null) {
-                    for (RuntimeScalar captured : code.capturedScalars) {
-                        addScalarReachabilityEdge(captured, seen,
-                                reachableScalars, todo, stats, true, false);
-                    }
-                }
-                if (code.capturedAggregates != null) {
-                    for (RuntimeBase captured : code.capturedAggregates) {
-                        addScalarReachabilityEdge(captured, seen,
-                                reachableScalars, todo, stats, true, true);
-                    }
-                }
-                visitReflectiveCodeScalars(code, captured ->
-                        addScalarReachabilityEdge(captured, seen,
-                                reachableScalars, todo, stats, true, false));
-                visitReflectiveCodeBases(code, captured ->
-                        addScalarReachabilityEdge(captured, seen,
-                                reachableScalars, todo, stats, false, false));
-            } else if (current instanceof RuntimeRegex regex) {
-                for (RuntimeCode callback : regex.executableCallbackCodes()) {
-                    addScalarReachabilityEdge(callback, seen,
-                            reachableScalars, todo, stats, false, false);
-                }
-            }
-        }
-        return new ScalarRootReachabilitySnapshot(reachableScalars, todo.isEmpty());
-    }
-
-    private static void addScalarReachabilityRoot(
-            RuntimeBase base, Set<RuntimeBase> seen, Set<RuntimeScalar> reachableScalars,
-            java.util.ArrayDeque<RuntimeBase> todo, ReachabilityQueryStats stats) {
-        if (base instanceof RuntimeScalar scalar && WeakRefRegistry.isweak(scalar)) return;
-        if (base != null && seen.add(base)) {
-            todo.addLast(base);
-            if (stats != null) stats.rootsSeeded++;
-        }
-        if (base instanceof RuntimeScalar scalar) reachableScalars.add(scalar);
-    }
-
-    private static void addScalarReachabilityEdge(
-            RuntimeBase base, Set<RuntimeBase> seen, Set<RuntimeScalar> reachableScalars,
-            java.util.ArrayDeque<RuntimeBase> todo, ReachabilityQueryStats stats,
-            boolean trackScalarIdentity, boolean includeWeakIdentity) {
-        if (stats != null) stats.edgesInspected++;
-        if (base instanceof RuntimeScalar scalar) {
-            boolean weak = WeakRefRegistry.isweak(scalar);
-            if (trackScalarIdentity && (!weak || includeWeakIdentity)) {
-                reachableScalars.add(scalar);
-            }
-            if (weak) return;
-        }
-        if (base != null && seen.add(base)) todo.addLast(base);
-    }
-
-    /**
-     * Phase D-W2c: distinguish reachability via package globals
-     * (`our %METAS`, `our @ISA`, `our $...`, `&Class::MOP::class_of`)
-     * from reachability via local lexicals (`my $x`, MyVarCleanupStack
-     * entries, `ScalarRefRegistry`).
-     *
-     * The walker gate uses {@code globalOnly=true}: an object is
-     * "really" reachable only if a package global path leads to it.
-     * Stack-local my-vars don't count — those are transient holders
-     * that should release at scope exit. This matches Perl 5
-     * semantics: `weaken($foo)` clears when no STRONG package-level
-     * or lexical-still-holding-strong path exists, and cycle-break
-     * tests rely on stack-local refs releasing properly.
-     *
-     * The default {@code globalOnly=false} is preserved for
-     * diagnostic / debugging callers.
-     */
     public static boolean isReachableFromRoots(RuntimeBase target, boolean globalOnly) {
         if (target == null) return false;
         ReachabilityQueryStats stats = MortalList.activeReachabilityQueryStats();
@@ -2320,7 +1353,7 @@ public class ReachabilityWalker {
             }
         }
         // Seed: rescued objects.
-        for (RuntimeBase rescued : DestroyDispatch.snapshotRescuedForWalk()) {
+        for (RuntimeBase rescued : DestroyDispatch.snapshotRescuedForDiagnostics()) {
             if (!budget.visitEdge()) return true;
             if (rescued == target) {
                 if (stats != null) stats.rootsSeeded++;
@@ -2405,8 +1438,8 @@ public class ReachabilityWalker {
     /**
      * Return true when {@code target} is held by a live reference scalar other
      * than its own named my-variable slot. This is deliberately narrower than a
-     * full root walk: scope cleanup calls it often, and DBIC can have thousands
-     * of live roots by the time its leak tests initialize.
+     * full root walk: it is a focused diagnostic query and DBIC can have
+     * thousands of live roots by the time its leak tests initialize.
      */
     public static boolean isReachableFromExternalRoot(RuntimeBase target) {
         return new ExternalRootSnapshot().isReachable(target);
@@ -2414,158 +1447,6 @@ public class ReachabilityWalker {
 
     public static boolean isReachableFromExternalRootExcludingRescued(RuntimeBase target) {
         return new ExternalRootSnapshot(false).isReachable(target);
-    }
-
-    public static boolean isReachableFromTemporaryRoots(RuntimeBase target) {
-        if (target == null || !MortalList.hasTemporaryRoots()) return false;
-        // Direct edges and ordinary array/hash owner ancestry are common while
-        // cleanup finishes around a temporary expression. Prove those without
-        // opening the referent graph; opaque or incomplete paths still use the
-        // full walker below.
-        if (MortalList.temporaryRootDirectlyReferences(target)) return true;
-        if (hasTemporaryRootOwnerAncestryPath(target)) return true;
-        ReachabilityWalker walker = new ReachabilityWalker();
-        java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
-        for (RuntimeBase tempRoot : MortalList.snapshotTemporaryRoots()) {
-            walker.addReachable(tempRoot, todo);
-        }
-        walker.bfs(todo, true);
-        return walker.reachable.contains(target);
-    }
-
-    private static final int MAX_TEMPORARY_ROOT_OWNER_ANCESTRY_DEPTH = 16;
-    private static final int MAX_TEMPORARY_ROOT_OWNER_ANCESTRY_NODES = 64;
-    private static final int MAX_TEMPORARY_ROOT_DIRECT_ROOTS = 256;
-    private static final int MAX_TEMPORARY_ROOT_DIRECT_EDGES = 4096;
-
-    private record TemporaryRootOwnerAncestor(RuntimeBase value, int depth) {}
-
-    /** Positive-only proof through current owner slots into direct temporary roots. */
-    private static boolean hasTemporaryRootOwnerAncestryPath(RuntimeBase target) {
-        java.util.ArrayDeque<TemporaryRootOwnerAncestor> todo = new java.util.ArrayDeque<>();
-        Set<RuntimeBase> seen = java.util.Collections.newSetFromMap(new IdentityHashMap<>());
-        Set<RuntimeBase> candidates = java.util.Collections.newSetFromMap(new IdentityHashMap<>());
-        candidates.add(target);
-        appendTemporaryRootOwnerAncestors(target, 0, todo);
-
-        int visited = 0;
-        while (!todo.isEmpty() && visited < MAX_TEMPORARY_ROOT_OWNER_ANCESTRY_NODES) {
-            TemporaryRootOwnerAncestor ancestor = todo.removeFirst();
-            RuntimeBase value = ancestor.value();
-            if (!seen.add(value)) continue;
-            visited++;
-            candidates.add(value);
-            appendTemporaryRootOwnerAncestors(value, ancestor.depth(), todo);
-        }
-        return MortalList.temporaryRootsDirectlyReferenceAny(
-                candidates, MAX_TEMPORARY_ROOT_DIRECT_ROOTS,
-                MAX_TEMPORARY_ROOT_DIRECT_EDGES);
-    }
-
-    private static void appendTemporaryRootOwnerAncestors(
-            RuntimeBase value, int depth,
-            java.util.ArrayDeque<TemporaryRootOwnerAncestor> todo) {
-        if (depth >= MAX_TEMPORARY_ROOT_OWNER_ANCESTRY_DEPTH) return;
-        Set<PerlOwnerSlot> ownerSlots = value.ownerSlotSnapshot(
-                MAX_TEMPORARY_ROOT_OWNER_ANCESTRY_NODES);
-        for (PerlOwnerSlot slot : ownerSlots) {
-            if (todo.size() >= MAX_TEMPORARY_ROOT_OWNER_ANCESTRY_NODES) return;
-            if (slot.kind() == PerlOwnerSlot.Kind.SCALAR_REFERENCE_CONTENTS) {
-                RuntimeScalar scalarCell = slot.scalarReferenceCell();
-                if (scalarCell != null
-                        && DestroyDispatch.isCurrentPerlOwnerSlot(value, slot)) {
-                    // The live wrapper owns this exact scalar cell, whose
-                    // current reference value is the referent. A direct root
-                    // edge to the cell therefore proves the whole chain.
-                    todo.addLast(new TemporaryRootOwnerAncestor(scalarCell, depth + 1));
-                }
-                continue;
-            }
-            if (slot.kind() == PerlOwnerSlot.Kind.SCALAR_CELL
-                    || slot.kind() == PerlOwnerSlot.Kind.CODE_SLOT
-                    || slot.kind() == PerlOwnerSlot.Kind.ARGUMENT_CONTAINER
-                    || slot.kind() == PerlOwnerSlot.Kind.TIE_HANDLER
-                    || slot.kind() == PerlOwnerSlot.Kind.ARGUMENT_TIE_HANDLER) {
-                RuntimeScalar scalarOwner = slot.countedScalarOwner();
-                if (scalarOwner != null
-                        && DestroyDispatch.isCurrentPerlOwnerSlot(value, slot)) {
-                    // A root may hold a reference to the current scalar cell
-                    // or tied-handler owner without directly holding its value.
-                    todo.addLast(new TemporaryRootOwnerAncestor(scalarOwner, depth + 1));
-                }
-                continue;
-            }
-            if (slot.kind() == PerlOwnerSlot.Kind.SCALAR_CAPTURE
-                    || slot.kind() == PerlOwnerSlot.Kind.CLOSURE_PAD) {
-                RuntimeCode captureOwner = slot.captureOwner();
-                if (captureOwner != null
-                        && DestroyDispatch.isCurrentPerlOwnerSlot(value, slot)) {
-                    // A current capture identity connects this pad value to
-                    // its CODE owner. A direct temporary-root edge to that
-                    // CODE proves reachability without opening its captures.
-                    todo.addLast(new TemporaryRootOwnerAncestor(captureOwner, depth + 1));
-                }
-                continue;
-            }
-            if (slot.kind() == PerlOwnerSlot.Kind.CODE_STATE) {
-                RuntimeCode stateOwner = slot.captureOwner();
-                if (stateOwner != null && stateOwner.hasCurrentStateOwner(value, slot)) {
-                    todo.addLast(new TemporaryRootOwnerAncestor(stateOwner, depth + 1));
-                }
-                continue;
-            }
-            if (slot.kind() == PerlOwnerSlot.Kind.ARRAY_ALIAS_CELL) {
-                RuntimeArray arrayOwner = slot.arrayAliasOwner();
-                if (arrayOwner != null
-                        && DestroyDispatch.isCurrentPerlOwnerSlot(value, slot)
-                        && arrayOwner.ownsReferenceListAliasCellOwner(slot, value)) {
-                    todo.addLast(new TemporaryRootOwnerAncestor(arrayOwner, depth + 1));
-                }
-                continue;
-            }
-            if (slot.kind() == PerlOwnerSlot.Kind.HASH_ALIAS_CELL) {
-                RuntimeHash hashOwner = slot.hashAliasOwner();
-                if (hashOwner != null && value instanceof RuntimeScalar scalar
-                        && DestroyDispatch.isCurrentPerlOwnerSlot(value, slot)
-                        && hashOwner.ownsHashAliasCellOwner(slot, scalar)) {
-                    todo.addLast(new TemporaryRootOwnerAncestor(hashOwner, depth + 1));
-                }
-                continue;
-            }
-            if (slot.kind() == PerlOwnerSlot.Kind.CODE_PAD_CONSTANT) {
-                if (DestroyDispatch.isCurrentPerlOwnerSlot(value, slot)) {
-                    for (RuntimeBase codeOwner : slot.endBoundaryOwnerSources()) {
-                        if (codeOwner instanceof RuntimeCode) {
-                            todo.addLast(new TemporaryRootOwnerAncestor(codeOwner, depth + 1));
-                        }
-                    }
-                }
-                continue;
-            }
-            if (slot.kind() == PerlOwnerSlot.Kind.UNTRACKED_REFERENCE) {
-                RuntimeScalar scalarOwner = slot.untrackedScalarOwner();
-                if (scalarOwner != null
-                        && DestroyDispatch.isCurrentPerlOwnerSlot(value, slot)) {
-                    RuntimeBase container = scalarOwner.currentTemporaryRootAggregateOwner(
-                            value, slot);
-                    // A current aggregate edge can prove the owner chain at
-                    // the container. Otherwise a direct root edge to this
-                    // scalar cell still proves its current untracked value.
-                    todo.addLast(new TemporaryRootOwnerAncestor(
-                            container == null ? scalarOwner : container, depth + 1));
-                }
-                continue;
-            }
-            RuntimeScalar scalarOwner = switch (slot.kind()) {
-                case ARRAY_ELEMENT, HASH_ELEMENT -> slot.countedScalarOwner();
-                default -> null;
-            };
-            if (scalarOwner == null) continue;
-            RuntimeBase container = scalarOwner.currentTemporaryRootAggregateOwner(value, slot);
-            if (container != null) {
-                todo.addLast(new TemporaryRootOwnerAncestor(container, depth + 1));
-            }
-        }
     }
 
     /**
@@ -2707,7 +1588,7 @@ public class ReachabilityWalker {
             if (hash == target) return true;
             if (seen.add(hash)) todo.addLast(hash);
         }
-        for (RuntimeBase rescued : DestroyDispatch.snapshotRescuedForWalk()) {
+        for (RuntimeBase rescued : DestroyDispatch.snapshotRescuedForDiagnostics()) {
             if (rescued == target) return true;
             if (seen.add(rescued)) todo.addLast(rescued);
         }
@@ -2807,7 +1688,7 @@ public class ReachabilityWalker {
             // Every installed CODE slot is itself a root, but only the
             // cached subset with capture/state edges needs reflective capture
             // traversal. Named subs with empty pads otherwise force this
-            // sweep to inspect every generated implementation object.
+            // diagnostic query to inspect every generated implementation object.
             rootScan: {
                 for (RuntimeScalar codeRef : GlobalVariable.globalCodeRefValuesView()) {
                     if (!seedNonLexicalScalar(codeRef, todo)) break rootScan;
@@ -2832,7 +1713,7 @@ public class ReachabilityWalker {
                     addNonLexical(hash, todo);
                 }
                 if (includeRescued) {
-                    for (RuntimeBase rescued : DestroyDispatch.snapshotRescuedForWalk()) {
+                    for (RuntimeBase rescued : DestroyDispatch.snapshotRescuedForDiagnostics()) {
                         if (!visitExternalEdge()) break rootScan;
                         addNonLexical(rescued, todo);
                     }
@@ -3207,829 +2088,5 @@ public class ReachabilityWalker {
         }
     }
 
-    /** Compatibility no-op: weak observers are cleared by their final owner release. */
-    public static int sweepWeakRefs() {
-        return 0;
-    }
 
-    /** Compatibility no-op: weak observers are cleared by their final owner release. */
-    public static int sweepWeakRefs(boolean quiet) {
-        return 0;
-    }
-
-    /** Compatibility no-op retained for callers of the removed sweep API. */
-    public static int sweepWeakRefs(boolean quiet, boolean forceJvmGc) {
-        return 0;
-    }
-
-    private record WeakSweepPass(int cleared, boolean graphChanged) {}
-
-    private static final int MAX_WITNESS_SWEEP_TARGETS = 64;
-    private static final int MAX_WITNESS_CYCLE_EDGES = 256;
-    private static final int MAX_WEAK_BACKREF_CAPTURE_VISITS = 10_000;
-
-    private record WeakBackrefCaptureSnapshot(Set<RuntimeBase> captured, boolean complete) {
-        boolean protects(RuntimeBase target) {
-            return !complete || captured.contains(target);
-        }
-    }
-
-    private static boolean tryWitnessQuietSweep(
-            boolean quiet, boolean forceJvmGc,
-            Set<RuntimeBase> releasedTargets,
-            ReleasedWeakSweepResult releasedSweepResult,
-            List<RuntimeBase> weakCandidates,
-            List<RuntimeBase> destroyableCandidates,
-            LifecycleRuntimeState runtimeState) {
-        if (!quiet || forceJvmGc || releasedSweepResult != null || !releasedTargets.isEmpty()) {
-            return false;
-        }
-        if (DestroyDispatch.hasRescuedObjects()
-                || runtimeState.currentDestroyTarget != null
-                || runtimeState.sweepPendingAfterOuterDestroy) {
-            return false;
-        }
-        Set<RuntimeBase> targets = Collections.newSetFromMap(new IdentityHashMap<>());
-        targets.addAll(weakCandidates);
-        targets.addAll(destroyableCandidates);
-        if (targets.size() > MAX_WITNESS_SWEEP_TARGETS) return false;
-
-        for (RuntimeBase referent : weakCandidates) {
-            if (referent == null) continue;
-            if (hasDirectCodeRootWitness(referent)) {
-                continue;
-            }
-            ReachabilityWalker.WeakRootWitness witness =
-                    runtimeState.weakSweepRootWitnesses.get(referent);
-            if (witness != null) {
-                if (isCurrentWeakRootWitness(witness)) continue;
-            }
-            if (hasExistingWeakRetentionRule(referent)) continue;
-            BoundedArrayCycleResult cycle = hasBoundedStrongArrayCycle(
-                    referent, MAX_WITNESS_CYCLE_EDGES);
-            if (!cycle.cycle()) return false;
-        }
-        for (RuntimeBase referent : destroyableCandidates) {
-            if (referent == null || referent.destroyFired || referent.currentlyDestroying
-                    || referent.refCount == Integer.MIN_VALUE
-                    || hasExistingDestroyRetentionRule(referent)) {
-                continue;
-            }
-            if (hasDirectCodeRootWitness(referent)) {
-                continue;
-            }
-            ReachabilityWalker.WeakRootWitness witness =
-                    runtimeState.weakSweepRootWitnesses.get(referent);
-            if (witness == null || !isCurrentWeakRootWitness(witness)) return false;
-        }
-        if (!sameIdentityContents(weakCandidates,
-                    WeakRefRegistry.snapshotWeakRefReferents())
-                || !sameIdentityContents(destroyableCandidates,
-                    DestroyDispatch.snapshotDestroyableObjects())) {
-            return false;
-        }
-        runtimeState.weakSweepRootWitnesses.entrySet().removeIf(entry ->
-                !targets.contains(entry.getKey())
-                        && !(entry.getKey() instanceof RuntimeCode
-                        && entry.getValue().liveLexicalScalar()
-                        && isCurrentWeakRootWitness(entry.getValue())));
-        return true;
-    }
-
-    private static boolean sameIdentityContents(
-            List<RuntimeBase> first, List<RuntimeBase> second) {
-        if (first.size() != second.size()) return false;
-        Set<RuntimeBase> identities = Collections.newSetFromMap(new IdentityHashMap<>());
-        identities.addAll(first);
-        for (RuntimeBase value : second) {
-            if (!identities.remove(value)) return false;
-        }
-        return identities.isEmpty();
-    }
-
-    private static boolean hasExistingWeakRetentionRule(RuntimeBase referent) {
-        if (referent.hasSemanticCaptureOwner() || referent.hasCallTransferOwner()
-                || referent.hasScalarCellOwner()) return true;
-        if ((referent instanceof RuntimeHash || referent instanceof RuntimeArray)
-                && referent.localBindingExists) return true;
-        if (referent instanceof RuntimeScalar scalar) {
-            return scalar.type == RuntimeScalarType.UNDEF
-                    || ((scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                    && scalar.value instanceof RuntimeCode);
-        }
-        return false;
-    }
-
-    private static boolean hasExistingDestroyRetentionRule(RuntimeBase referent) {
-        return referent.hasSemanticCaptureOwner() || referent.hasCallTransferOwner()
-                || referent.hasScalarCellOwner()
-                || ((referent instanceof RuntimeHash || referent instanceof RuntimeArray)
-                && referent.localBindingExists);
-    }
-
-    private static boolean hasDirectCodeRootWitness(RuntimeBase referent) {
-        if (!(referent instanceof RuntimeCode code)) return false;
-        if (GlobalVariable.installedGlobalCodeRefsView().contains(code)) return true;
-        for (RuntimeCode active : PerlRuntime.current().executionState().activeCodeStack) {
-            if (active == code) return true;
-        }
-        return false;
-    }
-
-    private static boolean isCurrentWeakRootWitness(WeakRootWitness witness) {
-        RuntimeCode rootCode = witness == null ? null : witness.rootCode().get();
-        RuntimeBase capturedAggregate = witness == null ? null : witness.capturedAggregate().get();
-        RuntimeScalar ownerScalar = witness == null ? null : witness.ownerScalar().get();
-        RuntimeBase referent = witness == null ? null : witness.referent().get();
-        if (witness != null && witness.liveLexicalScalar()) {
-            return ownerScalar != null && referent != null
-                    && MyVarCleanupStack.isLive(ownerScalar)
-                    && !ownerScalar.scopeExited
-                    && !WeakRefRegistry.isweak(ownerScalar)
-                    && (ownerScalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                    && ownerScalar.value == referent;
-        }
-        if (witness == null
-                || rootCode == null || capturedAggregate == null || ownerScalar == null
-                || referent == null
-                || !GlobalVariable.installedGlobalCodeRefsView().contains(rootCode)
-                || !rootCode.captureFieldsRecorded
-                || !(capturedAggregate instanceof RuntimeArray array)
-                || !isSupportedWitnessArray(array)
-                || WeakRefRegistry.isweak(ownerScalar)
-                || (ownerScalar.type & RuntimeScalarType.REFERENCE_BIT) == 0
-                || ownerScalar.value != referent) {
-            return false;
-        }
-        boolean captureStillInstalled = false;
-        if (rootCode.capturedAggregates != null) {
-            for (RuntimeBase captured : rootCode.capturedAggregates) {
-                if (captured == array) {
-                    captureStillInstalled = true;
-                    break;
-                }
-            }
-        }
-        if (!captureStillInstalled) return false;
-        for (RuntimeScalar slot : array.elements) {
-            if (slot == ownerScalar) return true;
-        }
-        return false;
-    }
-
-    private static WeakSweepPass sweepWeakRefsPass(
-            boolean quiet, boolean forceJvmGc,
-            Set<RuntimeBase> releasedTargets,
-            ReleasedWeakSweepResult releasedSweepResult) {
-        if (!WeakRefRegistry.weakRefsExist()) return new WeakSweepPass(0, false);
-        if (forceJvmGc) {
-            ScalarRefRegistry.forceGcAndSnapshot();
-        }
-        if (!quiet) {
-            // Explicit sweeps drain rescued objects. Quiet auto-sweeps run
-            // during user workflows and must not clear DBIC Schema rescue
-            // links while later chained calls still rely on them.
-            DestroyDispatch.clearRescuedWeakRefs();
-        }
-        LifecycleRuntimeState runtimeState = PerlRuntime.current().lifecycleState;
-        ArrayList<RuntimeBase> weakWitnessCandidates =
-                new ArrayList<>(WeakRefRegistry.snapshotWeakRefReferents());
-        releaseUnreachableScopeExitedCaptureOwners(weakWitnessCandidates, null);
-        ArrayList<RuntimeBase> destroyableWitnessCandidates = null;
-        if (quiet) {
-            destroyableWitnessCandidates = DestroyDispatch.snapshotDestroyableObjects();
-            if (tryWitnessQuietSweep(quiet, forceJvmGc, releasedTargets,
-                    releasedSweepResult, weakWitnessCandidates,
-                    destroyableWitnessCandidates, runtimeState)) {
-                return new WeakSweepPass(0, false);
-            }
-        }
-        boolean reuseReleasedSweep = !forceJvmGc
-                && releasedSweepResult != null
-                && releasedSweepResult.live() != null;
-        ReachabilityWalker fullWalker = null;
-        Set<RuntimeBase> live;
-        if (reuseReleasedSweep) {
-            live = releasedSweepResult.live();
-            runtimeState.weakSweepRootWitnesses.clear();
-        } else if (quiet) {
-            Set<RuntimeBase> witnessTargets =
-                    Collections.newSetFromMap(new IdentityHashMap<>());
-            witnessTargets.addAll(weakWitnessCandidates);
-            witnessTargets.addAll(destroyableWitnessCandidates);
-            fullWalker = new ReachabilityWalker().withWeakWitnessTargets(witnessTargets);
-            live = fullWalker.walk();
-            runtimeState.weakSweepRootWitnesses.clear();
-            runtimeState.weakSweepRootWitnesses.putAll(fullWalker.discoveredWeakRootWitnesses);
-        } else {
-            runtimeState.weakSweepRootWitnesses.clear();
-            fullWalker = new ReachabilityWalker();
-            live = fullWalker.walk();
-        }
-        ArrayList<RuntimeBase> toClear = new ArrayList<>();
-        Set<RuntimeBase> strongCycleProtected = quiet
-                ? (reuseReleasedSweep
-                    ? releasedSweepResult.strongCycleProtected()
-                    : collectStrongCycleProtected(live))
-                : Collections.emptySet();
-        Set<RuntimeBase> countedStrongOwners = releasedSweepResult == null
-                ? Collections.emptySet()
-                : releasedSweepResult.countedStrongOwners();
-        for (RuntimeBase referent : WeakRefRegistry.snapshotWeakRefReferents()) {
-            boolean liveReferent = live.contains(referent);
-            traceWeakReferent(referent, liveReferent, strongCycleProtected.contains(referent));
-            // Semantic closure ownership is an explicit Perl edge.  It is not
-            // necessarily visible to this conservative graph walk because
-            // generated closure fields and metadata are intentionally opaque.
-            if (!liveReferent && (referent.hasSemanticCaptureOwner()
-                    || referent.hasCallTransferOwner() || referent.hasScalarCellOwner())) {
-                continue;
-            }
-            // A live owner-slot identity is already the Perl refcount proof for
-            // this referent. In particular, a strong ARRAY_ELEMENT or
-            // HASH_ELEMENT slot protects a child even when the conservative
-            // root walk cannot see the generated closure that owns its parent.
-            if (!liveReferent && referent.hasOwnerSlots()) {
-                continue;
-            }
-            if (!liveReferent && hasCapturedAggregateElementOwner(referent)) {
-                continue;
-            }
-            boolean localBinding = (referent instanceof RuntimeHash || referent instanceof RuntimeArray)
-                    && referent.localBindingExists;
-            boolean cycleProtected = quiet && strongCycleProtected.contains(referent);
-            if (!liveReferent) {
-                // A named hash/array lexical (`my %h`, `my @a`) is NOT a
-                // walker root — the walker only seeds from globals and
-                // ScalarRefRegistry (scalars). If `\%h` was weakened,
-                // `%h` itself does not appear in any walker seed set,
-                // so it is trivially "unreachable" — but the lexical
-                // slot is still alive. Guard: localBindingExists=true
-                // means the named Perl lexical still holds this
-                // container alive; skip clearing weak refs to it.
-                // Scope exit (scopeExitCleanupHash/Array) will clear
-                // the flag and let a later sweep reap it if truly dead.
-                // Fixes op/hashassign.t 218 (bug #76716).
-                if (localBinding) {
-                    continue;
-                }
-                // Phase I (52leaks/60core): skip clearing weak refs to
-                // scalars that hold CODE refs, or scalars that are already
-                // UNDEF. These are commonly Sub::Quote/Sub::Defer
-                // `$unquoted` / `$undeferred` lexical slots — empty
-                // scalars to be filled with a compiled sub on first
-                // invocation, OR already holding the compiled sub.
-                // Clearing their weak refs breaks the re-dispatch chain
-                // (`$$_UNQUOTED = sub { ... }` loses its slot, producing
-                // "Not a CODE reference" at later dispatch points).
-                // clearWeakRefsTo(RuntimeCode) is already a no-op for
-                // CODE values themselves, but a weak ref pointing AT a
-                // scalar that holds a CODE is a different target and
-                // needs this explicit skip.
-                if (referent instanceof RuntimeScalar s) {
-                    if (s.type == RuntimeScalarType.UNDEF) continue;
-                    if ((s.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                            && s.value instanceof RuntimeCode) {
-                        continue;
-                    }
-                }
-                // Quiet auto-sweeps run at statement boundaries. Do not clear
-                // weak refs into, or strongly reachable from, a strong cycle:
-                // Perl's refcounting keeps such cycle islands alive. This
-                // covers callback-retained futures where the outer future is
-                // cyclic and inner sequence futures are strong children.
-                if (cycleProtected) {
-                    continue;
-                }
-                // The released-referent pass has a narrower guard for strong
-                // counted owners which the lexical/root walk cannot see. When
-                // that pass and the periodic global sweep share a snapshot,
-                // preserve the same guard for those requested targets.
-                if (releasedTargets.contains(referent)
-                        && referent.refCount > 0
-                        && countedStrongOwners.contains(referent)) {
-                    continue;
-                }
-                toClear.add(referent);
-            }
-        }
-        for (RuntimeBase referent : DestroyDispatch.snapshotDestroyableObjects()) {
-            if (referent == null
-                    || referent.destroyFired
-                    || referent.currentlyDestroying
-                    || referent.refCount == Integer.MIN_VALUE) {
-                continue;
-            }
-            if (live.contains(referent)) {
-                continue;
-            }
-            if (referent.hasSemanticCaptureOwner() || referent.hasCallTransferOwner()
-                    || referent.hasScalarCellOwner()) {
-                continue;
-            }
-            if (hasCapturedAggregateElementOwner(referent)) {
-                continue;
-            }
-            if ((referent instanceof RuntimeHash || referent instanceof RuntimeArray)
-                    && referent.localBindingExists) {
-                continue;
-            }
-            if (!toClear.contains(referent)) {
-                toClear.add(referent);
-            }
-        }
-        int cleared = 0;
-        boolean graphChanged = false;
-        Set<RuntimeBase> previousSweepLiveReferents = runtimeState.weakSweepLiveReferents;
-        runtimeState.weakSweepLiveReferents = live;
-        try {
-            for (RuntimeBase referent : toClear) {
-                // Phase I: auto-sweep (quiet) now fires DESTROY on blessed
-                // unreachable objects and sets refCount=MIN_VALUE — matching
-                // non-quiet jperl_gc behaviour. Previously quiet mode was
-                // more conservative to avoid mid-module-init DESTROY cascades,
-                // but Phase B2a's ModuleInitGuard already protects against
-                // that, and Phase I's walker seed filters ensure we only
-                // DESTROY genuinely unreachable objects. Without this,
-                // DBICTest::Artist and similar rows held only by
-                // Sub::Quote-generated internal caches never clear their
-                // weak refs between auto-sweeps.
-                if (referent.blessId != 0 && !referent.destroyFired
-                        && referent.refCount != Integer.MIN_VALUE) {
-                    referent.refCount = Integer.MIN_VALUE;
-                    DestroyDispatch.callDestroy(referent);
-                    graphChanged = true;
-                } else {
-                    WeakRefRegistry.clearWeakRefsTo(referent);
-                    if (referent.refCount != Integer.MIN_VALUE) {
-                        referent.refCount = Integer.MIN_VALUE;
-                    }
-                }
-                cleared++;
-            }
-        } finally {
-            runtimeState.weakSweepLiveReferents = previousSweepLiveReferents;
-        }
-        return new WeakSweepPass(cleared, graphChanged);
-    }
-
-    /**
-     * Drop semantic capture slots whose declaring pad has exited and is no
-     * longer reachable from Perl roots. A stale closure can otherwise keep
-     * its referent in {@code positiveOwnerReferents}; the sweep then mistakes
-     * that bookkeeping root for a live Perl owner and never clears weak refs.
-     */
-    static void releaseUnreachableScopeExitedCaptureOwners(
-            List<RuntimeBase> weakReferents, Set<RuntimeBase> endReachable) {
-        releaseUnreachableScopeExitedCaptureOwners(weakReferents, endReachable, null);
-    }
-
-    private static void releaseUnreachableScopeExitedCaptureOwners(
-            List<RuntimeBase> weakReferents,
-            Set<RuntimeBase> endReachable,
-            Set<RuntimeBase> statementBoundaryCandidates) {
-        Set<RuntimeBase> retainedByEnd = endReachable;
-        ScalarRootReachabilitySnapshot scalarRoots = null;
-        for (RuntimeBase referent : weakReferents) {
-            for (PerlOwnerSlot slot : referent.ownerSlotSnapshot()) {
-                RuntimeScalar padCell = slot.padCell();
-                if (padCell == null || !padCell.scopeExited || slot.referent() != referent) {
-                    continue;
-                }
-
-                if (releaseExplicitCaptureOwners(padCell, referent, endReachable)) continue;
-
-                if (retainedByEnd == null) retainedByEnd = walkEndBlockRoots();
-                boolean padInEnd = retainedByEnd.contains(padCell);
-                boolean referentInEnd = retainedByEnd.contains(referent);
-                if (scalarRoots == null) scalarRoots = scalarReachabilitySnapshot();
-                boolean padInScalarRoots = scalarRoots.isReachable(padCell);
-                if (padInScalarRoots && statementBoundaryCandidates != null
-                        && containsAnyCandidate(referent, statementBoundaryCandidates)
-                        && findPathTo(padCell, false, false) == null) {
-                    padInScalarRoots = false;
-                }
-                if (padInEnd || referentInEnd || padInScalarRoots) continue;
-                if (WALKER_TRACE_CLASS != null && !WALKER_TRACE_CLASS.isEmpty()) {
-                    String className = NameNormalizer.getBlessStr(referent.blessId);
-                    if (className != null && className.contains(WALKER_TRACE_CLASS)) {
-                        System.err.println("[WALKER_CAPTURE_RELEASE] target=" + className + "@"
-                                + System.identityHashCode(referent)
-                                + " slot=" + slot.identity()
-                                + " pad=" + System.identityHashCode(padCell)
-                                + " captureCount=" + padCell.captureCount
-                                + " legacyCaptures=" + slot.legacyCaptureCount());
-                    }
-                }
-                padCell.releaseUnreachableSemanticCaptureOwner();
-            }
-        }
-    }
-
-    /**
-     * Retire scope-exited captures through their CODE owner slots when every
-     * capture of this pad has an explicit owner identity. Return false when a
-     * compatibility-only capture remains, so the legacy root proof can still
-     * protect it.
-     */
-    private static boolean releaseExplicitCaptureOwners(
-            RuntimeScalar padCell, RuntimeBase referent, Set<RuntimeBase> endReachable) {
-        ArrayList<PerlOwnerSlot> captureSlots = new ArrayList<>();
-        for (PerlOwnerSlot captureSlot : padCell.ownerSlotSnapshot()) {
-            if (captureSlot.kind() == PerlOwnerSlot.Kind.SCALAR_CAPTURE
-                    && captureSlot.referent() == padCell) {
-                captureSlots.add(captureSlot);
-            }
-        }
-        int padCaptureCount = padCell.captureCount;
-        if (captureSlots.isEmpty()) return false;
-
-        boolean allCapturesExplicit = padCell.legacyCaptureOwnerCount() == 0
-                && captureSlots.size() == padCell.ownerSlotCount(
-                        PerlOwnerSlot.Kind.SCALAR_CAPTURE);
-        for (PerlOwnerSlot captureSlot : captureSlots) {
-            RuntimeCode captureOwner = captureSlot.captureOwner();
-            if (captureOwner == null) {
-                allCapturesExplicit = false;
-                continue;
-            }
-            if (captureOwner.hasPerlOwnerForCapture()) continue;
-            if (endReachable != null
-                    && (endReachable.contains(padCell) || endReachable.contains(referent))) continue;
-            if (WALKER_TRACE_CLASS != null && !WALKER_TRACE_CLASS.isEmpty()) {
-                String className = NameNormalizer.getBlessStr(referent.blessId);
-                if (className != null && className.contains(WALKER_TRACE_CLASS)) {
-                    System.err.println("[WALKER_CAPTURE_RELEASE] target=" + className + "@"
-                            + System.identityHashCode(referent)
-                            + " slot=" + captureSlot.identity()
-                            + " pad=" + System.identityHashCode(padCell)
-                            + " captureCount=" + padCaptureCount
-                            + " owner=" + System.identityHashCode(captureOwner)
-                            + " ownerless=true");
-                }
-            }
-            captureOwner.releaseCaptures();
-        }
-        return allCapturesExplicit;
-    }
-
-    private static boolean containsAnyCandidate(
-            RuntimeBase root, Set<RuntimeBase> candidates) {
-        Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
-        java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
-        todo.add(root);
-        while (!todo.isEmpty()) {
-            RuntimeBase current = todo.removeFirst();
-            if (!seen.add(current)) continue;
-            if (candidates.contains(current)) return true;
-            if (current instanceof RuntimeHash hash) {
-                for (RuntimeScalar value : hash.elements.values()) {
-                    if (value != null) todo.addLast(value);
-                }
-            } else if (current instanceof RuntimeArray array) {
-                for (RuntimeScalar value : array.elements) {
-                    if (value != null) todo.addLast(value);
-                }
-            } else if (current instanceof RuntimeScalar scalar) {
-                if (!WeakRefRegistry.isweak(scalar)
-                        && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                        && scalar.value instanceof RuntimeBase referent) {
-                    todo.addLast(referent);
-                }
-            } else if (current instanceof RuntimeCode code) {
-                if (code.closedOverVariables != null) {
-                    todo.addAll(code.closedOverVariables.values());
-                }
-                if (code.capturedScalars != null) {
-                    Collections.addAll(todo, code.capturedScalars);
-                }
-                if (code.capturedAggregates != null) {
-                    Collections.addAll(todo, code.capturedAggregates);
-                }
-                visitReflectiveCodeScalars(code, todo::addLast);
-                visitReflectiveCodeBases(code, todo::addLast);
-            } else if (current instanceof RuntimeRegex regex) {
-                todo.addAll(regex.executableCallbackCodes());
-            }
-        }
-        return false;
-    }
-
-    private static void traceWeakReferent(
-            RuntimeBase referent, boolean live, boolean cycleProtected) {
-        String filter = WALKER_TRACE_CLASS;
-        if (filter == null || filter.isEmpty() || referent.blessId == 0) return;
-        String className = NameNormalizer.getBlessStr(referent.blessId);
-        if (className == null || !className.contains(filter)) return;
-        List<String> path = live ? findPathTo(referent) : null;
-        String pathText = !live ? "<unreachable>"
-                : path == null ? "<path-not-found>"
-                : path.isEmpty() ? "<empty-path>" : String.join(" -> ", path);
-        ArrayList<String> ownerSlots = new ArrayList<>();
-        for (PerlOwnerSlot slot : referent.ownerSlotSnapshot()) {
-            RuntimeScalar padCell = slot.padCell();
-            ownerSlots.add(slot.identity()
-                    + ":native=" + slot.isNativeCaptureOwner()
-                    + ":legacy=" + slot.legacyCaptureCount()
-                    + ":pad=" + (padCell == null ? "none" : System.identityHashCode(padCell))
-                    + ":padLive=" + (padCell != null && isScalarReachable(padCell)));
-        }
-        System.err.println("[WALKER_TRACE] target=" + className + "@"
-                + System.identityHashCode(referent)
-                + " refCount=" + referent.refCount
-                + " live=" + live
-                + " cycleProtected=" + cycleProtected
-                + " countedScalarOwners=" + referent.activeOwnerCount()
-                + " ownerSlots=" + referent.ownerSlotSnapshot().size()
-                + " ownerSlotDetails=" + ownerSlots
-                + " semanticCapture=" + referent.hasSemanticCaptureOwner()
-                + " path=" + pathText);
-    }
-
-    /**
-     * Reconsider only referents explicitly released by {@code undef}. This is
-     * safe to run at a nested statement boundary because it cannot clear weak
-     * references belonging to unrelated in-flight return values.
-     */
-    record ReleasedWeakSweepResult(
-            Set<RuntimeBase> live,
-            Set<RuntimeBase> strongCycleProtected,
-            Set<RuntimeBase> countedStrongOwners,
-            int cleared) {}
-
-    public static ReleasedWeakSweepResult sweepReleasedWeakReferents(
-            Set<RuntimeBase> referents) {
-        if (referents == null || referents.isEmpty()) {
-            return new ReleasedWeakSweepResult(null, Collections.emptySet(),
-                    Collections.emptySet(), 0);
-        }
-        Set<RuntimeBase> pending = Collections.newSetFromMap(new IdentityHashMap<>());
-        for (RuntimeBase referent : referents) {
-            if (referent == null || referent.currentlyDestroying) continue;
-            // Normal decrement-to-zero destruction already clears the
-            // referent's weak observers and recursively releases contained
-            // objects in DestroyDispatch.callDestroy().  Re-walking every
-            // root after that completed path is both redundant and quadratic
-            // for object trees such as PPI's AST.  A rescued object is handled
-            // by the rescue-specific cleanup path after the assignment.
-            if (referent.destroyFired || referent.refCount == Integer.MIN_VALUE) continue;
-            pending.add(referent);
-        }
-        if (pending.isEmpty()) {
-            return new ReleasedWeakSweepResult(null, Collections.emptySet(),
-                    Collections.emptySet(), 0);
-        }
-
-        // A registered, live, nonweak scalar with an owned direct reference,
-        // or any active explicit owner slot, is a direct Perl strong-owner
-        // proof. If every released target has one, no graph traversal is
-        // needed to preserve those targets. Uncounted references still use
-        // the full reachability walk below.
-        Set<RuntimeBase> directlyOwned =
-                Collections.newSetFromMap(new IdentityHashMap<>());
-        for (RuntimeBase referent : pending) {
-            if (referent.hasDirectOwnerSlotProofForReleasedWeakReferent()) {
-                directlyOwned.add(referent);
-            }
-        }
-        if (directlyOwned.containsAll(pending)) {
-            return new ReleasedWeakSweepResult(null, Collections.emptySet(),
-                    directlyOwned, 0);
-        }
-
-        // Owner-slot identities cover the migrated scalar, element, capture,
-        // and call-transfer families. Only take the legacy scalar registry
-        // snapshot for targets that still need its compatibility proof.
-        for (RuntimeScalar owner : ScalarRefRegistry.snapshot()) {
-            if (owner == null || !owner.refCountOwned || owner.scopeExited
-                    || !MyVarCleanupStack.isLive(owner) || WeakRefRegistry.isweak(owner)
-                    || (owner.type & RuntimeScalarType.REFERENCE_BIT) == 0
-                    || !(owner.value instanceof RuntimeBase target)) {
-                continue;
-            }
-            if (pending.contains(target)) directlyOwned.add(target);
-        }
-        if (directlyOwned.containsAll(pending)) {
-            return new ReleasedWeakSweepResult(null, Collections.emptySet(),
-                    directlyOwned, 0);
-        }
-
-        // A package or live lexical path is sufficient to retain a target in
-        // this targeted release sweep. Prove those common positive cases from
-        // the shared root snapshots before constructing a full walker; the
-        // remaining targets still use the conservative full-root analysis.
-        Set<RuntimeBase> snapshotReachable =
-                Collections.newSetFromMap(new IdentityHashMap<>());
-        for (RuntimeBase referent : pending) {
-            if (MortalList.isReachableFromPersistentRootCached(referent)) {
-                snapshotReachable.add(referent);
-            }
-        }
-        if (snapshotReachable.containsAll(pending)) {
-            return new ReleasedWeakSweepResult(null, Collections.emptySet(),
-                    snapshotReachable, 0);
-        }
-
-        // A single released target that forms its own strong cycle is known
-        // alive by Perl's refcount semantics. The full weak sweep would keep
-        // this referent through collectStrongCycleProtected() after traversing
-        // every runtime root. Resolve this exact target directly and leave
-        // unrelated registry entries for their normal sweep cadence.
-        if (pending.size() == 1) {
-            RuntimeBase only = pending.iterator().next();
-            if (only.blessId == 0 && hasStrongCycle(only)) {
-                Set<RuntimeBase> cycleProtected =
-                        Collections.newSetFromMap(new IdentityHashMap<>());
-                collectStrongReachable(only, cycleProtected);
-                return new ReleasedWeakSweepResult(null, cycleProtected,
-                        Collections.emptySet(), 0);
-            }
-        }
-        Set<RuntimeBase> live = new ReachabilityWalker()
-                .withTemporaryRoots(false)
-                .walk();
-        Set<RuntimeBase> countedStrongOwners =
-                Collections.newSetFromMap(new IdentityHashMap<>());
-        for (RuntimeScalar owner : ScalarRefRegistry.snapshot()) {
-            if (owner == null || !owner.refCountOwned || WeakRefRegistry.isweak(owner)) continue;
-            // Hash/array slots in a discarded aggregate are internal owners of
-            // that graph, not independent roots. Keep their referents only when
-            // the containing aggregate is still reachable or was not part of
-            // this explicitly released graph.
-            if (owner.containerOwner != null
-                    && referents.contains(owner.containerOwner)
-                    && !live.contains(owner.containerOwner)) {
-                continue;
-            }
-            if (owner.value instanceof RuntimeBase referent && referents.contains(referent)) {
-                countedStrongOwners.add(referent);
-            }
-        }
-        // Targeted release sweeps run at the same quiet statement boundary as
-        // sweepWeakRefs(true). Preserve strong cycle islands here too: Perl's
-        // reference counting intentionally keeps an unreachable strong cycle
-        // alive, including weak diagnostic references into that cycle.
-        Set<RuntimeBase> strongCycleProtected = collectStrongCycleProtected(live);
-        int cleared = 0;
-        boolean releasedObjectNeedsCascade = false;
-        boolean releasedGraphChanged = false;
-        for (RuntimeBase referent : pending) {
-            if (referent == null || referent.currentlyDestroying) {
-                continue;
-            }
-            // Native closure-pad slots are explicit Perl owners, even when the
-            // conservative root walk cannot see the generated closure fields.
-            // Match sweepWeakRefs() above: a targeted release of another edge
-            // must not destroy an aggregate still captured by a live closure.
-            if (referent.hasOwnerSlots() || referent.hasSemanticCaptureOwner()
-                    || referent.hasCallTransferOwner() || referent.hasScalarCellOwner()) continue;
-            // A targeted release only means that one explicit owner went
-            // away. Other counted owners can still hold the referent through
-            // local aggregate slots that are not represented in the lexical
-            // root walk (notably file-scope my arrays and hashes). Preserve
-            // those objects until their counted owners release them.
-            if (referent.refCount > 0 && countedStrongOwners.contains(referent)) continue;
-            if (live.contains(referent)) continue;
-            if (strongCycleProtected.contains(referent)) continue;
-            if ((referent instanceof RuntimeHash || referent instanceof RuntimeArray)
-                    && referent.localBindingExists) {
-                continue;
-            }
-            if (referent.blessId != 0) {
-                referent.refCount = Integer.MIN_VALUE;
-                DestroyDispatch.callDestroy(referent);
-                releasedGraphChanged = true;
-            } else {
-                WeakRefRegistry.clearWeakRefsTo(referent);
-                referent.refCount = Integer.MIN_VALUE;
-            }
-            cleared++;
-            releasedObjectNeedsCascade = true;
-        }
-
-        // Destruction can remove the last strong edge to another weakly
-        // observed object (a tied hash wrapper -> handler -> external hash is
-        // one example). Reachability snapshots are intentionally immutable,
-        // so iterate to a fixed point after this explicit release.
-        if (releasedObjectNeedsCascade) {
-            for (int pass = 0; pass < 8; pass++) {
-                // This is still an automatic, statement-boundary sweep. Keep
-                // DESTROY-rescued objects pinned; the targeted release above
-                // must not drain unrelated (or newly rescued) object graphs.
-                // Clearing only unblessed weak aliases cannot change the
-                // strong root graph, so reuse the targeted pass's snapshot.
-                // A DESTROY call can mutate that graph; only then rebuild it.
-                ReleasedWeakSweepResult reusableSnapshot = releasedGraphChanged
-                        ? null
-                        : new ReleasedWeakSweepResult(live, strongCycleProtected,
-                                countedStrongOwners, cleared);
-                WeakSweepPass passResult = sweepWeakRefsPass(
-                        true, false, referents, reusableSnapshot);
-                cleared += passResult.cleared();
-                releasedGraphChanged |= passResult.graphChanged();
-                if (passResult.cleared() == 0 || !passResult.graphChanged()) break;
-            }
-        }
-        // A clear or DESTROY can change the root graph. Only share these
-        // snapshots with a same-boundary global sweep when the targeted pass
-        // made no such change.
-        return new ReleasedWeakSweepResult(
-                releasedGraphChanged ? null : live,
-                releasedGraphChanged ? null : strongCycleProtected,
-                countedStrongOwners,
-                cleared);
-    }
-
-    private static Set<RuntimeBase> collectStrongCycleProtected(Set<RuntimeBase> live) {
-        java.util.List<RuntimeBase> referents = WeakRefRegistry.snapshotWeakRefReferents();
-        if (referents.isEmpty()) return Collections.emptySet();
-
-        Set<RuntimeBase> protectedSet =
-                Collections.newSetFromMap(new IdentityHashMap<>());
-        for (RuntimeBase referent : referents) {
-            // A root-reachable referent and its strong descendants are already
-            // represented by the main sweep walk. Cycle checks are only needed
-            // for weak targets that would otherwise be mistaken for dead
-            // cycle islands.
-            if (referent == null || live.contains(referent) || protectedSet.contains(referent)) {
-                continue;
-            }
-            if (hasStrongCycle(referent)) {
-                collectStrongReachable(referent, protectedSet);
-            }
-        }
-        return protectedSet;
-    }
-
-    static Set<RuntimeBase> strongCycleProtectedReferents() {
-        return collectStrongCycleProtected(Collections.emptySet());
-    }
-
-    private static void collectStrongReachable(RuntimeBase root, Set<RuntimeBase> seen) {
-        final int MAX_VISITS = 50_000;
-        java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
-        if (seen.add(root)) {
-            todo.addLast(root);
-        }
-
-        int visits = 0;
-        while (!todo.isEmpty() && visits < MAX_VISITS) {
-            RuntimeBase cur = todo.removeFirst();
-            visits++;
-            enqueueStrongEdges(cur, null, seen, todo);
-        }
-    }
-
-    private static WeakBackrefCaptureSnapshot weakBackrefCaptureSnapshot() {
-        ReachabilityQueryStats stats = MortalList.activeReachabilityQueryStats();
-        if (stats != null) stats.weakBackrefCaptureSnapshotsBuilt++;
-        Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
-        java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
-        RootWalkBudget budget = new RootWalkBudget(MAX_ROOT_SNAPSHOT_EDGES);
-        for (RuntimeBase referent : WeakRefRegistry.snapshotWeakRefReferents()) {
-            if (referent instanceof RuntimeCode code
-                    && WeakRefRegistry.hasWeakRefsTo(code)) {
-                if (stats != null) stats.weakBackrefCaptureRootsWalked++;
-                followGlobalCodeCaptures(code, null, seen, todo, budget);
-                if (!budget.complete) break;
-            }
-        }
-        int visits = 0;
-        while (!todo.isEmpty() && visits < MAX_WEAK_BACKREF_CAPTURE_VISITS) {
-            RuntimeBase cur = todo.removeFirst();
-            visits++;
-            if (stats != null) stats.weakBackrefCaptureNodesVisited++;
-            if (cur instanceof RuntimeStash) {
-                continue;
-            } else if (cur instanceof RuntimeHash h) {
-                if (h.elements instanceof HashSpecialVariable) continue;
-                for (RuntimeScalar v : h.elements.values()) {
-                    if (!budget.visitEdge()) break;
-                    if (stats != null) stats.weakBackrefCaptureEdgesInspected++;
-                    followScalar(v, null, seen, todo);
-                }
-            } else if (cur instanceof RuntimeArray a) {
-                for (RuntimeScalar v : a.elements) {
-                    if (!budget.visitEdge()) break;
-                    if (stats != null) stats.weakBackrefCaptureEdgesInspected++;
-                    followScalar(v, null, seen, todo);
-                }
-            } else if (cur instanceof RuntimeCode nestedCode) {
-                followGlobalCodeCaptures(nestedCode, null, seen, todo, budget);
-            } else if (cur instanceof RuntimeScalar s) {
-                if (!budget.visitEdge()) break;
-                if (stats != null) stats.weakBackrefCaptureEdgesInspected++;
-                followScalar(s, null, seen, todo);
-            }
-            if (!budget.complete) break;
-        }
-        boolean complete = budget.complete
-                && todo.isEmpty() && visits < MAX_WEAK_BACKREF_CAPTURE_VISITS;
-        return new WeakBackrefCaptureSnapshot(seen, complete);
-    }
-
-    /** Record the legacy post-DESTROY capture diagnostic without cleaning objects. */
-    static void inspectWeakBackrefCapturesForDiagnostics() {
-        weakBackrefCaptureSnapshot();
-    }
 }

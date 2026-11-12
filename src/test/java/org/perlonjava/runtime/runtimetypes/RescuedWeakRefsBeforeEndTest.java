@@ -10,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Tag("unit")
 class RescuedWeakRefsBeforeEndTest {
     @Test
-    void preEndBoundaryKeepsWeakObserversForStrongCycleOwners() {
+    void preEndBoundaryPreservesObserversForStrongRescuedCycle() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeHash schema = blessedHash("Issue1649::RescuedSchema");
@@ -18,11 +18,11 @@ class RescuedWeakRefsBeforeEndTest {
             RuntimeHash dbh = blessedHash("Issue1649::RescuedDbh");
 
             RuntimeScalar storageEdge = storage.createAnonymousReference();
-            schema.put("storage", storageEdge);
+            storeStrongHashEdge(schema, "storage", storageEdge);
             RuntimeScalar dbhEdge = dbh.createAnonymousReference();
-            storage.put("_dbh", dbhEdge);
+            storeStrongHashEdge(storage, "_dbh", dbhEdge);
             RuntimeScalar schemaBackref = schema.createAnonymousReference();
-            dbh.put("schema", schemaBackref);
+            storeStrongHashEdge(dbh, "schema", schemaBackref);
 
             RuntimeScalar weakSchema = schema.createAnonymousReference();
             RuntimeScalar weakStorage = storage.createAnonymousReference();
@@ -30,8 +30,7 @@ class RescuedWeakRefsBeforeEndTest {
             WeakRefRegistry.weaken(weakSchema);
             WeakRefRegistry.weaken(weakStorage);
             WeakRefRegistry.weaken(weakDbh);
-            schema.destroyFired = true;
-            runtime.lifecycleState.rescuedObjects.add(schema);
+            markRescued(schema);
 
             assertTrue(WeakRefRegistry.isweak(weakSchema));
             assertTrue(WeakRefRegistry.isweak(weakStorage));
@@ -39,14 +38,14 @@ class RescuedWeakRefsBeforeEndTest {
 
             MortalList.flushDeferredCapturesBeforeEnd();
 
-            assertTrue(WeakRefRegistry.isweak(weakSchema), "cycle owner keeps root observer weak");
-            assertTrue(WeakRefRegistry.isweak(weakStorage), "cycle owner keeps Storage observer weak");
-            assertTrue(WeakRefRegistry.isweak(weakDbh), "cycle owner keeps DBH observer weak");
+            assertTrue(WeakRefRegistry.isweak(weakSchema), "strongly owned rescue keeps its observer");
+            assertTrue(WeakRefRegistry.isweak(weakStorage), "strongly owned Storage keeps its observer");
+            assertTrue(WeakRefRegistry.isweak(weakDbh), "strongly owned DBH keeps its observer");
             assertSame(schema, schemaBackref.value, "strong cycle remains available to END");
             assertSame(storage, storageEdge.value);
             assertSame(dbh, dbhEdge.value);
             assertTrue(DestroyDispatch.isRescued(schema), "END still has the rescued root");
-            assertTrue(schema.destroyFired, "END owner processing does not rerun DESTROY");
+            assertTrue(schema.destroyFired, "the pre-existing DESTROY state remains recorded");
         }
     }
 
@@ -58,11 +57,11 @@ class RescuedWeakRefsBeforeEndTest {
             RuntimeScalar weak = rescued.createAnonymousReference();
             WeakRefRegistry.weaken(weak);
             RuntimeHash globalRoot = new RuntimeHash();
-            globalRoot.put("rescued", rescued.createAnonymousReference());
+            storeStrongHashEdge(
+                    globalRoot, "rescued", rescued.createAnonymousReference());
             String globalName = "RescuedWeakRefsBeforeEndTest::globalRoot";
             GlobalVariable.globalHashes.put(globalName, globalRoot);
-            rescued.destroyFired = true;
-            runtime.lifecycleState.rescuedObjects.add(rescued);
+            markRescued(rescued);
 
             try {
                 assertTrue(WeakRefRegistry.isweak(weak));
@@ -90,8 +89,7 @@ class RescuedWeakRefsBeforeEndTest {
             MyVarCleanupStack.register(lexicalOwner);
             RuntimeScalar.incrementRefCountForContainerStore(
                     lexicalOwner, PerlOwnerSlot.Kind.SCALAR_CELL);
-            rescued.destroyFired = true;
-            runtime.lifecycleState.rescuedObjects.add(rescued);
+            markRescued(rescued);
 
             assertTrue(DestroyDispatch.hasLivePerlOwnerIdentity(rescued));
             assertTrue(WeakRefRegistry.isweak(weak));
@@ -110,7 +108,7 @@ class RescuedWeakRefsBeforeEndTest {
             RuntimeHash rescued = blessedHash("Issue1649::NestedRescueRoot");
             RuntimeHash nested = blessedHash("Issue1649::NestedIndependentRoot");
             RuntimeScalar nestedEdge = nested.createAnonymousReference();
-            rescued.put("nested", nestedEdge);
+            storeStrongHashEdge(rescued, "nested", nestedEdge);
 
             RuntimeScalar weakRescued = rescued.createAnonymousReference();
             RuntimeScalar weakNested = nested.createAnonymousReference();
@@ -118,11 +116,11 @@ class RescuedWeakRefsBeforeEndTest {
             WeakRefRegistry.weaken(weakNested);
 
             RuntimeHash globalRoot = new RuntimeHash();
-            globalRoot.put("nested", nested.createAnonymousReference());
+            storeStrongHashEdge(
+                    globalRoot, "nested", nested.createAnonymousReference());
             String globalName = "RescuedWeakRefsBeforeEndTest::nestedGlobalRoot";
             GlobalVariable.globalHashes.put(globalName, globalRoot);
-            rescued.destroyFired = true;
-            runtime.lifecycleState.rescuedObjects.add(rescued);
+            markRescued(rescued);
 
             try {
                 assertTrue(WeakRefRegistry.isweak(weakRescued));
@@ -149,29 +147,19 @@ class RescuedWeakRefsBeforeEndTest {
             RuntimeScalar weak = rescued.createAnonymousReference();
             WeakRefRegistry.weaken(weak);
             RuntimeCode endBlock = new RuntimeCode((args, context) -> new RuntimeList(), null);
-            RuntimeScalar captured = rescued.createAnonymousReference();
-            endBlock.putClosedOverVariable("rescued", captured);
-            endBlock.capturedScalars = new RuntimeScalar[]{captured};
-            endBlock.capturedScalarOwnerSlots = new PerlOwnerSlot[]{
-                    captured.retainClosureCaptureSlot(endBlock)
-            };
+            endBlock.closedOverVariables = new java.util.LinkedHashMap<>();
+            endBlock.closedOverVariables.put("rescued", rescued.createAnonymousReference());
+            retainCapturedAggregate(endBlock, rescued);
             SpecialBlock.saveEndBlock(new RuntimeScalar(endBlock));
-            rescued.destroyFired = true;
-            runtime.lifecycleState.rescuedObjects.add(rescued);
+            markRescued(rescued);
 
-            try {
-                assertTrue(WeakRefRegistry.isweak(weak));
-                MortalList.flushDeferredCapturesBeforeEnd();
+            assertTrue(WeakRefRegistry.isweak(weak));
+            MortalList.flushDeferredCapturesBeforeEnd();
 
-                assertTrue(WeakRefRegistry.isweak(weak),
-                        "a queued END callback keeps its captured object alive");
-                assertSame(rescued, weak.value);
-            } finally {
-                while (!SpecialBlock.getEndBlocks().isEmpty()) {
-                    RuntimeArray.shift(SpecialBlock.getEndBlocks());
-                }
-                endBlock.releaseCaptures();
-            }
+            assertTrue(WeakRefRegistry.isweak(weak),
+                    "a queued END callback keeps its captured object alive");
+            assertSame(rescued, weak.value);
+            endBlock.releaseCaptures();
         }
     }
 
@@ -184,27 +172,19 @@ class RescuedWeakRefsBeforeEndTest {
             WeakRefRegistry.weaken(weak);
             RuntimeCode activeCode = new RuntimeCode(
                     (args, context) -> new RuntimeList(), null);
-            RuntimeScalar captured = rescued.createAnonymousReference();
-            activeCode.putClosedOverVariable("rescued", captured);
-            activeCode.capturedScalars = new RuntimeScalar[]{captured};
-            activeCode.capturedScalarOwnerSlots = new PerlOwnerSlot[]{
-                    captured.retainClosureCaptureSlot(activeCode)
-            };
-            RuntimeCode.pushActiveCode(activeCode);
-            rescued.destroyFired = true;
-            runtime.lifecycleState.rescuedObjects.add(rescued);
+            activeCode.capturedScalars = new RuntimeScalar[]{rescued.createAnonymousReference()};
+            retainCapturedAggregate(activeCode, rescued);
+            runtime.executionState().activeCodeStack.add(activeCode);
+            markRescued(rescued);
 
-            try {
-                assertTrue(WeakRefRegistry.isweak(weak));
-                MortalList.flushDeferredCapturesBeforeEnd();
+            assertTrue(WeakRefRegistry.isweak(weak));
+            MortalList.flushDeferredCapturesBeforeEnd();
 
-                assertTrue(WeakRefRegistry.isweak(weak),
-                        "an active Perl callback keeps its captured object alive");
-                assertSame(rescued, weak.value);
-            } finally {
-                RuntimeCode.popActiveCode(activeCode);
-                activeCode.releaseCaptures();
-            }
+            assertTrue(WeakRefRegistry.isweak(weak),
+                    "an active Perl callback keeps its captured object alive");
+            assertSame(rescued, weak.value);
+            runtime.executionState().activeCodeStack.remove(activeCode);
+            activeCode.releaseCaptures();
         }
     }
 
@@ -215,13 +195,13 @@ class RescuedWeakRefsBeforeEndTest {
             RuntimeHash rescued = blessedHash("Issue1649::RescuedAfterEnd");
             RuntimeScalar weak = rescued.createAnonymousReference();
             WeakRefRegistry.weaken(weak);
-            rescued.destroyFired = true;
-            runtime.lifecycleState.rescuedObjects.add(rescued);
+            markRescued(rescued);
 
             MortalList.flushDeferredCaptures();
 
             assertFalse(WeakRefRegistry.isweak(weak));
-            assertFalse(DestroyDispatch.isRescued(rescued));
+            assertFalse(DestroyDispatch.isRescued(rescued),
+                    "final owner release removes the rescue lifecycle record");
         }
     }
 
@@ -229,5 +209,24 @@ class RescuedWeakRefsBeforeEndTest {
         RuntimeHash hash = new RuntimeHash();
         hash.blessId = NameNormalizer.getBlessId(className);
         return hash;
+    }
+
+    private static void markRescued(RuntimeBase rescued) {
+        rescued.destroyFired = true;
+        PerlRuntime.current().lifecycleState.rescuedObjects.add(rescued);
+    }
+
+    private static void retainCapturedAggregate(RuntimeCode code, RuntimeBase aggregate) {
+        code.capturedAggregates = new RuntimeBase[]{aggregate};
+        code.capturedAggregateOwnerSlots = new PerlOwnerSlot[]{
+                aggregate.retainClosureCaptureOwner(code)
+        };
+    }
+
+    private static void storeStrongHashEdge(
+            RuntimeHash hash, String key, RuntimeScalar owner) {
+        RuntimeScalar.incrementRefCountForContainerStore(
+                owner, PerlOwnerSlot.Kind.HASH_ELEMENT);
+        hash.elements.put(key, owner);
     }
 }

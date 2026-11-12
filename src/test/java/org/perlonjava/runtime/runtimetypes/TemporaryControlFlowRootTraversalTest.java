@@ -3,11 +3,7 @@ package org.perlonjava.runtime.runtimetypes;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
-import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 @Tag("unit")
 class TemporaryControlFlowRootTraversalTest {
@@ -22,17 +18,14 @@ class TemporaryControlFlowRootTraversalTest {
 
             MortalList.pushTemporaryRoot(transfer);
             try {
-                assertTrue(MortalList.temporaryRootDirectlyReferences(referent));
-                assertTrue(ReachabilityWalker.isReachableFromTemporaryRoots(referent));
-                List<String> path = ReachabilityWalker.findPathTo(referent);
-                assertNotNull(path);
-                assertTrue(path.toString().contains("<return-value>"), path.toString());
+                assertEquals(returnedReference, transfer.getReturnValue());
+                assertEquals(1, transfer.ownerSlotCount(
+                        PerlOwnerSlot.Kind.EXPRESSION_TEMPORARY_ROOT));
             } finally {
                 MortalList.popTemporaryRoot(transfer);
             }
-
-            assertFalse(MortalList.temporaryRootDirectlyReferences(referent));
-            assertFalse(ReachabilityWalker.isReachableFromTemporaryRoots(referent));
+            assertEquals(0, transfer.ownerSlotCount(
+                    PerlOwnerSlot.Kind.EXPRESSION_TEMPORARY_ROOT));
         }
     }
 }

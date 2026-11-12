@@ -1,6 +1,5 @@
 package org.perlonjava.runtime.runtimetypes;
 
-import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
@@ -14,9 +13,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class MortalReturnUntrackedOwnerTest {
     @Test
     void untrackedReturnOwnerLivesThroughNestedMortalBoundaryAndReleasesOnce() {
-        Assumptions.assumeFalse(ReachabilityWalker.correctiveSweepsEnabled(),
-                "return-slot ownership must release without corrective sweeps");
-
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeScalar target = new RuntimeScalar("return target");
@@ -46,9 +42,6 @@ class MortalReturnUntrackedOwnerTest {
 
     @Test
     void weaklyTrackedReturnOwnerClearsObserverAfterLastScalarCellLeaves() {
-        Assumptions.assumeFalse(ReachabilityWalker.correctiveSweepsEnabled(),
-                "return-slot ownership must release without corrective sweeps");
-
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeScalar target = new RuntimeScalar("weakly tracked return target");

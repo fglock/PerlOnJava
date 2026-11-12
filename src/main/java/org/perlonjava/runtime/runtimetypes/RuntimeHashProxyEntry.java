@@ -169,7 +169,6 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
     /** Replace this hash slot with an array or hash reference from an aggregate refalias. */
     public RuntimeScalar aliasToAggregateReference(RuntimeScalar reference) {
         if (parent.threadShared) SharedPerlStorage.validateStoredValue(reference);
-        parent.notePackageRootMutation();
         parent.elements.put(key, reference);
         parent.markKeyByte(key, byteKey);
         parent.markPackageRootedValue(reference);
@@ -203,7 +202,6 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
             // saved slot would also clear the object that must be reinstalled
             // at scope exit, losing ordinary `local $hash{key}` values.
             RuntimeScalar localized = new RuntimeScalar();
-            parent.notePackageRootMutation();
             parent.elements.put(key, localized);
             // %ENV wraps slots on insertion.  Re-fetch the installed element
             // so subsequent assignment updates that wrapper rather than the
@@ -234,7 +232,6 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
                 // Re-fetch from parent in case hash was reassigned (setFromList clears elements).
                 RuntimeScalar currentSlot = parent.elements.get(key);
                 boolean currentWasAlias = parent.ownsHashAliasCell(key, currentSlot);
-                parent.notePackageRootMutation();
                 RuntimeScalar current = parent.elements.remove(key);
                 if (current != null) {
                     // The key was created only inside the localized scope.
@@ -260,7 +257,6 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
                 // remains observable after the dynamic scope unwinds.
                 RuntimeScalar currentSlot = parent.elements.get(key);
                 boolean displacedWasAlias = parent.ownsHashAliasCell(key, currentSlot);
-                parent.notePackageRootMutation();
                 boolean savedAliasCell = savedState.aliasOwner() != null;
                 RuntimeScalar displaced = savedAliasCell
                         ? parent.aliasScalarCell(key, previousState)

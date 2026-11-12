@@ -20,7 +20,6 @@ import java.util.concurrent.atomic.AtomicInteger;
  * trigger DESTROY at statement end, not immediately during delete.
  */
 public class MortalList {
-    private static final int MAX_UNBLESSED_AGGREGATE_DRAIN_ROOTS = 50_000;
     private static final AtomicInteger runtimesWithBoundaryWork = new AtomicInteger();
 
     static final class DeferredArgumentOwnerRelease {
@@ -103,9 +102,7 @@ public class MortalList {
                     || !state.pendingTiedReleases.isEmpty()
                     || !state.pendingIoReleases.isEmpty()
                     || !state.pendingUntrackedReturnOwnerReleases.isEmpty()
-                    || state.deferredCapturesMayBeReady
-                    || !state.deferredTemporaryRootAggregateRefreshes.isEmpty()
-                    || !state.deferredTemporaryRootCaptureReleases.isEmpty();
+                    || state.deferredCapturesMayBeReady;
             if (!needed && state.boundaryWorkRegistered.compareAndSet(true, false)) {
                 runtimesWithBoundaryWork.decrementAndGet();
             }
@@ -142,7 +139,6 @@ public class MortalList {
             ArrayDeque<LifecycleRuntimeState.TemporaryRootLease> roots = state.temporaryRoots;
             if (!roots.isEmpty() && roots.peek().root() == root) {
                 roots.pop().release();
-                drainDeferredTemporaryRootCleanup(state);
                 return;
             }
             var iterator = roots.iterator();
@@ -151,7 +147,6 @@ public class MortalList {
                 if (lease.root() == root) {
                     iterator.remove();
                     lease.release();
-                    drainDeferredTemporaryRootCleanup(state);
                     return;
                 }
             }
@@ -182,189 +177,14 @@ public class MortalList {
         }
         ArrayDeque<LifecycleRuntimeState.TemporaryRootLease> roots = state().temporaryRoots;
         while (roots.size() > depth) roots.pop().release();
-        drainDeferredTemporaryRootCleanup(state());
-    }
-
-    static boolean temporaryRootDirectlyReferences(RuntimeBase target) {
-        if (target != null && target.hasTemporaryRootOwnerSlotIdentity()) return true;
-        for (LifecycleRuntimeState.TemporaryRootLease lease : state().temporaryRoots) {
-            if (directlyReferences(lease.root(), target)) return true;
-        }
-        return false;
-    }
-
-    /**
-     * Check only direct scalar/array/hash edges from current leases against a
-     * bounded candidate set. A miss is inconclusive; callers retain the full
-     * graph-walk fallback.
-     */
-    static boolean temporaryRootsDirectlyReferenceAny(
-            Set<RuntimeBase> candidates, int maximumRoots, int maximumEdges) {
-        if (candidates == null || candidates.isEmpty()
-                || maximumRoots < 0 || maximumEdges < 0) {
-            return false;
-        }
-        int roots = 0;
-        int edges = 0;
-        for (LifecycleRuntimeState.TemporaryRootLease lease : state().temporaryRoots) {
-            if (++roots > maximumRoots) return false;
-            RuntimeBase root = lease.root();
-            if (candidates.contains(root)) return true;
-            if (root instanceof RuntimeScalar scalar) {
-                if (++edges > maximumEdges) return false;
-                if (candidates.contains(directStrongReferent(scalar))) return true;
-            } else if (root instanceof RuntimeArray array) {
-                if (array.type != RuntimeArray.PLAIN_ARRAY || array.elementsAliased
-                        || array.threadShared) continue;
-                for (RuntimeScalar element : array.elements) {
-                    if (++edges > maximumEdges) return false;
-                    if (candidates.contains(directStrongReferent(element))) return true;
-                }
-            } else if (root instanceof RuntimeHash hash) {
-                if (hash.type != RuntimeHash.PLAIN_HASH || hash.threadShared
-                        || hash.elements == null || hash.elements instanceof HashSpecialVariable) {
-                    continue;
-                }
-                for (RuntimeScalar element : hash.elements.values()) {
-                    if (++edges > maximumEdges) return false;
-                    if (candidates.contains(directStrongReferent(element))) return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    private static RuntimeBase directStrongReferent(RuntimeScalar scalar) {
-        return scalar != null && !WeakRefRegistry.isweak(scalar)
-                && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                && scalar.value instanceof RuntimeBase referent ? referent : null;
-    }
-
-    private static boolean directlyReferences(RuntimeBase value, RuntimeBase target) {
-        if (value == target) return true;
-        if (value == null) return false;
-        if (value instanceof RuntimeScalar scalar) {
-            return directlyReferences(scalar, target);
-        }
-        if (value instanceof RuntimeArray array) {
-            // Array elements are scalar cells, so this query only checks each
-            // direct referent. It never recurses through the array graph and
-            // needs no per-query cycle set.
-            for (RuntimeScalar element : array.elements) {
-                if (element != null && directlyReferences(element, target)) return true;
-            }
-            return false;
-        }
-        if (value instanceof RuntimeHash hash) return directlyReferencesHash(hash, target);
-        if (!(value instanceof RuntimeList)) return false;
-        RuntimeList list = (RuntimeList) value;
-        if (list instanceof RuntimeControlFlowList flow
-                && directlyReferences(flow.getReturnValue(), target)) return true;
-        // A temporary list directly owns its scalar values. Nested aggregates
-        // keep their own element slots, so don't traverse their descendant
-        // graph here; the full reachability query can still inspect it if a
-        // compatibility caller needs that broader answer.
-        for (RuntimeBase element : list.elements) {
-            if (element == target) return true;
-            if (element instanceof RuntimeScalar scalar
-                    && directlyReferences(scalar, target)) return true;
-        }
-        return false;
-    }
-
-    private static boolean directlyReferences(RuntimeScalar scalar, RuntimeBase target) {
-        return !WeakRefRegistry.isweak(scalar)
-                && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                && scalar.value instanceof RuntimeBase referent
-                && referent == target;
-    }
-
-    private static boolean directlyReferencesHash(RuntimeHash hash, RuntimeBase target) {
-        // Special variables compute their values from external state; the
-        // general walker handles those dynamic ownership rules.
-        if (hash.elements == null || hash.elements instanceof HashSpecialVariable) return false;
-        if (hash.elements instanceof TieHash tieHash
-                && directlyReferences(tieHash.getSelf(), target)) return true;
-        for (RuntimeScalar element : hash.elements.values()) {
-            if (element != null && directlyReferences(element, target)) return true;
-        }
-        return false;
     }
 
     public static void clearTemporaryRoots() {
         LifecycleRuntimeState state = state();
         ArrayDeque<LifecycleRuntimeState.TemporaryRootLease> roots = state.temporaryRoots;
         while (!roots.isEmpty()) roots.pop().release();
-        drainDeferredTemporaryRootCleanup(state);
-        invalidateAllRootSnapshots();
     }
 
-    /** Hold aggregate-cell reconciliation until temporary roots are gone. */
-    static boolean deferAggregateRefreshUntilTemporaryRootsLeave(RuntimeBase container) {
-        if (container == null) return false;
-        LifecycleRuntimeState state = state();
-        if (state.temporaryRoots.isEmpty()) return false;
-        if (state.deferredTemporaryRootAggregateRefreshSet.add(container)) {
-            state.deferredTemporaryRootAggregateRefreshes.addLast(container);
-        }
-        markBoundaryWork(state);
-        return true;
-    }
-
-    /** Hold requested closure cleanup while temporary roots may reach it transitively. */
-    static boolean deferCaptureReleaseUntilTemporaryRootsLeave(RuntimeCode code) {
-        if (code == null) return false;
-        LifecycleRuntimeState state = state();
-        if (state.temporaryRoots.isEmpty()) return false;
-        if (state.deferredTemporaryRootCaptureReleaseSet.add(code)) {
-            state.deferredTemporaryRootCaptureReleases.addLast(code);
-        }
-        markBoundaryWork(state);
-        return true;
-    }
-
-    static void drainDeferredTemporaryRootCleanup(LifecycleRuntimeState state) {
-        if (state == null || !state.temporaryRoots.isEmpty()
-                || state.drainingTemporaryRootCleanup) return;
-        state.drainingTemporaryRootCleanup = true;
-        try {
-            while (state.temporaryRoots.isEmpty()) {
-                RuntimeBase container = state.deferredTemporaryRootAggregateRefreshes.pollFirst();
-                if (container != null) {
-                    state.deferredTemporaryRootAggregateRefreshSet.remove(container);
-                    try {
-                        RuntimeCode.refreshUntrackedCellsAfterContainerTransfer(container);
-                    } catch (RuntimeException | Error cleanupFailure) {
-                        if (state.deferredTemporaryRootAggregateRefreshSet.add(container)) {
-                            state.deferredTemporaryRootAggregateRefreshes.addFirst(container);
-                        }
-                        throw cleanupFailure;
-                    }
-                    continue;
-                }
-                RuntimeCode code = state.deferredTemporaryRootCaptureReleases.pollFirst();
-                if (code == null) break;
-                state.deferredTemporaryRootCaptureReleaseSet.remove(code);
-                try {
-                    code.finishRequestedCaptureReleaseAfterTemporaryRootsLeave();
-                } catch (RuntimeException | Error cleanupFailure) {
-                    if (state.deferredTemporaryRootCaptureReleaseSet.add(code)) {
-                        state.deferredTemporaryRootCaptureReleases.addFirst(code);
-                    }
-                    throw cleanupFailure;
-                }
-            }
-        } finally {
-            state.drainingTemporaryRootCleanup = false;
-            refreshBoundaryWork(state);
-        }
-    }
-
-    /**
-     * Phase I: O(1) check whether the given scalar is in
-     * {@link #deferredCaptures}. Used by the reachability walker to
-     * filter out stale {@link ScalarRefRegistry} seeds.
-     */
     public static boolean isDeferredCapture(RuntimeScalar scalar) {
         if (scalar == null) return false;
         return state().deferredCapturesSet.containsKey(scalar);
@@ -446,7 +266,6 @@ public class MortalList {
         PendingOwnerEntry returnEntry = null;
         PendingOwnerEntry sourceEntry = null;
         state.flushing = true;
-        invalidateDrainReachabilityCaches();
         try {
             if (returnIndex >= 0 && returnIndex == sourceIndex) {
                 sourceIndex = -1;
@@ -474,7 +293,6 @@ public class MortalList {
             returned.finishMortalReturnHandoff();
         } finally {
             state.flushing = false;
-            invalidateDrainReachabilityCaches();
         }
         refreshBoundaryWork(state);
     }
@@ -1000,7 +818,7 @@ public class MortalList {
             return;
         }
         LifecycleRuntimeState state = state();
-        if (state.flushing || state.reachabilityDrainDepth != 0) {
+        if (state.flushing || state.deferredReleaseDrainDepth != 0) {
             deferDecrementIfTracked(scalar);
             return;
         }
@@ -1198,14 +1016,7 @@ public class MortalList {
             return;
         }
         // A live reference keeps the container and its IO element slots alive.
-        if (!finalRelease) {
-            boolean temporaryRooted = temporaryRootDirectlyReferences(hash);
-            if (directlyReferences(returned, hash) || hash.refCount > 0
-                    || hash.hasCurrentPerlOwnerSlotIdentity() || temporaryRooted) {
-                if (temporaryRooted) deferAggregateRefreshUntilTemporaryRootsLeave(hash);
-                return;
-            }
-        }
+        if (!finalRelease && (hash.refCount > 0 || hash.hasCurrentPerlOwnerSlotIdentity())) return;
         if (hash instanceof RuntimeStash stash) {
             stash.releaseSavedNamespaceMove();
         }
@@ -1311,14 +1122,7 @@ public class MortalList {
             return;
         }
         // Alias arrays such as @_ do not own their original element slots.
-        if (!finalRelease) {
-            boolean temporaryRooted = temporaryRootDirectlyReferences(arr);
-            if (arr.refCount > 0 || arr.hasCurrentPerlOwnerSlotIdentity()
-                    || temporaryRooted || directlyReferences(returned, arr)) {
-                if (temporaryRooted) deferAggregateRefreshUntilTemporaryRootsLeave(arr);
-                return;
-            }
-        }
+        if (!finalRelease && (arr.refCount > 0 || arr.hasCurrentPerlOwnerSlotIdentity())) return;
         // A refalias list owns the scalar cells even though those cells are
         // not ordinary copied array values. Retire those cell identities only
         // when this RuntimeArray itself is no longer Perl-owned.
@@ -1773,7 +1577,7 @@ public class MortalList {
             int pendingStartIdx, int tiedReleaseStartIdx, int ioReleaseStartIdx,
             int untrackedReturnOwnerStartIdx) {
         LifecycleRuntimeState state = state();
-        state.reachabilityDrainDepth++;
+        state.deferredReleaseDrainDepth++;
         try {
             int pendingIdx = pendingStartIdx;
             int tiedReleaseIdx = tiedReleaseStartIdx;
@@ -1816,7 +1620,7 @@ public class MortalList {
                 }
             }
         } finally {
-            state.reachabilityDrainDepth--;
+            state.deferredReleaseDrainDepth--;
         }
         drainDeferredArgumentOwnerReleases();
     }
@@ -1887,233 +1691,13 @@ public class MortalList {
         // evaluation scaffolding rather than Perl ownership. Use validated
         // identities so stale slots and compatibility counts cannot preserve
         // an aggregate after its final owner cell is cleared.
-        if (DestroyDispatch.hasLivePerlOwnerIdentity(base)
-                || temporaryRootDirectlyReferences(base)) {
-            return;
-        }
+        if (DestroyDispatch.hasLivePerlOwnerIdentity(base)) return;
         // A deferred count release has already retired its live owner slot,
         // but the compatibility count is not decremented until the mortal
         // queue drains. Let that exact release decide finalization instead of
         // racing it with scope-exit cleanup.
         if (base.hasPendingOwnerRelease()) return;
         DestroyDispatch.callDestroy(base);
-    }
-
-    static boolean isReachableFromExternalRootCached(RuntimeBase base) {
-        if (ReachabilityWalker.isReachableFromTemporaryRoots(base)) {
-            return true;
-        }
-        return isReachableFromPersistentRootCached(base);
-    }
-
-    static boolean isReachableFromPersistentRootCached(RuntimeBase base) {
-        LifecycleRuntimeState state = state();
-        if (state.externalRootSnapshot == null) {
-            state.externalRootSnapshot = new ReachabilityWalker.ExternalRootSnapshot();
-        }
-        if (state.externalRootSnapshot.isReachableFromNonLexicalRoot(base)) {
-            return true;
-        }
-        if (!state.externalRootSnapshot.complete()) {
-            // An incomplete external-root walk cannot prove this target has
-            // no other owner. Keep it alive without rebuilding the broader
-            // full-root graph, which also cannot preserve this query's
-            // direct-lexical exclusion semantics.
-            return true;
-        }
-        if (state.liveRootSnapshot == null) {
-            state.liveRootSnapshot = new ReachabilityWalker.LiveRootSnapshot();
-        }
-        return state.liveRootSnapshot.isReachable(base);
-    }
-
-    static void invalidateExternalRootSnapshot() {
-        state().externalRootSnapshot = null;
-        state().fullRootSnapshot = null;
-        state().unblessedAggregateRootSnapshot = null;
-        state().scalarRootSnapshot = null;
-    }
-
-    static void invalidateAllRootSnapshots() {
-        invalidateExternalRootSnapshot();
-        invalidateLiveRootSnapshot();
-    }
-
-    private static boolean isReachableFromFullRootSnapshot(RuntimeBase base) {
-        LifecycleRuntimeState state = state();
-        if (state.fullRootSnapshot == null) {
-            state.fullRootSnapshot = ReachabilityWalker.reachableFromRootsSnapshotWithStatus();
-        }
-        return state.fullRootSnapshot.isReachable(base);
-    }
-
-    static boolean isUnblessedAggregateReachableDuringDrain(RuntimeBase base) {
-        LifecycleRuntimeState state = state();
-        boolean drainActive = state.flushing || state.reachabilityDrainDepth > 0;
-        if (drainActive && state.unblessedAggregateDrainSnapshotIncomplete) return true;
-        if (drainActive && state.unblessedAggregateDrainRoots.contains(base)) return true;
-        if (state.fullRootSnapshot != null) {
-            return recordUnblessedAggregateSnapshotResult(
-                    state, state.fullRootSnapshot, base, drainActive);
-        }
-        if (state.unblessedAggregateRootSnapshot != null) {
-            return recordUnblessedAggregateSnapshotResult(
-                    state, state.unblessedAggregateRootSnapshot, base, drainActive);
-        }
-        if (ReachabilityWalker.isReachableFromTemporaryRoots(base)) return true;
-        if (state.externalRootSnapshot != null
-                && state.externalRootSnapshot.isReachableFromNonLexicalRoot(base)) {
-            if (drainActive) state.unblessedAggregateDrainRoots.add(base);
-            return true;
-        }
-        if (state.liveRootSnapshot != null && state.liveRootSnapshot.isReachable(base)) {
-            if (drainActive) state.unblessedAggregateDrainRoots.add(base);
-            return true;
-        }
-        // The package-root and live-lexical snapshots cover the same strong
-        // roots without tying their lifetimes together. Scope exits invalidate
-        // the lexical view frequently, while package roots often stay stable;
-        // rebuilding a combined graph here repeats the full package walk for
-        // each cleanup batch during module loading and request handling.
-        // Temporary roots were checked above. Continue with persistent roots
-        // directly instead of repeating the same temporary-root graph walk.
-        boolean reachable = isReachableFromPersistentRootCached(base);
-        if (drainActive) {
-            boolean incomplete = state.externalRootSnapshot == null
-                    || !state.externalRootSnapshot.complete()
-                    || (state.liveRootSnapshot != null
-                        && !state.liveRootSnapshot.complete());
-            if (incomplete) {
-                state.unblessedAggregateDrainSnapshotIncomplete = true;
-                state.unblessedAggregateDrainRoots.clear();
-            } else if (reachable && !state.unblessedAggregateDrainRoots.contains(base)) {
-                if (state.unblessedAggregateDrainRoots.size()
-                        >= MAX_UNBLESSED_AGGREGATE_DRAIN_ROOTS) {
-                    state.unblessedAggregateDrainSnapshotIncomplete = true;
-                    state.unblessedAggregateDrainRoots.clear();
-                } else {
-                    state.unblessedAggregateDrainRoots.add(base);
-                    ReachabilityQueryStats stats = activeReachabilityQueryStats();
-                    if (stats != null) {
-                        stats.unblessedAggregateDrainPositiveProofsCached++;
-                    }
-                }
-            }
-        }
-        return reachable;
-    }
-
-    private static boolean recordUnblessedAggregateSnapshotResult(
-            LifecycleRuntimeState state,
-            ReachabilityWalker.RootReachabilitySnapshot snapshot,
-            RuntimeBase base,
-            boolean drainActive) {
-        boolean reachable = snapshot.isReachable(base);
-        if (drainActive) {
-            if (!snapshot.complete()) {
-                state.unblessedAggregateDrainSnapshotIncomplete = true;
-                state.unblessedAggregateDrainRoots.clear();
-            } else if (reachable && !state.unblessedAggregateDrainRoots.contains(base)) {
-                if (state.unblessedAggregateDrainRoots.size()
-                        >= MAX_UNBLESSED_AGGREGATE_DRAIN_ROOTS) {
-                    state.unblessedAggregateDrainSnapshotIncomplete = true;
-                    state.unblessedAggregateDrainRoots.clear();
-                } else {
-                    state.unblessedAggregateDrainRoots.add(base);
-                    ReachabilityQueryStats stats = activeReachabilityQueryStats();
-                    if (stats != null) {
-                        stats.unblessedAggregateDrainPositiveProofsCached++;
-                    }
-                }
-            }
-        }
-        return reachable;
-    }
-
-    /**
-     * Check an owner scalar through its containing aggregate using the shared
-     * drain snapshot. Owner scalars nested below package roots are otherwise
-     * verified by a separate full root walk for every deferred referent.
-     */
-    static boolean isScalarReachableThroughRootedContainer(RuntimeScalar scalar) {
-        LifecycleRuntimeState state = state();
-        if ((!state.flushing && state.reachabilityDrainDepth == 0)
-                || scalar == null || WeakRefRegistry.isweak(scalar)) {
-            return false;
-        }
-        RuntimeBase container = scalar.containerOwner;
-        boolean containsScalar;
-        if (container instanceof RuntimeHash hash) {
-            containsScalar = hash.elements.containsValue(scalar);
-        } else if (container instanceof RuntimeArray array) {
-            containsScalar = array.elements.contains(scalar);
-        } else {
-            containsScalar = false;
-        }
-        return containsScalar && isReachableFromFullRootSnapshot(container);
-    }
-
-    static void invalidateLiveRootSnapshot() {
-        state().liveRootSnapshot = null;
-        state().fullRootSnapshot = null;
-        state().unblessedAggregateRootSnapshot = null;
-        state().scalarRootSnapshot = null;
-    }
-
-    static void invalidateFullRootSnapshotIfReachable(RuntimeBase changedNode) {
-        PerlRuntime runtime = PerlRuntime.currentOrNull();
-        if (runtime == null) return;
-        LifecycleRuntimeState state = runtime.lifecycleState;
-        ReachabilityWalker.LiveRootSnapshot liveSnapshot = state.liveRootSnapshot;
-        boolean liveReachable = liveSnapshot != null && liveSnapshot.mayContain(changedNode);
-        ReachabilityWalker.RootReachabilitySnapshot snapshot = state.fullRootSnapshot;
-        boolean fullReachable = snapshot != null && snapshot.isReachable(changedNode);
-        ReachabilityWalker.RootReachabilitySnapshot unblessedSnapshot =
-                state.unblessedAggregateRootSnapshot;
-        boolean unblessedReachable = unblessedSnapshot != null
-                && unblessedSnapshot.isReachable(changedNode);
-        if ((snapshot != null && (!snapshot.complete() || fullReachable))
-                || (unblessedSnapshot != null
-                    && (!unblessedSnapshot.complete() || unblessedReachable))) {
-            state.fullRootSnapshot = null;
-            state.unblessedAggregateRootSnapshot = null;
-        }
-        if (liveReachable) state.liveRootSnapshot = null;
-    }
-
-    static void invalidateFullRootSnapshotForScalarClear() {
-        PerlRuntime runtime = PerlRuntime.currentOrNull();
-        if (runtime != null) {
-            runtime.lifecycleState.liveRootSnapshot = null;
-            runtime.lifecycleState.fullRootSnapshot = null;
-            runtime.lifecycleState.unblessedAggregateRootSnapshot = null;
-        }
-    }
-
-    /**
-     * Reuse scalar-owner reachability across one cleanup drain. Return
-     * {@code null} outside a drain so callers retain the target-specific walk
-     * and its original lifetime semantics.
-     */
-    static Boolean isScalarReachableFromDrainSnapshot(RuntimeScalar scalar) {
-        LifecycleRuntimeState state = state();
-        if (!state.flushing && state.reachabilityDrainDepth == 0) return null;
-        if (state.scalarRootSnapshot == null) {
-            state.scalarRootSnapshot =
-                    ReachabilityWalker.scalarReachabilitySnapshot();
-        }
-        return state.scalarRootSnapshot.isReachable(scalar);
-    }
-
-    private static void invalidateDrainReachabilityCaches() {
-        LifecycleRuntimeState state = state();
-        state.flushReachableCache = null;
-        state.scalarRootSnapshot = null;
-        state.fullRootSnapshot = null;
-        if (!state.flushing && state.reachabilityDrainDepth == 0) {
-            state.unblessedAggregateDrainRoots.clear();
-            state.unblessedAggregateDrainSnapshotIncomplete = false;
-        }
     }
 
     private static void processDeferredBase(RuntimeBase base, boolean clearWeakRefsForLocalBinding,
@@ -2280,7 +1864,7 @@ public class MortalList {
             } else {
                 // Call depth is not ownership. If every counted and direct
                 // owner check above is empty, a weak referent is final here;
-                // leaving it for a later sweep would strand the weak scalars.
+                // deferring cleanup would strand the weak scalars.
                 DestroyDispatch.callDestroy(base);
             }
         }
@@ -2333,13 +1917,6 @@ public class MortalList {
         LifecycleRuntimeState state = state();
         if (!state.mortalActive) return;
         if (state.flushing) return;
-        if (state.sweepPendingAfterOuterDestroy) {
-            // Preserve the old diagnostic counters for explicit post-DESTROY
-            // requests. This snapshots CODE captures only; it never clears
-            // weak refs, dispatches DESTROY, or changes owner state.
-            state.sweepPendingAfterOuterDestroy = false;
-            ReachabilityWalker.inspectWeakBackrefCapturesForDiagnostics();
-        }
         if (state.pending.isEmpty() && state.pendingTiedReleases.isEmpty()
                 && state.pendingIoReleases.isEmpty()
                 && state.pendingUntrackedReturnOwnerReleases.isEmpty()) {
@@ -2347,7 +1924,6 @@ public class MortalList {
             refreshBoundaryWork(state);
             return;
         }
-        invalidateDrainReachabilityCaches();
         state.flushing = true;
         try {
             processDeferredEntriesFrom(0, 0, 0, 0);
@@ -2362,7 +1938,6 @@ public class MortalList {
             state.markDepth = 0; // All entries drained; marks are meaningless now
         } finally {
             state.flushing = false;
-            invalidateDrainReachabilityCaches();
         }
         processReadyDeferredCaptures(state);
         refreshBoundaryWork(state);
@@ -2399,8 +1974,7 @@ public class MortalList {
         if (startIdx < 0) startIdx = 0;
         LifecycleRuntimeState state = state();
         if (startIdx >= state.pending.size()) return;
-        invalidateDrainReachabilityCaches();
-        state.reachabilityDrainDepth++;
+        state.deferredReleaseDrainDepth++;
         // Loop because DESTROY may add further entries
         int i = startIdx;
         try {
@@ -2411,8 +1985,7 @@ public class MortalList {
                 i++;
             }
         } finally {
-            state.reachabilityDrainDepth--;
-            invalidateDrainReachabilityCaches();
+            state.deferredReleaseDrainDepth--;
         }
         // Truncate the pending list back to startIdx to mark these entries
         // as processed. Outer flush won't re-process them.
@@ -2442,7 +2015,6 @@ public class MortalList {
 
         LifecycleRuntimeState state = state();
         if (state.flushing) return;
-        invalidateDrainReachabilityCaches();
         state.flushing = true;
         try {
             for (int i = state.pending.size() - 1; i >= 0; i--) {
@@ -2462,7 +2034,9 @@ public class MortalList {
                 // while either the tail-call argument list or the completed
                 // result still carries that reference; the receiving call
                 // boundary will retire it after the handoff.
-                if (abandonedBirthTemporary && directlyReferences(returnedResult, pending)) {
+                if (abandonedBirthTemporary
+                        && (pending.hasCurrentPerlOwnerSlotIdentity()
+                            || pending.hasPendingReturnOwner())) {
                     continue;
                 }
                 if ((!directOwner && !frameOwner && !abandonedBirthTemporary)
@@ -2479,7 +2053,6 @@ public class MortalList {
             }
         } finally {
             state.flushing = false;
-            invalidateDrainReachabilityCaches();
         }
         refreshBoundaryWork(state);
     }
@@ -2587,7 +2160,6 @@ public class MortalList {
             refreshBoundaryWork(state);
             return;
         }
-        invalidateDrainReachabilityCaches();
         state.flushing = true;
         try {
             processDeferredEntriesFrom(mark, tiedMark, ioMark, untrackedReturnOwnerMark);
@@ -2610,7 +2182,6 @@ public class MortalList {
             }
         } finally {
             state.flushing = false;
-            invalidateDrainReachabilityCaches();
         }
         processReadyDeferredCaptures(state);
         refreshBoundaryWork(state);
@@ -2640,7 +2211,6 @@ public class MortalList {
             DestroyDispatch.processRescuedObjects();
             return;
         }
-        invalidateDrainReachabilityCaches();
         // Process entries from mark onwards (DESTROY may add new entries)
         processDeferredEntriesFrom(mark, tiedMark, ioMark, untrackedReturnOwnerMark);
         // Remove only the entries we processed (keep entries before mark)
@@ -2660,7 +2230,6 @@ public class MortalList {
         while (state.pendingUntrackedReturnOwnerReleases.size() > untrackedReturnOwnerMark) {
             state.pendingUntrackedReturnOwnerReleases.removeLast();
         }
-        invalidateDrainReachabilityCaches();
         // After processing mortals (which may have triggered releaseCaptures
         // via callDestroy), check if any deferred captures are now ready.
         processReadyDeferredCaptures(state);
@@ -2679,7 +2248,7 @@ public class MortalList {
         // process entries appended by this nested cleanup after the callback
         // returns. Flush suppression is separate: a scoped mark can still
         // safely drain only the entries created after that mark.
-        if (state.reachabilityDrainDepth > 0) {
+        if (state.deferredReleaseDrainDepth > 0) {
             state.popMortalMark();
             return;
         }

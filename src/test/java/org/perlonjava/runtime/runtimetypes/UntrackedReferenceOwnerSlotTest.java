@@ -1,6 +1,5 @@
 package org.perlonjava.runtime.runtimetypes;
 
-import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
@@ -383,10 +382,7 @@ class UntrackedReferenceOwnerSlotTest {
     }
 
     @Test
-    void explicitUntrackedValueOwnerAvoidsGlobalCorrectiveSweep() {
-        Assumptions.assumeTrue(ReachabilityWalker.correctiveSweepsEnabled(),
-                "this scheduling regression requires corrective sweeps to be enabled");
-
+    void explicitUntrackedValueOwnerClearsWeakObserverOnRelease() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeScalar target = new RuntimeScalar("untracked referent");
@@ -408,27 +404,14 @@ class UntrackedReferenceOwnerSlotTest {
             observer.type = RuntimeScalarType.REFERENCE;
             observer.value = target;
             try {
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
-                    WeakRefRegistry.weaken(observer);
+                WeakRefRegistry.weaken(observer);
+                assertEquals(WeakRefRegistry.WEAKLY_TRACKED, target.refCount);
+                assertTrue(WeakRefRegistry.isweak(observer));
 
-                    assertEquals(WeakRefRegistry.WEAKLY_TRACKED, target.refCount);
-                    assertTrue(WeakRefRegistry.isweak(observer));
-                    assertFalse(runtime.lifecycleState.immediateWeakSweepRequested,
-                            "the explicit owner slot avoids a registry-wide correction");
-                    assertEquals(0, measurement.stats().rootQueries);
-                    assertEquals(0, measurement.stats().snapshotsBuilt);
-                }
-
-                boolean flushWasSuppressed = MortalList.suppressFlush(true);
-                try {
-                    owner.set(new RuntimeScalar());
-                } finally {
-                    MortalList.suppressFlush(flushWasSuppressed);
-                }
+                owner.set(new RuntimeScalar());
                 assertFalse(ownerSlot.isActive());
-                assertTrue(runtime.lifecycleState.targetedWeakSweepReferents.contains(target),
-                        "the final untracked owner schedules targeted cleanup");
+                assertFalse(WeakRefRegistry.isweak(observer));
+                assertEquals(RuntimeScalarType.UNDEF, observer.type);
             } finally {
                 if (WeakRefRegistry.isweak(observer)) WeakRefRegistry.unweaken(observer);
                 MyVarCleanupStack.unregister(owner);

@@ -720,7 +720,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         RuntimeBase referent = (type & RuntimeScalarType.REFERENCE_BIT) != 0
                 && value instanceof RuntimeBase base ? base : null;
         reconcileContainerOwnerAfterMutation(owner);
-        if (MortalList.deferAggregateRefreshUntilTemporaryRootsLeave(owner)) return;
         if (isStoredInContainer(owner)) {
             updateUntrackedReferenceOwner(referent, true);
         }
@@ -837,8 +836,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             retainClosureCaptureReferent();
         } else if (firstCapture) {
             // The ordinary pad-slot increment already exists in refCount.
-            // Record the semantic edge separately so weak sweeping cannot
-            // mistake a captured pad for an unowned JVM temporary.
+            // Record the semantic edge separately so the owner ledger sees
+            // the captured pad independently from JVM wrapper reachability.
             RuntimeBase base = semanticCaptureReferent();
             updateClosureOwnerSlot(base);
         }
@@ -4365,12 +4364,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         prepareCodeSlotValue(value);
         String packageCodeRefName = isPackageGlobalRoot ? globalCodeRefFqn : null;
         if (isPackageGlobalRoot) {
-            MortalList.invalidateExternalRootSnapshot();
         }
         if (this.value != value.value) {
-            MortalList.invalidateFullRootSnapshotIfReachable(this);
             if (containerOwner != null) {
-                MortalList.invalidateFullRootSnapshotIfReachable(containerOwner);
             }
         }
         noteClearedAggregateElement(value);
@@ -4566,17 +4562,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         boolean oldOwnedScalarReferenceContents = this.hasScalarReferenceContentsOwner();
         boolean scalarContentsOwnedByEscapedReference =
                 !scalarContentsOwnerSnapshot.isEmpty() && !this.localBindingExists;
-        boolean shouldReleaseUnrootedRescuedGraph = false;
 
         // If this scalar was a weak ref, remove from weak tracking before overwriting.
         // Weak refs don't count toward refCount, so skip refCount decrement later.
         boolean thisWasWeak = (oldBase != null && WeakRefRegistry.removeWeakRef(this, oldBase));
-        boolean undefAssignmentOfDestroyableRef = oldBase != null
-                && !thisWasWeak
-                && value.type == UNDEF
-                && oldBase.blessId != 0
-                && WeakRefRegistry.weakRefsExist()
-                && blessedClassHasDestroy(oldBase);
         if (oldBase != null && this.captureRefCountOwned() > 0) {
             releaseAllClosureCaptureReferents(oldBase);
         }
@@ -4909,12 +4898,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 MortalList.suppressFlush(flushWasSuppressed);
             }
         }
-        if (undefAssignmentOfDestroyableRef
-                && oldBase.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_ALIAS) == 0
-                && !DestroyDispatch.isInsideDestroy()) {
-            shouldReleaseUnrootedRescuedGraph = true;
-        }
-
         // WEAKLY_TRACKED objects: do NOT clear weak refs on overwrite.
         // These objects have refCount == -2 and their strong refs don't have
         // refCountOwned=true (they were set before tracking started).
@@ -4922,7 +4905,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // closures may capture copies (e.g., Sub::Quote's $_QUOTED capture).
         // This is the same rationale as in scopeExitCleanup.
         // Final strong-owner release clears weak refs through the owner-slot
-        // ledger; overwrite does not schedule a later reachability sweep.
+        // ledger; overwrite does not schedule later graph inspection.
 
         // A reentrant setter or weaken() may already have completed the slot's
         // ownership transition while old-value cleanup ran. Do not restore the
@@ -4975,19 +4958,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             MortalList.popTemporaryRoot(value);
             MortalList.popTemporaryRoot(this);
         }
-        // An explicit undef can run DESTROY and let the object self-rescue.
-        // Preserve real Perl resurrection when another package/closure root
-        // still reaches that graph.  If the only remaining pin is the runtime's
-        // rescued-object queue, release its nested weak callbacks now: DBIC's
-        // retained DBI handle relies on its weak HandleError closure observing
-        // that the owning Schema/Storage graph has gone away.
-        if (shouldReleaseUnrootedRescuedGraph
-                && DestroyDispatch.isRescued(oldBase)
-                && !ModuleInitGuard.inModuleInit()
-                && !DestroyDispatch.hasLivePerlOwnerIdentity(oldBase)) {
-            DestroyDispatch.clearNestedWeakRefsForRescued(oldBase);
-        }
-
         if (isPackageGlobalRoot && globalCodeRefFqn != null) {
             boolean invalidate = preAssignType != this.type || preAssignValue != this.value;
             if (!invalidate && this.type == CODE && this.value instanceof RuntimeCode nc
@@ -5020,11 +4990,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (clearedArray || clearedHash) {
             owner.clearedOwnedAggregateElement = true;
         }
-    }
-
-    private static boolean blessedClassHasDestroy(RuntimeBase base) {
-        String cn = NameNormalizer.getBlessStr(base.blessId);
-        return cn != null && DestroyDispatch.classHasDestroy(base.blessId, cn);
     }
 
     /** Whether a primitive/string setter must retire an existing Perl owner edge. */
@@ -6809,10 +6774,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public RuntimeScalar undefine() {
         releaseDetachedGlobValueOwner();
         if (isPackageGlobalRoot) {
-            MortalList.invalidateExternalRootSnapshot();
         }
         if ((type & REFERENCE_BIT) != 0 && value != null) {
-            MortalList.invalidateFullRootSnapshotForScalarClear();
         }
         // Special handling for CODE type - don't set the ref to undef,
         // just clear the code from the global symbol table.
@@ -7118,7 +7081,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
         // The lexical may have owned this cell when the initial refresh ran.
         // Recheck after scope-exit state changes so its untracked value leaves
-        // with the final scalar-cell owner instead of waiting for a sweep.
+        // with the final scalar-cell owner instead of waiting for graph cleanup.
         scalar.finalizeUntrackedValueAfterScopeExit(untrackedValueAtScopeExit);
 
         // WEAKLY_TRACKED objects: do NOT clear weak refs on scope exit.

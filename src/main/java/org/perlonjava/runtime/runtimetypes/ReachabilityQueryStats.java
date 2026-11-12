@@ -14,10 +14,6 @@ final class ReachabilityQueryStats {
     long liveRootSnapshotsBuilt;
     long liveRootSnapshotNodesVisited;
     long globalCodeCaptureRootsWalked;
-    long weakBackrefCaptureRootsWalked;
-    long weakBackrefCaptureNodesVisited;
-    long weakBackrefCaptureEdgesInspected;
-    long weakBackrefCaptureSnapshotsBuilt;
     long unblessedAggregateDrainPositiveProofsCached;
     long scalarReachabilityQueries;
     long scalarReachabilityRootWalks;

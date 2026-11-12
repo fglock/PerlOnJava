@@ -71,7 +71,6 @@ class NestedUntrackedOwnerFinalCellCleanupTest {
                 MortalList.scopeExitCleanupArray(packageRoot);
                 countedOwner.undefine();
                 MortalList.setActive(previousMortalListState);
-                MortalList.invalidateAllRootSnapshots();
             }
         }
     }

@@ -63,7 +63,6 @@ class ClearedAggregateOwnerIdentityNoRootWalkTest {
                 MortalList.scopeExitCleanupArray(lexicalContainer);
                 MyVarCleanupStack.unregister(lexicalContainer);
                 MyVarCleanupStack.popMark(mark);
-                MortalList.invalidateAllRootSnapshots();
                 MortalList.setActive(previousMortalListState);
             }
         }

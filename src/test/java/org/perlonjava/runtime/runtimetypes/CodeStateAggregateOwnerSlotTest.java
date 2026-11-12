@@ -13,7 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Tag("unit")
 class CodeStateAggregateOwnerSlotTest {
     @Test
-    void stateAggregateLifetimeUsesCodeOwnerIdentity() {
+    void deferredStateAggregateReleaseUsesCodeOwnerIdentity() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeCode code = new RuntimeCode(null, List.of());
@@ -21,6 +21,8 @@ class CodeStateAggregateOwnerSlotTest {
             String codeName = "CodeStateAggregateOwnerSlotTest::holder";
             GlobalVariable.globalCodeRefs.put(codeName, codeRoot);
             RuntimeArray stateArray = StateVariable.retrieveStateArray(codeRoot, "@state", 914_027);
+            RuntimeScalar temporaryOwner =
+                    CountedOwnerFixture.temporaryReference(stateArray);
             RuntimeScalar weak = stateArray.createAnonymousReference();
             WeakRefRegistry.weaken(weak);
 
@@ -28,9 +30,18 @@ class CodeStateAggregateOwnerSlotTest {
                 assertEquals(1, stateArray.ownerSlotCount(PerlOwnerSlot.Kind.CODE_STATE),
                         "the persistent CODE state entry must own its aggregate directly");
 
-                assertTrue(WeakRefRegistry.isweak(weak),
-                        "the live CODE state binding keeps the weakly observed array alive");
-                assertEquals(1, stateArray.ownerSlotCount(PerlOwnerSlot.Kind.CODE_STATE));
+                MortalList.pushMark();
+                CountedOwnerFixture.queueRelease(temporaryOwner);
+                try (MortalList.ReachabilityQueryMeasurement measurement =
+                             MortalList.measureReachabilityQueries()) {
+                    MortalList.popAndFlush();
+
+                    assertTrue(WeakRefRegistry.isweak(weak),
+                            "the live CODE state binding keeps the weakly observed array alive");
+                    assertEquals(1, stateArray.ownerSlotCount(PerlOwnerSlot.Kind.CODE_STATE));
+                    assertEquals(0, measurement.stats().rootQueries,
+                            "deferred release must use the CODE state owner slot");
+                }
 
                 code.releaseStateStorage();
 
@@ -42,7 +53,6 @@ class CodeStateAggregateOwnerSlotTest {
                 code.releaseStateStorage();
                 if (WeakRefRegistry.isweak(weak)) WeakRefRegistry.unweaken(weak);
                 GlobalVariable.globalCodeRefs.remove(codeName);
-                MortalList.invalidateAllRootSnapshots();
             }
         }
     }

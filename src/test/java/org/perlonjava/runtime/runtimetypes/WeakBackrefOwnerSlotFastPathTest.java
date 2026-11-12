@@ -1,6 +1,5 @@
 package org.perlonjava.runtime.runtimetypes;
 
-import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
@@ -12,10 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Tag("unit")
 class WeakBackrefOwnerSlotFastPathTest {
     @Test
-    void elementOwnerAvoidsWeakCodeCaptureGraphWalk() {
-        Assumptions.assumeTrue(ReachabilityWalker.correctiveSweepsEnabled(),
-                "this compatibility path only runs when corrective sweeps are enabled");
-
+    void elementOwnerPreservesWeakBackrefWithoutRootWalk() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeArray capturedParent = new RuntimeArray();
@@ -32,15 +28,9 @@ class WeakBackrefOwnerSlotFastPathTest {
             RuntimeScalar weakTarget = target.createAnonymousReference();
             WeakRefRegistry.weaken(weakTarget);
             try {
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
-                    ReachabilityWalker.sweepWeakRefs(true, false);
-
-                    assertTrue(WeakRefRegistry.isweak(weakTarget),
-                            "the active element owner keeps the weakly observed target alive");
-                    assertEquals(0, measurement.stats().weakBackrefCaptureSnapshotsBuilt,
-                            "an owner-slot proof avoids the weak CODE capture graph walk");
-                }
+                MortalList.flush();
+                assertTrue(WeakRefRegistry.isweak(weakTarget),
+                        "the active element owner keeps the weakly observed target alive");
             } finally {
                 WeakRefRegistry.unweaken(weakTarget);
                 WeakRefRegistry.unweaken(weakCode);

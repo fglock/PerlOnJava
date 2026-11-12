@@ -42,7 +42,6 @@ class ClearedAggregateOwnerIdentityFinalizationTest {
             } finally {
                 GlobalVariable.globalHashes.remove(globalName);
                 WeakRefRegistry.clearWeakRefsTo(packageRoot);
-                MortalList.invalidateAllRootSnapshots();
                 MortalList.setActive(previousMortalListState);
             }
         }
@@ -98,7 +97,6 @@ class ClearedAggregateOwnerIdentityFinalizationTest {
                 MortalList.scopeExitCleanupArray(container);
                 MyVarCleanupStack.unregister(container);
                 MyVarCleanupStack.popMark(mark);
-                MortalList.invalidateAllRootSnapshots();
                 MortalList.setActive(previousMortalListState);
             }
         }

@@ -306,7 +306,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * affected edges; no transitive runtime-root traversal is needed.
      */
     static void refreshUntrackedCellsAfterContainerTransfer(RuntimeBase container) {
-        if (MortalList.deferAggregateRefreshUntilTemporaryRootsLeave(container)) return;
         if (container == null || container.hasCurrentPerlStorageOwner()
                 || container.hasTemporaryRootOwnerSlotIdentity()) return;
         if (container instanceof RuntimeArray array) {
@@ -1656,8 +1655,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     /**
      * Snapshot the original arguments of active calls before @_ mutations.
      * A method commonly shifts its invocant into a lexical; retaining these
-     * frame arguments keeps reachability sweeps from destroying that invocant
-     * while the method is still executing.
+     * frame arguments keeps the owner ledger aligned while the method is
+     * still executing.
      */
     public static java.util.List<java.util.List<RuntimeScalar>> snapshotPristineArgsStack() {
         java.util.List<java.util.List<RuntimeScalar>> snapshot = new java.util.ArrayList<>();
@@ -1998,7 +1997,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     private void finishRequestedCaptureRelease() {
         if (!captureReleaseRequested) return;
-        if (MortalList.deferCaptureReleaseUntilTemporaryRootsLeave(this)) return;
         if (!captureReleaseRequested
                 || hasPerlOwnerForCaptureOtherThan(null)
                 || SpecialBlock.hasPendingEndBlock(this)
@@ -2007,10 +2005,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         captureReleaseRequested = false;
         releaseCaptures();
-    }
-
-    void finishRequestedCaptureReleaseAfterTemporaryRootsLeave() {
-        finishRequestedCaptureRelease();
     }
 
     public static RuntimeCode getActiveCodeAt(int depth) {
@@ -5086,7 +5080,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // A caller may retain a backslash-addressed literal through an
                 // uncounted scalar reference after this CV dies. Carry the
                 // final-release obligation onto that exact slot so its release
-                // clears weak observers without a later reachability sweep.
+                // clears weak observers on this final owner release.
                 constant.deferFinalReleaseToUncountedOwnerSlots();
             }
         }
@@ -8268,11 +8262,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             PerlRuntime methodRuntime) {
         RuntimeArray args = methodArgs;
         String[] stableHashKeys = code.stableHashMutationMethodKeys;
-        boolean suppressRootTracking = callContext == RuntimeContextType.SCALAR
+        boolean stableMethodArgumentRecycle = callContext == RuntimeContextType.SCALAR
                 && stableHashKeys != null && stableHashKeys.length > 0
                 && stableHashKeys.length <= 2 && code.autoloadVariableName == null
                 && !DebugState.isDebugMode()
-                && args.suppressRootTrackingForStableMethodArguments();
+                && args.enableStableMethodArgumentRecycle();
         try {
             args.prependMethodCallInvocant(methodInvocantArgument(runtimeScalar));
 
@@ -8288,8 +8282,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
             boolean stableHashFastPath = canUseStableHashMutationMethodFastPath(
                     code, args, callContext, methodRuntime);
-            if (!stableHashFastPath && suppressRootTracking) {
-                args.resumeMethodArgumentRootTracking();
+            if (!stableHashFastPath && stableMethodArgumentRecycle) {
+                args.disableStableMethodArgumentRecycle();
             }
             if (stableHashFastPath) {
                 return invokeStableHashMutationMethodHit(code, args, callContext, methodRuntime);
@@ -8299,7 +8293,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             if (e instanceof RuntimeException) throw (RuntimeException) e;
             throw new RuntimeException(e);
         } finally {
-            if (suppressRootTracking) args.resumeMethodArgumentRootTracking();
+            if (stableMethodArgumentRecycle) args.disableStableMethodArgumentRecycle();
         }
     }
 
@@ -11493,7 +11487,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         // lexical registrations are gone. Otherwise a captured
                         // blessed referent can be counted as a live lexical
                         // owner during this flush and survive until the
-                        // corrective scope-exit sweep.
+                            // deferred scope-exit cleanup.
                         MyVarCleanupStack.popMark(cleanupMark);
                         MortalList.flushAboveMark();
                         MortalList.popMark();

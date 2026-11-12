@@ -47,7 +47,6 @@ class PackageWeakCompatibilityPinOwnerSlotTest {
             } finally {
                 WeakRefRegistry.clearWeakRefsTo(target);
                 GlobalVariable.globalArrays.remove(globalName);
-                MortalList.invalidateAllRootSnapshots();
             }
         }
     }
@@ -98,7 +97,6 @@ class PackageWeakCompatibilityPinOwnerSlotTest {
                 MyVarCleanupStack.unregister(observer);
                 WeakRefRegistry.clearWeakRefsTo(target);
                 GlobalVariable.globalArrays.remove(globalName);
-                MortalList.invalidateAllRootSnapshots();
             }
         }
     }

@@ -10,11 +10,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Tag("unit")
 class DeferredUnblessedAggregateOwnerSlotRepairTest {
     @Test
-    void removingArrayElementReleasesItsExactOwnerSlot() {
+    void deferredReleaseUsesCurrentArrayElementSlotWithoutRootSnapshot() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
-            boolean previousMortalListState = MortalList.isActive();
-            MortalList.setActive(true);
             RuntimeHash target = new RuntimeHash();
             RuntimeArray ownerArray = new RuntimeArray();
             ownerArray.push(target.createAnonymousReference());
@@ -23,17 +21,28 @@ class DeferredUnblessedAggregateOwnerSlotRepairTest {
 
             try {
                 assertEquals(1, target.ownerSlotCount(PerlOwnerSlot.Kind.ARRAY_ELEMENT));
-                assertTrue(WeakRefRegistry.isweak(weakObserver),
-                        "the current array element owns the target");
-                RuntimeArray.pop(ownerArray);
-                MortalList.flush();
+                RuntimeScalar temporaryOwner =
+                        CountedOwnerFixture.temporaryReference(target);
+                MortalList.pushMark();
+                CountedOwnerFixture.queueRelease(temporaryOwner);
+
+                try (MortalList.ReachabilityQueryMeasurement measurement =
+                             MortalList.measureReachabilityQueries()) {
+                    MortalList.popAndFlush();
+
+                    assertEquals(1, target.refCount);
+                    assertTrue(WeakRefRegistry.isweak(weakObserver));
+                    assertEquals(0, measurement.stats().rootQueries);
+                    assertEquals(0, measurement.stats().snapshotsBuilt);
+                }
+
+                ownerArray.elements.getFirst().set(new RuntimeScalar());
                 assertFalse(WeakRefRegistry.isweak(weakObserver));
             } finally {
                 if (WeakRefRegistry.isweak(weakObserver)) WeakRefRegistry.unweaken(weakObserver);
                 if (!ownerArray.elements.isEmpty()) {
                     ownerArray.elements.getFirst().set(new RuntimeScalar());
                 }
-                MortalList.setActive(previousMortalListState);
             }
         }
     }

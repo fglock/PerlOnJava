@@ -46,7 +46,6 @@ class PackageNestedUntrackedAggregateReleaseTest {
             } finally {
                 WeakRefRegistry.clearWeakRefsTo(target);
                 GlobalVariable.globalArrays.remove(globalName);
-                MortalList.invalidateAllRootSnapshots();
             }
         }
     }
@@ -97,7 +96,6 @@ class PackageNestedUntrackedAggregateReleaseTest {
             } finally {
                 WeakRefRegistry.clearWeakRefsTo(target);
                 GlobalVariable.globalArrays.remove(globalName);
-                MortalList.invalidateAllRootSnapshots();
             }
         }
     }

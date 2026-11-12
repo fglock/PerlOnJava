@@ -37,7 +37,6 @@ class ExternalRootSnapshotBudgetTest {
                         "the targeted root walk stays within its edge budget");
             } finally {
                 GlobalVariable.globalArrays.remove(globalName);
-                MortalList.invalidateAllRootSnapshots();
             }
         }
     }
@@ -74,7 +73,6 @@ class ExternalRootSnapshotBudgetTest {
                         "unknown targets remain protected when the root proof is incomplete");
             } finally {
                 GlobalVariable.globalArrays.remove(globalName);
-                MortalList.invalidateAllRootSnapshots();
             }
         }
     }

@@ -1,6 +1,5 @@
 package org.perlonjava.runtime.runtimetypes;
 
-import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
@@ -11,9 +10,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ScopeExitHashOwnerSlotTest {
     @Test
     void schemaHashElementOwnsEscapedSourceRegistrationsWithoutRootWalk() {
-        Assumptions.assumeFalse(ReachabilityWalker.correctiveSweepsEnabled(),
-                "this lifecycle regression requires corrective sweeps to be disabled");
-
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             MortalList.setActive(true);
@@ -64,7 +60,6 @@ class ScopeExitHashOwnerSlotTest {
                 MortalList.flush();
                 GlobalVariable.globalHashes.remove(schemaName);
                 GlobalVariable.globalArrays.remove(rootName);
-                MortalList.invalidateAllRootSnapshots();
             }
         }
     }

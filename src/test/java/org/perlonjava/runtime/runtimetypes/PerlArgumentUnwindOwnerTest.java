@@ -137,7 +137,6 @@ class PerlArgumentUnwindOwnerTest {
             MortalList.deferDecrementIfTracked(childOwner);
             MortalList.deferDecrementIfTracked(parentOwner);
             MortalList.flushAboveMark();
-            ReachabilityWalker.sweepWeakRefs(true);
             assertEquals(RuntimeScalarType.HASHREFERENCE, weakChild.type);
             assertEquals(1, parent.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_VALUE));
             arguments.abandon(new RuntimeException("later argument failed"));

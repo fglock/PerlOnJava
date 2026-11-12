@@ -42,6 +42,7 @@ is($destroyed, 0, 'nested object is not destroyed during assignment handoff');
 is($schema->storage->{active}, 1, 'returned object graph remains usable');
 
 undef $schema;
+
 ok(!defined $weak_schema, 'weak object ref clears after caller releases value');
 ok(!defined $weak_storage, 'weak nested ref clears after caller releases value');
 is($destroyed, 1, 'nested object is destroyed after caller releases value');
