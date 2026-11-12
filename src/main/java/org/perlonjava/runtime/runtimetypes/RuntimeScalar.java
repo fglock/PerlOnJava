@@ -1434,7 +1434,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     void finalizeUntrackedValueAfterScopeExit(RuntimeBase expectedReferent) {
         if (expectedReferent == null) return;
         refreshUntrackedReferenceOwner();
-        if (hasDurableStrongValueSlot()) return;
+        if (hasLiveCurrentStrongValueSlot()) return;
         releaseUntrackedReferenceOwner(expectedReferent);
         WeakRefRegistry.finalizeUntrackedAfterOwnerScopeExit(expectedReferent);
     }
@@ -1480,7 +1480,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     || packageAggregateValueOwner
                     || liveAggregateValueOwner)
                 && !countedOwnerActive;
-        if (hasDurableStrongValueSlot() && untrackedStrongValue) {
+        if (hasLiveCurrentStrongValueSlot() && untrackedStrongValue) {
             retainUntrackedReferenceOwner(referent);
         } else if (untrackedReferenceOwnerSlot != null) {
             releaseUntrackedReferenceOwner(untrackedReferenceOwnerSlot.referent());
