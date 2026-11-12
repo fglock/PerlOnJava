@@ -14,13 +14,14 @@ thread, and HTML-Tree regressions pass with corrective sweeps disabled.
 
 **Current checkpoint (2026-11-12):** Sweep-removal work remains active under
 #2043. PR #1938 remains open and draft. The latest CI poll on remote head
-`fc8ebf006a` (2026-11-12 20:40 UTC) showed Ubuntu and Windows still running;
+`8521a158a4` (2026-11-12 20:48 UTC) showed Ubuntu and Windows still running;
 analysis and dependency jobs passed. Candidate branch
 `wip/issue2043-closure-owner-batch-20261112` now includes source commit
-`91eeca7fd0`. The candidate proves temporary-root ownership through ordinary
+`ded3fa7640`. The candidate proves temporary-root ownership through ordinary
 array/hash slots, current `SCALAR_REFERENCE_CONTENTS` slots, closure capture
 slots, compiled CODE pad-constant slots, CODE state bindings, current array
-refalias slots, and current `SCALAR_CELL`, `CODE_SLOT`, `ARGUMENT_CONTAINER`,
+refalias slots, current hash-alias slots, current `UNTRACKED_REFERENCE`
+owners, and current `SCALAR_CELL`, `CODE_SLOT`, `ARGUMENT_CONTAINER`,
 `TIE_HANDLER`, and `ARGUMENT_TIE_HANDLER` owners before opening the fallback
 graph walk. Unknown or incomplete owner paths still use the fallback.
 
@@ -66,6 +67,16 @@ the hash once and fails the diagnostic assertion. Focused logs are
 `/private/tmp/issue2043-untracked-scalar-parent-focused.log`. The full
 `nice -n 19 timeout 2400 make` passes in 8m16 on the committed source content
 (`/private/tmp/issue2043-untracked-scalar-full-make.log`).
+
+`TemporaryRootHashAliasOwnerTest` verifies that a current `HASH_ALIAS_CELL`
+slot maps to the exact owning hash and key through an identity reverse index.
+The opaque-hash counter passes on `ded3fa7640`; parent `fc8ebf006a` enumerates
+the opaque hash once and fails. Focused outputs are
+`/private/tmp/issue2043-hash-alias-owner-focused.log` and
+`/private/tmp/issue2043-untracked-hash-alias-parent-focused.log`. A combined
+full `nice -n 19 timeout 2400 make` passes in 6m51 for the hash-alias and
+untracked-scalar source changes
+(`/private/tmp/issue2043-hash-alias-full-make.log`).
 
 DBIx `t/52leaks.t` still fails collection checks 12–18 and aborts when
 Data::Dumper formats a detached ResultSource
