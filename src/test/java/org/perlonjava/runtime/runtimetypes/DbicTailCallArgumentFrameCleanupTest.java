@@ -83,11 +83,57 @@ class DbicTailCallArgumentFrameCleanupTest {
             RuntimeScalar retainedCallback = tries.elements.get(1);
             assertNotNull(retainedCallback);
             RuntimeBase callback = retainedCallback.value instanceof RuntimeBase base ? base : null;
-            String ownerTrace = callback == null ? "cleared" : callback.ownerTraceSnapshot();
-            assertNull(callback,
-                    "inner Try::Tiny callback remains strongly owned after goto; " + ownerTrace);
-            assertEquals(0, runtime.executionState().argsStack.size(),
+            int argsDepth = runtime.executionState().argsStack.size();
+            String ownerTrace = callback == null ? "cleared"
+                    : callback.ownerTraceSnapshot() + "; " + untrackedOwnerDetails(callback);
+            assertEquals(0, argsDepth,
                     "tail-call left an argument frame active; " + ownerTrace);
+            if (callback != null) {
+                assertTrue(WeakRefRegistry.isweak(retainedCallback),
+                        "a retained callback probe must be weak; " + ownerTrace);
+            }
+            assertEquals(RuntimeScalarType.UNDEF, retainedCallback.type,
+                    "inner Try::Tiny callback remains after goto; weakCell#"
+                            + System.identityHashCode(retainedCallback) + " argsDepth="
+                            + argsDepth + "; " + ownerTrace);
+            assertNull(retainedCallback.value,
+                    "cleared callback probe still contains a referent; " + ownerTrace);
         }
+    }
+
+    private static String untrackedOwnerDetails(RuntimeBase referent) {
+        StringBuilder details = new StringBuilder("untrackedOwners=[");
+        boolean first = true;
+        for (PerlOwnerSlot slot : referent.ownerSlotSnapshot()) {
+            if (!slot.isActive() || slot.kind() != PerlOwnerSlot.Kind.UNTRACKED_REFERENCE) {
+                continue;
+            }
+            RuntimeScalar owner = slot.untrackedScalarOwner();
+            if (!first) details.append(", ");
+            first = false;
+            details.append("slot#").append(slot.identity()).append(" scalar#");
+            if (owner == null) {
+                details.append("collected");
+                continue;
+            }
+            details.append(System.identityHashCode(owner))
+                    .append(" weak=").append(WeakRefRegistry.isweak(owner))
+                    .append(" owns=").append(owner.refCountOwned)
+                    .append(" scopeExited=").append(owner.scopeExited)
+                    .append(" local=").append(owner.localBindingExists)
+                    .append(" transient=").append(owner.isTransientArgumentValueOwner())
+                    .append(" registered=").append(MyVarCleanupStack.isRegistered(owner));
+            if (owner.containerOwner != null) {
+                details.append(" container=")
+                        .append(owner.containerOwner.getClass().getSimpleName())
+                        .append('#').append(System.identityHashCode(owner.containerOwner))
+                        .append(" perlOwned=").append(owner.containerOwner.hasPerlStrongOwner())
+                        .append(" packageRoot=").append(owner.containerOwner.isPackageGlobalRoot)
+                        .append(" local=").append(owner.containerOwner.localBindingExists)
+                        .append(" registered=")
+                        .append(MyVarCleanupStack.isRegistered(owner.containerOwner));
+            }
+        }
+        return details.append(']').toString();
     }
 }
