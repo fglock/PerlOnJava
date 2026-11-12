@@ -57,10 +57,23 @@ sub _masked_operation {
     return;
 }
 
+sub _install_shared_subs {
+    my ($self) = @_;
+    my $namespace = $self->{namespace};
+    return unless $namespace =~ /\A[A-Za-z_]\w*(?:::\w+)*\z/;
+
+    no strict 'refs';
+    for my $source_package (keys %{$self->{shared_subs} // {}}) {
+        next unless $source_package =~ /\A[A-Za-z_]\w*(?:::\w+)*\z/;
+        for my $name (keys %{$self->{shared_subs}{$source_package}}) {
+            my $code = *{"${source_package}::${name}"}{CODE};
+            *{"${namespace}::${name}"} = $code if $code;
+        }
+    }
+}
+
 sub reval {
     my ($self, $code, $strict) = @_;
-
-    my $caller_package = caller;
 
     if (my $op = $self->_masked_operation($code)) {
         $@ = "'$op' trapped by operation mask";
@@ -70,10 +83,11 @@ sub reval {
     # For PerlOnJava, we trust CPAN metadata - no sandboxing needed
     # The $strict parameter is ignored (would enable 'use strict' in real Safe)
     
-    # Safe::share records symbols from the caller's package. Evaluate in that
-    # package so strict subs can resolve a shared bareword sub call, while
-    # retaining this compatibility layer's existing strict-vars behavior.
-    my $eval_package = $self->{shared_package} || $caller_package || 'Safe';
+    # Install only explicitly shared subs into the compartment stash, then
+    # evaluate there so strict subs resolves those names without exposing the
+    # rest of the caller's package.
+    _install_shared_subs($self);
+    my $eval_package = $self->{namespace};
     $eval_package = 'Safe'
         unless $eval_package =~ /\A[A-Za-z_]\w*(?:::\w+)*\z/;
     my $wrapped = qq{package $eval_package; no strict 'vars'; $code};
@@ -152,14 +166,25 @@ sub mask {
 # Share variables with compartment - stub
 sub share {
     my ($self, @vars) = @_;
-    $self->{shared_package} //= caller;
+    my $source_package = caller;
+    for my $requested_name (@vars) {
+        my $name = $requested_name;
+        $name =~ s/^&//;
+        next unless $name =~ /\A[A-Za-z_]\w*\z/;
+        $self->{shared_subs}{$source_package}{$name} = 1;
+    }
     push @{$self->{share} //= []}, @vars;
     return $self;
 }
 
 sub share_from {
     my ($self, $pkg, $vars) = @_;
-    $self->{shared_package} //= $pkg;
+    for my $requested_name (@$vars) {
+        my $name = $requested_name;
+        $name =~ s/^&//;
+        next unless $name =~ /\A[A-Za-z_]\w*\z/;
+        $self->{shared_subs}{$pkg}{$name} = 1;
+    }
     push @{$self->{share_from}{$pkg} //= []}, @$vars;
     return $self;
 }
