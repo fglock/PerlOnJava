@@ -213,7 +213,7 @@ package B::CV {
     sub GV {
         my $self = shift;
         $self->_introspect;
-        return B::GV->new($self->{_sub_name}, $self->{_pkg_name});
+        return B::GV->new($self->{_sub_name}, $self->{_pkg_name}, $self->{ref});
     }
     
     sub STASH {
@@ -300,8 +300,8 @@ package B::GV {
     our @ISA = ('B::SV');
     
     sub new {
-        my ($class, $name, $pkg) = @_;
-        return bless { name => $name, package => $pkg }, $class;
+        my ($class, $name, $pkg, $code) = @_;
+        return bless { name => $name, package => $pkg, code => $code }, $class;
     }
     
     sub NAME {
@@ -312,6 +312,30 @@ package B::GV {
     sub STASH {
         my $self = shift;
         return B::STASH->new($self->{package});
+    }
+
+    sub _cv {
+        my $self = shift;
+        return B::CV->new($self->{code})
+            if defined $self->{code} && ref($self->{code}) eq 'CODE';
+
+        my $cv = $self->CV();
+        return ref($cv) eq 'B::CV' ? $cv : undef;
+    }
+
+    sub FILE {
+        my $self = shift;
+        my $cv = $self->_cv();
+        return $cv ? $cv->FILE() : '-e';
+    }
+
+    sub LINE {
+        my $self = shift;
+        my $cv = $self->_cv();
+        return 0 unless $cv;
+
+        my $start = $cv->START();
+        return ref($start) eq 'B::COP' ? $start->line() : 0;
     }
 
     sub SV {

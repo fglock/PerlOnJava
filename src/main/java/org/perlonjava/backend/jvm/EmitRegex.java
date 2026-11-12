@@ -448,6 +448,26 @@ public class EmitRegex {
             : ListNode.makeList(node.operand);
         EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
 
+        // Perl evaluates the bound string expression before interpolating the
+        // pattern. Keep the resulting scalar in a local while the pattern and
+        // flags are compiled, then publish match-target metadata immediately
+        // before the match operation.
+        Node target = variableBinding(operand, 2);
+        int targetSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+        boolean pooledTarget = targetSlot >= 0;
+        if (!pooledTarget) {
+            targetSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        }
+        target.accept(scalarVisitor);
+        if (target instanceof StringNode) {
+            emitterVisitor.ctx.mv.visitLdcInsn(nextCallsiteId.getAndIncrement());
+            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/regex/RuntimeRegex", "stabilizeLiteralTarget",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+        }
+        emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, targetSlot);
+
         // A static match is consumed immediately, unlike qr// which must create
         // a fresh Perl value for every evaluation.  Reuse one private wrapper
         // for the match call site to avoid cloning the cached native program.
@@ -489,13 +509,25 @@ public class EmitRegex {
         }
         emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, regexSlot);
 
-        // Use default variable $_ if none specified
-        handleVariableBinding(operand, 2, scalarVisitor, true);
-
+        // Load the already evaluated target and set its diagnostic name after
+        // pattern interpolation, which may itself run nested regex operations.
+        emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, targetSlot);
+        String targetName = regexTargetName(target);
+        if (targetName == null) {
+            emitterVisitor.ctx.mv.visitInsn(Opcodes.ACONST_NULL);
+        } else {
+            emitterVisitor.ctx.mv.visitLdcInsn(targetName);
+        }
+        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/regex/RegexQuoteMeta", "setMatchTargetName",
+                "(Ljava/lang/String;)V", false);
         emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, regexSlot);
         emitterVisitor.ctx.mv.visitInsn(Opcodes.SWAP);
 
         if (pooledRegex) {
+            emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+        }
+        if (pooledTarget) {
             emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
         }
 
@@ -558,16 +590,7 @@ public class EmitRegex {
     private static void handleVariableBinding(ListNode operand, int variableIndex,
                                               EmitterVisitor scalarVisitor,
                                               boolean stabilizeLiteral) {
-        // Check if a variable was provided in the operand list
-        Node variable = null;
-        if (operand.elements.size() > variableIndex) {
-            variable = operand.elements.get(variableIndex);
-        }
-
-        // If no variable was specified, use the default $_ variable
-        if (variable == null) {
-            variable = new OperatorNode("$", new IdentifierNode("_", operand.tokenIndex), operand.tokenIndex);
-        }
+        Node variable = variableBinding(operand, variableIndex);
 
         // Generate bytecode for the variable access
         variable.accept(scalarVisitor);
@@ -587,6 +610,15 @@ public class EmitRegex {
                     "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                     false);
         }
+    }
+
+    private static Node variableBinding(ListNode operand, int variableIndex) {
+        if (operand.elements.size() > variableIndex
+                && operand.elements.get(variableIndex) != null) {
+            return operand.elements.get(variableIndex);
+        }
+        return new OperatorNode("$", new IdentifierNode("_", operand.tokenIndex),
+                operand.tokenIndex);
     }
 
     private static String regexTargetName(Node node) {

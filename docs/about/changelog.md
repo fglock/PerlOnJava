@@ -6,6 +6,8 @@ priorities and future plans.
 
 ## Work in progress
 
+- Add `B::GV::FILE` and `LINE` source location introspection (#1284).
+- Evaluate bound regex targets before pattern interpolation, recognize imported AUTOLOAD-backed placeholders, and preserve anonymous caller names and arguments through eval and method frames (#1377, #1548).
 - Bundle the `indirect` pragma and restore `Sys::Syslog` `openlog`, POSIX `:float_h`, and `Want::howmany` compatibility (#2016, #2022, #2020, #2014).
 - Bound RSA key generation to 1024–8192 bits, preserving explicitly requested 1024-bit legacy compatibility while documenting its security limitation (#2031).
 - Forward redirected Perl stdin to child processes, load `IO::Handle` without ambiguous `close` warnings, and accept trailing semicolons in Perl shebangs (#2023, #2024, #2018).
