@@ -1097,6 +1097,20 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         return snapshot;
     }
 
+    /** Bounded owner-slot snapshot for positive reachability proofs. */
+    synchronized java.util.Set<PerlOwnerSlot> ownerSlotSnapshot(int maximumSlots) {
+        if (maximumSlots < 0) {
+            throw new IllegalArgumentException("Owner-slot snapshot limit must not be negative");
+        }
+        if (ownerSlots == null || ownerSlots.isEmpty() || ownerSlots.size() > maximumSlots) {
+            return java.util.Collections.emptySet();
+        }
+        java.util.Set<PerlOwnerSlot> snapshot = java.util.Collections.newSetFromMap(
+                new java.util.IdentityHashMap<>());
+        snapshot.addAll(ownerSlots);
+        return snapshot;
+    }
+
     private synchronized java.util.List<PerlOwnerSlot> closureCaptureOwnerSnapshot() {
         if (ownerSlots == null || ownerSlots.isEmpty()) return java.util.List.of();
         java.util.ArrayList<PerlOwnerSlot> snapshot = new java.util.ArrayList<>();

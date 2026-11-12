@@ -1819,6 +1819,47 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && hash.elements.containsValue(this);
     }
 
+    /** Return a validated ordinary aggregate owner for temporary-root proofs. */
+    RuntimeBase currentTemporaryRootAggregateOwner(
+            RuntimeBase referent, PerlOwnerSlot slot) {
+        if (referent == null || slot == null || !slot.isActive()
+                || slot.referent() != referent || value != referent
+                || WeakRefRegistry.isweak(this)) {
+            return null;
+        }
+
+        RuntimeBase container = containerOwner;
+        if (container instanceof RuntimeArray array) {
+            if (array.type != RuntimeArray.PLAIN_ARRAY || array.elementsAliased
+                    || array.threadShared || !array.elements.contains(this)) {
+                return null;
+            }
+        } else if (container instanceof RuntimeHash hash) {
+            if (hash.type != RuntimeHash.PLAIN_HASH || hash.threadShared
+                    || !hash.containsElementCellIdentity(this)) {
+                return null;
+            }
+        } else {
+            return null;
+        }
+
+        return switch (slot.kind()) {
+            case ARRAY_ELEMENT, HASH_ELEMENT ->
+                    slot.countedScalarOwner() == this
+                            && isCurrentAggregateElementOwner(referent, slot)
+                            ? container : null;
+            case UNTRACKED_REFERENCE ->
+                    slot == untrackedReferenceOwnerSlot
+                            && slot.untrackedScalarOwner() == this
+                            && !isTransientArgumentValueOwner()
+                            && (((type & RuntimeScalarType.REFERENCE_BIT) != 0)
+                                || type == RuntimeScalarType.GLOB
+                                || type == RuntimeScalarType.CODE)
+                            ? container : null;
+            default -> null;
+        };
+    }
+
     boolean isCurrentCountedScalarOwner(RuntimeBase referent, PerlOwnerSlot slot) {
         PerlOwnerSlot.Kind kind = slot.kind();
         if (localizedSavedCountedOwner) {

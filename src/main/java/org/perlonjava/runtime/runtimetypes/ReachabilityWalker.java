@@ -2418,11 +2418,12 @@ public class ReachabilityWalker {
 
     public static boolean isReachableFromTemporaryRoots(RuntimeBase target) {
         if (target == null || !MortalList.hasTemporaryRoots()) return false;
-        // Direct scalar/array/list edges are common while a caller finishes
-        // cleanup around a temporary expression. Prove those without opening
-        // the referent's full descendant graph; nested hash/object paths still
-        // use the walker below.
+        // Direct edges and ordinary array/hash owner ancestry are common while
+        // cleanup finishes around a temporary expression. Prove those without
+        // opening the referent graph; opaque or incomplete paths still use the
+        // full walker below.
         if (MortalList.temporaryRootDirectlyReferences(target)) return true;
+        if (hasTemporaryRootOwnerAncestryPath(target)) return true;
         ReachabilityWalker walker = new ReachabilityWalker();
         java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
         for (RuntimeBase tempRoot : MortalList.snapshotTemporaryRoots()) {
@@ -2430,6 +2431,56 @@ public class ReachabilityWalker {
         }
         walker.bfs(todo, true);
         return walker.reachable.contains(target);
+    }
+
+    private static final int MAX_TEMPORARY_ROOT_OWNER_ANCESTRY_DEPTH = 16;
+    private static final int MAX_TEMPORARY_ROOT_OWNER_ANCESTRY_NODES = 64;
+    private static final int MAX_TEMPORARY_ROOT_DIRECT_ROOTS = 256;
+    private static final int MAX_TEMPORARY_ROOT_DIRECT_EDGES = 4096;
+
+    private record TemporaryRootOwnerAncestor(RuntimeBase value, int depth) {}
+
+    /** Positive-only proof through current ordinary aggregate owner cells. */
+    private static boolean hasTemporaryRootOwnerAncestryPath(RuntimeBase target) {
+        java.util.ArrayDeque<TemporaryRootOwnerAncestor> todo = new java.util.ArrayDeque<>();
+        Set<RuntimeBase> seen = java.util.Collections.newSetFromMap(new IdentityHashMap<>());
+        Set<RuntimeBase> candidates = java.util.Collections.newSetFromMap(new IdentityHashMap<>());
+        candidates.add(target);
+        appendTemporaryRootOwnerAncestors(target, 0, todo);
+
+        int visited = 0;
+        while (!todo.isEmpty() && visited < MAX_TEMPORARY_ROOT_OWNER_ANCESTRY_NODES) {
+            TemporaryRootOwnerAncestor ancestor = todo.removeFirst();
+            RuntimeBase value = ancestor.value();
+            if (!seen.add(value)) continue;
+            visited++;
+            candidates.add(value);
+            appendTemporaryRootOwnerAncestors(value, ancestor.depth(), todo);
+        }
+        return MortalList.temporaryRootsDirectlyReferenceAny(
+                candidates, MAX_TEMPORARY_ROOT_DIRECT_ROOTS,
+                MAX_TEMPORARY_ROOT_DIRECT_EDGES);
+    }
+
+    private static void appendTemporaryRootOwnerAncestors(
+            RuntimeBase value, int depth,
+            java.util.ArrayDeque<TemporaryRootOwnerAncestor> todo) {
+        if (depth >= MAX_TEMPORARY_ROOT_OWNER_ANCESTRY_DEPTH) return;
+        Set<PerlOwnerSlot> ownerSlots = value.ownerSlotSnapshot(
+                MAX_TEMPORARY_ROOT_OWNER_ANCESTRY_NODES);
+        for (PerlOwnerSlot slot : ownerSlots) {
+            if (todo.size() >= MAX_TEMPORARY_ROOT_OWNER_ANCESTRY_NODES) return;
+            RuntimeScalar scalarOwner = switch (slot.kind()) {
+                case ARRAY_ELEMENT, HASH_ELEMENT -> slot.countedScalarOwner();
+                case UNTRACKED_REFERENCE -> slot.untrackedScalarOwner();
+                default -> null;
+            };
+            if (scalarOwner == null) continue;
+            RuntimeBase container = scalarOwner.currentTemporaryRootAggregateOwner(value, slot);
+            if (container != null) {
+                todo.addLast(new TemporaryRootOwnerAncestor(container, depth + 1));
+            }
+        }
     }
 
     /**

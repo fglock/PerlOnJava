@@ -193,6 +193,53 @@ public class MortalList {
         return false;
     }
 
+    /**
+     * Check only direct scalar/array/hash edges from current leases against a
+     * bounded candidate set. A miss is inconclusive; callers retain the full
+     * graph-walk fallback.
+     */
+    static boolean temporaryRootsDirectlyReferenceAny(
+            Set<RuntimeBase> candidates, int maximumRoots, int maximumEdges) {
+        if (candidates == null || candidates.isEmpty()
+                || maximumRoots < 0 || maximumEdges < 0) {
+            return false;
+        }
+        int roots = 0;
+        int edges = 0;
+        for (LifecycleRuntimeState.TemporaryRootLease lease : state().temporaryRoots) {
+            if (++roots > maximumRoots) return false;
+            RuntimeBase root = lease.root();
+            if (candidates.contains(root)) return true;
+            if (root instanceof RuntimeScalar scalar) {
+                if (++edges > maximumEdges) return false;
+                if (candidates.contains(directStrongReferent(scalar))) return true;
+            } else if (root instanceof RuntimeArray array) {
+                if (array.type != RuntimeArray.PLAIN_ARRAY || array.elementsAliased
+                        || array.threadShared) continue;
+                for (RuntimeScalar element : array.elements) {
+                    if (++edges > maximumEdges) return false;
+                    if (candidates.contains(directStrongReferent(element))) return true;
+                }
+            } else if (root instanceof RuntimeHash hash) {
+                if (hash.type != RuntimeHash.PLAIN_HASH || hash.threadShared
+                        || hash.elements == null || hash.elements instanceof HashSpecialVariable) {
+                    continue;
+                }
+                for (RuntimeScalar element : hash.elements.values()) {
+                    if (++edges > maximumEdges) return false;
+                    if (candidates.contains(directStrongReferent(element))) return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static RuntimeBase directStrongReferent(RuntimeScalar scalar) {
+        return scalar != null && !WeakRefRegistry.isweak(scalar)
+                && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                && scalar.value instanceof RuntimeBase referent ? referent : null;
+    }
+
     private static boolean directlyReferences(RuntimeBase value, RuntimeBase target) {
         if (value == target) return true;
         if (value == null) return false;
