@@ -2440,7 +2440,7 @@ public class ReachabilityWalker {
 
     private record TemporaryRootOwnerAncestor(RuntimeBase value, int depth) {}
 
-    /** Positive-only proof through current ordinary aggregate owner cells. */
+    /** Positive-only proof through current owner slots into direct temporary roots. */
     private static boolean hasTemporaryRootOwnerAncestryPath(RuntimeBase target) {
         java.util.ArrayDeque<TemporaryRootOwnerAncestor> todo = new java.util.ArrayDeque<>();
         Set<RuntimeBase> seen = java.util.Collections.newSetFromMap(new IdentityHashMap<>());
@@ -2470,6 +2470,17 @@ public class ReachabilityWalker {
                 MAX_TEMPORARY_ROOT_OWNER_ANCESTRY_NODES);
         for (PerlOwnerSlot slot : ownerSlots) {
             if (todo.size() >= MAX_TEMPORARY_ROOT_OWNER_ANCESTRY_NODES) return;
+            if (slot.kind() == PerlOwnerSlot.Kind.SCALAR_REFERENCE_CONTENTS) {
+                RuntimeScalar scalarCell = slot.scalarReferenceCell();
+                if (scalarCell != null
+                        && DestroyDispatch.isCurrentPerlOwnerSlot(value, slot)) {
+                    // The live wrapper owns this exact scalar cell, whose
+                    // current reference value is the referent. A direct root
+                    // edge to the cell therefore proves the whole chain.
+                    todo.addLast(new TemporaryRootOwnerAncestor(scalarCell, depth + 1));
+                }
+                continue;
+            }
             RuntimeScalar scalarOwner = switch (slot.kind()) {
                 case ARRAY_ELEMENT, HASH_ELEMENT -> slot.countedScalarOwner();
                 case UNTRACKED_REFERENCE -> slot.untrackedScalarOwner();
