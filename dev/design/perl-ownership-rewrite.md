@@ -43,18 +43,24 @@ references and is not a confirmed independent failure. Logs:
 `/tmp/issue2043-dbic-52leaks-system-perl.log`, and
 `/tmp/issue2043-dbic-52leaks-ownertrace-91b291deb7.log`.
 
-Production reachability fallbacks also remain: null-token deferred releases in
-`MortalList`, the remaining END-block root walk, and the `ReachabilityWalker`
-sweep engine.
+The call-site audit on `91b291deb7` found no in-repository production caller
+of `ReachabilityWalker.sweepWeakRefs()` after the Perl wrappers were removed.
+Remaining direct calls are Java tests or internal to the sweep engine.
+`MortalList` root-snapshot recovery is reached through the tokenless legacy
+`deferDecrement` path, which also has no in-repository production caller;
+`walkEndBlockRoots()` is nested under the sweep engine. Thread-clone
+`RootSnapshot` handling is separate and must remain.
 
 Next, reproduce the DBIx owner paths separately for checks 12–17 and the
 nested-clone check 18, add a project-owned system-Perl-verified behavior
-regression, and fix the exact missing owner-release transitions. Then remove
-the production root-walk fallbacks, sweep-only state and APIs, and diagnostics
-once their callers disappear. DBIx diagnosis and a read-only inventory of
-sweep-only callers can proceed independently; edits to the shared owner-release
-paths should be integrated serially. Finish with the exact-head `make` gate and
-fresh PR/issue review.
+regression, and fix the exact missing owner-release transitions. Then migrate
+legacy Java tests to explicit owner-slot releases and remove the tokenless
+compatibility API plus its root-snapshot repair. With those callers gone,
+remove the sweep engine, temporary-root ancestry/proof tests, sweep-only state,
+and obsolete diagnostics while preserving Perl behavior tests. DBIx diagnosis
+and read-only call-site review can proceed independently; edits to shared
+owner-release code should be integrated serially. Finish with exact-head
+`make`, focused DBIx acceptance, and fresh PR/issue review.
 
 ### Phase 2 progress (2026-10-27)
 
