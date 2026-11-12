@@ -149,17 +149,29 @@ class RescuedWeakRefsBeforeEndTest {
             RuntimeScalar weak = rescued.createAnonymousReference();
             WeakRefRegistry.weaken(weak);
             RuntimeCode endBlock = new RuntimeCode((args, context) -> new RuntimeList(), null);
-            endBlock.putClosedOverVariable("rescued", rescued.createAnonymousReference());
+            RuntimeScalar captured = rescued.createAnonymousReference();
+            endBlock.putClosedOverVariable("rescued", captured);
+            endBlock.capturedScalars = new RuntimeScalar[]{captured};
+            endBlock.capturedScalarOwnerSlots = new PerlOwnerSlot[]{
+                    captured.retainClosureCaptureSlot(endBlock)
+            };
             SpecialBlock.saveEndBlock(new RuntimeScalar(endBlock));
             rescued.destroyFired = true;
             runtime.lifecycleState.rescuedObjects.add(rescued);
 
-            assertTrue(WeakRefRegistry.isweak(weak));
-            MortalList.flushDeferredCapturesBeforeEnd();
+            try {
+                assertTrue(WeakRefRegistry.isweak(weak));
+                MortalList.flushDeferredCapturesBeforeEnd();
 
-            assertTrue(WeakRefRegistry.isweak(weak),
-                    "a queued END callback keeps its captured object alive");
-            assertSame(rescued, weak.value);
+                assertTrue(WeakRefRegistry.isweak(weak),
+                        "a queued END callback keeps its captured object alive");
+                assertSame(rescued, weak.value);
+            } finally {
+                while (!SpecialBlock.getEndBlocks().isEmpty()) {
+                    RuntimeArray.shift(SpecialBlock.getEndBlocks());
+                }
+                endBlock.releaseCaptures();
+            }
         }
     }
 
@@ -172,17 +184,27 @@ class RescuedWeakRefsBeforeEndTest {
             WeakRefRegistry.weaken(weak);
             RuntimeCode activeCode = new RuntimeCode(
                     (args, context) -> new RuntimeList(), null);
-            activeCode.putClosedOverVariable("rescued", rescued.createAnonymousReference());
-            runtime.executionState().activeCodeStack.add(activeCode);
+            RuntimeScalar captured = rescued.createAnonymousReference();
+            activeCode.putClosedOverVariable("rescued", captured);
+            activeCode.capturedScalars = new RuntimeScalar[]{captured};
+            activeCode.capturedScalarOwnerSlots = new PerlOwnerSlot[]{
+                    captured.retainClosureCaptureSlot(activeCode)
+            };
+            RuntimeCode.pushActiveCode(activeCode);
             rescued.destroyFired = true;
             runtime.lifecycleState.rescuedObjects.add(rescued);
 
-            assertTrue(WeakRefRegistry.isweak(weak));
-            MortalList.flushDeferredCapturesBeforeEnd();
+            try {
+                assertTrue(WeakRefRegistry.isweak(weak));
+                MortalList.flushDeferredCapturesBeforeEnd();
 
-            assertTrue(WeakRefRegistry.isweak(weak),
-                    "an active Perl callback keeps its captured object alive");
-            assertSame(rescued, weak.value);
+                assertTrue(WeakRefRegistry.isweak(weak),
+                        "an active Perl callback keeps its captured object alive");
+                assertSame(rescued, weak.value);
+            } finally {
+                RuntimeCode.popActiveCode(activeCode);
+                activeCode.releaseCaptures();
+            }
         }
     }
 
