@@ -117,4 +117,95 @@ class TemporaryRootCountedCellOwnerTest {
             }
         }
     }
+
+    @Test
+    void currentTieHandlerOwnerProvesTemporaryRootWithoutGraphWalk() {
+        assertTieHandlerOwnerProvesTemporaryRoot(PerlOwnerSlot.Kind.TIE_HANDLER);
+    }
+
+    @Test
+    void currentArgumentTieHandlerOwnerProvesTemporaryRootWithoutGraphWalk() {
+        assertTieHandlerOwnerProvesTemporaryRoot(PerlOwnerSlot.Kind.ARGUMENT_TIE_HANDLER);
+    }
+
+    @Test
+    void currentArgumentContainerOwnerProvesTemporaryRootWithoutGraphWalk() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeHash target = new RuntimeHash();
+            target.refCount = 0;
+            RuntimeScalar containerOwner = RuntimeScalar.retainArgumentContainerValue(target);
+
+            CountingHashValues opaqueValues = new CountingHashValues();
+            RuntimeHash opaque = new RuntimeHash();
+            opaque.elements = opaqueValues;
+            RuntimeArray root = new RuntimeArray();
+            root.localBindingExists = true;
+            root.elements.add(opaque.createReference());
+            root.elements.add(containerOwner.createReference());
+
+            MortalList.pushTemporaryRoot(root);
+            try {
+                PerlOwnerSlot ownerSlot = target.ownerSlotSnapshot().stream()
+                        .filter(slot -> slot.kind() == PerlOwnerSlot.Kind.ARGUMENT_CONTAINER)
+                        .findFirst().orElseThrow();
+                assertTrue(DestroyDispatch.isCurrentPerlOwnerSlot(target, ownerSlot),
+                        "the argument-container owner must be current");
+                assertFalse(MortalList.temporaryRootDirectlyReferences(target),
+                        "the root points to the argument-container cell, not its value");
+                assertTrue(MortalList.temporaryRootDirectlyReferences(containerOwner),
+                        "the root directly references the argument-container cell");
+
+                assertTrue(ReachabilityWalker.isReachableFromTemporaryRoots(target));
+                assertEquals(0, opaqueValues.valuesCalls,
+                        "the validated argument-container path must avoid the fallback graph walk");
+            } finally {
+                MortalList.popTemporaryRoot(root);
+                root.elements.clear();
+                root.localBindingExists = false;
+                MortalList.scopeExitCleanupArray(root);
+                RuntimeScalar.releaseArgumentContainerValue(containerOwner);
+            }
+        }
+    }
+
+    private void assertTieHandlerOwnerProvesTemporaryRoot(PerlOwnerSlot.Kind kind) {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeHash target = new RuntimeHash();
+            RuntimeScalar handlerSource = target.createAnonymousReference();
+            RuntimeScalar handlerOwner = RuntimeScalar.retainTiedHandlerValue(handlerSource, kind);
+
+            CountingHashValues opaqueValues = new CountingHashValues();
+            RuntimeHash opaque = new RuntimeHash();
+            opaque.elements = opaqueValues;
+            RuntimeArray root = new RuntimeArray();
+            root.localBindingExists = true;
+            root.elements.add(opaque.createReference());
+            root.elements.add(handlerOwner.createReference());
+
+            MortalList.pushTemporaryRoot(root);
+            try {
+                PerlOwnerSlot handlerSlot = target.ownerSlotSnapshot().stream()
+                        .filter(slot -> slot.kind() == kind)
+                        .findFirst().orElseThrow();
+                assertTrue(DestroyDispatch.isCurrentPerlOwnerSlot(target, handlerSlot),
+                        "the tied-handler owner must be current");
+                assertFalse(MortalList.temporaryRootDirectlyReferences(target),
+                        "the root points to the tied-handler cell, not its value");
+                assertTrue(MortalList.temporaryRootDirectlyReferences(handlerOwner),
+                        "the root directly references the tied-handler cell");
+
+                assertTrue(ReachabilityWalker.isReachableFromTemporaryRoots(target));
+                assertEquals(0, opaqueValues.valuesCalls,
+                        "the validated tied-handler path must avoid the fallback graph walk");
+            } finally {
+                MortalList.popTemporaryRoot(root);
+                root.elements.clear();
+                root.localBindingExists = false;
+                MortalList.scopeExitCleanupArray(root);
+                RuntimeScalar.releaseTiedHandlerValue(handlerOwner);
+            }
+        }
+    }
 }

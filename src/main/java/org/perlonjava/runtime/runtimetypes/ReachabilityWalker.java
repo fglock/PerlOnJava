@@ -2482,12 +2482,15 @@ public class ReachabilityWalker {
                 continue;
             }
             if (slot.kind() == PerlOwnerSlot.Kind.SCALAR_CELL
-                    || slot.kind() == PerlOwnerSlot.Kind.CODE_SLOT) {
+                    || slot.kind() == PerlOwnerSlot.Kind.CODE_SLOT
+                    || slot.kind() == PerlOwnerSlot.Kind.ARGUMENT_CONTAINER
+                    || slot.kind() == PerlOwnerSlot.Kind.TIE_HANDLER
+                    || slot.kind() == PerlOwnerSlot.Kind.ARGUMENT_TIE_HANDLER) {
                 RuntimeScalar scalarOwner = slot.countedScalarOwner();
                 if (scalarOwner != null
                         && DestroyDispatch.isCurrentPerlOwnerSlot(value, slot)) {
                     // A root may hold a reference to the current scalar cell
-                    // without directly holding the value stored in that cell.
+                    // or tied-handler owner without directly holding its value.
                     todo.addLast(new TemporaryRootOwnerAncestor(scalarOwner, depth + 1));
                 }
                 continue;
