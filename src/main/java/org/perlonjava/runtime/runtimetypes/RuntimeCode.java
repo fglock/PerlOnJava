@@ -1836,7 +1836,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     private boolean hasCurrentPerlOwnerSlotsOtherThan(PerlOwnerSlot excludedOwner) {
         for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
-            if (slot != excludedOwner && DestroyDispatch.isCurrentPerlOwnerSlot(this, slot)) {
+            if (slot == excludedOwner || !slot.isActive()) continue;
+            if (slot.kind() == PerlOwnerSlot.Kind.UNTRACKED_REFERENCE) {
+                RuntimeScalar owner = slot.untrackedScalarOwner();
+                if (owner != null && !owner.isTransientArgumentValueOwner()
+                        && owner.hasLiveCurrentStrongValueSlot()
+                        && !WeakRefRegistry.isweak(owner)
+                        && (owner.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                        && owner.value == this) return true;
+            } else if (DestroyDispatch.isCurrentPerlOwnerSlot(this, slot)) {
                 return true;
             }
         }
