@@ -1032,7 +1032,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
 
     void refreshUntrackedElementOwners() {
         if (elements == null) return;
-        for (RuntimeScalar value : elements) {
+        for (RuntimeScalar value : new ArrayList<>(elements)) {
+            if (MortalList.deferAggregateRefreshUntilTemporaryRootsLeave(this)) return;
             if (value != null) value.reconcileContainerOwnerAfterMutation(this);
         }
     }
