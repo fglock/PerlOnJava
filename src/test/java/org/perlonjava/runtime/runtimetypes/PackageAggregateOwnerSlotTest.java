@@ -1,6 +1,5 @@
 package org.perlonjava.runtime.runtimetypes;
 
-import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
@@ -135,9 +134,6 @@ class PackageAggregateOwnerSlotTest {
 
     @Test
     void finalPackageAggregateRootClearsWeakObserverWithoutSweeps() {
-        Assumptions.assumeFalse(ReachabilityWalker.correctiveSweepsEnabled(),
-                "package-root release must clear weak refs without corrective sweeps");
-
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeArray array = new RuntimeArray();
@@ -171,9 +167,6 @@ class PackageAggregateOwnerSlotTest {
 
     @Test
     void finalPackageScalarRootClearsWeakObserverToCellWithoutSweeps() {
-        Assumptions.assumeFalse(ReachabilityWalker.correctiveSweepsEnabled(),
-                "package-root release must clear weak refs without corrective sweeps");
-
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeScalar packageCell = new RuntimeScalar("package scalar cell");

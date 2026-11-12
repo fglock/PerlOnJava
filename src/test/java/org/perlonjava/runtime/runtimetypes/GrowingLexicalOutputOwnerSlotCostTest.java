@@ -75,7 +75,6 @@ class GrowingLexicalOutputOwnerSlotCostTest {
                 }
                 MyVarCleanupStack.unregister(output);
                 MortalList.scopeExitCleanupArray(output);
-                MortalList.invalidateAllRootSnapshots();
             }
         }
     }

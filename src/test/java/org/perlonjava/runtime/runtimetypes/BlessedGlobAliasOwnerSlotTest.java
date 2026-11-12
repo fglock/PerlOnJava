@@ -46,7 +46,6 @@ class BlessedGlobAliasOwnerSlotTest {
                 MyVarCleanupStack.unregister(weak);
                 MyVarCleanupStack.unregister(second);
                 MyVarCleanupStack.unregister(first);
-                MortalList.invalidateAllRootSnapshots();
             }
         }
     }
@@ -74,7 +73,6 @@ class BlessedGlobAliasOwnerSlotTest {
                 WeakRefRegistry.clearWeakRefsTo(glob);
                 MyVarCleanupStack.unregister(weak);
                 MortalList.flush();
-                MortalList.invalidateAllRootSnapshots();
             }
         }
     }

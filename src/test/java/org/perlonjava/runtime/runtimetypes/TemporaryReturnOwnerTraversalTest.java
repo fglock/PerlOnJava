@@ -79,7 +79,9 @@ class TemporaryReturnOwnerTraversalTest {
             expression.elements.add(target.createReference());
             MortalList.pushTemporaryRoot(expression);
             try {
-                assertTrue(MortalList.temporaryRootDirectlyReferences(target));
+                assertEquals(target, ((RuntimeScalar) expression.elements.getFirst()).value);
+                assertEquals(1, expression.ownerSlotCount(
+                        PerlOwnerSlot.Kind.EXPRESSION_TEMPORARY_ROOT));
             } finally {
                 MortalList.popTemporaryRoot(expression);
             }
@@ -87,7 +89,7 @@ class TemporaryReturnOwnerTraversalTest {
     }
 
     @Test
-    void temporaryReturnListKeepsStrongReferentsReachableUntilPopped() {
+    void temporaryReturnListLeaseTracksTheListLifetime() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeHash target = new RuntimeHash();
@@ -96,16 +98,15 @@ class TemporaryReturnOwnerTraversalTest {
 
             MortalList.pushTemporaryRoot(expression);
             try {
-                assertTrue(ReachabilityWalker.isReachableFromTemporaryRoots(target));
-                java.util.List<String> path = ReachabilityWalker.findPathTo(target);
-                assertNotNull(path);
-                assertTrue(path.getFirst().contains("<temp-root#"), path.toString());
+                assertEquals(target, ((RuntimeScalar) expression.elements.getFirst()).value);
+                assertEquals(1, expression.ownerSlotCount(
+                        PerlOwnerSlot.Kind.EXPRESSION_TEMPORARY_ROOT));
             } finally {
                 MortalList.popTemporaryRoot(expression);
             }
 
-            assertFalse(ReachabilityWalker.isReachableFromTemporaryRoots(target));
-            assertNull(ReachabilityWalker.findPathTo(target));
+            assertEquals(0, expression.ownerSlotCount(
+                    PerlOwnerSlot.Kind.EXPRESSION_TEMPORARY_ROOT));
         }
     }
 }

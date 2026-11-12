@@ -49,7 +49,6 @@ class WeakeningPrunesStaleUntrackedOwnerSlotTest {
                 lexicalOwner.localBindingExists = false;
                 MortalList.scopeExitCleanupArray(lexicalOwner);
                 MortalList.setActive(previousMortalListState);
-                MortalList.invalidateAllRootSnapshots();
             }
         }
     }

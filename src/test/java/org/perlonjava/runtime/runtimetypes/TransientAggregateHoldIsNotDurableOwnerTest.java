@@ -181,14 +181,14 @@ class TransientAggregateHoldIsNotDurableOwnerTest {
             RuntimeScalar codeCell = new RuntimeScalar(closure);
             RuntimeArray root = new RuntimeArray();
             root.localBindingExists = true;
-            root.elements.add(codeCell);
+            root.addClonedElement(codeCell);
             root.localBindingExists = false;
 
             RuntimeCode.CallArguments staged = RuntimeCode.newCallArguments(1);
             MortalList.pushTemporaryRoot(root);
             try {
-                assertTrue(MortalList.temporaryRootDirectlyReferences(closure),
-                        "the temporary array root directly owns the callback cell");
+                assertEquals(1, root.ownerSlotCount(
+                        PerlOwnerSlot.Kind.EXPRESSION_TEMPORARY_ROOT));
                 staged.add(codeCell);
                 closure.requestCaptureReleaseWhenUnowned();
                 staged.finish();
@@ -229,7 +229,8 @@ class TransientAggregateHoldIsNotDurableOwnerTest {
             RuntimeCode.CallArguments staged = RuntimeCode.newCallArguments(1);
             MortalList.pushTemporaryRoot(root);
             try {
-                assertTrue(MortalList.temporaryRootDirectlyReferences(closure));
+                assertEquals(1, root.ownerSlotCount(
+                        PerlOwnerSlot.Kind.EXPRESSION_TEMPORARY_ROOT));
                 staged.add(codeCell);
                 closure.requestCaptureReleaseWhenUnowned();
                 staged.finish();

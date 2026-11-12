@@ -16,7 +16,7 @@ class LegacyClosureCaptureOwnerReleaseTest {
             String className = "LegacyCaptureOwnerRelease::Tracked";
             RuntimeHash referent = new RuntimeHash();
             referent.blessId = NameNormalizer.getBlessId(className);
-            referent.refCount = 1;
+            referent.refCount = 0;
             installDestroy(className);
 
             RuntimeScalar pad = referenceTo(referent);
@@ -25,16 +25,17 @@ class LegacyClosureCaptureOwnerReleaseTest {
             assertEquals(1, referent.semanticCaptureOwnerCount());
             assertEquals(0, referent.nativeCaptureOwnerCount());
 
+            RuntimeScalar temporaryOwner = CountedOwnerFixture.temporaryReference(referent);
             RuntimeScalar weak = referenceTo(referent);
             WeakRefRegistry.weaken(weak);
 
             try (MortalList.ReachabilityQueryMeasurement measurement =
                          MortalList.measureReachabilityQueries()) {
-                MortalList.deferDecrement(referent);
+                CountedOwnerFixture.queueRelease(temporaryOwner);
                 MortalList.flush();
 
-                assertEquals(0, referent.refCount,
-                        "a live capture is represented by its owner identity");
+                assertEquals(WeakRefRegistry.WEAKLY_TRACKED, referent.refCount,
+                        "a live capture holds weak cleanup after the final counted slot leaves");
                 assertTrue(referent.deferredFinalReleaseForUncountedOwners,
                         "final cleanup waits for that identity to leave");
                 assertTrue(WeakRefRegistry.isweak(weak));

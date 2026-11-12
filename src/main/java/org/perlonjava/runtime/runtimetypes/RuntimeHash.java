@@ -67,8 +67,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * D-W6.18: marks this hash as a package-global hash (registered in
      * GlobalVariable.globalHashes). When a value is stored in this hash,
      * the value's referent is marked as {@code storedInPackageGlobal} —
-     * which then allows the walker-gate rescue at refCount→0 to
-     * preserve module-global metadata (Class::MOP %METAS, similar caches)
+     * which lets final-release cleanup recognize module-global metadata
      * across transient selective-refCount zeros.
      * <p>
      * Set by {@code GlobalVariable.markAsGlobalPackageHash} when the hash
@@ -324,7 +323,6 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     private void refreshUntrackedElementOwners(boolean afterTransfer) {
         if (elements == null) return;
         for (RuntimeScalar value : new ArrayList<>(elements.values())) {
-            if (MortalList.deferAggregateRefreshUntilTemporaryRootsLeave(this)) return;
             if (value == null) continue;
             if (afterTransfer) value.reconcileContainerOwnerAfterAggregateTransfer(this);
             else value.reconcileContainerOwnerAfterMutation(this);
@@ -460,7 +458,6 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                     && previous != null && previous != value && !previousWasAlias) {
                 MortalList.deferDestroyForContainerClear(java.util.Collections.singletonList(previous));
             }
-            owner.notePackageRootMutation(previous, value);
             if (value != null && !newValueIsAlias) {
                 if (owner.hasDurableElementLifetime()) {
                     RuntimeScalar.retainUnstashedIoForDurableSlot(value);
@@ -810,7 +807,6 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             if (owner.isHintHash && !owner.suppressHintHashLifecycleCleanup && !aliasCell) {
                 MortalList.deferDestroyForContainerClear(java.util.Collections.singletonList(previous));
             }
-            owner.notePackageRootMutation(previous, null);
             previous.reconcileContainerOwnerAfterMutation(owner);
             updateReferentHashSlotOwnership(previous, null);
             releaseHashAliasCellOwner(key);
@@ -849,17 +845,12 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 }
                 return;
             }
-            boolean hasReferenceEdge = false;
             Set<RuntimeScalar> replacedValues = Collections.newSetFromMap(
                     new IdentityHashMap<>());
             for (Map.Entry<? extends String, ? extends RuntimeScalar> e : m.entrySet()) {
                 RuntimeScalar previous = super.get(e.getKey());
                 if (previous != null && previous != e.getValue()) replacedValues.add(previous);
-                if (rootEdge(previous) || rootEdge(e.getValue())) {
-                    hasReferenceEdge = true;
-                }
             }
-            owner.notePackageRootMutationIf(hasReferenceEdge);
             for (RuntimeScalar value : m.values()) {
                 if (owner.threadShared) SharedPerlStorage.publishBlessing(value);
                 if (value != null) {
@@ -921,7 +912,6 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 if (owner.isHintHash && !owner.suppressHintHashLifecycleCleanup) {
                     MortalList.deferDestroyForContainerClear(removed);
                 }
-                owner.notePackageRootClear(removed);
                 super.clear();
                 valueIdentityCounts.clear();
                 releaseAllHashAliasCellOwners();
@@ -954,42 +944,6 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
 
     boolean isPackageRootedHash() {
         return isPackageGlobalRoot || isGlobalPackageHash;
-    }
-
-    private static boolean rootEdge(RuntimeScalar value) {
-        return value != null
-                && (value.type & REFERENCE_BIT) != 0
-                && value.value instanceof RuntimeBase;
-    }
-
-    private void notePackageRootMutation(RuntimeScalar oldValue, RuntimeScalar newValue) {
-        notePackageRootMutationIf(rootEdge(oldValue) || rootEdge(newValue));
-    }
-
-    private void notePackageRootMutationIf(boolean hasReferenceEdge) {
-        if (!hasReferenceEdge) return;
-        if (isPackageRootedHash()) {
-            MortalList.invalidateExternalRootSnapshot();
-        }
-        MortalList.invalidateFullRootSnapshotIfReachable(this);
-    }
-
-    private void notePackageRootClear(Collection<RuntimeScalar> values) {
-        boolean hasReferenceEdge = false;
-        for (RuntimeScalar value : values) {
-            if (rootEdge(value)) {
-                hasReferenceEdge = true;
-                break;
-            }
-        }
-        notePackageRootMutationIf(hasReferenceEdge);
-    }
-
-    void notePackageRootMutation() {
-        if (isPackageRootedHash()) {
-            MortalList.invalidateExternalRootSnapshot();
-        }
-        MortalList.invalidateFullRootSnapshotIfReachable(this);
     }
 
     void markPackageRootedValue(RuntimeScalar value) {
@@ -1370,7 +1324,6 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 }
             }
             case TIED_HASH -> {
-                notePackageRootMutation(null, value);
                 markPackageRootedValue(value);
                 TieHash.tiedStore(this, new RuntimeScalar(key), value);
             }
@@ -2598,7 +2551,6 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             resetIterator();
             return this;
         }
-        notePackageRootClear(this.elements.values());
         // Fast path: if no value could possibly fire a DESTROY, use the
         // old one-shot path (one flush total instead of N flushes). The
         // slow progressive path below is only required when at least one
@@ -2606,7 +2558,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         // the remaining hash entries (op/undef.t 19-35, bug 3096).
         //
         // Without this fast path, large schema-style hashes paid
-        // O(N) flushes + auto-sweep checks per `undef %hash`, which under
+        // O(N) flushes + automatic root checks per `undef %hash`, which under
         // parallel-load DBIC tests pushed t/cdbi/68 / t/96 / t/debug/core
         // past their 300s harness timeout.
         if (!hasDestroyableValues()) {
@@ -2645,7 +2597,6 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             boolean aliasCell = ownsHashAliasCell(key, value);
             it.remove();
             if (value != null) value.reconcileContainerOwnerAfterMutation(this);
-            notePackageRootMutation(value, null);
             if (this.byteKeys != null) this.byteKeys.remove(key);
             // Defer DESTROY for this one value, then flush so it runs now.
             if (!aliasCell) {
@@ -2782,14 +2733,12 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 this.blessId = savedBlessId;
             }
             Map<String, RuntimeScalar> replacedElements = this.elements;
-            notePackageRootClear(replacedElements.values());
             this.elements = newElementMap(previousState.elements);
             if (replacedElements instanceof RuntimeHashElementMap map) {
                 map.releaseAllHashAliasCellOwners();
             }
             refreshUntrackedElementOwners();
             previousState.elements.clear();
-            notePackageRootClear(this.elements.values());
             if (isPackageRootedHash()) {
                 for (RuntimeScalar value : this.elements.values()) {
                     markPackageRootedValue(value);

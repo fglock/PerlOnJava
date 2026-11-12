@@ -3,15 +3,13 @@ package org.perlonjava.runtime.runtimetypes;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
-import java.util.Collections;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("unit")
 class ReachabilityWalkerCapturedAggregateReleaseTest {
     @Test
-    void targetedReleaseKeepsAnAggregateOwnedByAClosurePad() {
+    void closurePadOwnerKeepsAnAggregateAliveWithoutSweep() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeHash captured = new RuntimeHash();
@@ -19,9 +17,6 @@ class ReachabilityWalkerCapturedAggregateReleaseTest {
             captured.put("value", new RuntimeScalar("alive"));
             captured.scopeExited = true;
             PerlOwnerSlot closureOwner = captured.retainClosureCaptureOwner();
-
-            ReachabilityWalker.sweepReleasedWeakReferents(
-                    Collections.singleton(captured));
 
             assertEquals(1, captured.refCount);
             assertEquals(1, captured.semanticCaptureOwnerCount());

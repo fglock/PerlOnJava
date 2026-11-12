@@ -14,7 +14,6 @@ class PerlDestroyFailureOwnershipTest {
     void throwingDestructorReleasesObserversAndOwnedChildrenWithSweepsSuppressed() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
-            runtime.lifecycleState.weakSweepSuppressionDepth++;
             String className = "Issue1649::FailedOwnerCleanup";
             AtomicInteger calls = new AtomicInteger();
             RuntimeCode code = new RuntimeCode((args, context) -> {
@@ -48,7 +47,6 @@ class PerlDestroyFailureOwnershipTest {
                 assertFalse(parent.currentlyDestroying);
             } finally {
                 GlobalVariable.removeGlobalCodeRefForStashDelete(className + "::DESTROY");
-                runtime.lifecycleState.weakSweepSuppressionDepth--;
             }
         }
     }

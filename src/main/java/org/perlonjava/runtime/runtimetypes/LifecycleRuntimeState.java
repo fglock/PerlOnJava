@@ -13,7 +13,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/** Runtime-owned mortal, weak-reference, DESTROY, and reachability sweep state. */
+/** Runtime-owned mortal, weak-reference, DESTROY, and owner-slot state. */
 final class LifecycleRuntimeState {
     final AtomicBoolean boundaryWorkRegistered = new AtomicBoolean();
     boolean mortalActive = true;
@@ -44,13 +44,6 @@ final class LifecycleRuntimeState {
     final IdentityHashMap<RuntimeBase, Integer> positiveOwnerReferents = new IdentityHashMap<>();
     boolean deferredCapturesMayBeReady;
     final ArrayDeque<TemporaryRootLease> temporaryRoots = new ArrayDeque<>();
-    final ArrayDeque<RuntimeBase> deferredTemporaryRootAggregateRefreshes = new ArrayDeque<>();
-    final Set<RuntimeBase> deferredTemporaryRootAggregateRefreshSet =
-            Collections.newSetFromMap(new IdentityHashMap<>());
-    final ArrayDeque<RuntimeCode> deferredTemporaryRootCaptureReleases = new ArrayDeque<>();
-    final Set<RuntimeCode> deferredTemporaryRootCaptureReleaseSet =
-            Collections.newSetFromMap(new IdentityHashMap<>());
-    boolean drainingTemporaryRootCleanup;
     private static final int INITIAL_MARK_CAPACITY = 16;
     int[] marks = new int[INITIAL_MARK_CAPACITY];
     int[] tiedReleaseMarks = new int[INITIAL_MARK_CAPACITY];
@@ -58,25 +51,7 @@ final class LifecycleRuntimeState {
     int[] untrackedReturnOwnerMarks = new int[INITIAL_MARK_CAPACITY];
     int markDepth;
     boolean flushing;
-    int reachabilityDrainDepth;
-    /** Suppress sweeps while clone hooks and the first child entry build Perl roots. */
-    int weakSweepSuppressionDepth;
-    boolean immediateWeakSweepRequested;
-    final Set<RuntimeBase> targetedWeakSweepReferents =
-            Collections.newSetFromMap(new IdentityHashMap<>());
-    Set<RuntimeBase> flushReachableCache;
-    ReachabilityWalker.ExternalRootSnapshot externalRootSnapshot;
-    ReachabilityWalker.LiveRootSnapshot liveRootSnapshot;
-    ReachabilityWalker.ScalarRootReachabilitySnapshot scalarRootSnapshot;
-    final Set<RuntimeBase> unblessedAggregateDrainRoots =
-            Collections.newSetFromMap(new IdentityHashMap<>());
-    boolean unblessedAggregateDrainSnapshotIncomplete;
-    Set<RuntimeBase> weakSweepLiveReferents;
-
-    ReachabilityWalker.RootReachabilitySnapshot fullRootSnapshot;
-    ReachabilityWalker.RootReachabilitySnapshot unblessedAggregateRootSnapshot;
-    final IdentityHashMap<RuntimeBase, ReachabilityWalker.WeakRootWitness>
-            weakSweepRootWitnesses = new IdentityHashMap<>();
+    int deferredReleaseDrainDepth;
     ReachabilityQueryStats activeReachabilityQueryStats;
 
     void pushMortalMark(int pendingSize, int tiedReleaseSize, int ioReleaseSize,
@@ -116,7 +91,6 @@ final class LifecycleRuntimeState {
             Collections.synchronizedSet(Collections.newSetFromMap(new IdentityHashMap<>()));
     RuntimeBase currentDestroyTarget;
     boolean destroyTargetRescued;
-    boolean sweepPendingAfterOuterDestroy;
     final List<RuntimeBase> rescuedObjects = Collections.synchronizedList(new ArrayList<>());
     final BitSet walkerGateClasses = new BitSet();
     final BitSet walkerGateChecked = new BitSet();
@@ -139,8 +113,9 @@ final class LifecycleRuntimeState {
                 // Preserve snapshot visibility without resurrecting a destroyed value.
                 this.ownerSlot = null;
             } else {
-                PerlOwnerSlot owner = new PerlOwnerSlot(PerlOwnerSlot.Kind.TEMPORARY_ROOT);
-                owner.acquireTemporaryRootIdentity(root);
+                PerlOwnerSlot owner = new PerlOwnerSlot(
+                        PerlOwnerSlot.Kind.EXPRESSION_TEMPORARY_ROOT);
+                owner.acquireCountedNativeOwner(root, "MortalList.pushTemporaryRoot");
                 this.ownerSlot = owner;
             }
         }
@@ -150,7 +125,13 @@ final class LifecycleRuntimeState {
         }
 
         void release() {
-            if (ownerSlot != null) ownerSlot.release();
+            if (ownerSlot != null) ownerSlot.releaseNativeOwner();
+            if (root.localBindingExists || root.hasCurrentPerlStorageOwner()) return;
+            if (root instanceof RuntimeArray array) {
+                MortalList.scopeExitCleanupArray(array);
+            } else if (root instanceof RuntimeHash hash) {
+                MortalList.scopeExitCleanupHash(hash);
+            }
         }
     }
 
@@ -183,29 +164,11 @@ final class LifecycleRuntimeState {
             positiveOwnerReferents.clear();
         }
         deferredCapturesMayBeReady = false;
-        while (true) {
-            while (!temporaryRoots.isEmpty()) temporaryRoots.pop().release();
-            MortalList.drainDeferredTemporaryRootCleanup(this);
-            if (temporaryRoots.isEmpty()
-                    && deferredTemporaryRootAggregateRefreshes.isEmpty()
-                    && deferredTemporaryRootCaptureReleases.isEmpty()) break;
-        }
+        while (!temporaryRoots.isEmpty()) temporaryRoots.pop().release();
         markDepth = 0;
         flushing = false;
-        reachabilityDrainDepth = 0;
-        fullRootSnapshot = null;
-        unblessedAggregateRootSnapshot = null;
-        weakSweepRootWitnesses.clear();
+        deferredReleaseDrainDepth = 0;
         activeReachabilityQueryStats = null;
-        immediateWeakSweepRequested = false;
-        targetedWeakSweepReferents.clear();
-        flushReachableCache = null;
-        externalRootSnapshot = null;
-        liveRootSnapshot = null;
-        scalarRootSnapshot = null;
-        unblessedAggregateDrainRoots.clear();
-        unblessedAggregateDrainSnapshotIncomplete = false;
-        weakSweepLiveReferents = null;
         weakScalars.clear();
         referentToWeakRefs.clear();
         weakRefsExist = false;
@@ -216,7 +179,6 @@ final class LifecycleRuntimeState {
         statementBoundaryDestroyableObjects.clear();
         currentDestroyTarget = null;
         destroyTargetRescued = false;
-        sweepPendingAfterOuterDestroy = false;
         rescuedObjects.clear();
         walkerGateClasses.clear();
         walkerGateChecked.clear();

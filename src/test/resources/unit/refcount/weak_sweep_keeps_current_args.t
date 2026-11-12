@@ -25,7 +25,6 @@ use Scalar::Util qw(weaken);
 sub keep_through_sweep {
     my $weak = $_[0];
     weaken($weak);
-    Internals::jperl_gc() if defined &Internals::jperl_gc;
     return $_[0];
 }
 

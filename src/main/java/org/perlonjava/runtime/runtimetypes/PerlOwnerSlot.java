@@ -71,6 +71,8 @@ public final class PerlOwnerSlot {
         IO_RESOURCE_HOLDER,
         /** Runtime-owned temporary value retained across a cleanup drain. */
         TEMPORARY_ROOT,
+        /** Perl expression temporary that strongly owns its root value. */
+        EXPRESSION_TEMPORARY_ROOT,
         /** Persistent scalar or aggregate state binding retained by a CODE object. */
         CODE_STATE,
         /** Scalar wrapper retaining the current contents of a referenced scalar cell. */
@@ -242,7 +244,8 @@ public final class PerlOwnerSlot {
     /** Mark a direct count paired with a native owner identity. */
     public synchronized void markCountedNativeOwner() {
         if ((kind != Kind.IO_VIA_LAYER && kind != Kind.REGEX_CALLBACK
-                    && kind != Kind.TIED_HASH_ITERATOR_KEY)
+                    && kind != Kind.TIED_HASH_ITERATOR_KEY
+                    && kind != Kind.EXPRESSION_TEMPORARY_ROOT)
                 || referent == null || !nativeOwner
                 || countedNativeOwner) {
             throw new IllegalStateException("counted native owner requires an active supported slot");
@@ -253,7 +256,8 @@ public final class PerlOwnerSlot {
     /** Whether this active native slot contributes one direct count. */
     public synchronized boolean isCountedNativeOwner() {
         return (kind == Kind.IO_VIA_LAYER || kind == Kind.REGEX_CALLBACK
-                    || kind == Kind.TIED_HASH_ITERATOR_KEY)
+                    || kind == Kind.TIED_HASH_ITERATOR_KEY
+                    || kind == Kind.EXPRESSION_TEMPORARY_ROOT)
                 && referent != null && countedNativeOwner;
     }
 
@@ -330,7 +334,8 @@ public final class PerlOwnerSlot {
             case IO_VIA_LAYER, REGEX_CALLBACK, TIED_HASH_ITERATOR_KEY,
                     CODE_PAD_CONSTANT, GLOB_VALUE, STASH_NAMESPACE_MOVE,
                     PACKAGE_SCALAR_SLOT, PACKAGE_AGGREGATE_SLOT, PACKAGE_GLOB_SLOT,
-                    ACTIVE_LEXICAL, ACTIVE_CODE, TEMPORARY_ROOT -> null;
+                    ACTIVE_LEXICAL, ACTIVE_CODE, TEMPORARY_ROOT,
+                    EXPRESSION_TEMPORARY_ROOT -> null;
             default -> countedScalarOwner();
         };
         return source == null ? List.of() : List.of(source);
@@ -521,7 +526,8 @@ public final class PerlOwnerSlot {
         Objects.requireNonNull(target, "target");
         Objects.requireNonNull(acquisitionSite, "acquisitionSite");
         if (kind != Kind.IO_VIA_LAYER && kind != Kind.REGEX_CALLBACK
-                && kind != Kind.TIED_HASH_ITERATOR_KEY) {
+                && kind != Kind.TIED_HASH_ITERATOR_KEY
+                && kind != Kind.EXPRESSION_TEMPORARY_ROOT) {
             throw new IllegalStateException("unsupported counted native owner slot: " + kind);
         }
         if (referent != null || nativeOwner || countedNativeOwner) {

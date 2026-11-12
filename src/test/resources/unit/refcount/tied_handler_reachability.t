@@ -28,7 +28,6 @@ sub build_database {
 }
 
 build_database();
-Internals::jperl_gc() if defined &Internals::jperl_gc;
 
 my $handler = tied(@$database);
 ok(defined($weak_storage), 'tied handler keeps its nested object reachable');

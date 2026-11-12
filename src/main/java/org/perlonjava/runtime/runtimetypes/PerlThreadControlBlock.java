@@ -84,15 +84,10 @@ public final class PerlThreadControlBlock {
         RuntimeArray childArgs = new RuntimeArray();
         for (int i = 1; i < cloned.size(); i++) childArgs.push(cloned.get(i).scalar());
         this.entryPoint = runtime -> {
-            runtime.beginThreadEntrySnapshotGrace();
-            try {
-                RuntimeList values = RuntimeCode.apply(childCode, childArgs, context);
-                RuntimeArray retained = new RuntimeArray();
-                for (RuntimeBase value : values.elements) retained.push(value.scalar());
-                return retained;
-            } finally {
-                runtime.endThreadEntrySnapshotGrace();
-            }
+            RuntimeList values = RuntimeCode.apply(childCode, childArgs, context);
+            RuntimeArray retained = new RuntimeArray();
+            for (RuntimeBase value : values.elements) retained.push(value.scalar());
+            return retained;
         };
         this.entryCleanup = () -> {
             try {

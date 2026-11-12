@@ -59,7 +59,6 @@ class ClearedAggregateNestedPackageOwnerNoRootWalkTest {
                     WeakRefRegistry.unweaken(weakObserver);
                 }
                 GlobalVariable.globalArrays.remove(globalName);
-                MortalList.invalidateAllRootSnapshots();
                 MortalList.setActive(previousMortalListState);
             }
         }

@@ -151,19 +151,18 @@ class UnblessedScalarCellOwnerSlotRepairTest {
 
                 assertEquals(2, target.refCount);
                 assertEquals(2, target.ownerSlotCount(PerlOwnerSlot.Kind.SCALAR_CELL));
-                target.refCount = 1; // Model a transient legacy-count undercount.
 
                 try (MortalList.ReachabilityQueryMeasurement measurement =
                              MortalList.measureReachabilityQueries()) {
                     if (deferRelease) {
                         MortalList.pushMark();
-                        MortalList.deferDecrement(target);
+                        MortalList.deferDecrementIfTracked(firstOwner);
                         MortalList.popAndFlush();
                     } else {
                         firstOwner.set(new RuntimeScalar());
                     }
 
-                    assertEquals(deferRelease ? 2 : 1, target.refCount);
+                    assertEquals(1, target.refCount);
                     assertTrue(WeakRefRegistry.isweak(weakObserver));
                     assertEquals(0, measurement.stats().rootQueries);
                     assertEquals(0, measurement.stats().snapshotsBuilt);

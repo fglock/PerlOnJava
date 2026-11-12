@@ -36,22 +36,24 @@ class RescuedObjectOwnerIdentityTest {
     }
 
     @Test
-    void rescueQueueAndTemporaryRootDoNotCountAsPerlOwners() {
+    void rescueQueueHasNoOwnerButAnExpressionTemporaryDoes() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeHash rescued = new RuntimeHash();
             runtime.lifecycleState.rescuedObjects.add(rescued);
+            assertFalse(DestroyDispatch.hasLivePerlOwnerIdentity(rescued));
             MortalList.pushTemporaryRoot(rescued);
 
             try (MortalList.ReachabilityQueryMeasurement measurement =
                          MortalList.measureReachabilityQueries()) {
-                assertFalse(DestroyDispatch.hasLivePerlOwnerIdentity(rescued));
+                assertTrue(DestroyDispatch.hasLivePerlOwnerIdentity(rescued));
                 assertEquals(0, measurement.stats().rootQueries);
                 assertEquals(0, measurement.stats().snapshotsBuilt);
             } finally {
                 MortalList.popTemporaryRoot(rescued);
                 runtime.lifecycleState.rescuedObjects.remove(rescued);
             }
+            assertFalse(DestroyDispatch.hasLivePerlOwnerIdentity(rescued));
         }
     }
 }

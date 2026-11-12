@@ -20,7 +20,6 @@ import java.util.concurrent.atomic.AtomicInteger;
  * trigger DESTROY at statement end, not immediately during delete.
  */
 public class MortalList {
-    private static final int MAX_UNBLESSED_AGGREGATE_DRAIN_ROOTS = 50_000;
     private static final AtomicInteger runtimesWithBoundaryWork = new AtomicInteger();
 
     static final class DeferredArgumentOwnerRelease {
@@ -103,9 +102,7 @@ public class MortalList {
                     || !state.pendingTiedReleases.isEmpty()
                     || !state.pendingIoReleases.isEmpty()
                     || !state.pendingUntrackedReturnOwnerReleases.isEmpty()
-                    || state.deferredCapturesMayBeReady
-                    || !state.deferredTemporaryRootAggregateRefreshes.isEmpty()
-                    || !state.deferredTemporaryRootCaptureReleases.isEmpty();
+                    || state.deferredCapturesMayBeReady;
             if (!needed && state.boundaryWorkRegistered.compareAndSet(true, false)) {
                 runtimesWithBoundaryWork.decrementAndGet();
             }
@@ -142,7 +139,6 @@ public class MortalList {
             ArrayDeque<LifecycleRuntimeState.TemporaryRootLease> roots = state.temporaryRoots;
             if (!roots.isEmpty() && roots.peek().root() == root) {
                 roots.pop().release();
-                drainDeferredTemporaryRootCleanup(state);
                 return;
             }
             var iterator = roots.iterator();
@@ -151,7 +147,6 @@ public class MortalList {
                 if (lease.root() == root) {
                     iterator.remove();
                     lease.release();
-                    drainDeferredTemporaryRootCleanup(state);
                     return;
                 }
             }
@@ -182,15 +177,6 @@ public class MortalList {
         }
         ArrayDeque<LifecycleRuntimeState.TemporaryRootLease> roots = state().temporaryRoots;
         while (roots.size() > depth) roots.pop().release();
-        drainDeferredTemporaryRootCleanup(state());
-    }
-
-    static boolean temporaryRootDirectlyReferences(RuntimeBase target) {
-        if (target != null && target.hasTemporaryRootOwnerSlotIdentity()) return true;
-        for (LifecycleRuntimeState.TemporaryRootLease lease : state().temporaryRoots) {
-            if (directlyReferences(lease.root(), target)) return true;
-        }
-        return false;
     }
 
     private static boolean directlyReferences(RuntimeBase value, RuntimeBase target) {
@@ -248,69 +234,6 @@ public class MortalList {
         LifecycleRuntimeState state = state();
         ArrayDeque<LifecycleRuntimeState.TemporaryRootLease> roots = state.temporaryRoots;
         while (!roots.isEmpty()) roots.pop().release();
-        drainDeferredTemporaryRootCleanup(state);
-        invalidateAllRootSnapshots();
-    }
-
-    /** Hold aggregate-cell reconciliation until temporary roots are gone. */
-    static boolean deferAggregateRefreshUntilTemporaryRootsLeave(RuntimeBase container) {
-        if (container == null) return false;
-        LifecycleRuntimeState state = state();
-        if (state.temporaryRoots.isEmpty()) return false;
-        if (state.deferredTemporaryRootAggregateRefreshSet.add(container)) {
-            state.deferredTemporaryRootAggregateRefreshes.addLast(container);
-        }
-        markBoundaryWork(state);
-        return true;
-    }
-
-    /** Hold requested closure cleanup while temporary roots may reach it transitively. */
-    static boolean deferCaptureReleaseUntilTemporaryRootsLeave(RuntimeCode code) {
-        if (code == null) return false;
-        LifecycleRuntimeState state = state();
-        if (state.temporaryRoots.isEmpty()) return false;
-        if (state.deferredTemporaryRootCaptureReleaseSet.add(code)) {
-            state.deferredTemporaryRootCaptureReleases.addLast(code);
-        }
-        markBoundaryWork(state);
-        return true;
-    }
-
-    static void drainDeferredTemporaryRootCleanup(LifecycleRuntimeState state) {
-        if (state == null || !state.temporaryRoots.isEmpty()
-                || state.drainingTemporaryRootCleanup) return;
-        state.drainingTemporaryRootCleanup = true;
-        try {
-            while (state.temporaryRoots.isEmpty()) {
-                RuntimeBase container = state.deferredTemporaryRootAggregateRefreshes.pollFirst();
-                if (container != null) {
-                    state.deferredTemporaryRootAggregateRefreshSet.remove(container);
-                    try {
-                        RuntimeCode.refreshUntrackedCellsAfterContainerTransfer(container);
-                    } catch (RuntimeException | Error cleanupFailure) {
-                        if (state.deferredTemporaryRootAggregateRefreshSet.add(container)) {
-                            state.deferredTemporaryRootAggregateRefreshes.addFirst(container);
-                        }
-                        throw cleanupFailure;
-                    }
-                    continue;
-                }
-                RuntimeCode code = state.deferredTemporaryRootCaptureReleases.pollFirst();
-                if (code == null) break;
-                state.deferredTemporaryRootCaptureReleaseSet.remove(code);
-                try {
-                    code.finishRequestedCaptureReleaseAfterTemporaryRootsLeave();
-                } catch (RuntimeException | Error cleanupFailure) {
-                    if (state.deferredTemporaryRootCaptureReleaseSet.add(code)) {
-                        state.deferredTemporaryRootCaptureReleases.addFirst(code);
-                    }
-                    throw cleanupFailure;
-                }
-            }
-        } finally {
-            state.drainingTemporaryRootCleanup = false;
-            refreshBoundaryWork(state);
-        }
     }
 
     /**
@@ -321,24 +244,6 @@ public class MortalList {
     public static boolean isDeferredCapture(RuntimeScalar scalar) {
         if (scalar == null) return false;
         return state().deferredCapturesSet.containsKey(scalar);
-    }
-
-    /**
-     * Legacy unpaired decrement without scalar-slot release provenance.
-     * Production mutation paths must use the slot-aware release methods below.
-     */
-    public static void deferDecrement(RuntimeBase base) {
-        deferDecrement(base, null);
-    }
-
-    /** Queue a decrement paired with a trace-only non-scalar owner kind. */
-    public static void deferDecrement(RuntimeBase base, String transientOwnerKind) {
-        if (base.refCountTrace) {
-            base.traceRefCount(0, "MortalList.deferDecrement (queued)");
-        }
-        LifecycleRuntimeState state = state();
-        markBoundaryWork(state);
-        queueDeferredBase(state, base, null, transientOwnerKind);
     }
 
     /**
@@ -417,7 +322,6 @@ public class MortalList {
         PendingOwnerEntry returnEntry = null;
         PendingOwnerEntry sourceEntry = null;
         state.flushing = true;
-        invalidateDrainReachabilityCaches();
         try {
             if (returnIndex >= 0 && returnIndex == sourceIndex) {
                 sourceIndex = -1;
@@ -445,8 +349,7 @@ public class MortalList {
             returned.finishMortalReturnHandoff();
         } finally {
             state.flushing = false;
-            invalidateDrainReachabilityCaches();
-        }
+            }
         refreshBoundaryWork(state);
     }
 
@@ -908,15 +811,14 @@ public class MortalList {
             flush();
         }
 
-        // Finalize ownerless rescues and clear weak observers into surviving
-        // rescued graphs after END has finished.
-        DestroyDispatch.clearRescuedWeakRefsAtEndBoundary();
+        // Finish ownerless rescues after END through their ordinary owner slots.
+        DestroyDispatch.processRescuedObjects();
 
     }
 
-    /** Clear weak observers for rescued graphs before Perl END callbacks inspect them. */
+    /** Finish ownerless DESTROY rescues before Perl END callbacks inspect them. */
     public static void flushDeferredCapturesBeforeEnd() {
-        DestroyDispatch.clearRescuedWeakRefsAtEndBoundary();
+        DestroyDispatch.processRescuedObjects();
     }
 
     /**
@@ -971,7 +873,7 @@ public class MortalList {
             return;
         }
         LifecycleRuntimeState state = state();
-        if (state.flushing || state.reachabilityDrainDepth != 0) {
+        if (state.flushing || state.deferredReleaseDrainDepth != 0) {
             deferDecrementIfTracked(scalar);
             return;
         }
@@ -1170,8 +1072,7 @@ public class MortalList {
         }
         if (!finalRelease && directlyReferences(returned, hash)) return;
         // A live reference keeps the container and its IO element slots alive.
-        if (!finalRelease && (hash.refCount > 0 || hash.hasCurrentPerlOwnerSlotIdentity()
-                || temporaryRootDirectlyReferences(hash))) return;
+        if (!finalRelease && (hash.refCount > 0 || hash.hasCurrentPerlOwnerSlotIdentity())) return;
         if (hash instanceof RuntimeStash stash) {
             stash.releaseSavedNamespaceMove();
         }
@@ -1278,7 +1179,7 @@ public class MortalList {
         }
         // Alias arrays such as @_ do not own their original element slots.
         if (!finalRelease && (arr.refCount > 0 || arr.hasCurrentPerlOwnerSlotIdentity()
-                || temporaryRootDirectlyReferences(arr) || directlyReferences(returned, arr))) return;
+                || directlyReferences(returned, arr))) return;
         // A refalias list owns the scalar cells even though those cells are
         // not ordinary copied array values. Retire those cell identities only
         // when this RuntimeArray itself is no longer Perl-owned.
@@ -1733,7 +1634,7 @@ public class MortalList {
             int pendingStartIdx, int tiedReleaseStartIdx, int ioReleaseStartIdx,
             int untrackedReturnOwnerStartIdx) {
         LifecycleRuntimeState state = state();
-        state.reachabilityDrainDepth++;
+        state.deferredReleaseDrainDepth++;
         try {
             int pendingIdx = pendingStartIdx;
             int tiedReleaseIdx = tiedReleaseStartIdx;
@@ -1776,7 +1677,7 @@ public class MortalList {
                 }
             }
         } finally {
-            state.reachabilityDrainDepth--;
+            state.deferredReleaseDrainDepth--;
         }
         drainDeferredArgumentOwnerReleases();
     }
@@ -1800,6 +1701,27 @@ public class MortalList {
         }
     }
 
+    /** Suppress deferred release draining while a result is being materialized. */
+    public static boolean suppressFlush(boolean suppress) {
+        LifecycleRuntimeState state = state();
+        boolean previous = state.flushing;
+        state.flushing = suppress;
+        return previous;
+    }
+
+    static void finalizeClearedAggregateOwnerAfterScopeExit(RuntimeBase base) {
+        if (!isActive()
+                || base == null
+                || !base.clearedOwnedAggregateElement
+                || !WeakRefRegistry.hasWeakRefsTo(base)) {
+            return;
+        }
+        if (DestroyDispatch.hasLivePerlOwnerIdentity(base)) return;
+        if (base.hasPendingOwnerRelease()) return;
+        base.refCount = Integer.MIN_VALUE;
+        DestroyDispatch.callDestroy(base);
+    }
+
     /**
      * Process all pending decrements. Called at statement boundaries.
      * Equivalent to Perl 5's FREETMPS.
@@ -1818,313 +1740,6 @@ public class MortalList {
      * list assignment materialization. This prevents premature destruction of
      * return values while the caller is still capturing them into variables.
      */
-    /**
-     * Suppress or unsuppress flushing. Used by setFromList to prevent pending
-     * decrements from earlier scopes (e.g., clone's $self) being processed
-     * during the materialization of list assignment (@_ → local vars).
-     * Without this, return values from chained method calls like
-     * {@code shift->clone->connection(@_)} can be destroyed mid-capture.
-     *
-     * @return the previous value of the flushing flag (for nesting).
-     */
-    public static boolean suppressFlush(boolean suppress) {
-        LifecycleRuntimeState state = state();
-        boolean prev = state.flushing;
-        state.flushing = suppress;
-        return prev;
-    }
-
-    // Phase B2a (refcount_alignment_52leaks_plan.md): throttled
-    // auto-sweep of the weak-ref registry, gated by ModuleInitGuard.
-    // Runs at statement boundaries (flush points) but skips while
-    // inside require/use/do/BEGIN/eval-STRING code paths — those
-    // often rely on weak-refed intermediate state that the sweep
-    // would prematurely clear.
-    // Tuned for DBIC-scale tests: 5s throttle. Shorter intervals
-    // (100ms, 500ms) fire too frequently — 52leaks.t creates thousands
-    // of weaken'd refs and each sweep's System.gc() + weak-ref cascade
-    // can run for tens of seconds. 5s gives the walker time to amortize.
-    /** Compatibility hook; weak-reference cleanup is driven by owner release. */
-    public static void requestImmediateWeakSweep() {
-    }
-
-    /** Compatibility hook; weak-reference cleanup is driven by owner release. */
-    static void requestCorrectiveWeakSweep() {
-    }
-
-    /** Compatibility hook; weak-reference cleanup is driven by owner release. */
-    public static void requestTargetedWeakSweep(RuntimeBase referent) {
-    }
-
-    /** Compatibility hook retained for callers compiled against the old sweep API. */
-    public static boolean requestWeakSweepsForDestroyedContainer(RuntimeBase container) {
-        return false;
-    }
-
-    static void finalizeClearedAggregateOwnerAfterScopeExit(RuntimeBase base) {
-        if (!isActive()
-                || base == null
-                || !base.clearedOwnedAggregateElement
-                || !WeakRefRegistry.hasWeakRefsTo(base)) {
-            return;
-        }
-        // Scope cleanup retires the exact lexical owner before reaching this
-        // point. Package, container, and capture edges have their own owner
-        // slots; temporary roots are checked separately because they are
-        // evaluation scaffolding rather than Perl ownership. Use validated
-        // identities so stale slots and compatibility counts cannot preserve
-        // an aggregate after its final owner cell is cleared.
-        if (DestroyDispatch.hasLivePerlOwnerIdentity(base)
-                || temporaryRootDirectlyReferences(base)) {
-            return;
-        }
-        // A deferred count release has already retired its live owner slot,
-        // but the compatibility count is not decremented until the mortal
-        // queue drains. Let that exact release decide finalization instead of
-        // racing it with scope-exit cleanup.
-        if (base.hasPendingOwnerRelease()) return;
-        // This measured query exists for the root-snapshot cost regression;
-        // its result must not affect aggregate lifetime.
-        if (base.refCount <= 0 && activeReachabilityQueryStats() != null) {
-            isReachableFromExternalRootCached(base);
-        }
-        base.refCount = Integer.MIN_VALUE;
-        DestroyDispatch.callDestroy(base);
-    }
-
-    // D-W6.18 perf: cached reachable-set, valid for the duration of a
-    // single flush() invocation. The walker BFS is O(globals); without
-    // this cache, calling it once per pending target turns flush into
-    // O(targets × globals). DBIC stresses this hard because many
-    // blessed objects are stored-in-package-global AND have weak refs
-    // (Schema/ResultSource back-refs) — every flush would re-walk the
-    // full global graph for each one. Computed lazily on first need.
-    private static boolean isReachableCached(RuntimeBase base) {
-        LifecycleRuntimeState state = state();
-        if (state.flushReachableCache == null) {
-            ReachabilityWalker w = new ReachabilityWalker();
-            state.flushReachableCache = w.walk();
-        }
-        return state.flushReachableCache.contains(base);
-    }
-
-    static boolean isReachableFromExternalRootCached(RuntimeBase base) {
-        if (ReachabilityWalker.isReachableFromTemporaryRoots(base)) {
-            return true;
-        }
-        return isReachableFromPersistentRootCached(base);
-    }
-
-    static boolean isReachableFromPersistentRootCached(RuntimeBase base) {
-        LifecycleRuntimeState state = state();
-        if (state.externalRootSnapshot == null) {
-            state.externalRootSnapshot = new ReachabilityWalker.ExternalRootSnapshot();
-        }
-        if (state.externalRootSnapshot.isReachableFromNonLexicalRoot(base)) {
-            return true;
-        }
-        if (!state.externalRootSnapshot.complete()) {
-            // An incomplete external-root walk cannot prove this target has
-            // no other owner. Keep it alive without rebuilding the broader
-            // full-root graph, which also cannot preserve this query's
-            // direct-lexical exclusion semantics.
-            return true;
-        }
-        if (state.liveRootSnapshot == null) {
-            state.liveRootSnapshot = new ReachabilityWalker.LiveRootSnapshot();
-        }
-        return state.liveRootSnapshot.isReachable(base);
-    }
-
-    static void invalidateExternalRootSnapshot() {
-        state().externalRootSnapshot = null;
-        state().fullRootSnapshot = null;
-        state().unblessedAggregateRootSnapshot = null;
-        state().scalarRootSnapshot = null;
-    }
-
-    static void invalidateAllRootSnapshots() {
-        invalidateExternalRootSnapshot();
-        invalidateLiveRootSnapshot();
-    }
-
-    private static boolean isReachableFromFullRootSnapshot(RuntimeBase base) {
-        LifecycleRuntimeState state = state();
-        if (state.fullRootSnapshot == null) {
-            state.fullRootSnapshot = ReachabilityWalker.reachableFromRootsSnapshotWithStatus();
-        }
-        return state.fullRootSnapshot.isReachable(base);
-    }
-
-    static boolean isUnblessedAggregateReachableDuringDrain(RuntimeBase base) {
-        LifecycleRuntimeState state = state();
-        boolean drainActive = state.flushing || state.reachabilityDrainDepth > 0;
-        if (drainActive && state.unblessedAggregateDrainSnapshotIncomplete) return true;
-        if (drainActive && state.unblessedAggregateDrainRoots.contains(base)) return true;
-        if (state.fullRootSnapshot != null) {
-            return recordUnblessedAggregateSnapshotResult(
-                    state, state.fullRootSnapshot, base, drainActive);
-        }
-        if (state.unblessedAggregateRootSnapshot != null) {
-            return recordUnblessedAggregateSnapshotResult(
-                    state, state.unblessedAggregateRootSnapshot, base, drainActive);
-        }
-        if (ReachabilityWalker.isReachableFromTemporaryRoots(base)) return true;
-        if (state.externalRootSnapshot != null
-                && state.externalRootSnapshot.isReachableFromNonLexicalRoot(base)) {
-            if (drainActive) state.unblessedAggregateDrainRoots.add(base);
-            return true;
-        }
-        if (state.liveRootSnapshot != null && state.liveRootSnapshot.isReachable(base)) {
-            if (drainActive) state.unblessedAggregateDrainRoots.add(base);
-            return true;
-        }
-        // The package-root and live-lexical snapshots cover the same strong
-        // roots without tying their lifetimes together. Scope exits invalidate
-        // the lexical view frequently, while package roots often stay stable;
-        // rebuilding a combined graph here repeats the full package walk for
-        // each cleanup batch during module loading and request handling.
-        // Temporary roots were checked above. Continue with persistent roots
-        // directly instead of repeating the same temporary-root graph walk.
-        boolean reachable = isReachableFromPersistentRootCached(base);
-        if (drainActive) {
-            boolean incomplete = state.externalRootSnapshot == null
-                    || !state.externalRootSnapshot.complete()
-                    || (state.liveRootSnapshot != null
-                        && !state.liveRootSnapshot.complete());
-            if (incomplete) {
-                state.unblessedAggregateDrainSnapshotIncomplete = true;
-                state.unblessedAggregateDrainRoots.clear();
-            } else if (reachable && !state.unblessedAggregateDrainRoots.contains(base)) {
-                if (state.unblessedAggregateDrainRoots.size()
-                        >= MAX_UNBLESSED_AGGREGATE_DRAIN_ROOTS) {
-                    state.unblessedAggregateDrainSnapshotIncomplete = true;
-                    state.unblessedAggregateDrainRoots.clear();
-                } else {
-                    state.unblessedAggregateDrainRoots.add(base);
-                    ReachabilityQueryStats stats = activeReachabilityQueryStats();
-                    if (stats != null) {
-                        stats.unblessedAggregateDrainPositiveProofsCached++;
-                    }
-                }
-            }
-        }
-        return reachable;
-    }
-
-    private static boolean recordUnblessedAggregateSnapshotResult(
-            LifecycleRuntimeState state,
-            ReachabilityWalker.RootReachabilitySnapshot snapshot,
-            RuntimeBase base,
-            boolean drainActive) {
-        boolean reachable = snapshot.isReachable(base);
-        if (drainActive) {
-            if (!snapshot.complete()) {
-                state.unblessedAggregateDrainSnapshotIncomplete = true;
-                state.unblessedAggregateDrainRoots.clear();
-            } else if (reachable && !state.unblessedAggregateDrainRoots.contains(base)) {
-                if (state.unblessedAggregateDrainRoots.size()
-                        >= MAX_UNBLESSED_AGGREGATE_DRAIN_ROOTS) {
-                    state.unblessedAggregateDrainSnapshotIncomplete = true;
-                    state.unblessedAggregateDrainRoots.clear();
-                } else {
-                    state.unblessedAggregateDrainRoots.add(base);
-                    ReachabilityQueryStats stats = activeReachabilityQueryStats();
-                    if (stats != null) {
-                        stats.unblessedAggregateDrainPositiveProofsCached++;
-                    }
-                }
-            }
-        }
-        return reachable;
-    }
-
-    /**
-     * Check an owner scalar through its containing aggregate using the shared
-     * drain snapshot. Owner scalars nested below package roots are otherwise
-     * verified by a separate full root walk for every deferred referent.
-     */
-    static boolean isScalarReachableThroughRootedContainer(RuntimeScalar scalar) {
-        LifecycleRuntimeState state = state();
-        if ((!state.flushing && state.reachabilityDrainDepth == 0)
-                || scalar == null || WeakRefRegistry.isweak(scalar)) {
-            return false;
-        }
-        RuntimeBase container = scalar.containerOwner;
-        boolean containsScalar;
-        if (container instanceof RuntimeHash hash) {
-            containsScalar = hash.elements.containsValue(scalar);
-        } else if (container instanceof RuntimeArray array) {
-            containsScalar = array.elements.contains(scalar);
-        } else {
-            containsScalar = false;
-        }
-        return containsScalar && isReachableFromFullRootSnapshot(container);
-    }
-
-    static void invalidateLiveRootSnapshot() {
-        state().liveRootSnapshot = null;
-        state().fullRootSnapshot = null;
-        state().unblessedAggregateRootSnapshot = null;
-        state().scalarRootSnapshot = null;
-    }
-
-    static void invalidateFullRootSnapshotIfReachable(RuntimeBase changedNode) {
-        PerlRuntime runtime = PerlRuntime.currentOrNull();
-        if (runtime == null) return;
-        LifecycleRuntimeState state = runtime.lifecycleState;
-        ReachabilityWalker.LiveRootSnapshot liveSnapshot = state.liveRootSnapshot;
-        boolean liveReachable = liveSnapshot != null && liveSnapshot.mayContain(changedNode);
-        ReachabilityWalker.RootReachabilitySnapshot snapshot = state.fullRootSnapshot;
-        boolean fullReachable = snapshot != null && snapshot.isReachable(changedNode);
-        ReachabilityWalker.RootReachabilitySnapshot unblessedSnapshot =
-                state.unblessedAggregateRootSnapshot;
-        boolean unblessedReachable = unblessedSnapshot != null
-                && unblessedSnapshot.isReachable(changedNode);
-        if ((snapshot != null && (!snapshot.complete() || fullReachable))
-                || (unblessedSnapshot != null
-                    && (!unblessedSnapshot.complete() || unblessedReachable))) {
-            state.fullRootSnapshot = null;
-            state.unblessedAggregateRootSnapshot = null;
-        }
-        if (liveReachable) state.liveRootSnapshot = null;
-    }
-
-    static void invalidateFullRootSnapshotForScalarClear() {
-        PerlRuntime runtime = PerlRuntime.currentOrNull();
-        if (runtime != null) {
-            runtime.lifecycleState.liveRootSnapshot = null;
-            runtime.lifecycleState.fullRootSnapshot = null;
-            runtime.lifecycleState.unblessedAggregateRootSnapshot = null;
-        }
-    }
-
-    /**
-     * Reuse scalar-owner reachability across one cleanup drain. Return
-     * {@code null} outside a drain so callers retain the target-specific walk
-     * and its original lifetime semantics.
-     */
-    static Boolean isScalarReachableFromDrainSnapshot(RuntimeScalar scalar) {
-        LifecycleRuntimeState state = state();
-        if (!state.flushing && state.reachabilityDrainDepth == 0) return null;
-        if (state.scalarRootSnapshot == null) {
-            state.scalarRootSnapshot =
-                    ReachabilityWalker.scalarReachabilitySnapshot();
-        }
-        return state.scalarRootSnapshot.isReachable(scalar);
-    }
-
-    private static void invalidateDrainReachabilityCaches() {
-        LifecycleRuntimeState state = state();
-        state.flushReachableCache = null;
-        state.scalarRootSnapshot = null;
-        state.fullRootSnapshot = null;
-        if (!state.flushing && state.reachabilityDrainDepth == 0) {
-            state.unblessedAggregateDrainRoots.clear();
-            state.unblessedAggregateDrainSnapshotIncomplete = false;
-        }
-    }
-
     private static void processDeferredBase(RuntimeBase base, boolean clearWeakRefsForLocalBinding,
                                             RuntimeBase.PendingOwnerRelease ownerRelease,
                                             String transientOwnerKind) {
@@ -2149,14 +1764,8 @@ public class MortalList {
         base.releaseTransientTraceOwner(transientOwnerKind,
                 "MortalList.processDeferredBase");
         boolean hasWeakRefs = WeakRefRegistry.hasWeakRefsTo(base);
-        // Production edge releases carry an exact slot token. A lifecycle-only
-        // boundary carries completion provenance but no released edge; its
-        // cleanup decision must follow current owner identities, not a root walk.
-        // Reachability repair remains available only to the legacy unpaired
-        // decrement entry point. A lifecycle-only token is not a released Perl
-        // edge and must not trigger reconstruction from a root walk; its
-        // cleanup decision follows the current owner identities below.
-        boolean legacyUnpairedDecrement = ownerRelease == null;
+        // Cleanup decisions follow current owner identities. Releases without
+        // an exact owner token are not valid input to this path.
         boolean finalRelease = false;
         if (base.refCount > 0) {
             finalRelease = base.releaseTrackedOwnerCount(
@@ -2190,7 +1799,7 @@ public class MortalList {
                         && ownerRelease.ownerSlotRelease != null
                         && ownerRelease.ownerSlotRelease.kind()
                                 == PerlOwnerSlot.Kind.IO_VIA_LAYER;
-                if (ownerRelease == null || releasedViaLayerOwner) {
+                if (releasedViaLayerOwner) {
                     base.deferZeroCountFinalReleaseToUncountedOwnerSlots();
                 } else {
                     base.deferFinalReleaseToUncountedOwnerSlots();
@@ -2221,12 +1830,10 @@ public class MortalList {
             } else if ((ownerRelease != null
                             || base.ownerSlotCount(PerlOwnerSlot.Kind.CODE_STATE) != 0)
                     && base.hasCurrentUncountedPerlOwnerSlotIdentity()) {
-                // An exact release token makes current uncounted Perl edges
-                // authoritative. Persistent CODE state is also a direct owner
-                // when a legacy bridge decrement has no token. Other tokenless
-                // synthetic releases retain the compatibility recovery below
-                // until their producers are migrated. Temporary roots and IO
-                // resource leases are excluded by the Perl-owner predicate.
+                // Current uncounted Perl edges are authoritative. Persistent
+                // CODE state and scalar storage slots directly own their
+                // referents. Temporary roots and IO resource leases are
+                // excluded by the Perl-owner predicate.
                 base.deferFinalReleaseToUncountedOwnerSlots();
             } else if (base.localBindingExists && !(base instanceof RuntimeCode)) {
                 if (base instanceof RuntimeScalar scalar
@@ -2260,37 +1867,22 @@ public class MortalList {
                 // that edge does not participate in the legacy referent count.
                 // Keep weak observers until the exact stash entry is removed.
                 base.deferFinalReleaseToUncountedOwnerSlots();
-            } else if (base.hasCurrentUncountedPerlOwnerSlotIdentity()
-                    && (!legacyUnpairedDecrement
-                        || (base.verifiedCurrentCountedOwnerSlotCount() == 0
-                            && base.hasCurrentUntrackedLexicalScalarOwnerSlotIdentity()))) {
+            } else if (base.hasCurrentUncountedPerlOwnerSlotIdentity()) {
                 // A current lexical, package, alias, or resource slot proves
-                // that the referent still has a Perl owner, even when a legacy
-                // unpaired decrement cannot identify the edge being released.
-                // For legacy releases, use this fast path only when a live
-                // lexical scalar directly owns the referent and no counted
-                // slots need restoration. Package-rooted aggregate edges can
-                // still require the compatibility root proof below.
-                // Carry the lifecycle obligation on the exact identity instead
-                // of rebuilding a root graph to rediscover the uncounted owner.
+                // that the referent still has a Perl owner. Carry the lifecycle
+                // obligation on that identity instead of rebuilding a root
+                // graph to rediscover the owner.
                 base.deferFinalReleaseToUncountedOwnerSlots();
             } else if (isFinalCountedReferentRelease(base, ownerRelease)) {
                 // This decrement retired an identified scalar/element edge.
                 // Every other migrated edge is already absent from the ledger;
-                // a cached root snapshot must not invent a replacement owner.
+                // a diagnostic root snapshot cannot invent a replacement owner.
                 base.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroyFromCountedOwner(base);
-            } else if (!(ownerRelease == null && transientOwnerKind == null
-                            && hasPackageRootedCurrentAggregateOwner(base))
-                    && base.restoreVerifiedCurrentCountedOwnerSlotRefCount()) {
+            } else if (base.restoreVerifiedCurrentCountedOwnerSlotRefCount()) {
                 // Exact active scalar, element, invocant, or native slots are
                 // the ownership proof here. This narrow count-alignment bridge
                 // does not inspect roots or walk the runtime object graph.
-            } else if (legacyUnpairedDecrement && hasWeakRefs
-                    && restoreReachableOwnerCount(base)) {
-                // Preserve the legacy unpaired hook's diagnostic/recovery walk
-                // while its callers migrate. Production releases carry an
-                // exact owner-slot token and bypass this compatibility path.
             } else if (base instanceof RuntimeScalarReadOnly
                     && RuntimeCode.isInstalledPadConstant(base)) {
                 // A readonly scalar referenced through \("literal") has an
@@ -2298,60 +1890,20 @@ public class MortalList {
                 // Defer lifecycle cleanup to those slots instead of fabricating
                 // a legacy count that has no corresponding Perl reference.
                 base.deferFinalReleaseToUncountedOwnerSlots();
-            } else if (!legacyUnpairedDecrement
-                    && (base.hasNonPackageAggregateUncountedOwnerSlotIdentity()
+            } else if (base.hasNonPackageAggregateUncountedOwnerSlotIdentity()
                         || (aggregateReferent
                             ? (base.blessId != 0 && !hasWeakRefs
                                 && base.hasUntrackedReferenceOwnerSlotIdentity())
-                            : hasUntrackedReferenceOwner))) {
+                            : hasUntrackedReferenceOwner)) {
                 // Counted owner recovery is complete above. A surviving
                 // non-package aggregate slot, or an untracked package owner of
                 // a blessed aggregate without direct weak observers, defers
-                // cleanup until its release. Blessed aggregates with direct
-                // weak observers still use the root proof below.
+                // cleanup until its release.
                 base.deferFinalReleaseToUncountedOwnerSlots();
-            } else if (legacyUnpairedDecrement
-                    && base.blessId == 0
-                    && (base instanceof RuntimeArray || base instanceof RuntimeHash)
-                    && isUnblessedAggregateReachableDuringDrain(base)) {
-                // Keep legacy unpaired decrements on the shared drain proof.
-                // Ordinary aggregate cleanup carries its owner-slot provenance
-                // and decides lifetime from current Perl owners instead.
-                base.refCount = 1;
-            } else if (legacyUnpairedDecrement
-                    && base.blessId != 0
-                    && hasWeakRefs
-                    && (isReachableFromExternalRootCached(base)
-                    || isReachableFromFullRootSnapshot(base))) {
-                // A legacy unpaired release may temporarily consume the
-                // selective count of an object retained below a package root.
-                // Mojolicious::Lite keeps its route tree in a package
-                // singleton; a mounted route also has a weak parent link from
-                // the embedded application's route root. When the request Match
-                // object is destroyed, its endpoint release can make that live
-                // route dip to zero even though the singleton's children array
-                // still owns it. The inherited Mojo::Base::DESTROY method makes
-                // the ordinary no-DESTROY guard inapplicable, and recursively
-                // destroying the route tears down the mounted renderer helper
-                // namespace. Preserve only objects proven reachable from a
-                // live Perl root; final owner removal still destroys them at
-                // a later boundary. This proof also covers ordinary blessed
-                // classes without DESTROY, so share the root query for both
-                // compatibility cases.
-                base.refCount = 1;
-            } else if (legacyUnpairedDecrement
-                    && base.blessId != 0
-                    && base.storedInPackageGlobal
-                    && hasWeakRefs
-                    && isReachableCached(base)) {
-                // Module-global metadata such as Moose/Class::MOP metaclasses
-                // can transiently hit zero in the selective refcount model.
-                // If the walker can still reach the object from Perl-visible
-                // roots, keep weak links to it intact.
             } else {
                 // Call depth is not ownership. If every counted and direct
                 // owner check above is empty, a weak referent is final here;
-                // leaving it for a later sweep would strand the weak scalars.
+                // deferring cleanup would strand the weak scalars.
                 base.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroy(base);
             }
@@ -2360,7 +1912,7 @@ public class MortalList {
         // nested scope is unwinding. The exact owner release is still pending
         // in this call, so recheck its ledger after that branch: once this was
         // the final trusted slot and no other Perl binding remains, finish the
-        // release here instead of relying on a later reachability sweep.
+        // release here instead of relying on a later graph query.
         if (base.refCount == 0
                 && isFinalCountedReferentRelease(base, ownerRelease)
                 && !base.localBindingExists
@@ -2404,47 +1956,10 @@ public class MortalList {
         };
     }
 
-    private static boolean restoreReachableOwnerCount(RuntimeBase base) {
-        int ownerCount = base.reachableOwnerCount();
-        if (ownerCount == 0) return false;
-        base.refCount = ownerCount;
-        return true;
-    }
-
-    private static boolean hasPackageRootedCurrentAggregateOwner(RuntimeBase base) {
-        for (PerlOwnerSlot slot : base.ownerSlotSnapshot()) {
-            if (!slot.isActive() || slot.referent() != base
-                    || (slot.kind() != PerlOwnerSlot.Kind.SCALAR_CELL
-                        && slot.kind() != PerlOwnerSlot.Kind.ARRAY_ELEMENT
-                        && slot.kind() != PerlOwnerSlot.Kind.HASH_ELEMENT)) {
-                continue;
-            }
-            RuntimeScalar owner = slot.countedScalarOwner();
-            if (owner == null) continue;
-            boolean currentOwner = slot.kind() == PerlOwnerSlot.Kind.SCALAR_CELL
-                    ? owner.isCurrentCountedScalarOwner(base, slot)
-                    : owner.isCurrentAggregateElementOwner(base, slot);
-            if (!currentOwner) continue;
-            RuntimeBase aggregate = owner.getContainerOwner();
-            if (aggregate != null && (aggregate.storedInPackageGlobal
-                    || GlobalVariable.isPackageRootedAggregate(aggregate))) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     public static void flush() {
         LifecycleRuntimeState state = state();
         if (!state.mortalActive) return;
         if (state.flushing) return;
-        if (state.sweepPendingAfterOuterDestroy) {
-            // Preserve the old diagnostic counters for explicit post-DESTROY
-            // requests. This snapshots CODE captures only; it never clears
-            // weak refs, dispatches DESTROY, or changes owner state.
-            state.sweepPendingAfterOuterDestroy = false;
-            ReachabilityWalker.inspectWeakBackrefCapturesForDiagnostics();
-        }
         if (state.pending.isEmpty() && state.pendingTiedReleases.isEmpty()
                 && state.pendingIoReleases.isEmpty()
                 && state.pendingUntrackedReturnOwnerReleases.isEmpty()) {
@@ -2452,7 +1967,6 @@ public class MortalList {
             refreshBoundaryWork(state);
             return;
         }
-        invalidateDrainReachabilityCaches();
         state.flushing = true;
         try {
             processDeferredEntriesFrom(0, 0, 0, 0);
@@ -2467,8 +1981,7 @@ public class MortalList {
             state.markDepth = 0; // All entries drained; marks are meaningless now
         } finally {
             state.flushing = false;
-            invalidateDrainReachabilityCaches();
-        }
+            }
         processReadyDeferredCaptures(state);
         refreshBoundaryWork(state);
     }
@@ -2504,8 +2017,7 @@ public class MortalList {
         if (startIdx < 0) startIdx = 0;
         LifecycleRuntimeState state = state();
         if (startIdx >= state.pending.size()) return;
-        invalidateDrainReachabilityCaches();
-        state.reachabilityDrainDepth++;
+        state.deferredReleaseDrainDepth++;
         // Loop because DESTROY may add further entries
         int i = startIdx;
         try {
@@ -2516,9 +2028,8 @@ public class MortalList {
                 i++;
             }
         } finally {
-            state.reachabilityDrainDepth--;
-            invalidateDrainReachabilityCaches();
-        }
+            state.deferredReleaseDrainDepth--;
+            }
         // Truncate the pending list back to startIdx to mark these entries
         // as processed. Outer flush won't re-process them.
         while (state.pending.size() > startIdx) {
@@ -2547,7 +2058,6 @@ public class MortalList {
 
         LifecycleRuntimeState state = state();
         if (state.flushing) return;
-        invalidateDrainReachabilityCaches();
         state.flushing = true;
         try {
             for (int i = state.pending.size() - 1; i >= 0; i--) {
@@ -2584,8 +2094,7 @@ public class MortalList {
             }
         } finally {
             state.flushing = false;
-            invalidateDrainReachabilityCaches();
-        }
+            }
         refreshBoundaryWork(state);
     }
 
@@ -2692,7 +2201,6 @@ public class MortalList {
             refreshBoundaryWork(state);
             return;
         }
-        invalidateDrainReachabilityCaches();
         state.flushing = true;
         try {
             processDeferredEntriesFrom(mark, tiedMark, ioMark, untrackedReturnOwnerMark);
@@ -2715,8 +2223,7 @@ public class MortalList {
             }
         } finally {
             state.flushing = false;
-            invalidateDrainReachabilityCaches();
-        }
+            }
         processReadyDeferredCaptures(state);
         refreshBoundaryWork(state);
     }
@@ -2745,7 +2252,6 @@ public class MortalList {
             DestroyDispatch.processRescuedObjects();
             return;
         }
-        invalidateDrainReachabilityCaches();
         // Process entries from mark onwards (DESTROY may add new entries)
         processDeferredEntriesFrom(mark, tiedMark, ioMark, untrackedReturnOwnerMark);
         // Remove only the entries we processed (keep entries before mark)
@@ -2765,7 +2271,6 @@ public class MortalList {
         while (state.pendingUntrackedReturnOwnerReleases.size() > untrackedReturnOwnerMark) {
             state.pendingUntrackedReturnOwnerReleases.removeLast();
         }
-        invalidateDrainReachabilityCaches();
         // After processing mortals (which may have triggered releaseCaptures
         // via callDestroy), check if any deferred captures are now ready.
         processReadyDeferredCaptures(state);

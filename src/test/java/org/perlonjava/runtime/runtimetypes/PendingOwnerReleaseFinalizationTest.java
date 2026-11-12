@@ -51,7 +51,6 @@ class PendingOwnerReleaseFinalizationTest {
                     WeakRefRegistry.unweaken(weakObserver);
                 }
                 if (referent.hasPendingOwnerRelease()) MortalList.flush();
-                MortalList.invalidateAllRootSnapshots();
                 MortalList.setActive(previousMortalListState);
             }
         }

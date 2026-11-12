@@ -10,40 +10,39 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Tag("unit")
 class LegacyUnpairedUncountedOwnerSlotFastPathTest {
     @Test
-    void currentUncountedOwnerDefersLegacyReleaseWithoutRootRecovery() {
+    void currentUncountedOwnerDefersWeakCleanupWithoutRootRecovery() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             boolean previousMortalListState = MortalList.isActive();
             MortalList.setActive(true);
             RuntimeArray target = new RuntimeArray();
+            target.refCount = -1;
+            RuntimeArray lexicalOwner = new RuntimeArray();
             RuntimeScalar strongOwner = referenceTo(target);
+            lexicalOwner.elements.add(strongOwner);
             RuntimeScalar weakObserver = referenceTo(target);
             int lexicalMark = MyVarCleanupStack.pushMark();
             try {
-                MyVarCleanupStack.register(strongOwner);
+                MyVarCleanupStack.register(lexicalOwner);
                 PerlOwnerSlot strongOwnerSlot = strongOwner.untrackedReferenceOwnerSlot();
+                assertTrue(strongOwnerSlot != null && strongOwnerSlot.isActive());
+                target.refCount = 1;
+                weakObserver.refCountOwned = true;
                 WeakRefRegistry.weaken(weakObserver);
 
                 assertTrue(strongOwnerSlot.isActive());
                 assertTrue(target.hasCurrentUncountedPerlOwnerSlotIdentity());
-                target.refCount = 1; // Model the compatibility bridge's undercount.
-
-                MortalList.pushMark();
-                MortalList.deferDecrement(target);
                 try (MortalList.ReachabilityQueryMeasurement measurement =
                              MortalList.measureReachabilityQueries()) {
-                    MortalList.popAndFlush();
-
-                    assertEquals(WeakRefRegistry.WEAKLY_TRACKED, target.refCount,
-                            "the explicit owner slot carries finalization while it remains active");
                     assertTrue(WeakRefRegistry.isweak(weakObserver));
-                    assertTrue(target.deferredFinalReleaseForUncountedOwners);
+                    assertEquals(WeakRefRegistry.WEAKLY_TRACKED, target.refCount,
+                            "weak tracking preserves the current uncounted Perl owner");
                     assertEquals(0, measurement.stats().rootQueries,
                             "a current owner identity makes root recovery unnecessary");
                     assertEquals(0, measurement.stats().snapshotsBuilt);
                 }
 
-                strongOwner.undefine();
+                strongOwner.set(new RuntimeScalar());
 
                 assertFalse(strongOwnerSlot.isActive());
                 assertFalse(WeakRefRegistry.isweak(weakObserver),
@@ -57,9 +56,8 @@ class LegacyUnpairedUncountedOwnerSlotFastPathTest {
                     WeakRefRegistry.unweaken(weakObserver);
                 }
                 RuntimeScalar.scopeExitCleanup(strongOwner);
-                MyVarCleanupStack.unregister(strongOwner);
+                MyVarCleanupStack.unregister(lexicalOwner);
                 MyVarCleanupStack.popMark(lexicalMark);
-                MortalList.invalidateAllRootSnapshots();
                 MortalList.setActive(previousMortalListState);
             }
         }

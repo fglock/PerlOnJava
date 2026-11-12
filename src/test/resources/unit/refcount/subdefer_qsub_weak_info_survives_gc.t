@@ -41,8 +41,6 @@ my $code = $HOLDER->{isa};
 ok($DEFERRED{$code}, 'deferred info exists before gc');
 undef $code;
 
-Internals::jperl_gc() if defined &Internals::jperl_gc;
-
 my $survived = $DEFERRED{$HOLDER->{isa}};
 ok($survived, 'deferred info survives gc through holder metadata');
 

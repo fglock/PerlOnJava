@@ -62,7 +62,6 @@ class WeakGlobIoOwnerSlotTest {
                 RuntimeScalar.releaseIoOwner(weak);
                 RuntimeScalar.releaseIoOwner(strong);
                 MortalList.flush();
-                MortalList.invalidateAllRootSnapshots();
             }
         }
     }

@@ -21,9 +21,10 @@ class DeferredUnblessedAggregateOwnerSlotRepairTest {
 
             try {
                 assertEquals(1, target.ownerSlotCount(PerlOwnerSlot.Kind.ARRAY_ELEMENT));
-                target.refCount = 1; // Model a transient legacy-count undercount.
+                RuntimeScalar temporaryOwner =
+                        CountedOwnerFixture.temporaryReference(target);
                 MortalList.pushMark();
-                MortalList.deferDecrement(target);
+                CountedOwnerFixture.queueRelease(temporaryOwner);
 
                 try (MortalList.ReachabilityQueryMeasurement measurement =
                              MortalList.measureReachabilityQueries()) {

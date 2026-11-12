@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Tag("unit")
 class UnblessedAggregateCachedRootShortcutTest {
     @Test
-    void rootedAggregateReusesAnExternalSnapshotBeforeBuildingFullRoots() {
+    void rootedAggregatesReleaseTemporaryOwnersWithoutRootSnapshots() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeArray global = new RuntimeArray();
@@ -20,23 +20,24 @@ class UnblessedAggregateCachedRootShortcutTest {
             RuntimeHash blessedSeed = new RuntimeHash();
             blessedSeed.blessId = NameNormalizer.getBlessId(
                     "UnblessedAggregateCachedRootShortcutTest::Seed");
-            RuntimeScalar blessedStrong = blessedSeed.createAnonymousReference();
-            RuntimeScalar blessedWeak = blessedSeed.createAnonymousReference();
-            global.elements.add(blessedStrong);
-            WeakRefRegistry.weaken(blessedWeak);
-            blessedSeed.refCount = 1;
-
             RuntimeArray aggregate = new RuntimeArray();
-            RuntimeScalar aggregateStrong = aggregate.createAnonymousReference();
+            RuntimeScalar seedOwner = CountedOwnerFixture.reference(
+                    blessedSeed, PerlOwnerSlot.Kind.ARRAY_ELEMENT);
+            RuntimeScalar aggregateOwner = CountedOwnerFixture.reference(
+                    aggregate, PerlOwnerSlot.Kind.ARRAY_ELEMENT);
+            global.elements.add(seedOwner);
+            global.elements.add(aggregateOwner);
+            RuntimeScalar seedWeak = blessedSeed.createAnonymousReference();
             RuntimeScalar aggregateWeak = aggregate.createAnonymousReference();
-            global.elements.add(aggregateStrong);
+            WeakRefRegistry.weaken(seedWeak);
             WeakRefRegistry.weaken(aggregateWeak);
-            aggregate.refCount = 1;
 
             try {
                 MortalList.pushMark();
-                MortalList.deferDecrement(blessedSeed);
-                MortalList.deferDecrement(aggregate);
+                CountedOwnerFixture.queueRelease(
+                        CountedOwnerFixture.temporaryReference(blessedSeed));
+                CountedOwnerFixture.queueRelease(
+                        CountedOwnerFixture.temporaryReference(aggregate));
 
                 try (MortalList.ReachabilityQueryMeasurement measurement =
                              MortalList.measureReachabilityQueries()) {
@@ -44,76 +45,46 @@ class UnblessedAggregateCachedRootShortcutTest {
 
                     ReachabilityQueryStats stats = measurement.stats();
                     assertEquals(2, stats.deferredBasesProcessed);
-                    assertEquals(1, stats.externalRootSnapshotsBuilt,
-                            "the blessed seed builds one package-root snapshot");
-                    assertEquals(0, stats.snapshotsBuilt,
-                            "the rooted aggregate reuses the existing external proof");
-                    assertTrue(stats.externalRootSnapshotNodesVisited > 0);
+                    assertEquals(0, stats.rootQueries);
+                    assertEquals(0, stats.externalRootSnapshotsBuilt);
+                    assertEquals(0, stats.snapshotsBuilt);
                     assertEquals(1, blessedSeed.refCount);
                     assertEquals(1, aggregate.refCount);
+                    assertTrue(WeakRefRegistry.isweak(seedWeak));
+                    assertTrue(WeakRefRegistry.isweak(aggregateWeak));
                 }
             } finally {
-                WeakRefRegistry.unweaken(blessedWeak);
+                WeakRefRegistry.unweaken(seedWeak);
                 WeakRefRegistry.unweaken(aggregateWeak);
                 GlobalVariable.globalArrays.remove(globalName);
-                MortalList.invalidateAllRootSnapshots();
             }
         }
     }
 
     @Test
-    void positiveAggregateProofSurvivesRootRemovalUntilDrainEnds() {
+    void finalExactOwnerReleaseClearsWeakObserverWithoutDrainProof() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
-            RuntimeArray global = new RuntimeArray();
-            String globalName =
-                    "UnblessedAggregateCachedRootShortcutTest::removedRoot";
-            GlobalVariable.globalArrays.put(globalName, global);
             RuntimeArray aggregate = new RuntimeArray();
-            RuntimeScalar strong = aggregate.createAnonymousReference();
+            RuntimeScalar temporaryOwner =
+                    CountedOwnerFixture.temporaryReference(aggregate);
             RuntimeScalar weak = aggregate.createAnonymousReference();
-            global.elements.add(strong);
             WeakRefRegistry.weaken(weak);
-            aggregate.refCount = 1;
 
-            LifecycleRuntimeState state = runtime.lifecycleState;
-            try {
-                state.flushing = true;
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
-                    assertTrue(MortalList.isUnblessedAggregateReachableDuringDrain(aggregate));
-                    assertEquals(1, measurement.stats().externalRootSnapshotsBuilt);
+            try (MortalList.ReachabilityQueryMeasurement measurement =
+                         MortalList.measureReachabilityQueries()) {
+                CountedOwnerFixture.queueRelease(
+                        temporaryOwner);
+                MortalList.flush();
 
-                    global.elements.remove(strong);
-                    MortalList.invalidateExternalRootSnapshot();
-
-                    assertTrue(MortalList.isUnblessedAggregateReachableDuringDrain(aggregate),
-                            "a positive proof is retained until this cleanup drain ends");
-                    assertEquals(1, measurement.stats().externalRootSnapshotsBuilt,
-                            "root removal must not rebuild package roots for this aggregate");
-                }
-
-                state.flushing = false;
-                MortalList.pushMark();
-                MortalList.deferDecrement(aggregate);
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
-                    MortalList.popAndFlush();
-                    assertEquals(RuntimeScalarType.UNDEF, weak.type,
-                            "the next drain must discard the previous drain's positive proof");
-                    assertEquals(null, weak.value,
-                            "the weak observer must be cleared after the aggregate becomes unreachable");
-                    assertEquals(1, measurement.stats().externalRootSnapshotsBuilt,
-                            "the new drain must build a current package-root snapshot");
-                }
-            } finally {
-                state.flushing = false;
-                state.unblessedAggregateDrainRoots.clear();
-                state.unblessedAggregateDrainSnapshotIncomplete = false;
-                WeakRefRegistry.unweaken(weak);
-                GlobalVariable.globalArrays.remove(globalName);
-                MortalList.invalidateAllRootSnapshots();
+                assertEquals(RuntimeScalarType.UNDEF, weak.type);
+                assertEquals(null, weak.value);
+                assertEquals(1, measurement.stats().deferredBasesProcessed);
+                assertEquals(0, measurement.stats().rootQueries);
+                assertEquals(0, measurement.stats().externalRootSnapshotsBuilt);
             }
         }
     }
+
+
 }

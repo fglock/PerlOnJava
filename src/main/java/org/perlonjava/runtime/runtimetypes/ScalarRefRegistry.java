@@ -7,24 +7,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Phase B1 of {@code dev/design/refcount_alignment_52leaks_plan.md}:
- * tracks all {@link RuntimeScalar} instances currently holding a
- * reference, keyed weakly so JVM GC can collect entries when the scalar
- * itself becomes unreachable.
- * <p>
- * Purpose: the {@link ReachabilityWalker} can't enumerate live
- * JVM-call-stack lexicals directly. By tracking ref-holding scalars
- * here with weak keys, a {@code System.gc()} followed by iteration of
- * surviving entries gives the walker a Perl-compatible view of "what
- * scalars are still alive in the call stack".
- * <p>
- * The map is only populated when {@link WeakRefRegistry#weakRefsExist}
- * is {@code true}, so non-{@code weaken()} programs pay zero cost.
- * <p>
- * Thread-safety: not thread-safe. Matches PerlOnJava's single-threaded
- * execution model (see {@code weaken-destroy.md} §5).
- */
+/** Weak-identity scalar registry used only by explicit root diagnostics. */
 public class ScalarRefRegistry {
 
     /**
@@ -119,42 +102,20 @@ public class ScalarRefRegistry {
         return PerlRuntime.current().lifecycleState;
     }
 
-    // Phase B1 performance toggle: when set, skip all registry
-    // maintenance. Useful for benchmarks; does NOT affect correctness
-    // for programs that don't use weaken() (no weak-ref registry =
-    // no sweep triggers = unused registry).
+    // Optional diagnostic-registry controls. These do not affect lifecycle.
     private static final boolean OPT_OUT =
             System.getenv("JPERL_NO_SCALAR_REGISTRY") != null;
     private static final boolean DEBUG =
             System.getenv("JPERL_GC_DEBUG") != null;
     private static final boolean RECORD_STACKS =
             System.getenv("JPERL_REGISTER_STACKS") != null;
-    // Opt back to unconditional registration for scripts that weaken()
-    // after a long warm-up phase where many scalars were assigned.
     private static final boolean UNGATED =
             System.getenv("JPERL_UNGATED_SCALAR_REGISTRY") != null;
 
     /**
-     * Register a scalar that now holds a reference. Called from
-     * {@link RuntimeScalar#setLarge} paths that assign a ref value.
-     * <p>
-     * Gated on {@link WeakRefRegistry#weakRefsExist}: this registry
-     * exists solely to feed {@link ReachabilityWalker#sweepWeakRefs}
-     * live-lexical seeds. If no weaken() has ever been called, no
-     * sweep will ever examine the registry, so registering is pure
-     * overhead — and it's a {@code synchronized(WeakHashMap).put}
-     * which is expensive per call. Life_bitpacked.pl profile showed
-     * this put path as the single largest post-compile hotspot.
-     * <p>
-     * Trade-off: if a script holds many scalars-with-refs PRIOR to
-     * the first weaken(), those scalars won't be in the registry
-     * when the walker first runs. However, any subsequent
-     * {@code setLarge} on those scalars will register them, and the
-     * walker's primary seeds (globals, code refs, DESTROY rescued
-     * set) still find reachable structures via the normal BFS.
-     * <p>
-     * Opt back to unconditional registration via
-     * {@code JPERL_UNGATED_SCALAR_REGISTRY=1} if needed.
+     * Register a scalar that now holds a reference for explicit root
+     * diagnostics. Gating keeps diagnostic bookkeeping off programs that never
+     * use weak references; it has no role in ownership or cleanup decisions.
      */
     public static void registerRef(RuntimeScalar scalar) {
         if (OPT_OUT || scalar == null) return;
@@ -191,11 +152,9 @@ public class ScalarRefRegistry {
     }
 
     /**
-     * Force JVM GC, wait briefly for finalization, then return a
-     * snapshot of still-live ref-holding scalars. Used by
-     * {@link ReachabilityWalker#sweepWeakRefs} to seed its walk with
-     * live call-stack lexicals. Idempotent but not cheap — bounded to
-     * a few hundred ms at most.
+     * Force JVM GC, wait briefly for weak-key cleanup, then return a
+     * snapshot of still-live ref-holding scalars for an explicit diagnostic
+     * root query. Idempotent but not cheap — bounded to a few hundred ms.
      */
     public static java.util.List<RuntimeScalar> forceGcAndSnapshot() {
         // Multiple GC cycles are sometimes needed: the first cycle may

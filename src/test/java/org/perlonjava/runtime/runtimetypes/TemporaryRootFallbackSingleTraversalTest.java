@@ -30,7 +30,7 @@ class TemporaryRootFallbackSingleTraversalTest {
     }
 
     @Test
-    void unblessedFallbackDoesNotRepeatTheTemporaryRootWalkAfterAMiss() {
+    void cleanupDoesNotWalkNestedTemporaryRootGraphs() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeHash nested = new RuntimeHash();
@@ -38,16 +38,19 @@ class TemporaryRootFallbackSingleTraversalTest {
             nested.elements = nestedValues;
             RuntimeList temporaryRoot = new RuntimeList();
             temporaryRoot.elements.add(nested.createReference());
-            RuntimeHash target = new RuntimeHash();
-
             MortalList.pushTemporaryRoot(temporaryRoot);
             try {
-                MortalList.isUnblessedAggregateReachableDuringDrain(target);
-
-                assertEquals(1, nestedValues.valuesCalls,
-                        "the temporary-root miss should fall through to persistent roots directly");
-            } finally {
+                assertEquals(1, temporaryRoot.ownerSlotCount(
+                        PerlOwnerSlot.Kind.EXPRESSION_TEMPORARY_ROOT));
                 MortalList.popTemporaryRoot(temporaryRoot);
+
+                assertEquals(0, nestedValues.valuesCalls,
+                        "temporary-root leases record their owner directly without walking nested graphs");
+            } finally {
+                if (temporaryRoot.ownerSlotCount(
+                        PerlOwnerSlot.Kind.EXPRESSION_TEMPORARY_ROOT) != 0) {
+                    MortalList.popTemporaryRoot(temporaryRoot);
+                }
             }
         }
     }

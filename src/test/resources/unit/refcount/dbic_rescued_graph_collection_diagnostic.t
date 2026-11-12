@@ -62,25 +62,14 @@ package main;
     weaken($weak{row});
 }
 
-sub diagnose_if_live {
-    my ($name) = @_;
-    return unless defined $weak{$name};
-    return unless defined &Internals::jperl_owner_trace;
-    diag("$name remains live: " . Internals::jperl_owner_trace($weak{$name}));
-}
-
-ok(defined $weak{schema}, 'ResultSource rescue keeps Schema alive while a row owns it')
-    or diagnose_if_live('schema');
-ok(defined $weak{source}, 'the row keeps its ResultSource alive')
-    or diagnose_if_live('source');
+ok(defined $weak{schema}, 'ResultSource rescue keeps Schema alive while a row owns it');
+ok(defined $weak{source}, 'the row keeps its ResultSource alive');
 ok(defined $weak{row}, 'the external row remains live before release');
 
 undef $row;
 
 ok(!defined $weak{row}, 'the row is released');
-ok(!defined $weak{source}, 'ResultSource is released after its last row owner leaves')
-    or diagnose_if_live('source');
-ok(!defined $weak{schema}, 'rescued Schema is released after its ResultSource leaves')
-    or diagnose_if_live('schema');
+ok(!defined $weak{source}, 'ResultSource is released after its last row owner leaves');
+ok(!defined $weak{schema}, 'rescued Schema is released after its ResultSource leaves');
 ok(!defined $weak{source} && !defined $weak{schema},
     'the destructor handoff does not leave a detached source or Schema behind');

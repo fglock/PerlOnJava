@@ -10,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Tag("unit")
 class UnblessedAggregateDrainPositiveProofCacheTest {
     @Test
-    void cachesOnlyPositiveTargetsInsteadOfCopyingEveryReachableRoot() {
+    void unrootedTargetsFinalizeWithoutBuildingAReachabilityCache() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeArray global = new RuntimeArray();
@@ -20,32 +20,43 @@ class UnblessedAggregateDrainPositiveProofCacheTest {
             String globalName =
                     "UnblessedAggregateDrainPositiveProofCacheTest::global";
             GlobalVariable.globalArrays.put(globalName, global);
-            RuntimeArray first = new RuntimeArray();
-            RuntimeArray second = new RuntimeArray();
-            RuntimeArray third = new RuntimeArray();
-            first.refCount = 1;
-            second.refCount = 1;
-            third.refCount = 1;
-            MortalList.pushMark();
-            MortalList.deferDecrement(first);
-            MortalList.deferDecrement(second);
-            MortalList.deferDecrement(third);
-            try (MortalList.ReachabilityQueryMeasurement measurement =
-                         MortalList.measureReachabilityQueries()) {
-                MortalList.popAndFlush();
+            RuntimeArray[] targets = {
+                    new RuntimeArray(), new RuntimeArray(), new RuntimeArray()
+            };
+            RuntimeScalar[] weak = new RuntimeScalar[targets.length];
 
-                assertEquals(3, measurement.stats().deferredBasesProcessed);
-                assertTrue(measurement.stats().externalRootSnapshotNodesVisited > 128,
-                        "the cleanup snapshot examines the populated package root");
-                assertEquals(1, measurement.stats().externalRootSnapshotsBuilt,
-                        "all three cleanup targets reuse one package-root snapshot");
-                assertEquals(0,
-                        measurement.stats().unblessedAggregateDrainPositiveProofsCached,
-                        "unreachable cleanup targets create no positive drain proofs");
+            try {
+                MortalList.pushMark();
+                for (int i = 0; i < targets.length; i++) {
+                    weak[i] = targets[i].createAnonymousReference();
+                    WeakRefRegistry.weaken(weak[i]);
+                    CountedOwnerFixture.queueRelease(
+                            CountedOwnerFixture.temporaryReference(targets[i]));
+                }
+                try (MortalList.ReachabilityQueryMeasurement measurement =
+                             MortalList.measureReachabilityQueries()) {
+                    MortalList.popAndFlush();
+
+                    assertEquals(3, measurement.stats().deferredBasesProcessed);
+                    assertEquals(0, measurement.stats().rootQueries);
+                    assertEquals(0, measurement.stats().externalRootSnapshotsBuilt);
+                    assertEquals(0, measurement.stats().externalRootSnapshotNodesVisited);
+                    assertEquals(0,
+                            measurement.stats().unblessedAggregateDrainPositiveProofsCached);
+                    for (RuntimeScalar observer : weak) {
+                        assertEquals(RuntimeScalarType.UNDEF, observer.type);
+                    }
+                }
             } finally {
+                for (RuntimeScalar observer : weak) {
+                    if (observer != null && WeakRefRegistry.isweak(observer)) {
+                        WeakRefRegistry.unweaken(observer);
+                    }
+                }
                 GlobalVariable.globalArrays.remove(globalName);
-                MortalList.invalidateAllRootSnapshots();
             }
         }
     }
+
+
 }

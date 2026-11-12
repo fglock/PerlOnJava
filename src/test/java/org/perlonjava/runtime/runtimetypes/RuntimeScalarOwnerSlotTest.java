@@ -181,7 +181,6 @@ class RuntimeScalarOwnerSlotTest {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             MortalList.setActive(true);
-            runtime.lifecycleState.weakSweepSuppressionDepth++;
             int lexicalMark = MyVarCleanupStack.pushMark();
             try {
                 RuntimeArray child = new RuntimeArray();
@@ -196,8 +195,6 @@ class RuntimeScalarOwnerSlotTest {
                 metadataCell.set(metadata.createAnonymousReference());
                 MyVarCleanupStack.register(metadataCell);
                 strong.set(new RuntimeScalar(1));
-                assertTrue(MortalList.isUnblessedAggregateReachableDuringDrain(child));
-
                 try (MortalList.ReachabilityQueryMeasurement measurement =
                              MortalList.measureReachabilityQueries()) {
                     metadataCell.set(new RuntimeScalar());
@@ -213,7 +210,6 @@ class RuntimeScalarOwnerSlotTest {
                 }
             } finally {
                 MyVarCleanupStack.popMark(lexicalMark);
-                runtime.lifecycleState.weakSweepSuppressionDepth--;
             }
         }
     }

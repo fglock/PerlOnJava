@@ -3,13 +3,13 @@ package org.perlonjava.runtime.runtimetypes;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("unit")
 class TemporaryRootNestedReturnMutationTest {
     @Test
-    void returnListMutationChangesTheReferentsKeptByItsTemporaryRoot() {
+    void returnListMutationPreservesTheControlFlowLeaseUntilTransferCompletes() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeArray oldReferent = new RuntimeArray();
@@ -21,23 +21,22 @@ class TemporaryRootNestedReturnMutationTest {
 
             MortalList.pushTemporaryRoot(transfer);
             try {
-                assertTrue(MortalList.temporaryRootDirectlyReferences(oldReferent));
-                assertFalse(MortalList.temporaryRootDirectlyReferences(newReferent));
+                assertEquals(1, transfer.ownerSlotCount(
+                        PerlOwnerSlot.Kind.EXPRESSION_TEMPORARY_ROOT));
+                assertEquals(oldReferent, ((RuntimeScalar) returnValues.elements.getFirst()).value);
 
                 returnValues.elements.set(0, newReferent.createReference());
 
-                assertFalse(MortalList.temporaryRootDirectlyReferences(oldReferent));
-                assertTrue(MortalList.temporaryRootDirectlyReferences(newReferent));
+                assertEquals(newReferent, ((RuntimeScalar) returnValues.elements.getFirst()).value);
 
                 returnValues.elements.clear();
-
-                assertFalse(MortalList.temporaryRootDirectlyReferences(newReferent));
+                assertTrue(returnValues.elements.isEmpty());
             } finally {
                 MortalList.popTemporaryRoot(transfer);
             }
 
-            assertFalse(MortalList.temporaryRootDirectlyReferences(oldReferent));
-            assertFalse(MortalList.temporaryRootDirectlyReferences(newReferent));
+            assertEquals(0, transfer.ownerSlotCount(
+                    PerlOwnerSlot.Kind.EXPRESSION_TEMPORARY_ROOT));
         }
     }
 }

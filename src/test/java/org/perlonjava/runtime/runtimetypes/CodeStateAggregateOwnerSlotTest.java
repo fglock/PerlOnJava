@@ -21,6 +21,8 @@ class CodeStateAggregateOwnerSlotTest {
             String codeName = "CodeStateAggregateOwnerSlotTest::holder";
             GlobalVariable.globalCodeRefs.put(codeName, codeRoot);
             RuntimeArray stateArray = StateVariable.retrieveStateArray(codeRoot, "@state", 914_027);
+            RuntimeScalar temporaryOwner =
+                    CountedOwnerFixture.temporaryReference(stateArray);
             RuntimeScalar weak = stateArray.createAnonymousReference();
             WeakRefRegistry.weaken(weak);
 
@@ -28,9 +30,8 @@ class CodeStateAggregateOwnerSlotTest {
                 assertEquals(1, stateArray.ownerSlotCount(PerlOwnerSlot.Kind.CODE_STATE),
                         "the persistent CODE state entry must own its aggregate directly");
 
-                stateArray.refCount = 1; // Model the last deferred legacy bridge release.
                 MortalList.pushMark();
-                MortalList.deferDecrement(stateArray);
+                CountedOwnerFixture.queueRelease(temporaryOwner);
                 try (MortalList.ReachabilityQueryMeasurement measurement =
                              MortalList.measureReachabilityQueries()) {
                     MortalList.popAndFlush();
@@ -52,7 +53,6 @@ class CodeStateAggregateOwnerSlotTest {
                 code.releaseStateStorage();
                 if (WeakRefRegistry.isweak(weak)) WeakRefRegistry.unweaken(weak);
                 GlobalVariable.globalCodeRefs.remove(codeName);
-                MortalList.invalidateAllRootSnapshots();
             }
         }
     }

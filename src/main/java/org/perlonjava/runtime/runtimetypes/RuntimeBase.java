@@ -329,11 +329,9 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     public synchronized PerlOwnerSlot retainClosureCaptureOwner(RuntimeCode captureOwner) {
         verifyClosureCaptureOwnerCount(PerlOwnerSlot.Kind.CLOSURE_PAD);
         // A closure-pad slot is a semantic Perl owner even though it does not
-        // contribute to the legacy selective refcount. A targeted weak sweep
-        // can therefore leave an unblessed aggregate's legacy count at the
-        // destroyed sentinel while other native capture slots still own it.
-        // Reconcile that stale bridge state before adding another owner; a
-        // blessed or already-destroyed object must never be revived here.
+        // contribute to the selective refcount. Reconcile stale bridge state
+        // before adding another owner; a blessed or already-destroyed object
+        // must never be revived here.
         if (refCount == Integer.MIN_VALUE && blessId == 0 && !destroyFired
                 && hasClosureCaptureOwner() && hasSemanticCaptureOwner()) {
             refCount = 0;
@@ -644,6 +642,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
             if (slot.isActive()
                     && !PerlOwnerSlot.isCountedKind(slot.kind())
+                    && !slot.isCountedNativeOwner()
                     && PerlOwnerSlot.isPerlOwnerKind(slot.kind())) {
                 return true;
             }
@@ -665,6 +664,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     boolean hasCurrentUncountedPerlOwnerSlotIdentity() {
         for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
             if (!PerlOwnerSlot.isCountedKind(slot.kind())
+                    && !slot.isCountedNativeOwner()
                     && PerlOwnerSlot.isPerlOwnerKind(slot.kind())
                     && DestroyDispatch.isCurrentPerlOwnerSlot(this, slot)) {
                 return true;
@@ -1120,21 +1120,6 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                 captureOwner.releaseCaptures();
             }
         }
-    }
-
-    /**
-     * Count live counted scalar-cell slots reachable from package globals or
-     * live my-vars. This root-walk compatibility fallback remains only for
-     * slots whose current storage cannot yet be proven from owner identities.
-     */
-    public int reachableOwnerCount() {
-        int count = 0;
-        for (RuntimeScalar scalar : activeOwnerSnapshot()) {
-            if (ReachabilityWalker.isScalarReachable(scalar)) {
-                count++;
-            }
-        }
-        return count;
     }
 
     private static final boolean REFCOUNT_TRACE_ENV =
