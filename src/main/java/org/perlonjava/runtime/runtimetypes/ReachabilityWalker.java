@@ -2523,6 +2523,15 @@ public class ReachabilityWalker {
                 }
                 continue;
             }
+            if (slot.kind() == PerlOwnerSlot.Kind.HASH_ALIAS_CELL) {
+                RuntimeHash hashOwner = slot.hashAliasOwner();
+                if (hashOwner != null && value instanceof RuntimeScalar scalar
+                        && DestroyDispatch.isCurrentPerlOwnerSlot(value, slot)
+                        && hashOwner.ownsHashAliasCellOwner(slot, scalar)) {
+                    todo.addLast(new TemporaryRootOwnerAncestor(hashOwner, depth + 1));
+                }
+                continue;
+            }
             if (slot.kind() == PerlOwnerSlot.Kind.CODE_PAD_CONSTANT) {
                 if (DestroyDispatch.isCurrentPerlOwnerSlot(value, slot)) {
                     for (RuntimeBase codeOwner : slot.endBoundaryOwnerSources()) {
