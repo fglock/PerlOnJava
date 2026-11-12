@@ -2612,6 +2612,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 failure = attemptCleanup(failure, () -> scalar.releaseContainerOwner(args));
             }
         }
+        failure = attemptCleanup(failure,
+                () -> refreshUntrackedCellsAfterContainerTransfer(args));
         rethrowCleanupFailure(failure);
     }
 
