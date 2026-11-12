@@ -323,6 +323,13 @@ public class WeakRefRegistry {
     static void onStrongOwnerSlotReleased(RuntimeBase referent) {
         if (referent instanceof RuntimeCode code) {
             code.releasePadConstantsForUntrackedOwnerSlot();
+            // Untracked CODE refs do not transition through a final count.
+            // Recheck weak observers at the owner-slot boundary instead.
+            if (code.refCount == -1
+                    && PerlRuntime.currentOrNull() != null
+                    && hasWeakRefsTo(code)) {
+                clearWeakRefsTo(code);
+            }
         }
         boolean zeroCountOwnerSlotsExhausted = referent != null
                 && referent.refCount == 0
@@ -514,23 +521,16 @@ public class WeakRefRegistry {
                 RuntimeScalar owner = slot.untrackedScalarOwner();
                 boolean currentStrongValue = owner != null
                         && owner.untrackedReferenceOwnerSlot() == slot
+                        && !owner.isTransientArgumentValueOwner()
                         && !isweak(owner)
                         && (owner.type & RuntimeScalarType.REFERENCE_BIT) != 0
                         && owner.value == code
                         && owner.hasLiveCurrentStrongValueSlot();
                 if (currentStrongValue) return true;
-
-                // Container cells can outlive the active call frame that
-                // briefly housed them. An UNTRACKED_REFERENCE token alone
-                // does not prove a live Perl owner: retire it when its scalar
-                // no longer occupies current strong storage, so a stale @_
-                // array cannot keep a weak callback alive after goto.
-                if (owner != null && owner.untrackedReferenceOwnerSlot() == slot) {
-                    owner.releaseUntrackedReferenceOwner(code);
-                } else {
-                    slot.release();
-                    onStrongOwnerSlotReleased(code);
-                }
+                // A stale untracked token is not a live Perl owner. The exact
+                // container-transfer release retires it; if a weak-clear
+                // boundary arrives first, do not let an exited @_ array pin
+                // the observer.
                 continue;
             }
             return true;
