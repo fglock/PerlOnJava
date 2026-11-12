@@ -219,4 +219,65 @@ class TemporaryRootOwnerSlotTest {
             }
         }
     }
+
+    @Test
+    void nestedOrdinaryOwnerAncestryProvesTemporaryRootWithoutGraphWalk() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeHash target = new RuntimeHash();
+            RuntimeArray nested = new RuntimeArray();
+            nested.elements.add(target.createReference());
+            RuntimeHash parent = new RuntimeHash();
+            parent.elements.put("nested", nested.createReference());
+
+            RuntimeHash opaque = new RuntimeHash();
+            CountingHashValues opaqueValues = new CountingHashValues();
+            opaque.elements = opaqueValues;
+            RuntimeArray root = new RuntimeArray();
+            root.elements.add(parent.createReference());
+            root.elements.add(opaque.createReference());
+
+            MortalList.pushTemporaryRoot(root);
+            try {
+                assertTrue(ReachabilityWalker.isReachableFromTemporaryRoots(target));
+                assertEquals(0, opaqueValues.valuesCalls,
+                        "current array/hash owner cells should prove the path without BFS");
+            } finally {
+                MortalList.popTemporaryRoot(root);
+                root.elements.clear();
+                parent.elements.clear();
+                nested.elements.clear();
+            }
+        }
+    }
+
+    @Test
+    void excessiveOwnerSetFallsBackToTemporaryRootGraphWalk() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeHash target = new RuntimeHash();
+            RuntimeArray root = new RuntimeArray();
+            CountingHashValues sideBranchValues = new CountingHashValues();
+
+            for (int i = 0; i < 65; i++) {
+                RuntimeArray child = new RuntimeArray();
+                child.elements.add(target.createReference());
+                if (i == 0) {
+                    RuntimeHash sideBranch = new RuntimeHash();
+                    sideBranch.elements = sideBranchValues;
+                    child.elements.add(sideBranch.createReference());
+                }
+                root.elements.add(child.createReference());
+            }
+
+            MortalList.pushTemporaryRoot(root);
+            try {
+                assertTrue(ReachabilityWalker.isReachableFromTemporaryRoots(target));
+                assertTrue(sideBranchValues.valuesCalls > 0,
+                        "owner-snapshot overflow must retain the established BFS");
+            } finally {
+                MortalList.popTemporaryRoot(root);
+            }
+        }
+    }
 }
