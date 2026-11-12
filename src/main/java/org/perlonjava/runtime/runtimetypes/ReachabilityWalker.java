@@ -1751,17 +1751,31 @@ public class ReachabilityWalker {
     public static boolean hasLiveStrongScalarReferentOtherThan(
             RuntimeBase target, RuntimeScalar excluded) {
         if (target == null) return false;
-        // snapshotLiveVars() is the authoritative set for any later scalar
-        // registry entry that passes MyVarCleanupStack.isLive(). Scanning
-        // ScalarRefRegistry.snapshot() below used to revisit the same live
-        // lexical slots and repeatedly copy the weak-key registry while a
-        // callback-boundary weak sweep was clearing CODE refs.
-        for (Object liveVar : MyVarCleanupStack.snapshotLiveVars()) {
-            if (liveVar instanceof RuntimeScalar sc
-                    && sc != excluded
-                    && !WeakRefRegistry.isweak(sc)
-                    && !sc.scopeExited
-                    && sc.value == target) {
+        // Query only scalar cells that currently own this referent. The prior
+        // lexical-registry scan was used by SvREFCNT's returned-hash adjustment
+        // and scaled with every live lexical, even when this referent had no
+        // such owners. Owner slots already index the candidate cells and let
+        // us validate their current value and storage identity directly.
+        for (PerlOwnerSlot slot : target.ownerSlotSnapshot()) {
+            if (!slot.isActive() || slot.referent() != target) continue;
+            RuntimeScalar owner;
+            boolean currentOwner;
+            if (slot.kind() == PerlOwnerSlot.Kind.UNTRACKED_REFERENCE) {
+                owner = slot.untrackedScalarOwner();
+                currentOwner = owner != null
+                        && owner.untrackedReferenceOwnerSlot() == slot
+                        && owner.hasLiveDurableStrongValueSlot();
+            } else {
+                owner = slot.countedScalarOwner();
+                currentOwner = owner != null
+                        && (owner.isCurrentAggregateElementOwner(target, slot)
+                            || owner.isCurrentCountedScalarOwner(target, slot));
+            }
+            if (currentOwner && owner != excluded
+                    && MyVarCleanupStack.isRegistered(owner)
+                    && !WeakRefRegistry.isweak(owner)
+                    && !owner.scopeExited
+                    && owner.value == target) {
                 return true;
             }
         }
