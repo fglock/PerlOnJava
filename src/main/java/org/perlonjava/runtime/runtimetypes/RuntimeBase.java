@@ -582,8 +582,9 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
      * an aliased scalar cell is already kept alive by its aggregate container.
      */
     boolean hasPersistentPerlStrongOwnerIdentity() {
+        PerlRuntime runtime = PerlRuntime.currentOrNull();
         if (localBindingExists || isPackageGlobalRoot || hasClosureCaptureOwner()
-                || MyVarCleanupStack.isRegistered(this)) return true;
+                || (runtime != null && MyVarCleanupStack.isRegistered(this))) return true;
 
         int temporaryCountedOwners = ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_VALUE)
                 + ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_CONTAINER)

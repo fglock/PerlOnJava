@@ -1829,9 +1829,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return hasStashCodeSlotOwner()
                 || hasActiveCodeOwner()
                 || hasCallTransferOwner()
-                || hasOwnerSlotsOtherThan(excludedOwner)
+                || hasCurrentPerlOwnerSlotsOtherThan(excludedOwner)
                 || isConstantCv
                 || constantValue != null;
+    }
+
+    private boolean hasCurrentPerlOwnerSlotsOtherThan(PerlOwnerSlot excludedOwner) {
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (slot != excludedOwner && DestroyDispatch.isCurrentPerlOwnerSlot(this, slot)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** A removed stash slot requests final state cleanup at the last owner boundary. */
