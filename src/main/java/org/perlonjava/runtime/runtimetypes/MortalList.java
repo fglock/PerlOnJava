@@ -1892,33 +1892,6 @@ public class MortalList {
         return prev;
     }
 
-    // Phase B2a (refcount_alignment_52leaks_plan.md): throttled
-    // auto-sweep of the weak-ref registry, gated by ModuleInitGuard.
-    // Runs at statement boundaries (flush points) but skips while
-    // inside require/use/do/BEGIN/eval-STRING code paths — those
-    // often rely on weak-refed intermediate state that the sweep
-    // would prematurely clear.
-    // Tuned for DBIC-scale tests: 5s throttle. Shorter intervals
-    // (100ms, 500ms) fire too frequently — 52leaks.t creates thousands
-    // of weaken'd refs and each sweep's System.gc() + weak-ref cascade
-    // can run for tens of seconds. 5s gives the walker time to amortize.
-    /** Compatibility hook; weak-reference cleanup is driven by owner release. */
-    public static void requestImmediateWeakSweep() {
-    }
-
-    /** Compatibility hook; weak-reference cleanup is driven by owner release. */
-    static void requestCorrectiveWeakSweep() {
-    }
-
-    /** Compatibility hook; weak-reference cleanup is driven by owner release. */
-    public static void requestTargetedWeakSweep(RuntimeBase referent) {
-    }
-
-    /** Compatibility hook retained for callers compiled against the old sweep API. */
-    public static boolean requestWeakSweepsForDestroyedContainer(RuntimeBase container) {
-        return false;
-    }
-
     static void finalizeClearedAggregateOwnerAfterScopeExit(RuntimeBase base) {
         if (!isActive()
                 || base == null

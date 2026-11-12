@@ -28,10 +28,6 @@ class CorrectiveSweepDefaultPolicyTest {
                 assertTrue(runtime.lifecycleState.deferredScopeExitCaptureCandidates.isEmpty());
                 MortalList.flushDeferredCapturesBeforeEnd();
                 assertEquals(1, runtime.lifecycleState.deferredCaptures.size());
-                MortalList.requestImmediateWeakSweep();
-                MortalList.requestTargetedWeakSweep(referent);
-                assertFalse(MortalList.requestWeakSweepsForDestroyedContainer(referent));
-                DestroyDispatch.requestSweepAfterOuterDestroy();
                 assertFalse(runtime.lifecycleState.immediateWeakSweepRequested);
                 assertTrue(runtime.lifecycleState.targetedWeakSweepReferents.isEmpty());
                 assertFalse(runtime.lifecycleState.sweepPendingAfterOuterDestroy);

@@ -512,7 +512,6 @@ sub _cleanup_before_ddl {
     eval {
         require Internals;
         Internals::jperl_freetmps();
-        Internals::jperl_sweep_destroyables_no_jvm_gc();
         1;
     };
     return 1;
@@ -1066,7 +1065,6 @@ sub _fetch_handle_value {
         eval {
             require Internals;
             Internals::jperl_freetmps();
-            Internals::jperl_sweep_destroyables_no_jvm_gc();
             1;
         };
     }

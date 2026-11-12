@@ -43,13 +43,6 @@ public class Internals extends PerlModuleBase {
             internals.registerMethod("jperl_refstate_str", "jperl_refstate_str", "$");
             internals.registerMethod("jperl_owner_trace", "jperlOwnerTrace", "$");
             internals.registerMethod("jperl_reference_by_address", "jperlReferenceByAddress", "$");
-            // Phase 4 (refcount_alignment_plan.md): On-demand reachability
-            // sweep. Walks Perl-visible roots (globals, stashes, rescued
-            // objects) and clears weak refs for unreachable objects. Returns
-            // the number of weak refs cleared.
-            internals.registerMethod("jperl_gc", "jperl_gc", "");
-            internals.registerMethod("jperl_gc_quiet", "jperl_gc_quiet", "");
-            internals.registerMethod("jperl_sweep_destroyables_no_jvm_gc", "jperl_sweep_destroyables_no_jvm_gc", "");
             internals.registerMethod("jperl_freetmps", "jperl_freetmps", "");
             // Phase 4 diagnostic: trace a reachable path from any Perl root
             // to the given referent. Returns the first-found path string or
@@ -785,27 +778,12 @@ public class Internals extends PerlModuleBase {
         return new RuntimeScalar("NOT_REF").getList();
     }
 
-    /** Compatibility stub: PerlOnJava uses owner release, not a reachability sweep. */
-    public static RuntimeList jperl_gc(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(0).getList();
-    }
-
-    /** Compatibility stub for the removed quiet reachability sweep. */
-    public static RuntimeList jperl_gc_quiet(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(0).getList();
-    }
-
     /**
      * Drain Perl-style mortal temporaries without asking the JVM to run GC.
      * This mirrors Perl's FREETMPS boundary for refcounted RuntimeBase objects.
      */
     public static RuntimeList jperl_freetmps(RuntimeArray args, int ctx) {
         MortalList.flush();
-        return new RuntimeScalar(0).getList();
-    }
-
-    /** Compatibility stub: destroyable objects are released through their owners. */
-    public static RuntimeList jperl_sweep_destroyables_no_jvm_gc(RuntimeArray args, int ctx) {
         return new RuntimeScalar(0).getList();
     }
 

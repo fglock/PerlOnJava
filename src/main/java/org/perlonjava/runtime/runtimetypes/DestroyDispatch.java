@@ -41,12 +41,6 @@ public class DestroyDispatch {
         }
     }
 
-    /** Compatibility no-op: outer DESTROY no longer schedules a sweep. */
-    static void requestSweepAfterOuterDestroy() {
-        // Keep the package-private test hook while ownership transitions replace
-        // the former corrective scheduling path.
-    }
-
     public static void registerIfDestroyable(RuntimeBase referent, int blessId) {
         if (referent == null || blessId == 0) return;
         String className = NameNormalizer.getBlessStr(blessId);

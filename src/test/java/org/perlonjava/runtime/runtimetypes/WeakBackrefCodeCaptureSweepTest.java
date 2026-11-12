@@ -37,7 +37,6 @@ class WeakBackrefCodeCaptureSweepTest {
                              MortalList.measureReachabilityQueries()) {
                     // Drive the same quiet sweep through the lifecycle flush
                     // used after an outer DESTROY, without depending on cadence.
-                    MortalList.requestImmediateWeakSweep();
                     MortalList.flush();
 
                     ReachabilityQueryStats stats = measurement.stats();
