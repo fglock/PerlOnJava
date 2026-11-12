@@ -1883,9 +1883,8 @@ public class MortalList {
         // queue drains. Let that exact release decide finalization instead of
         // racing it with scope-exit cleanup.
         if (base.hasPendingOwnerRelease()) return;
-        // Root reachability does not establish a Perl owner. Keep the measured
-        // traversal available to the synthetic direct-registration cost test,
-        // but ignore its result when deciding the aggregate's lifecycle.
+        // This measured query exists for the root-snapshot cost regression;
+        // its result must not affect aggregate lifetime.
         if (base.refCount <= 0 && activeReachabilityQueryStats() != null) {
             isReachableFromExternalRootCached(base);
         }
@@ -2336,18 +2335,9 @@ public class MortalList {
                 // destroying the route tears down the mounted renderer helper
                 // namespace. Preserve only objects proven reachable from a
                 // live Perl root; final owner removal still destroys them at
-                // a later boundary.
-                base.refCount = 1;
-            } else if (legacyUnpairedDecrement
-                    && base.blessId != 0
-                    && hasWeakRefs
-                    && !blessedClassHasDestroy(base)
-                    && (isReachableFromExternalRootCached(base)
-                    || isReachableFromFullRootSnapshot(base))) {
-                // A legacy unpaired release can make the selective count reach
-                // zero while an ordinary blessed object is still held by a
-                // live lexical. Test::Refcount exercises this shape; explicit
-                // production releases rely on current owner identities.
+                // a later boundary. This proof also covers ordinary blessed
+                // classes without DESTROY, so share the root query for both
+                // compatibility cases.
                 base.refCount = 1;
             } else if (legacyUnpairedDecrement
                     && base.blessId != 0
@@ -2387,11 +2377,6 @@ public class MortalList {
         if (base instanceof RuntimeScalar scalar) {
             PerlOwnerSlot.finishDeferredScalarCellRelease(scalar);
         }
-    }
-
-    private static boolean blessedClassHasDestroy(RuntimeBase base) {
-        String className = NameNormalizer.getBlessStr(base.blessId);
-        return className != null && DestroyDispatch.classHasDestroy(base.blessId, className);
     }
 
     static boolean canTrustFinalCountedRelease(RuntimeBase base) {
