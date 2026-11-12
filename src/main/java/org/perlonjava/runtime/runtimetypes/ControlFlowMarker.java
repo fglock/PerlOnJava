@@ -23,13 +23,13 @@ public class ControlFlowMarker {
     /**
      * The arguments for TAILCALL (goto &NAME)
      */
-    public final RuntimeArray args;
+    public RuntimeArray args;
     /** Ownership-only carrier for temporary aliases transferred from {@link #args}. */
-    public final RuntimeArray ownedArgs;
+    public RuntimeArray ownedArgs;
     /** Active source {@code @_} value owners carried to the target frame. */
-    final RuntimeCode.TailCallArgumentOwners argumentOwners;
+    RuntimeCode.TailCallArgumentOwners argumentOwners;
     /** Snapshot identity of the source call's pristine argument frame. */
-    public final Object argumentFrame;
+    public Object argumentFrame;
     public final String namedTarget;
     public final String evalScope;
     /** Whether the tail call itself was issued by the active sort comparator. */
@@ -113,6 +113,14 @@ public class ControlFlowMarker {
         this.evalScope = evalScope;
         this.tailCallFromSortComparator = RuntimeCode.isCurrentSortComparatorBlock();
         this.switchControlOperator = null;
+    }
+
+    /** Drop the consumed source frame and argument graph after tail-call handoff. */
+    void clearTailCallHandoff() {
+        args = null;
+        ownedArgs = null;
+        argumentOwners = null;
+        argumentFrame = null;
     }
 
     /**
