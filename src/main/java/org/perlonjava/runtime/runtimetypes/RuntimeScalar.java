@@ -1192,26 +1192,32 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     private boolean hasDurableStrongValueSlot() {
-        return hasDurableStrongValueSlot(false);
+        return hasStrongValueSlot(false, true);
     }
 
     /** Whether a slot is attached to a container that itself still has a Perl owner. */
     boolean hasLiveDurableStrongValueSlot() {
-        return hasDurableStrongValueSlot(true);
+        return hasStrongValueSlot(true, true);
     }
 
-    private boolean hasDurableStrongValueSlot(boolean requireLiveContainer) {
+    /** Whether a scalar value is current through an active transfer or durable storage. */
+    boolean hasLiveCurrentStrongValueSlot() {
+        return hasStrongValueSlot(true, false);
+    }
+
+    private boolean hasStrongValueSlot(
+            boolean requireLiveContainer, boolean requirePersistentContainer) {
         PerlRuntime runtime = PerlRuntime.currentOrNull();
         boolean registeredLexical = runtime != null && MyVarCleanupStack.isRegistered(this);
         boolean liveOwningContainer;
         RuntimeBase currentOwner = containerOwner;
         if (currentOwner != null && isStoredInContainer(currentOwner)) {
-            boolean liveContainerOwner = currentOwner.hasPersistentPerlStrongOwnerIdentity()
-                    || GlobalVariable.isPackageRootedAggregate(currentOwner)
-                    || (runtime != null && MyVarCleanupStack.isRegistered(currentOwner));
+            boolean liveContainerOwner = hasLiveContainerOwner(
+                    currentOwner, requirePersistentContainer, runtime);
             if (!requireLiveContainer || liveContainerOwner) return true;
         }
-        liveOwningContainer = hasStoredContainerOwner(requireLiveContainer, runtime);
+        liveOwningContainer = hasStoredContainerOwner(
+                requireLiveContainer, requirePersistentContainer, runtime);
         return liveOwningContainer
                 || ownerSlotCount(PerlOwnerSlot.Kind.PACKAGE_SCALAR_SLOT) != 0
                 || ownerSlotCount(PerlOwnerSlot.Kind.GLOB_COMPONENT_SLOT) != 0
@@ -1228,7 +1234,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     /** Scan container identities in place so repeated stores do not allocate a full history copy. */
-    private boolean hasStoredContainerOwner(boolean requireLiveContainer, PerlRuntime runtime) {
+    private boolean hasStoredContainerOwner(boolean requireLiveContainer,
+                                           boolean requirePersistentContainer,
+                                           PerlRuntime runtime) {
         boolean liveOwningContainer = false;
         synchronized (this) {
             for (Iterator<RuntimeBase> owners = containerOwners.iterator(); owners.hasNext();) {
@@ -1239,9 +1247,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     if (containerOwner == owner) containerOwner = null;
                     continue;
                 }
-                boolean liveContainerOwner = owner.hasPersistentPerlStrongOwnerIdentity()
-                        || GlobalVariable.isPackageRootedAggregate(owner)
-                        || (runtime != null && MyVarCleanupStack.isRegistered(owner));
+                boolean liveContainerOwner = hasLiveContainerOwner(
+                        owner, requirePersistentContainer, runtime);
                 if (!requireLiveContainer || liveContainerOwner) liveOwningContainer = true;
             }
             if (containerOwner == null) {
@@ -1254,6 +1261,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
         }
         return liveOwningContainer;
+    }
+
+    private static boolean hasLiveContainerOwner(RuntimeBase owner,
+                                                 boolean requirePersistentContainer,
+                                                 PerlRuntime runtime) {
+        return (requirePersistentContainer
+                ? owner.hasPersistentPerlStrongOwnerIdentity()
+                : owner.hasCurrentPerlStorageOwner())
+                || GlobalVariable.isPackageRootedAggregate(owner)
+                || (runtime != null && MyVarCleanupStack.isRegistered(owner));
     }
 
     private boolean isStoredInContainer(RuntimeBase owner) {

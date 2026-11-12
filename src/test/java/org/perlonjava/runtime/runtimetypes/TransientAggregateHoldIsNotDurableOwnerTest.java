@@ -3,6 +3,7 @@ package org.perlonjava.runtime.runtimetypes;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -23,6 +24,8 @@ class TransientAggregateHoldIsNotDurableOwnerTest {
                 staged.add(cell);
                 assertTrue(temporary.hasPerlStrongOwner(),
                         "staging temporarily keeps the untracked array available");
+                assertTrue(temporary.hasCurrentPerlStorageOwner(),
+                        "a live argument-container transfer remains a current storage owner");
                 assertFalse(temporary.hasPersistentPerlStrongOwnerIdentity(),
                         "the staging lease is not durable array storage");
                 assertFalse(cell.hasLiveDurableStrongValueSlot(),
@@ -91,18 +94,72 @@ class TransientAggregateHoldIsNotDurableOwnerTest {
         try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
             RuntimeCode closure = new RuntimeCode((args, context) -> new RuntimeList(), null);
             closure.refCount = -1;
-            closure.capturedScalars = new RuntimeScalar[0];
+            RuntimeScalar capturedPad = new RuntimeScalar(42);
+            PerlOwnerSlot captureOwner = capturedPad.retainClosureCaptureSlot(closure);
+            closure.capturedScalars = new RuntimeScalar[] {capturedPad};
+            closure.capturedScalarOwnerSlots = new PerlOwnerSlot[] {captureOwner};
             RuntimeScalar codeCell = new RuntimeScalar(closure);
             RuntimeArray temporary = new RuntimeArray();
+            temporary.localBindingExists = true;
             temporary.elements.add(codeCell);
+            temporary.localBindingExists = false;
 
-            assertTrue(closure.hasUntrackedReferenceOwnerSlotIdentity());
+            assertEquals(1, closure.ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE));
             assertFalse(closure.hasPerlOwnerForCaptureOtherThan(null),
                     "an unowned aggregate cell is not a durable capture owner");
             closure.requestCaptureReleaseWhenUnowned();
 
             assertNull(closure.capturedScalars,
                     "the stale untracked scalar edge must not keep captures alive");
+            assertFalse(captureOwner.isActive());
+        }
+    }
+
+    @Test
+    void activeAggregateTransferKeepsNestedClosureCapturesAlive() {
+        try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
+            RuntimeCode closure = new RuntimeCode((args, context) -> new RuntimeList(), null);
+            closure.refCount = -1;
+            RuntimeScalar capturedPad = new RuntimeScalar(42);
+            PerlOwnerSlot captureOwner = capturedPad.retainClosureCaptureSlot(closure);
+            closure.capturedScalars = new RuntimeScalar[] {capturedPad};
+            closure.capturedScalarOwnerSlots = new PerlOwnerSlot[] {captureOwner};
+            RuntimeScalar codeCell = new RuntimeScalar(closure);
+            RuntimeArray temporary = new RuntimeArray();
+            temporary.localBindingExists = true;
+            temporary.elements.add(codeCell);
+            temporary.localBindingExists = false;
+            RuntimeCode.CallArguments staged = RuntimeCode.newCallArguments(1);
+
+            MortalList.pushMark();
+            boolean markActive = true;
+            try {
+                staged.add(codeCell);
+
+                assertTrue(temporary.hasCurrentPerlStorageOwner());
+                assertFalse(temporary.hasPersistentPerlStrongOwnerIdentity());
+                assertFalse(closure.hasCallTransferOwner(),
+                        "only the containing aggregate is transferred as an argument");
+                assertTrue(closure.hasPerlOwnerForCaptureOtherThan(null),
+                        "the nested callback remains live through its aggregate's call transfer");
+
+                RuntimeCode.pushActiveCode(closure);
+                closure.requestCaptureReleaseWhenUnowned();
+                assertTrue(captureOwner.isActive());
+
+                staged.finish();
+                MortalList.popAndFlush();
+                markActive = false;
+                RuntimeCode.popActiveCode(closure);
+
+                assertNull(closure.capturedScalars,
+                        "the requested release completes after both owners leave");
+                assertFalse(captureOwner.isActive());
+            } finally {
+                staged.finish();
+                if (markActive) MortalList.popAndFlush();
+                if (RuntimeCode.isActiveCode(closure)) RuntimeCode.popActiveCode(closure);
+            }
         }
     }
 
@@ -111,7 +168,10 @@ class TransientAggregateHoldIsNotDurableOwnerTest {
         try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
             RuntimeCode closure = new RuntimeCode((args, context) -> new RuntimeList(), null);
             closure.refCount = -1;
-            closure.capturedScalars = new RuntimeScalar[0];
+            RuntimeScalar capturedPad = new RuntimeScalar(42);
+            PerlOwnerSlot captureOwner = capturedPad.retainClosureCaptureSlot(closure);
+            closure.capturedScalars = new RuntimeScalar[] {capturedPad};
+            closure.capturedScalarOwnerSlots = new PerlOwnerSlot[] {captureOwner};
             RuntimeScalar codeCell = new RuntimeScalar(closure);
             RuntimeArray persistent = new RuntimeArray();
             persistent.localBindingExists = true;
@@ -122,6 +182,43 @@ class TransientAggregateHoldIsNotDurableOwnerTest {
 
             assertTrue(closure.capturedScalars != null,
                     "a durable scalar cell must continue to retain its closure captures");
+            assertTrue(captureOwner.isActive());
+        }
+    }
+
+    @Test
+    void activeCallTransferKeepsTemporaryClosureCapturesAlive() {
+        try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
+            RuntimeCode closure = new RuntimeCode((args, context) -> new RuntimeList(), null);
+            closure.refCount = 0;
+            RuntimeScalar capturedPad = new RuntimeScalar(42);
+            PerlOwnerSlot captureOwner = capturedPad.retainClosureCaptureSlot(closure);
+            closure.capturedScalars = new RuntimeScalar[] {capturedPad};
+            closure.capturedScalarOwnerSlots = new PerlOwnerSlot[] {captureOwner};
+            RuntimeCode.CallArguments staged = RuntimeCode.newCallArguments(1);
+
+            MortalList.pushMark();
+            boolean markActive = true;
+            try {
+                staged.add(new RuntimeScalar(closure));
+
+                assertTrue(closure.hasCallTransferOwner());
+                closure.requestCaptureReleaseWhenUnowned();
+                assertTrue(closure.capturedScalars != null,
+                        "an active call transfer still needs the closure's captures");
+                assertTrue(captureOwner.isActive());
+
+                staged.finish();
+                MortalList.popAndFlush();
+                markActive = false;
+
+                assertNull(closure.capturedScalars,
+                        "the requested capture release completes when the transfer ends");
+                assertFalse(captureOwner.isActive());
+            } finally {
+                staged.finish();
+                if (markActive) MortalList.popAndFlush();
+            }
         }
     }
 }
