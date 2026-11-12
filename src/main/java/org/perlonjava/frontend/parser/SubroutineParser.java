@@ -1452,7 +1452,7 @@ public class SubroutineParser {
         parser.parsingFutureAsyncAwaitSub = futureAsyncAwaitSub;
         Parser.LexicalSubWarningFrame lexicalSubWarningFrame =
                 new Parser.LexicalSubWarningFrame(subName == null);
-        parser.lexicalSubWarningFrames.push(lexicalSubWarningFrame);
+        parser.lexicalSubWarningFrames().push(lexicalSubWarningFrame);
         java.util.BitSet definitionWarningFlags =
                 (java.util.BitSet) parser.ctx.symbolTable.warningFlagsStack.peek().clone();
         java.util.BitSet definitionWarningFatalFlags =
@@ -1606,7 +1606,7 @@ public class SubroutineParser {
             parser.ctx.symbolTable.setInSubroutineBody(previousInSubroutineBody);
             parser.parsingFutureAsyncAwaitSub = previousFutureAsyncAwaitSub;
             parser.parsingSignaturedSubroutine = previousParsingSignaturedSubroutine;
-            parser.lexicalSubWarningFrames.remove(lexicalSubWarningFrame);
+            parser.lexicalSubWarningFrames().remove(lexicalSubWarningFrame);
             if (subName != null) {
                 parser.compilingSubroutineBodies.pop();
             }

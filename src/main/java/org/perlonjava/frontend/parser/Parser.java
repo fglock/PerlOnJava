@@ -56,23 +56,29 @@ public class Parser {
         }
     }
 
-    public final Deque<LexicalSubWarningFrame> lexicalSubWarningFrames =
-            new ArrayDeque<>();
+    // Round 23: lazy-initialized — only created when a subroutine or anonymous
+    // closure is actually parsed.  A plain `eval "$x += $y"` never needs them.
+    public Deque<LexicalSubWarningFrame> lexicalSubWarningFrames;
 
     // Perl's constant-CV optimization is sensitive to the order in which
     // closures capture a lexical.  Keep the captures made by earlier
     // anonymous closures in each lexical scope so a later `sub () { $x }`
     // can decline the optimization when $x has already escaped.
-    private final Map<LexicalSubWarningFrame, Set<String>> anonymousClosureCaptures =
-            new IdentityHashMap<>();
-    private final Map<LexicalSubWarningFrame, Map<String, List<Node>>> lexicalConstantCandidates =
-            new IdentityHashMap<>();
-    private final Map<LexicalSubWarningFrame, Set<String>> refaliasLexicals =
-            new IdentityHashMap<>();
-    private final Map<String, Integer> priorLexicalMutations = new LinkedHashMap<>();
+    // Round 23: lazy-initialized — allocate only when an anonymous sub is parsed.
+    private Map<LexicalSubWarningFrame, Set<String>> anonymousClosureCaptures;
+    private Map<LexicalSubWarningFrame, Map<String, List<Node>>> lexicalConstantCandidates;
+    private Map<LexicalSubWarningFrame, Set<String>> refaliasLexicals;
+    private Map<String, Integer> priorLexicalMutations;
+
+    /** Lazy accessor for the subroutine-warning frame stack (only needed inside sub bodies). */
+    public Deque<LexicalSubWarningFrame> lexicalSubWarningFrames() {
+        if (lexicalSubWarningFrames == null) lexicalSubWarningFrames = new ArrayDeque<>();
+        return lexicalSubWarningFrames;
+    }
 
     /** The anonymous CV currently enclosing the subroutine being parsed. */
     public LexicalSubWarningFrame enclosingAnonymousClosureFrame() {
+        if (lexicalSubWarningFrames == null) return null;
         var frames = lexicalSubWarningFrames.iterator();
         if (frames.hasNext()) frames.next(); // current subroutine
         return frames.hasNext() ? frames.next() : null;
@@ -80,7 +86,7 @@ public class Parser {
 
     public boolean hasPriorAnonymousClosureCapture(LexicalSubWarningFrame owner,
                                                     Set<String> names) {
-        if (owner == null) return false;
+        if (owner == null || anonymousClosureCaptures == null) return false;
         Set<String> prior = anonymousClosureCaptures.get(owner);
         if (prior == null || prior.isEmpty()) return false;
         for (String name : names) {
@@ -92,19 +98,22 @@ public class Parser {
     public void noteAnonymousClosureCaptures(LexicalSubWarningFrame owner,
                                               Set<String> names) {
         if (owner == null || names.isEmpty()) return;
+        if (anonymousClosureCaptures == null) anonymousClosureCaptures = new IdentityHashMap<>();
         anonymousClosureCaptures.computeIfAbsent(owner, ignored -> new HashSet<>()).addAll(names);
     }
 
     public void noteLexicalConstantCandidate(LexicalSubWarningFrame owner, String name, Node node) {
         if (owner == null || name == null || node == null) return;
+        if (lexicalConstantCandidates == null) lexicalConstantCandidates = new IdentityHashMap<>();
         lexicalConstantCandidates.computeIfAbsent(owner, ignored -> new LinkedHashMap<>())
                 .computeIfAbsent(name, ignored -> new ArrayList<>()).add(node);
     }
 
     public void noteRefaliasLexical(String name) {
-        if (name == null) return;
+        if (name == null || lexicalSubWarningFrames == null) return;
         for (LexicalSubWarningFrame frame : lexicalSubWarningFrames) {
             if (frame.anonymous) {
+                if (refaliasLexicals == null) refaliasLexicals = new IdentityHashMap<>();
                 refaliasLexicals.computeIfAbsent(frame, ignored -> new HashSet<>()).add(name);
                 return;
             }
@@ -112,17 +121,20 @@ public class Parser {
     }
 
     public boolean hasRefaliasLexical(LexicalSubWarningFrame owner, String name) {
-        return owner != null && refaliasLexicals.getOrDefault(owner, Set.of()).contains(name);
+        return owner != null && refaliasLexicals != null
+                && refaliasLexicals.getOrDefault(owner, Set.of()).contains(name);
     }
 
     /** Record a write parsed after a candidate CV in the same anonymous scope. */
     public void noteLexicalConstantMutation(String name, int sourceIndex) {
         if (name == null) return;
+        if (priorLexicalMutations == null) priorLexicalMutations = new LinkedHashMap<>();
         priorLexicalMutations.putIfAbsent(name, sourceIndex);
+        if (lexicalSubWarningFrames == null) return;
         for (LexicalSubWarningFrame frame : lexicalSubWarningFrames) {
             if (!frame.anonymous) continue;
-            List<Node> candidates = lexicalConstantCandidates
-                    .getOrDefault(frame, Map.of()).get(name);
+            List<Node> candidates = lexicalConstantCandidates == null ? null
+                    : lexicalConstantCandidates.getOrDefault(frame, Map.of()).get(name);
             if (candidates == null) return;
             for (Node candidate : candidates) {
                 if (candidate instanceof AbstractNode annotated) {
@@ -139,6 +151,7 @@ public class Parser {
     }
 
     public boolean hasPriorLexicalMutationBefore(Set<String> names, int sourceIndex) {
+        if (priorLexicalMutations == null) return false;
         for (String name : names) {
             Integer mutationIndex = priorLexicalMutations.get(name);
             if (mutationIndex != null && mutationIndex < sourceIndex) return true;
