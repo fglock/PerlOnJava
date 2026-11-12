@@ -717,12 +717,17 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     /** Refresh this direct cell after its aggregate's last current Perl owner leaves. */
     void reconcileContainerOwnerAfterAggregateTransfer(RuntimeBase owner) {
         if (owner == null || isSharedImmutableLiteralWithoutOwnerTracking()) return;
+        RuntimeBase referent = (type & RuntimeScalarType.REFERENCE_BIT) != 0
+                && value instanceof RuntimeBase base ? base : null;
         reconcileContainerOwnerAfterMutation(owner);
         if (MortalList.deferAggregateRefreshUntilTemporaryRootsLeave(owner)) return;
         if (isStoredInContainer(owner)) {
-            RuntimeBase referent = (type & RuntimeScalarType.REFERENCE_BIT) != 0
-                    && value instanceof RuntimeBase base ? base : null;
             updateUntrackedReferenceOwner(referent, true);
+        }
+        if (referent instanceof RuntimeCode code
+                && PerlRuntime.currentOrNull() != null
+                && WeakRefRegistry.hasWeakRefsTo(code)) {
+            WeakRefRegistry.clearWeakRefsTo(code);
         }
     }
 
