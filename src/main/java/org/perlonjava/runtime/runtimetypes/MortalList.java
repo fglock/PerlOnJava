@@ -103,7 +103,9 @@ public class MortalList {
                     || !state.pendingTiedReleases.isEmpty()
                     || !state.pendingIoReleases.isEmpty()
                     || !state.pendingUntrackedReturnOwnerReleases.isEmpty()
-                    || state.deferredCapturesMayBeReady;
+                    || state.deferredCapturesMayBeReady
+                    || !state.deferredTemporaryRootAggregateRefreshes.isEmpty()
+                    || !state.deferredTemporaryRootCaptureReleases.isEmpty();
             if (!needed && state.boundaryWorkRegistered.compareAndSet(true, false)) {
                 runtimesWithBoundaryWork.decrementAndGet();
             }
@@ -136,9 +138,11 @@ public class MortalList {
 
     public static void popTemporaryRoot(RuntimeBase root) {
         if (root != null) {
-            ArrayDeque<LifecycleRuntimeState.TemporaryRootLease> roots = state().temporaryRoots;
+            LifecycleRuntimeState state = state();
+            ArrayDeque<LifecycleRuntimeState.TemporaryRootLease> roots = state.temporaryRoots;
             if (!roots.isEmpty() && roots.peek().root() == root) {
                 roots.pop().release();
+                drainDeferredTemporaryRootCleanup(state);
                 return;
             }
             var iterator = roots.iterator();
@@ -147,6 +151,7 @@ public class MortalList {
                 if (lease.root() == root) {
                     iterator.remove();
                     lease.release();
+                    drainDeferredTemporaryRootCleanup(state);
                     return;
                 }
             }
@@ -177,6 +182,7 @@ public class MortalList {
         }
         ArrayDeque<LifecycleRuntimeState.TemporaryRootLease> roots = state().temporaryRoots;
         while (roots.size() > depth) roots.pop().release();
+        drainDeferredTemporaryRootCleanup(state());
     }
 
     static boolean temporaryRootDirectlyReferences(RuntimeBase target) {
@@ -239,9 +245,62 @@ public class MortalList {
     }
 
     public static void clearTemporaryRoots() {
-        ArrayDeque<LifecycleRuntimeState.TemporaryRootLease> roots = state().temporaryRoots;
+        LifecycleRuntimeState state = state();
+        ArrayDeque<LifecycleRuntimeState.TemporaryRootLease> roots = state.temporaryRoots;
         while (!roots.isEmpty()) roots.pop().release();
+        drainDeferredTemporaryRootCleanup(state);
         invalidateAllRootSnapshots();
+    }
+
+    /** Hold aggregate-cell reconciliation until temporary roots are gone. */
+    static boolean deferAggregateRefreshUntilTemporaryRootsLeave(RuntimeBase container) {
+        if (container == null) return false;
+        LifecycleRuntimeState state = state();
+        if (state.temporaryRoots.isEmpty()) return false;
+        state.deferredTemporaryRootAggregateRefreshes.add(container);
+        markBoundaryWork(state);
+        return true;
+    }
+
+    /** Hold requested closure cleanup while temporary roots may reach it transitively. */
+    static boolean deferCaptureReleaseUntilTemporaryRootsLeave(RuntimeCode code) {
+        if (code == null) return false;
+        LifecycleRuntimeState state = state();
+        if (state.temporaryRoots.isEmpty()) return false;
+        state.deferredTemporaryRootCaptureReleases.add(code);
+        markBoundaryWork(state);
+        return true;
+    }
+
+    static void drainDeferredTemporaryRootCleanup(LifecycleRuntimeState state) {
+        if (state == null || !state.temporaryRoots.isEmpty()
+                || state.drainingTemporaryRootCleanup) return;
+        state.drainingTemporaryRootCleanup = true;
+        try {
+            while (state.temporaryRoots.isEmpty()) {
+                RuntimeBase container = takeFirstIdentity(
+                        state.deferredTemporaryRootAggregateRefreshes);
+                if (container != null) {
+                    RuntimeCode.refreshUntrackedCellsAfterContainerTransfer(container);
+                    continue;
+                }
+                RuntimeCode code = takeFirstIdentity(
+                        state.deferredTemporaryRootCaptureReleases);
+                if (code == null) break;
+                code.finishRequestedCaptureReleaseAfterTemporaryRootsLeave();
+            }
+        } finally {
+            state.drainingTemporaryRootCleanup = false;
+            refreshBoundaryWork(state);
+        }
+    }
+
+    private static <T> T takeFirstIdentity(Set<T> values) {
+        var iterator = values.iterator();
+        if (!iterator.hasNext()) return null;
+        T value = iterator.next();
+        iterator.remove();
+        return value;
     }
 
     /**

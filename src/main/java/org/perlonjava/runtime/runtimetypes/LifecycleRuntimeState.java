@@ -44,6 +44,11 @@ final class LifecycleRuntimeState {
     final IdentityHashMap<RuntimeBase, Integer> positiveOwnerReferents = new IdentityHashMap<>();
     boolean deferredCapturesMayBeReady;
     final ArrayDeque<TemporaryRootLease> temporaryRoots = new ArrayDeque<>();
+    final Set<RuntimeBase> deferredTemporaryRootAggregateRefreshes =
+            Collections.newSetFromMap(new IdentityHashMap<>());
+    final Set<RuntimeCode> deferredTemporaryRootCaptureReleases =
+            Collections.newSetFromMap(new IdentityHashMap<>());
+    boolean drainingTemporaryRootCleanup;
     private static final int INITIAL_MARK_CAPACITY = 16;
     int[] marks = new int[INITIAL_MARK_CAPACITY];
     int[] tiedReleaseMarks = new int[INITIAL_MARK_CAPACITY];
@@ -177,6 +182,9 @@ final class LifecycleRuntimeState {
         }
         deferredCapturesMayBeReady = false;
         while (!temporaryRoots.isEmpty()) temporaryRoots.pop().release();
+        MortalList.drainDeferredTemporaryRootCleanup(this);
+        deferredTemporaryRootAggregateRefreshes.clear();
+        deferredTemporaryRootCaptureReleases.clear();
         markDepth = 0;
         flushing = false;
         reachabilityDrainDepth = 0;
