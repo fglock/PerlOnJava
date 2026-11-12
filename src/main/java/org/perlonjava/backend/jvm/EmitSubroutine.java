@@ -1911,6 +1911,7 @@ public class EmitSubroutine {
         mv.visitVarInsn(Opcodes.ILOAD, emitterVisitor.ctx.javaClassInfo.controlFlowActionSlot);
         mv.visitInsn(Opcodes.ICONST_3);
         mv.visitJumpInsn(Opcodes.IF_ICMPNE, notGoto);
+        if (emitterVisitor.ctx.javaClassInfo.gotoLabelStack != null)
         for (GotoLabels gotoLabels : emitterVisitor.ctx.javaClassInfo.gotoLabelStack) {
             Label nextGotoCheck = new Label();
             mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);

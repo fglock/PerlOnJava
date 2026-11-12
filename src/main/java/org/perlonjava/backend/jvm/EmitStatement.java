@@ -12,6 +12,7 @@ import org.perlonjava.frontend.analysis.RegexUsageDetector;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.runtime.runtimetypes.*;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -1079,6 +1080,7 @@ public class EmitStatement {
             // while transfers out of finally remain compile-time errors.
             JavaClassInfo javaClassInfo = emitterVisitor.ctx.javaClassInfo;
             javaClassInfo.finallyBlockDepth++;
+            if (javaClassInfo.finallyLabelScopes == null) javaClassInfo.finallyLabelScopes = new ArrayDeque<>();
             javaClassInfo.finallyLabelScopes.push(EmitBlock.collectLabels(node.finallyBlock));
             try {
                 node.finallyBlock.accept(emitterVisitor.with(RuntimeContextType.VOID));

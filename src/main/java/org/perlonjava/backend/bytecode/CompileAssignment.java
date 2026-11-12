@@ -2294,12 +2294,17 @@ public class CompileAssignment {
             return;
         }
 
-        if (compileStateArrayReferenceAliasAssignment(bytecodeCompiler, node)
-                || compileStateHashReferenceAliasAssignment(bytecodeCompiler, node)
-                || compileArraySliceReferenceAliasAssignment(bytecodeCompiler, node)
-                || compileHashSliceReferenceAliasAssignment(bytecodeCompiler, node)
-                || compileReferenceAliasListAssignment(bytecodeCompiler, node, outerContext)) {
-            return;
+        // All five reference-alias matchers require LHS to start with '\\' or be a ListNode.
+        // Guard avoids 5 method calls + string comparisons for the common my/state/local/$var cases.
+        if ((node.left instanceof OperatorNode aliasGuard && aliasGuard.operator.equals("\\"))
+                || node.left instanceof ListNode) {
+            if (compileStateArrayReferenceAliasAssignment(bytecodeCompiler, node)
+                    || compileStateHashReferenceAliasAssignment(bytecodeCompiler, node)
+                    || compileArraySliceReferenceAliasAssignment(bytecodeCompiler, node)
+                    || compileHashSliceReferenceAliasAssignment(bytecodeCompiler, node)
+                    || compileReferenceAliasListAssignment(bytecodeCompiler, node, outerContext)) {
+                return;
+            }
         }
 
             // Special case: my $x = value
