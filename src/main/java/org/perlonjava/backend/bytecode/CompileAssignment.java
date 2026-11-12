@@ -2153,6 +2153,19 @@ public class CompileAssignment {
      */
     public static void compileAssignmentOperator(BytecodeCompiler bytecodeCompiler, BinaryOperatorNode node) {
         node = normalizeLocalizedDeclaredReferenceSlice(node);
+        // Round 26 fast path: 'my $scalar = expr' (no beginId, no attributes, no state).
+        // Skips substr guard, LValueVisitor.getContext(), isKeyValueHashSlice,
+        // isKeyValueHashSliceLvalueSub, two '\' guards, VOID normalisation,
+        // early-scalar fast path, '!' guard, empty-list-void, two '+' guards,
+        // alias guard — straight to the register-allocation/emit sequence.
+        if (node.left instanceof OperatorNode myOp
+                && myOp.operator.equals("my")
+                && myOp.operand instanceof OperatorNode sigilOp
+                && sigilOp.operator.length() == 1
+                && sigilOp.operator.charAt(0) == '$'
+                && sigilOp.operand instanceof IdentifierNode) {
+            if (compileMySingleScalarFastPath(bytecodeCompiler, node, myOp, sigilOp)) return;
+        }
         if (node.left instanceof OperatorNode leftOperator
                 && leftOperator.operator.equals("substr")
                 && leftOperator.operand instanceof ListNode arguments
@@ -2294,12 +2307,17 @@ public class CompileAssignment {
             return;
         }
 
-        if (compileStateArrayReferenceAliasAssignment(bytecodeCompiler, node)
-                || compileStateHashReferenceAliasAssignment(bytecodeCompiler, node)
-                || compileArraySliceReferenceAliasAssignment(bytecodeCompiler, node)
-                || compileHashSliceReferenceAliasAssignment(bytecodeCompiler, node)
-                || compileReferenceAliasListAssignment(bytecodeCompiler, node, outerContext)) {
-            return;
+        // All five reference-alias matchers require LHS to start with '\\' or be a ListNode.
+        // Guard avoids 5 method calls + string comparisons for the common my/state/local/$var cases.
+        if ((node.left instanceof OperatorNode aliasGuard && aliasGuard.operator.equals("\\"))
+                || node.left instanceof ListNode) {
+            if (compileStateArrayReferenceAliasAssignment(bytecodeCompiler, node)
+                    || compileStateHashReferenceAliasAssignment(bytecodeCompiler, node)
+                    || compileArraySliceReferenceAliasAssignment(bytecodeCompiler, node)
+                    || compileHashSliceReferenceAliasAssignment(bytecodeCompiler, node)
+                    || compileReferenceAliasListAssignment(bytecodeCompiler, node, outerContext)) {
+                return;
+            }
         }
 
             // Special case: my $x = value
@@ -4563,7 +4581,6 @@ public class CompileAssignment {
                             bytecodeCompiler, (TernaryOperatorNode) node.left, referenceReg, node.getIndex(), false);
                     return;
                 }
-                LValueVisitor.getContext(node.left);
                 bytecodeCompiler.compileNode(node.left, -1, rhsContext);
                 int lvalueReg = bytecodeCompiler.lastResultReg;
                 bytecodeCompiler.compileNode(node.right, -1, rhsContext);
@@ -4572,14 +4589,13 @@ public class CompileAssignment {
                 bytecodeCompiler.emitReg(lvalueReg);
                 bytecodeCompiler.emitReg(rhsReg);
                 bytecodeCompiler.lastResultReg = rhsReg;
-                
+
             } else if (node.left instanceof ListNode listNode) {
                 // List assignment: ($a, $b) = ... or () = ...
                 // Follow the JVM backend approach: compile LHS as a list of lvalues,
                 // then call setFromList() on it.
                 // In scalar context, returns the number of elements on RHS
                 // In list context, returns the RHS list
-                LValueVisitor.getContext(node.left);
 
                 // RHS was already compiled at the "regular assignment" fallthrough above (valueReg).
                 // Reuse it instead of compiling again.
@@ -4636,6 +4652,38 @@ public class CompileAssignment {
             } else {
                 bytecodeCompiler.throwCompilerException("Assignment to non-identifier not yet supported: " + node.left.getClass().getSimpleName());
             }
+    }
+
+    /**
+     * Round 26 fast path for 'my $scalar = expr'.
+     * Returns true and emits all bytecode; returns false without side-effects
+     * when any exceptional condition requires the general path.
+     */
+    private static boolean compileMySingleScalarFastPath(
+            BytecodeCompiler bytecodeCompiler, BinaryOperatorNode node,
+            OperatorNode myOp, OperatorNode sigilOp) {
+        var beginIds = RuntimeCode.evalBeginIds();
+        if (!beginIds.isEmpty() && beginIds.get(sigilOp) != null) return false;
+        if (myOp.annotations != null && myOp.annotations.containsKey("attributes")) return false;
+        String varName = "$" + ((IdentifierNode) sigilOp.operand).name;
+        bytecodeCompiler.compileNode(node.right, -1, RuntimeContextType.SCALAR);
+        int valueReg = bytecodeCompiler.lastResultReg;
+        int reg = bytecodeCompiler.addVariable(varName, "my");
+        sigilOp.setAnnotation("bytecodeLexicalRegister", reg);
+        myOp.setAnnotation("bytecodeLexicalRegister", reg);
+        bytecodeCompiler.emit(Opcodes.INITIALIZE_LEXICAL_SCALAR);
+        bytecodeCompiler.emitReg(reg);
+        if (!myOp.getBooleanAnnotation("signatureParameterDeclaration")) {
+            bytecodeCompiler.emitLexicalAlias(reg, varName);
+        }
+        bytecodeCompiler.emit(Opcodes.REGISTER_MY_VAR);
+        bytecodeCompiler.emitReg(reg);
+        bytecodeCompiler.emit(Opcodes.SET_SCALAR);
+        bytecodeCompiler.emitReg(reg);
+        bytecodeCompiler.emitReg(valueReg);
+        emitReleaseConsumedRhsTemp(bytecodeCompiler, node.right, valueReg, reg);
+        bytecodeCompiler.lastResultReg = reg;
+        return true;
     }
 
     private static boolean isKeyValueHashSliceLvalueSub(Node node) {

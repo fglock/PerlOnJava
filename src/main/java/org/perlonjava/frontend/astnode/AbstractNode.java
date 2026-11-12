@@ -14,6 +14,12 @@ import java.util.Map;
  */
 public abstract class AbstractNode implements Node {
     private static final int FLAG_BLOCK_ALREADY_REFACTORED = 1;
+    // Round 24: useInteger encoded as 2 bits instead of a HashMap entry.
+    // Avoids a HashMap allocation + HashMap.put in setAnnotation and a
+    // HashMap.get in every getAnnotation("useInteger") call — which fires
+    // for every arithmetic/bitwise operator node during eval compilation.
+    private static final int FLAG_USE_INTEGER_CHECKED = 1 << 1;
+    private static final int FLAG_USE_INTEGER_VALUE   = 1 << 2;
     public int tokenIndex;
     // Lazy initialization - only created when first annotation is set
     public Map<String, Object> annotations;
@@ -49,9 +55,14 @@ public abstract class AbstractNode implements Node {
     }
 
     public void setAnnotation(String key, Object value) {
-        if (value instanceof Boolean boolVal && boolVal) {
-            if ("blockAlreadyRefactored".equals(key)) {
-                internalAnnotationFlags |= FLAG_BLOCK_ALREADY_REFACTORED;
+        if (value instanceof Boolean boolVal) {
+            if (key == "blockAlreadyRefactored") {
+                if (boolVal) internalAnnotationFlags |= FLAG_BLOCK_ALREADY_REFACTORED;
+                return;
+            }
+            if (key == "useInteger") {
+                internalAnnotationFlags |= FLAG_USE_INTEGER_CHECKED;
+                if (boolVal) internalAnnotationFlags |= FLAG_USE_INTEGER_VALUE;
                 return;
             }
         }
@@ -70,8 +81,12 @@ public abstract class AbstractNode implements Node {
     }
 
     public Object getAnnotation(String key) {
-        if ("blockAlreadyRefactored".equals(key)) {
+        if (key == "blockAlreadyRefactored") {
             return (internalAnnotationFlags & FLAG_BLOCK_ALREADY_REFACTORED) != 0;
+        }
+        if (key == "useInteger") {
+            if ((internalAnnotationFlags & FLAG_USE_INTEGER_CHECKED) == 0) return null;
+            return (internalAnnotationFlags & FLAG_USE_INTEGER_VALUE) != 0;
         }
         return annotations == null ? null : annotations.get(key);
     }

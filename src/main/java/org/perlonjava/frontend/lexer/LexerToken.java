@@ -44,7 +44,8 @@ public class LexerToken {
 
     static {
         for (char c : "!\"#$%&'()*+,-./:;<=>?@[\\]^`{|}~".toCharArray()) {
-            OPERATOR_CACHE[c] = new LexerToken(LexerTokenType.OPERATOR, String.valueOf(c));
+            // Round 28: intern single-char text so callers can use == instead of .equals()
+            OPERATOR_CACHE[c] = new LexerToken(LexerTokenType.OPERATOR, String.valueOf(c).intern());
         }
         SPACE_CACHE[1] = TOKEN_SPACE;
         for (int i = 2; i <= MAX_CACHED_SPACES; i++) {

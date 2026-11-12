@@ -208,23 +208,21 @@ public class ByteCodeSourceMapper {
      * @param tokenIndex The index of the token in the source code
      */
     public static void saveSourceLocation(EmitterContext ctx, int tokenIndex) {
-        State state = state();
+        // Round 27: cache state() once to avoid 4 repeated ThreadLocal lookups.
         // Use the ORIGINAL filename (compile-time) for the key, not the #line-adjusted one.
         // This is because JVM stack traces report the original filename from visitSource().
         // The #line-adjusted filename is stored separately in LineInfo for caller() reporting.
-        int fileId = getOrCreateFileId(ctx.compilerOptions.fileName);
+        State state = state();
+        int fileId = state.fileNameToId.computeIfAbsent(ctx.compilerOptions.fileName, name -> {
+            state.fileNamePool.add(name);
+            return state.fileNamePool.size() - 1;
+        });
 
         // Get or create the SourceFileInfo object for the file
         SourceFileInfo info = state.sourceFiles.computeIfAbsent(fileId, SourceFileInfo::new);
 
-        // Get current subroutine name (empty string for main code)
-        String subroutineName = ctx.symbolTable.getCurrentSubroutine();
-        if (subroutineName == null) {
-            subroutineName = "";  // Use empty string for main code
-        }
-
         // Check if entry already exists - if so, preserve ALL parse-time data.
-        // 
+        //
         // Why: Parse-time correctly tracks package changes (the parser executes
         // `package Foo;` and updates the symbol table). Emit-time does NOT replay
         // package changes - it just visits AST nodes. So parse-time has correct
@@ -241,25 +239,40 @@ public class ByteCodeSourceMapper {
             // original logical file and line for caller()/warn/die.
             return;
         }
-        
+
+        // Get current subroutine name (empty string for main code)
+        String subroutineName = ctx.symbolTable.getCurrentSubroutine();
+        if (subroutineName == null) {
+            subroutineName = "";  // Use empty string for main code
+        }
+
         // First time seeing this tokenIndex - compute and store
         // Use getSourceLocationAccurate() which properly handles #line directives.
         // Unlike getLineNumberAccurate() (which only counts physical newlines),
         // getSourceLocationAccurate() walks all tokens and processes #line N "file"
         // directives, returning the correct adjusted filename and line number.
         var sourceLoc = ctx.errorUtil.getSourceLocationAccurate(tokenIndex);
-        int lineNumber = sourceLoc.lineNumber();
-        String sourceFileName = sourceLoc.fileName();
-        int packageId = getOrCreatePackageId(ctx.symbolTable.getCurrentPackage());
-        
-        int sourceFileNameId = getOrCreateFileId(sourceFileName);
-
+        int packageId = state.packageNameToId.computeIfAbsent(
+                ctx.symbolTable.getCurrentPackage(), name -> {
+                    state.packageNamePool.add(name);
+                    return state.packageNamePool.size() - 1;
+                });
+        int sourceFileNameId = state.fileNameToId.computeIfAbsent(
+                sourceLoc.fileName(), name -> {
+                    state.fileNamePool.add(name);
+                    return state.fileNamePool.size() - 1;
+                });
+        int subroutineId = state.subroutineNameToId.computeIfAbsent(
+                subroutineName, name -> {
+                    state.subroutineNamePool.add(name);
+                    return state.subroutineNamePool.size() - 1;
+                });
 
         // Map the token index to a LineInfo object containing line, package, subroutine, and source file
         info.tokenToLineInfo.put(tokenIndex, new LineInfo(
-                lineNumber,
+                sourceLoc.lineNumber(),
                 packageId,
-                getOrCreateSubroutineId(subroutineName),
+                subroutineId,
                 sourceFileNameId
         ));
     }

@@ -246,8 +246,8 @@ public class JavaClassInfo {
      * This is a counter rather than a boolean to handle nested finally blocks.
      */
     public int finallyBlockDepth;
-    /** Label names scoped to each active finally body, innermost first. */
-    public final Deque<Set<String>> finallyLabelScopes = new ArrayDeque<>();
+    /** Label names scoped to each active finally body, innermost first. Lazy: null when no finally seen yet. */
+    public Deque<Set<String>> finallyLabelScopes;
 
     public int[] spillSlots;
     public int spillTop;
@@ -336,7 +336,8 @@ public class JavaClassInfo {
         this.returnValueSlot = -1;
         this.dynamicLevelSlot = -1;
         this.loopLabelStack = new ArrayDeque<>();
-        this.gotoLabelStack = new ArrayDeque<>();
+        // gotoLabelStack and finallyLabelScopes are lazy: only allocated when a
+        // labeled block or finally block is compiled. Most eval strings have neither.
         // Goto-analysis collections are null until first use: most eval strings
         // contain no goto labels, so allocating 11 HashSet/HashMap objects per
         // eval call wastes ~11 allocations. Call ensureGotoCollections() before
@@ -536,10 +537,12 @@ public class JavaClassInfo {
     }
 
     public void pushGotoLabels(String labelName, Label gotoLabel) {
+        if (gotoLabelStack == null) gotoLabelStack = new ArrayDeque<>();
         gotoLabelStack.push(new GotoLabels(labelName, gotoLabel));
     }
 
     public GotoLabels findGotoLabelsByName(String labelName) {
+        if (gotoLabelStack == null) return null;
         for (GotoLabels gotoLabels : gotoLabelStack) {
             if (gotoLabels.labelName.equals(labelName)) {
                 return gotoLabels;
@@ -549,7 +552,7 @@ public class JavaClassInfo {
     }
 
     public void popGotoLabels() {
-        gotoLabelStack.pop();
+        if (gotoLabelStack != null) gotoLabelStack.pop();
     }
 
     /**
@@ -569,10 +572,12 @@ public class JavaClassInfo {
             sb.append("|");
         }
         sb.append("GOTOS:");
-        for (GotoLabels label : gotoLabelStack) {
-            sb.append(label.labelName);
-            sb.append("@").append(System.identityHashCode(label.gotoLabel));
-            sb.append("|");
+        if (gotoLabelStack != null) {
+            for (GotoLabels label : gotoLabelStack) {
+                sb.append(label.labelName);
+                sb.append("@").append(System.identityHashCode(label.gotoLabel));
+                sb.append("|");
+            }
         }
         return sb.toString();
     }
@@ -588,7 +593,7 @@ public class JavaClassInfo {
                 "    javaClassName='" + javaClassName + "',\n" +
                 "    returnLabel=" + (returnLabel != null ? returnLabel.toString() : "null") + ",\n" +
                 "    loopLabelStack=" + loopLabelStack + "\n" +
-                "    gotoLabelStack=" + gotoLabelStack + "\n" +
+                "    gotoLabelStack=" + (gotoLabelStack != null ? gotoLabelStack : "[]") + "\n" +
                 "}";
     }
 
