@@ -60,6 +60,8 @@ sub _masked_operation {
 sub reval {
     my ($self, $code, $strict) = @_;
 
+    my $caller_package = caller;
+
     if (my $op = $self->_masked_operation($code)) {
         $@ = "'$op' trapped by operation mask";
         return undef;
@@ -68,9 +70,13 @@ sub reval {
     # For PerlOnJava, we trust CPAN metadata - no sandboxing needed
     # The $strict parameter is ignored (would enable 'use strict' in real Safe)
     
-    # Wrap code to disable strict vars - CHECKSUMS files use $cksum without declaration
-    # The 'no strict "vars"' must be part of the eval'd code itself
-    my $wrapped = qq{no strict 'vars'; $code};
+    # Safe::share records symbols from the caller's package. Evaluate in that
+    # package so strict subs can resolve a shared bareword sub call, while
+    # retaining this compatibility layer's existing strict-vars behavior.
+    my $eval_package = $self->{shared_package} || $caller_package || 'Safe';
+    $eval_package = 'Safe'
+        unless $eval_package =~ /\A[A-Za-z_]\w*(?:::\w+)*\z/;
+    my $wrapped = qq{package $eval_package; no strict 'vars'; $code};
     
     # Simple eval - just return the result
     my $result = eval $wrapped;
@@ -146,12 +152,14 @@ sub mask {
 # Share variables with compartment - stub
 sub share {
     my ($self, @vars) = @_;
+    $self->{shared_package} //= caller;
     push @{$self->{share} //= []}, @vars;
     return $self;
 }
 
 sub share_from {
     my ($self, $pkg, $vars) = @_;
+    $self->{shared_package} //= $pkg;
     push @{$self->{share_from}{$pkg} //= []}, @$vars;
     return $self;
 }

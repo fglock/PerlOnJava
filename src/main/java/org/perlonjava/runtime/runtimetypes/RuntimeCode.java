@@ -5991,8 +5991,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     /** Perl forbids compiling tainted eval STRING input while -T is active. */
     public static void rejectTaintedEval(RuntimeScalar code) {
         if (code != null && code.isTainted() && GlobalContext.isTaintModeActive()) {
-            throw new PerlCompilerException(
-                    "Insecure dependency in eval while running with -T switch");
+            throw new TaintedEvalException();
         }
     }
 

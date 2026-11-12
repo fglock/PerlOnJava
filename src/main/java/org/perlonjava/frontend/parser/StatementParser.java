@@ -1449,6 +1449,17 @@ public class StatementParser {
             // execute the statement immediately, using:
             // `require "fullName.pm"`
 
+            ScopedSymbolTable.FastStack<Integer> savedRequireStrict =
+                    cloneIntegerStack(ctx.symbolTable.strictOptionsStack);
+            ScopedSymbolTable.FastStack<Integer> savedRequireFeatures =
+                    cloneIntegerStack(ctx.symbolTable.featureFlagsStack);
+            ScopedSymbolTable.FastStack<BitSet> savedRequireWarnings =
+                    cloneBitSetStack(ctx.symbolTable.warningFlagsStack);
+            ScopedSymbolTable.FastStack<BitSet> savedRequireFatalWarnings =
+                    cloneBitSetStack(ctx.symbolTable.warningFatalStack);
+            ScopedSymbolTable.FastStack<BitSet> savedRequireDisabledWarnings =
+                    cloneBitSetStack(ctx.symbolTable.warningDisabledStack);
+
             // Setup the caller stack - use getSourceLocationAccurate to honor #line directives
             ErrorMessageUtil.SourceLocation loc = ctx.errorUtil.getSourceLocationAccurate(useTokenIndex);
             CallerStack.push(
@@ -1461,15 +1472,23 @@ public class StatementParser {
 
                 // execute 'require(fullName)'
                 RuntimeScalar ret;
-                if (evalRequireOverride) {
-                    RuntimeArray requireArgs = new RuntimeArray();
-                    RuntimeArray.push(requireArgs, new RuntimeScalar(fullName));
-                    RuntimeList result = RuntimeCode.apply(
-                            GlobalVariable.getGlobalCodeRefForFreshLookup("CORE::GLOBAL::require"),
-                            requireArgs, RuntimeContextType.SCALAR);
-                    ret = result.isEmpty() ? scalarUndef : result.getFirst();
-                } else {
-                    ret = ModuleOperators.require(new RuntimeScalar(fullName));
+                try {
+                    if (evalRequireOverride) {
+                        RuntimeArray requireArgs = new RuntimeArray();
+                        RuntimeArray.push(requireArgs, new RuntimeScalar(fullName));
+                        RuntimeList result = RuntimeCode.apply(
+                                GlobalVariable.getGlobalCodeRefForFreshLookup("CORE::GLOBAL::require"),
+                                requireArgs, RuntimeContextType.SCALAR);
+                        ret = result.isEmpty() ? scalarUndef : result.getFirst();
+                    } else {
+                        ret = ModuleOperators.require(new RuntimeScalar(fullName));
+                    }
+                } finally {
+                    restoreStack(ctx.symbolTable.strictOptionsStack, savedRequireStrict);
+                    restoreStack(ctx.symbolTable.featureFlagsStack, savedRequireFeatures);
+                    restoreStack(ctx.symbolTable.warningFlagsStack, savedRequireWarnings);
+                    restoreStack(ctx.symbolTable.warningFatalStack, savedRequireFatalWarnings);
+                    restoreStack(ctx.symbolTable.warningDisabledStack, savedRequireDisabledWarnings);
                 }
                 // A module loaded by `use` may invoke re->import while its
                 // own compilation unit is active. That pragma is lexical to
