@@ -240,6 +240,15 @@ public class EmitEval {
 
         // Catch any exception from evalStringHelper / reflection / applyEval
         mv.visitLabel(catchBlock);
+        // Taint rejection is a fatal security error. Unlike syntax/runtime
+        // failures, eval STRING must not convert it into a normal $@ result.
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitTypeInsn(Opcodes.INSTANCEOF,
+                "org/perlonjava/runtime/runtimetypes/TaintedEvalException");
+        Label catchableEvalFailure = new Label();
+        mv.visitJumpInsn(Opcodes.IFEQ, catchableEvalFailure);
+        mv.visitInsn(Opcodes.ATHROW);
+        mv.visitLabel(catchableEvalFailure);
         mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/operators/WarnDie",
                 "catchEval",
