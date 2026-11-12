@@ -238,35 +238,6 @@ public class MortalList {
         return false;
     }
 
-    private static boolean directlyReferences(RuntimeBase value, RuntimeBase target,
-                                              IdentityHashMap<RuntimeBase, Boolean> visited) {
-        if (value == target) return true;
-        if (value == null || visited.put(value, Boolean.TRUE) != null) return false;
-        if (value instanceof RuntimeScalar scalar) {
-            // The reference owns its referent through the slot ledger. Its
-            // descendants are owned by their own element slots; searching
-            // through that graph here duplicates reference counting and can
-            // traverse all Moose metadata on every lexical scope exit.
-            return directlyReferences(scalar, target);
-        }
-        if (value instanceof RuntimeList list) {
-            if (list instanceof RuntimeControlFlowList flow
-                    && directlyReferences(flow.getReturnValue(), target, visited)) {
-                return true;
-            }
-            for (RuntimeBase element : list.elements) {
-                if (directlyReferences(element, target, visited)) return true;
-            }
-        } else if (value instanceof RuntimeArray array) {
-            for (RuntimeScalar element : array.elements) {
-                if (directlyReferences(element, target, visited)) return true;
-            }
-        } else if (value instanceof RuntimeHash hash) {
-            return directlyReferencesHash(hash, target);
-        }
-        return false;
-    }
-
     public static void clearTemporaryRoots() {
         ArrayDeque<LifecycleRuntimeState.TemporaryRootLease> roots = state().temporaryRoots;
         while (!roots.isEmpty()) roots.pop().release();
