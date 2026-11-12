@@ -12,317 +12,38 @@ thread, and HTML-Tree regressions pass with corrective sweeps disabled.
 | Phase 1: remove default corrective sweeps | Complete | Full no-sweeps gates and lifecycle coverage are recorded below. |
 | Phase 2: retire reachability fallbacks | Active | Owner-source proofs and exact-head CPAN acceptance remain. |
 
-**Current checkpoint (2026-11-12):** Sweep-removal work remains active under
-#2043. PR #1938 remains open and draft. The latest CI poll on remote head
-`8521a158a4` (2026-11-12 20:48 UTC) showed Ubuntu and Windows still running;
-analysis and dependency jobs passed. Candidate branch
-`wip/issue2043-closure-owner-batch-20261112` now includes source commit
-`ded3fa7640`. The candidate proves temporary-root ownership through ordinary
-array/hash slots, current `SCALAR_REFERENCE_CONTENTS` slots, closure capture
-slots, compiled CODE pad-constant slots, CODE state bindings, current array
-refalias slots, current hash-alias slots, current `UNTRACKED_REFERENCE`
-owners, and current `SCALAR_CELL`, `CODE_SLOT`, `ARGUMENT_CONTAINER`,
-`TIE_HANDLER`, and `ARGUMENT_TIE_HANDLER` owners before opening the fallback
-graph walk. Unknown or incomplete owner paths still use the fallback.
+**Current checkpoint (2026-11-12):** Issue #2043 is active. Local branch
+`wip/issue2043-standard-owner-removal-20261112` contains commits `e21220f55f`,
+`5d1ceb4870`, `8327d1d483`, and `91b291deb7` on top of the current PR base
+snapshot. Its cached upstream is two commits ahead of the local branch; GitHub
+could not be reached during this checkpoint, so refresh PR #1938 and the issue
+claim before publishing or reconciling the candidate.
 
-The new `UnownedTemporaryArrayAggregateOwnerTest` reproduces stale
-`UNTRACKED_REFERENCE` owners after scope cleanup returns under a root lease.
-Its unfixed-parent shard failed only this test (1,623 tests, one failure); the
-candidate full `nice -n 19 timeout 2400 make` passed in 7m41. Logs:
-`/private/tmp/issue2043-scope-exit-parent-test.log` and
-`/private/tmp/issue2043-batch-make-048bf8c615.log`. The new
-`TemporaryRootScalarContentsOwnerTest` proves reachability through a validated
-scalar-reference cell while an opaque hash branch remains unvisited. Its
-focused make target passes in 29 seconds; the full gate on `23b34a7315` passes
-in 7m46 (`/private/tmp/issue2043-scalar-contents-make-23b34a7315.log`). The new
-`TemporaryRootClosureCaptureOwnerTest` checks scalar and aggregate capture slots
-plus compiled pad constants. `TemporaryRootCodeStateOwnerTest` verifies current
-scalar, array, and hash state bindings, while
-`TemporaryRootArrayAliasOwnerTest` verifies the exact aliased-cell slot in its
-owning array. Each test asserts that an opaque hash branch is not enumerated.
-The three closure/pad tests pass in the focused target
-(`/private/tmp/issue2043-closure-capture-isolated-focused.log`); all five new
-owner-path tests pass in the full `nice -n 19 timeout 2400 make` gate in 8m04
-on the exact source content committed as `6f75fe1496`, based on `ade3cd83cf`
-(`/private/tmp/issue2043-owner-kind-batch-make.log`). On this candidate, DBIx
-`t/100populate.t` passes 108/108 and LeakTracer finds no retained references
-(`/private/tmp/issue2043-dbix-t100-048bf8c615.log`).
+The delivered slice removes the no-op `jperl_gc*` and sweep compatibility
+hooks, their direct DBI calls, and the obsolete `jperl_trace_to` API and its
+test-only call. END-boundary rescued-object handling now checks current Perl
+owner slots through `processRescuedObjects()` instead of walking rescued graphs
+to clear weak observers. The standard-Perl regression
+`strong_cycle_weak_refs_survive_end.t` passes 3/3. Java lifecycle fixtures now
+construct queued-END and active-code captures with explicit capture owner
+slots. The exact source gate `nice -n 19 make` passes on `91b291deb7` in 6m48;
+full output is `/tmp/issue2043-end-owner-make-retry.log`.
 
-`TemporaryRootCountedCellOwnerTest` covers temporary roots that hold a
-reference to a current scalar cell, stash CODE slot, argument-container slot,
-or tied-handler slot, rather than directly holding its value. The deliberately
-opaque hash is inserted first so each case counts fallback enumeration. All
-five cases pass on source commit `005e625dc2`; all five fail on parent
-`5ab0d9fdd1` because the fallback enumerates that hash once. Focused logs are
-`/private/tmp/issue2043-counted-owner-kinds-focused.log` and
-`/private/tmp/issue2043-counted-owner-kinds-parent-focused.log`. The full
-`nice -n 19 timeout 2400 make` passes in 8m44 on the committed source content
-(`/private/tmp/issue2043-counted-owner-kinds-full-make.log`).
+The DBIx::Class `t/52leaks.t` collection checks 12–18 remain unresolved on the
+previous candidate. The detached `ResultSource` exception follows those failed
+checks while LeakTracer formats the retained object; it is not a confirmed
+independent failure. Root cause is still unproven. Production reachability
+fallbacks also remain: null-token deferred releases in `MortalList`, the
+remaining END-block root walk, and the `ReachabilityWalker` sweep engine.
 
-`TemporaryRootUntrackedScalarOwnerTest` covers a current untracked-reference
-owner whose scalar cell is held directly by the temporary root. Its opaque
-hash counter passes on `91eeca7fd0`; the unfixed parent `fc8ebf006a` enumerates
-the hash once and fails the diagnostic assertion. Focused logs are
-`/private/tmp/issue2043-untracked-scalar-focused.log` and
-`/private/tmp/issue2043-untracked-scalar-parent-focused.log`. The full
-`nice -n 19 timeout 2400 make` passes in 8m16 on the committed source content
-(`/private/tmp/issue2043-untracked-scalar-full-make.log`).
-
-`TemporaryRootHashAliasOwnerTest` verifies that a current `HASH_ALIAS_CELL`
-slot maps to the exact owning hash and key through an identity reverse index.
-The opaque-hash counter passes on `ded3fa7640`; parent `fc8ebf006a` enumerates
-the opaque hash once and fails. Focused outputs are
-`/private/tmp/issue2043-hash-alias-owner-focused.log` and
-`/private/tmp/issue2043-untracked-hash-alias-parent-focused.log`. A combined
-full `nice -n 19 timeout 2400 make` passes in 6m51 for the hash-alias and
-untracked-scalar source changes
-(`/private/tmp/issue2043-hash-alias-full-make.log`).
-
-DBIx `t/52leaks.t` still fails collection checks 12–18 and aborts when
-Data::Dumper formats a detached ResultSource
-(`/private/tmp/issue2043-dbix-t52-048bf8c615.log`). Owner traces include
-retained ResultSource edges through small unowned arrays (sizes 6 and 92) and
-nested hashes; they do not show a temporary-root lease at scope exit. Older
-snapshots show an untracked cell in a size-60 array
-(`/private/tmp/issue1649-array-localbinding-52leaks.log:49`), but do not record
-root timing. A trace-enabled rerun reproduced the DBIx failures but emitted no
-walker trace and ended with a shutdown-hook `No PerlRuntime is bound` exception
-after 159 MB of trace output; compressed evidence is
-`/private/tmp/issue2043-dbix-t52-trace-048bf8c615.log.gz`. Treat the candidate
-fix as a bounded diagnostic result, not as resolution of the DBIx failure.
-Exact-head CPAN acceptance remains open.
-
-Next: continue auditing only owner paths that can be validated against their
-current storage identity. For DBIx `t/52leaks.t`, add boundary diagnostics only
-when they can distinguish a direct temporary root from a nested aggregate
-owner; the current traces do not establish a temporary-root cause. Poll CI at
-intervals of six minutes or longer. Keep END-boundary weak retirement until an
-equivalent owner event preserves rescued objects through END callbacks. The
-`SvREFCNT` lexical scan is retired. RSA API limits remain tracked in
-[issue #2031](https://github.com/fglock/PerlOnJava/issues/2031).
-The final callsite search found no production caller for the legacy
-`MortalList.deferDecrement` entry point; its root-recovery behavior is exercised
-by Java compatibility tests. `ReachabilityWalker.sweepReleasedWeakReferents`
-is also referenced only by Java tests, while public `sweepWeakRefs` and Perl
-sweep wrappers are compatibility no-ops. Keep these test/API surfaces separate
-from the production sweep-removal acceptance target.
-
-The reported Class::MethodMaker tied-array lifetime failure is covered by the
-new project-owned `refcount/generated_tied_array_handler_lifetime.t`: it
-asserts that a generated tied field retains its handler through `PUSH` and
-`FETCH`, then destroys it on reset. It passes 4/4 with system Perl, JVM, and
-interpreter; logs are `/tmp/issue1649-generated-tie-prove-perl.log`,
-`/tmp/issue1649-generated-tie-jvm.log`, and
-`/tmp/issue1649-generated-tie-interpreter.log`. The reported parent failure is
-documented in the latest #1649 issue comments; this session did not rebuild an
-unfixed parent. The complete `nice -n 19 timeout 1800 make` passes with the new
-test on source snapshot `250fe5cc04` in 8m16; log:
-`/tmp/issue1649-tied-array-owner-audit-make.log`. The full gate rebuilt the
-candidate and ran the Java and Perl unit suites.
-
-The ownership audit confirms that `MortalList.deferDecrementRecursive` remains
-a production cleanup path, but its normal decrements queue exact owner tokens.
-Root-based recovery is gated to a null-token legacy path; repository callers of
-that entry point are Java regression fixtures and compatibility documentation,
-not production. Do not infer that the public method is dead or remove its
-synthetic coverage without a separate compatibility decision. Ordinary
-anonymous IO close remains socket-specific until all IO::File aliases have
-explicit resource-owner coverage.
-
-The localized-CODE restore audit from the #1649 handoff found no production
-producer for the legacy count adoption in `RuntimeGlob.dynamicRestoreState`.
-Production stash writes pass through `GlobalCodeRefMap.put`, which binds the
-stash slot and acquires the current value through the scalar owner transition;
-named sub replacement and typeglob CODE assignment use `RuntimeScalar.set()`.
-`LocalizedGlobCodeOwnerReleaseTest` deliberately bypasses those paths by
-writing `type` and `value` directly, so the restore compatibility branch still
-has an explicit fixture. The Perl-level nested localization test passes 9/9
-under system Perl, JVM, and interpreter; logs are
-`/tmp/issue1649-localized-code-{system-perl,jvm,interpreter}.log`. Keep the
-legacy adapter until its compatibility contract is deliberately retired; it
-does not require a root scan on ordinary stash restoration.
-
-The analogous missing-token adoption in `WeakRefRegistry.weaken` has no normal
-producer in the current runtime: `refCountOwned` becomes true only when a
-`PerlOwnerSlot` is acquired or transferred. Several Java unit fixtures create
-the flag and positive count directly to exercise malformed/legacy states, so
-retain that adapter until those contracts are explicitly retired. The other
-`adoptExistingCountedOwnerForCurrentValue` callers include postfix result
-promotion. That audit found a missing transfer completion when a postfix
-reference is returned from a subroutine: the mortal return slot acquired an
-owner, but the postfix temporary kept its transferred scalar-cell owner. The
-new argument-alias regression covers both `++` and `--`; system Perl, JVM, and
-interpreter pass 12/12. The shared return-slot copy now retires the postfix
-temporary after acquiring the return owner. The bundled full `nice -n 19 make`
-passes in 8m05 on the working tree based on source snapshot `250fe5cc04`,
-including this regression and the tied-array lifetime regression; log:
-`/tmp/issue1649-postfix-return-owner-make.log`. Markdown link check passes
-(827 documents, 0 errors).
-`localized_code_state_owner_release.t` passes 9/9 under all three Perl
-executors; existing `NamedCodeReferenceInstallsCountedSlotOwnerTest` in the
-full make covers the standard bound-slot acquisition/restore route.
-
-The IO owner-source inventory now covers scalar aliases and returns, aggregate
-slots, weak/unweak transitions, argument aliases, borrowed handles, lexical
-cleanup, detached glob components, and the nested-render argument path.
-`io_file_final_owner_closes_during_destroy.t` checks scalar, returned, array,
-hash, weak, and unweakened `IO::File` owners; system Perl, JVM, and interpreter
-pass 25/25, with corrective sweeps disabled on PerlOnJava. The tied-array and
-postfix-argument alias regressions also pass all three executors. The detached
-package-IO-glob test passes 5/5 on system Perl and both backends with sweeps
-disabled; it confirms the deleted glob keeps its IO slot available until an
-explicit close. `borrowed_filehandle_alias.t` and
-`die_after_lexical_filehandle_scope.t` pass all three executors, and the
-nested-render regression passes both PerlOnJava backends (system Perl skips it
-because Template Toolkit is absent).
-
-The audit found that `IO_RESOURCE_HOLDER` leases describe scalar-owned
-anonymous-IO resources, while detached glob components use
-`GLOB_COMPONENT_SLOT` to retain Perl typeglob slots. Those edges have different
-release rules; the current ordinary-handle unregister-only path remains because
-transient IO aliases are not all represented by resource leases. No producer
-gap requiring a new ordinary-handle close transition was demonstrated.
-
-The integrated `JPERL_DISABLE_CORRECTIVE_SWEEPS=1 nice -n 19 timeout 1800
-make` passes in 10m48 on `b027bf9aa4`; log:
-`/tmp/issue1649-integrated-no-sweeps-make.log`. The post-merge acceptance run
-passes 33 files and 1,053 checks on each backend, covering the weak/DESTROY/
-resurrection/cycle/cancellation matrix, #1794, #1860, HTML lifecycle cases,
-and all 23 upstream HTML-Tree 5.07 files. Logs:
-`/tmp/issue1649-integrated-focused-{jvm,interpreter}.log`. Count arithmetic is
-already centralized in `RuntimeBase`/`PerlOwnerSlot`; remaining special cases
-represent distinct Perl edge kinds and resource leases, so further
-centralization should standardize those edge transitions instead of inferring
-ownership from one aggregate count.
-
-### Next steps
-
-1. Continue auditing current-owner proofs and aggregate temporary-root
-   fallbacks; keep `END` cleanup and `SvREFCNT` count semantics as distinct
-   boundaries.
-2. Instrument DBIx `t/52leaks.t` cleanup when the trace can distinguish a
-   direct temporary root from a nested aggregate owner.
-3. Complete fresh-home exact-head CPAN acceptance after the remaining owner
-   paths are qualified.
-
-### Open questions and blockers
-
-- The aggregate scope-unregister walk and repeated deferred-release snapshot
-  builds have separate deterministic counters. The synthetic deferred test
-  observes one external-root snapshot per flush. On rebased PR #1746 head
-  `8fd9f830f`, Catalyst-Runtime `t/aggregate/live_component_controller_action_chained2.t`
-  passes 9/9, `t/arg_constraints.t` passes 69/69, and `t/query_constraints.t`
-  passes 18/18. The latter two files had five UTF-8 failures in an earlier
-  candidate. Mojolicious 9.49 `t/mojo/dom.t` passes 132 top-level subtests /
-  1,418 assertions; DBIx::Class `t/55namespaces_cleaned.t` passes 14,931
-  assertions; DateTime 1.67 `t/00load.t` and `t/01sanity.t` pass 1/1 and 16/16;
-  Image::ExifTool 13.55 `t/Unknown.t` passes 3/3. The Catalyst chained action
-  and Dancer2-Plugin-DBIx-Class shutdown tests pass on both backends. The latest
-  check on remote head `6c743e23f3` showed Ubuntu passing and Windows still in
-  progress. The fresh-home `make test-cpan-release-acceptance`
-  gate has not been completed on this final candidate. The earlier run hit
-  DateTime and Catalyst setup timeouts and Mojolicious had 99/109 programs fail
-  to load because its isolated home lacked `IO::Compress::Gzip`; these are
-  historical run outcomes, not final-candidate suite results. The full gate remains a required final qualification; targeted-file results do
-  not substitute for it.
-- END CVs have queued and active lifetime tests, including aggregate captures,
-  nested `exit`, `die`, and callback failure. UNITCHECK/CHECK/INIT lexical-pad
-  lifetime is covered separately; the corresponding phaser ownership path is
-  no longer an open Phase 1 boundary.
-- The current standard Perl oracle is
-  `/Users/fglock/projects/perl5/perl`, version 5.45.4 with `useithreads=undef`.
-  It needs the checkout's `lib`, `cpan/Test-Simple/lib`, and
-  `cpan/Scalar-List-Utils/lib` added to `@INC`; the checkout remains untouched.
-  The prior Perl 5.44.0 build remains the oracle for historical HTML-Tree
-  integration results.
-- The focused `new_from_lol` regression now passes, but HTML-Tree 5.07's
-  content and incremental parser cases still retain two and three elements at
-  the immediate release assertion on both PerlOnJava backends; Perl 5.44 passes
-  all cases. The new parser lifecycle reproducer records this open failure.
-- The Dancer2-Plugin-DBIx-Class `t/01_both_using_rsnames.t` workload now passes
-  all six assertions and exits on both backends. The interpreter first exposed
-  a `caller->isa` scalar-context bug, fixed in this follow-up, then exceeded a
-  360-second teardown bound. Its 120-second JFR profile attributed 9.25% of
-  samples to full-root snapshot building and 28.53% to `WeakHashMap.put`.
-  Retaining positive aggregate-root proofs across nested invalidations now
-  lets the focused test exit within the same bound. The deterministic regression
-  verifies reuse after a root removal and reset at the drain boundary. Artifacts
-  are `/tmp/issue1642-dancer-interpreter-teardown-after-caller-fix.jfr`,
-  `/tmp/issue1642-dancer-interpreter-teardown-after-shortcut.jfr`,
-  `/tmp/issue1642-dancer-interpreter-after-drain-positive-snapshot.log`, and
-  `/tmp/issue1642-dancer-jvm-after-drain-positive-snapshot.log`. The local CPAN
-  cache now also has `B::Hooks::EndOfScope` 0.28; Moose is supplied by the
-  PerlOnJava provider. `jperl -MCatalyst` loads Catalyst-Runtime 5.90132.
-  Its checked-in distropref patches only `t/live_fork.t` to skip the six
-  process-fork assertions on PerlOnJava; the `system` and backtick assertions
-  and all other distribution tests remain enabled. A direct run from the
-  newest patched CPAN build passes all ten non-fork assertions, skips exactly
-  the six fork assertions, and exits successfully. The broader Catalyst
-  `jcpan -t` attempt exceeded its 900-second deadline while running
-  `t/aggregate/live_component_controller_action_chained2.t`, after 21 earlier
-  tests reported `ok`; that test passes 9/9 when run alone in about 25 seconds.
-  The full attempt therefore remains incomplete and did not produce a cleanup
-  profile. A post-change Dancer2 `jcpan -t` run reported
-  `t/01_both_using_rsnames.t` ok, then exceeded the 240-second command deadline
-  later in the distribution suite. The Catalyst owner-slot delta workload and
-  full cleanup acceptance are still open. On the 2026-10-12 rebased candidate,
-  the repository `make` gate passed in 7m05s. The first local AnyEvent install
-  hit its 30-minute timeout while the full-root snapshot walker scanned a large
-  aggregate. The walker now caps inspected edges at 50,000 and marks a capped
-  snapshot incomplete, preserving conservative reachability. The final
-  implementation `make` passed in 7m03s, the focused edge-cap regression
-  passed, and retrying the AnyEvent install completed in 15 minutes with all 32
-  files installed; `anyevent_server_guard_rebind.t` passes 2/2.
-- `RuntimeBase.refCount` still combines selective counts with legacy lifecycle
-  sentinels and triggers cleanup for mixed-owner referents. The new explicit
-  lifecycle prevents repeat dispatch and records destruction/resurrection, but
-  it does not yet replace sentinel checks at every legacy boundary. Scalar/
-  proxy and array/hash migration belongs to Phase 2 under issue #1649's current
-  plan.
-- On the 2026-10-12 rebase of #1642 onto `32472699a`, `nice -n 19 make` passes
-  in 7m42s. Catalyst-Runtime
-  `t/aggregate/live_component_controller_action_chained2.t` passes 9/9 on JVM
-  and interpreter; Mojolicious `t/mojo/dom.t` passes 132 subtests / 1,418
-  assertions on both backends. The labeled-SKIP parser regression passes 2/2
-  on system Perl and both backends, and `make check-links` passes. The obsolete
-  `TestMoreHelper` macro hook remains removed after rebasing onto master. The
-  fresh-home release acceptance and current-candidate Catalyst cleanup profile
-  remain open; targeted tests do not establish the full gate or the total cost
-  of root walking.
-- The full root snapshot now seeds all installed CODE slots but follows capture
-  fields only through `GlobalVariable.globalCodeRefEdgeRootsView()`, which
-  already caches the slots with walkable edges. A deterministic counter test
-  verifies one capture walk among 65 installed CODE slots while retaining the
-  captured aggregate. `nice -n 19 make` passes in 18m10s on this change, and the
-  Catalyst chained action passes on both backends. The current JFR still samples
-  `reachableFromRootsSnapshotWithStatus()` in 3,253 of 8,615 execution samples;
-  further cleanup-cost work and the fresh-home acceptance remain open.
-- The same JFR shows `MortalList.recordUnblessedAggregateSnapshotResult()` in
-  stacks copying the entire reachable set into a second drain cache for each
-  unresolved aggregate. The drain cache now retains only targets with positive
-  proofs, while the full snapshot answers other targets directly. Added a
-  deterministic counter regression for repeated unreachable targets over a
-  populated root graph. `nice -n 19 make` passes in 8m48s; the new regression
-  passes in the unit gate, and Catalyst-Runtime
-  `t/aggregate/live_component_controller_action_chained2.t` passes 9/9 on JVM
-  and interpreter. `make check-links` passes. A follow-up profile is recorded
-  below.
-- The cleanup-cost regression now drives three zero-count aggregates through
-  `MortalList` deferred release instead of calling its reachability helper
-  directly. After rebasing onto `2995d5a0a`, `nice -n 19 make` passes in 10m24s,
-  including the new test, and Catalyst-Runtime
-  `t/aggregate/live_component_controller_action_chained2.t` passes 9/9 on both
-  backends. The expensive release acceptance remains unrun per the user's
-  instruction to use focused CPAN files. A post-change 84-second JFR profile
-  of the focused Catalyst test contains 4,639 execution samples; the full root
-  walker appears in 1,790 sample stacks. The previous graph-sized copy is gone
-  from the aggregate result path: its only sampled result-helper stack performs
-  the target membership check, and the sole `AbstractCollection.addAll` sample
-  belongs to `RuntimeBase.ownerSlotSnapshot()`. Full-root traversal remains a
-  major cost across cleanup drains, so #1642 is not complete; the next
-  investigation is safe snapshot reuse across unchanged root sets or an
-  ownership path that removes the ordinary cleanup fallback. Full release
-  acceptance also remains required before closing the issue.
+Next, reproduce the DBIx owner paths separately for checks 12–17 and the
+nested-clone check 18, add a project-owned system-Perl-verified behavior
+regression, and fix the exact missing owner-release transitions. Then remove
+the production root-walk fallbacks, sweep-only state and APIs, and diagnostics
+once their callers disappear. DBIx diagnosis and a read-only inventory of
+sweep-only callers can proceed independently; edits to the shared owner-release
+paths should be integrated serially. Finish with the exact-head `make` gate and
+fresh PR/issue review.
 
 ### Phase 2 progress (2026-10-27)
 
