@@ -2493,6 +2493,22 @@ public class ReachabilityWalker {
                 }
                 continue;
             }
+            if (slot.kind() == PerlOwnerSlot.Kind.CODE_STATE) {
+                RuntimeCode stateOwner = slot.captureOwner();
+                if (stateOwner != null && stateOwner.hasCurrentStateOwner(value, slot)) {
+                    todo.addLast(new TemporaryRootOwnerAncestor(stateOwner, depth + 1));
+                }
+                continue;
+            }
+            if (slot.kind() == PerlOwnerSlot.Kind.ARRAY_ALIAS_CELL) {
+                RuntimeArray arrayOwner = slot.arrayAliasOwner();
+                if (arrayOwner != null
+                        && DestroyDispatch.isCurrentPerlOwnerSlot(value, slot)
+                        && arrayOwner.ownsReferenceListAliasCellOwner(slot, value)) {
+                    todo.addLast(new TemporaryRootOwnerAncestor(arrayOwner, depth + 1));
+                }
+                continue;
+            }
             if (slot.kind() == PerlOwnerSlot.Kind.CODE_PAD_CONSTANT) {
                 if (DestroyDispatch.isCurrentPerlOwnerSlot(value, slot)) {
                     for (RuntimeBase codeOwner : slot.endBoundaryOwnerSources()) {

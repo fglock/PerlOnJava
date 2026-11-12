@@ -4337,6 +4337,36 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         return false;
     }
+
+    boolean hasCurrentStateOwner(RuntimeBase value, PerlOwnerSlot ownerSlot) {
+        if (value == null || ownerSlot == null
+                || ownerSlot.kind() != PerlOwnerSlot.Kind.CODE_STATE
+                || ownerSlot.captureOwner() != this || ownerSlot.referent() != value
+                || !ownerSlot.isActive()) {
+            return false;
+        }
+        if (value instanceof RuntimeScalar scalar) {
+            return hasStateScalarOwner(scalar, ownerSlot);
+        }
+        if (value instanceof RuntimeArray array) {
+            for (Map.Entry<String, RuntimeArray> entry : stateArray.entrySet()) {
+                if (entry.getValue() == array
+                        && stateArrayOwnerSlots.get(entry.getKey()) == ownerSlot) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        if (value instanceof RuntimeHash hash) {
+            for (Map.Entry<String, RuntimeHash> entry : stateHash.entrySet()) {
+                if (entry.getValue() == hash
+                        && stateHashOwnerSlots.get(entry.getKey()) == ownerSlot) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
     public RuntimeList constantValue;
     // Field to hold the thread compiling this code
     public Supplier<Void> compilerSupplier;
