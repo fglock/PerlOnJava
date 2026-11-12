@@ -699,7 +699,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         return false;
     }
 
-    /** Whether this aggregate is itself held by a current Perl storage edge. */
+    /** Whether this aggregate has a current Perl storage or call-transfer owner. */
     boolean hasCurrentPerlStorageOwner() {
         PerlRuntime runtime = PerlRuntime.currentOrNull();
         if (refCount > 0 || localBindingExists || hasClosureCaptureOwner()
@@ -715,7 +715,22 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                     || (runtime != null && MyVarCleanupStack.isRegistered(this)))) {
             return true;
         }
+        if (hasTransientUntrackedContainerTransferOwner()) return true;
         return hasCurrentPerlOwnerSlotIdentity();
+    }
+
+    private boolean hasTransientUntrackedContainerTransferOwner() {
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (!slot.isActive() || slot.kind() != PerlOwnerSlot.Kind.UNTRACKED_REFERENCE
+                    || slot.referent() != this) continue;
+            RuntimeScalar owner = slot.untrackedScalarOwner();
+            if (owner != null && owner.untrackedReferenceOwnerSlot() == slot
+                    && owner.isTransientArgumentValueOwner()
+                    && !WeakRefRegistry.isweak(owner)
+                    && (owner.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                    && owner.value == this) return true;
+        }
+        return false;
     }
 
     boolean hasDirectOwnerSlotProofForReleasedWeakReferent() {

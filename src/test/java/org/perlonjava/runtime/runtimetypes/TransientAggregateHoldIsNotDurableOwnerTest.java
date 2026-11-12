@@ -148,6 +148,9 @@ class TransientAggregateHoldIsNotDurableOwnerTest {
                 assertTrue(captureOwner.isActive());
 
                 staged.finish();
+                assertEquals(0,
+                        closure.ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE),
+                        "the last aggregate transfer retires its stale direct CODE-cell edge");
                 MortalList.popAndFlush();
                 markActive = false;
                 RuntimeCode.popActiveCode(closure);

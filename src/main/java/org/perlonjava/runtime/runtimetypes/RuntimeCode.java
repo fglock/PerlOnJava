@@ -294,7 +294,24 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     () -> RuntimeScalar.releaseTiedHandlerValue(handlerOwner));
             failure = attemptCleanup(failure,
                     () -> RuntimeScalar.releaseArgumentContainerValue(ownerValue));
+            failure = attemptCleanup(failure,
+                    () -> refreshUntrackedCellsAfterContainerTransfer(container));
             rethrowCleanupFailure(failure);
+        }
+    }
+
+    /**
+     * Retire stale scalar-to-value edges after this transfer was the final
+     * Perl owner of an aggregate. The container's direct cells are the exact
+     * affected edges; no transitive runtime-root traversal is needed.
+     */
+    private static void refreshUntrackedCellsAfterContainerTransfer(RuntimeBase container) {
+        if (container == null || container.hasCurrentPerlStorageOwner()
+                || container.hasTemporaryRootOwnerSlotIdentity()) return;
+        if (container instanceof RuntimeArray array) {
+            array.refreshUntrackedElementOwners();
+        } else if (container instanceof RuntimeHash hash) {
+            hash.refreshUntrackedElementOwners();
         }
     }
 

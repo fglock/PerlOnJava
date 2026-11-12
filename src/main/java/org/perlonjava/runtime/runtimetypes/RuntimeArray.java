@@ -1030,7 +1030,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         }
     }
 
-    private void refreshUntrackedElementOwners() {
+    void refreshUntrackedElementOwners() {
         if (elements == null) return;
         for (RuntimeScalar value : elements) {
             if (value != null) value.reconcileContainerOwnerAfterMutation(this);
