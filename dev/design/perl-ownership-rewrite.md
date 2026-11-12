@@ -13,13 +13,13 @@ thread, and HTML-Tree regressions pass with corrective sweeps disabled.
 | Phase 2: retire reachability fallbacks | Active | Owner-source proofs and exact-head CPAN acceptance remain. |
 
 **Current checkpoint (2026-11-12):** Sweep-removal work remains active under
-#2043. PR #1938 is open and draft at remote head `4f24e5daa3`; Ubuntu and Windows
-CI both pass on that head. Candidate branch `wip/issue2043-batch-20261112` is at
-`23b34a7315`, two commits ahead. The candidate adds a bounded positive proof
-through ordinary array/hash owner slots and current
-`SCALAR_REFERENCE_CONTENTS` slots, plus a deferred refresh for untracked
-aggregate cells when scope cleanup meets a direct temporary-root lease. The
-fallback graph walk remains for incomplete or unsupported owner paths.
+#2043. PR #1938 is open and draft at remote head `6c743e23f3`; the latest check
+showed Ubuntu passing and Windows still running. Candidate branch
+`wip/issue2043-closure-owner-batch-20261112` is at source commit `28b4031876`.
+The candidate proves temporary-root ownership through ordinary array/hash
+slots, current `SCALAR_REFERENCE_CONTENTS` slots, closure capture slots, and
+compiled CODE pad-constant slots before opening the fallback graph walk. The
+fallback remains for incomplete or unsupported owner paths.
 
 The new `UnownedTemporaryArrayAggregateOwnerTest` reproduces stale
 `UNTRACKED_REFERENCE` owners after scope cleanup returns under a root lease.
@@ -30,7 +30,13 @@ candidate full `nice -n 19 timeout 2400 make` passed in 7m41. Logs:
 `TemporaryRootScalarContentsOwnerTest` proves reachability through a validated
 scalar-reference cell while an opaque hash branch remains unvisited. Its
 focused make target passes in 29 seconds; the full gate on `23b34a7315` passes
-in 7m46 (`/private/tmp/issue2043-scalar-contents-make-23b34a7315.log`). On this
+in 7m46 (`/private/tmp/issue2043-scalar-contents-make-23b34a7315.log`). The new
+`TemporaryRootClosureCaptureOwnerTest` checks scalar and aggregate capture slots
+plus compiled pad constants, and asserts that an opaque hash branch is not
+enumerated. All three tests pass in the focused target
+(`/private/tmp/issue2043-closure-capture-isolated-focused.log`); the full
+`nice -n 19 timeout 2400 make` passes in 9m27 on the exact source state based on
+`6c743e23f3` (`/private/tmp/issue2043-closure-owner-isolated-make.log`). On this
 candidate, DBIx
 `t/100populate.t` passes 108/108 and LeakTracer finds no retained references
 (`/private/tmp/issue2043-dbix-t100-048bf8c615.log`).
@@ -49,13 +55,15 @@ after 159 MB of trace output; compressed evidence is
 fix as a bounded diagnostic result, not as resolution of the DBIx failure.
 Exact-head CPAN acceptance remains open.
 
-Next: continue the owner-source audit for remaining temporary-root fallback
-paths, and instrument the DBIx cleanup boundary only when traces identify a
-specific owner transition to inspect. Keep END-boundary weak retirement until
-an equivalent owner event preserves rescued objects through END callbacks.
-The `SvREFCNT` lexical scan is retired. RSA API limits remain tracked in
-[issue #2031](https://github.com/fglock/PerlOnJava/issues/2031). Keep PR #1938
-open and draft; poll CI no more than once every six minutes.
+Next: publish `28b4031876` and the updated checkpoint to the existing PR branch,
+keeping PR #1938 open and draft. Continue auditing only owner paths that can be
+validated against their current storage identity. For DBIx `t/52leaks.t`, add
+boundary diagnostics only when they can distinguish a direct temporary root
+from a nested aggregate owner; the current traces do not establish a
+temporary-root cause. Poll CI at intervals of six minutes or longer. Keep
+END-boundary weak retirement until an equivalent owner event preserves rescued
+objects through END callbacks. The `SvREFCNT` lexical scan is retired. RSA API
+limits remain tracked in [issue #2031](https://github.com/fglock/PerlOnJava/issues/2031).
 The final callsite search found no production caller for the legacy
 `MortalList.deferDecrement` entry point; its root-recovery behavior is exercised
 by Java compatibility tests. `ReachabilityWalker.sweepReleasedWeakReferents`
@@ -153,11 +161,11 @@ ownership from one aggregate count.
 
 ### Next steps
 
-1. Publish candidate `b20dc9441a` as a fast-forward to the existing PR branch;
-   retain open/draft status and poll its checks at six-minute or longer
-   intervals.
-2. Continue the production caller audit for owner-count repairs and aggregate
-   root fallbacks; keep `END` cleanup and `SvREFCNT` count semantics as distinct
+1. Publish source commit `28b4031876` and the refreshed checkpoint as a
+   fast-forward to the existing PR branch; retain open/draft status and poll
+   its checks at six-minute or longer intervals.
+2. Continue auditing current-owner proofs and aggregate temporary-root
+   fallbacks; keep `END` cleanup and `SvREFCNT` count semantics as distinct
    boundaries.
 3. Complete fresh-home exact-head CPAN acceptance after the remaining owner
    paths are qualified.
@@ -174,8 +182,9 @@ ownership from one aggregate count.
   1,418 assertions; DBIx::Class `t/55namespaces_cleaned.t` passes 14,931
   assertions; DateTime 1.67 `t/00load.t` and `t/01sanity.t` pass 1/1 and 16/16;
   Image::ExifTool 13.55 `t/Unknown.t` passes 3/3. The Catalyst chained action
-  and Dancer2-Plugin-DBIx-Class shutdown tests pass on both backends. PR CI is
-  green on Ubuntu and Windows. The fresh-home `make test-cpan-release-acceptance`
+  and Dancer2-Plugin-DBIx-Class shutdown tests pass on both backends. The latest
+  check on remote head `6c743e23f3` showed Ubuntu passing and Windows still in
+  progress. The fresh-home `make test-cpan-release-acceptance`
   gate has not been completed on this final candidate. The earlier run hit
   DateTime and Catalyst setup timeouts and Mojolicious had 99/109 programs fail
   to load because its isolated home lacked `IO::Compress::Gzip`; these are
