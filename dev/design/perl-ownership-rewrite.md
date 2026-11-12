@@ -33,11 +33,16 @@ candidate full `nice -n 19 timeout 2400 make` passes in 7m41. Logs:
 DBIx `t/52leaks.t` still fails collection checks 12–18 and aborts when
 Data::Dumper formats a detached ResultSource
 (`/private/tmp/issue2043-dbix-t52-048bf8c615.log`). Owner traces include
-untracked scalar cells in a 60-element array, matching the new test's owner
-shape, but do not show whether that array was directly under a temporary-root
-lease at scope exit. Treat the candidate fix as a bounded diagnostic result,
-not as resolution of the DBIx failure. Exact-head CPAN acceptance remains
-open.
+retained ResultSource edges through small unowned arrays (sizes 6 and 92) and
+nested hashes; they do not show a temporary-root lease at scope exit. Older
+snapshots show an untracked cell in a size-60 array
+(`/private/tmp/issue1649-array-localbinding-52leaks.log:49`), but do not record
+root timing. A trace-enabled rerun reproduced the DBIx failures but emitted no
+walker trace and ended with a shutdown-hook `No PerlRuntime is bound` exception
+after 159 MB of trace output; compressed evidence is
+`/private/tmp/issue2043-dbix-t52-trace-048bf8c615.log.gz`. Treat the candidate
+fix as a bounded diagnostic result, not as resolution of the DBIx failure.
+Exact-head CPAN acceptance remains open.
 
 Next: instrument the failing cleanup boundary to distinguish direct from
 transitive temporary-root ancestry, then fix and cover the confirmed owner
