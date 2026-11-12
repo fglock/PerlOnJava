@@ -13,57 +13,42 @@ thread, and HTML-Tree regressions pass with corrective sweeps disabled.
 | Phase 2: retire reachability fallbacks | Active | Owner-source proofs and exact-head CPAN acceptance remain. |
 
 **Current checkpoint (2026-11-12):** Issue #1649 remains active. PR #1938 is
-open and draft at `790210706c5851ab673ef462ba08c9c2c4310974`; all checks on
-that head pass, including Ubuntu and Windows. Local candidate
-`36b9205453` adds weak-CODE cleanup at final argument-container transfer. Its
-Java diagnostic regression reports argument-stack depth and owner-slot state;
-the Perl companion passes 6/6 under system Perl. Full `nice -n 19 make` passes
-on the candidate in 13m08 (`/tmp/issue1649-36b9205453-make.log`), and DBIx
-`t/100populate.t` passes 108/108 (`/tmp/issue1649-36b9205453-DBIx-100populate.log`).
+open and draft at `61530ed55594014aee0021713ff1d4910fe1f2d1`; its published
+checks pass, including Ubuntu and Windows. Local candidate branch
+`wip/issue1649-temp-root-query-fastpath-20261112` is at `5a0738c354`. Its only
+production edit, `284374d424`, deduplicates adjacent blessed fallback branches;
+the measurement-only query remains because `ReachabilityQueryCostTest` requires
+it. Full `nice -n 19 timeout 1800 make` passes in 10m14
+(`/tmp/issue1649-5a0738c354-make.log`), and DBIx `t/100populate.t` passes
+108/108 with no LeakTracer findings (`/tmp/issue1649-5a0738c354-DBIx-100populate.log`).
 
-The candidate's direct `t/52leaks.t` run still fails seven object-collection
-assertions (tests 12–18). It passes the earlier phantom-chain assertions 1–8;
-the detached `Artist` ResultSource exception occurs only afterward while
-LeakTracer's Dumper formats failed assertion 18 (`Data::Dumper.pm` line 339),
-so it is diagnostic fallout rather than the earlier line-430 runtime failure
-(`/tmp/issue1649-36b9205453-DBIx-52leaks.log`). Tests 12–17 retain one connected
-Artist/CD/Schema/ResultSource graph; test 18 is an independently cloned hash.
-System Perl with the local DBIx dependency path completes the ordinary leak
-check; its two reference-cycle cases are existing TODOs and optional
-persistent-process tests are skipped
-(`/tmp/issue1649-system-perl-52leaks-with-local-lib.log`). The callback
-regression is separate from these remaining DBIx owner/collection gaps.
-Exact-head CPAN acceptance remains open. Mojolicious' route fix and the
-`SvREFCNT` live-lexical scan replacement are already covered by system-Perl and
-both-backend regressions. The RSA API policy is tracked in
-[issue #2031](https://github.com/fglock/PerlOnJava/issues/2031).
+Two project-owned diagnostics now cover the DBIx-shaped owner graphs. The raw
+acyclic Schema/Storage/ResultSource/Artist/CD graph and its clone/double-clone
+pass 21/21 on system Perl and both no-sweeps backends. A separate Schema and
+ResultSource destructor-rescue handoff passes 7/7 on the same paths. Their
+logs are `/tmp/issue1649-dbic-result-graph-*` and
+`/tmp/issue1649-dbic-rescued-graph-*`; test files are
+`src/test/resources/unit/refcount/dbic_result_graph_collection_diagnostic.t`
+and `src/test/resources/unit/refcount/dbic_rescued_graph_collection_diagnostic.t`.
 
-The temporary-root BFS is confined to the legacy unpaired decrement recovery;
-normal production cleanup carries exact owner-release tokens. Its public Java
-compatibility entry point and nested-root tests remain in use. A lease records
-the temporary root itself, but current owner slots do not encode the full
-descendant ancestry needed to replace nested BFS (including `RuntimeList`
-edges). Retiring the traversal requires that provenance or a separate
-compatibility decision. An orphan recursive direct-reference helper has been
-removed on local branch `wip/issue1649-unused-root-helper-20261112` at
-`6e44afdf8a`. Full `nice -n 19 timeout 1800 make` passed on branch head
-`12417775a6` in 16m51 (`/tmp/issue1649-unused-root-helper-make.log`).
+Unmodified DBIx `t/52leaks.t` still fails checks 12–18 and then aborts while
+Dumper formats the detached ResultSource (`/tmp/issue1649-5a0738c354-DBIx-52leaks-unmodified.log`). A temporary reporter copy that bypasses Dumper reaches all 35 checks and finds 23 object-collection failures; a no-trace copy reports the same 23 on both local `5a0738c354` and published-runtime `36b9205453`. This is pre-existing evidence, not a regression from the local change. Owner snapshots show live lexical/argument owners and a Schema in the rescue registry, but the precise root cause is unresolved. System Perl's ordinary leak check passes with its two expected cycle TODOs and optional persistent-process checks skipped (`/tmp/issue1649-system-perl-52leaks-with-local-lib.log`).
 
-Remaining Phase 2 work is producer-by-producer proof for exact owner-count
-alignment, then retirement of only those repairs whose normal producer paths
-are proven balanced. `restoreReachableOwnerCount` remains behind the unpaired
-compatibility path. The rescued-graph END-boundary cleanup is a distinct
-required event: it clears nested weak observers while keeping rescued objects
-alive for END callbacks; cascaded `DESTROY` alone cannot replace it. The
-`SvREFCNT` lexical scan is retired. RSA API limits remain tracked in
-[issue #2031](https://github.com/fglock/PerlOnJava/issues/2031).
+Temporary-root BFS remains only on the two legacy tokenless release fallbacks.
+`TemporaryRootFallbackSingleTraversalTest` and
+`TemporaryRootOwnerSlotTest.directListTemporaryRootEdgeSkipsNestedAggregateGraphWalk`
+require nested traversal; removing it needs descendant ancestry in owner
+provenance. The public Java compatibility API and nested-root tests remain.
+`restoreReachableOwnerCount` is still behind the unpaired compatibility path.
+END-boundary cleanup remains necessary to clear nested weak observers while
+preserving rescued objects through END callbacks; cascaded `DESTROY` alone
+does not replace it. The `SvREFCNT` lexical scan is retired. RSA API limits
+remain tracked in [issue #2031](https://github.com/fglock/PerlOnJava/issues/2031).
 
-Next: publish the locally validated candidate to the existing draft PR so CI
-can validate it, then trace the seven `t/52leaks.t` collection failures in a
-separate local change. Keep exact-head CPAN acceptance open until those failures
-and the detached ResultSource behavior are classified. Continue polling CI no
-more often than every six minutes.
-
+Next: publish the locally validated branch to draft PR #1938 and wait for its
+CI, then continue tracing DBIx's remaining object/clone roots and producer
+proofs. Exact-head CPAN acceptance remains open. Poll CI every six minutes or
+longer.
 The final callsite search found no production caller for the legacy
 `MortalList.deferDecrement` entry point; its root-recovery behavior is exercised
 by Java compatibility tests. `ReachabilityWalker.sweepReleasedWeakReferents`
