@@ -36,19 +36,13 @@ public class Internals extends PerlModuleBase {
             // allowed-but-absent keys separately, so there are no physical
             // placeholder entries to remove.
             internals.registerMethod("hv_clear_placeholders", "hvClearPlaceholders", "\\%");
-            // Phase 0 diagnostic: expose PerlOnJava-internal refcount state
-            // (refCount, flags, tracking mode) for differential testing
-            // against native Perl. See dev/design/refcount_alignment_plan.md.
+            // Ownership diagnostics expose runtime refcount state and owner
+            // slots for focused differential tests against system Perl.
             internals.registerMethod("jperl_refstate", "jperl_refstate", "$");
             internals.registerMethod("jperl_refstate_str", "jperl_refstate_str", "$");
             internals.registerMethod("jperl_owner_trace", "jperlOwnerTrace", "$");
             internals.registerMethod("jperl_reference_by_address", "jperlReferenceByAddress", "$");
             internals.registerMethod("jperl_freetmps", "jperl_freetmps", "");
-            // Phase 4 diagnostic: trace a reachable path from any Perl root
-            // to the given referent. Returns the first-found path string or
-            // undef if unreachable. Used to debug why an object that should
-            // be GC'd remains reachable from the walker's point of view.
-            internals.registerMethod("jperl_trace_to", "jperl_trace_to", "$");
             internals.registerMethod("initialize_state_variable", "initializeStateVariable", "$$");
             internals.registerMethod("initialize_state_array", "initializeStateArray", "$$");
             internals.registerMethod("initialize_state_hash", "initializeStateHash", "$$");
@@ -785,107 +779,6 @@ public class Internals extends PerlModuleBase {
     public static RuntimeList jperl_freetmps(RuntimeArray args, int ctx) {
         MortalList.flush();
         return new RuntimeScalar(0).getList();
-    }
-
-    /**
-     * Phase 4 diagnostic: find a reachable path from Perl roots to the
-     * given referent. Returns the path as a string ("$some::global{key}[3]")
-     * or undef if unreachable.
-     */
-    public static RuntimeList jperl_trace_to(RuntimeArray args, int ctx) {
-        RuntimeScalar arg = args.get(0);
-        if (!(arg.value instanceof RuntimeBase base)) {
-            return new RuntimeScalar().getList();
-        }
-        // Phase I: when JPERL_TRACE_SKIP_LEX=1, omit ScalarRefRegistry seeds
-        // from path discovery — forces the trace through Perl-semantic
-        // roots so diagnostics show which global/stash data structure
-        // keeps the object alive (not just "live-lexical").
-        boolean skipLex = System.getenv("JPERL_TRACE_SKIP_LEX") != null;
-        java.util.List<String> path = ReachabilityWalker.findPathTo(base, skipLex);
-        if (path == null) return new RuntimeScalar().getList();
-        // Also dump all direct lexical-holders for debugging deep leaks
-        if (System.getenv("JPERL_TRACE_ALL") != null) {
-            System.err.println("jperl_trace_to target addr="
-                    + System.identityHashCode(base)
-                    + " class=" + base.getClass().getSimpleName());
-            int matchIdx = 0;
-            int totalLexIdx = 0;
-            // Collect candidate parent hashes (those with any key pointing at base)
-            // when no direct holder exists. Useful for traces like
-            // "<live-lexical#N>{random_results}" where target is reached via
-            // a parent hash rather than directly held.
-            java.util.ArrayList<RuntimeScalar> parentScalars = new java.util.ArrayList<>();
-            for (RuntimeScalar sc : ScalarRefRegistry.snapshot()) {
-                if (sc == null) continue;
-                if (sc.hasClosureCaptureOwner()) continue;
-                if (WeakRefRegistry.isweak(sc)) continue;
-                if (!RuntimeScalarType.isReference(sc)) continue;
-                totalLexIdx++;
-                if (sc.value == base) {
-                    System.err.println("  direct holder #" + (matchIdx++)
-                            + " scId=" + System.identityHashCode(sc)
-                            + " type=" + sc.type
-                            + " rcO=" + sc.refCountOwned
-                            + " captureCount=" + sc.captureCount);
-                    Throwable st = ScalarRefRegistry.stackFor(sc);
-                    if (st != null) {
-                        StackTraceElement[] frames = st.getStackTrace();
-                        int shown = Math.min(frames.length, 40);
-                        for (int fi = 0; fi < shown; fi++) {
-                            System.err.println("      at " + frames[fi]);
-                        }
-                        if (frames.length > shown) {
-                            System.err.println("      ... "
-                                    + (frames.length - shown) + " more");
-                        }
-                    }
-                } else if (sc.value instanceof RuntimeHash h
-                        && h.elements.values().stream().anyMatch(v -> v != null && v.value == base)) {
-                    parentScalars.add(sc);
-                } else if (sc.value instanceof RuntimeArray a
-                        && a.elements.stream().anyMatch(v -> v != null && v.value == base)) {
-                    parentScalars.add(sc);
-                }
-            }
-            System.err.println("  total direct holders=" + matchIdx
-                    + " total lexicals scanned=" + totalLexIdx);
-            if (matchIdx == 0 && !parentScalars.isEmpty()) {
-                System.err.println("  --- parent-holder candidates ("
-                        + parentScalars.size() + ") ---");
-                int pIdx = 0;
-                for (RuntimeScalar ps : parentScalars) {
-                    System.err.println("  parent #" + (pIdx++)
-                            + " scId=" + System.identityHashCode(ps)
-                            + " type=" + ps.type
-                            + " rcO=" + ps.refCountOwned
-                            + " parentClass="
-                            + (ps.value != null ? ps.value.getClass().getSimpleName() : "null"));
-                    if (ps.value instanceof RuntimeHash ph) {
-                        java.util.List<String> keys = new java.util.ArrayList<>();
-                        for (Map.Entry<String, RuntimeScalar> ent : ph.elements.entrySet()) {
-                            if (ent.getValue() != null && ent.getValue().value == base) {
-                                keys.add(ent.getKey());
-                            }
-                        }
-                        System.err.println("    via keys: " + keys);
-                    }
-                    Throwable pst = ScalarRefRegistry.stackFor(ps);
-                    if (pst != null) {
-                        StackTraceElement[] frames = pst.getStackTrace();
-                        int shown = Math.min(frames.length, 30);
-                        for (int fi = 0; fi < shown; fi++) {
-                            System.err.println("      at " + frames[fi]);
-                        }
-                    }
-                    if (pIdx >= 5) {
-                        System.err.println("    ... " + (parentScalars.size() - 5) + " more parents");
-                        break;
-                    }
-                }
-            }
-        }
-        return new RuntimeScalar(String.join(" -> ", path)).getList();
     }
 
     /**
