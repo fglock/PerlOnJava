@@ -576,6 +576,36 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         return perlStrongOwnerSlots > 0;
     }
 
+    /**
+     * Whether this value has a durable Perl owner independent of temporary
+     * call-frame and result-transfer holds. This is used when deciding whether
+     * an aliased scalar cell is already kept alive by its aggregate container.
+     */
+    boolean hasPersistentPerlStrongOwnerIdentity() {
+        if (localBindingExists || isPackageGlobalRoot || hasClosureCaptureOwner()
+                || MyVarCleanupStack.isRegistered(this)) return true;
+
+        int temporaryCountedOwners = ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_VALUE)
+                + ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_CONTAINER)
+                + ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_TIE_HANDLER)
+                + ownerSlotCount(PerlOwnerSlot.Kind.RETURN_VALUE);
+        if (refCount > temporaryCountedOwners) return true;
+
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (!slot.isActive() || !PerlOwnerSlot.isPerlOwnerKind(slot.kind())) continue;
+            switch (slot.kind()) {
+                case ARGUMENT_VALUE, ARGUMENT_CONTAINER, ARGUMENT_ALIAS,
+                        ARGUMENT_TIE_HANDLER, RETURN_VALUE, ACTIVE_CODE -> { }
+                case UNTRACKED_REFERENCE, SCALAR_REFERENCE_CONTENTS,
+                        ARRAY_ELEMENT, HASH_ELEMENT -> {
+                    if (DestroyDispatch.isCurrentPerlOwnerSlot(this, slot)) return true;
+                }
+                default -> { return true; }
+            }
+        }
+        return false;
+    }
+
     /** Whether a current Perl owner identity other than one slot remains. */
     boolean hasCurrentPerlOwnerIdentityOtherThan(PerlOwnerSlot excluded) {
         if (localBindingExists || hasClosureCaptureOwner()
@@ -670,16 +700,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
 
     /** Whether this aggregate is itself held by a current Perl storage edge. */
     boolean hasCurrentPerlStorageOwner() {
-        if (refCount > 0 || localBindingExists || hasClosureCaptureOwner()
-                || hasPendingReturnOwner()) {
-            return true;
-        }
-        if ((this instanceof RuntimeArray || this instanceof RuntimeHash)
-                && (GlobalVariable.isPackageRootedAggregate(this)
-                    || MyVarCleanupStack.isRegistered(this))) {
-            return true;
-        }
-        return hasCurrentPerlOwnerSlotIdentity();
+        return hasPersistentPerlStrongOwnerIdentity();
     }
 
     boolean hasDirectOwnerSlotProofForReleasedWeakReferent() {

@@ -23,7 +23,6 @@ priorities and future plans.
 - Load `Exporter::Heavy` before compile-time imports so `export_to_level` targets the importing package (#1649).
 - Preserve aggregate element ownership when a foreach lexical aliases a stored scalar during scope cleanup (#1649).
 - Resolve `SvREFCNT` live-scalar adjustments from current owner slots instead of scanning the lexical registry (#1649).
-- Release temporary Try::Tiny callbacks after void-context `Sub::Util::set_subname` calls (#1649).
 - Preserve hash-held anonymous IO owners when interpreter scope cleanup returns that hash (#1649).
 - Normalize out-of-range calendar fields in `Time::Piece->strptime`, matching Perl date overflow behavior (#2001).
 - Reduce GC pressure in inner `eval STRING` compilation: replace `FastStack<T>`'s default lazy ArrayList initialisation (first-push allocates `Object[10]`) with an explicit `super(2)` constructor, cutting per-stack array allocation 5× for the 16 `FastStack` fields in each snapshot `ScopedSymbolTable`; replace the O(N log N) `getAllVisibleVariables()` `TreeMap`+`HashSet` build inside `getVisibleVariableRegistry()` and `getVisibleOurRegistry()` with direct O(N) iteration of `symbolTableStack` using `putIfAbsent` for shadowing, caching results until the next `clearVisibleVariablesCache()` invalidation — eliminating `TreeMap.put`, `TreeMap.successor`, and `HashSet.add` allocations from the JFR execution-sample profile for inner eval compilation.
