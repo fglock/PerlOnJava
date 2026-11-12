@@ -714,6 +714,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         refreshUntrackedReferenceOwner();
     }
 
+    /** Refresh this direct cell after its aggregate's last current Perl owner leaves. */
+    void reconcileContainerOwnerAfterAggregateTransfer(RuntimeBase owner) {
+        if (owner == null || isSharedImmutableLiteralWithoutOwnerTracking()) return;
+        reconcileContainerOwnerAfterMutation(owner);
+        if (MortalList.deferAggregateRefreshUntilTemporaryRootsLeave(owner)) return;
+        if (isStoredInContainer(owner)) updateUntrackedReferenceOwner(true);
+    }
+
     private void removeContainerOwnerTracking(RuntimeBase expectedOwner) {
         boolean replaceCurrentOwner;
         synchronized (this) {
@@ -1434,12 +1442,17 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     void finalizeUntrackedValueAfterScopeExit(RuntimeBase expectedReferent) {
         if (expectedReferent == null) return;
         refreshUntrackedReferenceOwner();
-        if (hasLiveCurrentStrongValueSlot()) return;
+        if (hasDurableStrongValueSlot()) return;
         releaseUntrackedReferenceOwner(expectedReferent);
         WeakRefRegistry.finalizeUntrackedAfterOwnerScopeExit(expectedReferent);
     }
 
     private void updateUntrackedReferenceOwner(RuntimeBase referent) {
+        updateUntrackedReferenceOwner(referent, false);
+    }
+
+    private void updateUntrackedReferenceOwner(RuntimeBase referent,
+            boolean requireCurrentValueOwner) {
         // Container-owner proofs are needed only while this scalar holds a
         // RuntimeBase reference. Primitive values have no referent to retain,
         // and scanning their container history on every array insertion turns
@@ -1480,7 +1493,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     || packageAggregateValueOwner
                     || liveAggregateValueOwner)
                 && !countedOwnerActive;
-        if (hasLiveCurrentStrongValueSlot() && untrackedStrongValue) {
+        boolean hasValueOwner = requireCurrentValueOwner
+                ? hasLiveCurrentStrongValueSlot() : hasDurableStrongValueSlot();
+        if (hasValueOwner && untrackedStrongValue) {
             retainUntrackedReferenceOwner(referent);
         } else if (untrackedReferenceOwnerSlot != null) {
             releaseUntrackedReferenceOwner(untrackedReferenceOwnerSlot.referent());

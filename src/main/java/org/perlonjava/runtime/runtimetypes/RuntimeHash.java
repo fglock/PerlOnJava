@@ -317,7 +317,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         if (elements == null) return;
         for (RuntimeScalar value : new ArrayList<>(elements.values())) {
             if (MortalList.deferAggregateRefreshUntilTemporaryRootsLeave(this)) return;
-            if (value != null) value.reconcileContainerOwnerAfterMutation(this);
+            if (value != null) value.reconcileContainerOwnerAfterAggregateTransfer(this);
         }
     }
 
