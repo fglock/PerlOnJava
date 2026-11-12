@@ -2481,6 +2481,17 @@ public class ReachabilityWalker {
                 }
                 continue;
             }
+            if (slot.kind() == PerlOwnerSlot.Kind.SCALAR_CELL
+                    || slot.kind() == PerlOwnerSlot.Kind.CODE_SLOT) {
+                RuntimeScalar scalarOwner = slot.countedScalarOwner();
+                if (scalarOwner != null
+                        && DestroyDispatch.isCurrentPerlOwnerSlot(value, slot)) {
+                    // A root may hold a reference to the current scalar cell
+                    // without directly holding the value stored in that cell.
+                    todo.addLast(new TemporaryRootOwnerAncestor(scalarOwner, depth + 1));
+                }
+                continue;
+            }
             if (slot.kind() == PerlOwnerSlot.Kind.SCALAR_CAPTURE
                     || slot.kind() == PerlOwnerSlot.Kind.CLOSURE_PAD) {
                 RuntimeCode captureOwner = slot.captureOwner();
