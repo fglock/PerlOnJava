@@ -13,20 +13,25 @@ thread, and HTML-Tree regressions pass with corrective sweeps disabled.
 | Phase 2: retire reachability fallbacks | Active | Owner-source proofs and exact-head CPAN acceptance remain. |
 
 **Current checkpoint (2026-11-12):** Sweep-removal work remains active under
-#2043; PR #1938 is open and draft at remote head `ecbf1978c6`, with all reported
-checks green, including Ubuntu and Windows. Candidate branch
-`wip/issue2043-batch-20261112` is at `048bf8c615`, five commits beyond that
-head. It adds a bounded positive proof through ordinary array/hash owner slots
-and a deferred refresh for untracked aggregate cells when scope cleanup meets
-a direct temporary-root lease. The fallback graph walk remains for incomplete
-or unsupported owner paths.
+#2043. PR #1938 is open and draft at remote head `4f24e5daa3`; Ubuntu and Windows
+CI both pass on that head. Candidate branch `wip/issue2043-batch-20261112` is at
+`23b34a7315`, two commits ahead. The candidate adds a bounded positive proof
+through ordinary array/hash owner slots and current
+`SCALAR_REFERENCE_CONTENTS` slots, plus a deferred refresh for untracked
+aggregate cells when scope cleanup meets a direct temporary-root lease. The
+fallback graph walk remains for incomplete or unsupported owner paths.
 
 The new `UnownedTemporaryArrayAggregateOwnerTest` reproduces stale
 `UNTRACKED_REFERENCE` owners after scope cleanup returns under a root lease.
 Its unfixed-parent shard failed only this test (1,623 tests, one failure); the
-candidate full `nice -n 19 timeout 2400 make` passes in 7m41. Logs:
+candidate full `nice -n 19 timeout 2400 make` passed in 7m41. Logs:
 `/private/tmp/issue2043-scope-exit-parent-test.log` and
-`/private/tmp/issue2043-batch-make-048bf8c615.log`. On this candidate, DBIx
+`/private/tmp/issue2043-batch-make-048bf8c615.log`. The new
+`TemporaryRootScalarContentsOwnerTest` proves reachability through a validated
+scalar-reference cell while an opaque hash branch remains unvisited. Its
+focused make target passes in 29 seconds; the full gate on `23b34a7315` passes
+in 7m46 (`/private/tmp/issue2043-scalar-contents-make-23b34a7315.log`). On this
+candidate, DBIx
 `t/100populate.t` passes 108/108 and LeakTracer finds no retained references
 (`/private/tmp/issue2043-dbix-t100-048bf8c615.log`).
 
@@ -44,12 +49,11 @@ after 159 MB of trace output; compressed evidence is
 fix as a bounded diagnostic result, not as resolution of the DBIx failure.
 Exact-head CPAN acceptance remains open.
 
-Next: instrument the failing cleanup boundary to distinguish direct from
-transitive temporary-root ancestry, then fix and cover the confirmed owner
-path. Continue retiring the temporary-root fallback only where explicit owner
-provenance proves reachability; keep END-boundary weak retirement until an
-equivalent owner event preserves rescued objects through END callbacks. The
-`SvREFCNT` lexical scan is retired. RSA API limits remain tracked in
+Next: continue the owner-source audit for remaining temporary-root fallback
+paths, and instrument the DBIx cleanup boundary only when traces identify a
+specific owner transition to inspect. Keep END-boundary weak retirement until
+an equivalent owner event preserves rescued objects through END callbacks.
+The `SvREFCNT` lexical scan is retired. RSA API limits remain tracked in
 [issue #2031](https://github.com/fglock/PerlOnJava/issues/2031). Keep PR #1938
 open and draft; poll CI no more than once every six minutes.
 The final callsite search found no production caller for the legacy
