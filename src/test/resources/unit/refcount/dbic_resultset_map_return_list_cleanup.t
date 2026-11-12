@@ -46,7 +46,6 @@ fire_resultsets_and_restore(\%weak);
 
 if (defined $weak{row} && defined &Internals::jperl_owner_trace) {
     diag('row remains live: ' . Internals::jperl_owner_trace($weak{row}));
-    diag('row root path: ' . (Internals::jperl_trace_to($weak{row}) // '<unreachable>'));
 }
 ok(!defined $weak{row}, 'row is released after resultset enumeration and temporary result cleanup');
 
