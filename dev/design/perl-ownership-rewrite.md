@@ -15,12 +15,11 @@ thread, and HTML-Tree regressions pass with corrective sweeps disabled.
 **Current checkpoint (2026-11-12):** Issue #1649 remains active. PR #1938 is
 open and draft at `790210706c5851ab673ef462ba08c9c2c4310974`. The full
 `nice -n 19 timeout 3600 make` passed on runtime/test source `b20dc9441a` in
-7m51 (`/tmp/issue1649-pr1938-owner-slot-svrefcnt-final-b20dc9441a.log`). Commits
-after b20 through 790 are documentation only. On 790, CodeQL, static analysis,
-and dependency submission checks pass; Ubuntu and Windows remain pending. The
-fresh-home CPAN release gate has completed its build and is running
-`Excel::Writer::XLSX`; 909 test files are marked `ok` so far, with no
-failure line. Its full log is
+7m51 (`/tmp/issue1649-pr1938-owner-slot-svrefcnt-final-b20dc9441a.log`). The
+only commit after b20 through 790 is a documentation checkpoint. On 790, all
+CI checks pass, including Ubuntu and Windows. The fresh-home CPAN release gate
+passed `Excel::Writer::XLSX` (1,247 files, 5,138 tests); it is now running
+Mojolicious. Its full log is
 `/private/tmp/issue1649-pr1938-route-fix-20261112/build/reports/cpan-release-acceptance.log`.
 
 Delivered runtime fixes include the Mojolicious aggregate-element owner
