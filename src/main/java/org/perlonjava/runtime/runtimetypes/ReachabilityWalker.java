@@ -2481,6 +2481,28 @@ public class ReachabilityWalker {
                 }
                 continue;
             }
+            if (slot.kind() == PerlOwnerSlot.Kind.SCALAR_CAPTURE
+                    || slot.kind() == PerlOwnerSlot.Kind.CLOSURE_PAD) {
+                RuntimeCode captureOwner = slot.captureOwner();
+                if (captureOwner != null
+                        && DestroyDispatch.isCurrentPerlOwnerSlot(value, slot)) {
+                    // A current capture identity connects this pad value to
+                    // its CODE owner. A direct temporary-root edge to that
+                    // CODE proves reachability without opening its captures.
+                    todo.addLast(new TemporaryRootOwnerAncestor(captureOwner, depth + 1));
+                }
+                continue;
+            }
+            if (slot.kind() == PerlOwnerSlot.Kind.CODE_PAD_CONSTANT) {
+                if (DestroyDispatch.isCurrentPerlOwnerSlot(value, slot)) {
+                    for (RuntimeBase codeOwner : slot.endBoundaryOwnerSources()) {
+                        if (codeOwner instanceof RuntimeCode) {
+                            todo.addLast(new TemporaryRootOwnerAncestor(codeOwner, depth + 1));
+                        }
+                    }
+                }
+                continue;
+            }
             RuntimeScalar scalarOwner = switch (slot.kind()) {
                 case ARRAY_ELEMENT, HASH_ELEMENT -> slot.countedScalarOwner();
                 case UNTRACKED_REFERENCE -> slot.untrackedScalarOwner();
