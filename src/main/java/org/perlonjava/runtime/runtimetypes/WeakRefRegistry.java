@@ -509,7 +509,31 @@ public class WeakRefRegistry {
             // for compiled call sites after a glob is deleted. The visible
             // stash checks above distinguish live Perl CODE owners from those
             // Java-facing pins.
-            if (slot.isActive() && slot.kind() != PerlOwnerSlot.Kind.CODE_SLOT) return true;
+            if (!slot.isActive() || slot.kind() == PerlOwnerSlot.Kind.CODE_SLOT) continue;
+            if (slot.kind() == PerlOwnerSlot.Kind.UNTRACKED_REFERENCE) {
+                RuntimeScalar owner = slot.untrackedScalarOwner();
+                boolean currentStrongValue = owner != null
+                        && owner.untrackedReferenceOwnerSlot() == slot
+                        && !isweak(owner)
+                        && (owner.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                        && owner.value == code
+                        && owner.hasLiveCurrentStrongValueSlot();
+                if (currentStrongValue) return true;
+
+                // Container cells can outlive the active call frame that
+                // briefly housed them. An UNTRACKED_REFERENCE token alone
+                // does not prove a live Perl owner: retire it when its scalar
+                // no longer occupies current strong storage, so a stale @_
+                // array cannot keep a weak callback alive after goto.
+                if (owner != null && owner.untrackedReferenceOwnerSlot() == slot) {
+                    owner.releaseUntrackedReferenceOwner(code);
+                } else {
+                    slot.release();
+                    onStrongOwnerSlotReleased(code);
+                }
+                continue;
+            }
+            return true;
         }
         return false;
     }
