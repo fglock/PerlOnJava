@@ -139,6 +139,11 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 && map.ownsHashAliasCell(key, cell);
     }
 
+    boolean ownsHashAliasCellOwner(PerlOwnerSlot owner, RuntimeScalar cell) {
+        return elements instanceof RuntimeHashElementMap map
+                && map.ownsHashAliasCellOwner(owner, cell);
+    }
+
     boolean containsElementCellIdentity(RuntimeScalar cell) {
         if (cell == null || elements == null) return false;
         if (elements instanceof RuntimeHashElementMap map) {
@@ -345,6 +350,8 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     private static final class RuntimeHashElementMap extends StableHashMap<String, RuntimeScalar> {
         private final RuntimeHash owner;
         private final Map<String, HashAliasCellOwner> hashAliasCellOwners = new HashMap<>();
+        private final IdentityHashMap<PerlOwnerSlot, String> hashAliasCellOwnerKeys =
+                new IdentityHashMap<>();
         private final IdentityHashMap<RuntimeScalar, Integer> valueIdentityCounts =
                 new IdentityHashMap<>();
         private long stableMethodFieldCacheRevision;
@@ -377,6 +384,14 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             return aliasOwner != null && aliasOwner.cell == cell;
         }
 
+        private boolean ownsHashAliasCellOwner(PerlOwnerSlot owner, RuntimeScalar cell) {
+            if (!hashAliasCellOwnerKeys.containsKey(owner)) return false;
+            String key = hashAliasCellOwnerKeys.get(owner);
+            HashAliasCellOwner aliasOwner = hashAliasCellOwners.get(key);
+            return aliasOwner != null && aliasOwner.owner == owner
+                    && aliasOwner.cell == cell && super.get(key) == cell;
+        }
+
         private Map<String, RuntimeScalar> aliasedCellsSnapshot() {
             Map<String, RuntimeScalar> snapshot = new HashMap<>();
             for (Map.Entry<String, HashAliasCellOwner> entry : hashAliasCellOwners.entrySet()) {
@@ -391,20 +406,28 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                                                PerlOwnerSlot nextOwner) {
             HashAliasCellOwner previous = hashAliasCellOwners.put(
                     key, new HashAliasCellOwner(cell, nextOwner));
-            if (previous != null && previous.owner != nextOwner) previous.owner.release();
+            if (previous != null && previous.owner != nextOwner) {
+                hashAliasCellOwnerKeys.remove(previous.owner);
+                previous.owner.release();
+            }
+            hashAliasCellOwnerKeys.put(nextOwner, key);
         }
 
         private void reconcileHashAliasCellOwner(String key, RuntimeScalar current) {
             HashAliasCellOwner aliasOwner = hashAliasCellOwners.get(key);
             if (aliasOwner != null && aliasOwner.cell != current) {
                 hashAliasCellOwners.remove(key);
+                hashAliasCellOwnerKeys.remove(aliasOwner.owner);
                 aliasOwner.owner.release();
             }
         }
 
         private void releaseHashAliasCellOwner(String key) {
             HashAliasCellOwner aliasOwner = hashAliasCellOwners.remove(key);
-            if (aliasOwner != null) aliasOwner.owner.release();
+            if (aliasOwner != null) {
+                hashAliasCellOwnerKeys.remove(aliasOwner.owner);
+                aliasOwner.owner.release();
+            }
         }
 
         private void releaseAllHashAliasCellOwners() {
@@ -414,6 +437,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 owners.add(aliasOwner.owner);
             }
             hashAliasCellOwners.clear();
+            hashAliasCellOwnerKeys.clear();
             for (PerlOwnerSlot aliasOwner : owners) aliasOwner.release();
         }
 
