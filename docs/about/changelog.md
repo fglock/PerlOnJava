@@ -51,7 +51,7 @@ priorities and future plans.
 - Drain scoped owner releases at block exit even while statement flushing is suppressed, preserving earlier pending releases (#2043).
 - Clear weak observers from rescued object graphs at the END boundary while preserving independently rooted objects and strong Perl edges (#1649).
 - Short-circuit temporary-root reachability checks when direct strong edges prove the referent is reachable (#1649).
-- Prove temporary-root reachability through current aggregate, scalar-cell, CODE-slot, argument-container, tied-handler, untracked-scalar, scalar-reference, closure-capture, CODE-state, array-refalias, hash-refalias, and compiled CODE pad-constant owner slots before falling back to a graph traversal (#2043).
+- Prove temporary-root reachability through current aggregate, scalar-cell, CODE-slot, argument-container, tied-handler, untracked-scalar, scalar-reference, closure-capture, CODE-state, array-refalias, hash-refalias, and compiled CODE pad-constant owner slots, including deep current-owner chains, before falling back to a graph traversal (#2043).
 - Skip rescued-graph END traversal when the runtime has no registered weak observers (#1649).
 - Load `Exporter::Heavy` before compile-time imports so `export_to_level` targets the importing package (#1649).
 - Preserve aggregate element ownership when a foreach lexical aliases a stored scalar during scope cleanup (#1649).
