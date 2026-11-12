@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More tests => 5;
+use Test::More tests => 6;
 use Scalar::Util qw(weaken);
 use Sub::Util ();
 use Try::Tiny;
@@ -67,7 +67,14 @@ my $id;
 }
 
 is($id, 42, 'the nested Try::Tiny calls return the scalar last-insert-id result');
-ok(!(grep { defined $_ } @{$weak_callbacks{try} || []}),
+my @recorded_try_callbacks = @{$weak_callbacks{try} || []};
+is(scalar @recorded_try_callbacks, 2,
+    'the outer transaction and inner storage try callbacks were both observed');
+my @retained_callback_indices = grep { defined $recorded_try_callbacks[$_] }
+    0 .. $#recorded_try_callbacks;
+diag('retained Try::Tiny try callback indices: '
+    . join(', ', @retained_callback_indices)) if @retained_callback_indices;
+ok(!@retained_callback_indices,
     'all Try::Tiny callback blocks are released after goto forwarding');
 ok(!defined($weak_dbh), 'the temporary try callback releases its captured DBI handle');
 ok(!defined($weak_source), 'the temporary try callback releases its captured result source');
