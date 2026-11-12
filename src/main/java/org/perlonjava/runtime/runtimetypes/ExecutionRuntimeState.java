@@ -105,6 +105,8 @@ public final class ExecutionRuntimeState {
     final IdentityHashMap<RuntimeBase, Boolean> deferredArgumentAggregateCleanup =
             new IdentityHashMap<>();
     public final Deque<Boolean> hasArgsStack = new ArrayDeque<>();
+    /** One-shot caller()[4] overrides for methods entered through runtime dispatch. */
+    public final Deque<Boolean> methodCallHasArgsOverrides = new ArrayDeque<>();
     public final Deque<Integer> callContextStack = new ArrayDeque<>();
     /** Call-site packages pending association with the CV entered for each call context. */
     public final Deque<String> pendingCallerPackages = new ArrayDeque<>();
