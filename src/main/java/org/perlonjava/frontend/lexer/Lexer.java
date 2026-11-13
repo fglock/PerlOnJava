@@ -319,13 +319,23 @@ public class Lexer {
 
     public LexerToken consumeWhitespace() {
         int start = position;
-        while (position < length
-                && input.charAt(position) != '\n'
-                && (input.charAt(position) == ' ' || input.charAt(position) == '\t'
-                    || input.charAt(position) == '\r' || input.charAt(position) == '\f')) {
+        // Round 30: fast path for pure-space runs (the common case in formatted source).
+        while (position < length && input.charAt(position) == ' ') {
             position++;
         }
-        return LexerToken.of(LexerTokenType.WHITESPACE, input.substring(start, position));
+        // If we stopped at end-of-input, newline, or a non-tab/CR/FF char, it was pure spaces.
+        if (position >= length || input.charAt(position) == '\n'
+                || (input.charAt(position) != '\t' && input.charAt(position) != '\r'
+                    && input.charAt(position) != '\f')) {
+            return LexerToken.ofPureSpaces(position - start);
+        }
+        // Mixed whitespace (has tab/\r/\f): consume remaining chars and fall back to substring.
+        while (position < length && input.charAt(position) != '\n'
+                && (input.charAt(position) == '\t' || input.charAt(position) == '\r'
+                    || input.charAt(position) == '\f' || input.charAt(position) == ' ')) {
+            position++;
+        }
+        return new LexerToken(LexerTokenType.WHITESPACE, input.substring(start, position));
     }
 
     public LexerToken consumeNumber() {
@@ -704,7 +714,7 @@ public class Lexer {
             }
         }
 
-        position++;
-        return LexerToken.of(LexerTokenType.OPERATOR, input.substring(start, start + 1));
+        // Round 29: use ofOperatorChar to avoid substring() for single-char operator cache hits.
+        return LexerToken.ofOperatorChar(input.charAt(position++));
     }
 }

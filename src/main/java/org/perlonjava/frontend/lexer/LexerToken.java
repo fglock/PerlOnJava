@@ -57,6 +57,30 @@ public class LexerToken {
     }
 
     /**
+     * Return the cached OPERATOR token for {@code c}, or a new one when not cached.
+     * Avoids {@code String.valueOf(c)} for the common single-char case.
+     */
+    public static LexerToken ofOperatorChar(char c) {
+        if (c < 128) {
+            LexerToken cached = OPERATOR_CACHE[c];
+            if (cached != null) return cached;
+        }
+        return new LexerToken(LexerTokenType.OPERATOR, String.valueOf(c));
+    }
+
+    /**
+     * Return the cached WHITESPACE token for a run of {@code count} spaces,
+     * or a new one when the count exceeds the cache range.
+     * Avoids {@code String.substring()} for the common indentation case.
+     */
+    public static LexerToken ofPureSpaces(int count) {
+        if (count >= 1 && count <= MAX_CACHED_SPACES) {
+            return SPACE_CACHE[count];
+        }
+        return new LexerToken(LexerTokenType.WHITESPACE, " ".repeat(count));
+    }
+
+    /**
      * Factory that returns a cached instance for common tokens, or allocates a new one.
      * Use this instead of {@code new LexerToken(...)} everywhere except the static
      * initialiser above.

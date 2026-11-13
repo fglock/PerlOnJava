@@ -33,6 +33,28 @@ import java.util.concurrent.atomic.AtomicInteger;
  * - Generate 3-address code (rd = rs1 op rs2)
  */
 public class BytecodeCompiler implements Visitor {
+    // Round 31: Replace 15-condition OR chain in emit() with a single array lookup.
+    // Covers every opcode that sets usesLocalization. Max opcode value is 554 (LOCAL_SCALAR_DYNAMIC).
+    private static final boolean[] IS_LOCAL_OPCODE;
+    static {
+        IS_LOCAL_OPCODE = new boolean[600];
+        IS_LOCAL_OPCODE[Opcodes.LOCAL_SCALAR]            = true;
+        IS_LOCAL_OPCODE[Opcodes.LOCAL_ARRAY]             = true;
+        IS_LOCAL_OPCODE[Opcodes.LOCAL_HASH]              = true;
+        IS_LOCAL_OPCODE[Opcodes.LOCAL_GLOB]              = true;
+        IS_LOCAL_OPCODE[Opcodes.LOCAL_GLOB_REF]          = true;
+        IS_LOCAL_OPCODE[Opcodes.LOCAL_SCALAR_DYNAMIC]    = true;
+        IS_LOCAL_OPCODE[Opcodes.PUSH_LOCAL_VARIABLE]     = true;
+        IS_LOCAL_OPCODE[Opcodes.LOCAL_SCALAR_SAVE_LEVEL] = true;
+        IS_LOCAL_OPCODE[Opcodes.HASH_DELETE_LOCAL]       = true;
+        IS_LOCAL_OPCODE[Opcodes.ARRAY_DELETE_LOCAL]      = true;
+        IS_LOCAL_OPCODE[Opcodes.HASH_SLICE_DELETE_LOCAL] = true;
+        IS_LOCAL_OPCODE[Opcodes.ARRAY_SLICE_DELETE_LOCAL]= true;
+        IS_LOCAL_OPCODE[Opcodes.PUSH_DEFER]              = true;
+        IS_LOCAL_OPCODE[Opcodes.PUSH_CANCEL]             = true;
+        IS_LOCAL_OPCODE[Opcodes.SAVE_REGEX_STATE]        = true;
+    }
+
     /**
      * Labels nested in a loop body cannot be entered from an eval boundary:
      * the loop's iterator and control-block setup has not executed yet.  Keep
@@ -7119,15 +7141,8 @@ public class BytecodeCompiler implements Visitor {
     }
 
     void emit(short opcode) {
-        // Track if any localization opcodes are emitted (including defer blocks which use DVM)
-        if (opcode == Opcodes.LOCAL_SCALAR || opcode == Opcodes.LOCAL_ARRAY ||
-                opcode == Opcodes.LOCAL_HASH || opcode == Opcodes.LOCAL_GLOB || opcode == Opcodes.LOCAL_GLOB_REF ||
-                opcode == Opcodes.LOCAL_SCALAR_DYNAMIC ||
-                opcode == Opcodes.PUSH_LOCAL_VARIABLE || opcode == Opcodes.LOCAL_SCALAR_SAVE_LEVEL ||
-                opcode == Opcodes.HASH_DELETE_LOCAL || opcode == Opcodes.ARRAY_DELETE_LOCAL ||
-                opcode == Opcodes.HASH_SLICE_DELETE_LOCAL || opcode == Opcodes.ARRAY_SLICE_DELETE_LOCAL ||
-                opcode == Opcodes.PUSH_DEFER || opcode == Opcodes.PUSH_CANCEL
-                || opcode == Opcodes.SAVE_REGEX_STATE) {
+        // Round 31: single array lookup replaces a 15-condition OR chain.
+        if (!usesLocalization && opcode < IS_LOCAL_OPCODE.length && IS_LOCAL_OPCODE[opcode]) {
             usesLocalization = true;
         }
         bytecode.add((int) opcode);
@@ -7138,15 +7153,8 @@ public class BytecodeCompiler implements Visitor {
      * Use this for opcodes that may throw exceptions (DIE, method calls, etc.)
      */
     void emitWithToken(short opcode, int tokenIndex) {
-        // Track if any localization opcodes are emitted (including defer blocks which use DVM)
-        if (opcode == Opcodes.LOCAL_SCALAR || opcode == Opcodes.LOCAL_ARRAY ||
-                opcode == Opcodes.LOCAL_HASH || opcode == Opcodes.LOCAL_GLOB || opcode == Opcodes.LOCAL_GLOB_REF ||
-                opcode == Opcodes.LOCAL_SCALAR_DYNAMIC ||
-                opcode == Opcodes.PUSH_LOCAL_VARIABLE || opcode == Opcodes.LOCAL_SCALAR_SAVE_LEVEL ||
-                opcode == Opcodes.HASH_DELETE_LOCAL || opcode == Opcodes.ARRAY_DELETE_LOCAL ||
-                opcode == Opcodes.HASH_SLICE_DELETE_LOCAL || opcode == Opcodes.ARRAY_SLICE_DELETE_LOCAL ||
-                opcode == Opcodes.PUSH_DEFER || opcode == Opcodes.PUSH_CANCEL
-                || opcode == Opcodes.SAVE_REGEX_STATE) {
+        // Round 31: single array lookup replaces a 15-condition OR chain.
+        if (!usesLocalization && opcode < IS_LOCAL_OPCODE.length && IS_LOCAL_OPCODE[opcode]) {
             usesLocalization = true;
         }
         int pc = bytecode.size();
