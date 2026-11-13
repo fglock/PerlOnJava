@@ -947,7 +947,7 @@ public class RuntimeList extends RuntimeBase {
                     if (lhs.isKeysLvalue()) lhs.rejectKeysLvalueListAssignment();
                     RuntimeScalar rhs = i < rhsSize ? rhsElements.get(i) : null;
                     lhs.set(rhs == null ? new RuntimeScalar() : rhs);
-                    if (result != null) result.elements.add(lhs);
+                    if (result != null) result.addBorrowedListResultValue(lhs);
                 }
                 return result;
             }
@@ -965,7 +965,7 @@ public class RuntimeList extends RuntimeBase {
                 RuntimeScalar lhs = (RuntimeScalar) elements.get(i);
                 if (lhs.isKeysLvalue()) lhs.rejectKeysLvalueListAssignment();
                 lhs.set(i < rhsValues.length ? rhsValues[i] : new RuntimeScalar());
-                if (result != null) result.elements.add(lhs);
+                if (result != null) result.addBorrowedListResultValue(lhs);
             }
             return result;
         } finally {
