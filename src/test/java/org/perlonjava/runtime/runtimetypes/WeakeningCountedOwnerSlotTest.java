@@ -24,7 +24,7 @@ class WeakeningCountedOwnerSlotTest {
             survivingOwner.set(referent.createAnonymousReference());
             try {
                 assertEquals(2, referent.countedOwnerSlotCount());
-                referent.refCount = 1; // Model a transient selective-count undercount.
+                referent.setTrackedRefCount(1); // Model a transient selective-count undercount.
 
                 try (MortalList.ReachabilityQueryMeasurement measurement =
                              MortalList.measureReachabilityQueries()) {

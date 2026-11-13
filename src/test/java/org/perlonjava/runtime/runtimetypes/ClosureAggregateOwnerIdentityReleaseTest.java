@@ -25,7 +25,7 @@ class ClosureAggregateOwnerIdentityReleaseTest {
 
             RuntimeScalar weakCode = new RuntimeScalar(closure);
             WeakRefRegistry.weaken(weakCode);
-            closure.refCount = 7; // stale compatibility count, with no strong owner slot
+            closure.setTrackedRefCount(7); // stale compatibility count, with no strong owner slot
             assertFalse(closure.hasPerlOwnerForCaptureOtherThan(null));
 
             try (MortalList.ReachabilityQueryMeasurement measurement =
@@ -50,7 +50,7 @@ class ClosureAggregateOwnerIdentityReleaseTest {
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeArray capturedPad = new RuntimeArray();
             RuntimeCode closure = new RuntimeCode(null, List.of());
-            closure.refCount = 0;
+            closure.setTrackedRefCount(0);
             PerlOwnerSlot padOwner = capturedPad.retainClosureCaptureOwner(closure);
             closure.capturedAggregates = new RuntimeBase[] {capturedPad};
             closure.capturedAggregateOwnerSlots = new PerlOwnerSlot[] {padOwner};

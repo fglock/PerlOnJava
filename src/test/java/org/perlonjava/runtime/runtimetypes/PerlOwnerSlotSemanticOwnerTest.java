@@ -113,7 +113,7 @@ class PerlOwnerSlotSemanticOwnerTest {
         assertThrows(IllegalStateException.class, () -> deadSlot.acquireNativeOwner(destroyed));
 
         RuntimeHash live = new RuntimeHash();
-        live.refCount = 0;
+        live.setTrackedRefCount(0);
         PerlOwnerSlot pendingSlot = new PerlOwnerSlot(PerlOwnerSlot.Kind.CLOSURE_PAD);
         pendingSlot.acquireLegacyCapture(live);
         assertThrows(IllegalStateException.class, () -> pendingSlot.acquireNativeOwner(live));

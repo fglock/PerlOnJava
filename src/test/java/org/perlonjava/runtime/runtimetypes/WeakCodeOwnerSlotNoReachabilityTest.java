@@ -13,7 +13,7 @@ class WeakCodeOwnerSlotNoReachabilityTest {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeCode code = new RuntimeCode((args, context) -> new RuntimeList(), null);
-            code.refCount = 0;
+            code.setTrackedRefCount(0);
             RuntimeScalar strongOwner = new RuntimeScalar();
             RuntimeScalar weakOwner = new RuntimeScalar();
             int mark = MyVarCleanupStack.pushMark();

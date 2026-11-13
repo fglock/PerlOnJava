@@ -21,7 +21,7 @@ class RuntimeRegexCallbackCountedOwnerTest {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeCode code = new RuntimeCode(null, List.of());
-            code.refCount = 0;
+            code.setTrackedRefCount(0);
             RuntimeRegexCallback callback = callback(code);
 
             callback.retainOwner();
@@ -46,14 +46,14 @@ class RuntimeRegexCallbackCountedOwnerTest {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeCode code = new RuntimeCode(null, List.of());
-            code.refCount = -1;
+            code.markRefCountUntracked();
             RuntimeRegexCallback callback = callback(code);
 
             callback.retainOwner();
 
             PerlOwnerSlot slot = callbackSlot(code);
             assertFalse(slot.isCountedNativeOwner());
-            code.refCount = 3;
+            code.setTrackedRefCount(3);
 
             callback.releaseOwner();
 

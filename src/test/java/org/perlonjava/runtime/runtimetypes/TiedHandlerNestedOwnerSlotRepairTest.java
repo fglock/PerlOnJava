@@ -32,7 +32,7 @@ class TiedHandlerNestedOwnerSlotRepairTest {
                 assertEquals(1, target.ownerSlotCount(PerlOwnerSlot.Kind.HASH_ELEMENT));
                 assertTrue(target.possiblyStoredInTiedHandler);
 
-                target.refCount = 1; // Model a legacy count missing the tied hash owner.
+                target.setTrackedRefCount(1); // Model a legacy count missing the tied hash owner.
                 try (MortalList.ReachabilityQueryMeasurement measurement =
                              MortalList.measureReachabilityQueries()) {
                     MortalList.deferDecrementIfTracked(released);

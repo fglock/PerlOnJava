@@ -23,7 +23,7 @@ class CountedOwnerSlotRepairsUnblessedReferentTest {
 
             try {
                 assertEquals(2, target.countedOwnerSlotCount());
-                target.refCount = 1; // Model a transient legacy-count undercount.
+                target.setTrackedRefCount(1); // Model a transient legacy-count undercount.
 
                 try (MortalList.ReachabilityQueryMeasurement measurement =
                              MortalList.measureReachabilityQueries()) {

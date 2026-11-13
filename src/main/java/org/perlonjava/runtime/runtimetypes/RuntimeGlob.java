@@ -2312,7 +2312,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         if (isUnderscoreGlobName(this.globName)) {
             PerlRuntime.current().executionState().explicitlyUndefinedGlobArraySlots.add(this.globName);
         }
-        if (oldArray != null && oldArray.refCount == -1) oldArray.undefine();
+        if (oldArray != null && oldArray.isRefCountUntracked()) oldArray.undefine();
         // Keep an empty @ISA slot after undefining a glob. A later
         // `*Class::ISA = *Empty` must alias that empty source rather than
         // rediscovering Class's former inheritance array through the alias
@@ -2325,7 +2325,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
 
         // HASH follows the same detached-but-live-reference semantics.
         RuntimeHash oldHash = GlobalVariable.globalHashes.remove(this.globName);
-        if (oldHash != null && oldHash.refCount == -1) oldHash.undefine();
+        if (oldHash != null && oldHash.isRefCountUntracked()) oldHash.undefine();
 
         // Undefine IO - detach the handle from the symbol without closing it,
         // so a saved *Pkg::name{IO} reference can be re-installed later.
@@ -2623,7 +2623,8 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                         "RuntimeGlob.restoreLocalizedCodeRef");
                 MortalList.releaseCountedOwnerImmediately(
                         localCode, "RuntimeGlob.restoreLocalizedCodeRef");
-            } else if (localBase.refCount == 0 && localBase instanceof RuntimeCode) {
+            } else if (localBase.isRefCountTracked() && localBase.refCount == 0
+                    && localBase instanceof RuntimeCode) {
                 DestroyDispatch.callDestroy(localBase);
             }
         }

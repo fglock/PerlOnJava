@@ -18,7 +18,7 @@ class LocalizedGlobCodeOwnerReleaseTest {
 
             RuntimeGlob glob = new RuntimeGlob(name);
             RuntimeCode localized = code();
-            localized.refCount = 2;
+            localized.setTrackedRefCount(2);
             localized.stashRefCount = 1;
             RuntimeScalar capturedPad = new RuntimeScalar(42);
             localized.capturedScalars = new RuntimeScalar[] {capturedPad};
@@ -50,7 +50,7 @@ class LocalizedGlobCodeOwnerReleaseTest {
             } finally {
                 GlobalVariable.globalCodeRefs.remove(name);
                 if (localized.perlLifecycleState() != RuntimeBase.PerlLifecycleState.DESTROYED) {
-                    localized.refCount = 0;
+                    localized.setTrackedRefCount(0);
                     DestroyDispatch.callDestroy(localized);
                 }
             }

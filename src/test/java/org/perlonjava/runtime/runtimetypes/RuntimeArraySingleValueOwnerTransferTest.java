@@ -36,7 +36,7 @@ class RuntimeArraySingleValueOwnerTransferTest {
             try {
                 // The two live cells own the target, but simulate the transient
                 // selective-count undercount that deferred cleanup must repair.
-                target.refCount = 1;
+                target.setTrackedRefCount(1);
                 try (MortalList.ReachabilityQueryMeasurement measurement =
                              MortalList.measureReachabilityQueries()) {
                     WeakRefRegistry.weaken(observer);

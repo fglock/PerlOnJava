@@ -17,7 +17,7 @@ class GlobalCodeRefMapWeakSourceOwnerTest {
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             GlobalVariable.resetAllGlobals();
             RuntimeCode code = new RuntimeCode((args, context) -> new RuntimeList(), null);
-            code.refCount = 0;
+            code.setTrackedRefCount(0);
 
             RuntimeScalar otherStrongOwner = new RuntimeScalar(code);
             RuntimeScalar.incrementRefCountForContainerStore(

@@ -14,7 +14,7 @@ class TailCallActiveLexicalOwnerTest {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeArray target = new RuntimeArray();
-            target.refCount = 0;
+            target.setTrackedRefCount(0);
             target.localBindingExists = true;
 
             PerlOwnerSlot lexicalOwner = new PerlOwnerSlot(PerlOwnerSlot.Kind.ACTIVE_LEXICAL);
@@ -35,7 +35,7 @@ class TailCallActiveLexicalOwnerTest {
 
                 MortalList.releaseTailCallArgs(tailArguments);
 
-                assertEquals(WeakRefRegistry.WEAKLY_TRACKED, target.refCount,
+                assertEquals(RuntimeBase.RefCountTrackingState.WEAKLY_TRACKED, target.refCountTrackingState(),
                         "the active lexical identity defers cleanup without a fabricated count");
                 assertTrue(WeakRefRegistry.isweak(weakObserver),
                         "the surviving lexical owner keeps weak observers live");

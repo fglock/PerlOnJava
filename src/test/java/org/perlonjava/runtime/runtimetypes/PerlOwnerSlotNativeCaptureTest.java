@@ -14,7 +14,7 @@ class PerlOwnerSlotNativeCaptureTest {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeHash referent = new RuntimeHash();
-            referent.refCount = 4;
+            referent.setTrackedRefCount(4);
             PerlOwnerSlot slot = new PerlOwnerSlot(PerlOwnerSlot.Kind.CLOSURE_PAD);
 
             slot.acquireCapture(referent);

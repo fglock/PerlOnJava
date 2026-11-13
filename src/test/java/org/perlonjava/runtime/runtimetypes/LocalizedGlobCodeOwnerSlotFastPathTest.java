@@ -19,7 +19,7 @@ class LocalizedGlobCodeOwnerSlotFastPathTest {
 
             RuntimeGlob glob = new RuntimeGlob(name);
             RuntimeCode localized = code();
-            localized.refCount = 2;
+            localized.setTrackedRefCount(2);
             localized.stashRefCount = 1;
             localized.capturedScalars = new RuntimeScalar[] {new RuntimeScalar(42)};
 
@@ -51,7 +51,7 @@ class LocalizedGlobCodeOwnerSlotFastPathTest {
             } finally {
                 RuntimeCode.popActiveCode(localized);
                 GlobalVariable.globalCodeRefs.remove(name);
-                localized.refCount = 0;
+                localized.setTrackedRefCount(0);
                 DestroyDispatch.callDestroy(localized);
             }
         }

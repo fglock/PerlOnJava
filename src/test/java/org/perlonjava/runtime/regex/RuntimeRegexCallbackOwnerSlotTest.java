@@ -25,7 +25,7 @@ class RuntimeRegexCallbackOwnerSlotTest {
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeArray capturedPad = new RuntimeArray();
             RuntimeCode code = new RuntimeCode(null, List.of());
-            code.refCount = 0;
+            code.setTrackedRefCount(0);
             PerlOwnerSlot padOwner = capturedPad.retainClosureCaptureOwner(code);
             code.capturedAggregates = new RuntimeBase[] {capturedPad};
             code.capturedAggregateOwnerSlots = new PerlOwnerSlot[] {padOwner};
@@ -36,7 +36,7 @@ class RuntimeRegexCallbackOwnerSlotTest {
             callback.retainOwner();
             assertTrue(code.hasPerlOwnerForCaptureOtherThan(null));
 
-            code.refCount = 8; // compatibility count outlives the callback owner
+            code.setTrackedRefCount(8); // compatibility count outlives the callback owner
             MortalList.scopeExitCleanupArray(capturedPad);
             assertTrue(padOwner.isActive(), "the callback owner keeps its captured pad alive");
 

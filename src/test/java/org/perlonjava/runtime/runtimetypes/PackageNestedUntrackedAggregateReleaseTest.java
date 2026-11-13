@@ -21,10 +21,10 @@ class PackageNestedUntrackedAggregateReleaseTest {
 
             RuntimeArray target = new RuntimeArray();
             RuntimeScalar strong = target.createAnonymousReference();
-            target.refCount = -1;
+            target.markRefCountUntracked();
             packageRoot.elements.add(strong);
             RuntimeScalar weak = target.createAnonymousReference();
-            target.refCount = -1;
+            target.markRefCountUntracked();
 
             try {
                 assertEquals(1,
@@ -61,13 +61,13 @@ class PackageNestedUntrackedAggregateReleaseTest {
 
             RuntimeArray target = new RuntimeArray();
             RuntimeScalar firstOwner = target.createAnonymousReference();
-            target.refCount = -1;
+            target.markRefCountUntracked();
             packageRoot.elements.add(firstOwner);
             RuntimeScalar secondOwner = target.createAnonymousReference();
-            target.refCount = -1;
+            target.markRefCountUntracked();
             packageRoot.elements.add(secondOwner);
             RuntimeScalar weak = target.createAnonymousReference();
-            target.refCount = -1;
+            target.markRefCountUntracked();
 
             try {
                 assertEquals(2,
@@ -76,7 +76,7 @@ class PackageNestedUntrackedAggregateReleaseTest {
                 WeakRefRegistry.weaken(weak);
 
                 assertTrue(WeakRefRegistry.isweak(weak));
-                assertEquals(WeakRefRegistry.WEAKLY_TRACKED, target.refCount,
+                assertEquals(RuntimeBase.RefCountTrackingState.WEAKLY_TRACKED, target.refCountTrackingState(),
                         "weak tracking does not fabricate a positive owner count");
                 assertEquals(2, target.ownerSlotCount(
                         PerlOwnerSlot.Kind.UNTRACKED_REFERENCE));

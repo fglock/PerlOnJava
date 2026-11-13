@@ -25,7 +25,7 @@ class MethodInvocantVerifiedOwnerRepairTest {
 
                 // Exercise the same repair boundary as deferred and tail-call
                 // release without fabricating a scalar storage cell for the hold.
-                target.refCount = 0;
+                target.setTrackedRefCount(0);
                 assertTrue(target.restoreVerifiedCurrentCountedOwnerSlotRefCount());
                 assertEquals(1, target.refCount);
             } finally {

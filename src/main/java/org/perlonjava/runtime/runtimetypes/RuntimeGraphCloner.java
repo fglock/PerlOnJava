@@ -317,7 +317,7 @@ public class RuntimeGraphCloner {
             target.capturedAggregates = captureOwnerBody.capturedAggregates;
             target.capturedAggregateOwnerSlots = captureOwnerBody.capturedAggregateOwnerSlots;
             if (target.capturedScalars != null || target.capturedAggregates != null) {
-                target.refCount = 0;
+                target.startRefCountTracking();
             }
             target.rebindCaptureOwnerSlots();
         }
@@ -620,7 +620,7 @@ public class RuntimeGraphCloner {
                 }
             }
             if (target.capturedScalars != null || target.capturedAggregates != null) {
-                target.refCount = 0;
+                target.startRefCountTracking();
             }
         }
     }
@@ -1032,7 +1032,8 @@ public class RuntimeGraphCloner {
         target.storedInPackageGlobal = source.storedInPackageGlobal;
         target.isPackageGlobalRoot = source.isPackageGlobalRoot;
         // Refcount/lifecycle queues are reconstructed in the child runtime.
-        target.refCount = source.refCount >= 0 ? 0 : -1;
+        if (source.isRefCountTracked()) target.startRefCountTracking();
+        else target.markRefCountUntracked();
     }
 
     private int cloneBlessId(int sourceBlessId) {

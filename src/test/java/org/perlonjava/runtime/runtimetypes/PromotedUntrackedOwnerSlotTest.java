@@ -23,7 +23,7 @@ class PromotedUntrackedOwnerSlotTest {
             PerlOwnerSlot ownerSlot = element.untrackedReferenceOwnerSlot();
             assertNotNull(ownerSlot);
 
-            target.refCount = 0;
+            target.setTrackedRefCount(0);
 
             assertFalse(target.hasUntrackedReferenceOwnerSlotIdentity());
             assertFalse(ownerSlot.isActive(),
@@ -61,7 +61,7 @@ class PromotedUntrackedOwnerSlotTest {
                              MortalList.measureReachabilityQueries()) {
                     countedOwner.set(new RuntimeScalar());
 
-                    assertEquals(WeakRefRegistry.WEAKLY_TRACKED, target.refCount);
+                    assertEquals(RuntimeBase.RefCountTrackingState.WEAKLY_TRACKED, target.refCountTrackingState());
                     assertTrue(WeakRefRegistry.isweak(weak),
                             "the surviving package scalar keeps the weak referent alive");
                     assertEquals(0, measurement.stats().rootQueries);

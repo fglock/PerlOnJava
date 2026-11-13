@@ -31,7 +31,7 @@ class EndBlockOwnerIdentityTest {
                 return new RuntimeList();
             }, null);
             codeRef.set(code);
-            code.refCount = 0;
+            code.setTrackedRefCount(0);
             code.capturedScalars = new RuntimeScalar[]{capturedPad};
             code.capturedScalarOwnerSlots = new PerlOwnerSlot[]{
                     capturedPad.retainClosureCaptureSlot()};

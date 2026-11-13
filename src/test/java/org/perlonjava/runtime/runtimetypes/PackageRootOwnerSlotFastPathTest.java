@@ -35,7 +35,7 @@ class PackageRootOwnerSlotFastPathTest {
 
                 // Model the selective count's transient undercount. The two
                 // package hash slots remain the authoritative owner ledger.
-                target.refCount = 1;
+                target.setTrackedRefCount(1);
                 try (MortalList.ReachabilityQueryMeasurement measurement =
                              MortalList.measureReachabilityQueries()) {
                     left.elements.get("target").set(new RuntimeScalar());

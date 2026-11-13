@@ -25,7 +25,7 @@ class ClearedAggregateOwnerIdentityNoRootWalkTest {
             MyVarCleanupStack.register(lexicalContainer);
             MortalList.setActive(true);
             try {
-                referent.refCount = -1;
+                referent.markRefCountUntracked();
                 nestedCell.refreshUntrackedReferenceOwner();
                 PerlOwnerSlot nestedOwner = nestedCell.untrackedReferenceOwnerSlot();
                 assertTrue(nestedOwner != null && nestedOwner.isActive());
@@ -35,7 +35,7 @@ class ClearedAggregateOwnerIdentityNoRootWalkTest {
 
                 // Retire the exact owner while leaving a positive compatibility
                 // count behind, as can happen during async aggregate cleanup.
-                referent.refCount = 5;
+                referent.setTrackedRefCount(5);
                 referent.clearedOwnedAggregateElement = true;
                 nestedCell.set(new RuntimeScalar());
                 assertFalse(nestedOwner.isActive());

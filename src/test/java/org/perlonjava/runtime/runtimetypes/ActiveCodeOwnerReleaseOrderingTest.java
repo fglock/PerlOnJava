@@ -15,7 +15,7 @@ class ActiveCodeOwnerReleaseOrderingTest {
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeScalar pad = new RuntimeScalar(42);
             ObservedRuntimeCode code = new ObservedRuntimeCode();
-            code.refCount = 0;
+            code.setTrackedRefCount(0);
             code.capturedScalars = new RuntimeScalar[] {pad};
             code.capturedScalarOwnerSlots = new PerlOwnerSlot[] {
                     pad.retainClosureCaptureSlot(code)

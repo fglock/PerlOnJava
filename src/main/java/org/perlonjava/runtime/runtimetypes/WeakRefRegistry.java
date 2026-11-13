@@ -36,27 +36,6 @@ public class WeakRefRegistry {
         return !state().referentToWeakRefs.isEmpty();
     }
 
-    /**
-     * Special refCount value for objects that have weak refs but whose strong
-     * refs can't be counted accurately. Used in two cases:
-     * <p>
-     * 1. Unblessed birth-tracked objects (refCount started at 0) with blessId == 0,
-     *    where closure captures and temporary copies bypass {@code setLarge()},
-     *    making refCount unreliable.
-     * <p>
-     * 2. Untracked non-CODE objects (refCount == -1) that acquire weak refs via
-     *    {@code weaken()}. These are transitioned to WEAKLY_TRACKED so that
-     *    {@code undefine()} and {@code scopeExitCleanup()} can clear weak refs
-     *    when a strong reference is dropped. CODE refs are excluded because they
-     *    live in both lexicals and the symbol table, making stash references
-     *    invisible to refcounting.
-     * <p>
-     * Setting refCount to WEAKLY_TRACKED prevents {@code setLarge()} from
-     * incorrectly decrementing to 0 and triggering false destruction.
-     * Weak ref clearing happens only via explicit {@code undef} or scope exit.
-     */
-    public static final int WEAKLY_TRACKED = -2;
-
     /** Drop references belonging to the previous top-level script. */
     public static void resetState() {
         state().weakScalars.clear();
@@ -68,7 +47,7 @@ public class WeakRefRegistry {
     /**
      * Make a reference weak. The reference no longer counts as a strong reference
      * for refCount purposes. If this was the last strong reference, DESTROY fires.
-     * For untracked objects (refCount == -1), simply registers in WeakRefRegistry
+     * For untracked objects, simply registers in WeakRefRegistry
      * without changing refCount — weak refs to untracked objects are never cleared
      * deterministically (see Strategy A in weaken-destroy.md).
      */
@@ -105,7 +84,7 @@ public class WeakRefRegistry {
             if (base instanceof RuntimeCode code
                     && code.defined()
                     && !code.currentlyDestroying) {
-                base.refCount = -1;
+                base.markRefCountUntracked();
                 base.markPerlResurrected();
             } else {
                 ref.type = RuntimeScalarType.UNDEF;
@@ -146,7 +125,7 @@ public class WeakRefRegistry {
 
         boolean weakenedLiveLexical = MyVarCleanupStack.isRegistered(ref);
         boolean weakenedLiveCodeRef = base instanceof RuntimeCode && weakenedLiveLexical;
-        if (base.refCount > 0 && ref.refCountOwned) {
+        if (base.isRefCountTracked() && base.refCount > 0 && ref.refCountOwned) {
             PerlOwnerSlot releasedSlot = ref.countedOwnerSlot();
             boolean identifiedOwner = releasedSlot != null && releasedSlot.isActive()
                     && releasedSlot.referent() == base;
@@ -175,12 +154,12 @@ public class WeakRefRegistry {
             }
             MortalList.releaseCountedOwnerSlotImmediately(
                     base, release, "WeakRefRegistry.weaken");
-        } else if (base.refCount == -1
+        } else if (base.isRefCountUntracked()
                 && base instanceof RuntimeScalarReadOnly
                 && RuntimeCode.isInstalledPadConstant(base)) {
             // A live CV optree owns this constant through an explicit owner slot.
-        } else if (base.refCount == -1 && !(base instanceof RuntimeCode)) {
-            // Untracked non-CODE object: transition to WEAKLY_TRACKED so that
+        } else if (base.isRefCountUntracked() && !(base instanceof RuntimeCode)) {
+            // Untracked non-CODE object: transition to weak-tracked state so that
             // undefine() and scopeExitCleanup() can clear weak refs
             // when a strong reference is dropped. This is a heuristic —
             // it may clear weak refs too early when multiple strong refs
@@ -192,23 +171,23 @@ public class WeakRefRegistry {
             // CODE refs are excluded because they live in BOTH lexicals AND
             // the symbol table (stash). Stash assignments (*Foo::bar = $coderef)
             // don't go through setLarge(), making the stash reference invisible
-            // to refcounting. If we transition CODE refs to WEAKLY_TRACKED,
+            // to refcounting. If we transition CODE refs to weak-tracked state,
             // setLarge()/scopeExitCleanup() will prematurely clear weak refs
             // when a lexical reference is overwritten — even though the CODE ref
             // is still alive in the stash. This breaks Sub::Quote/Sub::Defer
             // (which use weaken() for back-references) and cascades to break
             // Moo's accessor inlining (51 test failures). See §15.
             ref.refCountOwned = false;
-            // Keep the weak-lifecycle sentinel instead of fabricating a
+            // Keep weak-tracked state instead of fabricating a
             // positive count for package-nested aggregates. Their exact
             // UNTRACKED_REFERENCE slots keep the observer live and trigger
             // cleanup when the final scalar owner releases its edge.
-            base.refCount = WEAKLY_TRACKED;
+            base.markRefCountWeaklyTracked();
         }
         boolean shouldCheckLiveCodeRef = weakenedLiveCodeRef
                 && codeRefHasCountedOwners(base);
         if (base instanceof RuntimeCode code
-                && code.refCount >= 0
+                && code.isRefCountTracked()
                 && state.weakRefsExist
                 && (shouldCheckLiveCodeRef
                 || (code.hadStashRef
@@ -323,13 +302,15 @@ public class WeakRefRegistry {
             code.finishActiveCodeOwnerRelease();
         }
         boolean zeroCountOwnerSlotsExhausted = referent != null
+                && referent.isRefCountTracked()
                 && referent.refCount == 0
                 && !(referent instanceof RuntimeCode)
                 && !GlobalVariable.isPackageRootedAggregate(referent)
                 && MortalList.canTrustFinalCountedRelease(referent);
         if (referent != null
                 && ((referent.deferredFinalReleaseForUncountedOwners
-                        && (referent.refCount == WEAKLY_TRACKED || referent.refCount == 0))
+                        && (referent.isWeaklyRefCountTracked()
+                            || (referent.isRefCountTracked() && referent.refCount == 0)))
                     || zeroCountOwnerSlotsExhausted)
                 && !referent.hasOwnerSlots()
                 && PerlRuntime.currentOrNull() != null
@@ -344,7 +325,7 @@ public class WeakRefRegistry {
             return;
         }
         if (referent == null
-                || referent.refCount != WEAKLY_TRACKED
+                || !referent.isWeaklyRefCountTracked()
                 || referent.hasOwnerSlots()
                 || PerlRuntime.currentOrNull() == null
                 || !hasWeakRefsTo(referent)
@@ -374,7 +355,7 @@ public class WeakRefRegistry {
 
     /** Finalize an untracked value after its scalar owner has left scope. */
     static void finalizeUntrackedAfterOwnerScopeExit(RuntimeBase referent) {
-        if (referent == null || referent.refCount != -1
+        if (referent == null || !referent.isRefCountUntracked()
                 || PerlRuntime.currentOrNull() == null
                 || referent.hasOwnerSlots() || referent.localBindingExists
                 || referent.hasClosureCaptureOwner() || referent.hasPendingReturnOwner()
@@ -396,8 +377,9 @@ public class WeakRefRegistry {
 
         boolean untrackedAggregate = referent.blessId == 0
                 && (referent instanceof RuntimeArray || referent instanceof RuntimeHash);
-        if (untrackedAggregate && referent.refCount == 1) {
-            referent.refCount = WEAKLY_TRACKED;
+        if (untrackedAggregate && referent.isRefCountTracked()
+                && referent.refCount == 1) {
+            referent.markRefCountWeaklyTracked();
         }
 
         if (referent.blessId != 0) {
@@ -405,7 +387,8 @@ public class WeakRefRegistry {
             return;
         }
 
-        if ((referent.refCount == WEAKLY_TRACKED || referent.refCount == 0)
+        if ((referent.isWeaklyRefCountTracked()
+                    || (referent.isRefCountTracked() && referent.refCount == 0))
                 && hasWeakRefsTo(referent)) {
             clearWeakRefsTo(referent);
         }
@@ -421,7 +404,7 @@ public class WeakRefRegistry {
 
     static void clearWeakRefsTo(RuntimeBase referent, boolean finalCountedOwner) {
         // A captured pad is a semantic strong owner even when the selective
-        // refcount has reached a weak-tracking sentinel. Destruction paths
+        // refcount has entered weak-tracked state. Destruction paths
         // funnel through this method, so preserve that edge at
         // the weak-clearing boundary as well as in refcount transitions.
         if (referent.hasSemanticCaptureOwner()) return;

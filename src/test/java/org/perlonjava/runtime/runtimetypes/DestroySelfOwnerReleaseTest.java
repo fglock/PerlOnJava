@@ -14,7 +14,7 @@ class DestroySelfOwnerReleaseTest {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeHash referent = new RuntimeHash();
-            referent.refCount = 0;
+            referent.setTrackedRefCount(0);
             RuntimeScalar selfArgument = referent.createAnonymousReference();
             RuntimeScalar.incrementRefCountForContainerStore(
                     selfArgument, PerlOwnerSlot.Kind.ARRAY_ELEMENT);

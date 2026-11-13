@@ -525,7 +525,8 @@ public class DestroyDispatch {
             referent.currentlyDestroying = savedCurrentlyDestroying;
             int newCurrentCountedOwners = countNewCurrentCountedOwnerSlots(
                     referent, ownerSlotsAtStart);
-            if (referent.refCount == 0 && newCurrentCountedOwners != 0) {
+            if ((!referent.isRefCountTracked() || referent.refCount == 0)
+                    && newCurrentCountedOwners != 0) {
                 throw new IllegalStateException("DESTROY returned with "
                         + newCurrentCountedOwners + " newly acquired counted Perl owner slot(s) "
                         + "but refCount is zero for "

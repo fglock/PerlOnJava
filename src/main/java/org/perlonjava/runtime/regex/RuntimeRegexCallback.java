@@ -68,7 +68,7 @@ public final class RuntimeRegexCallback {
     }
 
     private void retainOwnerReference(RuntimeRegex owner) {
-        if (ownerCount == 0 && code.refCount != Integer.MIN_VALUE) {
+        if (ownerCount == 0 && !code.isPerlDestroyed()) {
             PerlOwnerSlot slot = new PerlOwnerSlot(PerlOwnerSlot.Kind.REGEX_CALLBACK);
             slot.acquireCountedNativeOwner(code, "RuntimeRegexCallback.retainOwner");
             codeOwnerSlot = slot;
@@ -110,7 +110,7 @@ public final class RuntimeRegexCallback {
             codeOwnerSlot = null;
             slot.releaseRegexCallbackOwner("RuntimeRegexCallback.releaseOwner");
         }
-        if (code.refCount != Integer.MIN_VALUE
+        if (!code.isPerlDestroyed()
                 && !code.hasPerlOwnerForCaptureOtherThan(null)) {
             code.releaseCaptures();
         }

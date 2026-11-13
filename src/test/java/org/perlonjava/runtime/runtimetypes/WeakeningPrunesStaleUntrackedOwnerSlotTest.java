@@ -24,7 +24,7 @@ class WeakeningPrunesStaleUntrackedOwnerSlotTest {
             lexicalOwner.elements.add(staleCell);
             PerlOwnerSlot staleOwner = staleCell.untrackedReferenceOwnerSlot();
             assertNotNull(staleOwner);
-            target.refCount = 1;
+            target.setTrackedRefCount(1);
             weakObserver.refCountOwned = true;
 
             try {

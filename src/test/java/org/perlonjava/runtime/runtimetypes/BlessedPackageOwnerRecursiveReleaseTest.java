@@ -23,7 +23,7 @@ class BlessedPackageOwnerRecursiveReleaseTest {
             parent.blessId = NameNormalizer.getBlessId(
                     "Issue1649::PackageOwnedParent");
             RuntimeScalar packageOwner = parent.createAnonymousReference();
-            parent.refCount = -1;
+            parent.markRefCountUntracked();
             packageRoot.elements.add(packageOwner);
 
             RuntimeArray child = new RuntimeArray();

@@ -133,7 +133,7 @@ public class StateVariable {
             // The persistent pad is a binding even though this SV is not on
             // the per-invocation lexical cleanup stack. A returned \$state
             // must keep the cell's value after the CV releases that binding.
-            variable.refCount = 0;
+            variable.startRefCountTracking();
             variable.localBindingExists = true;
             code.bindStateScalar(beginVar, variable);
             return tagGeneratedLexicalSub(variable, var);

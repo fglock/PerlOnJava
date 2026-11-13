@@ -962,7 +962,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     }
 
     private boolean hasDurableElementLifetime() {
-        return refCount >= 0 || (PerlRuntime.currentOrNull() != null
+        return isRefCountTracked() || (PerlRuntime.currentOrNull() != null
                 && MyVarCleanupStack.isRegistered(this));
     }
 
@@ -2042,16 +2042,16 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      */
     public RuntimeScalar createReference() {
         // Opt into refCount tracking when a reference to a named hash is created.
-        // Named hashes start at refCount=-1 (untracked). When \%hash creates a
-        // reference, we transition to refCount=0 (tracked, zero external refs)
+        // Named hashes begin untracked. When \%hash creates a reference, we
+        // enter tracked mode with zero counted external refs.
         // and set localBindingExists=true to indicate a JVM local variable slot
         // holds a strong reference not counted in refCount.
         // This allows setLargeRefCounted to properly count references, and
         // scopeExitCleanupHash to skip element cleanup when external refs exist.
         // Without this, scope exit of `my %hash` would destroy elements even when
         // \%hash is stored elsewhere (e.g., $obj->{data} = \%hash).
-        if (this.refCount == -1) {
-            this.refCount = 0;
+        if (this.isRefCountUntracked()) {
+            this.startRefCountTracking();
             this.localBindingExists = true;
         }
         RuntimeScalar result = new RuntimeScalar();
@@ -2076,10 +2076,10 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      */
     public RuntimeScalar createAnonymousReference() {
         // Birth-track the anonymous hash (same as {...} constructor path).
-        // refCount=0 means tracked with zero counted containers; setLargeRefCounted
+        // A tracked zero count means no counted containers; setLargeRefCounted
         // will bump to 1 when this reference is assigned to a variable.
-        if (this.refCount == -1) {
-            this.refCount = 0;
+        if (this.isRefCountUntracked()) {
+            this.startRefCountTracking();
         }
         RuntimeScalar result = new RuntimeScalar();
         result.type = HASHREFERENCE;
@@ -2089,12 +2089,12 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
 
     @Override
     public RuntimeScalar createReferenceWithTrackedElements() {
-        // Birth-track anonymous hashes: set refCount=0 so setLarge() can
+        // Birth-track anonymous hashes so setLarge() can
         // accurately count strong references. Anonymous hashes are only
         // reachable through references (no lexical variable slot), so
         // refCount is complete and reaching 0 means truly no strong refs.
-        if (this.refCount == -1) {
-            this.refCount = 0;
+        if (this.isRefCountUntracked()) {
+            this.startRefCountTracking();
         }
         RuntimeScalar result = createAnonymousReference();
         for (RuntimeScalar elem : this.elements.values()) {
@@ -2749,11 +2749,13 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                     && this.blessId != 0 && this.blessId != previousState.blessId) {
                 int savedBlessId = this.blessId;
                 int savedRefCount = this.refCount;
+                RefCountTrackingState savedRefCountTrackingState =
+                        this.refCountTrackingState();
                 boolean savedDestroyFired = this.destroyFired;
                 RuntimeBase.PerlLifecycleState savedLifecycleState = this.perlLifecycleState();
                 DestroyDispatch.callDestroy(this);
                 this.destroyFired = savedDestroyFired;
-                this.refCount = savedRefCount;
+                this.restoreRefCountState(savedRefCount, savedRefCountTrackingState);
                 this.blessId = savedBlessId;
                 this.restorePerlLifecycleState(savedLifecycleState);
             }

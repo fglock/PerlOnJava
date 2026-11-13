@@ -24,12 +24,12 @@ class GrowingLexicalOutputOwnerSlotCostTest {
                     RuntimeArray leaf = new RuntimeArray();
                     RuntimeScalar leafOwner = leaf.createAnonymousReference();
                     RuntimeScalar weakLeaf = leaf.createAnonymousReference();
-                    leaf.refCount = -1;
+                    leaf.markRefCountUntracked();
 
                     RuntimeArray record = new RuntimeArray();
                     record.elements.add(leafOwner);
                     RuntimeScalar recordOwner = record.createAnonymousReference();
-                    record.refCount = -1;
+                    record.markRefCountUntracked();
                     output.elements.add(recordOwner);
 
                     WeakRefRegistry.weaken(weakLeaf);

@@ -24,7 +24,7 @@ class RuntimeTiedHashIteratorOwnerSlotTest {
             hash.hashIterator = iterator;
 
             RuntimeArray currentReferent = new RuntimeArray();
-            currentReferent.refCount = 0;
+            currentReferent.setTrackedRefCount(0);
             RuntimeScalar currentKey = referenceTo(currentReferent);
             PerlOwnerSlot currentSlot = retainIteratorKey(iterator, currentKey);
             setField(iterator, "currentKey", currentKey);
@@ -33,12 +33,12 @@ class RuntimeTiedHashIteratorOwnerSlotTest {
             assertTrue(currentSlot.isCountedNativeOwner());
             assertEquals(1, currentReferent.refCount);
 
-            currentReferent.refCount = 0;
+            currentReferent.setTrackedRefCount(0);
             assertTrue(currentReferent.restoreVerifiedCurrentCountedOwnerSlotRefCount());
             assertEquals(1, currentReferent.refCount,
                     "the live iterator slot restores its paired count");
 
-            currentReferent.refCount = 2;
+            currentReferent.setTrackedRefCount(2);
             hash.resetIterator();
 
             assertFalse(currentSlot.isActive());
@@ -59,10 +59,10 @@ class RuntimeTiedHashIteratorOwnerSlotTest {
             hash.hashIterator = iterator;
 
             RuntimeArray referent = new RuntimeArray();
-            referent.refCount = -1;
+            referent.markRefCountUntracked();
             RuntimeScalar weak = referenceTo(referent);
             WeakRefRegistry.weaken(weak);
-            assertEquals(WeakRefRegistry.WEAKLY_TRACKED, referent.refCount);
+            assertEquals(RuntimeBase.RefCountTrackingState.WEAKLY_TRACKED, referent.refCountTrackingState());
             assertTrue(WeakRefRegistry.isweak(weak));
 
             RuntimeScalar currentKey = referenceTo(referent);

@@ -16,10 +16,10 @@ class CapturedCellOwnerReplacementOrderTest {
         try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
             List<String> events = new ArrayList<>();
             RecordingReferent previous = new RecordingReferent("previous", events);
-            previous.refCount = 0;
+            previous.setTrackedRefCount(0);
             previous.localBindingExists = true;
             RecordingReferent replacement = new RecordingReferent("replacement", events);
-            replacement.refCount = 0;
+            replacement.setTrackedRefCount(0);
             replacement.blessId = NameNormalizer.getBlessId(
                     "Issue1649::CapturedCellReplacement");
 

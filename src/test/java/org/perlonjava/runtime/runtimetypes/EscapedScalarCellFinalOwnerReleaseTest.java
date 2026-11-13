@@ -17,7 +17,7 @@ class EscapedScalarCellFinalOwnerReleaseTest {
             String destroyFqn = className + "::DESTROY";
             RuntimeHash target = new RuntimeHash();
             target.blessId = NameNormalizer.getBlessId(className);
-            target.refCount = 1;
+            target.setTrackedRefCount(1);
 
             AtomicInteger destroyCalls = new AtomicInteger();
             RuntimeCode destroy = new RuntimeCode((args, context) -> {

@@ -18,18 +18,18 @@ class PackageWeakCompatibilityPinOwnerSlotTest {
 
             RuntimeArray target = new RuntimeArray();
             RuntimeScalar firstOwner = target.createAnonymousReference();
-            target.refCount = -1;
+            target.markRefCountUntracked();
             packageRoot.elements.add(firstOwner);
             RuntimeScalar secondOwner = target.createAnonymousReference();
-            target.refCount = -1;
+            target.markRefCountUntracked();
             packageRoot.elements.add(secondOwner);
             RuntimeScalar weakObserver = target.createAnonymousReference();
-            target.refCount = -1;
+            target.markRefCountUntracked();
 
             try {
                 WeakRefRegistry.weaken(weakObserver);
 
-                assertEquals(WeakRefRegistry.WEAKLY_TRACKED, target.refCount,
+                assertEquals(RuntimeBase.RefCountTrackingState.WEAKLY_TRACKED, target.refCountTrackingState(),
                         "weak tracking does not manufacture a positive count");
                 assertEquals(2, target.ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE));
 
@@ -62,13 +62,13 @@ class PackageWeakCompatibilityPinOwnerSlotTest {
 
             RuntimeArray target = new RuntimeArray();
             RuntimeScalar firstOwner = target.createAnonymousReference();
-            target.refCount = -1;
+            target.markRefCountUntracked();
             packageRoot.elements.add(firstOwner);
             RuntimeScalar secondOwner = target.createAnonymousReference();
-            target.refCount = -1;
+            target.markRefCountUntracked();
             packageRoot.elements.add(secondOwner);
             RuntimeScalar observer = target.createAnonymousReference();
-            target.refCount = -1;
+            target.markRefCountUntracked();
 
             try {
                 WeakRefRegistry.weaken(observer);

@@ -61,7 +61,7 @@ class PerlCallTransferOwnerTest {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeCode code = new RuntimeCode((args, context) -> new RuntimeList(), null);
-            code.refCount = 0;
+            code.setTrackedRefCount(0);
             RuntimeScalar source = new RuntimeScalar();
             source.set(new RuntimeScalar(code));
             RuntimeList returned = RuntimeCode.coerceScalarCallResult(source.getList(), RuntimeContextType.SCALAR);

@@ -16,7 +16,7 @@ class PerlClosureArgumentOwnerTest {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeCode closure = new RuntimeCode((args, context) -> new RuntimeList(), null);
-            closure.refCount = 0;
+            closure.setTrackedRefCount(0);
             closure.capturedScalars = new RuntimeScalar[0];
             RuntimeScalar argument = new RuntimeScalar(closure);
             RuntimeCode.CallArguments staged = RuntimeCode.newCallArguments(1);
@@ -68,7 +68,7 @@ class PerlClosureArgumentOwnerTest {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeCode closure = new RuntimeCode((args, context) -> new RuntimeList(), null);
-            closure.refCount = 0;
+            closure.setTrackedRefCount(0);
             closure.capturedScalars = new RuntimeScalar[0];
             RuntimeScalar argument = new RuntimeScalar(closure);
             RuntimeCode.CallArguments staged = RuntimeCode.newCallArguments(1);

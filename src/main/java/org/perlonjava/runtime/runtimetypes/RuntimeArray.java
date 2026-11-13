@@ -2476,16 +2476,16 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      */
     public RuntimeScalar createReference() {
         // Opt into refCount tracking when a reference to a named array is created.
-        // Named arrays start at refCount=-1 (untracked). When \@array creates a
-        // reference, we transition to refCount=0 (tracked, zero external refs)
+        // Named arrays begin untracked. When \@array creates a reference, we
+        // enter the tracked mode with zero counted external refs.
         // and set localBindingExists=true to indicate a JVM local variable slot
         // holds a strong reference not counted in refCount.
         // This allows setLargeRefCounted to properly count references, and
         // scopeExitCleanupArray to skip element cleanup when external refs exist.
         // Without this, scope exit of `my @array` would destroy elements even when
         // \@array is stored elsewhere.
-        if (this.refCount == -1) {
-            this.refCount = 0;
+        if (this.isRefCountUntracked()) {
+            this.startRefCountTracking();
             this.localBindingExists = true;
         }
         RuntimeScalar result = new RuntimeScalar();
@@ -2506,8 +2506,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      * @return A scalar representing the array reference.
      */
     public RuntimeScalar createAnonymousReference() {
-        if (this.refCount == -1) {
-            this.refCount = 0;
+        if (this.isRefCountUntracked()) {
+            this.startRefCountTracking();
         }
         RuntimeScalar result = new RuntimeScalar();
         result.type = RuntimeScalarType.ARRAYREFERENCE;
@@ -2523,12 +2523,12 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      * @return A scalar representing the array reference.
      */
     public RuntimeScalar createReferenceWithTrackedElements() {
-        // Birth-track anonymous arrays: set refCount=0 so setLarge() can
+        // Birth-track anonymous arrays so setLarge() can
         // accurately count strong references. Anonymous arrays are only
         // reachable through references (no lexical variable slot), so
         // refCount is complete and reaching 0 means truly no strong refs.
-        if (this.refCount == -1) {
-            this.refCount = 0;
+        if (this.isRefCountUntracked()) {
+            this.startRefCountTracking();
         }
         for (RuntimeScalar elem : this.elements) {
             RuntimeScalar.retainUnstashedIoForDurableSlot(elem);
@@ -2548,7 +2548,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     }
 
     private boolean hasDurableElementLifetime() {
-        return refCount >= 0 || (PerlRuntime.currentOrNull() != null
+        return isRefCountTracked() || (PerlRuntime.currentOrNull() != null
                 && MyVarCleanupStack.isRegistered(this));
     }
 
@@ -3230,6 +3230,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                     && this.blessId != 0 && this.blessId != previousState.blessId) {
                 int savedBlessId = this.blessId;
                 int savedRefCount = this.refCount;
+                RefCountTrackingState savedRefCountTrackingState =
+                        this.refCountTrackingState();
                 int savedType = this.type;
                 boolean savedDestroyFired = this.destroyFired;
                 RuntimeBase.PerlLifecycleState savedLifecycleState = this.perlLifecycleState();
@@ -3238,7 +3240,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 // destroyFired so subsequent local/restore cycles can
                 // also fire DESTROY.
                 this.destroyFired = savedDestroyFired;
-                this.refCount = savedRefCount;
+                this.restoreRefCountState(savedRefCount, savedRefCountTrackingState);
                 this.type = savedType;
                 this.blessId = savedBlessId;
                 this.restorePerlLifecycleState(savedLifecycleState);

@@ -25,12 +25,12 @@ class WeaklyTrackedUndefOwnerSlotTest {
 
                 PerlOwnerSlot firstSlot = firstOwner.untrackedReferenceOwnerSlot();
                 PerlOwnerSlot secondSlot = secondOwner.untrackedReferenceOwnerSlot();
-                assertEquals(-1, target.refCount);
+                assertEquals(RuntimeBase.RefCountTrackingState.UNTRACKED, target.refCountTrackingState());
                 assertTrue(firstSlot.isActive());
                 assertTrue(secondSlot.isActive());
 
                 WeakRefRegistry.weaken(weakObserver);
-                assertEquals(WeakRefRegistry.WEAKLY_TRACKED, target.refCount);
+                assertEquals(RuntimeBase.RefCountTrackingState.WEAKLY_TRACKED, target.refCountTrackingState());
 
                 firstOwner.undefine();
 

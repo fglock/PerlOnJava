@@ -18,7 +18,7 @@ class BlessExistingScalarOwnerIdentityTest {
             RuntimeHash referent = new RuntimeHash();
             referent.blessId = NameNormalizer.getBlessId("Issue1649::Original");
             assertTrue(referent.blessId != 0, "the setup is an already-blessed referent");
-            assertEquals(-1, referent.refCount, "the existing referent is untracked");
+            assertEquals(RuntimeBase.RefCountTrackingState.UNTRACKED, referent.refCountTrackingState(), "the existing referent is untracked");
             RuntimeScalar scalarOwner = new RuntimeScalar();
             scalarOwner.type = RuntimeScalarType.REFERENCE;
             scalarOwner.value = referent;

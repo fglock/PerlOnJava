@@ -26,7 +26,7 @@ class ActiveArgumentOwnerLedgerFastPathTest {
             try {
                 assertEquals(0, target.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_VALUE),
                         "a persistent caller cell remains an aliased borrow");
-                target.refCount = 1; // Model a transient legacy-count underflow.
+                target.setTrackedRefCount(1); // Model a transient legacy-count underflow.
                 MortalList.deferDecrementIfTracked(released);
 
                 try (MortalList.ReachabilityQueryMeasurement measurement =

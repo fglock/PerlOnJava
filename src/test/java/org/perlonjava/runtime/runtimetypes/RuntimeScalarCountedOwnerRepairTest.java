@@ -32,7 +32,7 @@ class RuntimeScalarCountedOwnerRepairTest {
 
                 // Model a transient selective-count undercount while retaining
                 // both explicit owner identities.
-                target.refCount = 1;
+                target.setTrackedRefCount(1);
                 try (MortalList.ReachabilityQueryMeasurement measurement =
                              MortalList.measureReachabilityQueries()) {
                     scalarOwner.set(new RuntimeScalar());

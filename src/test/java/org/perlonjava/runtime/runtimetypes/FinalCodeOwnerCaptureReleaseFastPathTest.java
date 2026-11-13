@@ -14,7 +14,7 @@ class FinalCodeOwnerCaptureReleaseFastPathTest {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeCode closure = new RuntimeCode((args, context) -> new RuntimeList(), null);
-            closure.refCount = 0;
+            closure.setTrackedRefCount(0);
             RuntimeScalar capturedPad = new RuntimeScalar();
             PerlOwnerSlot captureSlot = capturedPad.retainClosureCaptureSlot(closure);
             closure.capturedScalars = new RuntimeScalar[]{capturedPad};

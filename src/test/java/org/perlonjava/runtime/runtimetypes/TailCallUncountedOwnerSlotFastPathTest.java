@@ -17,7 +17,7 @@ class TailCallUncountedOwnerSlotFastPathTest {
             String globalName =
                     "TailCallUncountedOwnerSlotFastPathTest::packageScalarOwner";
             GlobalVariable.globalVariables.put(globalName, target);
-            target.refCount = 0;
+            target.setTrackedRefCount(0);
 
             RuntimeScalar tailArgument = new RuntimeScalar();
             tailArgument.set(target.createReference());
@@ -35,7 +35,7 @@ class TailCallUncountedOwnerSlotFastPathTest {
                              MortalList.measureReachabilityQueries()) {
                     MortalList.releaseTailCallArgs(tailArguments);
 
-                    assertEquals(WeakRefRegistry.WEAKLY_TRACKED, target.refCount);
+                    assertEquals(RuntimeBase.RefCountTrackingState.WEAKLY_TRACKED, target.refCountTrackingState());
                     assertTrue(WeakRefRegistry.isweak(weak));
                     assertEquals(0, measurement.stats().rootQueries);
                     assertEquals(0, measurement.stats().snapshotsBuilt);

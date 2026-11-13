@@ -13,7 +13,7 @@ class ReachabilitySnapshotCompletenessTest {
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeArray parent = new RuntimeArray();
             RuntimeHash child = new RuntimeHash();
-            child.refCount = 0;
+            child.setTrackedRefCount(0);
             parent.addClonedElement(child.createAnonymousReference());
 
             assertEquals(1, child.ownerSlotCount(PerlOwnerSlot.Kind.ARRAY_ELEMENT));

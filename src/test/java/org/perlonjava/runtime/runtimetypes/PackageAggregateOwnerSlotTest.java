@@ -95,8 +95,8 @@ class PackageAggregateOwnerSlotTest {
 
             assertEquals(1, array.ownerSlotCount(PerlOwnerSlot.Kind.PACKAGE_AGGREGATE_SLOT));
             assertEquals(1, hash.ownerSlotCount(PerlOwnerSlot.Kind.PACKAGE_AGGREGATE_SLOT));
-            assertEquals(-1, array.refCount);
-            assertEquals(-1, hash.refCount);
+            assertEquals(RuntimeBase.RefCountTrackingState.UNTRACKED, array.refCountTrackingState());
+            assertEquals(RuntimeBase.RefCountTrackingState.UNTRACKED, hash.refCountTrackingState());
         }
     }
 
@@ -139,7 +139,7 @@ class PackageAggregateOwnerSlotTest {
             RuntimeArray array = new RuntimeArray();
             RuntimeScalar weakObserver = referenceTo(array);
             WeakRefRegistry.weaken(weakObserver);
-            assertEquals(WeakRefRegistry.WEAKLY_TRACKED, array.refCount);
+            assertEquals(RuntimeBase.RefCountTrackingState.WEAKLY_TRACKED, array.refCountTrackingState());
             String key = "PackageAggregateOwnerSlotTest::weak_array";
 
             try {
@@ -172,7 +172,7 @@ class PackageAggregateOwnerSlotTest {
             RuntimeScalar packageCell = new RuntimeScalar("package scalar cell");
             RuntimeScalar weakObserver = referenceTo(packageCell);
             WeakRefRegistry.weaken(weakObserver);
-            assertEquals(WeakRefRegistry.WEAKLY_TRACKED, packageCell.refCount);
+            assertEquals(RuntimeBase.RefCountTrackingState.WEAKLY_TRACKED, packageCell.refCountTrackingState());
             String key = "PackageAggregateOwnerSlotTest::weak_scalar";
 
             try {

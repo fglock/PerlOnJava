@@ -15,7 +15,7 @@ class BlessedGlobAliasOwnerSlotTest {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeGlob glob = new RuntimeGlob(null);
-            glob.refCount = 2;
+            glob.setTrackedRefCount(2);
             glob.blessId = NameNormalizer.getBlessId(
                     "BlessedGlobAliasOwnerSlotTest::GlobOwner");
 
@@ -55,7 +55,7 @@ class BlessedGlobAliasOwnerSlotTest {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeGlob glob = new RuntimeGlob(null);
-            glob.refCount = WeakRefRegistry.WEAKLY_TRACKED;
+            glob.markRefCountWeaklyTracked();
             RuntimeScalar weak = globReference(glob);
             MyVarCleanupStack.register(weak);
             WeakRefRegistry.weaken(weak);

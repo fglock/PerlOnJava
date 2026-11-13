@@ -14,7 +14,7 @@ class RescuedObjectOwnerIdentityTest {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeHash referent = new RuntimeHash();
-            referent.refCount = 0;
+            referent.setTrackedRefCount(0);
             RuntimeScalar global = GlobalVariable.getGlobalVariable(
                     "RescuedObjectOwnerIdentityTest::globalOwner");
 

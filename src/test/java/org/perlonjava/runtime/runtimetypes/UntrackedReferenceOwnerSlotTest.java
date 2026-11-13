@@ -62,7 +62,7 @@ class UntrackedReferenceOwnerSlotTest {
             PerlOwnerSlot arrayValueOwner = arrayElement.untrackedReferenceOwnerSlot();
             assertNotNull(arrayValueOwner);
             assertSame(arrayTarget, arrayValueOwner.referent());
-            assertEquals(-1, arrayTarget.refCount);
+            assertEquals(RuntimeBase.RefCountTrackingState.UNTRACKED, arrayTarget.refCountTrackingState());
 
             RuntimeScalar hashTarget = new RuntimeScalar("raw hash target");
             RuntimeScalar hashElement = referenceTo(hashTarget);
@@ -72,7 +72,7 @@ class UntrackedReferenceOwnerSlotTest {
             PerlOwnerSlot hashValueOwner = hashElement.untrackedReferenceOwnerSlot();
             assertNotNull(hashValueOwner);
             assertSame(hashTarget, hashValueOwner.referent());
-            assertEquals(-1, hashTarget.refCount);
+            assertEquals(RuntimeBase.RefCountTrackingState.UNTRACKED, hashTarget.refCountTrackingState());
 
             array.elements.remove(arrayElement);
             hash.elements.remove("value");
@@ -96,7 +96,7 @@ class UntrackedReferenceOwnerSlotTest {
             assertNotNull(owner);
             assertSame(target, owner.referent());
             assertTrue(copy.elements.contains(element));
-            assertEquals(-1, target.refCount);
+            assertEquals(RuntimeBase.RefCountTrackingState.UNTRACKED, target.refCountTrackingState());
         }
     }
 
@@ -118,14 +118,14 @@ class UntrackedReferenceOwnerSlotTest {
             assertNotNull(owner);
             assertEquals(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE, owner.kind());
             assertSame(firstTarget, owner.referent());
-            assertEquals(-1, firstTarget.refCount,
+            assertEquals(RuntimeBase.RefCountTrackingState.UNTRACKED, firstTarget.refCountTrackingState(),
                     "slot tracking must not promote an arbitrary referent into the legacy count");
 
             element.set(secondTarget.createReference());
             assertSame(owner, element.untrackedReferenceOwnerSlot());
             assertSame(secondTarget, owner.referent());
             assertFalse(firstTarget.hasOwnerSlots());
-            assertEquals(-1, secondTarget.refCount);
+            assertEquals(RuntimeBase.RefCountTrackingState.UNTRACKED, secondTarget.refCountTrackingState());
 
             array.elements.remove(element);
             MortalList.deferDestroyForContainerClear(java.util.List.of(element));
@@ -136,7 +136,7 @@ class UntrackedReferenceOwnerSlotTest {
             targetStorage.addClonedElement(weaklyTrackedTarget);
             RuntimeScalar weakObserver = weaklyTrackedTarget.createReference();
             WeakRefRegistry.weaken(weakObserver);
-            assertEquals(WeakRefRegistry.WEAKLY_TRACKED, weaklyTrackedTarget.refCount);
+            assertEquals(RuntimeBase.RefCountTrackingState.WEAKLY_TRACKED, weaklyTrackedTarget.refCountTrackingState());
 
             RuntimeArray weaklyTrackedArray = new RuntimeArray();
             weaklyTrackedArray.addClonedElement(weaklyTrackedTarget.createReference());
@@ -144,8 +144,8 @@ class UntrackedReferenceOwnerSlotTest {
             PerlOwnerSlot weaklyTrackedOwner = weaklyTrackedElement.untrackedReferenceOwnerSlot();
             assertNotNull(weaklyTrackedOwner);
             assertSame(weaklyTrackedTarget, weaklyTrackedOwner.referent());
-            assertEquals(WeakRefRegistry.WEAKLY_TRACKED, weaklyTrackedTarget.refCount,
-                    "a later strong store must not promote the legacy weakly-tracked sentinel");
+            assertEquals(RuntimeBase.RefCountTrackingState.WEAKLY_TRACKED, weaklyTrackedTarget.refCountTrackingState(),
+                    "a later strong store must not promote weak-tracked state");
 
             WeakRefRegistry.unweaken(weakObserver);
             weaklyTrackedArray.elements.remove(weaklyTrackedElement);
@@ -163,7 +163,7 @@ class UntrackedReferenceOwnerSlotTest {
             weakObserver.type = RuntimeScalarType.REFERENCE;
             weakObserver.value = target;
             WeakRefRegistry.weaken(weakObserver);
-            assertEquals(WeakRefRegistry.WEAKLY_TRACKED, target.refCount);
+            assertEquals(RuntimeBase.RefCountTrackingState.WEAKLY_TRACKED, target.refCountTrackingState());
 
             RuntimeScalar lexical = new RuntimeScalar();
             int mark = MyVarCleanupStack.pushMark();
@@ -177,7 +177,7 @@ class UntrackedReferenceOwnerSlotTest {
             PerlOwnerSlot valueSlot = lexical.untrackedReferenceOwnerSlot();
             assertNotNull(valueSlot);
             assertSame(untrackedTarget, valueSlot.referent());
-            assertEquals(-1, untrackedTarget.refCount);
+            assertEquals(RuntimeBase.RefCountTrackingState.UNTRACKED, untrackedTarget.refCountTrackingState());
 
             RuntimeScalar targetReference = new RuntimeScalar();
             targetReference.type = RuntimeScalarType.REFERENCE;
@@ -186,8 +186,8 @@ class UntrackedReferenceOwnerSlotTest {
             assertSame(valueSlot, lexical.untrackedReferenceOwnerSlot());
             assertFalse(untrackedTarget.hasOwnerSlots());
             assertSame(target, valueSlot.referent());
-            assertEquals(WeakRefRegistry.WEAKLY_TRACKED, target.refCount,
-                    "a lexical owner slot must not promote the weakly-tracked sentinel");
+            assertEquals(RuntimeBase.RefCountTrackingState.WEAKLY_TRACKED, target.refCountTrackingState(),
+                    "a lexical owner slot must not promote weak-tracked state");
 
             PerlOwnerSlot capture = lexical.retainClosureCaptureSlot();
             RuntimeScalar.scopeExitCleanup(lexical);
@@ -198,7 +198,7 @@ class UntrackedReferenceOwnerSlotTest {
             lexical.releaseClosureCaptureSlot(capture);
             assertFalse(valueSlot.isActive(), "the final cell owner must retire the value slot");
             assertFalse(target.hasOwnerSlots());
-            assertEquals(WeakRefRegistry.WEAKLY_TRACKED, target.refCount);
+            assertEquals(RuntimeBase.RefCountTrackingState.WEAKLY_TRACKED, target.refCountTrackingState());
             MyVarCleanupStack.popMark(mark);
         }
     }
@@ -222,7 +222,7 @@ class UntrackedReferenceOwnerSlotTest {
                 PerlOwnerSlot valueOwner = packageCell.untrackedReferenceOwnerSlot();
                 assertNotNull(valueOwner,
                         "a package scalar cell owns its untracked reference value");
-                assertEquals(-1, target.refCount,
+                assertEquals(RuntimeBase.RefCountTrackingState.UNTRACKED, target.refCountTrackingState(),
                         "package ownership must not promote an untracked referent");
                 assertEquals(1, packageCell.ownerSlotCount(
                         PerlOwnerSlot.Kind.PACKAGE_SCALAR_SLOT));
@@ -280,7 +280,7 @@ class UntrackedReferenceOwnerSlotTest {
                     PerlOwnerSlot.Kind.PACKAGE_SCALAR_SLOT));
             assertEquals(1, target.ownerSlotCount(
                     PerlOwnerSlot.Kind.UNTRACKED_REFERENCE));
-            assertEquals(-1, target.refCount,
+            assertEquals(RuntimeBase.RefCountTrackingState.UNTRACKED, target.refCountTrackingState(),
                     "reconstructing a package root must not promote its untracked value");
         }
     }
@@ -290,7 +290,7 @@ class UntrackedReferenceOwnerSlotTest {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeScalar packageCell = new RuntimeScalar("value");
-            packageCell.refCount = 0;
+            packageCell.setTrackedRefCount(0);
             String key = "RuntimeScalarOwnerSlotTest::retired_cell";
 
             try {
@@ -327,14 +327,14 @@ class UntrackedReferenceOwnerSlotTest {
 
             assertNotNull(valueOwner);
             assertSame(target, valueOwner.referent());
-            assertEquals(-1, target.refCount,
+            assertEquals(RuntimeBase.RefCountTrackingState.UNTRACKED, target.refCountTrackingState(),
                     "the tie handler slot must not promote the legacy referent count");
 
             try {
                 try (MortalList.ReachabilityQueryMeasurement measurement =
                              MortalList.measureReachabilityQueries()) {
                     WeakRefRegistry.weaken(observer);
-                    assertEquals(WeakRefRegistry.WEAKLY_TRACKED, target.refCount);
+                    assertEquals(RuntimeBase.RefCountTrackingState.WEAKLY_TRACKED, target.refCountTrackingState());
                     assertEquals(0, measurement.stats().rootQueries,
                             "the tied handler identity avoids a root walk during weaken");
                     assertEquals(0, measurement.stats().snapshotsBuilt);
@@ -367,7 +367,7 @@ class UntrackedReferenceOwnerSlotTest {
 
             assertNotNull(valueOwner);
             assertSame(target, valueOwner.referent());
-            assertEquals(-1, target.refCount,
+            assertEquals(RuntimeBase.RefCountTrackingState.UNTRACKED, target.refCountTrackingState(),
                     "the staged owner must not promote the legacy referent count");
 
             RuntimeScalar.releaseStagedArgumentValue(stagedOwner);
@@ -397,7 +397,7 @@ class UntrackedReferenceOwnerSlotTest {
             assertNotNull(ownerSlot);
             assertEquals(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE, ownerSlot.kind());
             assertSame(target, ownerSlot.referent());
-            assertEquals(-1, target.refCount,
+            assertEquals(RuntimeBase.RefCountTrackingState.UNTRACKED, target.refCountTrackingState(),
                     "the durable slot identity must not promote the compatibility count");
 
             RuntimeScalar observer = new RuntimeScalar();
@@ -405,7 +405,7 @@ class UntrackedReferenceOwnerSlotTest {
             observer.value = target;
             try {
                 WeakRefRegistry.weaken(observer);
-                assertEquals(WeakRefRegistry.WEAKLY_TRACKED, target.refCount);
+                assertEquals(RuntimeBase.RefCountTrackingState.WEAKLY_TRACKED, target.refCountTrackingState());
                 assertTrue(WeakRefRegistry.isweak(observer));
 
                 owner.set(new RuntimeScalar());

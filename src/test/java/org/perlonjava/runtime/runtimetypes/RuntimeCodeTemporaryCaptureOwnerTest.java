@@ -19,7 +19,7 @@ class RuntimeCodeTemporaryCaptureOwnerTest {
             PerlOwnerSlot captureOwner = capturedPad.retainClosureCaptureSlot(closure);
             closure.capturedScalars = new RuntimeScalar[] {capturedPad};
             closure.capturedScalarOwnerSlots = new PerlOwnerSlot[] {captureOwner};
-            closure.refCount = 7; // No owner slot backs this compatibility count.
+            closure.setTrackedRefCount(7); // No owner slot backs this compatibility count.
 
             RuntimeScalar temporary = new RuntimeScalar();
             temporary.type = RuntimeScalarType.CODE;
@@ -42,7 +42,7 @@ class RuntimeCodeTemporaryCaptureOwnerTest {
             PerlOwnerSlot captureOwner = capturedPad.retainClosureCaptureSlot(closure);
             closure.capturedScalars = new RuntimeScalar[] {capturedPad};
             closure.capturedScalarOwnerSlots = new PerlOwnerSlot[] {captureOwner};
-            closure.refCount = 7;
+            closure.setTrackedRefCount(7);
 
             RuntimeScalar temporary = new RuntimeScalar();
             temporary.type = RuntimeScalarType.CODE;

@@ -27,7 +27,7 @@ class TailCallArgumentOwnerSlotFastPathTest {
             WeakRefRegistry.weaken(weak);
             try {
                 assertEquals(2, target.countedOwnerSlotCount());
-                target.refCount = 1; // Model a transient legacy-count underflow.
+                target.setTrackedRefCount(1); // Model a transient legacy-count underflow.
 
                 try (MortalList.ReachabilityQueryMeasurement measurement =
                              MortalList.measureReachabilityQueries()) {

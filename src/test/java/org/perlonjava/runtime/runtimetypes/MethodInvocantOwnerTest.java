@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class MethodInvocantOwnerTest {
     private static RuntimeHash invocant() {
         RuntimeHash value = new RuntimeHash();
-        value.refCount = 0;
+        value.setTrackedRefCount(0);
         value.blessId = NameNormalizer.getBlessId("Issue1649::MethodOwner");
         return value;
     }

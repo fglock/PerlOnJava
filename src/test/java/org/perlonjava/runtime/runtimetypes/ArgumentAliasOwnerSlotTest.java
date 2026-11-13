@@ -146,7 +146,7 @@ class ArgumentAliasOwnerSlotTest {
             PerlOwnerSlot argumentCellOwner = argumentCell.countedOwnerSlot();
             argumentCellOwner.release();
             argumentCell.refCountOwned = false;
-            target.refCount = 1; // The released scalar is the only counted owner.
+            target.setTrackedRefCount(1); // The released scalar is the only counted owner.
 
             RuntimeScalar weak = target.createAnonymousReference();
             WeakRefRegistry.weaken(weak);
@@ -210,7 +210,7 @@ class ArgumentAliasOwnerSlotTest {
             argumentCell.set(target.createAnonymousReference());
             argumentCell.countedOwnerSlot().release();
             argumentCell.refCountOwned = false;
-            target.refCount = 1;
+            target.setTrackedRefCount(1);
 
             RuntimeScalar weak = target.createAnonymousReference();
             WeakRefRegistry.weaken(weak);

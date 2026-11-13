@@ -70,7 +70,7 @@ class TemporaryRootOwnerSlotTest {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeHash root = new RuntimeHash();
-            root.refCount = 1; // Keep one external owner while checking runtime reset.
+            root.setTrackedRefCount(1); // Keep one external owner while checking runtime reset.
             MortalList.pushTemporaryRoot(root);
             MortalList.pushTemporaryRoot(root);
 

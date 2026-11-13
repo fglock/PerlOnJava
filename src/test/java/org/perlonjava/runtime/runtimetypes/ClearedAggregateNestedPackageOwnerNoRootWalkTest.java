@@ -22,7 +22,7 @@ class ClearedAggregateNestedPackageOwnerNoRootWalkTest {
             boolean previousMortalListState = MortalList.isActive();
             GlobalVariable.globalArrays.put(globalName, packageRoot);
             packageRoot.elements.add(strongOwner);
-            referent.refCount = -1;
+            referent.markRefCountUntracked();
             weakObserver.value = referent;
             weakObserver.type = RuntimeScalarType.HASHREFERENCE;
             MortalList.setActive(true);
@@ -37,7 +37,7 @@ class ClearedAggregateNestedPackageOwnerNoRootWalkTest {
                 // has been marked cleared; the package element slot is still
                 // the current strong edge.
                 referent.clearedOwnedAggregateElement = true;
-                referent.refCount = 0;
+                referent.setTrackedRefCount(0);
                 try (MortalList.ReachabilityQueryMeasurement measurement =
                              MortalList.measureReachabilityQueries()) {
                     MortalList.finalizeClearedAggregateOwnerAfterScopeExit(referent);

@@ -31,7 +31,7 @@ class CurrentCountedOwnerRepairsDeferredUndercountTest {
                                 && owner.countedOwnerSlot().isActive()
                                 && owner.countedOwnerSlot().referent() == target),
                         "each active scalar owner has a corresponding counted identity");
-                target.refCount = 1; // Model a transient compatibility-count undercount.
+                target.setTrackedRefCount(1); // Model a transient compatibility-count undercount.
 
                 try (MortalList.ReachabilityQueryMeasurement measurement =
                              MortalList.measureReachabilityQueries()) {
