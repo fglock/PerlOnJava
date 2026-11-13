@@ -691,6 +691,16 @@ public class ErrorMessageUtil {
         return lineNumbers[Math.min(index, lineNumbers.length - 1)];
     }
 
+    /** Round 35: inject pre-computed array to skip buildPhysicalLineNumbers() on warm eval path. */
+    public void injectPhysicalLineNumbers(int[] arr) {
+        this.physicalLineNumbers = arr;
+    }
+
+    /** Round 35: return the cached array (null if not yet computed). */
+    public int[] peekPhysicalLineNumbers() {
+        return physicalLineNumbers;
+    }
+
     private int[] buildPhysicalLineNumbers() {
         int[] lineNumbers = new int[tokens.size()];
         int lineNumber = 1;

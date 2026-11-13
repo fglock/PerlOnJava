@@ -528,7 +528,7 @@ public class CompileBinaryOperator {
             int rs1 = bytecodeCompiler.lastResultReg;
             bytecodeCompiler.emitAliasWithTarget(rd, rs1);
 
-            int skipRightPos = bytecodeCompiler.bytecode.size();
+            int skipRightPos = bytecodeCompiler.bytecodeSize;
             bytecodeCompiler.emit(bytecodeCompiler.gotoIfFalseOpcode());
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitInt(0);
@@ -541,7 +541,7 @@ public class CompileBinaryOperator {
                 bytecodeCompiler.emitAliasWithTarget(rd, rs2);
             }
 
-            int skipRightTarget = bytecodeCompiler.bytecode.size();
+            int skipRightTarget = bytecodeCompiler.bytecodeSize;
             bytecodeCompiler.patchIntOffset(skipRightPos + 2, skipRightTarget);
 
             bytecodeCompiler.lastResultReg = rd;
@@ -555,7 +555,7 @@ public class CompileBinaryOperator {
             int rs1 = bytecodeCompiler.lastResultReg;
             bytecodeCompiler.emitAliasWithTarget(rd, rs1);
 
-            int skipRightPos = bytecodeCompiler.bytecode.size();
+            int skipRightPos = bytecodeCompiler.bytecodeSize;
             bytecodeCompiler.emit(bytecodeCompiler.gotoIfTrueOpcode());
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitInt(0);
@@ -567,7 +567,7 @@ public class CompileBinaryOperator {
                 bytecodeCompiler.emitAliasWithTarget(rd, rs2);
             }
 
-            int skipRightTarget = bytecodeCompiler.bytecode.size();
+            int skipRightTarget = bytecodeCompiler.bytecodeSize;
             bytecodeCompiler.patchIntOffset(skipRightPos + 2, skipRightTarget);
 
             bytecodeCompiler.lastResultReg = rd;
@@ -586,7 +586,7 @@ public class CompileBinaryOperator {
             bytecodeCompiler.emitReg(definedReg);
             bytecodeCompiler.emitReg(rd);
 
-            int skipRightPos = bytecodeCompiler.bytecode.size();
+            int skipRightPos = bytecodeCompiler.bytecodeSize;
             bytecodeCompiler.emit(Opcodes.GOTO_IF_TRUE);
             bytecodeCompiler.emitReg(definedReg);
             bytecodeCompiler.emitInt(0);
@@ -598,7 +598,7 @@ public class CompileBinaryOperator {
                 bytecodeCompiler.emitAliasWithTarget(rd, rs2);
             }
 
-            int skipRightTarget = bytecodeCompiler.bytecode.size();
+            int skipRightTarget = bytecodeCompiler.bytecodeSize;
             bytecodeCompiler.patchIntOffset(skipRightPos + 2, skipRightTarget);
 
             bytecodeCompiler.lastResultReg = rd;
@@ -851,13 +851,13 @@ public class CompileBinaryOperator {
             if (i + 1 < operators.size()) {
                 bytecodeCompiler.emit(bytecodeCompiler.gotoIfFalseOpcode());
                 bytecodeCompiler.emitReg(resultReg);
-                falseJumpPositions.add(bytecodeCompiler.bytecode.size());
+                falseJumpPositions.add(bytecodeCompiler.bytecodeSize);
                 bytecodeCompiler.emitInt(0);
             }
             leftReg = rightReg;
         }
 
-        int endPc = bytecodeCompiler.bytecode.size();
+        int endPc = bytecodeCompiler.bytecodeSize;
         for (int patchPosition : falseJumpPositions) {
             bytecodeCompiler.patchIntOffset(patchPosition, endPc);
         }
