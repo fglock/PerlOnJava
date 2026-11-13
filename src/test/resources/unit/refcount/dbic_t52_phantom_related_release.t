@@ -72,7 +72,5 @@ my %weak;
 
 for my $name (qw(artist_row cd_row artist_source schema storage dbh)) {
     my $released = !defined($weak{$name});
-    diag("$name owner trace: " . Internals::jperl_owner_trace($weak{$name}))
-        if !$released && defined(&Internals::jperl_owner_trace);
     ok($released, "$name is released after the phantom chain scope");
 }
