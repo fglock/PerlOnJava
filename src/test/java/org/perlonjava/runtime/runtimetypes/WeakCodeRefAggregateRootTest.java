@@ -220,18 +220,24 @@ class WeakCodeRefAggregateRootTest {
             retainScalarCapture(capturedCode, capturedScalar);
 
             String globalName = "WeakCodeRefAggregateRootTest::mutable_capture_holder";
+            String aliasName = "WeakCodeRefAggregateRootTest::mutable_capture_owner";
             RuntimeScalar capturedRoot = new RuntimeScalar(capturedCode);
+            RuntimeScalar aliasRoot = new RuntimeScalar(capturedCode);
             GlobalVariable.globalCodeRefs.put(globalName, capturedRoot);
+            GlobalVariable.globalCodeRefs.put(aliasName, aliasRoot);
             try {
                 java.util.List<RuntimeScalar> cachedRoots =
                         GlobalVariable.globalCodeRefEdgeRootsView();
                 assertTrue(cachedRoots.contains(capturedRoot));
+                assertTrue(cachedRoots.contains(aliasRoot));
 
                 RuntimeScalar terminalRoot = new RuntimeScalar(
                         new RuntimeCode(null, java.util.List.of()));
                 GlobalVariable.globalCodeRefs.put(globalName, terminalRoot);
                 assertFalse(cachedRoots.contains(capturedRoot));
                 assertFalse(cachedRoots.contains(terminalRoot));
+                assertTrue(cachedRoots.contains(aliasRoot),
+                        "the remaining CODE slot preserves the capture owner");
 
                 GlobalVariable.globalCodeRefs.put(globalName, capturedRoot);
                 assertTrue(cachedRoots.contains(capturedRoot));
@@ -239,6 +245,7 @@ class WeakCodeRefAggregateRootTest {
                 assertFalse(cachedRoots.contains(capturedRoot));
             } finally {
                 GlobalVariable.globalCodeRefs.remove(globalName);
+                GlobalVariable.globalCodeRefs.remove(aliasName);
                 capturedCode.releaseCaptures();
             }
         }
