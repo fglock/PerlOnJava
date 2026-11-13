@@ -4551,6 +4551,64 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return slots;
     }
 
+    /**
+     * Whether this CV currently owns any closure or persistent-state edges.
+     * Root selection uses these slot identities directly; reflective capture
+     * discovery and retired-edge history are not Perl ownership proofs.
+     */
+    boolean hasActiveOwnedCaptureEdges() {
+        if (hasActiveCaptureEdges(capturedScalars, capturedScalarOwnerSlots)
+                || hasActiveCaptureEdges(capturedAggregates, capturedAggregateOwnerSlots)) {
+            return true;
+        }
+        for (RetiredCaptureEdges captures : pendingRetiredCaptureEdges) {
+            if (hasActiveCaptureEdges(captures.scalars, captures.scalarOwnerSlots)
+                    || hasActiveCaptureEdges(captures.aggregates, captures.aggregateOwnerSlots)) {
+                return true;
+            }
+        }
+        for (Map.Entry<String, RuntimeScalar> entry : stateVariable.entrySet()) {
+            if (hasCurrentStateOwner(entry.getValue(), stateScalarOwnerSlots.get(entry.getKey()))) {
+                return true;
+            }
+        }
+        for (Map.Entry<String, RuntimeScalar> entry : stateAggregateAliasOwners.entrySet()) {
+            if (hasCurrentStateOwner(
+                    entry.getValue(), stateAggregateAliasOwnerSlots.get(entry.getKey()))) {
+                return true;
+            }
+        }
+        for (Map.Entry<String, RuntimeArray> entry : stateArray.entrySet()) {
+            if (hasCurrentStateOwner(entry.getValue(), stateArrayOwnerSlots.get(entry.getKey()))) {
+                return true;
+            }
+        }
+        for (Map.Entry<String, RuntimeHash> entry : stateHash.entrySet()) {
+            if (hasCurrentStateOwner(entry.getValue(), stateHashOwnerSlots.get(entry.getKey()))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean hasActiveCaptureEdges(RuntimeBase[] values, PerlOwnerSlot[] ownerSlots) {
+        if (values == null || ownerSlots == null) return false;
+        int count = Math.min(values.length, ownerSlots.length);
+        for (int i = 0; i < count; i++) {
+            RuntimeBase value = values[i];
+            PerlOwnerSlot ownerSlot = ownerSlots[i];
+            PerlOwnerSlot.Kind expectedKind = value instanceof RuntimeScalar
+                    ? PerlOwnerSlot.Kind.SCALAR_CAPTURE : PerlOwnerSlot.Kind.CLOSURE_PAD;
+            if (value != null && ownerSlot != null && ownerSlot.isActive()
+                    && ownerSlot.kind() == expectedKind
+                    && ownerSlot.captureOwner() == this
+                    && ownerSlot.referent() == value) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** Live lexical containers keyed by their Perl pad names for PadWalker. */
     public Map<String, RuntimeBase> closedOverVariables;
     private volatile long closedOverVariablesVersion;

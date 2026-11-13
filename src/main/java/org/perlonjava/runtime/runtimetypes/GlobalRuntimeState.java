@@ -484,8 +484,7 @@ public final class GlobalRuntimeState {
     private static boolean isCodeRefEdgeRoot(RuntimeScalar scalar) {
         if (scalar == null) return false;
         return !(scalar.value instanceof RuntimeCode code)
-                || code.retiredOwnedEdges
-                || ReachabilityWalker.hasWalkableCodeEdges(code, true);
+                || code.hasActiveOwnedCaptureEdges();
     }
 
     /** Identity set of globally installed RuntimeCode values, cached by slot version. */
