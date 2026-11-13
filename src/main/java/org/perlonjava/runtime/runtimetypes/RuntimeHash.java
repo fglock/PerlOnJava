@@ -2799,11 +2799,12 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 int savedBlessId = this.blessId;
                 int savedRefCount = this.refCount;
                 boolean savedDestroyFired = this.destroyFired;
-                this.refCount = Integer.MIN_VALUE;
+                RuntimeBase.PerlLifecycleState savedLifecycleState = this.perlLifecycleState();
                 DestroyDispatch.callDestroy(this);
                 this.destroyFired = savedDestroyFired;
                 this.refCount = savedRefCount;
                 this.blessId = savedBlessId;
+                this.restorePerlLifecycleState(savedLifecycleState);
             }
             Map<String, RuntimeScalar> replacedElements = this.elements;
             notePackageRootClear(replacedElements.values());
@@ -3033,7 +3034,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             if (key == null
                     || (key.type & RuntimeScalarType.REFERENCE_BIT) == 0
                     || !(key.value instanceof RuntimeBase base)
-                    || base.refCount == Integer.MIN_VALUE) {
+                    || base.isPerlDestroyed()) {
                 return null;
             }
             PerlOwnerSlot slot = new PerlOwnerSlot(

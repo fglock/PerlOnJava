@@ -200,8 +200,7 @@ public class DestroyDispatch {
     }
 
     /**
-     * Call DESTROY on a referent whose refCount has reached 0.
-     * The caller MUST have already set refCount to Integer.MIN_VALUE.
+     * Finish destruction for a referent whose final owner has been released.
      *
      * @param referent the RuntimeBase object to destroy
      */
@@ -214,7 +213,6 @@ public class DestroyDispatch {
     }
 
     private static void callDestroy(RuntimeBase referent, boolean finalCountedOwner) {
-        // refCount is already MIN_VALUE (set by caller)
         if (referent instanceof RuntimeCode code && code.hasActiveCodeOwner()) {
             code.deferFinalReleaseToActiveCode();
             return;
@@ -240,11 +238,12 @@ public class DestroyDispatch {
             return;
         }
 
-        // The explicit lifecycle is authoritative once final cleanup has
-        // completed. Keep refCount's sentinel interpretation at the legacy
-        // bridge, while preventing a repeated count transition from entering
-        // the destruction path a second time.
         if (referent.perlLifecycleState() == RuntimeBase.PerlLifecycleState.DESTROYED) return;
+
+        // Older lifecycle producers still use MIN_VALUE as a one-way request
+        // marker. Normalize those callers into the count domain before they
+        // enter the lifecycle state machine.
+        if (referent.refCount == Integer.MIN_VALUE) referent.refCount = 0;
 
         // Phase 3 (refcount_alignment_plan.md): Re-entry guard.
         // If this object is already inside its own DESTROY body, a transient
@@ -254,12 +253,7 @@ public class DestroyDispatch {
         // DESTROY can still track references, then return. The outer
         // doCallDestroy will handle final cleanup based on refCount when
         // its Perl body returns.
-        if (referent.currentlyDestroying) {
-            if (referent.refCount == Integer.MIN_VALUE) {
-                referent.refCount = 0;
-            }
-            return;
-        }
+        if (referent.currentlyDestroying) return;
         unregisterDestroyable(referent);
 
         // Phase 3 (refcount_alignment_plan.md): Resurrection re-fire.
@@ -469,15 +463,8 @@ public class DestroyDispatch {
         state.currentDestroyTarget = referent;
         state.destroyTargetRescued = false;
 
-        // Phase 3 (refcount_alignment_plan.md): Transition from MIN_VALUE
-        // back to 0 so increments/decrements inside DESTROY work normally.
-        // currentlyDestroying guards callDestroy re-entry from transient
-        // decrement-to-0 events (see callDestroy's entry check).
         boolean savedCurrentlyDestroying = referent.currentlyDestroying;
         referent.currentlyDestroying = true;
-        if (referent.refCount == Integer.MIN_VALUE) {
-            referent.refCount = 0;
-        }
 
         boolean callbackCompleted = false;
         try {
@@ -593,16 +580,6 @@ public class DestroyDispatch {
                         + newCurrentCountedOwners + " newly acquired counted Perl owner slot(s) "
                         + "but refCount is zero for "
                         + referent.getClass().getSimpleName());
-            }
-            if (referent.refCount == 0 && !referent.needsReDestroy) {
-                boolean otherOwner = referent.localBindingExists
-                        || referent.hasSemanticCaptureOwner()
-                        || referent.hasPendingReturnOwner()
-                        || referent.hasUncountedPerlOwnerSlotIdentity()
-                        || referent.hasScalarCellOwner();
-                if (!otherOwner) {
-                    referent.refCount = Integer.MIN_VALUE;
-                }
             }
             // Restore $@ — must happen whether DESTROY succeeded or threw.
             // Without this, die inside DESTROY would clobber the caller's $@.
@@ -856,7 +833,6 @@ public class DestroyDispatch {
                 // reference. A positive count can belong to a real promoted
                 // slot, so only current Perl owner identities decide whether
                 // the object is still alive.
-                obj.refCount = Integer.MIN_VALUE;
                 callDestroy(obj);
                 anyProcessed = true;
             } else {

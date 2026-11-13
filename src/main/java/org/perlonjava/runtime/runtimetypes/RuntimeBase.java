@@ -25,6 +25,10 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         return perlLifecycleState;
     }
 
+    public boolean isPerlDestroyed() {
+        return perlLifecycleState == PerlLifecycleState.DESTROYED;
+    }
+
     void beginPerlDestruction() {
         perlLifecycleState = PerlLifecycleState.DESTROYING;
     }
@@ -35,6 +39,10 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
 
     void markPerlDestroyed() {
         perlLifecycleState = PerlLifecycleState.DESTROYED;
+    }
+
+    void restorePerlLifecycleState(PerlLifecycleState state) {
+        perlLifecycleState = Objects.requireNonNull(state, "state");
     }
 
     /** Storage identity retained across ithread graph clones. */
@@ -160,14 +168,9 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     // Index to the class that this reference belongs
     public int blessId;
 
-    // Reference count for blessed objects with DESTROY.
-    // Four-state lifecycle counter:
-    //   -1                = Not tracked (unblessed, or blessed without DESTROY)
-    //    0                = Tracked, zero counted containers (fresh from bless)
-    //   >0                = Being tracked; N named-variable containers exist
-    //   Integer.MIN_VALUE = DESTROY already called (or in progress)
-    // MUST be explicitly initialized to -1 (Java defaults int to 0, which would
-    // mean "tracked, zero containers" — silently breaking all unblessed objects).
+    // Selective legacy count bridge used while owner producers are migrated.
+    // Destruction state is tracked independently by perlLifecycleState.
+    // -1 means this referent is not currently participating in the bridge.
     public int refCount = -1;
 
     // ─────────────────────────────────────────────────────────────────────
@@ -426,10 +429,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             // A closure pad capture is not a counted RV edge. Any positive
             // count belongs to scalar or container slots, which retire their
             // own count when those slots are released.
-            if (blessId != 0 && refCount <= 0) {
-                refCount = Integer.MIN_VALUE;
-                DestroyDispatch.callDestroy(this);
-            }
+            if (blessId != 0 && refCount <= 0) DestroyDispatch.callDestroy(this);
         }
     }
 

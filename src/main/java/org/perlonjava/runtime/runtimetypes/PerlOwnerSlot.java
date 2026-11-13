@@ -412,7 +412,7 @@ public final class PerlOwnerSlot {
             throw new IllegalStateException("method-invocant slot is not available");
         }
         Objects.requireNonNull(target, "target");
-        if (target.refCount == Integer.MIN_VALUE) {
+        if (target.isPerlDestroyed()) {
             throw new IllegalStateException("cannot hold a destroyed method invocant");
         }
         methodInvocantOwner = true;
@@ -500,7 +500,7 @@ public final class PerlOwnerSlot {
     /** Acquire this slot as one semantic Perl owner, without touching refCount. */
     public synchronized void acquireNativeOwner(RuntimeBase target) {
         Objects.requireNonNull(target, "target");
-        if (target.refCount == Integer.MIN_VALUE) {
+        if (target.isPerlDestroyed()) {
             throw new IllegalStateException("cannot own a destroyed referent");
         }
         if (legacyCaptureCount != 0) {
@@ -532,7 +532,7 @@ public final class PerlOwnerSlot {
         if (referent != null || nativeOwner || countedNativeOwner) {
             throw new IllegalStateException("counted native acquisition requires an empty slot");
         }
-        if (target.refCount == Integer.MIN_VALUE) {
+        if (target.isPerlDestroyed()) {
             throw new IllegalStateException("cannot own a destroyed referent");
         }
         boolean counted = target.refCount >= 0;
@@ -606,7 +606,7 @@ public final class PerlOwnerSlot {
             throw new IllegalStateException("pad-constant acquisition requires a CODE-pad slot");
         }
         Objects.requireNonNull(target, "target");
-        if (target.refCount == Integer.MIN_VALUE) {
+        if (target.isPerlDestroyed()) {
             throw new IllegalStateException("cannot own a destroyed pad constant");
         }
         if (legacyCaptureCount != 0) {
@@ -721,7 +721,7 @@ public final class PerlOwnerSlot {
             throw new IllegalStateException("suspended-frame acquisition requires a suspended-frame slot");
         }
         Objects.requireNonNull(target, "target");
-        if (target.refCount == Integer.MIN_VALUE) {
+        if (target.isPerlDestroyed()) {
             throw new IllegalStateException("cannot own a destroyed suspended-frame value");
         }
         if (legacyCaptureCount != 0) {
@@ -735,7 +735,7 @@ public final class PerlOwnerSlot {
         if (kind != Kind.SUSPENDED_FRAME) {
             throw new IllegalStateException("suspended-frame update requires a suspended-frame slot");
         }
-        if (target != null && target.refCount == Integer.MIN_VALUE) target = null;
+        if (target != null && target.isPerlDestroyed()) target = null;
         transferWithoutRuntimeRoot(target, target != null);
     }
 
@@ -745,7 +745,7 @@ public final class PerlOwnerSlot {
             throw new IllegalStateException("untracked acquisition requires an untracked-reference slot");
         }
         Objects.requireNonNull(target, "target");
-        if (target.refCount == Integer.MIN_VALUE) {
+        if (target.isPerlDestroyed()) {
             throw new IllegalStateException("cannot own a destroyed referent");
         }
         if (nativeOwner || legacyCaptureCount != 0) {
@@ -905,7 +905,7 @@ public final class PerlOwnerSlot {
         if (referent != null || nativeOwner || legacyCaptureCount != 0) {
             throw new IllegalStateException("temporary-root slot is already active");
         }
-        if (target.refCount == Integer.MIN_VALUE) {
+        if (target.isPerlDestroyed()) {
             throw new IllegalStateException("cannot retain a destroyed temporary root");
         }
         transferWithoutRuntimeRoot(target, false);
@@ -958,7 +958,7 @@ public final class PerlOwnerSlot {
         if (referent != null || nativeOwner) {
             throw new IllegalStateException("capture identity is already active");
         }
-        if (target.refCount == Integer.MIN_VALUE) {
+        if (target.isPerlDestroyed()) {
             throw new IllegalStateException("cannot capture a destroyed pad cell");
         }
         referent = target;
@@ -998,7 +998,7 @@ public final class PerlOwnerSlot {
         }
         Objects.requireNonNull(target, "target");
         Objects.requireNonNull(owner, "owner");
-        if (target.refCount == Integer.MIN_VALUE) {
+        if (target.isPerlDestroyed()) {
             throw new IllegalStateException("cannot alias a destroyed scalar cell");
         }
         arrayAliasOwner = new WeakReference<>(owner);
@@ -1016,7 +1016,7 @@ public final class PerlOwnerSlot {
         }
         Objects.requireNonNull(target, "target");
         Objects.requireNonNull(owner, "owner");
-        if (target.refCount == Integer.MIN_VALUE) {
+        if (target.isPerlDestroyed()) {
             throw new IllegalStateException("cannot alias a destroyed scalar cell");
         }
         hashAliasOwner = new WeakReference<>(owner);
@@ -1127,7 +1127,7 @@ public final class PerlOwnerSlot {
             throw new IllegalStateException("argument-alias acquisition requires an alias slot");
         }
         Objects.requireNonNull(target, "target");
-        if (target.refCount == Integer.MIN_VALUE) {
+        if (target.isPerlDestroyed()) {
             release();
             return;
         }
@@ -1274,7 +1274,7 @@ public final class PerlOwnerSlot {
             throw new IllegalStateException("cannot replace a slot that is not a native owner");
         }
         Objects.requireNonNull(nextReferent, "nextReferent");
-        if (nextReferent.refCount == Integer.MIN_VALUE) {
+        if (nextReferent.isPerlDestroyed()) {
             throw new IllegalStateException("cannot own a destroyed referent");
         }
         transferTo(nextReferent);

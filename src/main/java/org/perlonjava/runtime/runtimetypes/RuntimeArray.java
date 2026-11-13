@@ -3302,8 +3302,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 int savedRefCount = this.refCount;
                 int savedType = this.type;
                 boolean savedDestroyFired = this.destroyFired;
-                // callDestroy contract: caller sets refCount = MIN_VALUE.
-                this.refCount = Integer.MIN_VALUE;
+                RuntimeBase.PerlLifecycleState savedLifecycleState = this.perlLifecycleState();
                 DestroyDispatch.callDestroy(this);
                 // Restore for safe state replacement below. Reset
                 // destroyFired so subsequent local/restore cycles can
@@ -3312,6 +3311,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 this.refCount = savedRefCount;
                 this.type = savedType;
                 this.blessId = savedBlessId;
+                this.restorePerlLifecycleState(savedLifecycleState);
             }
             // Restore the elements from the saved state
             notePackageRootMutation();

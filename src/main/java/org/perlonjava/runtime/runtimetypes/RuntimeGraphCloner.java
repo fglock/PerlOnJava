@@ -228,9 +228,9 @@ public class RuntimeGraphCloner {
         if (value.threadShared && !needsSharedRuntimeView(value)) return value;
         Object existing = clones.get(value);
         if (existing instanceof RuntimeScalar clonedScalar
-                && clonedScalar.refCount == Integer.MIN_VALUE
+                && clonedScalar.isPerlDestroyed()
                 && value instanceof RuntimeScalar sourceScalar
-                && sourceScalar.refCount != Integer.MIN_VALUE) {
+                && !sourceScalar.isPerlDestroyed()) {
             // A lazy CODE definition can expose a pad cell after the initial
             // thread snapshot. If this snapshot already cloned that source
             // cell and the child has since retired the clone, reuse would
@@ -563,7 +563,7 @@ public class RuntimeGraphCloner {
                     // ownership metadata for a dead cell left in a lazy CV's
                     // conservative capture array. Such cells are placeholders,
                     // not live Perl captures.
-                    if (capture == null || capture.refCount == Integer.MIN_VALUE
+                    if (capture == null || capture.isPerlDestroyed()
                             || !seenCaptureValues.add(capture)) continue;
                     if (capture instanceof RuntimeScalar scalar) {
                         clonedCaptureScalars.add(scalar);
@@ -580,9 +580,9 @@ public class RuntimeGraphCloner {
                         // CODE definitions are copied into an ithread. A dead
                         // cell is not a Perl owner and must not be resurrected
                         // as a child closure capture.
-                        if (scalar == null || scalar.refCount == Integer.MIN_VALUE) continue;
+                        if (scalar == null || scalar.isPerlDestroyed()) continue;
                         RuntimeScalar cloned = (RuntimeScalar) cloneValue(scalar);
-                        if (cloned != null && cloned.refCount != Integer.MIN_VALUE
+                        if (cloned != null && !cloned.isPerlDestroyed()
                                 && seenCaptureValues.add(cloned)) {
                             clonedCaptureScalars.add(cloned);
                         }

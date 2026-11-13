@@ -102,11 +102,12 @@ public class WeakRefRegistry {
         // that glob. The restore path can mark the temporary stash reference as
         // destroyed even though a strong coderef escaped. Revive that stale
         // marker so a later weaken() of the escaped CODE behaves like Perl.
-        if (base.refCount == Integer.MIN_VALUE) {
+        if (base.isPerlDestroyed()) {
             if (base instanceof RuntimeCode code
                     && code.defined()
                     && !code.currentlyDestroying) {
                 base.refCount = -1;
+                base.markPerlResurrected();
             } else {
                 ref.type = RuntimeScalarType.UNDEF;
                 ref.value = null;
@@ -279,7 +280,7 @@ public class WeakRefRegistry {
             // leaves formerly untracked referents uncounted.
             RuntimeScalar.incrementRefCountForContainerStore(
                     ref, ref.countedOwnerKind());
-            if (base.refCount != Integer.MIN_VALUE) {
+            if (!base.isPerlDestroyed()) {
                 RuntimeScalar.retainUnstashedIoForDurableSlot(ref);
             }
             // Note: if MIN_VALUE, object already destroyed — unweaken is a no-op
@@ -342,7 +343,6 @@ public class WeakRefRegistry {
                 && !(referent instanceof RuntimeScalarReadOnly
                     && RuntimeCode.isInstalledPadConstant(referent))) {
             referent.deferredFinalReleaseForUncountedOwners = false;
-            referent.refCount = Integer.MIN_VALUE;
             DestroyDispatch.callDestroy(referent);
             return;
         }
@@ -361,7 +361,6 @@ public class WeakRefRegistry {
         if (referent.blessId != 0
                 || referent instanceof RuntimeArray
                 || referent instanceof RuntimeHash) {
-            referent.refCount = Integer.MIN_VALUE;
             DestroyDispatch.callDestroy(referent);
         } else {
             clearWeakRefsTo(referent);
@@ -370,7 +369,7 @@ public class WeakRefRegistry {
 
     /** Recheck cleared aggregate cleanup after a suspended lexical owner retires. */
     public static void onSuspendedFrameOwnerReleased(RuntimeBase referent) {
-        if (referent != null && referent.refCount != Integer.MIN_VALUE
+        if (referent != null && !referent.isPerlDestroyed()
                 && referent.clearedOwnedAggregateElement) {
             MortalList.finalizeClearedAggregateOwnerAfterScopeExit(referent);
         }
@@ -387,7 +386,6 @@ public class WeakRefRegistry {
                 || (referent instanceof RuntimeCode code && RuntimeCode.isActiveCode(code))) {
             return;
         }
-        referent.refCount = Integer.MIN_VALUE;
         DestroyDispatch.callDestroy(referent);
     }
 
@@ -398,7 +396,7 @@ public class WeakRefRegistry {
                 || referent.hasPendingReturnOwner()
                 || referent.countedOwnerSlotCount() != 0
                 || referent.localBindingExists || referent.refCount > 0
-                || referent.refCount == Integer.MIN_VALUE) return;
+                || referent.isPerlDestroyed()) return;
 
         boolean untrackedAggregate = referent.blessId == 0
                 && (referent instanceof RuntimeArray || referent instanceof RuntimeHash);
@@ -407,7 +405,6 @@ public class WeakRefRegistry {
         }
 
         if (referent.blessId != 0) {
-            referent.refCount = Integer.MIN_VALUE;
             DestroyDispatch.callDestroy(referent);
             return;
         }

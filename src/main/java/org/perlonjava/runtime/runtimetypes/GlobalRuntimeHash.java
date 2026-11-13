@@ -82,7 +82,6 @@ public class GlobalRuntimeHash implements DynamicState {
                 if (!preserveSuspendedHash && localHash != null && localHash.blessId != 0
                         && !localHash.destroyFired
                         && (saved.originalHash == null || localHash != saved.originalHash)) {
-                    localHash.refCount = Integer.MIN_VALUE;
                     DestroyDispatch.callDestroy(localHash);
                 }
 

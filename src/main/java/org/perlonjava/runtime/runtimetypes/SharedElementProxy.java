@@ -27,7 +27,6 @@ final class SharedElementProxy extends RuntimeScalar {
         if (value instanceof RuntimeBase view
                 && view.threadSharedFetchedView
                 && view.refCount == 0) {
-            view.refCount = Integer.MIN_VALUE;
             DestroyDispatch.callDestroy(view);
             value = null;
             type = RuntimeScalarType.UNDEF;
