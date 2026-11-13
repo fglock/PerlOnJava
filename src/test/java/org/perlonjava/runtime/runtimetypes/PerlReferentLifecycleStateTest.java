@@ -23,8 +23,8 @@ class PerlReferentLifecycleStateTest {
             referent.beginPerlDestruction();
             referent.markPerlDestroyed();
             assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, referent.perlLifecycleState());
-            assertEquals(-1, referent.refCount,
-                    "the explicit lifecycle state does not encode refCount sentinels");
+            assertEquals(0, referent.refCount,
+                    "a destroyed referent has no remaining Perl owner count");
         }
     }
 

@@ -24,7 +24,7 @@ class ViaLayerSelfOwnerSlotTest {
     void trackedPushedObjectHasOneOwnerIdentityUntilLayerRelease() {
         try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
             RuntimeArray referent = new RuntimeArray();
-            DestroyDispatch.callDestroy(referent);
+            referent.refCount = 0;
 
             ViaLayer.SelfReferenceOwner owner =
                     ViaLayer.SelfReferenceOwner.retain(referent.createReference());
