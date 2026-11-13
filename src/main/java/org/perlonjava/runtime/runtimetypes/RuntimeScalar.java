@@ -658,6 +658,35 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return containerOwner;
     }
 
+    private static int untrackedOwnerDebugLines;
+
+    private void traceUntrackedOwnerTransition(String operation, RuntimeBase owner) {
+        if (!Boolean.getBoolean("perlonjava.traceUntrackedOwnerTransitions")
+                || !(owner instanceof RuntimeArray array) || array.elements == null
+                || array.elements.size() != 5 || !(value instanceof RuntimeHash referent)
+                || referent.blessId == 0) {
+            return;
+        }
+        synchronized (RuntimeScalar.class) {
+            if (untrackedOwnerDebugLines >= 300) return;
+            untrackedOwnerDebugLines++;
+        }
+        PerlOwnerSlot slot = untrackedReferenceOwnerSlot;
+        System.err.println("[UNTRACKED-OWNER-TRANSITION] op=" + operation
+                + " scalar=" + System.identityHashCode(this)
+                + " referent=" + System.identityHashCode(referent)
+                + " blessId=" + referent.blessId
+                + " array=" + System.identityHashCode(array)
+                + " index=" + array.elements.indexOf(this)
+                + " registered=" + MyVarCleanupStack.isRegistered(this)
+                + " scopeExited=" + scopeExited
+                + " localBinding=" + localBindingExists
+                + " refCountOwned=" + refCountOwned
+                + " slotActive=" + (slot != null && slot.isActive())
+                + " slotReferent=" + (slot == null || slot.referent() == null
+                    ? "none" : System.identityHashCode(slot.referent())));
+    }
+
     void markContainerOwner(RuntimeBase owner) {
         // Immutable primitive literals are shared from the global scalar
         // cache. Their owner does not make them writable, but it would keep a
@@ -694,8 +723,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     /** Retire this cell's container edge when the container loses its last Perl owner. */
     void releaseContainerOwner(RuntimeBase expectedOwner) {
+        traceUntrackedOwnerTransition("release-container-before", expectedOwner);
         removeContainerOwnerTracking(expectedOwner);
         refreshUntrackedReferenceOwner();
+        traceUntrackedOwnerTransition("release-container-after", expectedOwner);
     }
 
     /** Retire this aggregate edge after a slot mutation removed its last copy. */
@@ -717,6 +748,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     /** Refresh this direct cell after its aggregate's last current Perl owner leaves. */
     void reconcileContainerOwnerAfterAggregateTransfer(RuntimeBase owner) {
         if (owner == null || isSharedImmutableLiteralWithoutOwnerTracking()) return;
+        traceUntrackedOwnerTransition("aggregate-transfer-before", owner);
         RuntimeBase referent = (type & RuntimeScalarType.REFERENCE_BIT) != 0
                 && value instanceof RuntimeBase base ? base : null;
         reconcileContainerOwnerAfterMutation(owner);
@@ -728,6 +760,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && WeakRefRegistry.hasWeakRefsTo(code)) {
             WeakRefRegistry.clearWeakRefsTo(code);
         }
+        traceUntrackedOwnerTransition("aggregate-transfer-after", owner);
     }
 
     private void removeContainerOwnerTracking(RuntimeBase expectedOwner) {
@@ -1403,6 +1436,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     private void retainUntrackedReferenceOwner(RuntimeBase referent) {
+        traceUntrackedOwnerTransition("retain-before", containerOwner);
         if (untrackedReferenceOwnerSlot == null) {
             untrackedReferenceOwnerSlot = new PerlOwnerSlot(
                     PerlOwnerSlot.Kind.UNTRACKED_REFERENCE);
@@ -1412,13 +1446,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // new referent before releasing the previous one, so cleanup callbacks
         // cannot observe a gap where this scalar's current value has no owner.
         untrackedReferenceOwnerSlot.acquireUntrackedIdentity(referent);
+        traceUntrackedOwnerTransition("retain-after", containerOwner);
     }
 
     void releaseUntrackedReferenceOwner(RuntimeBase expectedReferent) {
         if (untrackedReferenceOwnerSlot == null
                 || untrackedReferenceOwnerSlot.referent() != expectedReferent) return;
+        traceUntrackedOwnerTransition("release-value-before", containerOwner);
         untrackedReferenceOwnerSlot.release();
         WeakRefRegistry.onStrongOwnerSlotReleased(expectedReferent);
+        traceUntrackedOwnerTransition("release-value-after", containerOwner);
     }
 
     void finalizeUntrackedValueAfterScopeExit(RuntimeBase expectedReferent) {
