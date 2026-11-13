@@ -13,7 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Tag("unit")
 class CodeStateAggregateOwnerSlotTest {
     @Test
-    void deferredStateAggregateReleaseUsesCodeOwnerIdentity() {
+    void stateAggregateLifetimeUsesCodeOwnerIdentity() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeCode code = new RuntimeCode(null, List.of());
@@ -28,19 +28,9 @@ class CodeStateAggregateOwnerSlotTest {
                 assertEquals(1, stateArray.ownerSlotCount(PerlOwnerSlot.Kind.CODE_STATE),
                         "the persistent CODE state entry must own its aggregate directly");
 
-                stateArray.refCount = 1; // Model the last deferred legacy bridge release.
-                MortalList.pushMark();
-                MortalList.deferDecrement(stateArray);
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
-                    MortalList.popAndFlush();
-
-                    assertTrue(WeakRefRegistry.isweak(weak),
-                            "the live CODE state binding keeps the weakly observed array alive");
-                    assertEquals(1, stateArray.ownerSlotCount(PerlOwnerSlot.Kind.CODE_STATE));
-                    assertEquals(0, measurement.stats().rootQueries,
-                            "deferred release must use the CODE state owner slot");
-                }
+                assertTrue(WeakRefRegistry.isweak(weak),
+                        "the live CODE state binding keeps the weakly observed array alive");
+                assertEquals(1, stateArray.ownerSlotCount(PerlOwnerSlot.Kind.CODE_STATE));
 
                 code.releaseStateStorage();
 

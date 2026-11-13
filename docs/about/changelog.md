@@ -43,6 +43,7 @@ priorities and future plans.
 - Preserve control-flow return payloads and pending suspended-frame owners during END-boundary root checks; trim temporary roots skipped by exceptional call and eval unwinds (#1649).
 - Root current package CODE slots by stash identity, including anonymous and eval-defined closures, and ignore detached glob slots after their aliases move (#1649).
 - Track IO handle replacement and executable regex callback owners through their current runtime slots (#1649).
+- Remove the tokenless decrement compatibility path and its root-count repair now that releases identify their owner slots (#2043).
 - Clear weak observers from rescued object graphs at the END boundary while preserving independently rooted objects and strong Perl edges (#1649).
 - Short-circuit temporary-root reachability checks when direct strong edges prove the referent is reachable (#1649).
 - Prove temporary-root reachability through current aggregate, scalar-cell, CODE-slot, argument-container, tied-handler, untracked-scalar, scalar-reference, closure-capture, CODE-state, array-refalias, hash-refalias, and compiled CODE pad-constant owner slots before falling back to a graph traversal (#2043).

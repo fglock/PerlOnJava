@@ -371,24 +371,6 @@ public class MortalList {
     }
 
     /**
-     * Legacy unpaired decrement without scalar-slot release provenance.
-     * Production mutation paths must use the slot-aware release methods below.
-     */
-    public static void deferDecrement(RuntimeBase base) {
-        deferDecrement(base, null);
-    }
-
-    /** Queue a decrement paired with a trace-only non-scalar owner kind. */
-    public static void deferDecrement(RuntimeBase base, String transientOwnerKind) {
-        if (base.refCountTrace) {
-            base.traceRefCount(0, "MortalList.deferDecrement (queued)");
-        }
-        LifecycleRuntimeState state = state();
-        markBoundaryWork(state);
-        queueDeferredBase(state, base, null, transientOwnerKind);
-    }
-
-    /**
      * Whether a release for this exact referent is queued while a call argument
      * is being staged. The staging scalar is a live argument alias, so it must
      * acquire that identity before the queued temporary release can drain.
@@ -1914,29 +1896,8 @@ public class MortalList {
         // queue drains. Let that exact release decide finalization instead of
         // racing it with scope-exit cleanup.
         if (base.hasPendingOwnerRelease()) return;
-        // This measured query exists for the root-snapshot cost regression;
-        // its result must not affect aggregate lifetime.
-        if (base.refCount <= 0 && activeReachabilityQueryStats() != null) {
-            isReachableFromExternalRootCached(base);
-        }
         base.refCount = Integer.MIN_VALUE;
         DestroyDispatch.callDestroy(base);
-    }
-
-    // D-W6.18 perf: cached reachable-set, valid for the duration of a
-    // single flush() invocation. The walker BFS is O(globals); without
-    // this cache, calling it once per pending target turns flush into
-    // O(targets × globals). DBIC stresses this hard because many
-    // blessed objects are stored-in-package-global AND have weak refs
-    // (Schema/ResultSource back-refs) — every flush would re-walk the
-    // full global graph for each one. Computed lazily on first need.
-    private static boolean isReachableCached(RuntimeBase base) {
-        LifecycleRuntimeState state = state();
-        if (state.flushReachableCache == null) {
-            ReachabilityWalker w = new ReachabilityWalker();
-            state.flushReachableCache = w.walk();
-        }
-        return state.flushReachableCache.contains(base);
     }
 
     static boolean isReachableFromExternalRootCached(RuntimeBase base) {
@@ -2182,12 +2143,7 @@ public class MortalList {
         boolean hasWeakRefs = WeakRefRegistry.hasWeakRefsTo(base);
         // Production edge releases carry an exact slot token. A lifecycle-only
         // boundary carries completion provenance but no released edge; its
-        // cleanup decision must follow current owner identities, not a root walk.
-        // Reachability repair remains available only to the legacy unpaired
-        // decrement entry point. A lifecycle-only token is not a released Perl
-        // edge and must not trigger reconstruction from a root walk; its
-        // cleanup decision follows the current owner identities below.
-        boolean legacyUnpairedDecrement = ownerRelease == null;
+        // cleanup decision follows current owner identities, not a root walk.
         boolean finalRelease = false;
         if (base.refCount > 0) {
             finalRelease = base.releaseTrackedOwnerCount(
@@ -2291,19 +2247,11 @@ public class MortalList {
                 // that edge does not participate in the legacy referent count.
                 // Keep weak observers until the exact stash entry is removed.
                 base.deferFinalReleaseToUncountedOwnerSlots();
-            } else if (base.hasCurrentUncountedPerlOwnerSlotIdentity()
-                    && (!legacyUnpairedDecrement
-                        || (base.verifiedCurrentCountedOwnerSlotCount() == 0
-                            && base.hasCurrentUntrackedLexicalScalarOwnerSlotIdentity()))) {
+            } else if (base.hasCurrentUncountedPerlOwnerSlotIdentity()) {
                 // A current lexical, package, alias, or resource slot proves
-                // that the referent still has a Perl owner, even when a legacy
-                // unpaired decrement cannot identify the edge being released.
-                // For legacy releases, use this fast path only when a live
-                // lexical scalar directly owns the referent and no counted
-                // slots need restoration. Package-rooted aggregate edges can
-                // still require the compatibility root proof below.
+                // that the referent still has a Perl owner.
                 // Carry the lifecycle obligation on the exact identity instead
-                // of rebuilding a root graph to rediscover the uncounted owner.
+                // of rebuilding a root graph to rediscover the owner.
                 base.deferFinalReleaseToUncountedOwnerSlots();
             } else if (isFinalCountedReferentRelease(base, ownerRelease)) {
                 // This decrement retired an identified scalar/element edge.
@@ -2311,17 +2259,10 @@ public class MortalList {
                 // a cached root snapshot must not invent a replacement owner.
                 base.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroyFromCountedOwner(base);
-            } else if (!(ownerRelease == null && transientOwnerKind == null
-                            && hasPackageRootedCurrentAggregateOwner(base))
-                    && base.restoreVerifiedCurrentCountedOwnerSlotRefCount()) {
+            } else if (base.restoreVerifiedCurrentCountedOwnerSlotRefCount()) {
                 // Exact active scalar, element, invocant, or native slots are
                 // the ownership proof here. This narrow count-alignment bridge
                 // does not inspect roots or walk the runtime object graph.
-            } else if (legacyUnpairedDecrement && hasWeakRefs
-                    && restoreReachableOwnerCount(base)) {
-                // Preserve the legacy unpaired hook's diagnostic/recovery walk
-                // while its callers migrate. Production releases carry an
-                // exact owner-slot token and bypass this compatibility path.
             } else if (base instanceof RuntimeScalarReadOnly
                     && RuntimeCode.isInstalledPadConstant(base)) {
                 // A readonly scalar referenced through \("literal") has an
@@ -2329,56 +2270,16 @@ public class MortalList {
                 // Defer lifecycle cleanup to those slots instead of fabricating
                 // a legacy count that has no corresponding Perl reference.
                 base.deferFinalReleaseToUncountedOwnerSlots();
-            } else if (!legacyUnpairedDecrement
-                    && (base.hasNonPackageAggregateUncountedOwnerSlotIdentity()
+            } else if (base.hasNonPackageAggregateUncountedOwnerSlotIdentity()
                         || (aggregateReferent
                             ? (base.blessId != 0 && !hasWeakRefs
                                 && base.hasUntrackedReferenceOwnerSlotIdentity())
-                            : hasUntrackedReferenceOwner))) {
+                            : hasUntrackedReferenceOwner)) {
                 // Counted owner recovery is complete above. A surviving
                 // non-package aggregate slot, or an untracked package owner of
                 // a blessed aggregate without direct weak observers, defers
-                // cleanup until its release. Blessed aggregates with direct
-                // weak observers still use the root proof below.
+                // cleanup until its release.
                 base.deferFinalReleaseToUncountedOwnerSlots();
-            } else if (legacyUnpairedDecrement
-                    && base.blessId == 0
-                    && (base instanceof RuntimeArray || base instanceof RuntimeHash)
-                    && isUnblessedAggregateReachableDuringDrain(base)) {
-                // Keep legacy unpaired decrements on the shared drain proof.
-                // Ordinary aggregate cleanup carries its owner-slot provenance
-                // and decides lifetime from current Perl owners instead.
-                base.refCount = 1;
-            } else if (legacyUnpairedDecrement
-                    && base.blessId != 0
-                    && hasWeakRefs
-                    && (isReachableFromExternalRootCached(base)
-                    || isReachableFromFullRootSnapshot(base))) {
-                // A legacy unpaired release may temporarily consume the
-                // selective count of an object retained below a package root.
-                // Mojolicious::Lite keeps its route tree in a package
-                // singleton; a mounted route also has a weak parent link from
-                // the embedded application's route root. When the request Match
-                // object is destroyed, its endpoint release can make that live
-                // route dip to zero even though the singleton's children array
-                // still owns it. The inherited Mojo::Base::DESTROY method makes
-                // the ordinary no-DESTROY guard inapplicable, and recursively
-                // destroying the route tears down the mounted renderer helper
-                // namespace. Preserve only objects proven reachable from a
-                // live Perl root; final owner removal still destroys them at
-                // a later boundary. This proof also covers ordinary blessed
-                // classes without DESTROY, so share the root query for both
-                // compatibility cases.
-                base.refCount = 1;
-            } else if (legacyUnpairedDecrement
-                    && base.blessId != 0
-                    && base.storedInPackageGlobal
-                    && hasWeakRefs
-                    && isReachableCached(base)) {
-                // Module-global metadata such as Moose/Class::MOP metaclasses
-                // can transiently hit zero in the selective refcount model.
-                // If the walker can still reach the object from Perl-visible
-                // roots, keep weak links to it intact.
             } else {
                 // Call depth is not ownership. If every counted and direct
                 // owner check above is empty, a weak referent is final here;
@@ -2387,11 +2288,9 @@ public class MortalList {
                 DestroyDispatch.callDestroy(base);
             }
         }
-        // A prior compatibility branch may preserve refCount at zero while a
-        // nested scope is unwinding. The exact owner release is still pending
-        // in this call, so recheck its ledger after that branch: once this was
-        // the final trusted slot and no other Perl binding remains, finish the
-        // release here instead of relying on a later reachability sweep.
+        // A nested scope may defer destruction while another active owner
+        // remains. Recheck the ledger after the final counted release so the
+        // last trusted slot completes cleanup here.
         if (base.refCount == 0
                 && isFinalCountedReferentRelease(base, ownerRelease)
                 && !base.localBindingExists
@@ -2433,36 +2332,6 @@ public class MortalList {
                     ARGUMENT_TIE_HANDLER, SCALAR_REFERENCE_CONTENTS -> true;
             default -> false;
         };
-    }
-
-    private static boolean restoreReachableOwnerCount(RuntimeBase base) {
-        int ownerCount = base.reachableOwnerCount();
-        if (ownerCount == 0) return false;
-        base.refCount = ownerCount;
-        return true;
-    }
-
-    private static boolean hasPackageRootedCurrentAggregateOwner(RuntimeBase base) {
-        for (PerlOwnerSlot slot : base.ownerSlotSnapshot()) {
-            if (!slot.isActive() || slot.referent() != base
-                    || (slot.kind() != PerlOwnerSlot.Kind.SCALAR_CELL
-                        && slot.kind() != PerlOwnerSlot.Kind.ARRAY_ELEMENT
-                        && slot.kind() != PerlOwnerSlot.Kind.HASH_ELEMENT)) {
-                continue;
-            }
-            RuntimeScalar owner = slot.countedScalarOwner();
-            if (owner == null) continue;
-            boolean currentOwner = slot.kind() == PerlOwnerSlot.Kind.SCALAR_CELL
-                    ? owner.isCurrentCountedScalarOwner(base, slot)
-                    : owner.isCurrentAggregateElementOwner(base, slot);
-            if (!currentOwner) continue;
-            RuntimeBase aggregate = owner.getContainerOwner();
-            if (aggregate != null && (aggregate.storedInPackageGlobal
-                    || GlobalVariable.isPackageRootedAggregate(aggregate))) {
-                return true;
-            }
-        }
-        return false;
     }
 
     public static void flush() {
@@ -2808,6 +2677,12 @@ public class MortalList {
         LifecycleRuntimeState state = state();
         if (!state.hasMortalMarks()) return;
         if (!state.mortalActive) {
+            state.popMortalMark();
+            return;
+        }
+        // A surrounding drain owns the queue cursor and will process entries
+        // appended by this nested cleanup after the current callback returns.
+        if (state.flushing) {
             state.popMortalMark();
             return;
         }
