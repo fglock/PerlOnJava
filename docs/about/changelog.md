@@ -6,6 +6,8 @@ priorities and future plans.
 
 ## Work in progress
 
+- Preserve standard MakeMaker `MY::test` prerequisites so generated test data is built before CPAN tests run (#2050).
+
 - Preserve fatal taint-mode eval errors on the JVM, keep loaded-module pragmas out of the caller's lexical scope, and resolve shared Safe subs under strict subs (#1981, #2011, #2033).
 
 - Continue the `eval STRING` hot-path micro-optimisation series (Rounds 26–28): replace `.equals()` with identity (`==`) comparisons for compile-time-literal annotation keys in `AbstractNode`; add a fast path in `compileAssignmentOperator` that handles the dominant `my $scalar = expr` form with five structural checks and direct opcode emission, bypassing the full `LValueVisitor.getContext` traversal and general dispatch; cache the `ThreadLocal` state reference once per `ByteCodeSourceMapper.saveSourceLocation` call instead of four separate lookups (one per AST node compiled); and intern single-char `OPERATOR_CACHE` text strings so the comment-detection and POD-detection branches in `Whitespace.skipWhitespace` can use identity comparison on every token.

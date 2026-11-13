@@ -899,7 +899,10 @@ sub _create_install_makefile {
     # MakeMaker's MY::test hook returns a list of Makefile lines. Keep the
     # list context so wrappers that call SUPER::test can edit those lines
     # (Thrift adds generated-module include paths to $(TEST_FILES)).
-    $mm->{_perlonjava_test_rule} = "test::\n\t$test_cmd\n";
+    # Keep the stock MakeMaker target spelling and staging prerequisite. Some
+    # distributions' MY::test overrides edit this rule (for example, to add
+    # generated test data as a prerequisite) using the `test ::` form.
+    $mm->{_perlonjava_test_rule} = "test :: pure_all\n\t$test_cmd\n";
     my $my_test = '';
     if (defined &MY::test) {
         my @my_test = MY::test($mm, TESTS => $test_glob);
