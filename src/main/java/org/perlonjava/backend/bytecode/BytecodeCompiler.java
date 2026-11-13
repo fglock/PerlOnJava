@@ -4127,9 +4127,8 @@ public class BytecodeCompiler implements Visitor {
                         }
                         if (op.equals("my")) {
                             // The BEGIN cell becomes the live lexical pad slot
-                            // when the main code retrieves it. Keep it visible
-                            // to interpreter reachability sweeps from this
-                            // point until the declaring scope exits.
+                            // when the main code retrieves it. Register that
+                            // slot with its declaring scope for normal cleanup.
                             emit(Opcodes.REGISTER_MY_VAR);
                             emitReg(reg);
                         }

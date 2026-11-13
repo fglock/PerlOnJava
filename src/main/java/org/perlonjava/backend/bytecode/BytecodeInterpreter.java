@@ -853,7 +853,7 @@ public class BytecodeInterpreter {
                                 // registrations before flushing them; flushing
                                 // at the opcode can still see the returning
                                 // frame as an owner and postpone DESTROY until
-                                // a corrective sweep.
+                                // the owner release at the call boundary.
                                 return retList;
                             }
 
@@ -1593,7 +1593,7 @@ public class BytecodeInterpreter {
                                 // Undef assignment must release the value through
                                 // the existing scalar cell. Replacing the cell
                                 // defers weakly observed aggregate cleanup until
-                                // a later sweep, after Perl code can observe it.
+                                // normal owner-slot cleanup after Perl code can observe it.
                                 if (sourceScalar.type == RuntimeScalarType.UNDEF
                                         || lexicalAssignmentMustPreserveSlot(target)
                                         || (sourceScalar.type == RuntimeScalarType.GLOBREFERENCE

@@ -173,7 +173,6 @@ public final class ExecutionRuntimeState {
     public boolean taintMode;
     public boolean taintWarnings;
     public boolean joinTaint;
-    public int moduleInitDepth;
     public final IdentityHashMap<Throwable, Boolean> unhandledDieHandlerSeen =
             new IdentityHashMap<>();
     public boolean insideUnhandledDieHandler;
