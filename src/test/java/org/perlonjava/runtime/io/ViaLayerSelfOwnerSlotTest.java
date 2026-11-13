@@ -2,8 +2,10 @@ package org.perlonjava.runtime.io;
 
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.perlonjava.runtime.runtimetypes.DestroyDispatch;
 import org.perlonjava.runtime.runtimetypes.PerlOwnerSlot;
 import org.perlonjava.runtime.runtimetypes.PerlRuntime;
+import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.DestroyDispatch;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
@@ -73,7 +75,7 @@ class ViaLayerSelfOwnerSlotTest {
     void destroyedPushedObjectDoesNotAcquireALayerOwner() {
         try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
             RuntimeArray referent = new RuntimeArray();
-            referent.refCount = 0;
+            DestroyDispatch.callDestroy(referent);
 
             assertNull(ViaLayer.SelfReferenceOwner.retain(referent.createReference()));
             assertEquals(0, referent.ownerSlotCount(PerlOwnerSlot.Kind.IO_VIA_LAYER));
