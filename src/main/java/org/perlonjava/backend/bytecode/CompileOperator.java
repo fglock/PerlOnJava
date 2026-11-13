@@ -2332,7 +2332,7 @@ public class CompileOperator {
             // Static gotos bind to the nearest containing block, never to the
             // final entry of the name-only dynamic map.
             bc.emit(Opcodes.GOTO);
-            int patchPc = bc.bytecode.size();
+            int patchPc = bc.bytecodeSize;
             bc.emitInt(0);
             if (staticTarget.pc != null) {
                 bc.patchIntOffset(patchPc, staticTarget.pc);

@@ -5538,6 +5538,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         evalCompilerOptions,
                         new RuntimeArray());
 
+                // Round 35: inject cached physicalLineNumbers so buildPhysicalLineNumbers() is skipped.
+                // Safe only when the exact same String object is reused (reference equality).
+                if (ctx.evalCachedPhysicalLineNumbers != null && evalString == ctx.evalCachedSourceStr) {
+                    evalCtx.errorUtil.injectPhysicalLineNumbers(ctx.evalCachedPhysicalLineNumbers);
+                }
+
                 Parser parser = new Parser(evalCtx, tokens);
                 parser.parsingEvalString = true;
                 BHooksEndOfScope.beginFileLoad(evalCompilerOptions.fileName);
@@ -5548,6 +5554,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 } finally {
                     RegexQuoteMeta.setParserWarningBits(savedRegexWarningBits);
                     BHooksEndOfScope.endFileLoad(evalCompilerOptions.fileName);
+                }
+
+                // Round 35: populate the cache after first successful parse.
+                if (ctx.evalCachedPhysicalLineNumbers == null) {
+                    int[] pln = evalCtx.errorUtil.peekPhysicalLineNumbers();
+                    if (pln != null) {
+                        ctx.evalCachedPhysicalLineNumbers = pln;
+                        ctx.evalCachedSourceStr = evalString;
+                    }
                 }
 
                 // Transfer parse-time flags to the AST root so BytecodeCompiler can
@@ -5667,7 +5682,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     // Create pooled BytecodeCompiler collections once (round 21).
                     // The cached constructor clears these before each compile, keeping the
                     // backing arrays alive across 2M+ iterations instead of reallocating.
-                    ctx.evalCachedBytecodeList = new ArrayList<>(64);
+                    ctx.evalCachedBytecodeArr = new int[64];
                     ctx.evalCachedConstants = new ArrayList<>(16);
                     ctx.evalCachedStringPool = new ArrayList<>(16);
                     ctx.evalCachedScopeIndices = new ArrayDeque<>();

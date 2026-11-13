@@ -149,8 +149,14 @@ public class EmitterContext {
     // ---- Pooled BytecodeCompiler collections (round 21) ----
     // Each list/deque is empty after a successful compile(); we clear() and reuse
     // the backing arrays instead of allocating new ones on every warm-path eval.
-    /** Pooled bytecode instruction list; cleared and reused per warm-path compile. */
-    public java.util.List<Integer> evalCachedBytecodeList;
+    /** Round 34: pooled primitive bytecode buffer; avoids Integer boxing. Size is reset to 0; array is reused. */
+    public int[] evalCachedBytecodeArr;
+    /** Round 35: pre-computed physicalLineNumbers array for the eval source; valid only when evalCachedSourceStr == the eval string object. */
+    public int[] evalCachedPhysicalLineNumbers;
+    /** Round 35: the eval string object for which evalCachedPhysicalLineNumbers was computed. */
+    public String evalCachedSourceStr;
+    /** @deprecated replaced by evalCachedBytecodeArr in Round 34. */
+    @Deprecated public java.util.List<Integer> evalCachedBytecodeList;
     /** Pooled constants list (runtime objects referenced from bytecode). */
     public java.util.List<Object>  evalCachedConstants;
     /** Pooled string-pool list (interned string literals). */
