@@ -1298,6 +1298,13 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         };
     }
 
+    /** Store B's raw SV pointer view without adding a Perl owner edge. */
+    public void putBObjectReference(String key, RuntimeScalar source) {
+        RuntimeScalar view = new RuntimeScalar(source);
+        view.nonOwningBObjectReference = true;
+        put(key, view);
+    }
+
     /**
      * Adds a key-value pair to the hash.
      *
