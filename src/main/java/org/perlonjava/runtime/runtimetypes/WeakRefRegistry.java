@@ -206,8 +206,7 @@ public class WeakRefRegistry {
             base.refCount = WEAKLY_TRACKED;
         }
         boolean shouldCheckLiveCodeRef = weakenedLiveCodeRef
-                && codeRefHasCountedOwners(base)
-                && !ModuleInitGuard.inModuleInit();
+                && codeRefHasCountedOwners(base);
         if (base instanceof RuntimeCode code
                 && code.refCount >= 0
                 && state.weakRefsExist
