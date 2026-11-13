@@ -385,6 +385,9 @@ public class DataSection {
     }
 
     static int parseDataSection(Parser parser, int tokenIndex, List<LexerToken> tokens, LexerToken token) {
+        if (token.text.equals("__DATA__") || token.text.equals("__END__")) {
+            parser.dataSectionTokenIndex = tokenIndex;
+        }
         String handleName = dataHandleName(parser, token.text);
 
         // Check if this package has already processed its DATA section.

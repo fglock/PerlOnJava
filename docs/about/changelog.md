@@ -1169,7 +1169,7 @@ priorities and future plans.
 
 - Serialize XML::LibXSLT results directly instead of applying the stylesheet a second time (#1892).
 
-- Diagnose version-control conflict markers after parsing quote-like strings and heredocs, preserving literal marker text while retaining source-level errors.
+- Diagnose version-control conflict markers only in Perl source, preserving marker text in quote-like strings, heredocs, and `__DATA__`/`__END__` sections while retaining source-level errors.
 
 ## v5.44.1: Regex, Threads, Async/Await, and CPAN Compatibility
 

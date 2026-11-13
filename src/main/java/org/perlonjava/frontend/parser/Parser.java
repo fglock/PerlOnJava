@@ -208,6 +208,8 @@ public class Parser {
     private final List<String> specialBlockPrototypeWarnings = new ArrayList<>();
     // Current index in the token list.
     public int tokenIndex = 0;
+    /** Index of the parsed source-level __DATA__/__END__ boundary, or -1. */
+    int dataSectionTokenIndex = -1;
     /** Nesting depth of expression parsing, used by parser plugins to reject statements in expressions. */
     public int expressionParseDepth = 0;
     // Flags to indicate special parsing states.
@@ -576,6 +578,9 @@ public class Parser {
     private String conflictMarkerDiagnostics() {
         StringBuilder diagnostics = new StringBuilder();
         for (int i = 0; i < tokens.size(); i++) {
+            if (dataSectionTokenIndex >= 0 && i >= dataSectionTokenIndex) {
+                break;
+            }
             LexerToken token = tokens.get(i);
             if (token.type == LexerTokenType.CONFLICT_MARKER) {
                 ErrorMessageUtil.SourceLocation location =
