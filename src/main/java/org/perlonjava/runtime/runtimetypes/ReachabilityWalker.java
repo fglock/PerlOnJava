@@ -1195,30 +1195,7 @@ public class ReachabilityWalker {
 
     public static boolean hasLiveStrongScalarReferentOtherThan(
             RuntimeBase target, RuntimeScalar excluded) {
-        if (target == null) return false;
-        for (PerlOwnerSlot slot : target.ownerSlotSnapshot()) {
-            if (!slot.isActive() || slot.referent() != target) continue;
-            RuntimeScalar owner;
-            boolean ownerSlotMatches;
-            if (slot.kind() == PerlOwnerSlot.Kind.UNTRACKED_REFERENCE) {
-                owner = slot.untrackedScalarOwner();
-                ownerSlotMatches = owner != null
-                        && owner.untrackedReferenceOwnerSlot() == slot;
-            } else {
-                owner = slot.countedScalarOwner();
-                ownerSlotMatches = owner != null
-                        && owner.countedOwnerSlot() == slot
-                        && owner.refCountOwned;
-            }
-            if (ownerSlotMatches && owner != excluded
-                    && MyVarCleanupStack.isRegistered(owner)
-                    && !WeakRefRegistry.isweak(owner)
-                    && !owner.scopeExited
-                    && owner.value == target) {
-                return true;
-            }
-        }
-        return false;
+        return target != null && target.hasLiveStrongScalarOwnerSlotOtherThan(excluded);
     }
 
     public static boolean isReachableFromRoots(RuntimeBase target, boolean globalOnly) {
