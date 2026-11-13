@@ -15,29 +15,37 @@ for the current handoff. Historical context: [issue #1649](https://github.com/fg
 
 ## Current handoff: 2026-11-13
 
-Candidate: `/private/tmp/issue2043-head-8521-review-20261112`, branch
-`wip/issue2043-preserve-diagnostic-20261113-082631`, commit
-`386856ab308665ed07d18b1d1903dec2dafa3386`. This commit preserves pending
-owner-release and diagnostic edits; it is not published to PR #1938. Review
-those edits before extending them. The direct CODE-root owner-slot change
-passed a full `make` on its earlier candidate. The current WIP owner-release,
-`Internals::SvREFCNT`, and walker changes have not passed final acceptance.
+Working snapshot: `/private/tmp/issue2043-head-8521-review-20261112`, branch
+`wip/issue2043-capture-parallel-state-20261113-094240`, commit `17bc21e91c`.
+The WIP snapshot is not published to PR #1938. The project-owned
+`dbic_t52_phantom_related_release.t` reproduces the 13-step DBIx phantom chain:
+system Perl passes 7/7 plus DBIx's six leak checks, while the existing JVM JAR
+fails the six observer-release assertions and DBIx teardown checks. Logs:
+`/tmp/issue2043-dbic-regression-system.log` and
+`/tmp/issue2043-dbic-regression-jvm-d077.log`.
 
-The project-owned DBIx phantom-chain test passes system Perl and fails on the
-JVM. Its trace shows a count-zero CD row with an untracked edge in a size-five
-ownerless array; the actual acquire or release site is not yet identified.
-Do not infer the cause from the final trace alone. The raw interpreter run
-stops before leak assertions at the missing
-`DBIx::Class::Storage::DBI::is_literal_value` import; resolve and validate that
-prerequisite before claiming interpreter acceptance.
+The final owner trace shows the count-zero CD row retaining an untracked edge
+from a size-five ownerless `RuntimeArray`; it does not identify the transition
+that left that slot active. A bounded opt-in transition trace was added to
+`RuntimeScalar` for blessed-hash values stored in size-five arrays. Rebuild
+before using it. The attempt to prune every untracked scalar without a current
+slot was too broad: its full `make` gate took 10m57 and failed five Java tests.
+That pruning and its invalid Java fixture were removed from this snapshot. The
+gate does not qualify the current source. Direct owner-slot checks now live on
+`RuntimeBase`, and `Internals::SvREFCNT` no longer calls the walker for that
+decision; this state still needs an immutable passing gate.
 
-Next: trace the edge from acquisition to its Perl lifetime boundary with
-bounded diagnostics, fix that owner transition, and establish exact-parent
-failure evidence. Then validate direct owner queries, integrate the separate
+The raw interpreter integration run stops before leak assertions at the
+missing `DBIx::Class::Storage::DBI::is_literal_value` import. Resolve and
+validate that compatibility prerequisite before claiming interpreter
+acceptance.
+
+Next: rebuild this snapshot, run the opt-in transition trace on the focused
+DBIx test, and fix the lifetime boundary that leaves the detached-array edge
+active. Then validate the direct owner query migration, finish the separate
 hook/walker cleanup, remove obsolete recovery and diagnostic-only calls, and
-run final acceptance on one immutable commit. Keep the current issue handoff
-and PR description authoritative; the PR remains draft until acceptance and
-review are complete.
+run final acceptance on one immutable commit. Keep the issue handoff and PR
+description authoritative; PR #1938 remains draft until acceptance and review.
 
 ### Phase 2 progress (2026-10-27)
 
