@@ -7,6 +7,7 @@ priorities and future plans.
 ## Work in progress
 
 - Preserve standard MakeMaker `MY::test` prerequisites so generated test data is built before CPAN tests run (#2050).
+- Eliminate `String.substring()` allocations on the lexer hot path and cut bytecode-compiler overhead (eval STRING Rounds 29–32): add `LexerToken.ofOperatorChar(char)` and `ofPureSpaces(int)` factories so `consumeOperator` and `consumeWhitespace` skip `substring()` for the common single-char operator and pure-space cases (combined 6.64% of all allocation samples in a 500k-eval profile); replace the 15-condition OR chain in `BytecodeCompiler.emit(short)` / `emitWithToken` with a static boolean array lookup, short-circuiting once `usesLocalization` is set; and cache the `shouldDecodeEvalbytesUtf8Source()` scan result in `evalStringWithInterpreter` to avoid a second O(n) `indexOf("use utf8")` pass. Net result: ~30% eval/s throughput gain (66 619 → 86 977 evals/s on a 500k-iteration benchmark; Perl/POJ ratio improves from 4.70× to 4.39×).
 
 - Preserve fatal taint-mode eval errors on the JVM, keep loaded-module pragmas out of the caller's lexical scope, and resolve shared Safe subs under strict subs (#1981, #2011, #2033).
 

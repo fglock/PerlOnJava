@@ -5386,11 +5386,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
         try {
             String evalString = code.toString();
-            boolean evalbytesUtf8Source = ctx.isEvalbytes && shouldDecodeEvalbytesUtf8Source(evalString);
+            // Round 32: cache the scan result to avoid a second O(n) indexOf("use utf8") pass.
+            boolean decodeUtf8 = shouldDecodeEvalbytesUtf8Source(evalString);
+            boolean evalbytesUtf8Source = ctx.isEvalbytes && decodeUtf8;
             boolean byteStringUtf8Source = !ctx.isEvalbytes
                     && code.type == RuntimeScalarType.BYTE_STRING
                     && ((ctx.symbolTable.strictOptionsStack.peek() & Strict.HINT_UTF8) != 0
-                        || shouldDecodeEvalbytesUtf8Source(evalString))
+                        || decodeUtf8)
                     && !ctx.symbolTable.isFeatureCategoryEnabled("unicode_eval");
             if (evalbytesUtf8Source || byteStringUtf8Source) {
                 evalString = decodeEvalbytesUtf8Source(evalString);
