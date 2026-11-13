@@ -27,28 +27,34 @@ with 835 documents before this Java-only follow-up
 (`/tmp/issue2043-current-check-links.log`).
 
 The untouched upstream DBIx::Class 0.082844 `t/52leaks.t` passes under system
-Perl but reports 17 weak-registry leaks on the JVM
-(`/tmp/issue2043-dbic-upstream-52leaks-{system,jvm}.log`). A target-filtered
-owner trace shows a leaked `DBICTest::Schema` held by a strong `schema` hash
-slot on a `ResultSource::Table`; DBIx later uses this slot for phantom-chain
-handoff. The evidence locates the retained edge but does not yet prove which
-owner release or handoff is stale. A minimal direct hash-field `weaken()` probe
-passes on both system Perl and JVM. The raw upstream interpreter run still
-stops earlier at missing `DBIx::Class::Storage::DBI::is_literal_value`, so it
-needs the repository's normal DBIx compatibility setup before it can serve as
-acceptance. Do not infer a fix from the reduced reproducer.
+Perl (with two upstream TODO leak assertions) but reports 17 weak-registry
+leaks on the JVM (`/tmp/issue2043-dbic-upstream-52leaks-{system,jvm}.log`). A
+test-local reduction with prefetch and resultset firing removed passes on both
+runtimes through the first 12 phantom-chain operations. Adding operation 13,
+`$cd->artist`, produces seven JVM leak assertions while the same 13-operation
+slice passes on system Perl (`/tmp/issue2043-phantom-prefix-{12,13}-{jvm,system}.log`).
+The owner trace shows the returned `Artist` row held under the CD row's
+`_inflated_column->{artist}` slot; the CD row's selective count reaches zero
+without clearing its weak observer. The full failure also retains schema,
+storage, and DBI handles. This isolates the first failing DBIx operation, but
+the exact owner-release or schema-handoff mismatch is still unproven. A minimal
+direct hash-field `weaken()` probe passes on both runtimes. The raw upstream
+interpreter run still stops earlier at missing
+`DBIx::Class::Storage::DBI::is_literal_value`, so it needs the repository's
+normal DBIx compatibility setup before it can serve as acceptance.
 
 Two production paths still ask `ReachabilityWalker` for liveness: installed
 CODE-edge selection in `GlobalRuntimeState.isCodeRefEdgeRoot`, and the
 `Internals::svRefcount` field-owned method-result adjustment. Root-query
 counters and diagnostics remain until both paths have owner-ledger proofs.
 
-Next: trace the retained DBIx row/result-source owner chain to its exact release
-boundary and add a project-owned regression that passes system Perl and fails
-on this parent. Then replace the two graph-query decisions with direct owner
-identities, remove walker APIs and sweep-only diagnostics/compatibility hooks,
-and run DBIx leak/populate, JVM/interpreter, fresh-home CPAN, and full-repository
-gates on the exact final head before reconciling PR #1938.
+Next: trace the `$cd->artist` return and the CD row's final owner release to the
+schema-handoff boundary, then add a project-owned regression that passes system
+Perl and fails on this parent. Replace the two graph-query decisions with
+direct owner identities, remove walker APIs and sweep-only
+diagnostics/compatibility hooks, and run DBIx leak/populate,
+JVM/interpreter, fresh-home CPAN, and full-repository gates on the exact final
+head before reconciling PR #1938.
 
 ### Phase 2 progress (2026-10-27)
 
