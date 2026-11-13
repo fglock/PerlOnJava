@@ -15,37 +15,32 @@ for the current handoff. Historical context: [issue #1649](https://github.com/fg
 
 ## Current handoff: 2026-11-13
 
-Working snapshot: `/private/tmp/issue2043-head-8521-review-20261112`, branch
-`wip/issue2043-capture-parallel-state-20261113-094240`, commit `17bc21e91c`.
-The WIP snapshot is not published to PR #1938. The project-owned
-`dbic_t52_phantom_related_release.t` reproduces the 13-step DBIx phantom chain:
-system Perl passes 7/7 plus DBIx's six leak checks, while the existing JVM JAR
-fails the six observer-release assertions and DBIx teardown checks. Logs:
-`/tmp/issue2043-dbic-regression-system.log` and
-`/tmp/issue2043-dbic-regression-jvm-d077.log`.
+Candidate: `/private/tmp/issue2043-owner-trace-isolated-20261113`, branch
+`feature/issue2043-borrowed-list-result`, implementation commit `00f10d09f0`.
+The focused `dbic_t52_phantom_related_release.t` regression passes 7/7 on system
+Perl and the JVM, including DBIx's six leak checks; evidence:
+`/private/tmp/issue2043-borrowed-list-result-system-final.log` and
+`/private/tmp/issue2043-borrowed-list-result-jvm-final.log`.
 
-The final owner trace shows the count-zero CD row retaining an untracked edge
-from a size-five ownerless `RuntimeArray`; it does not identify the transition
-that left that slot active. A bounded opt-in transition trace was added to
-`RuntimeScalar` for blessed-hash values stored in size-five arrays. Rebuild
-before using it. The attempt to prune every untracked scalar without a current
-slot was too broad: its full `make` gate took 10m57 and failed five Java tests.
-That pruning and its invalid Java fixture were removed from this snapshot. The
-gate does not qualify the current source. Direct owner-slot checks now live on
-`RuntimeBase`, and `Internals::SvREFCNT` no longer calls the walker for that
-decision; this state still needs an immutable passing gate.
+Root cause: both simple scalar branches in
+`RuntimeList.assignSimpleScalarsFromArray` inserted returned LHS cells with
+ordinary `RuntimeArray` ownership. The expression-only result array then
+became the owner of an `UNTRACKED_REFERENCE` slot after its Perl lifetime had
+ended. The generic transition trace located the acquisition in the fast path:
+the array had four elements when the cell was inserted, then grew to five. Both
+branches now use `addBorrowedListResultValue`, matching the other list-result
+paths. Temporary owner-transition tracing and its diagnostic-only test call
+have been removed; no fixture-class filter or tracing hook remains in runtime
+code.
 
-The raw interpreter integration run stops before leak assertions at the
-missing `DBIx::Class::Storage::DBI::is_literal_value` import. Resolve and
-validate that compatibility prerequisite before claiming interpreter
-acceptance.
-
-Next: rebuild this snapshot, run the opt-in transition trace on the focused
-DBIx test, and fix the lifetime boundary that leaves the detached-array edge
-active. Then validate the direct owner query migration, finish the separate
-hook/walker cleanup, remove obsolete recovery and diagnostic-only calls, and
-run final acceptance on one immutable commit. Keep the issue handoff and PR
-description authoritative; PR #1938 remains draft until acceptance and review.
+System Perl and JVM now pass the same seven assertions and six DBIx leak checks.
+The interpreter path and full repository gate have not run on this source
+commit; the previous passing full gate applies only to its parent. Run
+`nice -n 19 make` and documentation link checks on the exact candidate. Then
+continue the remaining #2043 phases: close the direct owner-slot audit, remove
+obsolete sweep hooks and graph-recovery paths, resolve the interpreter DBIx
+dependency prerequisite, and run full DBIx leak/populate plus fresh-home CPAN
+acceptance. PR #1938 remains draft until those gates and review are complete.
 
 ### Phase 2 progress (2026-10-27)
 
