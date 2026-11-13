@@ -51,44 +51,17 @@ use constant {
 # Stub classes for B objects
 package B::SV {
     sub new {
-        # IMPORTANT: Avoid `my ($class, $ref) = @_` or `shift` — each local
-        # variable assignment that holds a reference inflates the referent's
-        # selective refcount by 1 (via setLargeRefCounted). Instead, use
-        # $_[0]/$_[1] (aliases into @_) which don't increment refcount.
-        # This keeps the only inflation to the `$self->{ref}` hash slot,
-        # which REFCNT compensates for with its -1 adjustment.
+        # Native B objects keep an SV pointer without owning the referent.
+        # Store the runtime's equivalent non-owning view so the target remains
+        # inspectable during DESTROY without extending its Perl lifetime.
         my $self = bless {}, $_[0];
-        $self->{ref} = $_[1];
+        Internals::jperl_b_object_store_reference($self, $_[1]);
         return $self;
     }
 
     sub REFCNT {
-        # Return the selective refcount via Internals::SvREFCNT.
-        #
-        # In PerlOnJava, B::SV stores the reference in $self->{ref} which is
-        # a tracked (blessed) hash element. This inflates the referent's
-        # selective refCount by +1 via setLargeRefCounted.
-        #
-        # In Perl 5, B::svref_2object() stores the SV pointer directly (a C
-        # pointer), so it does NOT inflate the referent's refcnt. However,
-        # Perl 5 has higher refcounts overall because ALL references count
-        # (hash elements, stack temporaries, mortal slots). PerlOnJava's
-        # selective refCount is lower because:
-        #   1. Stack/JVM temporaries don't contribute
-        #   2. Method call argument copies don't contribute
-        #
-        # The B::SV inflation (+1) roughly compensates for these deficits,
-        # so we return the raw selective refCount WITHOUT subtracting 1.
-        #
-        # For Schema::DESTROY's `refcount($source) > 1` check:
-        #   - Source with 1 selective ref (e.g., source_registrations only):
-        #     B::SV inflation → 2, REFCNT = 2 → > 1 → rescue ✓
-        #     (In Perl 5 this source also shows > 1 because stack temps add refs)
-        #   - Source with 0 selective refs (untracked):
-        #     B::SV inflation → 1, REFCNT = 1 → no rescue ✓
-        # B's C implementation inspects the referent without creating a Perl
-        # owner. Ask the runtime to compensate for an independently live
-        # lexical owner that selective refcounting may not have counted.
+        # The $self->{ref} slot is a non-owning runtime view. Ask the runtime
+        # for the Perl-visible count while accounting for the active B frame.
         Internals::SvREFCNT($_[0]->{ref}, 1);
     }
 
@@ -579,7 +552,7 @@ sub svref_2object {
         my $name = *{$_[0]}{NAME} // '';
         my $pkg  = *{$_[0]}{PACKAGE} // 'main';
         my $gv = B::GV->new($name, $pkg);
-        $gv->{ref} = $_[0];  # store glob ref for SV method access
+        Internals::jperl_b_object_store_reference($gv, $_[0]);
         return $gv;
     }
 

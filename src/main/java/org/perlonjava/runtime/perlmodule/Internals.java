@@ -67,6 +67,7 @@ public class Internals extends PerlModuleBase {
             internals.registerMethod("jperl_mark_pseudo_constant", "jperlMarkPseudoConstant", "$$");
             internals.registerMethod("jperl_end_av_ref", "jperlEndAvRef", "");
             internals.registerMethod("jperl_b_object_2svref", "jperlBObject2svref", "$");
+            internals.registerMethod("jperl_b_object_store_reference", "jperlBObjectStoreReference", "$$");
             internals.registerMethod("jperl_b_scalar_flags", "jperlBScalarFlags", "$");
             internals.registerMethod("jperl_set_closed_over", "jperlSetClosedOver", null);
             internals.registerMethod("jperl_closed_over", "jperlClosedOver", null);
@@ -85,6 +86,17 @@ public class Internals extends PerlModuleBase {
      */
     public static RuntimeList jperlEndAvRef(RuntimeArray args, int ctx) {
         return SpecialBlock.getEndBlocks().createReference().getList();
+    }
+
+    /** Store a B wrapper's raw referent view without adding a Perl owner. */
+    public static RuntimeList jperlBObjectStoreReference(RuntimeArray args, int ctx) {
+        if (args.size() != 2 || !(args.get(0).value instanceof RuntimeHash wrapper)
+                || !(args.get(1).value instanceof RuntimeBase)) {
+            throw new IllegalArgumentException(
+                    "Usage: Internals::jperl_b_object_store_reference(B_OBJECT, REFERENT)");
+        }
+        wrapper.putBObjectReference("ref", args.get(1));
+        return new RuntimeList();
     }
 
     /** Resolve a reference pseudo-address previously exposed by stringification. */
@@ -647,25 +659,18 @@ public class Internals extends PerlModuleBase {
             int adjust = compileHintsHash
                     ? -1
                     : base.localBindingExists || fieldOwnedMethodResult ? 0 : -1;
-            // B::SV keeps its referent in a PerlOnJava hash slot, unlike the
-            // native B object which stores an SV pointer without owning the
-            // referent. For named aggregates, the local-binding adjustment
-            // already accounts for the pad, so discount this extra wrapper
-            // slot instead of counting both as Perl owners.
-            if (bObjectProbe && base.localBindingExists && !compileHintsHash) {
-                adjust = -1;
-            }
             if (bObjectProbe) {
-                // Native B wrappers contain only an SV pointer, so their
-                // PerlOnJava wrapper slots do not own the referent.
-                adjust -= base.currentBObjectReferentOwnerCount();
-                // @_ aliases do not add references to their referents.
-                // Discount argument-frame slots while preserving the one
-                // call-site adjustment already made above.
-                adjust -= Math.max(0,
-                        base.currentArgumentFrameReferentOwnerCount() - 1);
+                // B's raw pointer view is not a Perl owner, so the query itself
+                // contributes no argument reference to discount. Keep the
+                // ordinary anonymous-value adjustment only for ordinary probes;
+                // any actual active argument-frame owners are discounted exactly.
+                if (!compileHintsHash && !base.localBindingExists && !fieldOwnedMethodResult) {
+                    adjust++;
+                }
+                adjust -= base.currentArgumentFrameReferentOwnerCount();
             }
-            return new RuntimeScalar(rc + extra + adjust).getList();
+            int reported = rc + extra + adjust;
+            return new RuntimeScalar(reported).getList();
         }
         return new RuntimeScalar(1).getList();
     }

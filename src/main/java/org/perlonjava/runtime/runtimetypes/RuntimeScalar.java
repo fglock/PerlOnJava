@@ -1053,6 +1053,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     private long referenceSlotMutationVersion;
 
     private PerlOwnerSlot countedOwnerSlot;
+    /** A B::SV raw pointer view; reachable in Java, but not a Perl owner. */
+    boolean nonOwningBObjectReference;
     /** Identity for this scalar cell's strong edge to a non-counted referent. */
     private PerlOwnerSlot untrackedReferenceOwnerSlot;
     private ArrayList<PerlOwnerSlot> argumentAliasOwnerSlots;
@@ -1435,6 +1437,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     private void updateUntrackedReferenceOwner(RuntimeBase referent,
             boolean requireCurrentValueOwner) {
+        if (nonOwningBObjectReference) {
+            if (untrackedReferenceOwnerSlot != null) {
+                releaseUntrackedReferenceOwner(untrackedReferenceOwnerSlot.referent());
+            }
+            return;
+        }
         // Container-owner proofs are needed only while this scalar holds a
         // RuntimeBase reference. Primitive values have no referent to retain,
         // and scanning their container history on every array insertion turns
@@ -3715,6 +3723,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public static void incrementRefCountForContainerStore(
             RuntimeScalar scalar, PerlOwnerSlot.Kind intendedOwnerKind) {
         if (scalar == null) return;
+        if (scalar.nonOwningBObjectReference) return;
         if (intendedOwnerKind != null && !PerlOwnerSlot.isCountedKind(intendedOwnerKind)) {
             throw new IllegalArgumentException("container stores require a counted owner kind");
         }
