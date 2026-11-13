@@ -317,27 +317,30 @@ Run on JVM and interpreter backends with `timeout` and complete output logs:
 
 ## Progress Tracking
 
-### Current Status: lifecycle-state assertions in progress (2026-11-13)
+### Current Status: sweep-free integration passes the repository gate (2026-11-13)
 
 Issue #2043 is active on branch
 `wip/issue2043-late-test-preflight-20261113-054154` in
-`/private/tmp/issue2043-head-8521-review-20261112`. The current checkpoint is
-`2f2632d6c4`, integrating lifecycle-state work from `d39be7963b` with the
+`/private/tmp/issue2043-head-8521-review-20261112`. Source checkpoint
+`5052e77de1` integrates lifecycle-state work from `d39be7963b` with the
 sweep-removal candidate `5a8b5c335e`. PR #1938 remains open/draft at
 `1b80749914`; this integration has not been published.
 
 The integration removes lifecycle weak sweeps, temporary-root ancestry search,
 rescued-object graph clearing, END-boundary owner proofs, no-op sweep hooks,
 and the module-initialization guard that suppressed weak CODE cleanup. Temporary
-and deferred cleanup paths use current owner-slot identities. The first full
-gate on the integrated source completed in 6m38s with 1,615 tests, 50 failures,
-and 3 skips (`/tmp/issue2043-ab32e49b31-make.log`). Forty-seven failures asserted
-the former `Integer.MIN_VALUE` destroyed marker; the other three used that marker
-to simulate destruction in owner tests. The current checkpoint stores destroyed
-state separately, resets destroyed owner counts to zero, and updates those
-white-box tests to assert lifecycle state and nonnegative counts. Its full gate
-has not run yet. The changed Perl tests pass 10/10 under system Perl, and
-`make check-links` passes with zero errors.
+and deferred cleanup use current owner-slot identities. Destruction state is
+separate from the count; a destroyed referent now has count zero, and white-box
+tests assert the lifecycle state instead of the former `Integer.MIN_VALUE`
+marker.
+
+`nice -n 19 timeout 3600 make` passes on source checkpoint `5052e77de1` in
+8m49s (`/tmp/issue2043-5052e77de1-make.log`). The system Perl check for both
+changed Perl unit files passes 10/10, and `make check-links` passes with 834
+documents and zero errors. The first integrated gate failed 50 tests, mostly on
+the obsolete destroyed sentinel; the intermediate gate exposed two stale test
+setups, now corrected (`/tmp/issue2043-ab32e49b31-make.log` and
+`/tmp/issue2043-e4523a8153-make.log`).
 
 The issue's live-owner count contract is still incomplete: untracked and weak
 tracking states remain negative in `refCount`, and some owner-slot producers do
@@ -345,10 +348,10 @@ not yet contribute to the count. DBIx
 `t/52leaks-resultset-source-only.t` also remains a known failure on both
 backends; its final strong owner edge is unresolved.
 
-Next: run `nice -n 19 timeout 3600 make` on the current immutable checkpoint and
-resolve remaining semantic failures without weakening coverage. Then migrate
-untracked/weak count states into explicit lifecycle metadata, remove diagnostic
-counters and obsolete graph-query paths, and finish DBIx leak/populate plus
+Next: migrate untracked and weak tracking state out of `refCount`, reconcile
+every strong owner slot with the nonnegative count, then remove diagnostic-only
+counters and graph-query paths. After those source changes, run focused JVM and
+interpreter checks, the full repository gate, DBIx leak/populate tests, and
 fresh-home exact-head CPAN acceptance. Update PR #1938 only with current evidence
 after those gates pass.
 
