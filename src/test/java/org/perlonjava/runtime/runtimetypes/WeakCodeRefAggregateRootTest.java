@@ -11,6 +11,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("unit")
 class WeakCodeRefAggregateRootTest {
+    private static void retainScalarCapture(RuntimeCode code, RuntimeScalar scalar) {
+        code.capturedScalars = new RuntimeScalar[] { scalar };
+        code.capturedScalarOwnerSlots = new PerlOwnerSlot[] {
+                scalar.retainClosureCaptureSlot(code)
+        };
+        code.captureFieldsRecorded = true;
+    }
+
     @Test
     void fullRootSnapshotReflectsOnlyCodeSlotsWithCaptureEdges() {
         PerlRuntime runtime = new PerlRuntime();
@@ -20,8 +28,7 @@ class WeakCodeRefAggregateRootTest {
             capturedScalar.type = RuntimeScalarType.REFERENCE;
             capturedScalar.value = capturedTarget;
             RuntimeCode capturedCode = new RuntimeCode(null, java.util.List.of());
-            capturedCode.capturedScalars = new RuntimeScalar[] { capturedScalar };
-            capturedCode.captureFieldsRecorded = true;
+            retainScalarCapture(capturedCode, capturedScalar);
             String capturedName =
                     "WeakCodeRefAggregateRootTest::snapshot_capture_holder";
             GlobalVariable.globalCodeRefs.put(capturedName, new RuntimeScalar(capturedCode));
@@ -47,6 +54,7 @@ class WeakCodeRefAggregateRootTest {
             } finally {
                 GlobalVariable.globalCodeRefs.remove(capturedName);
                 for (String name : terminalNames) GlobalVariable.globalCodeRefs.remove(name);
+                capturedCode.releaseCaptures();
             }
         }
     }
@@ -60,8 +68,7 @@ class WeakCodeRefAggregateRootTest {
             capturedScalar.type = RuntimeScalarType.REFERENCE;
             capturedScalar.value = capturedTarget;
             RuntimeCode capturedCode = new RuntimeCode(null, java.util.List.of());
-            capturedCode.capturedScalars = new RuntimeScalar[] { capturedScalar };
-            capturedCode.captureFieldsRecorded = true;
+            retainScalarCapture(capturedCode, capturedScalar);
             String capturedName =
                     "WeakCodeRefAggregateRootTest::aggregate_snapshot_capture_holder";
             GlobalVariable.globalCodeRefs.put(capturedName, new RuntimeScalar(capturedCode));
@@ -93,6 +100,7 @@ class WeakCodeRefAggregateRootTest {
             } finally {
                 GlobalVariable.globalCodeRefs.remove(capturedName);
                 for (String name : terminalNames) GlobalVariable.globalCodeRefs.remove(name);
+                capturedCode.releaseCaptures();
             }
         }
     }
@@ -185,8 +193,7 @@ class WeakCodeRefAggregateRootTest {
             capturedScalar.type = RuntimeScalarType.REFERENCE;
             capturedScalar.value = capturedTarget;
             RuntimeCode code = new RuntimeCode(null, java.util.List.of());
-            code.capturedScalars = new RuntimeScalar[] { capturedScalar };
-            code.captureFieldsRecorded = true;
+            retainScalarCapture(code, capturedScalar);
 
             String globalName = "WeakCodeRefAggregateRootTest::capture_holder";
             GlobalVariable.globalCodeRefs.put(globalName, new RuntimeScalar(code));
@@ -196,6 +203,7 @@ class WeakCodeRefAggregateRootTest {
                 assertTrue(snapshot.isReachableFromNonLexicalRoot(capturedTarget));
             } finally {
                 GlobalVariable.globalCodeRefs.remove(globalName);
+                code.releaseCaptures();
             }
         }
     }
@@ -209,8 +217,7 @@ class WeakCodeRefAggregateRootTest {
             capturedScalar.type = RuntimeScalarType.REFERENCE;
             capturedScalar.value = capturedTarget;
             RuntimeCode capturedCode = new RuntimeCode(null, java.util.List.of());
-            capturedCode.capturedScalars = new RuntimeScalar[] { capturedScalar };
-            capturedCode.captureFieldsRecorded = true;
+            retainScalarCapture(capturedCode, capturedScalar);
 
             String globalName = "WeakCodeRefAggregateRootTest::mutable_capture_holder";
             RuntimeScalar capturedRoot = new RuntimeScalar(capturedCode);
@@ -232,6 +239,7 @@ class WeakCodeRefAggregateRootTest {
                 assertFalse(cachedRoots.contains(capturedRoot));
             } finally {
                 GlobalVariable.globalCodeRefs.remove(globalName);
+                capturedCode.releaseCaptures();
             }
         }
     }
