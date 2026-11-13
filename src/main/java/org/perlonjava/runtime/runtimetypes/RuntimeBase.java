@@ -872,6 +872,33 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         return false;
     }
 
+    /** Whether another current scalar slot holds this referent strongly. */
+    public boolean hasLiveStrongScalarOwnerSlotOtherThan(RuntimeScalar excluded) {
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (!slot.isActive() || slot.referent() != this) continue;
+            RuntimeScalar owner;
+            boolean ownerSlotMatches;
+            if (slot.kind() == PerlOwnerSlot.Kind.UNTRACKED_REFERENCE) {
+                owner = slot.untrackedScalarOwner();
+                ownerSlotMatches = owner != null
+                        && owner.untrackedReferenceOwnerSlot() == slot;
+            } else {
+                owner = slot.countedScalarOwner();
+                ownerSlotMatches = owner != null
+                        && owner.countedOwnerSlot() == slot
+                        && owner.refCountOwned;
+            }
+            if (ownerSlotMatches && owner != excluded
+                    && MyVarCleanupStack.isRegistered(owner)
+                    && !WeakRefRegistry.isweak(owner)
+                    && !owner.scopeExited
+                    && owner.value == this) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** Whether an aggregate has a surviving owner outside the legacy count. */
     boolean hasUncountedAggregateOwnerSlotIdentity() {
         return (this instanceof RuntimeArray || this instanceof RuntimeHash)

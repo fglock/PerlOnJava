@@ -642,7 +642,7 @@ public class Internals extends PerlModuleBase {
             boolean fieldOwnedMethodResult = rc == 1
                     && !base.localBindingExists
                     && base.hashSlotOwnerCount > 0
-                    && !ReachabilityWalker.hasLiveStrongScalarReferentOtherThan(base, arg);
+                    && !base.hasLiveStrongScalarOwnerSlotOtherThan(arg);
             boolean bObjectProbe = args.size() > 1 && args.get(1).getBoolean();
             int adjust = compileHintsHash
                     ? -1
