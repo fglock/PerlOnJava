@@ -317,36 +317,40 @@ Run on JVM and interpreter backends with `timeout` and complete output logs:
 
 ## Progress Tracking
 
-### Current Status: sweep-free integration under validation (2026-11-13)
+### Current Status: lifecycle-state assertions in progress (2026-11-13)
 
 Issue #2043 is active on branch
-`wip/issue2043-owner-model-checkpoint-20261113-033921` in
-`/private/tmp/issue2043-head-8521-review-20261112`. The current source is commit
-`ce7f8ff34f`, integrating lifecycle-state work from `d39be7963b` with the
+`wip/issue2043-late-test-preflight-20261113-054154` in
+`/private/tmp/issue2043-head-8521-review-20261112`. The current checkpoint is
+`2f2632d6c4`, integrating lifecycle-state work from `d39be7963b` with the
 sweep-removal candidate `5a8b5c335e`. PR #1938 remains open/draft at
 `1b80749914`; this integration has not been published.
 
 The integration removes lifecycle weak sweeps, temporary-root ancestry search,
 rescued-object graph clearing, END-boundary owner proofs, no-op sweep hooks,
 and the module-initialization guard that suppressed weak CODE cleanup. Temporary
-and deferred cleanup paths now use current owner-slot identities. A full Make
-passed on the older candidate (`/tmp/issue2043-preflight-5a8b-make.log`), but
-that is not evidence for this merged source. The prior lifecycle-state parent
-failed 50 of 1,617 tests (`/tmp/issue2043-lifecycle-state-d39be7963b-make.log`);
-the integrated head has not yet run its full gate. DBIx
-`t/52leaks-resultset-source-only.t` remains a known failure on both backends;
-the final strong owner edge is unresolved.
+and deferred cleanup paths use current owner-slot identities. The first full
+gate on the integrated source completed in 6m38s with 1,615 tests, 50 failures,
+and 3 skips (`/tmp/issue2043-ab32e49b31-make.log`). Forty-seven failures asserted
+the former `Integer.MIN_VALUE` destroyed marker; the other three used that marker
+to simulate destruction in owner tests. The current checkpoint stores destroyed
+state separately, resets destroyed owner counts to zero, and updates those
+white-box tests to assert lifecycle state and nonnegative counts. Its full gate
+has not run yet. The changed Perl tests pass 10/10 under system Perl, and
+`make check-links` passes with zero errors.
 
-The issue's nonnegative owner-count contract is not complete. Legacy negative
-states remain in `refCount`, including untracked/weak tracking values and
-destruction compatibility checks. Do not treat sweep removal as final until
-counts represent live owner slots and lifecycle state remains separate.
+The issue's live-owner count contract is still incomplete: untracked and weak
+tracking states remain negative in `refCount`, and some owner-slot producers do
+not yet contribute to the count. DBIx
+`t/52leaks-resultset-source-only.t` also remains a known failure on both
+backends; its final strong owner edge is unresolved.
 
-Next: run the changed Perl tests under system Perl, then run
-`nice -n 19 timeout 3600 make` on this immutable commit. Fix code regressions
-before adjusting test expectations. After that, finish the count-state and
-diagnostic-only API audit, run DBIx leak/populate and fresh-home exact-head CPAN
-acceptance, and update PR #1938 with current evidence only after the gates pass.
+Next: run `nice -n 19 timeout 3600 make` on the current immutable checkpoint and
+resolve remaining semantic failures without weakening coverage. Then migrate
+untracked/weak count states into explicit lifecycle metadata, remove diagnostic
+counters and obsolete graph-query paths, and finish DBIx leak/populate plus
+fresh-home exact-head CPAN acceptance. Update PR #1938 only with current evidence
+after those gates pass.
 
 ### Historical handoff: issue #1132 / PR #1204
 
