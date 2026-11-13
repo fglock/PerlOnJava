@@ -43,8 +43,9 @@ class TailCallActiveLexicalOwnerTest {
                 target.localBindingExists = false;
                 lexicalOwner.release();
 
-                assertEquals(Integer.MIN_VALUE, target.refCount,
+                assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, target.perlLifecycleState(),
                         "the final active lexical owner completes cleanup");
+                assertEquals(0, target.refCount);
                 assertFalse(WeakRefRegistry.isweak(weakObserver));
                 assertEquals(RuntimeScalarType.UNDEF, weakObserver.type);
             } finally {

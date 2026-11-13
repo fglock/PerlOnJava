@@ -48,8 +48,9 @@ class TiedHandlerNestedOwnerCountInvariantTest {
                              MortalList.measureReachabilityQueries()) {
                     ((TieHash) tied.elements).releaseTiedObject();
 
-                    assertEquals(Integer.MIN_VALUE, target.refCount,
+                    assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, target.perlLifecycleState(),
                             "untie destroys the handler and releases its final nested value edge");
+                    assertEquals(0, target.refCount);
                     assertEquals(0, target.countedOwnerSlotCount());
                     assertEquals(RuntimeScalarType.UNDEF, weak.type,
                             "the final owner release clears the weak observer");

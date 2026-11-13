@@ -40,7 +40,8 @@ class RuntimeGraphClonerScalarOwnerTest {
             assertFalse(WeakRefRegistry.isweak(weakObserver));
             assertEquals(RuntimeScalarType.UNDEF, weakObserver.type,
                     "releasing the cloned owner clears its final weak observer");
-            assertEquals(Integer.MIN_VALUE, clonedReferent.refCount);
+            assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, clonedReferent.perlLifecycleState());
+            assertEquals(0, clonedReferent.refCount);
         } finally {
             try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
                 if (WeakRefRegistry.isweak(weakObserver)) {

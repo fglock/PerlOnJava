@@ -33,8 +33,9 @@ class CapturedAggregateWeakOwnerReleaseTest {
 
                 assertFalse(WeakRefRegistry.isweak(weakObserver));
                 assertEquals(RuntimeScalarType.UNDEF, weakObserver.type);
-                assertEquals(Integer.MIN_VALUE, referent.refCount,
+                assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, referent.perlLifecycleState(),
                         "the final capture owner retires the weak referent exactly once");
+                assertEquals(0, referent.refCount);
                 assertFalse(referent.deferredFinalReleaseForUncountedOwners);
             } finally {
                 if (captureOwner.isActive()) referent.releaseClosureCaptureOwner(captureOwner);

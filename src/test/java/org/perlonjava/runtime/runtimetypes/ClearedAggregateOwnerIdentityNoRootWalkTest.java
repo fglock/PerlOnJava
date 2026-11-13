@@ -46,7 +46,8 @@ class ClearedAggregateOwnerIdentityNoRootWalkTest {
 
                     assertEquals(RuntimeScalarType.UNDEF, weakObserver.type,
                             "a stale count cannot preserve the cleared referent");
-                    assertEquals(Integer.MIN_VALUE, referent.refCount);
+                    assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, referent.perlLifecycleState());
+                    assertEquals(0, referent.refCount);
                     assertEquals(0, measurement.stats().rootQueries);
                     assertEquals(0, measurement.stats().snapshotsBuilt);
                     assertEquals(0, measurement.stats().externalRootSnapshotsBuilt);

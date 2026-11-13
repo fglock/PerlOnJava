@@ -29,7 +29,8 @@ class TailCallNoRootFallbackTest {
 
                 assertFalse(owner.refCountOwned);
                 assertTrue(ScalarRefRegistry.snapshot().contains(owner));
-                assertEquals(Integer.MIN_VALUE, referent.refCount);
+                assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, referent.perlLifecycleState());
+                assertEquals(0, referent.refCount);
                 assertEquals(RuntimeScalarType.UNDEF, weak.type);
                 assertEquals(0, measurement.stats().rootQueries);
                 assertEquals(0, measurement.stats().snapshotsBuilt);

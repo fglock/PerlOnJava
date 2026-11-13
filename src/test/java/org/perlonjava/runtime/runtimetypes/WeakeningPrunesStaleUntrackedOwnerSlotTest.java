@@ -38,7 +38,8 @@ class WeakeningPrunesStaleUntrackedOwnerSlotTest {
                     assertFalse(WeakRefRegistry.isweak(weakObserver),
                             "the stale slot must not strand the final weak observer");
                     assertEquals(RuntimeScalarType.UNDEF, weakObserver.type);
-                    assertEquals(Integer.MIN_VALUE, target.refCount);
+                    assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, target.perlLifecycleState());
+                    assertEquals(0, target.refCount);
                     assertEquals(0, measurement.stats().rootQueries);
                     assertEquals(0, measurement.stats().snapshotsBuilt);
                 }

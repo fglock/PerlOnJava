@@ -50,7 +50,8 @@ class WeakUncountedOwnerSlotFastPathTest {
                 assertFalse(WeakRefRegistry.isweak(weakObserver),
                         "the final uncounted owner release clears the weak observer");
                 assertEquals(RuntimeScalarType.UNDEF, weakObserver.type);
-                assertEquals(Integer.MIN_VALUE, target.refCount);
+                assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, target.perlLifecycleState());
+                assertEquals(0, target.refCount);
             } finally {
                 if (WeakRefRegistry.isweak(weakObserver)) {
                     WeakRefRegistry.unweaken(weakObserver);

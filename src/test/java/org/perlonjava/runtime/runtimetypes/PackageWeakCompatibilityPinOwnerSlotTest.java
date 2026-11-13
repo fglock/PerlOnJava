@@ -38,12 +38,14 @@ class PackageWeakCompatibilityPinOwnerSlotTest {
                 assertEquals(1, target.ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE));
 
                 secondOwner.undefine();
-                assertEquals(Integer.MIN_VALUE, target.refCount);
+                assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, target.perlLifecycleState());
+                assertEquals(0, target.refCount);
                 assertFalse(WeakRefRegistry.isweak(weakObserver));
                 assertFalse(target.hasOwnerSlots());
                 secondOwner.undefine();
-                assertEquals(Integer.MIN_VALUE, target.refCount,
+                assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, target.perlLifecycleState(),
                         "repeated owner release cannot revive or destroy the referent twice");
+                assertEquals(0, target.refCount);
             } finally {
                 WeakRefRegistry.clearWeakRefsTo(target);
                 GlobalVariable.globalArrays.remove(globalName);

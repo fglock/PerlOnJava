@@ -35,8 +35,9 @@ class CodeSlotReleaseBoundaryTest {
                 MortalList.popAndFlush();
             }
 
-            assertEquals(Integer.MIN_VALUE, earlierTarget.refCount,
+            assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, earlierTarget.perlLifecycleState(),
                     "the pending owner is released at its enclosing boundary");
+            assertEquals(0, earlierTarget.refCount);
             assertFalse(earlierTarget.hasPendingOwnerRelease());
         }
     }

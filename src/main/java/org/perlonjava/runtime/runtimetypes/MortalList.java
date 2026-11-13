@@ -457,7 +457,7 @@ public class MortalList {
             // releases and empty unblessed aggregates; any final Perl lifecycle
             // work still requires the owning runtime to be bound.
             if (base.currentlyDestroying || base.refCount < 0
-                    || base.refCount == Integer.MIN_VALUE) {
+                    || base.isPerlDestroyed()) {
                 slotRelease.complete();
                 return;
             }

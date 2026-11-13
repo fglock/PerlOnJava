@@ -84,7 +84,8 @@ class ClearedAggregateOwnerIdentityFinalizationTest {
 
                 assertFalse(WeakRefRegistry.isweak(weakObserver),
                         "legacy count alone must not keep a cleared aggregate alive");
-                assertEquals(Integer.MIN_VALUE, referent.refCount);
+                assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, referent.perlLifecycleState());
+                assertEquals(0, referent.refCount);
             } finally {
                 if (nestedCell.untrackedReferenceOwnerSlot() != null
                         && nestedCell.untrackedReferenceOwnerSlot().isActive()) {

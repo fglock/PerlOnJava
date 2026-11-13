@@ -38,7 +38,8 @@ class WeakArgumentAliasUndefOwnerTest {
                 assertFalse(argumentAlias.isActive());
                 assertFalse(WeakRefRegistry.isweak(weakObserver),
                         "the final alias release clears the weak observer");
-                assertEquals(Integer.MIN_VALUE, target.refCount);
+                assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, target.perlLifecycleState());
+                assertEquals(0, target.refCount);
             } finally {
                 argumentAlias.release();
                 if (WeakRefRegistry.isweak(weakObserver)) {

@@ -62,7 +62,8 @@ class NestedUntrackedOwnerFinalCellCleanupTest {
                 countedOwner.undefine();
                 assertFalse(WeakRefRegistry.isweak(weakObserver),
                         "the final counted owner clears the observer when it leaves");
-                assertEquals(Integer.MIN_VALUE, referent.refCount);
+                assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, referent.perlLifecycleState());
+                assertEquals(0, referent.refCount);
             } finally {
                 if (weakObserver != null && WeakRefRegistry.isweak(weakObserver)) {
                     WeakRefRegistry.unweaken(weakObserver);

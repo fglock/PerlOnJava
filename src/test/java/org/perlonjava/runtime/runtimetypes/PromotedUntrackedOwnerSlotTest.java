@@ -73,7 +73,8 @@ class PromotedUntrackedOwnerSlotTest {
                 assertFalse(ownerSlot.isActive());
                 assertFalse(WeakRefRegistry.isweak(weak));
                 assertEquals(RuntimeScalarType.UNDEF, weak.type);
-                assertEquals(Integer.MIN_VALUE, target.refCount);
+                assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, target.perlLifecycleState());
+                assertEquals(0, target.refCount);
             } finally {
                 GlobalVariable.globalVariables.remove(globalName);
                 if (WeakRefRegistry.isweak(weak)) WeakRefRegistry.unweaken(weak);

@@ -31,8 +31,9 @@ class ScalarRegistryIsNotPerlOwnerTest {
             observer.refCountOwned = true;
             WeakRefRegistry.weaken(observer);
 
-            assertEquals(Integer.MIN_VALUE, referent.refCount,
+            assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, referent.perlLifecycleState(),
                     "a JVM registry entry without a Perl owner cannot rescue the referent");
+            assertEquals(0, referent.refCount);
             assertEquals(RuntimeScalarType.UNDEF, observer.type,
                     "the last real owner release clears the weak observer immediately");
             assertFalse(WeakRefRegistry.hasWeakRefsTo(referent));

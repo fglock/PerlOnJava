@@ -92,7 +92,8 @@ class PackageNestedUntrackedAggregateReleaseTest {
                 assertFalse(WeakRefRegistry.isweak(weak));
                 assertNull(weak.value,
                         "the observer is cleared when the final untracked owner leaves");
-                assertEquals(Integer.MIN_VALUE, target.refCount);
+                assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, target.perlLifecycleState());
+                assertEquals(0, target.refCount);
             } finally {
                 WeakRefRegistry.clearWeakRefsTo(target);
                 GlobalVariable.globalArrays.remove(globalName);

@@ -36,8 +36,9 @@ class BlessTemporaryOwnerProvenanceTest {
             MortalList.flush();
 
             assertTrue(pending.completed.get());
-            assertEquals(Integer.MIN_VALUE, referent.refCount,
+            assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, referent.perlLifecycleState(),
                     "the final temporary release completes lifecycle cleanup");
+            assertEquals(0, referent.refCount);
         }
     }
 }

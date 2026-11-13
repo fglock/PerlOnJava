@@ -35,7 +35,8 @@ class GlobalCodeSlotUndefOwnerTransitionTest {
                 assertEquals(1, undefinedCode.refCount);
                 assertEquals(1, undefinedCode.ownerSlotCount(PerlOwnerSlot.Kind.CODE_SLOT));
                 assertEquals(0, oldCode.ownerSlotCount(PerlOwnerSlot.Kind.CODE_SLOT));
-                assertEquals(Integer.MIN_VALUE, oldCode.refCount);
+                assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, oldCode.perlLifecycleState());
+                assertEquals(0, oldCode.refCount);
             } finally {
                 GlobalVariable.resetAllGlobals();
             }

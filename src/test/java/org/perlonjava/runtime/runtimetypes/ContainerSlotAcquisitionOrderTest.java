@@ -34,8 +34,9 @@ class ContainerSlotAcquisitionOrderTest {
 
             MortalList.flush();
 
-            assertEquals(Integer.MIN_VALUE, previous.refCount,
+            assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, previous.perlLifecycleState(),
                     "the previous referent reaches its final lifecycle state");
+            assertEquals(0, previous.refCount);
             assertEquals(0, previous.ownerSlotCount(PerlOwnerSlot.Kind.HASH_ELEMENT));
             assertEquals(1, replacement.refCount);
             assertEquals(1, replacement.ownerSlotCount(PerlOwnerSlot.Kind.HASH_ELEMENT));
@@ -112,8 +113,9 @@ class ContainerSlotAcquisitionOrderTest {
                     "the replacement referent is retained before the array slot is published");
             assertEquals(1, array.previousOwnersAtPublication,
                     "the previous element remains owned until the replacement is published");
-            assertEquals(Integer.MIN_VALUE, previous.refCount,
+            assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, previous.perlLifecycleState(),
                     "the old element is released after the replacement is visible");
+            assertEquals(0, previous.refCount);
         }
     }
 

@@ -296,13 +296,15 @@ class UntrackedReferenceOwnerSlotTest {
             try {
                 GlobalVariable.globalVariables.put(key, legacyDestroyedCell);
 
-                assertEquals(Integer.MIN_VALUE, legacyDestroyedCell.refCount,
+                assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, legacyDestroyedCell.perlLifecycleState(),
                         "identity tracking must not revive the legacy lifecycle count");
+                assertEquals(0, legacyDestroyedCell.refCount);
                 assertEquals(1, legacyDestroyedCell.ownerSlotCount(
                         PerlOwnerSlot.Kind.PACKAGE_SCALAR_SLOT));
 
                 GlobalVariable.globalVariables.remove(key);
-                assertEquals(Integer.MIN_VALUE, legacyDestroyedCell.refCount);
+                assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, legacyDestroyedCell.perlLifecycleState());
+                assertEquals(0, legacyDestroyedCell.refCount);
                 assertEquals(0, legacyDestroyedCell.ownerSlotCount(
                         PerlOwnerSlot.Kind.PACKAGE_SCALAR_SLOT));
             } finally {

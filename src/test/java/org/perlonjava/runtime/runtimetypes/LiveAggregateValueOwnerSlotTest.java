@@ -46,7 +46,8 @@ class LiveAggregateValueOwnerSlotTest {
                 assertFalse(WeakRefRegistry.isweak(weakObserver),
                         "the final owner release clears weak observers");
                 assertEquals(RuntimeScalarType.UNDEF, weakObserver.type);
-                assertEquals(Integer.MIN_VALUE, referent.refCount);
+                assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, referent.perlLifecycleState());
+                assertEquals(0, referent.refCount);
             } finally {
                 if (valueOwner != null && valueOwner.isActive()) {
                     uncountedOwner.set(new RuntimeScalar());

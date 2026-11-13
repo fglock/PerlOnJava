@@ -40,11 +40,13 @@ class RuntimeHashClonedElementReplacementOwnerTest {
 
                 assertFalse(WeakRefRegistry.isweak(weakObserver),
                         "replacing the final hash owner clears the displaced weak observer");
-                assertEquals(Integer.MIN_VALUE, displaced.refCount);
+                assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, displaced.perlLifecycleState());
+                assertEquals(0, displaced.refCount);
 
                 destination.putClonedElement("slot", null);
                 MortalList.flush();
-                assertEquals(Integer.MIN_VALUE, replacement.refCount);
+                assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, replacement.perlLifecycleState());
+                assertEquals(0, replacement.refCount);
             } finally {
                 if (WeakRefRegistry.isweak(weakObserver)) WeakRefRegistry.unweaken(weakObserver);
                 weakObserver.set(new RuntimeScalar());

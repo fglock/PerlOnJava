@@ -41,8 +41,9 @@ class ScalarOverwriteRetiresOldCountedOwnerTest {
             assertFalse(oldSlot.isActive(),
                     "the old counted slot is retired when this scalar stops owning its referent");
             assertEquals(0, oldReferent.ownerSlotCount(PerlOwnerSlot.Kind.SCALAR_CELL));
-            assertEquals(Integer.MIN_VALUE, oldReferent.refCount,
+            assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, oldReferent.perlLifecycleState(),
                     "the old referent reaches final destruction after its last counted owner leaves");
+            assertEquals(0, oldReferent.refCount);
             assertEquals(RuntimeScalarType.UNDEF, weakObserver.type,
                     "final release clears weak observers immediately");
         }

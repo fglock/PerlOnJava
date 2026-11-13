@@ -197,7 +197,7 @@ public final class SuspendedInterpreterFrame
 
     private static RuntimeBase suspendedLexicalReferent(RuntimeBase value) {
         if (value instanceof RuntimeArray || value instanceof RuntimeHash) {
-            return value.refCount == Integer.MIN_VALUE ? null : value;
+            return value.isPerlDestroyed() ? null : value;
         }
         return null;
     }

@@ -30,7 +30,8 @@ class TailCallScalarRegistryOwnershipTest {
             assertFalse(owner.refCountOwned);
             assertTrue(ScalarRefRegistry.snapshot().contains(owner),
                     "the Java-live scalar remains registered after its Perl owner leaves");
-            assertEquals(Integer.MIN_VALUE, referent.refCount);
+            assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, referent.perlLifecycleState());
+            assertEquals(0, referent.refCount);
             assertEquals(RuntimeScalarType.UNDEF, weak.type);
         }
     }

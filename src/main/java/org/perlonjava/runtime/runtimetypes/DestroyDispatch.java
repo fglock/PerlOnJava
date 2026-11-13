@@ -197,11 +197,6 @@ public class DestroyDispatch {
 
         if (referent.perlLifecycleState() == RuntimeBase.PerlLifecycleState.DESTROYED) return;
 
-        // Older lifecycle producers still use MIN_VALUE as a one-way request
-        // marker. Normalize those callers into the count domain before they
-        // enter the lifecycle state machine.
-        if (referent.refCount == Integer.MIN_VALUE) referent.refCount = 0;
-
         // Phase 3 (refcount_alignment_plan.md): Re-entry guard.
         // If this object is already inside its own DESTROY body, a transient
         // decrement-to-0 (local temp release, deferred MortalList flush,
