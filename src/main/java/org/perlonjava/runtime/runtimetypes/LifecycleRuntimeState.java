@@ -128,7 +128,7 @@ final class LifecycleRuntimeState {
     final ScalarRefRegistry.WeakIdentityMap<Throwable> scalarRegisterStacks =
             new ScalarRefRegistry.WeakIdentityMap<>();
 
-    /** One expression-root stack entry and its exact temporary owner identity. */
+    /** One Perl temporary-scope value and its exact direct owner identity. */
     static final class TemporaryRootLease {
         private final RuntimeBase root;
         private final PerlOwnerSlot ownerSlot;
@@ -136,11 +136,11 @@ final class LifecycleRuntimeState {
         TemporaryRootLease(RuntimeBase root) {
             this.root = root;
             if (root.refCount == Integer.MIN_VALUE) {
-                // Preserve snapshot visibility without resurrecting a destroyed value.
+                // Keep the boundary entry balanced without reviving a destroyed value.
                 this.ownerSlot = null;
             } else {
-                PerlOwnerSlot owner = new PerlOwnerSlot(PerlOwnerSlot.Kind.TEMPORARY_ROOT);
-                owner.acquireTemporaryRootIdentity(root);
+                PerlOwnerSlot owner = new PerlOwnerSlot(PerlOwnerSlot.Kind.EXPRESSION_VALUE);
+                owner.acquireCountedNativeOwner(root, "MortalList temporary expression value");
                 this.ownerSlot = owner;
             }
         }
@@ -150,7 +150,7 @@ final class LifecycleRuntimeState {
         }
 
         void release() {
-            if (ownerSlot != null) ownerSlot.release();
+            if (ownerSlot != null) ownerSlot.releaseNativeOwner();
         }
     }
 
