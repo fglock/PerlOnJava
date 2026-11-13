@@ -64,8 +64,8 @@ class UnownedTemporaryArrayAggregateOwnerTest {
 
                 assertFalse(temporary.localBindingExists,
                         "scope exit removes the array's lexical owner");
-                assertTrue(temporary.hasTemporaryRootOwnerSlotIdentity(),
-                        "the expression lease remains active during deferred cleanup");
+                assertEquals(1, temporary.ownerSlotCount(PerlOwnerSlot.Kind.EXPRESSION_VALUE),
+                        "the expression lease is a direct counted owner during cleanup");
                 assertEquals(TEMPORARY_RESULT_COUNT, temporary.elements.size(),
                         "the Java-reachable array remains available during the lease");
                 for (RuntimeHash referent : referents) {
@@ -82,8 +82,8 @@ class UnownedTemporaryArrayAggregateOwnerTest {
                 MortalList.popTemporaryRoot(temporary);
                 temporaryRootPushed = false;
 
-                assertFalse(temporary.hasTemporaryRootOwnerSlotIdentity(),
-                        "popping the expression root releases its lease");
+                assertEquals(0, temporary.ownerSlotCount(PerlOwnerSlot.Kind.EXPRESSION_VALUE),
+                        "popping the expression root releases its counted owner");
                 for (RuntimeHash referent : referents) {
                     assertEquals(0, referent.ownerSlotCount(
                                     PerlOwnerSlot.Kind.UNTRACKED_REFERENCE),
