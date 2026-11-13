@@ -1548,6 +1548,25 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                                 .append(" aliased=").append(array.elementsAliased)
                                 .append(" owned=").append(array.elementsOwned)
                                 .append(" activeArgs=").append(activeArgs);
+                        if (activeArgs) {
+                            for (int depth = 0; ; depth++) {
+                                RuntimeArray activeFrame = RuntimeCode.getActiveArgsAt(depth);
+                                if (activeFrame == null) break;
+                                if (activeFrame != array) continue;
+                                RuntimeCode activeCode = RuntimeCode.getActiveCodeAt(depth);
+                                result.append(" argsFrameDepth=").append(depth)
+                                        .append(" activeCode=");
+                                if (activeCode == null) {
+                                    result.append("none");
+                                } else {
+                                    result.append(activeCode.packageName).append("::")
+                                            .append(activeCode.subName)
+                                            .append('@').append(activeCode.cvStartFile)
+                                            .append(':').append(activeCode.cvStartLine);
+                                }
+                                break;
+                            }
+                        }
                         for (int i = 0; i < array.elements.size(); i++) {
                             if (array.elements.get(i) == owner) {
                                 result.append(" index=").append(i);
@@ -1675,6 +1694,34 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             result.append(']');
         }
         result.append(" semanticCaptureOwners=").append(semanticCaptureOwnerCount());
+        result.append(" matchingArgumentFrames=[");
+        boolean firstMatchingArgumentFrame = true;
+        int argumentFrameDepth = 0;
+        for (RuntimeArray argumentFrame : RuntimeCode.snapshotArgsStack()) {
+            boolean matches = false;
+            for (RuntimeScalar argument : argumentFrame.elements) {
+                if (argument != null && argument.value == this) {
+                    matches = true;
+                    break;
+                }
+            }
+            if (matches) {
+                if (!firstMatchingArgumentFrame) result.append(", ");
+                firstMatchingArgumentFrame = false;
+                RuntimeCode activeCode = RuntimeCode.getActiveCodeAt(argumentFrameDepth);
+                result.append(argumentFrameDepth).append(':');
+                if (activeCode == null) {
+                    result.append("none");
+                } else {
+                    result.append(activeCode.packageName).append("::")
+                            .append(activeCode.subName)
+                            .append('@').append(activeCode.cvStartFile)
+                            .append(':').append(activeCode.cvStartLine);
+                }
+            }
+            argumentFrameDepth++;
+        }
+        result.append(']');
         return result.toString();
     }
 

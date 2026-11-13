@@ -37,18 +37,34 @@ pass system Perl (33 assertions), log:
 `t/52leaks-resultset-source-only.t` passes system Perl but still fails one
 assertion of two on both JVM and interpreter after this build. Owner tracing
 shows the chained `BaseResultSet` retains a final owner through the assertion;
-the source of that edge remains unconfirmed. Logs:
+the source of that edge remains unconfirmed. A fresh uninstrumented JVM run still
+fails; extracting the chained resultset to a lexical and adding owner-trace
+calls makes the staged variant pass, so that variant perturbs the lifetime and
+is not valid acceptance evidence. A generic method-return-to-hash case passes
+system Perl and both backends; a blessed-lexical-return chain with method calls
+also passes on all three runtimes. This narrows the reproduction to DBIx's
+actual construction/method path rather than a general return or hash-store
+rule. Logs:
 `/tmp/issue2043-dbic-source-only-final-jvm.log`,
 `/tmp/issue2043-dbic-source-only-final-interpreter.log`, and
-`/tmp/issue2043-dbic-source-only-after-guard-ownertrace.log`.
+`/tmp/issue2043-dbic-source-only-after-guard-ownertrace.log`; current fresh
+reproduction `/tmp/issue2043-source-only-original-current-jperl.log`, staged
+variant `/tmp/issue2043-source-only-staged-jperl.log`, and generic control
+`/tmp/issue2043-generic-system.log`, `/tmp/issue2043-generic-jvm.log`,
+`/tmp/issue2043-generic-interpreter.log`; blessed return control
+`/tmp/issue2043-blessed-lexical-system.log`,
+`/tmp/issue2043-blessed-lexical-jvm.log`, and
+`/tmp/issue2043-blessed-lexical-interpreter.log`.
 
-Next, identify and retire the final `BaseResultSet` owner at the correct Perl
-scope boundary, then continue removing temporary-root ancestry and remaining
-sweep-only state and diagnostics. Keep thread-clone snapshots as separate
-runtime ownership. Before publishing, finish the no-sweep owner migration,
-remove obsolete diagnostic-only coverage, run full `make` and focused DBIx
-acceptance on the exact candidate, refresh the issue claim, and reconcile PR
-#1938 without overwriting its separate branch.
+Next, trace the uninstrumented `BaseResultSet` count through construction,
+return, hash insertion, and block cleanup without querying it from Perl at the
+measurement boundary; fix that owner transition and add permanent focused
+coverage. Then continue removing temporary-root ancestry and sweep-only state
+and diagnostics while keeping thread-clone snapshots as separate runtime
+ownership. Before publishing, finish the no-sweep owner migration, remove
+obsolete diagnostic-only coverage, run full `make` and focused DBIx acceptance
+on the exact candidate, refresh the issue claim, and reconcile PR #1938 without
+overwriting its separate branch.
 
 ### Phase 2 progress (2026-10-27)
 
