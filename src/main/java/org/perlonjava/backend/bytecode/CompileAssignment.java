@@ -140,19 +140,19 @@ public class CompileAssignment {
         }
         bc.compileNode(ternary.condition, -1, RuntimeContextType.SCALAR);
         int conditionReg = bc.lastResultReg;
-        int ifFalsePos = bc.bytecode.size();
+        int ifFalsePos = bc.bytecodeSize;
         bc.emit(bc.gotoIfFalseOpcode());
         bc.emitReg(conditionReg);
         bc.emitInt(0);
 
         compileDirectReferenceAliasTarget(bc, ternary.trueExpr, rhsListReg, index, tokenIndex);
-        int gotoEndPos = bc.bytecode.size();
+        int gotoEndPos = bc.bytecodeSize;
         bc.emit(Opcodes.GOTO);
         bc.emitInt(0);
 
-        bc.patchIntOffset(ifFalsePos + 2, bc.bytecode.size());
+        bc.patchIntOffset(ifFalsePos + 2, bc.bytecodeSize);
         compileDirectReferenceAliasTarget(bc, ternary.falseExpr, rhsListReg, index, tokenIndex);
-        bc.patchIntOffset(gotoEndPos + 1, bc.bytecode.size());
+        bc.patchIntOffset(gotoEndPos + 1, bc.bytecodeSize);
         return true;
     }
 
@@ -174,17 +174,17 @@ public class CompileAssignment {
         if (target instanceof TernaryOperatorNode ternary) {
             bc.compileNode(ternary.condition, -1, RuntimeContextType.SCALAR);
             int conditionReg = bc.lastResultReg;
-            int ifFalsePos = bc.bytecode.size();
+            int ifFalsePos = bc.bytecodeSize;
             bc.emit(bc.gotoIfFalseOpcode());
             bc.emitReg(conditionReg);
             bc.emitInt(0);
             compileReferenceAliasTarget(bc, ternary.trueExpr, referenceReg, tokenIndex, aliasBareScalar);
-            int gotoEndPos = bc.bytecode.size();
+            int gotoEndPos = bc.bytecodeSize;
             bc.emit(Opcodes.GOTO);
             bc.emitInt(0);
-            bc.patchIntOffset(ifFalsePos + 2, bc.bytecode.size());
+            bc.patchIntOffset(ifFalsePos + 2, bc.bytecodeSize);
             compileReferenceAliasTarget(bc, ternary.falseExpr, referenceReg, tokenIndex, aliasBareScalar);
-            bc.patchIntOffset(gotoEndPos + 1, bc.bytecode.size());
+            bc.patchIntOffset(gotoEndPos + 1, bc.bytecodeSize);
             return;
         }
         if (target instanceof OperatorNode reference && reference.operator.equals("\\")) {
@@ -265,7 +265,7 @@ public class CompileAssignment {
         bc.emit(persistId);
         bc.emit(bc.gotoIfTrueOpcode());
         bc.emitReg(initializedReg);
-        int initializedJump = bc.bytecode.size();
+        int initializedJump = bc.bytecodeSize;
         bc.emitInt(0);
         bc.emit(Opcodes.SET_SCALAR);
         bc.emitReg(targetReg);
@@ -273,7 +273,7 @@ public class CompileAssignment {
         bc.emit(Opcodes.STATE_MARK_INITIALIZED);
         bc.emit(nameIdx);
         bc.emit(persistId);
-        bc.patchIntOffset(initializedJump, bc.bytecode.size());
+        bc.patchIntOffset(initializedJump, bc.bytecodeSize);
     }
 
     private static boolean isDirectReferenceAliasTarget(Node target) {
@@ -538,7 +538,7 @@ public class CompileAssignment {
         bc.emit(persistId);
         bc.emit(bc.gotoIfTrueOpcode());
         bc.emitReg(initializedReg);
-        int initializedJump = bc.bytecode.size();
+        int initializedJump = bc.bytecodeSize;
         bc.emitInt(0);
 
         int referenceReg = compileRhs(bc, node.right, RuntimeContextType.SCALAR);
@@ -554,7 +554,7 @@ public class CompileAssignment {
         bc.emitReg(sourceArrayReg);
         bc.emit(nameIdx);
         bc.emit(persistId);
-        bc.patchIntOffset(initializedJump, bc.bytecode.size());
+        bc.patchIntOffset(initializedJump, bc.bytecodeSize);
         bc.emitActiveLexicalBinding(arrayReg, varName);
         bc.registerStateArrayVariable(varName, arrayReg, persistId);
         bc.lastResultReg = arrayReg;
@@ -608,7 +608,7 @@ public class CompileAssignment {
         bc.emit(persistId);
         bc.emit(bc.gotoIfTrueOpcode());
         bc.emitReg(initializedReg);
-        int initializedJump = bc.bytecode.size();
+        int initializedJump = bc.bytecodeSize;
         bc.emitInt(0);
 
         int referenceReg = compileRhs(bc, node.right, RuntimeContextType.SCALAR);
@@ -624,7 +624,7 @@ public class CompileAssignment {
         bc.emitReg(sourceHashReg);
         bc.emit(nameIdx);
         bc.emit(persistId);
-        bc.patchIntOffset(initializedJump, bc.bytecode.size());
+        bc.patchIntOffset(initializedJump, bc.bytecodeSize);
         bc.emitActiveLexicalBinding(hashReg, varName);
         bc.registerStateHashVariable(varName, hashReg, persistId);
         bc.lastResultReg = hashReg;
@@ -884,7 +884,7 @@ public class CompileAssignment {
             bc.emit(persistId);
             bc.emit(bc.gotoIfTrueOpcode());
             bc.emitReg(initializedReg);
-            int initializedJump = bc.bytecode.size();
+            int initializedJump = bc.bytecodeSize;
             bc.emitInt(0);
 
             int rhsReg = compileRhs(bc, node.right, RuntimeContextType.LIST);
@@ -898,7 +898,7 @@ public class CompileAssignment {
             bc.emit(Opcodes.STATE_MARK_INITIALIZED);
             bc.emit(nameIdx);
             bc.emit(persistId);
-            bc.patchIntOffset(initializedJump, bc.bytecode.size());
+            bc.patchIntOffset(initializedJump, bc.bytecodeSize);
             bc.emitActiveLexicalBinding(arrayReg, varName);
             bc.registerStateArrayVariable(varName, arrayReg, persistId);
             bc.lastResultReg = arrayReg;
@@ -1185,7 +1185,7 @@ public class CompileAssignment {
                     bc.emit(statePersistId);
                     bc.emit(bc.gotoIfTrueOpcode());
                     bc.emitReg(initializedReg);
-                    initializedJump = bc.bytecode.size();
+                    initializedJump = bc.bytecodeSize;
                     bc.emitInt(0);
                 }
                 bc.emit(declaration.operator.equals("state")
@@ -1196,7 +1196,7 @@ public class CompileAssignment {
                     bc.emit(Opcodes.STATE_MARK_INITIALIZED);
                     bc.emit(stateNameIdx);
                     bc.emit(statePersistId);
-                    bc.patchIntOffset(initializedJump, bc.bytecode.size());
+                    bc.patchIntOffset(initializedJump, bc.bytecodeSize);
                 }
                 if (declaration.operator.equals("my")) {
                     bc.emit(Opcodes.REGISTER_MY_VAR);
@@ -2390,7 +2390,7 @@ public class CompileAssignment {
 
                                 bytecodeCompiler.emit(bytecodeCompiler.gotoIfTrueOpcode());
                                 bytecodeCompiler.emitReg(initializedReg);
-                                int initializedJump = bytecodeCompiler.bytecode.size();
+                                int initializedJump = bytecodeCompiler.bytecodeSize;
                                 bytecodeCompiler.emitInt(0);
 
                                 bytecodeCompiler.compileNode(node.right, -1, rhsContext);
@@ -2401,7 +2401,7 @@ public class CompileAssignment {
                                 bytecodeCompiler.emit(Opcodes.STATE_MARK_INITIALIZED);
                                 bytecodeCompiler.emit(nameIdx);
                                 bytecodeCompiler.emit(persistId);
-                                bytecodeCompiler.patchIntOffset(initializedJump, bytecodeCompiler.bytecode.size());
+                                bytecodeCompiler.patchIntOffset(initializedJump, bytecodeCompiler.bytecodeSize);
                                 bytecodeCompiler.emitActiveLexicalBinding(reg, varName);
 
                                 bytecodeCompiler.registerStateScalarVariable(varName, reg, persistId);
@@ -3570,7 +3570,7 @@ public class CompileAssignment {
                             bytecodeCompiler.emit(statePersistId);
                             bytecodeCompiler.emit(bytecodeCompiler.gotoIfTrueOpcode());
                             bytecodeCompiler.emitReg(initializedReg);
-                            initializedJump = bytecodeCompiler.bytecode.size();
+                            initializedJump = bytecodeCompiler.bytecodeSize;
                             bytecodeCompiler.emitInt(0);
                         }
                         bytecodeCompiler.emit(declaration.operator.equals("state")
@@ -3581,7 +3581,7 @@ public class CompileAssignment {
                             bytecodeCompiler.emit(Opcodes.STATE_MARK_INITIALIZED);
                             bytecodeCompiler.emit(stateNameIdx);
                             bytecodeCompiler.emit(statePersistId);
-                            bytecodeCompiler.patchIntOffset(initializedJump, bytecodeCompiler.bytecode.size());
+                            bytecodeCompiler.patchIntOffset(initializedJump, bytecodeCompiler.bytecodeSize);
                         }
                         // A `my` declaration initially registers its empty
                         // storage for scope cleanup. Refaliasing replaces the

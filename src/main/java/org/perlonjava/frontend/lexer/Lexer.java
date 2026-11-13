@@ -406,6 +406,20 @@ public class Lexer {
                 break;
             }
         }
+        // Round 36: return a cached token for common Perl keywords — avoids both
+        // String.substring() and LexerToken allocation for cache hits.
+        int len = position - start;
+        LexerToken kwToken = LexerToken.ofKeyword(input, start, len);
+        if (kwToken != null) {
+            if (!sawBeginOrSub) {
+                char a = input.charAt(start);
+                // sub(len=3,'s'), use(len=3,'u'), no(len=2,'n'), BEGIN(len=5,'B')
+                if (len==3 && (a=='s'||a=='u') || len==2 && a=='n' || len==5 && a=='B') {
+                    sawBeginOrSub = true;
+                }
+            }
+            return kwToken;
+        }
         // Build token text using substring to preserve surrogate pairs correctly
         String text = input.substring(start, position);
         if (!sawBeginOrSub
