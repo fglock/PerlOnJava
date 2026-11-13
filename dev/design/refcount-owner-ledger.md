@@ -345,15 +345,26 @@ setups, now corrected (`/tmp/issue2043-ab32e49b31-make.log` and
 The issue's live-owner count contract is still incomplete: untracked and weak
 tracking states remain negative in `refCount`, and some owner-slot producers do
 not yet contribute to the count. DBIx
-`t/52leaks-resultset-source-only.t` also remains a known failure on both
-backends; its final strong owner edge is unresolved.
+`t/52leaks-resultset-source-only.t` remains a known failure on both backends,
+retaining one `BaseResultSet` from the first `chained_resultset` hash slot. Its
+trace shows that slot as strong but uncounted while the referent is
+`WEAKLY_TRACKED`; this is a candidate missing owner transition, not a proven
+root cause. The reduced DBIx-style reproducer passes 1/1 on system Perl, JVM,
+and interpreter (`/tmp/issue2043-dbic-resultset-subframe-system-perl.log`,
+`/tmp/issue2043-dbic-resultset-subframe-jvm.log`, and
+`/tmp/issue2043-dbic-resultset-subframe-interpreter.log`), so it does not yet
+reproduce the leak and must not drive a runtime fix.
 
-Next: migrate untracked and weak tracking state out of `refCount`, reconcile
-every strong owner slot with the nonnegative count, then remove diagnostic-only
-counters and graph-query paths. After those source changes, run focused JVM and
-interpreter checks, the full repository gate, DBIx leak/populate tests, and
-fresh-home exact-head CPAN acceptance. Update PR #1938 only with current evidence
-after those gates pass.
+Next: make a focused regression preserve the real DBIx construction and weak
+registry ordering, and capture the owner-slot state before destruction clears
+it. In parallel, introduce explicit tracking state for the legacy untracked
+and weak-tracked cases, then migrate the count gates and clone paths before
+counting every remaining strong owner slot. Keep DBIx owner tracing only until
+that edge is identified. Remove obsolete root-query diagnostics and tests when
+their behavior is no longer needed; keep liveness assertions. After source
+changes, run focused JVM and interpreter checks, the full repository gate,
+DBIx leak/populate tests, and fresh-home exact-head CPAN acceptance. Update PR
+#1938 only with current evidence after those gates pass.
 
 ### Historical handoff: issue #1132 / PR #1204
 
