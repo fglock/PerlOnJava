@@ -14,38 +14,41 @@ Thread-clone snapshots remain explicit runtime ownership.
 
 **Current checkpoint (2026-11-13):** Issue #2043 continues on
 `wip/issue2043-late-test-preflight-20261113-054154`, source commit
-`311e8b4fbd`, in `/private/tmp/issue2043-head-8521-review-20261112`. PR #1938
+`d077cafc54`, in `/private/tmp/issue2043-head-8521-review-20261112`. PR #1938
 remains open/draft at `1b80749914`; this work is not published there.
 
-The selective count now starts at zero and uses explicit `UNTRACKED`, `TRACKED`,
-and `WEAKLY_TRACKED` modes. Runtime promotion, clone/restore, release gates, and
-white-box fixtures use that state instead of negative count values. The new
-`RuntimeBaseRefCountTrackingStateTest` checks the nonnegative count invariant.
-`nice -n 19 timeout 3600 make` passes in 7m13
-(`/tmp/issue2043-explicit-tracking-make.log`); `make check-links` passes with
-834 documents (`/tmp/issue2043-explicit-tracking-check-links.log`). The reduced
-DBIx-style reproducer passes 1/1 under system Perl, JVM, and interpreter
-(`/tmp/issue2043-explicit-dbic-reduced-{system,jvm,interpreter}.log`), but it
-does not reproduce the known leak. The DBIx::Class distribution and its
-`t/52leaks-resultset-source-only.t` are absent from the current local CPAN build
-cache, so the original failure has not been rechecked on this commit.
+Selective counts now start at zero and use explicit `UNTRACKED`, `TRACKED`, and
+`WEAKLY_TRACKED` modes. Runtime producers, clone/restore paths, release gates,
+and white-box fixtures use the state instead of negative count sentinels. The
+remaining `Internals::SvREFCNT` sentinel branch was migrated in `d077cafc54`.
+`nice -n 19 timeout 1800 make` passes in 6m23
+(`/tmp/issue2043-explicit-state-svrefcnt-make.log`); `make check-links` passed
+with 835 documents before this Java-only follow-up
+(`/tmp/issue2043-current-check-links.log`).
+
+The untouched upstream DBIx::Class 0.082844 `t/52leaks.t` passes under system
+Perl but reports 17 weak-registry leaks on the JVM
+(`/tmp/issue2043-dbic-upstream-52leaks-{system,jvm}.log`). A target-filtered
+owner trace shows a leaked `DBICTest::Schema` held by a strong `schema` hash
+slot on a `ResultSource::Table`; DBIx later uses this slot for phantom-chain
+handoff. The evidence locates the retained edge but does not yet prove which
+owner release or handoff is stale. A minimal direct hash-field `weaken()` probe
+passes on both system Perl and JVM. The raw upstream interpreter run still
+stops earlier at missing `DBIx::Class::Storage::DBI::is_literal_value`, so it
+needs the repository's normal DBIx compatibility setup before it can serve as
+acceptance. Do not infer a fix from the reduced reproducer.
 
 Two production paths still ask `ReachabilityWalker` for liveness: installed
 CODE-edge selection in `GlobalRuntimeState.isCodeRefEdgeRoot`, and the
-`Internals::svRefcount` field-owned method-result adjustment. Owner-count
-alignment is also incomplete, and the DBIx `BaseResultSet` owner transition is
-unproven. Root-query counters and tests remain until these callers no longer
-need graph traversal.
+`Internals::svRefcount` field-owned method-result adjustment. Root-query
+counters and diagnostics remain until both paths have owner-ledger proofs.
 
-Next: restore the exact DBIx test source and reproduce its owner edge without
-instrumentation that changes lifetime; fix it with permanent source-level
-coverage. In parallel, audit the CODE-edge cache and `Internals::svRefcount`
-queries against current owner slots, keeping shared lifecycle edits for the
-integration pass. Once those liveness decisions use owner identities, remove
-the graph walker, query counters, and diagnostic-only test blocks while
-retaining liveness and Perl-visible `SvREFCNT` assertions. Then run full
-repository, DBIx leak/populate, fresh-home exact-head CPAN, and final-base gates
-before reconciling PR #1938.
+Next: trace the retained DBIx row/result-source owner chain to its exact release
+boundary and add a project-owned regression that passes system Perl and fails
+on this parent. Then replace the two graph-query decisions with direct owner
+identities, remove walker APIs and sweep-only diagnostics/compatibility hooks,
+and run DBIx leak/populate, JVM/interpreter, fresh-home CPAN, and full-repository
+gates on the exact final head before reconciling PR #1938.
 
 ### Phase 2 progress (2026-10-27)
 
