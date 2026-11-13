@@ -51,7 +51,7 @@ class LocalizedGlobCodeOwnerSlotFastPathTest {
             } finally {
                 RuntimeCode.popActiveCode(localized);
                 GlobalVariable.globalCodeRefs.remove(name);
-                localized.refCount = Integer.MIN_VALUE;
+                localized.refCount = 0;
                 DestroyDispatch.callDestroy(localized);
             }
         }

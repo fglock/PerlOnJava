@@ -42,7 +42,7 @@ class RescuedAggregateOwnerFinalizationTest {
                 return new RuntimeScalar().getList();
             });
 
-            parent.refCount = Integer.MIN_VALUE;
+            parent.refCount = 0;
             try {
                 DestroyDispatch.callDestroy(parent);
                 assertEquals(RuntimeBase.PerlLifecycleState.RESURRECTED,

@@ -108,7 +108,7 @@ class PerlOwnerSlotSemanticOwnerTest {
     @Test
     void nativeOwnerCannotReuseADeadReferentOrMigratePendingLegacyReleases() {
         RuntimeHash destroyed = new RuntimeHash();
-        destroyed.refCount = Integer.MIN_VALUE;
+        destroyed.markPerlDestroyed();
         PerlOwnerSlot deadSlot = new PerlOwnerSlot(PerlOwnerSlot.Kind.SCALAR_CELL);
         assertThrows(IllegalStateException.class, () -> deadSlot.acquireNativeOwner(destroyed));
 

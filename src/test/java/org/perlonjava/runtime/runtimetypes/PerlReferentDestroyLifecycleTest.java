@@ -17,7 +17,7 @@ class PerlReferentDestroyLifecycleTest {
             String className = "Issue1649::ThrowingDestroy";
             RuntimeHash referent = new RuntimeHash();
             referent.blessId = NameNormalizer.getBlessId(className);
-            referent.refCount = Integer.MIN_VALUE;
+            referent.refCount = 0;
             installDestroy(className, (args, context) -> {
                 throw new PerlDieException(new RuntimeScalar("destructor failed\n"));
             });
@@ -42,7 +42,7 @@ class PerlReferentDestroyLifecycleTest {
             String className = "Issue1649::ReentrantDestroy";
             RuntimeHash referent = new RuntimeHash();
             referent.blessId = NameNormalizer.getBlessId(className);
-            referent.refCount = Integer.MIN_VALUE;
+            referent.refCount = 0;
             AtomicReference<RuntimeBase.PerlLifecycleState> observed = new AtomicReference<>();
             installDestroy(className, (args, context) -> {
                 observed.set(referent.perlLifecycleState());
@@ -67,7 +67,7 @@ class PerlReferentDestroyLifecycleTest {
             String className = "Issue1649::ResurrectedDestroy";
             RuntimeHash referent = new RuntimeHash();
             referent.blessId = NameNormalizer.getBlessId(className);
-            referent.refCount = Integer.MIN_VALUE;
+            referent.refCount = 0;
             installDestroy(className, (args, context) -> {
                 referent.refCount++;
                 DestroyDispatch.markDestroyTargetRescued();

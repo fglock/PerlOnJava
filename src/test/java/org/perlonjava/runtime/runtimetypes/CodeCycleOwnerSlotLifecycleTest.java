@@ -26,21 +26,9 @@ class CodeCycleOwnerSlotLifecycleTest {
             assertTrue(WeakRefRegistry.isweak(weakObserver));
             assertEquals(1, code.countedOwnerSlotCount());
 
-            // Exercise the legacy undercount bridge while the real self-capture
-            // slot remains current. Normal Perl cycle lifetime is covered by
-            // weak_self_retaining_closure_cycle.t and self_capture_cycle_owner.t.
-            code.refCount = Integer.MIN_VALUE;
-            try (MortalList.ReachabilityQueryMeasurement measurement =
-                         MortalList.measureReachabilityQueries()) {
-                DestroyDispatch.callDestroy(code);
-
-                assertEquals(1, code.refCount,
-                        "the current self-capture edge restores the compatibility count");
-                assertEquals(1, measurement.stats().codeOwnerSlotRestorations);
-                assertEquals(0, measurement.stats().rootQueries);
-                assertEquals(0, measurement.stats().snapshotsBuilt);
-                assertTrue(WeakRefRegistry.isweak(weakObserver));
-            }
+            assertEquals(1, code.refCount,
+                    "the current self-capture edge has one ordinary owner count");
+            assertTrue(WeakRefRegistry.isweak(weakObserver));
 
             capture.set(new RuntimeScalar());
             assertFalse(WeakRefRegistry.isweak(weakObserver),

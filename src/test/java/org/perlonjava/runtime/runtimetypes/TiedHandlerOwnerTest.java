@@ -68,7 +68,7 @@ class TiedHandlerOwnerTest {
             RuntimeScalar borrowed = outer.createAnonymousReference();
             MortalList.pushTemporaryRoot(borrowed);
             try {
-                outer.refCount = Integer.MIN_VALUE;
+                outer.refCount = 0;
                 DestroyDispatch.callDestroyFromCountedOwner(outer);
                 assertEquals(RuntimeScalarType.UNDEF, weak.type);
                 assertFalse(handler.hasOwnerSlots());
@@ -99,9 +99,9 @@ class TiedHandlerOwnerTest {
             MortalList.pushTemporaryRoot(borrowedHash);
             MortalList.pushTemporaryRoot(borrowedArray);
             try (MortalList.ReachabilityQueryMeasurement measurement = MortalList.measureReachabilityQueries()) {
-                hash.refCount = Integer.MIN_VALUE;
+                hash.refCount = 0;
                 DestroyDispatch.callDestroyFromCountedOwner(hash);
-                array.refCount = Integer.MIN_VALUE;
+                array.refCount = 0;
                 DestroyDispatch.callDestroyFromCountedOwner(array);
                 // Container finalization queues child decrements; the boundary
                 // drains those identified releases before observers are checked.

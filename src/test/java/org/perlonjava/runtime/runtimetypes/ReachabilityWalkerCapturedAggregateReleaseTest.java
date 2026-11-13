@@ -39,7 +39,7 @@ class ReachabilityWalkerCapturedAggregateReleaseTest {
 
             // A targeted weak sweep can miss the native owner slots and leave
             // this bridge sentinel behind while the captured lexical is live.
-            captured.refCount = Integer.MIN_VALUE;
+            captured.refCount = 0;
             PerlOwnerSlot secondOwner = captured.retainClosureCaptureOwner();
 
             assertEquals(0, captured.refCount);

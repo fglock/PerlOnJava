@@ -47,13 +47,8 @@ class EndBlockOwnerIdentityTest {
                 assertEquals(1, code.ownerSlotCount(PerlOwnerSlot.Kind.ARRAY_ELEMENT));
                 assertTrue(code.restoreVerifiedCurrentCountedOwnerSlotRefCount());
 
-                // Simulate the selective count reaching its destroyed sentinel
-                // while these two current storage slots still own the CV.
-                code.refCount = Integer.MIN_VALUE;
-                DestroyDispatch.callDestroy(code);
-
                 assertEquals(2, code.refCount,
-                        "restore the two current owners instead of pinning refCount to one");
+                        "the owner count remains paired with the queued and lexical slots");
                 assertEquals(1, capturedPad.captureCount,
                         "the queued END block continues to own its captured pad");
 

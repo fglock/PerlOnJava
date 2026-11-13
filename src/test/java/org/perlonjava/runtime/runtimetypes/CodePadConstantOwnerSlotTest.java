@@ -41,18 +41,18 @@ class CodePadConstantOwnerSlotTest {
                 assertTrue(WeakRefRegistry.isweak(weakObserver),
                         "transferring the owner does not clear a live constant");
 
-                publishedCv.refCount = Integer.MIN_VALUE;
+                publishedCv.refCount = 0;
                 DestroyDispatch.callDestroy(publishedCv);
                 assertEquals(0, constant.ownerSlotCount(PerlOwnerSlot.Kind.CODE_PAD_CONSTANT));
                 assertFalse(WeakRefRegistry.isweak(weakObserver),
                         "the published CV's final release reaps its constant");
             } finally {
                 if (compiledCode.perlLifecycleState() != RuntimeBase.PerlLifecycleState.DESTROYED) {
-                    compiledCode.refCount = Integer.MIN_VALUE;
+                    compiledCode.refCount = 0;
                     DestroyDispatch.callDestroy(compiledCode);
                 }
                 if (publishedCv.perlLifecycleState() != RuntimeBase.PerlLifecycleState.DESTROYED) {
-                    publishedCv.refCount = Integer.MIN_VALUE;
+                    publishedCv.refCount = 0;
                     DestroyDispatch.callDestroy(publishedCv);
                 }
                 WeakRefRegistry.clearWeakRefsTo(constant);
@@ -97,7 +97,7 @@ class CodePadConstantOwnerSlotTest {
                 MyVarCleanupStack.unregister(strongOwner);
                 MyVarCleanupStack.popMark(mark);
                 if (code.perlLifecycleState() != RuntimeBase.PerlLifecycleState.DESTROYED) {
-                    code.refCount = Integer.MIN_VALUE;
+                    code.refCount = 0;
                     DestroyDispatch.callDestroy(code);
                 }
                 WeakRefRegistry.clearWeakRefsTo(constant);
@@ -195,13 +195,13 @@ class CodePadConstantOwnerSlotTest {
                 assertEquals(3, constant.ownerSlotCount(
                                 PerlOwnerSlot.Kind.CODE_PAD_CONSTANT));
 
-                firstCode.refCount = Integer.MIN_VALUE;
+                firstCode.refCount = 0;
                 DestroyDispatch.callDestroy(firstCode);
                 assertEquals(1, constant.ownerSlotCount(PerlOwnerSlot.Kind.CODE_PAD_CONSTANT));
                 assertTrue(WeakRefRegistry.isweak(weakObserver),
                         "one surviving CV still owns the shared optree constant");
 
-                secondCode.refCount = Integer.MIN_VALUE;
+                secondCode.refCount = 0;
                 DestroyDispatch.callDestroy(secondCode);
                 assertEquals(0, constant.ownerSlotCount(PerlOwnerSlot.Kind.CODE_PAD_CONSTANT));
                 assertFalse(WeakRefRegistry.isweak(weakObserver),
@@ -214,11 +214,11 @@ class CodePadConstantOwnerSlotTest {
                         "repeated destruction cannot release an owner twice");
             } finally {
                 if (firstCode.perlLifecycleState() != RuntimeBase.PerlLifecycleState.DESTROYED) {
-                    firstCode.refCount = Integer.MIN_VALUE;
+                    firstCode.refCount = 0;
                     DestroyDispatch.callDestroy(firstCode);
                 }
                 if (secondCode.perlLifecycleState() != RuntimeBase.PerlLifecycleState.DESTROYED) {
-                    secondCode.refCount = Integer.MIN_VALUE;
+                    secondCode.refCount = 0;
                     DestroyDispatch.callDestroy(secondCode);
                 }
                 WeakRefRegistry.clearWeakRefsTo(constant);

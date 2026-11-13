@@ -50,7 +50,7 @@ class LocalizedGlobCodeOwnerReleaseTest {
             } finally {
                 GlobalVariable.globalCodeRefs.remove(name);
                 if (localized.perlLifecycleState() != RuntimeBase.PerlLifecycleState.DESTROYED) {
-                    localized.refCount = Integer.MIN_VALUE;
+                    localized.refCount = 0;
                     DestroyDispatch.callDestroy(localized);
                 }
             }
