@@ -25,6 +25,10 @@ public abstract class AbstractNode implements Node {
     public Map<String, Object> annotations;
     private int internalAnnotationFlags;
     private int cachedBytecodeSize = Integer.MIN_VALUE;
+    // Round 33: direct int fields for the two most-common integer annotations,
+    // avoiding HashMap creation + resize for every my-declaration and statement.
+    private int bytecodeLexicalRegisterSlot = -1;
+    private int statementStartIndexSlot = -1;
 
     @Override
     public int getIndex() {
@@ -66,6 +70,11 @@ public abstract class AbstractNode implements Node {
                 return;
             }
         }
+        // Round 33: direct int slots for the most common integer annotations.
+        if (value instanceof Integer intVal) {
+            if (key == "bytecodeLexicalRegister") { bytecodeLexicalRegisterSlot = intVal; return; }
+            if (key == "statementStartIndex")     { statementStartIndexSlot = intVal;     return; }
+        }
         if (annotations == null) {
             annotations = new HashMap<>();
         }
@@ -87,6 +96,13 @@ public abstract class AbstractNode implements Node {
         if (key == "useInteger") {
             if ((internalAnnotationFlags & FLAG_USE_INTEGER_CHECKED) == 0) return null;
             return (internalAnnotationFlags & FLAG_USE_INTEGER_VALUE) != 0;
+        }
+        // Round 33: read direct int slots without touching annotations map.
+        if (key == "bytecodeLexicalRegister") {
+            return bytecodeLexicalRegisterSlot < 0 ? null : bytecodeLexicalRegisterSlot;
+        }
+        if (key == "statementStartIndex") {
+            return statementStartIndexSlot < 0 ? null : statementStartIndexSlot;
         }
         return annotations == null ? null : annotations.get(key);
     }
