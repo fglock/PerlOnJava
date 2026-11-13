@@ -67,12 +67,6 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
      */
     abstract void vivify();
 
-    private static boolean rootEdge(RuntimeScalar scalar) {
-        return scalar != null
-                && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                && scalar.value instanceof RuntimeBase;
-    }
-
     /**
      * Vivifies this proxy as an lvalue. Creates the actual entry in the parent
      * hash/array, matching Perl 5's behavior where hash element access in lvalue
@@ -102,11 +96,7 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
                 && hpe.getParent() != null
                 && hpe.getParent().isGlobalPackageHash;
         if (globalHashEntry) {
-            boolean invalidatesRootSnapshot = rootEdge(lvalue) || rootEdge(value);
             lvalue.isPackageGlobalRoot = true;
-            if (invalidatesRootSnapshot) {
-                MortalList.invalidateExternalRootSnapshot();
-            }
         }
         this.lvalue.set(value);
         this.type = lvalue.type;
@@ -116,8 +106,8 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
         // D-W6.18: propagate package-global metadata flag.
         // If this proxy is for an element of a package-global hash,
         // mark the stored value's referent as storedInPackageGlobal
-        // so the walker gate at refCount→0 can rescue it across
-        // transient zeros (replaces the class-name heuristic).
+        // so final-release cleanup can recognize it across transient
+        // selective-count zeros (replaces the class-name heuristic).
         if (globalHashEntry && lvalue.value instanceof RuntimeBase rb) {
             rb.storedInPackageGlobal = true;
         }
@@ -233,11 +223,7 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
         if (this instanceof RuntimeHashProxyEntry hpe
                 && hpe.getParent() != null
                 && hpe.getParent().isGlobalPackageHash) {
-            boolean invalidatesRootSnapshot = rootEdge(lvalue);
             lvalue.isPackageGlobalRoot = true;
-            if (invalidatesRootSnapshot) {
-                MortalList.invalidateExternalRootSnapshot();
-            }
         }
         RuntimeScalar ret = lvalue.undefine();
         this.type = lvalue.type;

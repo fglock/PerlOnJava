@@ -173,14 +173,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     // -1 means this referent is not currently participating in the bridge.
     public int refCount = -1;
 
-    // ─────────────────────────────────────────────────────────────────────
-    // Phase D-W6.10: targeted refCount transition tracing.
-    // Activate at bless time for classes matching `classNeedsWalkerGate`
-    // when env-flag PJ_REFCOUNT_TRACE is set. Writes a stderr line for
-    // every increment/decrement, including a stack snippet, so we can
-    // pinpoint which path causes the metaclass refCount underflow on
-    // Class::MOP bootstrap (see dev/modules/moose_support.md D-W6.7).
-    // ─────────────────────────────────────────────────────────────────────
+    // Targeted refCount transition tracing is enabled by PJ_REFCOUNT_TRACE_CLASS.
     public boolean refCountTrace = false;
 
     // Temporary aliases installed by foreach loop variables such as $_.
@@ -201,11 +194,8 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
      * cleared (the object remains a module-global anchor for the
      * program's lifetime).
      * <p>
-     * Replaces the class-name heuristic in
-     * {@code DestroyDispatch.classNeedsWalkerGate}: instead of
-     * approximating "module-global metadata" by hard-coded class names
-     * (Class::MOP, Moose, Moo), we capture the underlying property
-     * directly at store time.
+     * Captures the package-global owner property directly at store time,
+     * without inferring it from the referent's class name.
      */
     public boolean storedInPackageGlobal = false;
 
@@ -332,11 +322,9 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     public synchronized PerlOwnerSlot retainClosureCaptureOwner(RuntimeCode captureOwner) {
         verifyClosureCaptureOwnerCount(PerlOwnerSlot.Kind.CLOSURE_PAD);
         // A closure-pad slot is a semantic Perl owner even though it does not
-        // contribute to the legacy selective refcount. A targeted weak sweep
-        // can therefore leave an unblessed aggregate's legacy count at the
-        // destroyed sentinel while other native capture slots still own it.
-        // Reconcile that stale bridge state before adding another owner; a
-        // blessed or already-destroyed object must never be revived here.
+        // contribute to the selective refcount. Reconcile stale bridge state
+        // before adding another owner; a blessed or already-destroyed object
+        // must never be revived here.
         if (refCount == Integer.MIN_VALUE && blessId == 0 && !destroyFired
                 && hasClosureCaptureOwner() && hasSemanticCaptureOwner()) {
             refCount = 0;
@@ -646,6 +634,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
             if (slot.isActive()
                     && !PerlOwnerSlot.isCountedKind(slot.kind())
+                    && !slot.isCountedNativeOwner()
                     && PerlOwnerSlot.isPerlOwnerKind(slot.kind())) {
                 return true;
             }
@@ -667,6 +656,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     boolean hasCurrentUncountedPerlOwnerSlotIdentity() {
         for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
             if (!PerlOwnerSlot.isCountedKind(slot.kind())
+                    && !slot.isCountedNativeOwner()
                     && PerlOwnerSlot.isPerlOwnerKind(slot.kind())
                     && DestroyDispatch.isCurrentPerlOwnerSlot(this, slot)) {
                 return true;

@@ -160,7 +160,6 @@ public class RuntimeStash extends RuntimeHash {
      */
     public void put(String key, RuntimeScalar value) {
         new RuntimeStashEntry(namespace + key, true).set(value);
-        GlobalVariable.invalidatePackageRootSnapshot();
     }
 
     /**
@@ -332,7 +331,6 @@ public class RuntimeStash extends RuntimeHash {
             GlobalVariable.hideIORefAfterStashDelete(fullKey);
         }
         GlobalVariable.globalFormatRefs.remove(fullKey);
-        GlobalVariable.invalidatePackageRootSnapshot();
 
         // Removing symbols from a stash can affect method lookup.
         InheritanceResolver.invalidateCache();
@@ -385,7 +383,6 @@ public class RuntimeStash extends RuntimeHash {
         GlobalVariable.globalFormatRefs.keySet().removeIf(key -> key.startsWith(mainQualifiedChildPrefix));
         GlobalVariable.invalidateStashEnumerationCache();
         GlobalVariable.clearHiddenIORefsForNamespace(childPrefix);
-        GlobalVariable.invalidatePackageRootSnapshot();
 
         // A namespace can retain another effective name after `*two:: =
         // *one::`.  Deleting one:: must not empty the stash still reachable
@@ -601,7 +598,6 @@ public class RuntimeStash extends RuntimeHash {
         GlobalVariable.globalFormatRefs.keySet().removeIf(k -> k.startsWith(prefix));
         GlobalVariable.invalidateStashEnumerationCache();
         GlobalVariable.clearHiddenIORefsForNamespace(prefix);
-        GlobalVariable.invalidatePackageRootSnapshot();
 
         this.elements.clear();
 
@@ -654,7 +650,6 @@ public class RuntimeStash extends RuntimeHash {
         GlobalVariable.globalFormatRefs.keySet().removeIf(k -> k.startsWith(prefix));
         GlobalVariable.invalidateStashEnumerationCache();
         GlobalVariable.clearHiddenIORefsForNamespace(prefix);
-        GlobalVariable.invalidatePackageRootSnapshot();
         elements.clear();
         InheritanceResolver.invalidateCache();
         GlobalVariable.clearPackageCache();

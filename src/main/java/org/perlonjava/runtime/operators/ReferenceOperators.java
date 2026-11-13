@@ -145,9 +145,7 @@ public class ReferenceOperators {
             boolean traceClassMatch = traceClass != null
                     && !traceClass.isEmpty()
                     && str.contains(traceClass);
-            if (RuntimeBase.refCountTraceEnabled()
-                    && (traceClassMatch || org.perlonjava.runtime.runtimetypes.DestroyDispatch
-                            .classNeedsWalkerGate(newBlessId))) {
+            if (RuntimeBase.refCountTraceEnabled() && traceClassMatch) {
                 referent.refCountTrace = true;
                 System.err.println("[REFCOUNT] *** ARMED *** base="
                     + System.identityHashCode(referent)

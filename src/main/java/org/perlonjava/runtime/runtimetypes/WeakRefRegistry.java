@@ -94,7 +94,6 @@ public class WeakRefRegistry {
 
         // Weakness changes the strong root graph even though the scalar's
         // referent field is unchanged.
-        MortalList.invalidateAllRootSnapshots();
 
         // If referent was already destroyed, immediately undef the weak ref.
         // CODE refs are an exception: Sub::Quote compiles named, no-install
@@ -216,8 +215,8 @@ public class WeakRefRegistry {
                 || (code.hadStashRef
                 && !isInstalledGlobalCodeRef(code)))) {
             // Keep this path targeted to the CODE referent. DBIC weakens
-            // callback CODE refs in hot cursor paths; running a full
-            // ReachabilityWalker sweep here forces repeated System.gc() calls.
+            // callback CODE refs in hot cursor paths; a graph query here would
+            // add repeated root traversal to that callback path.
             // The CODE-specific stale-ref decision below is enough: live CODE
             // refs are protected by clearWeakRefsTo()/shouldKeepCodeWeakRefs,
             // while expired anonymous or former-stash CODE refs can still clear
@@ -255,7 +254,6 @@ public class WeakRefRegistry {
     public static void unweaken(RuntimeScalar ref) {
         LifecycleRuntimeState state = state();
         if (!state.weakScalars.contains(ref)) return;
-        MortalList.invalidateAllRootSnapshots();
         if (!state.weakScalars.remove(ref)) return;
         ref.noteReferenceSlotMutation();
         if (ref.value instanceof RuntimeBase base) {
@@ -296,7 +294,6 @@ public class WeakRefRegistry {
     public static boolean removeWeakRef(RuntimeScalar ref, RuntimeBase oldReferent) {
         LifecycleRuntimeState state = state();
         if (!state.weakScalars.contains(ref)) return false;
-        MortalList.invalidateAllRootSnapshots();
         if (!state.weakScalars.remove(ref)) return false;
         if (System.getenv("PJ_WEAKCLEAR_TRACE") != null) {
             System.err.println("[WEAKREMOVE] ref=" + System.identityHashCode(ref)
@@ -324,6 +321,7 @@ public class WeakRefRegistry {
     static void onStrongOwnerSlotReleased(RuntimeBase referent) {
         if (referent instanceof RuntimeCode code) {
             code.releasePadConstantsForUntrackedOwnerSlot();
+            code.finishActiveCodeOwnerRelease();
         }
         boolean zeroCountOwnerSlotsExhausted = referent != null
                 && referent.refCount == 0
@@ -382,7 +380,6 @@ public class WeakRefRegistry {
                 || referent.hasOwnerSlots() || referent.localBindingExists
                 || referent.hasClosureCaptureOwner() || referent.hasPendingReturnOwner()
                 || referent.countedOwnerSlotCount() != 0
-                || MortalList.temporaryRootDirectlyReferences(referent)
                 || (referent instanceof RuntimeCode code && RuntimeCode.isActiveCode(code))) {
             return;
         }
@@ -425,8 +422,8 @@ public class WeakRefRegistry {
 
     static void clearWeakRefsTo(RuntimeBase referent, boolean finalCountedOwner) {
         // A captured pad is a semantic strong owner even when the selective
-        // refcount has reached a weak-tracking sentinel. All destruction and
-        // sweeping paths funnel through this method, so preserve that edge at
+        // refcount has reached a weak-tracking sentinel. Destruction paths
+        // funnel through this method, so preserve that edge at
         // the weak-clearing boundary as well as in refcount transitions.
         if (referent.hasSemanticCaptureOwner()) return;
         // CODE refs can live in both lexicals and the symbol table. Do not
@@ -468,8 +465,8 @@ public class WeakRefRegistry {
         }
         if (installed) return true;
         // The active frame is already a definitive strong owner. Check it
-        // before scanning the live scalar registries, which can be large and
-        // sits on the callback dispatch path when a quiet sweep runs.
+        // before inspecting remaining owner slots, which can be numerous on
+        // the callback dispatch path.
         if (RuntimeCode.isActiveCode(code)) return true;
         // Stale frame-temporary scalar cells can leave counted identities on
         // a CODE after their Perl scope exits. Retire those cells before using
@@ -495,8 +492,8 @@ public class WeakRefRegistry {
             }
             return true;
         }
-        // A Perl-visible owner must have an active slot identity. Sweep-local
-        // reachability snapshots and scalar registry scans are not ownership.
+        // A Perl-visible owner must have an active slot identity. Diagnostic
+        // root snapshots and scalar registry scans are not ownership.
         return false;
     }
 

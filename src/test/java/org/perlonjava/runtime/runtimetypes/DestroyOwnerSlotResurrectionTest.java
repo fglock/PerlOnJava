@@ -65,7 +65,6 @@ class DestroyOwnerSlotResurrectionTest {
             } finally {
                 packageRoot.elements.clear();
                 GlobalVariable.globalArrays.remove(globalName);
-                MortalList.invalidateAllRootSnapshots();
             }
         }
     }

@@ -5,7 +5,6 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("unit")
 class ClearedAggregateReachabilityNotOwnerTest {
@@ -33,23 +32,14 @@ class ClearedAggregateReachabilityNotOwnerTest {
                 WeakRefRegistry.weaken(weakObserver);
                 referent.refCount = 0;
                 referent.clearedOwnedAggregateElement = true;
-                MortalList.invalidateAllRootSnapshots();
 
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
-                    assertTrue(MortalList.isReachableFromExternalRootCached(referent),
-                            "the synthetic package graph should still reach the referent");
-                    MyVarCleanupStack.unregister(referent);
+                MyVarCleanupStack.unregister(referent);
 
-                    assertFalse(DestroyDispatch.hasLivePerlOwnerIdentity(referent));
-                    assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED,
-                            referent.perlLifecycleState());
-                    assertFalse(WeakRefRegistry.isweak(weakObserver),
-                            "graph reachability without an owner slot cannot preserve the observer");
-                    assertEquals(1, measurement.stats().externalRootSnapshotsBuilt,
-                            "the diagnostic walk still measures the synthetic graph");
-                    assertTrue(measurement.stats().externalRootSnapshotNodesVisited > 0);
-                }
+                assertFalse(DestroyDispatch.hasLivePerlOwnerIdentity(referent));
+                assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED,
+                        referent.perlLifecycleState());
+                assertFalse(WeakRefRegistry.isweak(weakObserver),
+                        "graph reachability without an owner slot cannot preserve the observer");
             } finally {
                 MyVarCleanupStack.unregister(referent);
                 if (WeakRefRegistry.isweak(weakObserver)) {
@@ -57,7 +47,6 @@ class ClearedAggregateReachabilityNotOwnerTest {
                 }
                 WeakRefRegistry.clearWeakRefsTo(referent);
                 GlobalVariable.globalHashes.remove(globalName);
-                MortalList.invalidateAllRootSnapshots();
                 MortalList.setActive(previousMortalListState);
             }
         }

@@ -56,7 +56,6 @@ class CodePadConstantOwnerSlotTest {
                     DestroyDispatch.callDestroy(publishedCv);
                 }
                 WeakRefRegistry.clearWeakRefsTo(constant);
-                MortalList.invalidateAllRootSnapshots();
                 MortalList.setActive(previousMortalListState);
             }
         }
@@ -102,7 +101,6 @@ class CodePadConstantOwnerSlotTest {
                     DestroyDispatch.callDestroy(code);
                 }
                 WeakRefRegistry.clearWeakRefsTo(constant);
-                MortalList.invalidateAllRootSnapshots();
                 MortalList.setActive(previousMortalListState);
             }
         }
@@ -154,7 +152,6 @@ class CodePadConstantOwnerSlotTest {
                 MyVarCleanupStack.popMark(mark);
                 closure.clearPadConstantWeakRefs();
                 WeakRefRegistry.clearWeakRefsTo(constant);
-                MortalList.invalidateAllRootSnapshots();
                 MortalList.setActive(previousMortalListState);
             }
         }
@@ -193,6 +190,11 @@ class CodePadConstantOwnerSlotTest {
                     assertEquals(0, measurement.stats().snapshotsBuilt);
                 }
 
+                assertTrue(WeakRefRegistry.isweak(weakObserver),
+                        "the direct optree owner slots retain the constant observer");
+                assertEquals(3, constant.ownerSlotCount(
+                                PerlOwnerSlot.Kind.CODE_PAD_CONSTANT));
+
                 firstCode.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroy(firstCode);
                 assertEquals(1, constant.ownerSlotCount(PerlOwnerSlot.Kind.CODE_PAD_CONSTANT));
@@ -220,7 +222,6 @@ class CodePadConstantOwnerSlotTest {
                     DestroyDispatch.callDestroy(secondCode);
                 }
                 WeakRefRegistry.clearWeakRefsTo(constant);
-                MortalList.invalidateAllRootSnapshots();
                 MortalList.setActive(previousMortalListState);
             }
         }

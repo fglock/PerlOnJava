@@ -1,15 +1,12 @@
 package org.perlonjava.runtime.runtimetypes;
 
 /**
- * Phase B2a (refcount_alignment_52leaks_plan.md): module-init guard.
- * <p>
- * A thread-local counter that tracks how deep we are inside
- * module-initialization code ({@code require} / {@code use} / BEGIN
- * blocks / {@code eval STRING}). Auto-triggered reachability sweeps
- * consult {@link #inModuleInit()} and skip firing when it's true —
- * module-init chains (like DBICTest::BaseResult's {@code use}
- * sequence) rely on weak-refed intermediate state remaining defined,
- * and firing a sweep mid-init corrupts that.
+ * Tracks module-initialization depth for weak CODE cleanup decisions.
+ *
+ * <p>Some code-reference cleanup checks are deferred while a module is
+ * compiling and publishing its package slots. A thread-local depth keeps those
+ * checks from running in the middle of {@code require}, {@code use}, BEGIN, or
+ * string eval initialization.
  * <p>
  * Expected usage: any code path that runs Perl-compiled code on
  * behalf of {@code require}/{@code use}/{@code BEGIN}/{@code eval

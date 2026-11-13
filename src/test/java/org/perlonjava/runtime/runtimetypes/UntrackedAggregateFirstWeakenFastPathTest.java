@@ -45,7 +45,6 @@ class UntrackedAggregateFirstWeakenFastPathTest {
                     WeakRefRegistry.unweaken(weakObserver);
                 }
                 GlobalVariable.globalArrays.remove(key);
-                MortalList.invalidateAllRootSnapshots();
             }
         }
     }

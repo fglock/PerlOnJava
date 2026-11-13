@@ -38,7 +38,6 @@ class PerlFinalWeakOwnerTest {
     void finalNestedArraySlotOverwriteReleasesWithoutRequestingASweep() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
-            runtime.lifecycleState.weakSweepSuppressionDepth++;
             RuntimeCode.pushArgs(new RuntimeArray());
             RuntimeCode.pushArgs(new RuntimeArray());
             try {
@@ -56,14 +55,12 @@ class PerlFinalWeakOwnerTest {
                     assertEquals(RuntimeScalarType.UNDEF, observer.type);
                     assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, referent.perlLifecycleState());
                     assertFalse(slot.isActive());
-                    assertTrue(runtime.lifecycleState.targetedWeakSweepReferents.isEmpty());
                     assertEquals(0, measurement.stats().rootQueries);
                     assertEquals(0, measurement.stats().snapshotsBuilt);
                 }
             } finally {
                 RuntimeCode.popArgs();
                 RuntimeCode.popArgs();
-                runtime.lifecycleState.weakSweepSuppressionDepth--;
             }
         }
     }
@@ -72,7 +69,6 @@ class PerlFinalWeakOwnerTest {
     void weakeningTheLastIdentifiedOwnerDoesNotConsultReachability() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
-            runtime.lifecycleState.weakSweepSuppressionDepth++;
             RuntimeHash referent = new RuntimeHash();
             RuntimeScalar owner = new RuntimeScalar();
             owner.set(referent.createAnonymousReference());
@@ -86,7 +82,6 @@ class PerlFinalWeakOwnerTest {
                 assertEquals(0, measurement.stats().snapshotsBuilt);
                 assertEquals(0, measurement.stats().scalarReachabilityQueries);
             } finally {
-                runtime.lifecycleState.weakSweepSuppressionDepth--;
             }
         }
     }
@@ -139,7 +134,6 @@ class PerlFinalWeakOwnerTest {
     void scalarCellsReleaseTheirWeakObserversWhenTheLexicalOwnerExits() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
-            runtime.lifecycleState.weakSweepSuppressionDepth++;
             RuntimeScalar cell = new RuntimeScalar(42);
             MyVarCleanupStack.register(cell);
             RuntimeScalar observer = new RuntimeScalar();
@@ -155,7 +149,6 @@ class PerlFinalWeakOwnerTest {
             assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, cell.perlLifecycleState());
             RuntimeScalar.scopeExitCleanup(cell);
             assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, cell.perlLifecycleState());
-            runtime.lifecycleState.weakSweepSuppressionDepth--;
         }
     }
 

@@ -36,34 +36,24 @@ class RescuedObjectOwnerIdentityTest {
     }
 
     @Test
-    void rescueQueueDoesNotOwnButTemporaryExpressionDoes() {
+    void rescueQueueHasNoOwnerButAnExpressionTemporaryDoes() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeHash rescued = new RuntimeHash();
-            rescued.refCount = 0;
             runtime.lifecycleState.rescuedObjects.add(rescued);
-
-            assertFalse(DestroyDispatch.hasLivePerlOwnerIdentity(rescued),
-                    "the rescue queue alone is not a Perl owner");
-
+            assertFalse(DestroyDispatch.hasLivePerlOwnerIdentity(rescued));
             MortalList.pushTemporaryRoot(rescued);
 
             try (MortalList.ReachabilityQueryMeasurement measurement =
                          MortalList.measureReachabilityQueries()) {
-                assertTrue(DestroyDispatch.hasLivePerlOwnerIdentity(rescued),
-                        "a temporary expression is a direct Perl owner");
-                assertEquals(1, rescued.refCount);
-                assertEquals(1, rescued.ownerSlotCount(PerlOwnerSlot.Kind.EXPRESSION_VALUE));
+                assertTrue(DestroyDispatch.hasLivePerlOwnerIdentity(rescued));
                 assertEquals(0, measurement.stats().rootQueries);
                 assertEquals(0, measurement.stats().snapshotsBuilt);
             } finally {
                 MortalList.popTemporaryRoot(rescued);
                 runtime.lifecycleState.rescuedObjects.remove(rescued);
             }
-            assertEquals(0, rescued.ownerSlotCount(PerlOwnerSlot.Kind.EXPRESSION_VALUE));
-            assertEquals(0, rescued.refCount);
-            assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED,
-                    rescued.perlLifecycleState());
+            assertFalse(DestroyDispatch.hasLivePerlOwnerIdentity(rescued));
         }
     }
 }

@@ -110,11 +110,10 @@ class WeakCodeRefAggregateRootTest {
 
             RuntimeScalar weakCodeRef = new RuntimeScalar(code);
             WeakRefRegistry.weaken(weakCodeRef);
-            runtime.lifecycleState.fullRootSnapshot =
-                    ReachabilityWalker.reachableFromRootsSnapshotWithStatus();
-
             try {
-                assertTrue(runtime.lifecycleState.fullRootSnapshot.isReachable(code));
+                ReachabilityWalker.RootReachabilitySnapshot snapshot =
+                        ReachabilityWalker.reachableFromRootsSnapshotWithStatus();
+                assertTrue(snapshot.isReachable(code));
                 assertFalse(ReachabilityWalker.hasLiveStrongScalarReferent(code));
                 WeakRefRegistry.clearWeakRefsTo(code);
                 assertTrue(WeakRefRegistry.isweak(weakCodeRef));
