@@ -487,25 +487,6 @@ public class Parser {
      * @return The root node of the parsed AST.
      */
     public Node parse() {
-        // Perl recognizes a seven-character merge-conflict marker before it
-        // attempts to reduce the surrounding statement.  Doing this as a
-        // lexical diagnostic is important for input such as "$_\n<<<<<<<":
-        // the incomplete preceding expression must not mask the marker.
-        StringBuilder conflictDiagnostics = new StringBuilder();
-        for (int i = 0; i < tokens.size(); i++) {
-            if (tokens.get(i).type == LexerTokenType.CONFLICT_MARKER) {
-                ErrorMessageUtil.SourceLocation location =
-                        ctx.errorUtil.getSourceLocationAccurate(i);
-                conflictDiagnostics.append("Version control conflict marker at ")
-                        .append(location.fileName()).append(" line ")
-                        .append(location.lineNumber()).append(", near \"")
-                        .append(tokens.get(i).text.substring(0, 7))
-                        .append("\"\n");
-            }
-        }
-        if (!conflictDiagnostics.isEmpty()) {
-            throw new PerlParserException(conflictDiagnostics.toString());
-        }
         if (tokens.get(tokenIndex).text.equals("=")) {
             // looks like pod: insert a newline to trigger pod parsing
             tokens.addFirst(new LexerToken(LexerTokenType.NEWLINE, "\n"));
@@ -521,6 +502,10 @@ public class Parser {
         try {
             ast = ParseBlock.parseBlock(this);
         } catch (PerlCompilerException | PerlParserException exception) {
+            String conflictMarkers = conflictMarkerDiagnostics();
+            if (!conflictMarkers.isEmpty()) {
+                throw new PerlParserException(conflictMarkers);
+            }
             // Recoverable diagnostics (such as strict vars) are normally
             // reported after parsing.  If a later syntax error aborts parsing,
             // retain those earlier diagnostics ahead of the terminal error,
@@ -554,6 +539,10 @@ public class Parser {
         } finally {
             compilationState.unitcheckQueueStack.get().pop();
         }
+        String conflictMarkers = conflictMarkerDiagnostics();
+        if (!conflictMarkers.isEmpty()) {
+            throw new PerlParserException(conflictMarkers);
+        }
         // ParseBlock stops before a closing brace so callers parsing a nested
         // block can consume it. At file/eval scope there is no such caller:
         // leaving it accepted makes `eval 'sub {} }'` silently compile.
@@ -581,6 +570,23 @@ public class Parser {
             throw new PerlCompilerException(String.join("", deferredDiagnostics));
         }
         return ast;
+    }
+
+    /** Report marker tokens that parser string readers did not consume as literal data. */
+    private String conflictMarkerDiagnostics() {
+        StringBuilder diagnostics = new StringBuilder();
+        for (int i = 0; i < tokens.size(); i++) {
+            LexerToken token = tokens.get(i);
+            if (token.type == LexerTokenType.CONFLICT_MARKER) {
+                ErrorMessageUtil.SourceLocation location =
+                        ctx.errorUtil.getSourceLocationAccurate(i);
+                diagnostics.append("Version control conflict marker at ")
+                        .append(location.fileName()).append(" line ")
+                        .append(location.lineNumber()).append(", near \"")
+                        .append(token.text.substring(0, 7)).append("\"\n");
+            }
+        }
+        return diagnostics.toString();
     }
 
     /** Record a parse-time diagnostic after consuming a recoverable statement. */

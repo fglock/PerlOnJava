@@ -1169,6 +1169,8 @@ priorities and future plans.
 
 - Serialize XML::LibXSLT results directly instead of applying the stylesheet a second time (#1892).
 
+- Diagnose version-control conflict markers after parsing quote-like strings and heredocs, preserving literal marker text while retaining source-level errors.
+
 ## v5.44.1: Regex, Threads, Async/Await, and CPAN Compatibility
 
 - Reach 686,288 of 696,597 passing assertions in the Perl standard test suite
