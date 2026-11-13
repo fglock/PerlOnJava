@@ -424,7 +424,7 @@ public final class PerlOwnerSlot {
             RuntimeBase target, String acquisitionSite) {
         Objects.requireNonNull(target, "target");
         Objects.requireNonNull(acquisitionSite, "acquisitionSite");
-        if (target.refCount < 0 || target.refCount == Integer.MAX_VALUE) {
+        if (!target.isRefCountTracked() || target.refCount == Integer.MAX_VALUE) {
             throw new IllegalStateException(
                     "method-invocant acquisition requires an available tracked count");
         }
@@ -441,7 +441,7 @@ public final class PerlOwnerSlot {
                 || legacyCaptureCount != 0 || methodInvocantOwner) {
             throw new IllegalStateException("temporary counted-owner slot is not available");
         }
-        if (target.refCount < 0 || target.refCount == Integer.MAX_VALUE) {
+        if (!target.isRefCountTracked() || target.refCount == Integer.MAX_VALUE) {
             throw new IllegalStateException(
                     "temporary-owner acquisition requires an available tracked count");
         }
@@ -465,7 +465,7 @@ public final class PerlOwnerSlot {
     /** Acquire one closure-pad referent count through the legacy bridge. */
     public synchronized void acquireLegacyCapture(RuntimeBase target) {
         Objects.requireNonNull(target, "target");
-        if (target.refCount < 0) {
+        if (!target.isRefCountTracked()) {
             throw new IllegalStateException("closure capture bridge requires a tracked referent");
         }
         if (target.refCount == Integer.MAX_VALUE
@@ -535,7 +535,7 @@ public final class PerlOwnerSlot {
         if (target.isPerlDestroyed()) {
             throw new IllegalStateException("cannot own a destroyed referent");
         }
-        boolean counted = target.refCount >= 0;
+        boolean counted = target.isRefCountTracked();
         if (counted && target.refCount == Integer.MAX_VALUE) {
             throw new IllegalStateException("native owner count overflow");
         }
@@ -772,7 +772,7 @@ public final class PerlOwnerSlot {
         Objects.requireNonNull(target, "target");
         Objects.requireNonNull(referenceCell, "referenceCell");
         Objects.requireNonNull(owner, "owner");
-        if (target.refCount < 0) {
+        if (!target.isRefCountTracked()) {
             throw new IllegalStateException("scalar-reference contents must be tracked");
         }
         if (referent != null) {
@@ -819,7 +819,7 @@ public final class PerlOwnerSlot {
         if (referenceCell == null) {
             throw new IllegalStateException("active scalar-contents owner lost its reference cell");
         }
-        if (nextTarget != null && nextTarget.refCount < 0) nextTarget = null;
+        if (nextTarget != null && !nextTarget.isRefCountTracked()) nextTarget = null;
         boolean firstOwnerForNextTarget = nextTarget != null
                 && !referenceCell.hasScalarReferenceContentsOwner(this, nextTarget);
         if (firstOwnerForNextTarget && nextTarget.refCount == Integer.MAX_VALUE) {
@@ -1075,7 +1075,7 @@ public final class PerlOwnerSlot {
         Objects.requireNonNull(target, "target");
         Objects.requireNonNull(acquisitionSite, "acquisitionSite");
         if (!isCountedKind(kind) || scalar.refCountOwned || referent != null
-                || target.refCount < 0 || target.refCount == Integer.MAX_VALUE) {
+                || !target.isRefCountTracked() || target.refCount == Integer.MAX_VALUE) {
             throw new IllegalStateException("invalid counted scalar owner acquisition");
         }
         acquireCountedIdentity(target);
@@ -1099,7 +1099,7 @@ public final class PerlOwnerSlot {
             throw new IllegalStateException(
                     "scalar replacement requires its current counted owner identity");
         }
-        if (next.refCount < 0 || next.refCount == Integer.MAX_VALUE) {
+        if (!next.isRefCountTracked() || next.refCount == Integer.MAX_VALUE) {
             throw new IllegalStateException(
                     "scalar replacement requires an available tracked reference count");
         }

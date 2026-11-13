@@ -42,7 +42,7 @@ class ForwardedArgumentAliasCurrentOwnerTest {
                                 target, argumentCell.countedOwnerSlot()),
                         "a live forwarded alias makes its current scalar cell authoritative");
 
-                target.refCount = 0;
+                target.setTrackedRefCount(0);
                 assertTrue(target.restoreVerifiedCurrentCountedOwnerSlotRefCount(),
                         "verified count repair accepts the active forwarded cell");
                 assertEquals(1, target.refCount);

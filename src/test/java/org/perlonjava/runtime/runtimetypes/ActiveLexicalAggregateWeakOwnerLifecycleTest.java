@@ -32,7 +32,7 @@ class ActiveLexicalAggregateWeakOwnerLifecycleTest {
                     WeakRefRegistry.weaken(weakOwner);
 
                     assertTrue(WeakRefRegistry.isweak(weakOwner));
-                    assertEquals(WeakRefRegistry.WEAKLY_TRACKED, array.refCount,
+                    assertEquals(RuntimeBase.RefCountTrackingState.WEAKLY_TRACKED, array.refCountTrackingState(),
                             "the active lexical edge must not be fabricated as a count");
                     assertTrue(array.deferredFinalReleaseForUncountedOwners,
                             "the zero-count lifecycle must wait on the exact pad owner");

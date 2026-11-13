@@ -11,6 +11,77 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef
  * and interfaces for these entities.
  */
 public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScalar> {
+    /**
+     * Whether the selective owner count is authoritative for this referent.
+     * This state is separate from the numeric count: untracked and weak-tracked
+     * referents still expose an ordinary nonnegative {@link #refCount}.
+     */
+    public enum RefCountTrackingState {
+        UNTRACKED,
+        TRACKED,
+        WEAKLY_TRACKED
+    }
+
+    private volatile RefCountTrackingState refCountTrackingState =
+            RefCountTrackingState.UNTRACKED;
+
+    public RefCountTrackingState refCountTrackingState() {
+        return refCountTrackingState;
+    }
+
+    public boolean isRefCountTracked() {
+        return refCountTrackingState == RefCountTrackingState.TRACKED;
+    }
+
+    public boolean isRefCountUntracked() {
+        return refCountTrackingState == RefCountTrackingState.UNTRACKED;
+    }
+
+    public boolean isWeaklyRefCountTracked() {
+        return refCountTrackingState == RefCountTrackingState.WEAKLY_TRACKED;
+    }
+
+    /** Start selective counting after the caller has reconciled prior owners. */
+    public void startRefCountTracking() {
+        refCount = 0;
+        refCountTrackingState = RefCountTrackingState.TRACKED;
+    }
+
+    /** Leave the selective bridge after its owner identities have been rebuilt. */
+    public void markRefCountUntracked() {
+        refCount = 0;
+        refCountTrackingState = RefCountTrackingState.UNTRACKED;
+    }
+
+    /** Defer weak cleanup while some real strong slots remain outside the count. */
+    public void markRefCountWeaklyTracked() {
+        refCount = 0;
+        refCountTrackingState = RefCountTrackingState.WEAKLY_TRACKED;
+    }
+
+    /** Set a known count and activate the selective count bridge. */
+    public void setTrackedRefCount(int count) {
+        if (count < 0) {
+            throw new IllegalArgumentException("Perl refcount cannot be negative");
+        }
+        refCount = count;
+        refCountTrackingState = RefCountTrackingState.TRACKED;
+    }
+
+    /** Restore a count and its tracking mode together after temporary mutation. */
+    public void restoreRefCountState(int count, RefCountTrackingState state) {
+        if (count < 0) {
+            throw new IllegalArgumentException("Perl refcount cannot be negative");
+        }
+        Objects.requireNonNull(state, "state");
+        if (state != RefCountTrackingState.TRACKED && count != 0) {
+            throw new IllegalArgumentException(
+                    "untracked referents cannot have a selective owner count");
+        }
+        refCount = count;
+        refCountTrackingState = state;
+    }
+
     /** Lifecycle is independent of the selective-count compatibility bridge. */
     public enum PerlLifecycleState {
         LIVE,
@@ -173,9 +244,8 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     public int blessId;
 
     // Selective legacy count bridge used while owner producers are migrated.
-    // Destruction state is tracked independently by perlLifecycleState.
-    // -1 means this referent is not currently participating in the bridge.
-    public int refCount = -1;
+    // Destruction and tracking mode are represented independently.
+    public int refCount = 0;
 
     // ─────────────────────────────────────────────────────────────────────
     // Phase D-W6.10: targeted refCount transition tracing.
@@ -841,13 +911,13 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
 
     void deferFinalReleaseToUncountedOwnerSlots() {
         if (!hasUncountedPerlOwnerSlotIdentity()) return;
-        refCount = WeakRefRegistry.WEAKLY_TRACKED;
+        markRefCountWeaklyTracked();
         deferredFinalReleaseForUncountedOwners = true;
     }
 
     /** Defer a zero-count lifecycle transition without encoding it as a count. */
     void deferZeroCountFinalReleaseToUncountedOwnerSlots() {
-        if (refCount != 0) {
+        if (!isRefCountTracked() || refCount != 0) {
             throw new IllegalStateException("zero-count owner release requires refCount=0");
         }
         if (!hasUncountedPerlOwnerSlotIdentity()) return;
@@ -856,11 +926,11 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
 
     /** Hold weak cleanup until an explicit runtime snapshot lease is released. */
     void deferFinalReleaseToTemporaryRootSlots() {
-        if (refCount != 0) {
+        if (!isRefCountTracked() || refCount != 0) {
             throw new IllegalStateException("temporary-root release requires refCount=0");
         }
         if (!hasTemporaryRootOwnerSlotIdentity()) return;
-        refCount = WeakRefRegistry.WEAKLY_TRACKED;
+        markRefCountWeaklyTracked();
         deferredFinalReleaseForUncountedOwners = true;
     }
 
@@ -957,7 +1027,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     boolean restoreVerifiedCurrentCountedOwnerSlotRefCount() {
         int count = verifiedCurrentCountedOwnerSlotCount();
         if (count == 0) return false;
-        refCount = count;
+        setTrackedRefCount(count);
         return true;
     }
 
@@ -1051,7 +1121,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     final void retireZeroCountOwnerIdentity(RuntimeScalar scalar, String releaseSite) {
         Objects.requireNonNull(scalar, "scalar");
         Objects.requireNonNull(releaseSite, "releaseSite");
-        if (refCount != 0) {
+        if (!isRefCountTracked() || refCount != 0) {
             throw new IllegalStateException(
                     "zero-count owner identity retirement requires refCount=0 at " + releaseSite);
         }
@@ -1169,7 +1239,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
 
     /** Apply the shared counter half of a tracked Perl-owner acquisition. */
     final void acquireTrackedOwnerCount(String acquisitionSite) {
-        if (refCount < 0 || refCount == Integer.MAX_VALUE) {
+        if (!isRefCountTracked() || refCount == Integer.MAX_VALUE) {
             throw new IllegalStateException("tracked owner count is unavailable at " + acquisitionSite);
         }
         traceRefCount(+1, acquisitionSite);
@@ -1179,7 +1249,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
 
     /** Apply one exact tracked-owner decrement; returns true at zero. */
     final boolean releaseTrackedOwnerCount(String releaseSite) {
-        if (refCount <= 0) {
+        if (!isRefCountTracked() || refCount <= 0) {
             throw new IllegalStateException("tracked owner count is not positive at " + releaseSite);
         }
         traceRefCount(-1, releaseSite);

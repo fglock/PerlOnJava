@@ -12,7 +12,7 @@ class TailCallCodeRefDoesNotPinFromLocalBindingFlagTest {
     void staleLocalBindingMarkerCannotReplaceTheReleasedCodeSlot() {
         try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
             RuntimeCode code = new RuntimeCode((args, context) -> new RuntimeList(), null);
-            code.refCount = 1;
+            code.setTrackedRefCount(1);
             // RuntimeCode has no producer for this aggregate/scalar binding
             // marker. It must not fabricate a counted owner at tail-call exit.
             code.localBindingExists = true;

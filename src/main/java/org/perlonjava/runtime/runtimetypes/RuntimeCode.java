@@ -3623,7 +3623,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (base.isPerlDestroyed() || base.currentlyDestroying) {
             return null;
         }
-        if (base.refCount < 0) {
+        if (!base.isRefCountTracked()) {
             return null;
         }
         return new MethodInvocantHold(base, PerlRuntime.current().executionState());
@@ -8016,7 +8016,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         capturedAggregateOwnerSlots.toArray(new PerlOwnerSlot[0]);
             }
             if (!captured.isEmpty() || !capturedAggregates.isEmpty()) {
-                code.refCount = 0;
+                code.startRefCountTracking();
                 registerJvmClosure(code);
             }
         }
@@ -8822,7 +8822,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }, target.prototype);
         bound.packageName = target.packageName;
         bound.subName = target.subName;
-        bound.refCount = 0;
+        bound.startRefCountTracking();
         bound.capturedScalars = new RuntimeScalar[] { new RuntimeScalar(codeRef), invocant };
         bound.capturedScalarOwnerSlots = new PerlOwnerSlot[bound.capturedScalars.length];
         for (int i = 0; i < bound.capturedScalars.length; i++) {

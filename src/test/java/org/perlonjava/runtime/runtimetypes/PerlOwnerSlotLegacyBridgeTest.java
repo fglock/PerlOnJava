@@ -15,7 +15,7 @@ class PerlOwnerSlotLegacyBridgeTest {
     @Test
     void rejectsCaptureCountOverflowBeforeAcquiringTheSlot() {
         RuntimeHash referent = new RuntimeHash();
-        referent.refCount = Integer.MAX_VALUE;
+        referent.setTrackedRefCount(Integer.MAX_VALUE);
         PerlOwnerSlot slot = new PerlOwnerSlot(PerlOwnerSlot.Kind.CLOSURE_PAD);
 
         assertThrows(IllegalStateException.class, () -> slot.acquireLegacyCapture(referent));
@@ -27,7 +27,7 @@ class PerlOwnerSlotLegacyBridgeTest {
     @Test
     void releasingAnUnownedCaptureDoesNotUnderflowOrScheduleCleanup() {
         RuntimeHash referent = new RuntimeHash();
-        referent.refCount = 0;
+        referent.setTrackedRefCount(0);
         PerlOwnerSlot slot = new PerlOwnerSlot(PerlOwnerSlot.Kind.CLOSURE_PAD);
 
         assertNull(slot.deferLegacyCaptureRelease(referent));
@@ -41,7 +41,7 @@ class PerlOwnerSlotLegacyBridgeTest {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeHash referent = new RuntimeHash();
-            referent.refCount = 0;
+            referent.setTrackedRefCount(0);
             referent.localBindingExists = true;
             int lexicalMark = MyVarCleanupStack.pushMark();
             MyVarCleanupStack.register(referent);

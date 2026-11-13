@@ -13,12 +13,12 @@ class RuntimeScalarUntrackedOwnerIdentityTest {
     void staleLegacyScalarCellCountDoesNotKeepUntrackedOwnerAlive() {
         try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
             RuntimeHash referent = new RuntimeHash();
-            referent.refCount = WeakRefRegistry.WEAKLY_TRACKED;
+            referent.markRefCountWeaklyTracked();
 
             RuntimeScalar cell = new RuntimeScalar();
             cell.type = RuntimeScalarType.HASHREFERENCE;
             cell.value = referent;
-            cell.refCount = 1;
+            cell.setTrackedRefCount(1);
             cell.referencedByScalarReference = true;
             cell.refreshUntrackedReferenceOwner();
 

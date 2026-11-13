@@ -50,7 +50,7 @@ class UncountedOwnerSlotZeroCountReleaseTest {
             String destroyFqn = className + "::DESTROY";
             RuntimeHash target = new RuntimeHash();
             target.blessId = NameNormalizer.getBlessId(className);
-            target.refCount = -1;
+            target.markRefCountUntracked();
 
             AtomicInteger destroyCalls = new AtomicInteger();
             RuntimeCode destroy = new RuntimeCode((args, context) -> {
@@ -64,12 +64,12 @@ class UncountedOwnerSlotZeroCountReleaseTest {
 
             RuntimeScalar countedOwner = new RuntimeScalar();
             countedOwner.set(target.createAnonymousReference());
-            target.refCount = 1;
+            target.setTrackedRefCount(1);
             PerlOwnerSlot rawOwner = new PerlOwnerSlot(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE);
             rawOwner.acquireUntrackedIdentity(target);
             try {
                 target.deferFinalReleaseToUncountedOwnerSlots();
-                assertEquals(WeakRefRegistry.WEAKLY_TRACKED, target.refCount);
+                assertEquals(RuntimeBase.RefCountTrackingState.WEAKLY_TRACKED, target.refCountTrackingState());
 
                 target.releaseActiveOwner(countedOwner);
                 countedOwner.refCountOwned = false;
@@ -100,7 +100,7 @@ class UncountedOwnerSlotZeroCountReleaseTest {
         String className = "UncountedOwnerSlotZeroCountReleaseTest::Target";
         RuntimeHash target = new RuntimeHash();
         target.blessId = NameNormalizer.getBlessId(className);
-        target.refCount = -1;
+        target.markRefCountUntracked();
 
         AtomicInteger destroyCalls = new AtomicInteger();
         RuntimeCode destroy = new RuntimeCode((args, context) -> {
@@ -122,7 +122,7 @@ class UncountedOwnerSlotZeroCountReleaseTest {
         RuntimeScalar countedOwner = new RuntimeScalar();
         countedOwner.set(target.createAnonymousReference());
         assertEquals(1, target.countedOwnerSlotCount());
-        target.refCount = 1; // Model a transient legacy-count undercount.
+        target.setTrackedRefCount(1); // Model a transient legacy-count undercount.
         assertFalse(WeakRefRegistry.hasWeakRefsTo(target));
         return new Fixture(target, ownerContainer, uncountedOwner, ownerSlot, countedOwner,
                 destroyCalls, destroyFqn);
@@ -134,7 +134,7 @@ class UncountedOwnerSlotZeroCountReleaseTest {
                          MortalList.measureReachabilityQueries()) {
                 countedRelease.run();
 
-                assertEquals(WeakRefRegistry.WEAKLY_TRACKED, fixture.target.refCount);
+                assertEquals(RuntimeBase.RefCountTrackingState.WEAKLY_TRACKED, fixture.target.refCountTrackingState());
                 assertEquals(RuntimeBase.PerlLifecycleState.LIVE,
                         fixture.target.perlLifecycleState());
                 assertEquals(1,

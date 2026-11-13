@@ -15,7 +15,7 @@ class WeakArgumentAliasUndefOwnerTest {
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             MortalList.setActive(true);
             RuntimeArray target = new RuntimeArray();
-            target.refCount = WeakRefRegistry.WEAKLY_TRACKED;
+            target.markRefCountWeaklyTracked();
             RuntimeScalar source = referenceTo(target);
             RuntimeScalar weakObserver = referenceTo(target);
             MyVarCleanupStack.register(source);
@@ -27,7 +27,7 @@ class WeakArgumentAliasUndefOwnerTest {
             try {
                 source.undefine();
 
-                assertEquals(WeakRefRegistry.WEAKLY_TRACKED, target.refCount,
+                assertEquals(RuntimeBase.RefCountTrackingState.WEAKLY_TRACKED, target.refCountTrackingState(),
                         "the alias identity defers cleanup without a synthetic count");
                 assertTrue(target.deferredFinalReleaseForUncountedOwners);
                 assertTrue(argumentAlias.isActive());

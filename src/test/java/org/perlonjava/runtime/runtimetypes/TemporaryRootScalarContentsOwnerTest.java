@@ -35,11 +35,11 @@ class TemporaryRootScalarContentsOwnerTest {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeHash target = new RuntimeHash();
-            target.refCount = 3;
+            target.setTrackedRefCount(3);
             RuntimeScalar scalarCell = new RuntimeScalar();
             scalarCell.type = RuntimeScalarType.REFERENCE;
             scalarCell.value = target;
-            scalarCell.refCount = 1;
+            scalarCell.setTrackedRefCount(1);
             scalarCell.referencedByScalarReference = true;
 
             RuntimeScalar wrapper = new RuntimeScalar();

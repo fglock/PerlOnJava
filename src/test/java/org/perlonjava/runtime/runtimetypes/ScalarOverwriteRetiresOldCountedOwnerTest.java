@@ -33,7 +33,7 @@ class ScalarOverwriteRetiresOldCountedOwnerTest {
             RuntimeScalar replacement = new RuntimeScalar();
             replacement.type = RuntimeScalarType.REFERENCE;
             replacement.value = scalarCell;
-            assertEquals(-1, scalarCell.refCount,
+            assertEquals(RuntimeBase.RefCountTrackingState.UNTRACKED, scalarCell.refCountTrackingState(),
                     "the referenced scalar cell is an untracked referent");
 
             owner.set(replacement);

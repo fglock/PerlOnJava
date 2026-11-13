@@ -12,7 +12,7 @@ class RuntimeHashSetFromListTemporaryOwnerTest {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeHash referent = new RuntimeHash();
-            referent.refCount = WeakRefRegistry.WEAKLY_TRACKED;
+            referent.markRefCountWeaklyTracked();
 
             RuntimeScalar sourceValue = new RuntimeScalar();
             sourceValue.type = RuntimeScalarType.HASHREFERENCE;

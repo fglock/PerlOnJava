@@ -99,7 +99,7 @@ class UnblessedScalarCellOwnerSlotRepairTest {
                 WeakRefRegistry.weaken(weakObserver);
 
                 assertEquals(3, target.refCount);
-                target.refCount = 1; // Model one undercount across mixed owner families.
+                target.setTrackedRefCount(1); // Model one undercount across mixed owner families.
 
                 try (MortalList.ReachabilityQueryMeasurement measurement =
                              MortalList.measureReachabilityQueries()) {

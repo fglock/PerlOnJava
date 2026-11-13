@@ -21,7 +21,7 @@ class RescuedAggregateOwnerFinalizationTest {
             RuntimeHash child = new RuntimeHash();
             parent.blessId = NameNormalizer.getBlessId(parentClass);
             child.blessId = NameNormalizer.getBlessId(childClass);
-            child.refCount = 0;
+            child.setTrackedRefCount(0);
 
             RuntimeScalar childSlot = new RuntimeScalar();
             parent.elements.put("child", childSlot);
@@ -42,7 +42,7 @@ class RescuedAggregateOwnerFinalizationTest {
                 return new RuntimeScalar().getList();
             });
 
-            parent.refCount = 0;
+            parent.setTrackedRefCount(0);
             try {
                 DestroyDispatch.callDestroy(parent);
                 assertEquals(RuntimeBase.PerlLifecycleState.RESURRECTED,

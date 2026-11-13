@@ -13,7 +13,7 @@ class ReachabilityWalkerCapturedAggregateReleaseTest {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeHash captured = new RuntimeHash();
-            captured.refCount = 1;
+            captured.setTrackedRefCount(1);
             captured.put("value", new RuntimeScalar("alive"));
             captured.scopeExited = true;
             PerlOwnerSlot closureOwner = captured.retainClosureCaptureOwner();
@@ -28,18 +28,18 @@ class ReachabilityWalkerCapturedAggregateReleaseTest {
     }
 
     @Test
-    void laterCaptureReconcilesAStaleDestroyedSentinelWhileOwnersRemain() {
+    void laterCaptureReconcilesZeroCountWhileOwnersRemain() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeHash captured = new RuntimeHash();
-            captured.refCount = 1;
+            captured.setTrackedRefCount(1);
             captured.put("value", new RuntimeScalar("alive"));
             captured.scopeExited = true;
             PerlOwnerSlot firstOwner = captured.retainClosureCaptureOwner();
 
-            // A targeted weak sweep can miss the native owner slots and leave
-            // this bridge sentinel behind while the captured lexical is live.
-            captured.refCount = 0;
+            // Model a count that reached zero while native capture owners
+            // still keep the aggregate alive.
+            captured.setTrackedRefCount(0);
             PerlOwnerSlot secondOwner = captured.retainClosureCaptureOwner();
 
             assertEquals(0, captured.refCount);

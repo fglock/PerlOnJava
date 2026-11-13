@@ -133,7 +133,7 @@ class TemporaryRootCountedCellOwnerTest {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeHash target = new RuntimeHash();
-            target.refCount = 0;
+            target.setTrackedRefCount(0);
             RuntimeScalar containerOwner = RuntimeScalar.retainArgumentContainerValue(target);
 
             CountingHashValues opaqueValues = new CountingHashValues();

@@ -12,11 +12,11 @@ class CountedOwnerReleaseRequiresOwnerSlotTest {
     void countedReleaseCannotQueueWithoutItsOwnerIdentity() {
         try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
             RuntimeArray referent = new RuntimeArray();
-            referent.refCount = 1;
+            referent.setTrackedRefCount(1);
             referent.hadCountedReference = true;
 
             RuntimeArray replacement = new RuntimeArray();
-            replacement.refCount = 1;
+            replacement.setTrackedRefCount(1);
 
             RuntimeScalar owner = new RuntimeScalar();
             owner.type = RuntimeScalarType.ARRAYREFERENCE;

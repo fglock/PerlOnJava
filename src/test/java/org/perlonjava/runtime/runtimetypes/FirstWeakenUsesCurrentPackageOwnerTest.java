@@ -26,7 +26,7 @@ class FirstWeakenUsesCurrentPackageOwnerTest {
 
             try {
                 assertEquals(2, target.countedOwnerSlotCount());
-                target.refCount = 1; // Exercise defensive recovery from a transient undercount.
+                target.setTrackedRefCount(1); // Exercise defensive recovery from a transient undercount.
 
                 try (MortalList.ReachabilityQueryMeasurement measurement =
                              MortalList.measureReachabilityQueries()) {

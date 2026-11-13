@@ -14,7 +14,7 @@ class UntrackedAggregateFirstWeakenFastPathTest {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeArray target = new RuntimeArray();
-            target.refCount = -1;
+            target.markRefCountUntracked();
             RuntimeScalar weakObserver = referenceTo(target);
             String key = "UntrackedAggregateFirstWeakenFastPathTest::target";
 
@@ -24,7 +24,7 @@ class UntrackedAggregateFirstWeakenFastPathTest {
                     WeakRefRegistry.weaken(weakObserver);
 
                     assertTrue(WeakRefRegistry.isweak(weakObserver));
-                    assertEquals(WeakRefRegistry.WEAKLY_TRACKED, target.refCount);
+                    assertEquals(RuntimeBase.RefCountTrackingState.WEAKLY_TRACKED, target.refCountTrackingState());
                     assertEquals(0, measurement.stats().rootQueries,
                             "an untracked temporary needs no root-graph fallback");
                     assertEquals(0, measurement.stats().edgesInspected);

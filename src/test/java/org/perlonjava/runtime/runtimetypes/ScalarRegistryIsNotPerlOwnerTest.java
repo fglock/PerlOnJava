@@ -15,7 +15,7 @@ class ScalarRegistryIsNotPerlOwnerTest {
             runtime.lifecycleState.weakRefsExist = true;
 
             RuntimeArray referent = new RuntimeArray();
-            referent.refCount = 1;
+            referent.setTrackedRefCount(1);
 
             // This wrapper remains Java-live in the test, but it has no Perl
             // storage slot, lexical binding, or owner identity.

@@ -16,7 +16,7 @@ class LegacyUnpairedUncountedOwnerSlotFastPathTest {
             boolean previousMortalListState = MortalList.isActive();
             MortalList.setActive(true);
             RuntimeArray target = new RuntimeArray();
-            target.refCount = -1;
+            target.markRefCountUntracked();
             RuntimeArray lexicalOwner = new RuntimeArray();
             RuntimeScalar strongOwner = referenceTo(target);
             lexicalOwner.elements.add(strongOwner);
@@ -26,7 +26,7 @@ class LegacyUnpairedUncountedOwnerSlotFastPathTest {
                 MyVarCleanupStack.register(lexicalOwner);
                 PerlOwnerSlot strongOwnerSlot = strongOwner.untrackedReferenceOwnerSlot();
                 assertTrue(strongOwnerSlot != null && strongOwnerSlot.isActive());
-                target.refCount = 1;
+                target.setTrackedRefCount(1);
                 weakObserver.refCountOwned = true;
                 WeakRefRegistry.weaken(weakObserver);
 
@@ -35,7 +35,7 @@ class LegacyUnpairedUncountedOwnerSlotFastPathTest {
                 try (MortalList.ReachabilityQueryMeasurement measurement =
                              MortalList.measureReachabilityQueries()) {
                     assertTrue(WeakRefRegistry.isweak(weakObserver));
-                    assertEquals(WeakRefRegistry.WEAKLY_TRACKED, target.refCount,
+                    assertEquals(RuntimeBase.RefCountTrackingState.WEAKLY_TRACKED, target.refCountTrackingState(),
                             "weak tracking preserves the current uncounted Perl owner");
                     assertEquals(0, measurement.stats().rootQueries,
                             "a current owner identity makes root recovery unnecessary");

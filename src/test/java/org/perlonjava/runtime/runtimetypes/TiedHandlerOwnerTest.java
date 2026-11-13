@@ -12,7 +12,7 @@ class TiedHandlerOwnerTest {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeHash handler = new RuntimeHash();
-            handler.refCount = 0;
+            handler.setTrackedRefCount(0);
             RuntimeScalar source = handler.createAnonymousReference();
             TieHash hash = new TieHash("Handler", new RuntimeHash(), source);
             TieArray array = new TieArray("Handler", new RuntimeArray(), source, new RuntimeArray());
@@ -58,7 +58,7 @@ class TiedHandlerOwnerTest {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeHash handler = new RuntimeHash();
-            handler.refCount = 0;
+            handler.setTrackedRefCount(0);
             RuntimeHash outer = new RuntimeHash();
             outer.type = RuntimeHash.TIED_HASH;
             outer.elements = new TieHash("Handler", new RuntimeHash(), handler.createAnonymousReference());
@@ -68,7 +68,7 @@ class TiedHandlerOwnerTest {
             RuntimeScalar borrowed = outer.createAnonymousReference();
             MortalList.pushTemporaryRoot(borrowed);
             try {
-                outer.refCount = 0;
+                outer.setTrackedRefCount(0);
                 DestroyDispatch.callDestroyFromCountedOwner(outer);
                 assertEquals(RuntimeScalarType.UNDEF, weak.type);
                 assertFalse(handler.hasOwnerSlots());
@@ -99,9 +99,9 @@ class TiedHandlerOwnerTest {
             MortalList.pushTemporaryRoot(borrowedHash);
             MortalList.pushTemporaryRoot(borrowedArray);
             try (MortalList.ReachabilityQueryMeasurement measurement = MortalList.measureReachabilityQueries()) {
-                hash.refCount = 0;
+                hash.setTrackedRefCount(0);
                 DestroyDispatch.callDestroyFromCountedOwner(hash);
-                array.refCount = 0;
+                array.setTrackedRefCount(0);
                 DestroyDispatch.callDestroyFromCountedOwner(array);
                 // Container finalization queues child decrements; the boundary
                 // drains those identified releases before observers are checked.

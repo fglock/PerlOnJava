@@ -24,7 +24,7 @@ class MortalReturnUntrackedOwnerTest {
             assertNotNull(returnOwner);
             assertSame(target, returnOwner.referent());
             assertEquals(1, target.ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE));
-            assertEquals(-1, target.refCount,
+            assertEquals(RuntimeBase.RefCountTrackingState.UNTRACKED, target.refCountTrackingState(),
                     "return ownership must not promote an untracked referent");
 
             MortalList.pushMark();
@@ -35,7 +35,7 @@ class MortalReturnUntrackedOwnerTest {
             MortalList.popAndFlush();
             assertFalse(returnOwner.isActive());
             assertEquals(0, target.ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE));
-            assertEquals(-1, target.refCount,
+            assertEquals(RuntimeBase.RefCountTrackingState.UNTRACKED, target.refCountTrackingState(),
                     "releasing a return identity must leave the legacy count unchanged");
         }
     }
@@ -51,7 +51,7 @@ class MortalReturnUntrackedOwnerTest {
             MyVarCleanupStack.register(source);
             source.set(referenceTo(target));
             WeakRefRegistry.weaken(weakObserver);
-            assertEquals(WeakRefRegistry.WEAKLY_TRACKED, target.refCount);
+            assertEquals(RuntimeBase.RefCountTrackingState.WEAKLY_TRACKED, target.refCountTrackingState());
 
             try {
                 MortalList.pushMark();

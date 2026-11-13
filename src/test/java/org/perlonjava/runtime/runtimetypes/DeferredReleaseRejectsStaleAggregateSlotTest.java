@@ -47,7 +47,7 @@ class DeferredReleaseRejectsStaleAggregateSlotTest {
 
             try {
                 assertEquals(1, target.ownerSlotCount(ownerKind));
-                target.refCount = 1; // Model a transient undercount before deferred release.
+                target.setTrackedRefCount(1); // Model a transient undercount before deferred release.
                 detach.accept(staleOwner); // Deliberately leave the old identity active.
 
                 MortalList.deferDecrementIfTracked(released);

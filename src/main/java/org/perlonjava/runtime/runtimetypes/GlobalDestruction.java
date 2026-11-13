@@ -11,7 +11,7 @@ import java.util.Set;
  * Handles global destruction at program exit.
  * <p>
  * Walks all package stashes and global variables to find blessed objects
- * with refCount >= 0 that still need DESTROY. This covers globals, stash
+ * whose count tracking is active and still need DESTROY. This covers globals, stash
  * entries, and values inside global arrays and hashes.
  * <p>
  * Matches Perl 5 behavior where global destruction runs after END blocks.
@@ -131,16 +131,16 @@ public class GlobalDestruction {
                 && val.value instanceof RuntimeBase base
                 // A global object can be blessed before its class installs
                 // DESTROY.  Its initial transient cleanup then leaves the
-                // object untracked (or at MIN_VALUE), but a later method
+                // object untracked, but a later method
                 // definition must still be observed at global destruction.
-                && (base.refCount >= 0 || (base.blessId != 0 && !base.destroyFired))) {
+                && (base.isRefCountTracked() || (base.blessId != 0 && !base.destroyFired))) {
             destroyBaseIfTracked(base, visited);
         }
     }
 
     private static void destroyBaseIfTracked(RuntimeBase base, Set<RuntimeBase> visited) {
         if (base == null
-                || (base.refCount < 0 && (base.blessId == 0 || base.destroyFired))
+                || (!base.isRefCountTracked() && (base.blessId == 0 || base.destroyFired))
                 || !visited.add(base)) {
             return;
         }

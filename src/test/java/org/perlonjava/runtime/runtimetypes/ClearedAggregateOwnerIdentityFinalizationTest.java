@@ -26,7 +26,7 @@ class ClearedAggregateOwnerIdentityFinalizationTest {
                         PerlOwnerSlot.Kind.PACKAGE_AGGREGATE_SLOT));
                 packageRoot.clearedOwnedAggregateElement = true;
                 WeakRefRegistry.weaken(weakPackageRoot);
-                packageRoot.refCount = 0;
+                packageRoot.setTrackedRefCount(0);
 
                 try (MortalList.ReachabilityQueryMeasurement measurement =
                              MortalList.measureReachabilityQueries()) {
@@ -63,7 +63,7 @@ class ClearedAggregateOwnerIdentityFinalizationTest {
             MyVarCleanupStack.register(container);
             MortalList.setActive(true);
             try {
-                referent.refCount = -1;
+                referent.markRefCountUntracked();
                 nestedCell.refreshUntrackedReferenceOwner();
                 PerlOwnerSlot nestedOwner = nestedCell.untrackedReferenceOwnerSlot();
                 assertTrue(nestedOwner != null && nestedOwner.isActive());
@@ -73,7 +73,7 @@ class ClearedAggregateOwnerIdentityFinalizationTest {
 
                 // Model a positive compatibility count left behind after the
                 // nested scalar's final untracked owner identity is retired.
-                referent.refCount = 5;
+                referent.setTrackedRefCount(5);
                 referent.clearedOwnedAggregateElement = true;
                 nestedCell.set(new RuntimeScalar());
                 assertFalse(nestedOwner.isActive());

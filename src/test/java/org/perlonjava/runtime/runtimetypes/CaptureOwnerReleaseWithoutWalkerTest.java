@@ -17,7 +17,7 @@ class CaptureOwnerReleaseWithoutWalkerTest {
             referent.scopeExited = true;
 
             RuntimeCode closure = new RuntimeCode((args, context) -> new RuntimeList(), null);
-            closure.refCount = 1;
+            closure.setTrackedRefCount(1);
             PerlOwnerSlot capture = referent.retainClosureCaptureOwner(closure);
             closure.capturedAggregates = new RuntimeBase[] {referent};
             closure.capturedAggregateOwnerSlots = new PerlOwnerSlot[] {capture};

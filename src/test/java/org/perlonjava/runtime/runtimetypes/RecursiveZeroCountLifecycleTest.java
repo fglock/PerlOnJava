@@ -15,7 +15,7 @@ class RecursiveZeroCountLifecycleTest {
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeHash target = new RuntimeHash();
             target.blessId = NameNormalizer.getBlessId("Issue1649::ZeroCountCleanup");
-            target.refCount = 0;
+            target.setTrackedRefCount(0);
             RuntimeScalar discarded = new RuntimeScalar();
             discarded.type = RuntimeScalarType.REFERENCE;
             discarded.value = target;

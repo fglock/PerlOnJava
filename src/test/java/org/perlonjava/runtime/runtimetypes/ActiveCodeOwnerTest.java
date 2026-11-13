@@ -15,7 +15,7 @@ class ActiveCodeOwnerTest {
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeScalar pad = new RuntimeScalar(42);
             RuntimeCode code = new RuntimeCode((args, context) -> new RuntimeList(), null);
-            code.refCount = 0;
+            code.setTrackedRefCount(0);
             code.capturedScalars = new RuntimeScalar[]{pad};
             code.capturedScalarOwnerSlots = new PerlOwnerSlot[]{pad.retainClosureCaptureSlot()};
             RuntimeCode.pushActiveCode(code);
@@ -33,7 +33,7 @@ class ActiveCodeOwnerTest {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeCode code = new RuntimeCode((args, context) -> new RuntimeList(), null);
-            code.refCount = 0;
+            code.setTrackedRefCount(0);
             RuntimeScalar owner = new RuntimeScalar();
             owner.set(new RuntimeScalar(code));
             RuntimeScalar weak = new RuntimeScalar();
@@ -80,7 +80,7 @@ class ActiveCodeOwnerTest {
             weak.set(pad);
             WeakRefRegistry.weaken(weak);
             RuntimeCode code = new RuntimeCode((args, context) -> new RuntimeList(), null);
-            code.refCount = 0;
+            code.setTrackedRefCount(0);
             code.capturedScalars = new RuntimeScalar[]{pad};
             code.capturedScalarOwnerSlots = new PerlOwnerSlot[]{pad.retainClosureCaptureSlot()};
             RuntimeScalar.scopeExitCleanup(pad);
@@ -128,7 +128,7 @@ class ActiveCodeOwnerTest {
             weak.set(pad);
             WeakRefRegistry.weaken(weak);
             RuntimeCode code = new RuntimeCode((args, context) -> new RuntimeList(), null);
-            code.refCount = 0;
+            code.setTrackedRefCount(0);
             code.capturedScalars = new RuntimeScalar[]{pad};
             code.capturedScalarOwnerSlots = new PerlOwnerSlot[]{pad.retainClosureCaptureSlot()};
             RuntimeScalar owner = new RuntimeScalar();

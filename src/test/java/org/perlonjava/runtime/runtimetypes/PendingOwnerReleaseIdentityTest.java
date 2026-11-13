@@ -13,7 +13,7 @@ class PendingOwnerReleaseIdentityTest {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeHash lifecycleTarget = new RuntimeHash();
-            lifecycleTarget.refCount = 0;
+            lifecycleTarget.setTrackedRefCount(0);
             RuntimeBase.PendingOwnerRelease lifecycleOnly =
                     lifecycleTarget.queueLifecycleOnlyAtZero("identity regression");
             try {

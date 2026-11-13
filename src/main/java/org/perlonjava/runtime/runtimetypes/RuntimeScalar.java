@@ -978,10 +978,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if ((type & RuntimeScalarType.REFERENCE_BIT) == 0 || !(value instanceof RuntimeBase base)) {
             return null;
         }
-        if (type == RuntimeScalarType.CODE && base.refCount < 0) {
-            base.refCount = 0;
+        if (type == RuntimeScalarType.CODE && !base.isRefCountTracked()) {
+            base.startRefCountTracking();
         }
-        if (base.refCount < 0 || base.refCount == WeakRefRegistry.WEAKLY_TRACKED
+        if (!base.isRefCountTracked() || base.isWeaklyRefCountTracked()
                 || base.isPerlDestroyed()) {
             return null;
         }
@@ -993,7 +993,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (WeakRefRegistry.isweak(this)
                 || (type & RuntimeScalarType.REFERENCE_BIT) == 0
                 || !(value instanceof RuntimeBase base)
-                || base.refCount == WeakRefRegistry.WEAKLY_TRACKED
+                || base.isWeaklyRefCountTracked()
                 || base.isPerlDestroyed()) {
             return null;
         }
@@ -1002,8 +1002,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     /**
      * The owner ledger tracks Perl's strong capture edge separately from the
-     * selective refcount. A live referent can be WEAKLY_TRACKED when a weak
-     * probe was installed before the closure was constructed; that sentinel
+     * selective refcount. A live referent can be weakly tracked when a weak
+     * probe was installed before the closure was constructed; that state
      * must not prevent the later strong capture from becoming an owner.
      */
     private RuntimeBase semanticCaptureReferent() {
@@ -1111,7 +1111,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 || !(source.value instanceof RuntimeCode code)) return;
         code.hasCountedCodeSlots = true;
         if (source.compiledDirectCallSiteName == null) code.hadStashRef = true;
-        if (code.refCount == -1) code.refCount = 0;
+        if (code.isRefCountUntracked()) code.startRefCountTracking();
     }
 
     void refreshCodeSlotOwner() {
@@ -1469,7 +1469,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         boolean untrackedStrongValue = !weakValue
                 && referent != null
                 && !referent.isPerlDestroyed()
-                && (referent.refCount < 0
+                && (!referent.isRefCountTracked()
                     || existingOwnerForReferent
                     || packageScalarValueOwner
                     || packageAggregateValueOwner
@@ -1755,7 +1755,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             throw new IllegalStateException(
                     "pending counted acquisition requires the scalar's old edge to be retired");
         }
-        if (referent.refCount < 0 || referent.refCount == Integer.MAX_VALUE) {
+        if (!referent.isRefCountTracked() || referent.refCount == Integer.MAX_VALUE) {
             throw new IllegalStateException(
                     "counted acquisition requires an available tracked reference count");
         }
@@ -3743,34 +3743,35 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 || !(scalar.value instanceof RuntimeBase base)) {
             return;
         }
-        // Destroyed / weaken sentinel states must not be reactivated here.
+        // Destroyed and weak-tracked referents must not be reactivated here.
         if (base.isPerlDestroyed()) {
             return;
         }
-        if (base.refCount == WeakRefRegistry.WEAKLY_TRACKED) {
+        if (base.isWeaklyRefCountTracked()) {
             scalar.refreshUntrackedReferenceOwner();
             return;
         }
-        if (base.refCount < 0 && intendedOwnerKind == PerlOwnerSlot.Kind.ARGUMENT_CONTAINER) {
+        if (!base.isRefCountTracked()
+                && intendedOwnerKind == PerlOwnerSlot.Kind.ARGUMENT_CONTAINER) {
             // Selective counting has no ledger for the referent's pre-existing
             // owners. Keep this real argument edge as an untracked owner rather
             // than promoting a partial count that could reach zero too early.
             scalar.refreshUntrackedReferenceOwner();
             return;
         }
-        // Anonymous nested containers start at refCount=-1 (untracked).
+        // Anonymous nested containers begin with explicit untracked state.
         // bless {}'s retroactive pass and normal container stores must still count
         // the hash slot as a strong ref, otherwise delete $h{k} / hash clear never
         // drops the child (PPI::Node->{children}; cpan PPI t/04_element.t).
         // Restrict promotion to real containers: doing this for arbitrary -1
         // referents (e.g. refs to readonly scalars) breaks Moo weak_ref accessors
         // (cpan Moo t/accessor-weaken.t).
-        if (base.refCount < 0) {
+        if (!base.isRefCountTracked()) {
             if (!(base instanceof RuntimeHash) && !(base instanceof RuntimeArray)) {
                 scalar.refreshUntrackedReferenceOwner();
                 return;
             }
-            base.refCount = 0;
+            base.startRefCountTracking();
         }
         acquireCountedOwnerForCurrentValue(scalar, base, intendedOwnerKind,
                 "RuntimeScalar.incrementRefCountForContainerStore");
@@ -3970,7 +3971,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && !scalarReferent.refCountOwned
                 && (scalarReferent.type & REFERENCE_BIT) != 0
                 && scalarReferent.value instanceof RuntimeBase inner
-                && inner.refCount >= 0;
+                && inner.isRefCountTracked();
     }
 
     private void retainScalarReferenceContents(RuntimeScalar value) {
@@ -4370,7 +4371,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
         }
         noteClearedAggregateElement(value);
-        // Fast path for untracked references (refCount == -1).
+        // Fast path for references outside the selective count bridge.
         // Most reference assignments involve untracked objects (named variables,
         // anonymous arrays/hashes that were never blessed). Skip all refCount
         // tracking, WeakRefRegistry checks, and MortalList flush.
@@ -4391,17 +4392,17 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             // Both old and new are non-GLOB references. Check if referents are untracked.
             boolean oldUntracked = (this.type & REFERENCE_BIT) == 0
                     || this.value == null
-                    || ((RuntimeBase) this.value).refCount == -1;
+                    || ((RuntimeBase) this.value).isRefCountUntracked();
             boolean newUntracked = (value.type & REFERENCE_BIT) == 0
                     || value.value == null
-                    || ((RuntimeBase) value.value).refCount == -1;
+                    || ((RuntimeBase) value.value).isRefCountUntracked();
             if (oldUntracked && newUntracked) {
                 // Hash/array element stores must count refs to RuntimeHash/RuntimeArray
-                // at refCount==-1 (see incrementRefCountForContainerStore). Otherwise a
+                // untracked (see incrementRefCountForContainerStore). Otherwise a
                 // lone `$slot = $obj` assignment can bypass tracking while push() does not.
                 if ((value.type & REFERENCE_BIT) != 0
                         && value.value instanceof RuntimeBase nb
-                        && nb.refCount < 0
+                        && !nb.isRefCountTracked()
                         && (nb instanceof RuntimeHash || nb instanceof RuntimeArray)) {
                     // fall through to full refCounted assignment
                 } else {
@@ -4519,7 +4520,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // CODE ref — e.g., the stash entry *Foo::bar holds the constructor
         // while a local variable also holds it. Overwriting the local should
         // not release the captures that the stash's copy still needs.
-        // For untracked CODE refs (refCount == -1), the JVM GC handles cleanup.
+        // For untracked CODE refs, the JVM GC handles cleanup.
 
         // Track refCount for blessed objects with DESTROY.
         // Save old referent BEFORE the assignment (for correct DESTROY ordering —
@@ -4582,11 +4583,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 || value.type == RuntimeScalarType.GLOB)
                 && value.value != null) {
             RuntimeBase nb = (RuntimeBase) value.value;
-            if (nb.refCount < 0
+            if (!nb.isRefCountTracked()
                     && (nb instanceof RuntimeHash || nb instanceof RuntimeArray)) {
-                nb.refCount = 0;
+                nb.startRefCountTracking();
             }
-            if (nb.refCount >= 0 && !scalarContentsOwnedByEscapedReference) {
+            if (nb.isRefCountTracked() && !scalarContentsOwnedByEscapedReference) {
                 if (nb.refCount == 0) nb.registerSharedFetchedView();
                 newOwned = true;
                 newReferent = nb;
@@ -4618,7 +4619,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 // A detached aggregate slot is no longer a Perl edge. Its
                 // identity can outlive the storage mutation in compatibility
                 // paths; retire that token without decrementing a count that
-                // has already reached zero or the destroyed sentinel.
+                // has already reached zero or the referent is destroyed.
                 retireOldCountedOwnerAfterPublish = true;
             } else if (oldBase.refCount <= 0) {
                 throw new IllegalStateException(
@@ -4815,7 +4816,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             // owner already represents it.
             boolean rescueNeedsCountedOwner = !newOwned
                     && !scalarContentsOwnedByEscapedReference;
-            if (rescueNeedsCountedOwner && base.refCount >= 0) {
+            if (rescueNeedsCountedOwner && base.isRefCountTracked()) {
                 acquireCountedOwnerForPendingValue(
                         this, base, countedOwnerKind(),
                         "RuntimeScalar.setLargeRefCounted DESTROY rescue");
@@ -4835,7 +4836,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // this scalar is its final Perl owner.  It will not enter the counted
         // decrement branch below, so release nested objects explicitly before
         // an undef overwrite discards the container.
-        if (oldBase != null && oldBase.blessId != 0 && oldBase.refCount == 0
+        if (oldBase != null && oldBase.blessId != 0
+                && oldBase.isRefCountTracked() && oldBase.refCount == 0
                 && !thisWasWeak && value.type == UNDEF) {
             if (oldBase instanceof RuntimeArray array) {
                 MortalList.deferDestroyForContainerClear(array.elements);
@@ -4845,7 +4847,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
 
         if (explicitUndef && oldBase != null
-                && oldBase.refCount == WeakRefRegistry.WEAKLY_TRACKED) {
+                && oldBase.isWeaklyRefCountTracked()) {
             boolean argumentAliasKeepsOldBase =
                     oldBase.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_ALIAS) != 0;
             if (argumentAliasKeepsOldBase) {
@@ -4898,8 +4900,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 MortalList.suppressFlush(flushWasSuppressed);
             }
         }
-        // WEAKLY_TRACKED objects: do NOT clear weak refs on overwrite.
-        // These objects have refCount == -2 and their strong refs don't have
+        // Weak-tracked objects: do NOT clear weak refs on overwrite.
+        // Their strong refs don't have
         // refCountOwned=true (they were set before tracking started).
         // Overwriting ONE reference doesn't mean no other strong refs exist —
         // closures may capture copies (e.g., Sub::Quote's $_QUOTED capture).
@@ -6743,11 +6745,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
         referencedByScalarReference = true;
         boolean isRegisteredLexical =
-                this.refCount == -1 && MyVarCleanupStack.isRegistered(this);
-        if (this.refCount == -1 && isRegisteredLexical) {
-            this.refCount = 0;
+                this.isRefCountUntracked() && MyVarCleanupStack.isRegistered(this);
+        if (this.isRefCountUntracked() && isRegisteredLexical) {
+            this.startRefCountTracking();
             this.localBindingExists = true;
-        } else if (this.refCount == -1
+        } else if (this.isRefCountUntracked()
                 && !isRegisteredLexical
                 && !hasClosureCaptureOwner()
                 && (!isPackageGlobalRoot || GlobalVariable.isTemporaryGlobalAliasValue(this))
@@ -6758,8 +6760,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             // consumes its sole owner immediately. Bound lexicals, closure
             // captures, globals, aggregate elements, active @_ arguments, and
             // constants owned by an installed subroutine's optree retain the
-            // established untracked/WEAKLY_TRACKED behavior.
-            this.refCount = 0;
+            // established untracked/weak-tracked behavior.
+            this.startRefCountTracking();
             this.ephemeralScalarReferenceReferent = true;
         }
         if (MyVarCleanupStack.isRegistered(this)) {
@@ -6836,7 +6838,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     throw new IllegalStateException(
                             "global CODE undefine lost its counted stash owner slot");
                 }
-                undefinedCode.refCount = 0;
+                undefinedCode.startRefCountTracking();
                 oldCodeRelease = ownerSlot.replaceCountedScalarOwnerAndAcquire(
                         code, undefinedCode, this,
                         "RuntimeScalar.undefine global CODE replacement");
@@ -7084,14 +7086,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // with the final scalar-cell owner instead of waiting for graph cleanup.
         scalar.finalizeUntrackedValueAfterScopeExit(untrackedValueAtScopeExit);
 
-        // WEAKLY_TRACKED objects: do NOT clear weak refs on scope exit.
-        // These objects transitioned from untracked (-1) to WEAKLY_TRACKED (-2) in
+        // Weak-tracked objects: do NOT clear weak refs on scope exit.
+        // These objects transitioned from untracked state during weaken() and
         // weaken(), but scope exit of ONE reference doesn't mean no other strong
         // references exist — closures may capture copies of the same reference
         // (e.g., Sub::Quote's $_QUOTED capture keeps $quoted_info alive even after
         // unquote_sub's local exits scope). Clearing weak refs here would break
         // Sub::Quote/Moo constructor inlining.
-        // Weak refs for WEAKLY_TRACKED objects are cleared only via:
+        // Weak refs for weak-tracked objects are cleared only via:
         //   - explicit undefine() of a strong reference
         // Since unblessed objects have no DESTROY, delayed clearing is safe.
     }
@@ -8451,7 +8453,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             return;
         }
         scalar.localBindingExists = false;
-        if (scalar.refCount == 0 && !scalar.hasScalarCellOwner()
+        if (scalar.isRefCountTracked() && scalar.refCount == 0
+                && !scalar.hasScalarCellOwner()
                 && !scalar.hasUncountedPerlOwnerSlotIdentity()) {
             DestroyDispatch.callDestroy(scalar);
         }

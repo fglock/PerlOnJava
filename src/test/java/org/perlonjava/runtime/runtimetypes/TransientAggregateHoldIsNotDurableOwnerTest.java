@@ -95,7 +95,7 @@ class TransientAggregateHoldIsNotDurableOwnerTest {
     void untrackedClosureInTemporaryArrayDoesNotBlockCaptureRetirement() {
         try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
             RuntimeCode closure = new RuntimeCode((args, context) -> new RuntimeList(), null);
-            closure.refCount = -1;
+            closure.markRefCountUntracked();
             RuntimeScalar capturedPad = new RuntimeScalar(42);
             PerlOwnerSlot captureOwner = capturedPad.retainClosureCaptureSlot(closure);
             closure.capturedScalars = new RuntimeScalar[] {capturedPad};
@@ -121,7 +121,7 @@ class TransientAggregateHoldIsNotDurableOwnerTest {
     void activeAggregateTransferKeepsNestedClosureCapturesAlive() {
         try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
             RuntimeCode closure = new RuntimeCode((args, context) -> new RuntimeList(), null);
-            closure.refCount = -1;
+            closure.markRefCountUntracked();
             RuntimeScalar capturedPad = new RuntimeScalar(42);
             PerlOwnerSlot captureOwner = capturedPad.retainClosureCaptureSlot(closure);
             closure.capturedScalars = new RuntimeScalar[] {capturedPad};
@@ -172,7 +172,7 @@ class TransientAggregateHoldIsNotDurableOwnerTest {
     void temporaryArrayRootDefersAggregateAndCaptureCleanup() {
         try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
             RuntimeCode closure = new RuntimeCode((args, context) -> new RuntimeList(), null);
-            closure.refCount = -1;
+            closure.markRefCountUntracked();
             RuntimeScalar capturedPad = new RuntimeScalar(42);
             PerlOwnerSlot captureOwner = capturedPad.retainClosureCaptureSlot(closure);
             closure.capturedScalars = new RuntimeScalar[] {capturedPad};
@@ -214,7 +214,7 @@ class TransientAggregateHoldIsNotDurableOwnerTest {
     void temporaryHashRootDefersCellCleanup() {
         try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
             RuntimeCode closure = new RuntimeCode((args, context) -> new RuntimeList(), null);
-            closure.refCount = -1;
+            closure.markRefCountUntracked();
             RuntimeScalar capturedPad = new RuntimeScalar(42);
             PerlOwnerSlot captureOwner = capturedPad.retainClosureCaptureSlot(closure);
             closure.capturedScalars = new RuntimeScalar[] {capturedPad};
@@ -255,7 +255,7 @@ class TransientAggregateHoldIsNotDurableOwnerTest {
     void aggregateRefreshStopsAfterDestroyAddsRootAndMutatesArray() {
         try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
             RuntimeCode closure = new RuntimeCode((args, context) -> new RuntimeList(), null);
-            closure.refCount = -1;
+            closure.markRefCountUntracked();
             RuntimeScalar capturedPad = new RuntimeScalar(42);
             PerlOwnerSlot captureOwner = capturedPad.retainClosureCaptureSlot(closure);
             closure.capturedScalars = new RuntimeScalar[] {capturedPad};
@@ -306,7 +306,7 @@ class TransientAggregateHoldIsNotDurableOwnerTest {
     void durableArrayCellKeepsClosureCapturesAlive() {
         try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
             RuntimeCode closure = new RuntimeCode((args, context) -> new RuntimeList(), null);
-            closure.refCount = -1;
+            closure.markRefCountUntracked();
             RuntimeScalar capturedPad = new RuntimeScalar(42);
             PerlOwnerSlot captureOwner = capturedPad.retainClosureCaptureSlot(closure);
             closure.capturedScalars = new RuntimeScalar[] {capturedPad};
@@ -329,7 +329,7 @@ class TransientAggregateHoldIsNotDurableOwnerTest {
     void activeCallTransferKeepsTemporaryClosureCapturesAlive() {
         try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
             RuntimeCode closure = new RuntimeCode((args, context) -> new RuntimeList(), null);
-            closure.refCount = 0;
+            closure.setTrackedRefCount(0);
             RuntimeScalar capturedPad = new RuntimeScalar(42);
             PerlOwnerSlot captureOwner = capturedPad.retainClosureCaptureSlot(closure);
             closure.capturedScalars = new RuntimeScalar[] {capturedPad};

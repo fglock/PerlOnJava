@@ -17,13 +17,13 @@ class PerlOwnerSlotScalarReferenceContentsTest {
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeHash previous = new RuntimeHash();
             RuntimeHash replacement = new RuntimeHash();
-            previous.refCount = 3;
-            replacement.refCount = 3;
+            previous.setTrackedRefCount(3);
+            replacement.setTrackedRefCount(3);
 
             RuntimeScalar referenceCell = new RuntimeScalar();
             referenceCell.type = RuntimeScalarType.REFERENCE;
             referenceCell.value = previous;
-            referenceCell.refCount = 1;
+            referenceCell.setTrackedRefCount(1);
             referenceCell.referencedByScalarReference = true;
             RuntimeScalar outerReference = new RuntimeScalar();
             outerReference.type = RuntimeScalarType.REFERENCE;
@@ -56,7 +56,7 @@ class PerlOwnerSlotScalarReferenceContentsTest {
     @Test
     void aliasesToOneCellShareOneCountAndReleaseIndependently() {
         RuntimeHash referent = new RuntimeHash();
-        referent.refCount = 3;
+        referent.setTrackedRefCount(3);
         RuntimeScalar referenceCell = new RuntimeScalar();
         referenceCell.type = RuntimeScalarType.REFERENCE;
         referenceCell.value = referent;
@@ -91,7 +91,7 @@ class PerlOwnerSlotScalarReferenceContentsTest {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeHash referent = new RuntimeHash();
-            referent.refCount = 3;
+            referent.setTrackedRefCount(3);
             RuntimeScalar referenceCell = new RuntimeScalar();
             referenceCell.type = RuntimeScalarType.REFERENCE;
             referenceCell.value = referent;

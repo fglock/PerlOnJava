@@ -31,13 +31,13 @@ class UntrackedAggregateOwnerSlotTest {
                         "each durable scalar cell contributes its own owner identity");
                 assertEquals(2,
                         target.ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE));
-                assertEquals(-1, target.refCount,
+                assertEquals(RuntimeBase.RefCountTrackingState.UNTRACKED, target.refCountTrackingState(),
                         "explicit owner slots must not promote the legacy count");
 
                 try (MortalList.ReachabilityQueryMeasurement measurement =
                              MortalList.measureReachabilityQueries()) {
                     WeakRefRegistry.weaken(weakObserver);
-                    assertEquals(WeakRefRegistry.WEAKLY_TRACKED, target.refCount);
+                    assertEquals(RuntimeBase.RefCountTrackingState.WEAKLY_TRACKED, target.refCountTrackingState());
                     assertTrue(WeakRefRegistry.isweak(weakObserver));
                     assertEquals(0, measurement.stats().rootQueries,
                             "surviving owner identities avoid a root walk at first weaken");

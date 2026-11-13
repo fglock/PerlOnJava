@@ -27,7 +27,7 @@ class RuntimeCodeStashOwnerReleaseTest {
             WeakRefRegistry.weaken(weak);
             // The bridge count can outlive its Perl owners during the staged
             // migration; the owner ledger must decide final state cleanup.
-            code.refCount = 5;
+            code.setTrackedRefCount(5);
 
             PerlOwnerSlot activeCall =
                     new PerlOwnerSlot(PerlOwnerSlot.Kind.ACTIVE_CODE);

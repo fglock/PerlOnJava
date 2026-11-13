@@ -17,7 +17,7 @@ class RuntimeScalarUncountedOwnerRepairTest {
             RuntimeHash target = new RuntimeHash();
             target.blessId = NameNormalizer.getBlessId(
                     "RuntimeScalarUncountedOwnerRepairTest::Target");
-            target.refCount = -1;
+            target.markRefCountUntracked();
 
             RuntimeArray ownerContainer = new RuntimeArray();
             RuntimeScalar uncountedOwner = referenceTo(target);
@@ -35,12 +35,12 @@ class RuntimeScalarUncountedOwnerRepairTest {
             try {
                 // Model a transient selective-count undercount. Releasing this
                 // last counted slot leaves the array element as the strong owner.
-                target.refCount = 1;
+                target.setTrackedRefCount(1);
                 try (MortalList.ReachabilityQueryMeasurement measurement =
                              MortalList.measureReachabilityQueries()) {
                     countedOwner.set(new RuntimeScalar());
 
-                    assertEquals(WeakRefRegistry.WEAKLY_TRACKED, target.refCount);
+                    assertEquals(RuntimeBase.RefCountTrackingState.WEAKLY_TRACKED, target.refCountTrackingState());
                     assertTrue(WeakRefRegistry.isweak(weakObserver));
                     assertFalse(target.destroyFired);
                     assertEquals(0, measurement.stats().rootQueries,

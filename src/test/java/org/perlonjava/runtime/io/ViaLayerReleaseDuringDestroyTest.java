@@ -15,7 +15,7 @@ class ViaLayerReleaseDuringDestroyTest {
     void countedLayerHoldBalancesWhileReferentIsAlreadyDestroying() {
         try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
             RuntimeArray referent = new RuntimeArray();
-            referent.refCount = 0;
+            referent.setTrackedRefCount(0);
             RuntimeScalar pushed = new RuntimeScalar();
             pushed.type = RuntimeScalarType.ARRAYREFERENCE;
             pushed.value = referent;

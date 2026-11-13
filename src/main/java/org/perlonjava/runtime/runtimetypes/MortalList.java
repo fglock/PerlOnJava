@@ -80,7 +80,7 @@ public class MortalList {
 
     // Always-on: refCount tracking for birth-tracked objects (anonymous hashes,
     // arrays, closures with captures) requires balanced increment/decrement.
-    // The increment side fires unconditionally in setLarge() when refCount >= 0,
+    // The increment side fires unconditionally in setLarge() when count tracking is active,
     // so the decrement side (deferDecrementIfTracked, flush, etc.) must also
     // be active from the start.  The per-method `!active` guards are retained
     // as a trivially-predicted branch; the JIT will elide them.
@@ -456,7 +456,7 @@ public class MortalList {
             // a Perl execution context. Keep this path limited to count-only
             // releases and empty unblessed aggregates; any final Perl lifecycle
             // work still requires the owning runtime to be bound.
-            if (base.currentlyDestroying || base.refCount < 0
+            if (base.currentlyDestroying || !base.isRefCountTracked()
                     || base.isPerlDestroyed()) {
                 slotRelease.complete();
                 return;
@@ -788,7 +788,7 @@ public class MortalList {
                 RuntimeBase.PendingOwnerRelease ownerRelease = base.queueOwnerRelease(
                         scalar, "MortalList.deferDecrementIfTracked");
                 queueDeferredBase(state, base, ownerRelease, null, scalar);
-            } else if (base.refCount == 0
+            } else if (base.isRefCountTracked() && base.refCount == 0
                     && base.clearedOwnedAggregateElement
                     && WeakRefRegistry.hasWeakRefsTo(base)) {
                 // A nested-call guard may preserve this object at a selective
@@ -797,7 +797,7 @@ public class MortalList {
                 base.retireZeroCountOwnerIdentity(
                         scalar, "deferDecrementIfTracked zero-count owner");
             }
-            // Note: WEAKLY_TRACKED (-2) objects are NOT scheduled for destruction
+            // Note: weak-tracked objects are NOT scheduled for destruction
             // on scope exit. We can't count strong refs for non-DESTROY objects
             // (refs created before weaken() weren't tracked), so scope exit of
             // ONE reference doesn't mean there are no other strong refs (e.g.,
@@ -1045,7 +1045,7 @@ public class MortalList {
         for (RuntimeScalar val : hash.elements.values()) {
             if (val != null && (val.type & RuntimeScalarType.REFERENCE_BIT) != 0
                     && val.value instanceof RuntimeBase rb) {
-                if (rb.blessId != 0 || rb.refCount >= 0) {
+                if (rb.blessId != 0 || rb.isRefCountTracked()) {
                     needsWalk = true;
                     break;
                 }
@@ -1188,7 +1188,7 @@ public class MortalList {
             if (elem.refCountOwned) { needsWalk = true; break; }
             if (!(elem.value instanceof RuntimeBase rb)) continue;
             // Direct blessed ref
-            if (rb.blessId != 0 || rb.refCount >= 0) { needsWalk = true; break; }
+            if (rb.blessId != 0 || rb.isRefCountTracked()) { needsWalk = true; break; }
             // Container ref — peek at children for reference-type elements
             if (rb instanceof RuntimeArray innerArr) {
                 for (RuntimeScalar inner : innerArr.elements) {
@@ -1316,7 +1316,7 @@ public class MortalList {
 
         // Fast path for leaf references (the overwhelmingly common case):
         // unblessed, untracked referents with no nested containers to walk.
-        if (topBase.blessId == 0 && topBase.refCount == -1) {
+        if (topBase.blessId == 0 && topBase.isRefCountUntracked()) {
             // Unblessed, untracked — nothing to do unless it's a container.
             if (topBase instanceof RuntimeArray arr) {
                 // Check if any element is a tracked ref before iterating.
@@ -1324,7 +1324,7 @@ public class MortalList {
                 for (RuntimeScalar elem : arr.elements) {
                     if (elem != null && (elem.type & RuntimeScalarType.REFERENCE_BIT) != 0
                             && elem.value instanceof RuntimeBase eb
-                            && (eb.blessId != 0 || eb.refCount >= 0)) {
+                            && (eb.blessId != 0 || eb.isRefCountTracked())) {
                         hasTracked = true;
                         break;
                     }
@@ -1335,7 +1335,7 @@ public class MortalList {
                 for (RuntimeScalar val : hash.elements.values()) {
                     if (val != null && (val.type & RuntimeScalarType.REFERENCE_BIT) != 0
                             && val.value instanceof RuntimeBase vb
-                            && (vb.blessId != 0 || vb.refCount >= 0)) {
+                            && (vb.blessId != 0 || vb.isRefCountTracked())) {
                         hasTracked = true;
                         break;
                     }
@@ -1378,7 +1378,7 @@ public class MortalList {
                     LifecycleRuntimeState state = state();
                     markBoundaryWork(state);
                     queueDeferredBase(state, base, ownerRelease, null, s);
-                } else if (base.refCount == 0) {
+                } else if (base.isRefCountTracked() && base.refCount == 0) {
                     LifecycleRuntimeState state = state();
                     markBoundaryWork(state);
                     RuntimeBase.PendingOwnerRelease ownerRelease =
@@ -1496,7 +1496,7 @@ public class MortalList {
         if (base.blessId != 0) return true;
         if (base instanceof RuntimeArray || base instanceof RuntimeHash) {
             work.add(base);
-        } else if (base instanceof RuntimeCode && base.refCount >= 0) {
+        } else if (base instanceof RuntimeCode && base.isRefCountTracked()) {
             return true;
         }
         return false;
@@ -1549,7 +1549,7 @@ public class MortalList {
                     LifecycleRuntimeState state = state();
                     markBoundaryWork(state);
                     queueDeferredBase(state, base, ownerRelease, null, scalar);
-                } else if (base.refCount == 0
+                } else if (base.isRefCountTracked() && base.refCount == 0
                         && (base.blessId != 0
                         || base instanceof RuntimeHash
                         || base instanceof RuntimeArray
@@ -1731,7 +1731,8 @@ public class MortalList {
         if (base.refCount > 0) {
             finalRelease = base.releaseTrackedOwnerCount(
                     "MortalList.flush (deferred decrement)");
-        } else if (base.refCount == 0 && ownerRelease != null) {
+        } else if (base.isRefCountTracked() && base.refCount == 0
+                && ownerRelease != null) {
             // The queue token may represent a real edge released after a
             // transient undercount, or an explicit zero-count temporary
             // finalization request. Process that lifecycle boundary directly;
@@ -1754,7 +1755,7 @@ public class MortalList {
                 // hold is runtime scaffolding around PUSHED; when POPPED drops
                 // it, retain the tracked zero count and let the closure slot
                 // carry the remaining lifecycle. Ordinary scalar weakening
-                // continues to use WEAKLY_TRACKED while a semantic capture is
+                // continues to use weak-tracked state while a semantic capture is
                 // the only remaining strong path.
                 boolean releasedViaLayerOwner = ownerRelease != null
                         && ownerRelease.ownerSlotRelease != null
@@ -1871,7 +1872,7 @@ public class MortalList {
         // A nested scope may defer destruction while another active owner
         // remains. Recheck the ledger after the final counted release so the
         // last trusted slot completes cleanup here.
-        if (base.refCount == 0
+        if (base.isRefCountTracked() && base.refCount == 0
                 && isFinalCountedReferentRelease(base, ownerRelease)
                 && !base.localBindingExists
                 && !base.hasClosureCaptureOwner()

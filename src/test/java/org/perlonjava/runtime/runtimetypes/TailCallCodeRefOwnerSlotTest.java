@@ -17,7 +17,7 @@ class TailCallCodeRefOwnerSlotTest {
             try {
                 MortalList.setActive(true);
                 RuntimeCode target = new RuntimeCode((args, context) -> new RuntimeList(), null);
-                target.refCount = 0;
+                target.setTrackedRefCount(0);
                 RuntimeScalar source = new RuntimeScalar();
                 source.type = RuntimeScalarType.CODE;
                 source.value = target;

@@ -51,7 +51,7 @@ class WeakCodeOwnerSlotTest {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeCode code = new RuntimeCode((args, context) -> new RuntimeList(), null);
-            code.refCount = 0;
+            code.setTrackedRefCount(0);
             RuntimeScalar owner = new RuntimeScalar();
             int mark = MyVarCleanupStack.pushMark();
             MyVarCleanupStack.register(owner);

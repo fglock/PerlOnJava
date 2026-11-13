@@ -24,7 +24,7 @@ class CapturedAggregateWeakOwnerReleaseTest {
                 WeakRefRegistry.weaken(weakObserver);
 
                 assertTrue(WeakRefRegistry.isweak(weakObserver));
-                assertEquals(WeakRefRegistry.WEAKLY_TRACKED, referent.refCount,
+                assertEquals(RuntimeBase.RefCountTrackingState.WEAKLY_TRACKED, referent.refCountTrackingState(),
                         "a semantic closure owner preserves lifecycle without a count shim");
                 assertTrue(referent.deferredFinalReleaseForUncountedOwners);
                 assertEquals(1, referent.ownerSlotCount(PerlOwnerSlot.Kind.CLOSURE_PAD));

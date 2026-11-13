@@ -13,7 +13,7 @@ class CodeCycleOwnerSlotLifecycleTest {
     void restoresTheCurrentSelfCaptureOwnerWithoutWalkingTheObjectGraph() {
         try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
             RuntimeCode code = new RuntimeCode((args, context) -> new RuntimeList(), null);
-            code.refCount = 0;
+            code.setTrackedRefCount(0);
             RuntimeScalar capture = new RuntimeScalar();
             PerlOwnerSlot captureSlot = capture.retainClosureCaptureSlot(code);
             capture.set(new RuntimeScalar(code));

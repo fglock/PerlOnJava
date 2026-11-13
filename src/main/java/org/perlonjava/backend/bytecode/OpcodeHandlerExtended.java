@@ -1127,7 +1127,7 @@ public class OpcodeHandlerExtended {
                     new PerlOwnerSlot[0]);
         }
         if (!capturedScalars.isEmpty() || !capturedAggregates.isEmpty()) {
-            closureCode.refCount = 0;
+            closureCode.startRefCountTracking();
         }
 
         // Wrap in RuntimeScalar and set __SUB__ for self-reference

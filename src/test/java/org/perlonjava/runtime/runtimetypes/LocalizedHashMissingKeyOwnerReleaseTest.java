@@ -18,7 +18,7 @@ class LocalizedHashMissingKeyOwnerReleaseTest {
             MortalList.setActive(true);
 
             RuntimeArray referent = new RuntimeArray();
-            referent.refCount = 0;
+            referent.setTrackedRefCount(0);
             RuntimeScalar externalOwner = new RuntimeScalar();
             RuntimeHash parent = new RuntimeHash();
             RuntimeHashProxyEntry proxy = new RuntimeHashProxyEntry(parent, "temporary");

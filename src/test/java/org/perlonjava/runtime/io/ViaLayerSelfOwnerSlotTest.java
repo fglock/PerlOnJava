@@ -24,7 +24,7 @@ class ViaLayerSelfOwnerSlotTest {
     void trackedPushedObjectHasOneOwnerIdentityUntilLayerRelease() {
         try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
             RuntimeArray referent = new RuntimeArray();
-            referent.refCount = 0;
+            referent.setTrackedRefCount(0);
 
             ViaLayer.SelfReferenceOwner owner =
                     ViaLayer.SelfReferenceOwner.retain(referent.createReference());
@@ -53,7 +53,7 @@ class ViaLayerSelfOwnerSlotTest {
     void untrackedPushedObjectStillHasAnIdentityWithoutCountPromotion() {
         try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
             RuntimeArray referent = new RuntimeArray();
-            referent.refCount = -1;
+            referent.markRefCountUntracked();
             RuntimeScalar untrackedReference = new RuntimeScalar();
             untrackedReference.type = RuntimeScalarType.ARRAYREFERENCE;
             untrackedReference.value = referent;
@@ -61,12 +61,12 @@ class ViaLayerSelfOwnerSlotTest {
                     ViaLayer.SelfReferenceOwner.retain(untrackedReference);
 
             assertNotNull(owner);
-            assertEquals(-1, referent.refCount);
+            assertEquals(RuntimeBase.RefCountTrackingState.UNTRACKED, referent.refCountTrackingState());
             assertEquals(1, referent.ownerSlotCount(PerlOwnerSlot.Kind.IO_VIA_LAYER));
 
             owner.release();
 
-            assertEquals(-1, referent.refCount);
+            assertEquals(RuntimeBase.RefCountTrackingState.UNTRACKED, referent.refCountTrackingState());
             assertEquals(0, referent.ownerSlotCount(PerlOwnerSlot.Kind.IO_VIA_LAYER));
         }
     }

@@ -15,7 +15,7 @@ class DestroyOwnerSlotResurrectionTest {
     void currentCountedGlobalOwnerIsDetectedWithoutRootWalk() {
         try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
             RuntimeHash referent = new RuntimeHash();
-            referent.refCount = 0;
+            referent.setTrackedRefCount(0);
             RuntimeScalar global = GlobalVariable.getGlobalVariable(
                     "DestroyOwnerSlotResurrectionTest::countedOwner");
             Set<PerlOwnerSlot> ownersAtStart = referent.ownerSlotSnapshot();
@@ -45,7 +45,7 @@ class DestroyOwnerSlotResurrectionTest {
             RuntimeArray packageRoot = new RuntimeArray();
             GlobalVariable.globalArrays.put(globalName, packageRoot);
             RuntimeArray referent = new RuntimeArray();
-            referent.refCount = -1;
+            referent.markRefCountUntracked();
             RuntimeScalar globalOwner = referent.createAnonymousReference();
             Set<PerlOwnerSlot> ownersAtStart = referent.ownerSlotSnapshot();
 
@@ -73,7 +73,7 @@ class DestroyOwnerSlotResurrectionTest {
     void currentCountedOwnerIsDetectedOutsideGlobalTeardownWithoutRootWalk() {
         try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
             RuntimeHash referent = new RuntimeHash();
-            referent.refCount = 0;
+            referent.setTrackedRefCount(0);
             RuntimeScalar global = GlobalVariable.getGlobalVariable(
                     "DestroyOwnerSlotResurrectionTest::nonGlobalCountedOwner");
 
@@ -100,7 +100,7 @@ class DestroyOwnerSlotResurrectionTest {
     void detachedCountedCellDoesNotResurrectTheReferent() {
         try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
             RuntimeHash referent = new RuntimeHash();
-            referent.refCount = 0;
+            referent.setTrackedRefCount(0);
             RuntimeScalar detachedCell = new RuntimeScalar();
             detachedCell.localBindingExists = true;
             detachedCell.set(referenceTo(referent));
@@ -134,7 +134,7 @@ class DestroyOwnerSlotResurrectionTest {
     void temporaryArgumentOwnerIsNotResurrection() {
         try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
             RuntimeHash referent = new RuntimeHash();
-            referent.refCount = 0;
+            referent.setTrackedRefCount(0);
             referent.activateOwnerTracking();
             Set<PerlOwnerSlot> ownersAtStart = referent.ownerSlotSnapshot();
             RuntimeScalar staged = RuntimeScalar.retainStagedArgumentValue(referenceTo(referent));

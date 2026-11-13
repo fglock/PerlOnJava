@@ -26,7 +26,7 @@ final class SharedElementProxy extends RuntimeScalar {
     private void retireUnownedFetchView() {
         if (value instanceof RuntimeBase view
                 && view.threadSharedFetchedView
-                && view.refCount == 0) {
+                && view.isRefCountTracked() && view.refCount == 0) {
             DestroyDispatch.callDestroy(view);
             value = null;
             type = RuntimeScalarType.UNDEF;

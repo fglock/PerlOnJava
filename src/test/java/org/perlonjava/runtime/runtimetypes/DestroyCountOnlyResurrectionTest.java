@@ -12,7 +12,7 @@ class DestroyCountOnlyResurrectionTest {
     void positiveCountDoesNotResurrectWithoutALiveOwnerSlot() {
         try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
             RuntimeHash referent = new RuntimeHash();
-            referent.refCount = 1;
+            referent.setTrackedRefCount(1);
 
             assertTrue(referent.ownerSlotSnapshot().isEmpty());
             assertFalse(DestroyDispatch.hasEscapedPerlOwner(referent, false, null),

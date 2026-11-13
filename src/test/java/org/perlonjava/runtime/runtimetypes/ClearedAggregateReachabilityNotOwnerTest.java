@@ -30,7 +30,7 @@ class ClearedAggregateReachabilityNotOwnerTest {
             MortalList.setActive(true);
             try {
                 WeakRefRegistry.weaken(weakObserver);
-                referent.refCount = 0;
+                referent.setTrackedRefCount(0);
                 referent.clearedOwnedAggregateElement = true;
 
                 MyVarCleanupStack.unregister(referent);

@@ -70,7 +70,7 @@ class CapturedScalarCellOwnerFastPathTest {
 
                     // Model a selective-count undercount while preserving the
                     // active closure's scalar-cell owner identity.
-                    target.refCount = 1;
+                    target.setTrackedRefCount(1);
                     try (MortalList.ReachabilityQueryMeasurement measurement =
                                  MortalList.measureReachabilityQueries()) {
                         transientOwner.set(new RuntimeScalar());

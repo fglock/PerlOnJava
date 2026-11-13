@@ -155,7 +155,7 @@ class WeakCodeRefAggregateRootTest {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeCode code = new RuntimeCode(null, java.util.List.of());
-            code.refCount = 0;
+            code.setTrackedRefCount(0);
             RuntimeScalar strongCodeRef = new RuntimeScalar(code);
             RuntimeScalar.acquireCountedOwnerForCurrentValue(strongCodeRef, code,
                     PerlOwnerSlot.Kind.ARRAY_ELEMENT,

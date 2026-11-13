@@ -34,7 +34,7 @@ class LiveAggregateValueOwnerSlotTest {
 
                 countedOwner.set(new RuntimeScalar());
 
-                assertEquals(WeakRefRegistry.WEAKLY_TRACKED, referent.refCount);
+                assertEquals(RuntimeBase.RefCountTrackingState.WEAKLY_TRACKED, referent.refCountTrackingState());
                 assertTrue(WeakRefRegistry.isweak(weakObserver),
                         "the aggregate cell keeps the weakly observed referent alive");
 

@@ -18,7 +18,7 @@ class ViaLayerCountedOwnerLifecycleTest {
     void releasingLayerDoesNotDestroyReferentWithLiveClosurePadOwner() {
         try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
             RuntimeArray referent = new RuntimeArray();
-            referent.refCount = 0;
+            referent.setTrackedRefCount(0);
             PerlOwnerSlot captureOwner = referent.retainClosureCaptureOwner();
 
             RuntimeScalar pushed = new RuntimeScalar();

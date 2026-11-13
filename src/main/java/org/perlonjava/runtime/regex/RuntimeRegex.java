@@ -390,7 +390,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         copy.failedParseDebugTrace = this.failedParseDebugTrace;
         // replacement and callerArgs are not copied — they are set per-substitution
         // matched is not copied — each qr// object tracks its own m?PAT? state
-        copy.refCount = 0;  // Enable refCount tracking
+        copy.startRefCountTracking();
         return copy;
     }
 
@@ -2921,7 +2921,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             regex.regexFlags = mergeRegexFlags(originalRegex.regexFlags, modifierStr, originalRegex.patternString);
             regex.hasPreservesMatch = regex.hasPreservesMatch || regex.regexFlags.preservesMatch();
             regex.useGAssertion = regex.regexFlags.useGAssertion();
-            regex.refCount = 0;  // Track for proper weak ref handling
+            regex.startRefCountTracking();
 
             return new RuntimeScalar(regex).propagateTaint(patternString);
         }
@@ -2971,7 +2971,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     regex.regexFlags = mergeRegexFlags(originalRegex.regexFlags, modifierStr, originalRegex.patternString);
                     regex.hasPreservesMatch = regex.hasPreservesMatch || regex.regexFlags.preservesMatch();
                     regex.useGAssertion = regex.regexFlags.useGAssertion();
-                    regex.refCount = 0;  // Track for proper weak ref handling
+                    regex.startRefCountTracking();
 
                     return new RuntimeScalar(regex).propagateTaint(patternString, overloadedResult);
                 }

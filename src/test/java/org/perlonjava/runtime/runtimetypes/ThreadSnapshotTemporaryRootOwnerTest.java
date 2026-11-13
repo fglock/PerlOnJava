@@ -31,7 +31,7 @@ class ThreadSnapshotTemporaryRootOwnerTest {
                 // The direct Java root is intentionally outside the source
                 // runtime's counted scalar slots. Keep the source referent
                 // live while the snapshot reconstructs its external edge.
-                sourceReferent.refCount = 1;
+                sourceReferent.setTrackedRefCount(1);
                 sourceObserverRoot.addClonedElement(weakObserver);
                 WeakRefRegistry.weaken(weakObserver);
             }
@@ -47,7 +47,7 @@ class ThreadSnapshotTemporaryRootOwnerTest {
                 assertNotNull(childReferent);
                 assertSame(childReferent, childWeakObserver.value);
                 assertTrue(WeakRefRegistry.isweak(childWeakObserver));
-                assertEquals(WeakRefRegistry.WEAKLY_TRACKED, childReferent.refCount,
+                assertEquals(RuntimeBase.RefCountTrackingState.WEAKLY_TRACKED, childReferent.refCountTrackingState(),
                         "a snapshot root must not fabricate a positive Perl reference count");
                 assertEquals(1, childReferent.ownerSlotCount(PerlOwnerSlot.Kind.TEMPORARY_ROOT),
                         "the direct snapshot edge must have a stable temporary owner identity");

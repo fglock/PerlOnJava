@@ -156,7 +156,7 @@ public class ReferenceOperators {
                     + " refCount=" + referent.refCount);
             }
 
-            if (referent.refCount >= 0) {
+            if (referent.isRefCountTracked()) {
                 // Already-tracked referent (e.g., anonymous hash from `bless {}`).
                 // Always keep tracking — even classes without DESTROY need
                 // cascading cleanup of their hash/array elements when freed.
@@ -183,7 +183,7 @@ public class ReferenceOperators {
                 // Retroactively count references stored in existing elements.
                 // When the hash/array was created (e.g., bless { key => $ref }),
                 // elements were stored while the container was untracked
-                // (refCount == -1). Those stores did NOT increment referents'
+                // while the referent was untracked. Those stores did NOT increment referents'
                 // refCounts. Now that we're transitioning to tracked, we must
                 // count these as strong references so scopeExitCleanupHash
                 // correctly decrements them when the container is destroyed.
@@ -207,7 +207,7 @@ public class ReferenceOperators {
                 // untracked container or temporary list. Promote those exact
                 // owner-slot identities now; blessing changes lifecycle
                 // tracking, but it does not create or remove Perl edges.
-                referent.refCount = 0;
+                referent.startRefCountTracking();
                 referent.promoteUntrackedScalarOwners();
 
                 if (wasAlreadyBlessed) {

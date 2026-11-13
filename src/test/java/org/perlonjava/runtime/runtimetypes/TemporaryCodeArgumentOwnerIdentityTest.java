@@ -15,7 +15,7 @@ class TemporaryCodeArgumentOwnerIdentityTest {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeCode closure = new RuntimeCode((args, context) -> new RuntimeList(), null);
-            closure.refCount = 0;
+            closure.setTrackedRefCount(0);
             closure.capturedScalars = new RuntimeScalar[0];
 
             RuntimeScalar durableCell = new RuntimeScalar();
@@ -71,7 +71,7 @@ class TemporaryCodeArgumentOwnerIdentityTest {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeCode closure = new RuntimeCode((args, context) -> new RuntimeList(), null);
-            closure.refCount = 0;
+            closure.setTrackedRefCount(0);
             closure.capturedScalars = new RuntimeScalar[0];
             RuntimeScalar argumentCell = new RuntimeScalar(closure);
             RuntimeCode.CallArguments outer = RuntimeCode.newCallArguments(1);

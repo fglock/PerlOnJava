@@ -14,7 +14,7 @@ class CodeOwnerSlotReleaseFastPathTest {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeCode closure = new RuntimeCode((args, context) -> new RuntimeList(), null);
-            closure.refCount = 0;
+            closure.setTrackedRefCount(0);
             RuntimeScalar pad = new RuntimeScalar();
             closure.capturedScalars = new RuntimeScalar[] {pad};
             closure.capturedScalarOwnerSlots = new PerlOwnerSlot[] {

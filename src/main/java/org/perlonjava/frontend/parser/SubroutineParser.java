@@ -3001,8 +3001,8 @@ public class SubroutineParser {
         }
         GlobalVariable.invalidateGlobalCodeRefGraphRoots();
         if ((!capturedScalars.isEmpty() || !capturedAggregates.isEmpty())
-                && code.refCount == -1) {
-            code.refCount = 0;
+                && code.isRefCountUntracked()) {
+            code.startRefCountTracking();
         }
     }
 

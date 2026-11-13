@@ -16,7 +16,7 @@ class WeakUncountedOwnerSlotFastPathTest {
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             MortalList.setActive(true);
             RuntimeArray target = new RuntimeArray();
-            target.refCount = -1;
+            target.markRefCountUntracked();
 
             RuntimeArray lexicalOwner = new RuntimeArray();
             int mark = MyVarCleanupStack.pushMark();
@@ -29,7 +29,7 @@ class WeakUncountedOwnerSlotFastPathTest {
             RuntimeScalar weakObserver = referenceTo(target);
             // Model the counted slot being weakened; the array element remains
             // the only uncounted strong Perl owner of the target.
-            target.refCount = 1;
+            target.setTrackedRefCount(1);
             weakObserver.refCountOwned = true;
             try {
                 try (MortalList.ReachabilityQueryMeasurement measurement =
@@ -37,7 +37,7 @@ class WeakUncountedOwnerSlotFastPathTest {
                     WeakRefRegistry.weaken(weakObserver);
 
                     assertTrue(WeakRefRegistry.isweak(weakObserver));
-                    assertEquals(WeakRefRegistry.WEAKLY_TRACKED, target.refCount,
+                    assertEquals(RuntimeBase.RefCountTrackingState.WEAKLY_TRACKED, target.refCountTrackingState(),
                             "an uncounted slot retains the target without a compatibility pin");
                     assertEquals(0, measurement.stats().rootQueries,
                             "the direct owner identity avoids a graph query");

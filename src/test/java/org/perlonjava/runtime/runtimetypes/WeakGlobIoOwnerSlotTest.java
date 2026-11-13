@@ -18,7 +18,7 @@ class WeakGlobIoOwnerSlotTest {
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeGlob glob = new RuntimeGlob(null).setIO(new RuntimeIO(
                     new StandardIO(new ByteArrayOutputStream(), true)));
-            glob.refCount = 2;
+            glob.setTrackedRefCount(2);
             RuntimeScalar strong = globAlias(glob);
             RuntimeScalar weak = globAlias(glob);
             retainCountedAlias(glob, strong);
