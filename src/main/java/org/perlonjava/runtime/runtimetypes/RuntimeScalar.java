@@ -1409,36 +1409,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     PerlOwnerSlot.Kind.UNTRACKED_REFERENCE);
             untrackedReferenceOwnerSlot.associateUntrackedScalarOwner(this);
         }
-        RuntimeBase container = getContainerOwner();
-        boolean traceTransientResultSetArrayOwner = RuntimeBase.refCountTraceEnabled()
-                && referent instanceof RuntimeHash
-                && "DBICTest::BaseResultSet".equals(
-                        NameNormalizer.getBlessStr(referent.blessId))
-                && container instanceof RuntimeArray array
-                && !array.hasPerlStrongOwnerIdentity()
-                && !array.localBindingExists
-                && !array.isPackageGlobalRoot
-                && !MyVarCleanupStack.isRegistered(array)
-                && untrackedReferenceOwnerSlot.borrowReferent() != referent;
         // Transfer the existing identity in place. PerlOwnerSlot installs its
         // new referent before releasing the previous one, so cleanup callbacks
         // cannot observe a gap where this scalar's current value has no owner.
         untrackedReferenceOwnerSlot.acquireUntrackedIdentity(referent);
-        if (traceTransientResultSetArrayOwner) {
-            RuntimeArray array = (RuntimeArray) container;
-            System.err.println("[UNOWNED-RESULTSET-ARRAY-OWNER] referent="
-                    + System.identityHashCode(referent) + " generation="
-                    + RuntimeBase.traceReferentGeneration(referent) + " refCount="
-                    + referent.refCount + " scalar=" + System.identityHashCode(this)
-                    + " packageRoot=" + isPackageGlobalRoot + " array="
-                    + System.identityHashCode(array) + " size=" + array.elements.size()
-                    + " arrayRefCount=" + array.refCount + " elementsOwned="
-                    + array.elementsOwned + " elementsAliased=" + array.elementsAliased);
-            StackTraceElement[] stack = new Throwable().getStackTrace();
-            for (int i = 1; i < Math.min(stack.length, 18); i++) {
-                System.err.println("    at " + stack[i]);
-            }
-        }
     }
 
     void releaseUntrackedReferenceOwner(RuntimeBase expectedReferent) {

@@ -7,8 +7,7 @@ use Storable ();
 # Isolate ownership cleanup for the graph shape behind DBIx t/52leaks.t:
 # Schema owns Storage and ResultSources, while rows own their sources and one
 # row can reference another. Weak backrefs keep the fixture acyclic. This omits
-# DBIx DESTROY behavior so a failure points at base graph ownership; on
-# PerlOnJava, each retained node reports its owner trace before its assertion.
+# DBIx DESTROY behavior so a failure points at base graph ownership.
 sub make_dbic_style_graph {
     my $schema = bless { source_registrations => {} }, 'Local::DBICGraph::Schema';
     my $storage = bless {}, 'Local::DBICGraph::Storage';
@@ -67,9 +66,6 @@ my %weak;
 for my $generation (qw(original clone double_clone)) {
     for my $node (@nodes) {
         my $key = "$generation/$node";
-        if (defined $weak{$key} && defined &Internals::jperl_owner_trace) {
-            diag("$key remains live: " . Internals::jperl_owner_trace($weak{$key}));
-        }
         ok(!defined $weak{$key}, "$key is released after its aggregate is dropped");
     }
 }

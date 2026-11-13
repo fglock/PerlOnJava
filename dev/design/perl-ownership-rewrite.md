@@ -12,37 +12,43 @@ remain in place.
 | Phase 1: remove default corrective sweeps | Complete | Full no-sweeps gates and lifecycle coverage are recorded below. |
 | Phase 2: retire reachability fallbacks | Active | Owner-source proofs and exact-head CPAN acceptance remain. |
 
-**Current checkpoint (2026-11-13):** Issue #2043 is active on
-`wip/issue2043-standard-owner-removal-20261112`, source base `c67c802229`.
-This checkpoint includes uncommitted work; refresh the live PR and issue claim
-before publishing or reconciling it.
+**Current checkpoint (2026-11-13):** Issue #2043 continues on
+`wip/issue2043-standard-owner-removal-20261112`, at commit `f0762ff4a6` plus the
+current working-tree batch. This work has not been published to PR #1938; its
+separate branch needs reconciliation before any publication.
 
-The new localized-hash-restore fix scopes cleanup to the restored entry, so it
-cannot drain a pending return owner before the caller receives it. The new
+The localized-hash-restore fix scopes cleanup to the restored entry, so it
+cannot drain a pending return owner before the caller receives it. Its
 `returned_object_survives_local_hash_restore.t` regression passes 4/4 on system
-Perl, JVM, and interpreter; the unfixed JVM failed 2/4. Reduced DBIx transaction
-cases for row and pager returns now pass without leak reports. The full
-`t/52leaks.t` still fails broader collection checks. Owner traces point to
-retained `_inflated_column` and related-resultset cache edges; the precise
-missing release remains unconfirmed. Evidence logs:
-`/tmp/issue2043-returned-object-local-restore-fixed-jvm.log`,
-`/tmp/issue2043-returned-object-local-restore-fixed-interpreter.log`,
-`/tmp/issue2043-dbic-txn-row-only-fixed-jperl.log`,
-`/tmp/issue2043-dbic-txn-pagers-only-fixed-jperl.log`, and
-`/tmp/issue2043-dbic-52leaks-fixed-jperl.log`.
+Perl, JVM, and interpreter; the unfixed JVM failed 2/4. The unused tokenless
+decrement API and its reachable-owner-count repair path are removed. Current
+owner-slot lifetime tests remain. Scoped block cleanup now distinguishes an
+active deferred-entry drain from flush suppression: it drains entries created
+above its own mark and leaves earlier entries pending. The added
+`RuntimeScalarOwnerSlotTest.scopedCleanupDrainsItsEntriesDuringFlushSuppression`
+case verifies that boundary. Failure-side `jperl_owner_trace` calls were
+removed from four behavior tests, and the BaseResultSet-only trace block was
+removed after it produced no evidence in the reduced case.
 
-No production caller used `MortalList.deferDecrement`; the tokenless API,
-reachable-owner-count repair, and its root-walk branches are removed. Tests
-that measured only that fallback or root-snapshot cost are retired, while
-current owner-slot lifetime tests remain. `nice -n 19 timeout 3600 make` passes
-on this source in 6m44 with 4,137 tests, 7 skipped, and no failures; full log:
-`/tmp/issue2043-tokenless-removal-make-rerun.log`.
+The latest `nice -n 19 timeout 3600 make` passes in 7m31; log:
+`/tmp/issue2043-diagnostic-removal-make.log`. The four changed Perl regressions
+pass system Perl (33 assertions), log:
+`/tmp/issue2043-diagnostic-call-removal-system-perl.log`. The reduced external
+`t/52leaks-resultset-source-only.t` passes system Perl but still fails one
+assertion of two on both JVM and interpreter after this build. Owner tracing
+shows the chained `BaseResultSet` retains a final owner through the assertion;
+the source of that edge remains unconfirmed. Logs:
+`/tmp/issue2043-dbic-source-only-final-jvm.log`,
+`/tmp/issue2043-dbic-source-only-final-interpreter.log`, and
+`/tmp/issue2043-dbic-source-only-after-guard-ownertrace.log`.
 
-Next, isolate the full DBIx cache graph and fix each missing owner transition.
-Then remove remaining temporary-root ancestry, root-query fallback state, and
-sweep-only diagnostics and tests, keeping thread-clone snapshots separate.
-Finish with system-Perl behavior checks, both backend regressions, full `make`,
-focused DBIx acceptance, and a fresh PR/issue review.
+Next, identify and retire the final `BaseResultSet` owner at the correct Perl
+scope boundary, then continue removing temporary-root ancestry and remaining
+sweep-only state and diagnostics. Keep thread-clone snapshots as separate
+runtime ownership. Before publishing, finish the no-sweep owner migration,
+remove obsolete diagnostic-only coverage, run full `make` and focused DBIx
+acceptance on the exact candidate, refresh the issue claim, and reconcile PR
+#1938 without overwriting its separate branch.
 
 ### Phase 2 progress (2026-10-27)
 

@@ -57,11 +57,6 @@ my %weak;
 for my $mode (qw(direct single_map nested_map localized_collection)) {
     run_case(\%weak, $mode);
 
-    if (defined $weak{$mode} && defined &Internals::jperl_owner_trace) {
-        diag("$mode retained row owner snapshot: "
-            . Internals::jperl_owner_trace($weak{$mode}));
-    }
-
     ok(!defined $weak{$mode}, "$mode releases its result row");
 }
 

@@ -2680,9 +2680,11 @@ public class MortalList {
             state.popMortalMark();
             return;
         }
-        // A surrounding drain owns the queue cursor and will process entries
-        // appended by this nested cleanup after the current callback returns.
-        if (state.flushing) {
+        // A surrounding deferred-entry drain owns the queue cursor and will
+        // process entries appended by this nested cleanup after the callback
+        // returns. Flush suppression is separate: a scoped mark can still
+        // safely drain only the entries created after that mark.
+        if (state.reachabilityDrainDepth > 0) {
             state.popMortalMark();
             return;
         }

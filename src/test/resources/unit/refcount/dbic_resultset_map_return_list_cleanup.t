@@ -44,9 +44,6 @@ sub fire_resultsets_and_restore {
 my %weak;
 fire_resultsets_and_restore(\%weak);
 
-if (defined $weak{row} && defined &Internals::jperl_owner_trace) {
-    diag('row remains live: ' . Internals::jperl_owner_trace($weak{row}));
-}
 ok(!defined $weak{row}, 'row is released after resultset enumeration and temporary result cleanup');
 
 done_testing();
