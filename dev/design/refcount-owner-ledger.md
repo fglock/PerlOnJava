@@ -317,40 +317,36 @@ Run on JVM and interpreter backends with `timeout` and complete output logs:
 
 ## Progress Tracking
 
-### Current Status: lifecycle sweep removal; candidate based on `ecbf1978c` (2026-11-12)
+### Current Status: sweep-free integration under validation (2026-11-13)
 
-Issue #2043 is active on branch `wip/issue2043-preflight-20261112-1555` in
-`/private/tmp/issue2043-map-alias-candidate`. The candidate is uncommitted and
-based on PR #1938 head `ecbf1978c62ce7d084f1090b927a75b76b5c5649`.
+Issue #2043 is active on branch
+`wip/issue2043-owner-model-checkpoint-20261113-033921` in
+`/private/tmp/issue2043-head-8521-review-20261112`. The current source is commit
+`ce7f8ff34f`, integrating lifecycle-state work from `d39be7963b` with the
+sweep-removal candidate `5a8b5c335e`. PR #1938 remains open/draft at
+`1b80749914`; this integration has not been published.
 
-This slice completes explicit temporary-root ownership, removes tokenless
-`MortalList.deferDecrement(RuntimeBase)`, deletes lifecycle root-snapshot caches
-and invalidation hooks, and removes recursive weak-reference clearing through
-rescued aggregate graphs. Deferred cleanup, END callbacks, and rescue completion
-now use current owner identities and ordinary slot release. `ReachabilityWalker`
-and `ScalarRefRegistry` remain only for read-only diagnostics; no lifecycle
-cleanup path calls them.
+The integration removes lifecycle weak sweeps, temporary-root ancestry search,
+rescued-object graph clearing, END-boundary owner proofs, no-op sweep hooks,
+and the module-initialization guard that suppressed weak CODE cleanup. Temporary
+and deferred cleanup paths now use current owner-slot identities. A full Make
+passed on the older candidate (`/tmp/issue2043-preflight-5a8b-make.log`), but
+that is not evidence for this merged source. The prior lifecycle-state parent
+failed 50 of 1,617 tests (`/tmp/issue2043-lifecycle-state-d39be7963b-make.log`);
+the integrated head has not yet run its full gate. DBIx
+`t/52leaks-resultset-source-only.t` remains a known failure on both backends;
+the final strong owner edge is unresolved.
 
-| Area | Current state | Evidence |
-| --- | --- | --- |
-| Owner-slot migration | Temporary, closure, aggregate, package, tied, return, and END owners use explicit identities. | Focused owner tests and the `TemporaryRootOwnerSlotTest` family. |
-| Sweep-path removal | Lifecycle snapshots, tokenless release, recursive rescued-graph weak clearing, no-op root-cache hooks, and obsolete diagnostic calls are removed. | `git diff --check`; current-source focused Make log below. |
-| Rescue and weak cleanup | Nested weak observers clear through final owner release; rescued cycles retain weak observers while their Perl owners remain. | System Perl: 39/39; JVM: 39/39; interpreter: 39/39 across six focused cases. |
-| Unit gate | Full `make test-unit` passed before the latest narrow cleanup; focused Make recompiled the current source and passed rescue-owner tests. | `/tmp/issue2043-owner-refactor-unit-4.log`; `/tmp/issue2043-rescued-graph-owner-focused-make.log`. |
-| Remaining acceptance | Final full Make and DBIx/CPAN gates are not yet run on this exact source. | No blocker; work remains in progress. |
+The issue's nonnegative owner-count contract is not complete. Legacy negative
+states remain in `refCount`, including untracked/weak tracking values and
+destruction compatibility checks. Do not treat sweep removal as final until
+counts represent live owner slots and lifecycle state remains separate.
 
-System Perl outputs are in `/tmp/issue2043-rescue-cycle-system-perl-before.log`,
-`/tmp/issue2043-map-return-system-perl-after.log`, and
-`/tmp/issue2043-rescued-graph-system-perl-after.log`. Current-backend logs are
-`/tmp/issue2043-rescue-cycle-jvm-current.log` and
-`/tmp/issue2043-rescue-cycle-interpreter-current.log`.
-
-Next: run the File::MMagic parser-release regression for #2037 against system
-Perl and both backends, retain exact-parent failure evidence, then run full
-`nice -n 19 make`, DBIx `t/52leaks.t` and `t/100populate.t`, and the exact-head
-CPAN acceptance gate. Keep #2034's `local *STDERR` typeglob assignment separate
-because PR #1938 still overlaps its `RuntimeGlob`/`RuntimeIO` paths. Update PR
-#1938 only after the candidate passes the final immutable gates.
+Next: run the changed Perl tests under system Perl, then run
+`nice -n 19 timeout 3600 make` on this immutable commit. Fix code regressions
+before adjusting test expectations. After that, finish the count-state and
+diagnostic-only API audit, run DBIx leak/populate and fresh-home exact-head CPAN
+acceptance, and update PR #1938 with current evidence only after the gates pass.
 
 ### Historical handoff: issue #1132 / PR #1204
 
@@ -363,23 +359,6 @@ branch instructions do not define the current continuation.
 The Net::Async::HTTP 0.50 distribution is installed through `jcpan` in the
 local CPAN cache. JVM and interpreter `t/30timeout.t` and `t/32remove.t` now
 pass. Preserve both focused ownership regressions when evolving the ledger.
-
-### Next Steps
-
-1. Add the #2037 File::MMagic archive-content regression. Verify all archive
-   inputs on system Perl and both PerlOnJava backends, and record failure on the
-   exact unfixed parent.
-2. Finish the lifecycle audit for any remaining graph query, sweep state, or
-   compatibility caller that can affect ownership, weak references, or
-   destruction timing. Keep read-only diagnostics separate.
-3. Run the final focused weak/DESTROY/resurrection/cycle and HTML::Tree suites,
-   then `nice -n 19 make` and DBIx `t/52leaks.t` / `t/100populate.t` on the
-   immutable candidate.
-4. Run fresh-home exact-head CPAN acceptance, `make check-links`, reconcile the
-   candidate with PR #1938, and update its evidence before finalizing.
-
-#2034's `local *STDERR` typeglob assignment stays a separate follow-up until
-PR #1938's overlapping `RuntimeGlob` and `RuntimeIO` changes are reconciled.
 
 ### Open Questions
 
