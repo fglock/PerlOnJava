@@ -17,6 +17,9 @@ BEGIN {
     require DBICTest::RunMode;
 }
 
+# Register before DBICTest so its leak-check END assertions are included in the plan.
+END { done_testing(); }
+
 require DBICTest;
 
 sub watch {
