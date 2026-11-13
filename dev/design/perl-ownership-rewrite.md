@@ -1,66 +1,48 @@
 # Perl-compatible ownership rewrite
 
 **Status:** Phase 1 is complete; Phase 2 is active. Default production cleanup
-no longer calls corrective reachability sweeps. Remaining boundaries include
-the legacy null-token compatibility API, verified owner-count alignment, the
-temporary-root fallback traversal, targeted END-boundary weak retirement, and
-final CPAN acceptance. Existing lifecycle, aggregate, IO, CODE, weak-reference,
-thread, and HTML-Tree regressions pass with corrective sweeps disabled.
+no longer calls corrective reachability sweeps, and the tokenless decrement
+fallback is removed. Remaining work covers temporary-root fallback traversal,
+owner-count alignment, sweep-only state and diagnostics, and exact-head CPAN
+acceptance. Thread-clone root snapshots are separate runtime ownership and
+remain in place.
 
 | Phase | Status | Acceptance |
 | --- | --- | --- |
 | Phase 1: remove default corrective sweeps | Complete | Full no-sweeps gates and lifecycle coverage are recorded below. |
 | Phase 2: retire reachability fallbacks | Active | Owner-source proofs and exact-head CPAN acceptance remain. |
 
-**Current checkpoint (2026-11-12):** Issue #2043 is active. Local branch
-`wip/issue2043-standard-owner-removal-20261112` contains commits `e21220f55f`,
-`5d1ceb4870`, `8327d1d483`, and `91b291deb7` on top of the current PR base
-snapshot. Its cached upstream is two commits ahead of the local branch; GitHub
-could not be reached during this checkpoint, so refresh PR #1938 and the issue
-claim before publishing or reconciling the candidate.
+**Current checkpoint (2026-11-13):** Issue #2043 is active on
+`wip/issue2043-standard-owner-removal-20261112`, source base `c67c802229`.
+This checkpoint includes uncommitted work; refresh the live PR and issue claim
+before publishing or reconciling it.
 
-The delivered slice removes the no-op `jperl_gc*` and sweep compatibility
-hooks, their direct DBI calls, and the obsolete `jperl_trace_to` API and its
-test-only call. END-boundary rescued-object handling now checks current Perl
-owner slots through `processRescuedObjects()` instead of walking rescued graphs
-to clear weak observers. The standard-Perl regression
-`strong_cycle_weak_refs_survive_end.t` passes 3/3. Java lifecycle fixtures now
-construct queued-END and active-code captures with explicit capture owner
-slots. The exact source gate `nice -n 19 make` passes on `91b291deb7` in 6m48;
-full output is `/tmp/issue2043-end-owner-make-retry.log`.
+The new localized-hash-restore fix scopes cleanup to the restored entry, so it
+cannot drain a pending return owner before the caller receives it. The new
+`returned_object_survives_local_hash_restore.t` regression passes 4/4 on system
+Perl, JVM, and interpreter; the unfixed JVM failed 2/4. Reduced DBIx transaction
+cases for row and pager returns now pass without leak reports. The full
+`t/52leaks.t` still fails broader collection checks. Owner traces point to
+retained `_inflated_column` and related-resultset cache edges; the precise
+missing release remains unconfirmed. Evidence logs:
+`/tmp/issue2043-returned-object-local-restore-fixed-jvm.log`,
+`/tmp/issue2043-returned-object-local-restore-fixed-interpreter.log`,
+`/tmp/issue2043-dbic-txn-row-only-fixed-jperl.log`,
+`/tmp/issue2043-dbic-txn-pagers-only-fixed-jperl.log`, and
+`/tmp/issue2043-dbic-52leaks-fixed-jperl.log`.
 
-The DBIx::Class `t/52leaks.t` remains the next behavior blocker. On exact
-candidate `91b291deb7`, the raw cached CPAN tarball fails collection checks
-12–26 after its ordinary checks 1–8 pass. System Perl with the installed
-DBIx dependencies passes its ordinary leak check and skips the two optional
-persistent-process checks. This is a baseline comparison, not the patched
-CPAN release gate. A temporary owner-trace run shows retained `UNTRACKED_REFERENCE`
-slots without a live scalar carrier and child `HASH_ELEMENT` edges through
-aggregate holders. That is a lead to verify, not a confirmed root cause. The
-later detached `ResultSource` exception occurs while LeakTracer formats failed
-references and is not a confirmed independent failure. Logs:
-`/tmp/issue2043-dbic-52leaks-91b291deb7.log`,
-`/tmp/issue2043-dbic-52leaks-system-perl.log`, and
-`/tmp/issue2043-dbic-52leaks-ownertrace-91b291deb7.log`.
+No production caller used `MortalList.deferDecrement`; the tokenless API,
+reachable-owner-count repair, and its root-walk branches are removed. Tests
+that measured only that fallback or root-snapshot cost are retired, while
+current owner-slot lifetime tests remain. `nice -n 19 timeout 3600 make` passes
+on this source in 6m44 with 4,137 tests, 7 skipped, and no failures; full log:
+`/tmp/issue2043-tokenless-removal-make-rerun.log`.
 
-The call-site audit on `91b291deb7` found no in-repository production caller
-of `ReachabilityWalker.sweepWeakRefs()` after the Perl wrappers were removed.
-Remaining direct calls are Java tests or internal to the sweep engine.
-`MortalList` root-snapshot recovery is reached through the tokenless legacy
-`deferDecrement` path, which also has no in-repository production caller;
-`walkEndBlockRoots()` is nested under the sweep engine. Thread-clone
-`RootSnapshot` handling is separate and must remain.
-
-Next, reproduce the DBIx owner paths separately for checks 12–17 and the
-nested-clone check 18, add a project-owned system-Perl-verified behavior
-regression, and fix the exact missing owner-release transitions. Then migrate
-legacy Java tests to explicit owner-slot releases and remove the tokenless
-compatibility API plus its root-snapshot repair. With those callers gone,
-remove the sweep engine, temporary-root ancestry/proof tests, sweep-only state,
-and obsolete diagnostics while preserving Perl behavior tests. DBIx diagnosis
-and read-only call-site review can proceed independently; edits to shared
-owner-release code should be integrated serially. Finish with exact-head
-`make`, focused DBIx acceptance, and fresh PR/issue review.
+Next, isolate the full DBIx cache graph and fix each missing owner transition.
+Then remove remaining temporary-root ancestry, root-query fallback state, and
+sweep-only diagnostics and tests, keeping thread-clone snapshots separate.
+Finish with system-Perl behavior checks, both backend regressions, full `make`,
+focused DBIx acceptance, and a fresh PR/issue review.
 
 ### Phase 2 progress (2026-10-27)
 

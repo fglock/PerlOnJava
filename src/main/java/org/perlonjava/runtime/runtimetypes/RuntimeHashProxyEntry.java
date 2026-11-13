@@ -248,10 +248,8 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
                         // the HASH_ELEMENT identity active when another scalar
                         // still owned the referent, so the removed slot could
                         // appear live during a later final release.
-                        MortalList.deferDecrementIfTracked(current);
-                        MortalList.deferIoOwnerRelease(current);
+                        releaseLocalizedValue(current);
                     }
-                    MortalList.flush();
                 }
                 this.lvalue = null;
                 this.type = RuntimeScalarType.UNDEF;
@@ -284,14 +282,25 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
                     // CODE slot can be the last counted owner of a closure;
                     // deferDecrementIfTracked then releases its captures when
                     // the closure's reference count reaches zero.
-                    MortalList.deferDecrementIfTracked(displaced);
-                    MortalList.deferIoOwnerRelease(displaced);
-                    MortalList.flush();
+                    releaseLocalizedValue(displaced);
                 }
             }
             if (savedState != null && savedState.aliasOwner() != null) {
                 savedState.aliasOwner().release();
             }
+        }
+    }
+
+    /** Release only this localized entry's value and cleanup it creates. */
+    private static void releaseLocalizedValue(RuntimeScalar value) {
+        // A full flush can drain a pending RETURN_VALUE created just before
+        // this dynamic scope restores, destroying a value still being returned.
+        MortalList.pushScopeMark();
+        try {
+            MortalList.deferDecrementIfTracked(value);
+            MortalList.deferIoOwnerRelease(value);
+        } finally {
+            MortalList.popScopeMarkAndFlush();
         }
     }
 

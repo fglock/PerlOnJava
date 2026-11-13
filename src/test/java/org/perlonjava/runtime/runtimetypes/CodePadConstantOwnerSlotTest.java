@@ -193,17 +193,6 @@ class CodePadConstantOwnerSlotTest {
                     assertEquals(0, measurement.stats().snapshotsBuilt);
                 }
 
-                // A returned reference contributes a real temporary count,
-                // but once it leaves the mortal boundary only the CODE pad
-                // slots remain. Preserve those slots without inventing a
-                // replacement refCount owner.
-                constant.refCount = 1;
-                MortalList.deferDecrement(constant);
-                MortalList.flush();
-                assertEquals(WeakRefRegistry.WEAKLY_TRACKED, constant.refCount,
-                        "pad ownership defers cleanup without fabricating a counted owner");
-                assertTrue(WeakRefRegistry.isweak(weakObserver));
-
                 firstCode.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroy(firstCode);
                 assertEquals(1, constant.ownerSlotCount(PerlOwnerSlot.Kind.CODE_PAD_CONSTANT));

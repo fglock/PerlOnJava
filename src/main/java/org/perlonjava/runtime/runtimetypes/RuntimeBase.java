@@ -1136,21 +1136,6 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         }
     }
 
-    /**
-     * Count live counted scalar-cell slots reachable from package globals or
-     * live my-vars. This root-walk compatibility fallback remains only for
-     * slots whose current storage cannot yet be proven from owner identities.
-     */
-    public int reachableOwnerCount() {
-        int count = 0;
-        for (RuntimeScalar scalar : activeOwnerSnapshot()) {
-            if (ReachabilityWalker.isScalarReachable(scalar)) {
-                count++;
-            }
-        }
-        return count;
-    }
-
     private static final boolean REFCOUNT_TRACE_ENV =
             System.getenv("PJ_REFCOUNT_TRACE") != null;
 
