@@ -24,8 +24,43 @@ priorities and future plans.
 - Prevent active overload-handler redispatch, expose subroutine arguments through English `@ARG`, keep deleted namespaces absent after scalar reads, and compare false Neo4j boolean properties consistently with JSON booleans (#2007, #2006, #1980, #2017).
 - Apply declared XML encodings to byte and UTF-8 flagged scalar input in `XML::LibXML` string parsing (#1989).
 - Preserve qualified indirect constructors under `strict subs`, `__DATA__` hash keys, inline terminal source markers, `our` self-references under `strict vars`, and bare unary `fc` after conditional feature imports (#2027, #2010, #2008, #1979).
+- Retain eval-block direct-call targets with their parent CV across repeated execution (#1649).
+- Preserve temporary-root identity across implicit return preparation so scope cleanup pops the root it pushed (#1649).
+- Follow strong references held by temporary list returns during root reachability checks (#1649).
+- Preserve control-flow return payloads and pending suspended-frame owners during END-boundary root checks; trim temporary roots skipped by exceptional call and eval unwinds (#1649).
+- Root current package CODE slots by stash identity, including anonymous and eval-defined closures, and ignore detached glob slots after their aliases move (#1649).
+- Track IO handle replacement and executable regex callback owners through their current runtime slots (#1649).
+- Clear weak observers from rescued object graphs at the END boundary while preserving independently rooted objects and strong Perl edges (#1649).
+- Short-circuit temporary-root reachability checks when direct strong edges prove the referent is reachable (#1649).
+- Prove temporary-root reachability through current aggregate, scalar-cell, CODE-slot, argument-container, tied-handler, untracked-scalar, scalar-reference, closure-capture, CODE-state, array-refalias, hash-refalias, and compiled CODE pad-constant owner slots, including deep current-owner chains, before falling back to a graph traversal (#2043).
+- Skip rescued-graph END traversal when the runtime has no registered weak observers (#1649).
+- Load `Exporter::Heavy` before compile-time imports so `export_to_level` targets the importing package (#1649).
+- Preserve aggregate element ownership when a foreach lexical aliases a stored scalar during scope cleanup (#1649).
+- Resolve `SvREFCNT` live-scalar adjustments from current owner slots instead of scanning the lexical registry (#1649).
+- Preserve hash-held anonymous IO owners when interpreter scope cleanup returns that hash (#1649).
+- Ignore stale untracked scalar slots in exited argument containers when deciding whether a weak CODE ref remains live (#1649).
 - Normalize out-of-range calendar fields in `Time::Piece->strptime`, matching Perl date overflow behavior (#2001).
 - Reduce GC pressure in inner `eval STRING` compilation: replace `FastStack<T>`'s default lazy ArrayList initialisation (first-push allocates `Object[10]`) with an explicit `super(2)` constructor, cutting per-stack array allocation 5× for the 16 `FastStack` fields in each snapshot `ScopedSymbolTable`; replace the O(N log N) `getAllVisibleVariables()` `TreeMap`+`HashSet` build inside `getVisibleVariableRegistry()` and `getVisibleOurRegistry()` with direct O(N) iteration of `symbolTableStack` using `putIfAbsent` for shadowing, caching results until the next `clearVisibleVariablesCache()` invalidation — eliminating `TreeMap.put`, `TreeMap.successor`, and `HashSet.add` allocations from the JFR execution-sample profile for inner eval compilation.
+- Release localized CODE-slot owners when restoring a glob, allowing closure captures and their Perl referents to finalize at scope exit (#1649).
+- Keep a scalar referent alive through an outer lexical refalias after the source lexical exits, then release it with the final alias (#1649).
+- Increment and release scalar-cell refalias counts correctly across JVM and interpreter scope exits, including eval exceptions (#1649).
+- Keep hash owner lookup constant-time during large hash hydration by indexing stored scalar-cell identities (#1649).
+- Index semantic Perl owner-slot membership and skip referent-owner scans for primitive scalar stores (#1649).
+- Route primitive and string scalar setters through owner-slot transitions when replacing tracked values (#1649).
+- Release replaced nested hash and array objects from shared aggregate slots at assignment time, without retaining an unowned fetched view (#1649).
+- Reacquire anonymous IO holder identities for cloned Perl scalars in child thread runtimes (#1649).
+- Acquire anonymous IO holder identities for existing scalar and aggregate aliases whenever IO is installed into an existing glob (#1649).
+- Release temporary anonymous IO holder leases with list-assignment scalar owners while preserving handles carried in assignment results (#1649).
+- Finalize cleared aggregates from current owner identities; root reachability no longer preserves an ownerless referent (#1649).
+- Release `Storable::dclone` results when their last Perl owner is dropped, without leaving an extra counted return helper (#1649).
+- Release compiler, module, and postfix reference-transfer temporaries through their exact counted slot transition, including subroutine return slots, list assignment, hash slices, refalias setup, and Storable hooks (#1649).
+- Hold an array or hash container through the lifetime of an aliased element argument, including after `shift @_` (#1649).
+- Keep a replacement reference's RHS temporary alive through reentrant cleanup of the overwritten scalar slot (#1649).
+- Preserve tied hash and array magic through aliased element arguments, including `untie` during the callee, and release the handler at frame exit (#1649).
+- Acquire replacement ownership before publishing array and hash slots, then release displaced values against the updated storage state (#1649).
+- Snapshot glob arguments retained by file-test and stat caches, and retain the anonymous IO lease assigned by `sysopen` (#1649).
+- Copy weakened CODE references into independent strong stash scalars so glob slots acquire and release their own `CODE_SLOT` owner (#1649).
+- Use owner-slot transitions for named CODE vivification and typeglob aliases instead of direct replacement or parallel stash counts (#1649).
 
 - Replace the O(N) `getAllVisibleVariables()` scan in `recycleTemporaryRegisters()` (called after every compiled statement) with an O(1) read of `ScopedSymbolTable.getTopScopeNextIndex()`: the innermost scope's `index` field is already the exact high-water mark for all allocated variable registers (maintained by `enterScope`/`exitScope` propagation and `addVariable`/`addVariableWithIndex`), so no full symbol-table traversal is needed. Removes `getHighestVariableRegister` from the JFR execution-sample profile entirely and reduces `recycleTemporaryRegisters` samples from ~138 to ~5, yielding ~11–13% wall-clock speedup on a 2 M-iteration `eval STRING` benchmark (10.67 s vs 12.07 s).
 
@@ -67,6 +102,73 @@ priorities and future plans.
 - Recognize a bareword filehandle when `print`'s implicit `$_` list ends at a block close (#1948).
 
 - Accept YAML-style mapping syntax in `YAML::Syck::LoadJSON`, matching Syck's JSON loader behavior (#1942).
+- Acquire replacement ownership before publishing array and hash slots, then release displaced values against the updated storage state (#1649).
+- Release temporary JVM reference-alias RHS owners after scalar-context assignments so the final aliased cell can clean up (#1649).
+- Track first-bless mortal references with deferred owner identities while preserving weak-source behavior (#1649).
+- Defer weakly tracked `undef` cleanup to current argument-alias identities, preserving the tracking sentinel (#1649).
+- Release aggregate closure captures without decrementing another owner's counted edge (#1649).
+- Disable corrective sweeps by default while migrating to explicit reference ownership; retain temporary scalar call and mortal return values through their caller boundaries, and balance argument, scalar-cell, closure, aggregate, package scalar/array/hash roots, tied-handler, shared-view, named CODE, persistent state, and destructor lifetimes (#1649).
+- Keep queued END callbacks live through their current queue owner and active-code handoff, without a synthetic positive count (#1649).
+- Publish pending return-owner identities before detaching counted scalar slots, preserving imported END callbacks through queue publication (#1649).
+- Validate counted scalar-cell owners through current array and hash storage during deferred cleanup, avoiding root snapshots for migrated edges (#1649).
+- Track persistent CV scalar, array, hash, and refalias state bindings with `CODE_STATE` owner identities, including replacement and cloning; remove deferred live/global CODE capture recovery traversal (#1649).
+- Use live scalar-owner slots to preserve nested untracked aggregates on first weaken, avoid package-root walks, and clear weak observers at final release (#1649).
+- Release detached typeglob snapshot owners after namespace rebinding so stale stash values finalize with their last Perl owner (#1649).
+- Release tail-call arguments from explicit owner slots without a root-graph fallback (#1649).
+- Record uncounted value ownership for tracked referents held in package scalar cells (#1649).
+- Give borrowed scalar cells in live lexical aggregates owner identities for their strong values (#1649).
+- Preserve non-CODE weak referents directly from surviving uncounted owner slots when a scalar releases its last counted slot (#1649).
+- Release displaced localized CODE captures from active-frame and owner-slot identities, without scalar-registry or root-graph scans (#1649).
+- Defer zero-count cleanup for aggregates with surviving owner slots across scalar, deferred, and tail-call releases (#1649).
+- Preserve live uncounted scalar owner slots through referent promotion, and prune temporary-container slots at final release (#1649).
+- Avoid duplicate scalar reachability queries when a registered container proves a live CODE owner (#1649).
+- Use direct non-counted Perl owner slots to defer tail-call cleanup without a root walk; ignore temporary runtime roots (#1649).
+- Repair transient unblessed referent undercounts from verified array/hash element slots during overwrite and deferred cleanup, avoiding root walks (#1649).
+- Resolve scalar-overwrite liveness from current owner-slot identities, removing external-root/live-CODE queries, unverified raw-count restoration, and nested-call depth deferrals (#1649).
+- Use active-code and current storage owner identities during deferred CODE cleanup, removing the nested-call depth positive-count pin (#1649).
+- Repair unblessed referent undercounts from captured scalar-cell owners only while a live closure owns the cell, in overwrite and deferred cleanup (#1649).
+- Release captures from a final scalar CODE owner using explicit owner identities instead of a root walk (#1649).
+- Release aggregate closure captures at scope exit from CODE owner identities, ignoring stale compatibility counts (#1649).
+- Pair compiled regex callback owner slots with only their acquired CODE count, and release captures after the final callback owner leaves (#1649).
+- Repair unblessed referent undercounts from verified scalar and aggregate owner slots in immediate and deferred cleanup, without root snapshots (#1649).
+- Remove live-scalar-registry reachability from first-weaken, tail-call, and async-Future owner decisions.
+- Release weakly tracked referents from their final uncounted owner slot without a root walk.
+- Detect global `DESTROY` resurrection from current owner-slot identities instead of walking Perl roots, while excluding temporary call owners (#1649).
+- Detect non-global `DESTROY` resurrection from validated owner slots, avoiding repeated root walks and stale detached-cell retention (#1649, #1860).
+- Give mutable scalar-reference contents stable owner-slot identities, share the contents count across aliases, and carry slot identity through localization and deferred release (#1649).
+- Preserve localized package array and hash element owners across async suspension, resume, and cancellation with explicit suspended-frame identities (#1649).
+- Clear nested weak observers after explicit undef from validated Perl owner identities, without treating rescued or temporary roots as owners (#1649).
+- Keep async lexical values owned while interpreter frames are suspended, then finalize cleared aggregate weak observers from current slots without stale-count root walks (#1649, #1860).
+- Give each awaited Future a `SUSPENDED_FRAME` owner identity and remove its separate reachability-root registry (#1649).
+- Repair deferred undercounts for values nested in tied handlers from their explicit hash slots, removing the tied-root reachability snapshot from deferred cleanup (#1649).
+- Resolve package aggregate liveness from active package-root owner slots instead of scanning package tables (#1649).
+- Transfer scalar-cell owner identity into a single-value array replacement so deferred cleanup validates the current element slot without a root walk (#1649).
+- Release displaced hash element owners when cloned values replace an existing slot (#1649).
+- Release deleted middle-array element owners after transferring the result to the caller (#1649).
+- Release displaced array-element owners when multi-LHS list assignment replaces an array tail (#1649).
+- Carry exact array-element owner identities through pop, shift, delete, and localized unwind while preserving borrowed `@_` aliases, so removed references release despite stale array ownership summaries (#1649).
+- Track visible named package IO globs with per-stash owner identities, excluding anonymous `Symbol::gensym` handles from package ownership (#1649).
+- Track the Perl object retained by each `PerlIO::via` layer through `POPPED`, pairing its owner identity with the selective count when applicable (#1649).
+- Track the current tied-hash iterator key by owner identity, pair its direct count when tracked, and release it on `NEXTKEY`, exhaustion, and iterator resets (#1649).
+- Preserve moved scalar, array, hash, and CODE slots while deleting a whole namespace, and release them with the detached namespace glob (#1649).
+- Honor void context when deleting stash entries, releasing detached glob and namespace owners immediately (#1649).
+- Transfer package scalar, array, and hash owner identities while materializing stash aliases (#1649).
+- Track saved namespace moves with stash owner slots and release them when consumed or when the stale stash dies (#1649).
+- Acquire active lexical owner identities when aggregate registration follows the initial pad bind, and clear weak aggregate observers on normal scope exit (#1649).
+- Release scalar-cell pad owners after lexical cleanup, clearing weak observers at the correct scope exit (#1649).
+- Exclude weak glob aliases from strong-owner backfill; release their anonymous IO holder on weaken and restore it on unweaken (#1649).
+- Release displaced hash-element owners when multi-LHS list assignment replaces a hash tail, through the normal tied and package-root-aware store path (#1649).
+- Release materialized list-assignment owners and restore lexical cleanup when tied hash assignment throws from `STORE` (#1649).
+- Acquire replacement counted owner slots before releasing prior referents, preserving slot identity across overwrite and deferred release (#1649).
+- Recognize weak-slot resurrection from durable storage identities and rebuild the post-`DESTROY` count, so final release redispatches `DESTROY` and clears weak observers (#1649).
+- Queue zero-count void-context result cleanup as explicit lifecycle work instead of raising a synthetic positive reference count (#1649).
+- Track cloned thread snapshot roots with temporary owner identities and retire them at entry cleanup or runtime teardown, removing the cloned-root reachability fallback from first weaken (#1649).
+- Preserve captured weak referents through semantic closure-pad owner identities; release scalar cells after the last capture and retry weak cleanup after pending owner release (#1649).
+- Defer legacy semantic closure-pad cleanup to its owner-slot release, removing the final capture-path positive-count pin (#1649).
+- Bind signature parameter cells that skip lexical alias resolution into active pads so slurpy aggregates release weak observers at frame exit (#1649).
+
+
+
 
 - Bundle `Devel::Size` with JVM-based `size` and `total_size` estimates.
 
@@ -113,6 +215,15 @@ priorities and future plans.
 - Preserve scalar context for short-circuit expressions passed to scalar prototypes (#1891).
 - Include operating-system CA bundles and the Windows root store in verified `HTTP::Tiny` HTTPS connections while retaining JVM trust roots.
 - Keep nested Rose::HTML::Objects form results alive with counted argument owners so weak parent links and qualified field names survive argument evaluation (#1851).
+- Preserve caller argument identity in @DB::args so borrowed debugger slots share source-cell cleanup instead of creating detached untracked references (#1649).
+- Keep weakly tracked referents alive while an explicit Perl owner slot remains; undef now retires only the released cell's identity (#1649).
+- Track package-root weak compatibility pins by owner-slot identity and retire each pin with the final scalar owner (#1649).
+- Finalize cleared aggregate weak references from live owner identities even when a legacy count remains; retain reachability checks only for unmigrated owner cases (#1649).
+- Keep queued owner releases visible to cleared-aggregate cleanup until their deferred count transition completes (#1649).
+- Keep backslash-addressed optree constants alive through saved CODE references, transfer interpreter optree owner trees to published CVs, and release each constant edge with its CV owner (#1649).
+- Acquire interpreter return owners before lexical cleanup so returned closures retain captured aggregates (#1649).
+- Unwind lexical owners on returns through try/finally wrappers while preserving returned reference and lvalue behavior (#1649).
+- Keep recursive output cleanup on explicit owner slots as lexical result graphs grow, avoiding repeated live-root snapshots (#1860).
 - Preserve multiline regex searches when positive lookaheads constrain a lazy any-character prefix, restoring Text::YAWikiFormater formatting (#1596).
 - Compile executable format argument expressions at write time on both backends, scope line-local lexicals correctly, preserve literal-only pictures, and refresh deferred lexical bindings (#1234).
 - Diagnose malformed and out-of-class Object::Pad `BUILD` declarations during parsing (#1808).

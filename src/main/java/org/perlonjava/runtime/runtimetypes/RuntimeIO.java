@@ -76,6 +76,17 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef
 public class RuntimeIO extends RuntimeScalar {
     /** The glob from which this escaped IO-slot value originated, if still live. */
     private WeakReference<RuntimeGlob> ownerGlob;
+    /** Current glob sources, weak so an IO/layer cycle is not a Perl root. */
+    private final List<EndBoundaryGlobOwner> endBoundaryGlobOwners = new ArrayList<>();
+
+    private static final class EndBoundaryGlobOwner {
+        private final WeakReference<RuntimeGlob> glob;
+        private int references = 1;
+
+        private EndBoundaryGlobOwner(RuntimeGlob glob) {
+            this.glob = new WeakReference<>(glob);
+        }
+    }
     /** Ties visible through escaped PVIO values without retaining their glob cycle. */
     private static final Map<RuntimeIO, WeakReference<TieHandle>> tiedAliases =
             Collections.synchronizedMap(new WeakHashMap<>());
@@ -92,6 +103,127 @@ public class RuntimeIO extends RuntimeScalar {
 
     public RuntimeGlob getOwnerGlob() {
         return ownerGlob == null ? null : ownerGlob.get();
+    }
+
+    /** Record one current RuntimeGlob field that retains this IO object. */
+    synchronized void retainEndBoundaryOwnerGlob(RuntimeGlob glob) {
+        if (glob == null) return;
+        for (Iterator<EndBoundaryGlobOwner> iterator = endBoundaryGlobOwners.iterator();
+                iterator.hasNext();) {
+            EndBoundaryGlobOwner existing = iterator.next();
+            RuntimeGlob current = existing.glob.get();
+            if (current == null) {
+                iterator.remove();
+            } else if (current == glob) {
+                attachRuntimeIOLayerOwners();
+                existing.references++;
+                return;
+            }
+        }
+        endBoundaryGlobOwners.add(new EndBoundaryGlobOwner(glob));
+        attachRuntimeIOLayerOwners();
+    }
+
+    /** Retire one RuntimeGlob field that stopped retaining this IO object. */
+    synchronized void releaseEndBoundaryOwnerGlob(RuntimeGlob glob) {
+        if (glob == null) return;
+        for (Iterator<EndBoundaryGlobOwner> iterator = endBoundaryGlobOwners.iterator();
+                iterator.hasNext();) {
+            EndBoundaryGlobOwner existing = iterator.next();
+            RuntimeGlob current = existing.glob.get();
+            if (current == null) {
+                iterator.remove();
+            } else if (current == glob) {
+                if (--existing.references <= 0) iterator.remove();
+                return;
+            }
+        }
+    }
+
+    /** Identity snapshot of live glob sources that currently retain this IO. */
+    synchronized List<RuntimeGlob> endBoundaryOwnerGlobs() {
+        attachRuntimeIOLayerOwners();
+        Set<RuntimeGlob> snapshot = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (Iterator<EndBoundaryGlobOwner> iterator = endBoundaryGlobOwners.iterator();
+                iterator.hasNext();) {
+            RuntimeGlob glob = iterator.next().glob.get();
+            if (glob == null) iterator.remove();
+            else if (glob.ownsRuntimeIOForEndBoundary(this)) snapshot.add(glob);
+        }
+
+        // Standard handles and a few bootstrap paths install their IO scalar
+        // directly while constructing the package glob. Include those owners
+        // even though they did not pass through RuntimeGlob.setIO().
+        for (RuntimeGlob glob : GlobalVariable.globalIORefs.values()) {
+            if (glob != null && glob.ownsRuntimeIOForEndBoundary(this)) snapshot.add(glob);
+        }
+        PerlRuntime runtime = PerlRuntime.currentOrNull();
+        if (runtime != null) {
+            for (String name : runtime.standardIOGlobNames()) {
+                if (!runtime.isStandardIOGlobVisible(name)) continue;
+                RuntimeGlob glob = runtime.standardIOGlob(name);
+                if (glob != null && glob.ownsRuntimeIOForEndBoundary(this)) snapshot.add(glob);
+            }
+        }
+
+        RuntimeGlob hinted = getOwnerGlob();
+        if (hinted != null && hinted.ownsRuntimeIOForEndBoundary(this)) snapshot.add(hinted);
+        return new ArrayList<>(snapshot);
+    }
+
+    /** RuntimeIO is the weak provenance source stored on each PerlIO::via owner slot. */
+    public void associateViaLayerOwner(PerlOwnerSlot ownerSlot) {
+        if (ownerSlot != null) ownerSlot.associateEndBoundaryOwnerSource(this);
+    }
+
+    /** Remove this RuntimeIO from one via-layer owner slot before layer teardown. */
+    public void releaseViaLayerOwner(PerlOwnerSlot ownerSlot) {
+        if (ownerSlot != null) ownerSlot.releaseEndBoundaryOwnerSource(this);
+    }
+
+    /** Replace the handle while keeping layer-stack provenance in sync. */
+    public void replaceIOHandle(IOHandle next) {
+        if (ioHandle == next) return;
+        IOHandle previous = ioHandle;
+        updateRuntimeIOLayerOwners(previous, this, false);
+        ioHandle = next;
+        updateRuntimeIOLayerOwners(next, this, true);
+    }
+
+    private void attachRuntimeIOLayerOwners() {
+        updateRuntimeIOLayerOwners(ioHandle, this, true);
+    }
+
+    void refreshEndBoundaryLayerOwners() {
+        attachRuntimeIOLayerOwners();
+    }
+
+    private static void updateRuntimeIOLayerOwners(
+            IOHandle root, RuntimeIO owner, boolean retain) {
+        if (root == null || owner == null) return;
+        Set<IOHandle> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        ArrayDeque<IOHandle> todo = new ArrayDeque<>();
+        todo.add(root);
+        while (!todo.isEmpty()) {
+            IOHandle current = todo.removeFirst();
+            if (!seen.add(current)) continue;
+            if (current instanceof LayeredIOHandle layered) {
+                if (retain) layered.addRuntimeIOOwner(owner);
+                else layered.removeRuntimeIOOwner(owner);
+                enqueueLayeredHandleDelegate(todo, layered.getDelegate());
+            } else if (current instanceof BorrowedIOHandle borrowed) {
+                enqueueLayeredHandleDelegate(todo, borrowed.getDelegate());
+            } else if (current instanceof DupIOHandle duplicate) {
+                enqueueLayeredHandleDelegate(todo, duplicate.getDelegate());
+            } else if (current instanceof SharedTransportIOHandle shared) {
+                enqueueLayeredHandleDelegate(todo, shared.getDelegate());
+            }
+        }
+    }
+
+    private static void enqueueLayeredHandleDelegate(
+            ArrayDeque<IOHandle> todo, IOHandle delegate) {
+        if (delegate != null) todo.addLast(delegate);
     }
 
     /** Glob slot currently owning this IO object, when it has one. */
@@ -552,7 +684,7 @@ public class RuntimeIO extends RuntimeScalar {
      * @param ioHandle the IOHandle implementation to wrap
      */
     public RuntimeIO(IOHandle ioHandle) {
-        this.ioHandle = ioHandle;
+        replaceIOHandle(ioHandle);
     }
 
     /**
@@ -592,7 +724,7 @@ public class RuntimeIO extends RuntimeScalar {
         this.currentLineNumber = other.currentLineNumber;
         this.currentChunkNumber = other.currentChunkNumber;
         this.slurpReadAttempted = other.slurpReadAttempted;
-        this.ioHandle = other.ioHandle;
+        replaceIOHandle(other.ioHandle);
         this.explicitlyClosed = other.explicitlyClosed;
         this.directoryIO = other.directoryIO;
         this.openedPath = other.openedPath;
@@ -855,10 +987,10 @@ public class RuntimeIO extends RuntimeScalar {
             }
             if (mode.equals(">") || mode.equals(">>")) {
                 // ">-" or just ">" means stdout
-                fh.ioHandle = new CustomOutputStreamHandle(System.out);
+                fh.replaceIOHandle(new CustomOutputStreamHandle(System.out));
             } else {
                 // "<-" or just "<" means stdin
-                fh.ioHandle = new StandardIO(System.in);
+                fh.replaceIOHandle(new StandardIO(System.in));
             }
             return fh;
         } else {
@@ -1019,7 +1151,7 @@ public class RuntimeIO extends RuntimeScalar {
                         return null;
                     }
                     // Use SeekableJarHandle to support seek operations (needed by Module::Metadata)
-                    fh.ioHandle = new SeekableJarHandle(is);
+                    fh.replaceIOHandle(new SeekableJarHandle(is));
                     addHandle(fh.ioHandle);
                     if (!fh.applyOpenLayers(ioLayers, mode)) {
                         return null;
@@ -1046,9 +1178,9 @@ public class RuntimeIO extends RuntimeScalar {
             if (Files.isDirectory(filePath)
                     && options.contains(StandardOpenOption.READ)
                     && !options.contains(StandardOpenOption.WRITE)) {
-                fh.ioHandle = new DirectoryReadErrorHandle();
+                fh.replaceIOHandle(new DirectoryReadErrorHandle());
             } else {
-                fh.ioHandle = new CustomFileChannel(filePath, options);
+                fh.replaceIOHandle(new CustomFileChannel(filePath, options));
             }
 
             // Reserve the virtual descriptor immediately.  Handles can be
@@ -1229,7 +1361,7 @@ public class RuntimeIO extends RuntimeScalar {
             scalarIO.setAppendMode(true);
         }
 
-        fh.ioHandle = scalarIO;
+        fh.replaceIOHandle(scalarIO);
         addHandle(fh.ioHandle);
 
         // PerlIO::scalar is not a real OS file descriptor, so a plain scalar
@@ -1305,16 +1437,16 @@ public class RuntimeIO extends RuntimeScalar {
             if (">".equals(mode)) {
                 // When noShell is true, always use list constructor to bypass shell
                 if (strings.size() == 1 && !noShell) {
-                    fh.ioHandle = new PipeOutputChannel(strings.getFirst());
+                    fh.replaceIOHandle(new PipeOutputChannel(strings.getFirst()));
                 } else {
-                    fh.ioHandle = new PipeOutputChannel(strings);
+                    fh.replaceIOHandle(new PipeOutputChannel(strings));
                 }
             } else if ("<".equals(mode)) {
                 // When noShell is true, always use list constructor to bypass shell
                 if (strings.size() == 1 && !noShell) {
-                    fh.ioHandle = new PipeInputChannel(strings.getFirst());
+                    fh.replaceIOHandle(new PipeInputChannel(strings.getFirst()));
                 } else {
-                    fh.ioHandle = new PipeInputChannel(strings);
+                    fh.replaceIOHandle(new PipeInputChannel(strings));
                 }
             } else {
                 handleIOError("open failed: invalid mode for pipe");
@@ -1352,9 +1484,9 @@ public class RuntimeIO extends RuntimeScalar {
                     occurrence + ":" + ProcessHandle.current().pid());
             List<String> invocation = org.perlonjava.runtime.ForkOpenState.currentInvocation();
             if ("-|".equals(mode)) {
-                fh.ioHandle = new PipeInputChannel(invocation, marker);
+                fh.replaceIOHandle(new PipeInputChannel(invocation, marker));
             } else {
-                fh.ioHandle = new PipeOutputChannel(invocation, marker);
+                fh.replaceIOHandle(new PipeOutputChannel(invocation, marker));
             }
             addHandle(fh.ioHandle);
             return fh;
@@ -1777,7 +1909,7 @@ public class RuntimeIO extends RuntimeScalar {
             if (originalHandle instanceof LayeredIOHandle layered) {
                 layered.popAllLayers();
             }
-            ioHandle = baseHandle;
+            replaceIOHandle(baseHandle);
             return scalarTrue;
         }
 
@@ -1790,7 +1922,7 @@ public class RuntimeIO extends RuntimeScalar {
         if (originalHandle instanceof LayeredIOHandle layered) {
             layered.popAllLayers();
         }
-        ioHandle = wrappedHandle;
+        replaceIOHandle(wrappedHandle);
         return scalarTrue;
     }
 
@@ -1904,7 +2036,7 @@ public class RuntimeIO extends RuntimeScalar {
         if (ioError) {
             return scalarFalse;
         }
-        ioHandle = new ClosedIOHandle();
+        replaceIOHandle(new ClosedIOHandle());
         explicitlyClosed = true;
         // Reset line number to 0 on close, matching Perl 5 behavior.
         // This ensures $. becomes 0 and error messages don't include

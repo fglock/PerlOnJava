@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("unit")
@@ -129,6 +131,11 @@ class WeakCodeRefAggregateRootTest {
             RuntimeCode code = new RuntimeCode(null, java.util.List.of());
             RuntimeScalar strongCodeRef = new RuntimeScalar(code);
             MyVarCleanupStack.register(strongCodeRef);
+            PerlOwnerSlot strongOwner = strongCodeRef.untrackedReferenceOwnerSlot();
+            assertNotNull(strongOwner,
+                    "the lexical's direct value edge is recorded by an owner slot");
+            assertTrue(strongOwner.isActive());
+            assertSame(code, strongOwner.referent());
             RuntimeScalar weakCodeRef = new RuntimeScalar(code);
             WeakRefRegistry.weaken(weakCodeRef);
 
@@ -141,6 +148,32 @@ class WeakCodeRefAggregateRootTest {
             }
 
             assertFalse(ReachabilityWalker.hasLiveStrongScalarReferent(code));
+        }
+    }
+
+    @Test
+    void liveLexicalOwnerSurvivesAliasedAggregateStorageCheck() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeCode code = new RuntimeCode(null, java.util.List.of());
+            code.refCount = 0;
+            RuntimeScalar strongCodeRef = new RuntimeScalar(code);
+            RuntimeScalar.acquireCountedOwnerForCurrentValue(strongCodeRef, code,
+                    PerlOwnerSlot.Kind.ARRAY_ELEMENT,
+                    "WeakCodeRefAggregateRootTest aliased lexical owner");
+            RuntimeArray elements = new RuntimeArray();
+            elements.elements.add(strongCodeRef);
+            elements.elementsAliased = true;
+            MyVarCleanupStack.register(strongCodeRef);
+
+            try {
+                assertTrue(ReachabilityWalker.hasLiveStrongScalarReferent(code),
+                        "a registered lexical remains a direct strong owner through an aliased array view");
+                assertFalse(ReachabilityWalker.hasLiveStrongScalarReferentOtherThan(
+                        code, strongCodeRef));
+            } finally {
+                MyVarCleanupStack.unregister(strongCodeRef);
+            }
         }
     }
 

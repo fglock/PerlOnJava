@@ -712,7 +712,11 @@ public class EmitterMethodCreator implements Opcodes {
                 org.perlonjava.frontend.analysis.CleanupNeededVisitor cleanupVisitor =
                         new org.perlonjava.frontend.analysis.CleanupNeededVisitor();
                 ast.accept(cleanupVisitor);
-                ctx.javaClassInfo.cleanupNeeded = cleanupVisitor.needsCleanup();
+                // A try-expression wrapper can leave via PerlNonLocalReturnException
+                // after its finally block. Its locals need cleanup-stack registrations
+                // even when ordinary AST analysis sees no user calls or blesses.
+                ctx.javaClassInfo.cleanupNeeded = ctx.javaClassInfo.isTryExpressionWrapper
+                        || cleanupVisitor.needsCleanup();
             }
 
             // Manual frames removed - using COMPUTE_FRAMES for automatic frame computation
@@ -827,6 +831,12 @@ public class EmitterMethodCreator implements Opcodes {
             // Recorded my-variable local indices for eval exception cleanup.
             // Populated during ast.accept(visitor) when useTryCatch is true.
             java.util.List<Integer> evalCleanupLocals = null;
+            java.util.Map<Integer, String> evalCleanupScalarNames = null;
+            int evalArgumentDepthSlot = -1;
+            int evalMethodInvocantDepthSlot = -1;
+            int evalMortalMarkDepthSlot = -1;
+            int evalTemporaryRootDepthSlot = -1;
+            int evalThrowableSlot = -1;
 
             if (useTryCatch) {
                 if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("useTryCatch");
@@ -838,6 +848,37 @@ public class EmitterMethodCreator implements Opcodes {
                 evalErrorSlot = ctx.symbolTable.allocateLocalVariable();
                 mv.visitInsn(Opcodes.ACONST_NULL);
                 mv.visitVarInsn(Opcodes.ASTORE, evalErrorSlot);
+
+                // Record runtime-owned call frames before the protected eval
+                // body starts. The catch path finishes only staged arguments
+                // and chained invocant holds created inside this boundary.
+                evalArgumentDepthSlot = ctx.symbolTable.allocateLocalVariable();
+                mv.visitVarInsn(Opcodes.ALOAD, ctx.javaClassInfo.jvmFrameStateSlot);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                        "callArgumentFrameDepth",
+                        "(Lorg/perlonjava/runtime/runtimetypes/ExecutionRuntimeState;)I", false);
+                mv.visitVarInsn(Opcodes.ISTORE, evalArgumentDepthSlot);
+
+                evalMethodInvocantDepthSlot = ctx.symbolTable.allocateLocalVariable();
+                mv.visitVarInsn(Opcodes.ALOAD, ctx.javaClassInfo.jvmFrameStateSlot);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                        "methodInvocantHoldDepth",
+                        "(Lorg/perlonjava/runtime/runtimetypes/ExecutionRuntimeState;)I", false);
+                mv.visitVarInsn(Opcodes.ISTORE, evalMethodInvocantDepthSlot);
+
+                evalMortalMarkDepthSlot = ctx.symbolTable.allocateLocalVariable();
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/MortalList",
+                        "markDepth", "()I", false);
+                mv.visitVarInsn(Opcodes.ISTORE, evalMortalMarkDepthSlot);
+                evalTemporaryRootDepthSlot = ctx.symbolTable.allocateLocalVariable();
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/MortalList",
+                        "temporaryRootDepth", "()I", false);
+                mv.visitVarInsn(Opcodes.ISTORE, evalTemporaryRootDepthSlot);
+                evalThrowableSlot = ctx.symbolTable.allocateLocalVariable();
 
                 tryStart = new Label();
                 tryEnd = new Label();
@@ -869,12 +910,15 @@ public class EmitterMethodCreator implements Opcodes {
                 // when die unwinds through the eval (exception handler).
                 // Enable recording of my-variable indices for eval exception cleanup.
                 ctx.javaClassInfo.evalCleanupLocals = new java.util.ArrayList<>();
+                ctx.javaClassInfo.evalCleanupScalarNames = new java.util.HashMap<>();
 
                 ast.accept(visitor);
 
                 // Snapshot and disable recording of my-variable indices.
                 evalCleanupLocals = ctx.javaClassInfo.evalCleanupLocals;
+                evalCleanupScalarNames = ctx.javaClassInfo.evalCleanupScalarNames;
                 ctx.javaClassInfo.evalCleanupLocals = null;
+                ctx.javaClassInfo.evalCleanupScalarNames = null;
 
                 // Normal fallthrough return: spill and jump with empty operand stack.
                 mv.visitVarInsn(Opcodes.ASTORE, returnValueSlot);
@@ -1122,20 +1166,86 @@ public class EmitterMethodCreator implements Opcodes {
                         "org/perlonjava/runtime/runtimetypes/PerlNonLocalReturnException");
                 Label notNonLocalReturn = new Label();
                 mv.visitJumpInsn(Opcodes.IFEQ, notNonLocalReturn);
-                mv.visitInsn(Opcodes.ATHROW);  // Re-throw PerlNonLocalReturnException
+                // Untargeted map/grep return belongs to this eval boundary.
+                // A targeted try/finally return continues to its containing CV.
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitTypeInsn(Opcodes.CHECKCAST,
+                        "org/perlonjava/runtime/runtimetypes/PerlNonLocalReturnException");
+                mv.visitFieldInsn(Opcodes.GETFIELD,
+                        "org/perlonjava/runtime/runtimetypes/PerlNonLocalReturnException",
+                        "targetCode", "Lorg/perlonjava/runtime/runtimetypes/RuntimeCode;");
+                Label targetedReturn = new Label();
+                mv.visitJumpInsn(Opcodes.IFNONNULL, targetedReturn);
+                mv.visitTypeInsn(Opcodes.CHECKCAST,
+                        "org/perlonjava/runtime/runtimetypes/PerlNonLocalReturnException");
+                java.util.List<Integer> returnCleanupLocals = evalCleanupLocals == null
+                        ? java.util.List.of() : new java.util.ArrayList<>(
+                                new java.util.LinkedHashSet<>(evalCleanupLocals));
+                mv.visitLdcInsn(returnCleanupLocals.size());
+                mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object");
+                for (int i = 0; i < returnCleanupLocals.size(); i++) {
+                    mv.visitInsn(Opcodes.DUP);
+                    mv.visitLdcInsn(i);
+                    mv.visitVarInsn(Opcodes.ALOAD, returnCleanupLocals.get(i));
+                    mv.visitInsn(Opcodes.AASTORE);
+                }
+                mv.visitVarInsn(Opcodes.ILOAD, 2);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                        "finishEvalCallbackReturn",
+                        "(Lorg/perlonjava/runtime/runtimetypes/PerlNonLocalReturnException;[Ljava/lang/Object;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;", false);
+                mv.visitVarInsn(Opcodes.ASTORE, returnListSlot);
+                // The eval boundary consumed the transfer and retained its
+                // returned Perl owners, so discard temporary roots skipped
+                // by the non-local return's emitted cleanup.
+                mv.visitVarInsn(Opcodes.ILOAD, evalTemporaryRootDepthSlot);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/MortalList",
+                        "restoreTemporaryRootDepth", "(I)V", false);
+                emitEvalMethodInvocantCleanup(mv, ctx.javaClassInfo.jvmFrameStateSlot,
+                        evalArgumentDepthSlot, evalMethodInvocantDepthSlot);
+                emitEvalDepthDecrement(mv);
+                mv.visitJumpInsn(Opcodes.GOTO, endCatch);
+                mv.visitLabel(targetedReturn);
+                mv.visitVarInsn(Opcodes.ASTORE, evalThrowableSlot);
+                emitEvalMethodInvocantCleanup(mv, ctx.javaClassInfo.jvmFrameStateSlot,
+                        evalArgumentDepthSlot, evalMethodInvocantDepthSlot);
+                // Leave the target return's roots in place while it propagates;
+                // its RuntimeCode.apply boundary restores its own entry depth.
+                mv.visitVarInsn(Opcodes.ALOAD, evalThrowableSlot);
+                mv.visitInsn(Opcodes.ATHROW);
                 mv.visitLabel(notNonLocalReturn);
 
+                mv.visitVarInsn(Opcodes.ASTORE, evalThrowableSlot);
+                emitEvalMethodInvocantCleanup(mv, ctx.javaClassInfo.jvmFrameStateSlot,
+                        evalArgumentDepthSlot, evalMethodInvocantDepthSlot);
+
                 // Track eval depth for $^S: RuntimeCode.evalDepth--
-                // Note: Throwable is on the stack but GETSTATIC/PUTSTATIC don't affect it
                 emitEvalDepthDecrement(mv);
 
-                // The throwable object is on the stack
                 // Catch the throwable
+                mv.visitVarInsn(Opcodes.ALOAD, evalThrowableSlot);
                 mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                         "org/perlonjava/runtime/operators/WarnDie",
                         "catchEval",
                         "(Ljava/lang/Throwable;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
                 mv.visitInsn(Opcodes.POP);
+
+                // Generated block-return roots can be left behind when an
+                // exception skips their emitted pop. Preserve caller roots
+                // and discard only roots created inside this eval boundary.
+                mv.visitVarInsn(Opcodes.ILOAD, evalTemporaryRootDepthSlot);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/MortalList",
+                        "restoreTemporaryRootDepth", "(I)V", false);
+
+                // Scope marks opened inside eval were bypassed by the thrown
+                // exception. Restore the eval-entry boundary before the
+                // explicit lexical cleanup below drains their releases.
+                mv.visitVarInsn(Opcodes.ILOAD, evalMortalMarkDepthSlot);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/MortalList",
+                        "restoreMarkDepth", "(I)V", false);
 
                 // Scope-exit cleanup for lexical variables allocated inside the eval body.
                 // When die throws a PerlDieException, Java exception handling jumps directly
@@ -1159,6 +1269,17 @@ public class EmitterMethodCreator implements Opcodes {
                                 "org/perlonjava/runtime/runtimetypes/MortalList",
                                 "evalExceptionScopeCleanup",
                                 "(Ljava/lang/Object;)V", false);
+                        String variableName = evalCleanupScalarNames == null
+                                ? null : evalCleanupScalarNames.get(localIdx);
+                        if (variableName != null) {
+                            mv.visitVarInsn(Opcodes.ALOAD, localIdx);
+                            mv.visitLdcInsn(variableName);
+                            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                                    "unbindCurrentActiveLexical",
+                                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;Ljava/lang/String;)V",
+                                    false);
+                        }
                         mv.visitVarInsn(Opcodes.ALOAD, localIdx);
                         mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                                 "org/perlonjava/runtime/runtimetypes/MyVarCleanupStack",
@@ -2116,6 +2237,16 @@ public class EmitterMethodCreator implements Opcodes {
                 System.err.println("Note: JVM compilation succeeded.");
             }
             RuntimeCode code = wrapAsCompiledCode(generatedClass, ctx, ast);
+            RuntimeBase[] padConstants = ctx.javaClassInfo.padConstants == null
+                    ? new RuntimeBase[0]
+                    : ctx.javaClassInfo.padConstants.toArray(new RuntimeBase[0]);
+            if (padConstants.length != 0 || !ctx.javaClassInfo.embeddedPadConstants.isEmpty()) {
+                code.installPadConstantTree(
+                        ctx.javaClassInfo.javaClassName,
+                        padConstants,
+                        ctx.javaClassInfo.embeddedPadConstants,
+                        ctx.javaClassInfo.embeddedPadConstantDescendants);
+            }
             code.setJvmClosureFrameRequired(ctx.javaClassInfo.jvmClosureFrameRequired);
             code.setPristineArgsSnapshotRequired(
                     ctx.javaClassInfo.pristineArgsSnapshotRequired);
@@ -2490,5 +2621,17 @@ public class EmitterMethodCreator implements Opcodes {
         mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                 "decrementEvalDepth", "()V", false);
+    }
+
+    private static void emitEvalMethodInvocantCleanup(
+            MethodVisitor mv, int executionStateSlot,
+            int argumentDepthSlot, int methodInvocantDepthSlot) {
+        mv.visitVarInsn(Opcodes.ALOAD, executionStateSlot);
+        mv.visitVarInsn(Opcodes.ILOAD, argumentDepthSlot);
+        mv.visitVarInsn(Opcodes.ILOAD, methodInvocantDepthSlot);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                "unwindEvalMethodInvocantHolds",
+                "(Lorg/perlonjava/runtime/runtimetypes/ExecutionRuntimeState;II)V", false);
     }
 }

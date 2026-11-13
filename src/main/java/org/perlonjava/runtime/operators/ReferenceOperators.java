@@ -161,20 +161,13 @@ public class ReferenceOperators {
                 // Always keep tracking — even classes without DESTROY need
                 // cascading cleanup of their hash/array elements when freed.
                 if (referent.blessId == 0) {
-                    // First bless of a tracked referent. Mortal-ize: bump refCount
-                    // and queue a deferred decrement so that if the blessed ref is
-                    // never stored in a named variable (method-chain temporaries like
-                    // `Foo->new()->method()`), the flush brings refCount back to 0
-                    // and fires DESTROY.  If the ref IS stored (the common
-                    // `my $self = bless {}, $class` pattern), setLargeRefCounted()
-                    // increments refCount first, so the mortal flush leaves it at the
-                    // correct count.
+                    // First bless of a tracked referent. The mortal reference
+                    // remains an identified owner until its deferred boundary, so
+                    // an unstored expression reaches zero and fires DESTROY while
+                    // a subsequent scalar store leaves that scalar's count intact.
                     referent.setBlessId(newBlessId);
-                    referent.traceRefCount(+1, "ReferenceOperators.bless tracked referent");
-                    referent.refCount++;  // 0 → 1 (or N → N+1 for edge cases)
-                    referent.acquireTransientTraceOwner("bless mortal temporary",
-                            "ReferenceOperators.bless tracked referent");
-                    MortalList.deferDecrement(referent, "bless mortal temporary");
+                    MortalList.deferBlessTemporary(referent,
+                            !WeakRefRegistry.isweak(runtimeScalar));
                 } else {
                     // Re-bless: update class, keep refCount.
                     referent.setBlessId(newBlessId);
@@ -200,39 +193,39 @@ public class ReferenceOperators {
                 // held by a ResultSet's {result_source} hash element).
                 if (referent instanceof RuntimeHash hash) {
                     for (RuntimeScalar elem : hash.elements.values()) {
-                        RuntimeScalar.incrementRefCountForContainerStore(elem);
+                        RuntimeScalar.incrementRefCountForContainerStore(
+                                elem, PerlOwnerSlot.Kind.HASH_ELEMENT);
                     }
                 } else if (referent instanceof RuntimeArray arr) {
                     for (RuntimeScalar elem : arr.elements) {
-                        RuntimeScalar.incrementRefCountForContainerStore(elem);
+                        RuntimeScalar.incrementRefCountForContainerStore(
+                                elem, PerlOwnerSlot.Kind.ARRAY_ELEMENT);
                     }
                 }
+
+                // Scalar owners may already hold this referent inside an
+                // untracked container or temporary list. Promote those exact
+                // owner-slot identities now; blessing changes lifecycle
+                // tracking, but it does not create or remove Perl edges.
+                referent.refCount = 0;
+                referent.promoteUntrackedScalarOwners();
 
                 if (wasAlreadyBlessed) {
                     // Re-bless from untracked class: the scalar being blessed
                     // already holds a reference that was never counted (because
                     // tracking wasn't active at assignment time). Count it as 1.
-                    referent.refCount = 1;
-                    referent.recordOwner(runtimeScalar, "rebless from untracked");
-                    runtimeScalar.refCountOwned = true;
+                    if (!runtimeScalar.refCountOwned) {
+                        RuntimeScalar.acquireCountedOwnerForCurrentValue(
+                                runtimeScalar, referent, runtimeScalar.countedOwnerKind(),
+                                "ReferenceOperators.bless rebless from untracked");
+                    }
                 } else {
-                    // First bless: start at refCount=1 and add to MortalList.
-                    // The mortal entry will decrement back to 0 at the next
-                    // statement-boundary flush (FREETMPS equivalent).
-                    //
-                    // If the blessed ref is stored in a named variable (the
-                    // common `my $self = bless {}, $class` pattern), setLarge()
-                    // increments refCount to 2. The mortal flush then brings it
-                    // back to 1, which is correct: only the variable owns it.
-                    //
-                    // If the blessed ref is returned directly without storage
-                    // (e.g., `sub new { bless {}, shift }`), the mortal entry
-                    // ensures the object is properly cleaned up when the caller's
-                    // statement boundary flushes, fixing method chain temporaries
-                    // like `Foo->new()->method()` where the invocant was never
-                    // tracked.
+                    // Establish only the owners that already exist. The
+                    // identified bless temporary below supplies its own count;
+                    // a later scalar store acquires a separate count as usual.
                     boolean existingScalarOwner =
                             RuntimeScalarType.isReference(runtimeScalar)
+                            && !WeakRefRegistry.isweak(runtimeScalar)
                             && !runtimeScalar.refCountOwned
                             && (runtimeScalar instanceof GlobalRuntimeScalar
                             || GlobalVariable.scalarSlots().containsValue(runtimeScalar)
@@ -244,15 +237,14 @@ public class ReferenceOperators {
                             && scalarReferent.referencedByScalarReference) {
                         scalarReferent.localBindingExists = true;
                     }
-                    referent.refCount = existingScalarOwner ? 2 : 1;
                     if (existingScalarOwner) {
-                        referent.recordOwner(runtimeScalar, "first bless of existing scalar ref");
-                        runtimeScalar.refCountOwned = true;
+                        RuntimeScalar.acquireCountedOwnerForCurrentValue(
+                                runtimeScalar, referent, runtimeScalar.countedOwnerKind(),
+                                "ReferenceOperators.bless first bless of existing scalar ref");
                     }
-                    referent.acquireTransientTraceOwner("bless mortal temporary",
-                            "ReferenceOperators.first bless");
-                    MortalList.deferDecrement(referent, "bless mortal temporary");
                 }
+                MortalList.deferBlessTemporary(referent,
+                        !WeakRefRegistry.isweak(runtimeScalar));
                 // Activate the mortal mechanism
                 MortalList.setActive(true);
             }

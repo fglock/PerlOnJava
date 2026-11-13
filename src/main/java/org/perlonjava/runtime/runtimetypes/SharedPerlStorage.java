@@ -426,8 +426,7 @@ public final class SharedPerlStorage {
                 // threads::shared replaces an existing aggregate tie with its
                 // own shared storage without invoking CLEAR or UNTIE.
                 if (array.elements instanceof TieArray tie) tie.releaseTiedObject();
-                array.type = RuntimeArray.PLAIN_ARRAY;
-                array.elements = Collections.synchronizedList(new ArrayList<>());
+                array.replaceWithEmptySharedStorage();
                 markShared(array);
                 return;
             }
@@ -439,9 +438,7 @@ public final class SharedPerlStorage {
         if (value instanceof RuntimeHash hash) {
             if (hash.type == RuntimeHash.TIED_HASH) {
                 if (hash.elements instanceof TieHash tie) tie.releaseTiedObject();
-                hash.type = RuntimeHash.PLAIN_HASH;
-                hash.elements = Collections.synchronizedMap(new StableHashMap<>());
-                hash.resetIterator();
+                hash.replaceWithEmptySharedStorage();
                 markShared(hash);
                 return;
             }
@@ -475,6 +472,10 @@ public final class SharedPerlStorage {
         PerlRuntime runtime = PerlRuntime.current();
         RuntimeBase view = new RuntimeGraphCloner(runtime, runtime).cloneGraph(nested);
         view.threadSharedFetchedView = true;
+        // The fetched view can be discarded before any receiving scalar slot
+        // stores it. Register the local view now so its first release is
+        // classified as a view cleanup rather than canonical shared DESTROY.
+        view.registerSharedFetchedView();
         return new SharedElementProxy(stored, view);
     }
 

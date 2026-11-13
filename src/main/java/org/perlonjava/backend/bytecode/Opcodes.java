@@ -2333,6 +2333,12 @@ public class Opcodes {
      */
     public static final short MORTAL_POP_FLUSH = 465;
 
+    /** Push an unconditional dynamic-scope mark before a fresh-result block. */
+    public static final short MORTAL_PUSH_SCOPE_MARK = 643;
+
+    /** Pop and flush the matching unconditional fresh-result block mark. */
+    public static final short MORTAL_POP_SCOPE_FLUSH = 644;
+
     /**
      * Scope-exit cleanup for a my-hash register.
      * Walks hash values recursively for tracked blessed references
@@ -2786,6 +2792,17 @@ public class Opcodes {
 
     /** Restore a loop regex baseline and retain a fresh baseline for its next iteration. Format: register. */
     public static final short RESTORE_LOOP_REGEX_STATE = 631;
+
+    /** Preserve rvalue reference owners before a nested scope exits. Format: rd sourceReg context. */
+    public static final short SNAPSHOT_SCOPE_RESULT = 639;
+
+    /** Dereference a compiler-owned scalar temporary and release it after lookup. Format: rd rs. */
+    public static final short DEREF_SCALAR_STRICT_TEMP = 640;
+    /** Non-strict scalar dereference that consumes its scalar input. Format: rd rs pkgIdx. */
+    public static final short DEREF_SCALAR_NONSTRICT_TEMP = 641;
+
+    /** Acquire the subroutine return owner before any lexical cleanup. Format: returnReg. */
+    public static final short PREPARE_SCOPE_RETURN = 642;
 
     private Opcodes() {
     } // Utility class - no instantiation

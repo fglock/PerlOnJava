@@ -56,6 +56,8 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
     public int maxRegisters;               // Number of registers needed
     public RuntimeBase[] capturedVars;     // Closure support (captured from outer scope)
     public final Map<String, Integer> variableRegistry; // Variable name → register index (for eval STRING)
+    /** All lexical scalar names by register, including names from exited compiler scopes. */
+    public Map<Integer, List<String>> myScalarNamesByRegister = Map.of();
     public final List<Map<String, Integer>> evalSiteRegistries; // Per-eval-site variable registries
     public final List<Map<String, OperatorNode>> evalSiteLexicalSubroutineBindings;
     public final List<Map<String, ParserKeywordPlugin>> evalSiteParserKeywordPlugins;
@@ -119,22 +121,21 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
     public final ErrorMessageUtil errorUtil; // For converting token index to line numbers
 
     // BitSet of register indices that are actual "my" variables (not temporaries).
-    // Computed from SCOPE_EXIT_CLEANUP opcodes in the bytecode.
-    // Used by exception propagation cleanup to avoid calling scopeExitCleanup
-    // on temporaries that may alias hash/array elements (which would incorrectly
-    // decrement refCounts and cause premature DESTROY).
+    // Computed from scope-exit cleanup opcodes in the bytecode.
+    // Used by early frame teardown (exceptions and non-local returns) to avoid
+    // calling scopeExitCleanup on temporaries that may alias hash/array elements
+    // (which would incorrectly decrement refCounts and cause premature DESTROY).
     public final BitSet myVarRegisters;
 
     /**
-     * Scan bytecodes for SCOPE_EXIT_CLEANUP, SCOPE_EXIT_CLEANUP_HASH, and
-     * SCOPE_EXIT_CLEANUP_ARRAY opcodes to identify which registers hold actual
-     * "my" variables. These are the only registers that should get
-     * scopeExitCleanup during exception propagation.
+     * Scan bytecodes for scope-exit cleanup opcodes to identify registers
+     * holding actual "my" variables. These are the registers that should get
+     * scopeExitCleanup when early control flow bypasses ordinary block teardown.
      * <p>
      * Uses a simple scan: looks for the specific opcode values and reads the
-     * next int as the register index. Since SCOPE_EXIT_CLEANUP opcodes have
-     * high values (463, 466, 467) that are unlikely to appear as register
-     * indices, false positives are extremely rare.
+     * next int as the register index. Since these opcodes have high values
+     * (463 through 496) that are unlikely to appear as register indices, false
+     * positives are extremely rare.
      */
     private static BitSet scanMyVarRegisters(int[] bytecode, int maxRegisters) {
         BitSet result = new BitSet();
@@ -142,7 +143,10 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
             int opcode = bytecode[i];
             if (opcode == Opcodes.SCOPE_EXIT_CLEANUP
                     || opcode == Opcodes.SCOPE_EXIT_CLEANUP_HASH
-                    || opcode == Opcodes.SCOPE_EXIT_CLEANUP_ARRAY) {
+                    || opcode == Opcodes.SCOPE_EXIT_CLEANUP_ARRAY
+                    || opcode == Opcodes.RETURN_SCOPE_CLEANUP
+                    || opcode == Opcodes.RETURN_SCOPE_CLEANUP_HASH
+                    || opcode == Opcodes.RETURN_SCOPE_CLEANUP_ARRAY) {
                 int register = bytecode[i + 1];
                 // This lightweight scan also sees opcode-shaped values in
                 // instruction operands. Never let a following sentinel (for
@@ -151,7 +155,10 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
                 if (register >= 0 && register < maxRegisters) {
                     result.set(register);
                 }
-                i++; // skip the operand
+                // RETURN_SCOPE_CLEANUP and RETURN_SCOPE_CLEANUP_ARRAY have
+                // both a lexical register and a return-value register.
+                i += opcode == Opcodes.RETURN_SCOPE_CLEANUP
+                        || opcode == Opcodes.RETURN_SCOPE_CLEANUP_ARRAY ? 2 : 1;
             }
         }
         return result;
@@ -448,6 +455,12 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
             // retaining async initial-result wrapping from master.
             RuntimeList result = BytecodeInterpreter.execute(
                     this, args, effectiveContext, this.subName);
+            if (result instanceof RuntimeControlFlowList flow
+                    && flow.getControlFlowType() == ControlFlowType.RETURN) {
+                // A non-local return leaves this interpreted frame without
+                // reaching its normal block teardown opcodes.
+                MyVarCleanupStack.unwindTo(cleanupMark);
+            }
             result = RuntimeCode.handleEscapingLoopControl(
                     result, generatedClassConstructor, classAdjustBlock);
             if (isSortComparator && result instanceof RuntimeControlFlowList flow) {
@@ -470,6 +483,11 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
             }
             MyVarCleanupStack.releaseOrTransferSocketOwnersOnReturn(cleanupMark, returned);
             return returned;
+        } catch (PerlNonLocalReturnException e) {
+            // The enclosing RuntimeCode boundary consumes the result; preserve
+            // its mortal owners while this frame's lexical cleanup is queued.
+            MyVarCleanupStack.unwindTo(cleanupMark);
+            throw e;
         } catch (RuntimeException e) {
             if (!(e instanceof PerlExitException)) {
                 MyVarCleanupStack.unwindTo(cleanupMark);
@@ -543,6 +561,9 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
             }
             return RuntimeCode.coerceScalarCallResult(
                     result, effectiveContext, callContext, !RuntimeCode.isLvalueCode(this));
+        } catch (PerlNonLocalReturnException e) {
+            // A map/grep return carries a value through this frame's unwind.
+            throw e;
         } catch (RuntimeException e) {
             if (!(e instanceof PerlExitException)) {
                 MyVarCleanupStack.unwindTo(cleanupMark);
@@ -569,13 +590,14 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
     }
 
     /**
-     * Override RuntimeCode.defined() to return true for InterpretedCode.
-     * InterpretedCode doesn't use methodHandle, so the parent defined() check fails.
-     * But InterpretedCode instances are always "defined" - they contain executable bytecode.
+     * InterpretedCode has executable bytecode instead of a methodHandle, so an
+     * installed interpreted CV is defined while its CODE reference is valid.
+     * `undef &name` explicitly retires that callable definition even though
+     * the bytecode object remains available to existing Java references.
      */
     @Override
     public boolean defined() {
-        return true;
+        return !codeReferenceUndefined;
     }
 
     /**
@@ -614,6 +636,8 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
                 true,
                 this.deparseSourceText
         );
+        copy.installPadConstants(this.padConstants);
+        copy.setMyScalarNamesByRegister(this.myScalarNamesByRegister);
         copy.prototype = this.prototype;
         copy.isConstantCv = this.isConstantCv;
         copy.isLexicalConstantCv = this.isLexicalConstantCv;
@@ -712,6 +736,19 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
                 this.closedOverVariables.put(entry.getKey(), capturedVars[capturedIndex]);
             }
         }
+    }
+
+    /** Preserve lexical names needed to unbind exact pad entries during exceptional unwind. */
+    public void setMyScalarNamesByRegister(Map<Integer, List<String>> namesByRegister) {
+        if (namesByRegister == null || namesByRegister.isEmpty()) {
+            myScalarNamesByRegister = Map.of();
+            return;
+        }
+        Map<Integer, List<String>> copy = new java.util.LinkedHashMap<>();
+        for (Map.Entry<Integer, List<String>> entry : namesByRegister.entrySet()) {
+            copy.put(entry.getKey(), List.copyOf(entry.getValue()));
+        }
+        myScalarNamesByRegister = Map.copyOf(copy);
     }
 
     private void validateAsyncSignature(RuntimeArray args) {

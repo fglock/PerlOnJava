@@ -15,6 +15,9 @@ public class RuntimeTiedHashProxyEntry extends TiedVariableBase {
 
     // Reference to the parent RuntimeHash (which is tied)
     private final RuntimeHash parent;
+    // Preserve the magic view captured when this lvalue was formed. untie may
+    // replace parent.elements while this proxy remains active in @_ .
+    private final TieHash tieHandle;
     // Index associated with this proxy in the parent array
     private final RuntimeScalar key;
 
@@ -37,7 +40,20 @@ public class RuntimeTiedHashProxyEntry extends TiedVariableBase {
     public RuntimeTiedHashProxyEntry(RuntimeHash parent, RuntimeScalar key) {
         super(null, null);
         this.parent = parent;
+        this.tieHandle = parent.elements instanceof TieHash tieHash ? tieHash : null;
         this.key = key;
+    }
+
+    @Override
+    RuntimeBase argumentAliasContainer() {
+        return parent;
+    }
+
+    @Override
+    RuntimeScalar retainArgumentAliasHandlerOwner() {
+        return tieHandle == null ? null
+                : RuntimeScalar.retainTiedHandlerValue(tieHandle.getSelf(),
+                        PerlOwnerSlot.Kind.ARGUMENT_TIE_HANDLER);
     }
 
     /**
@@ -45,9 +61,14 @@ public class RuntimeTiedHashProxyEntry extends TiedVariableBase {
      * This ensures lvalue is populated with the current value from the tied array.
      */
     @Override
+    RuntimeScalar storageOwnerReference() {
+        return parent.createAnonymousReference();
+    }
+
+    @Override
     void vivify() {
         // Always fetch the current value from the tied object
-        RuntimeScalar fetchedValue = TieHash.tiedFetch(parent, key);
+        RuntimeScalar fetchedValue = tiedFetchFromAlias();
         this.type = fetchedValue.type;
         this.value = fetchedValue.value;
     }
@@ -60,12 +81,12 @@ public class RuntimeTiedHashProxyEntry extends TiedVariableBase {
      */
     @Override
     public RuntimeScalar tiedStore(RuntimeScalar value) {
-        return TieHash.tiedStore(parent, key, value);
+        return tiedStoreFromAlias(value);
     }
 
     @Override
     public RuntimeScalar tiedFetch() {
-        return TieHash.tiedFetch(parent, key);
+        return tiedFetchFromAlias();
     }
 
     @Override
@@ -98,8 +119,8 @@ public class RuntimeTiedHashProxyEntry extends TiedVariableBase {
 
     @Override
     public void dynamicSaveState() {
-        boolean existed = TieHash.tiedExists(parent, key).getBoolean();
-        RuntimeScalar saved = existed ? new RuntimeScalar(TieHash.tiedFetch(parent, key)) : null;
+        boolean existed = tiedExistsFromAlias().getBoolean();
+        RuntimeScalar saved = existed ? new RuntimeScalar(tiedFetchFromAlias()) : null;
         dynamicStateStack().push(new SavedState(existed, saved));
     }
 
@@ -111,9 +132,29 @@ public class RuntimeTiedHashProxyEntry extends TiedVariableBase {
         }
         SavedState previous = dynamicStateStack.pop();
         if (previous.existed) {
-            TieHash.tiedStore(parent, key, new RuntimeScalar(previous.value));
+            tiedStoreFromAlias(new RuntimeScalar(previous.value));
         } else {
-            TieHash.tiedDelete(parent, key);
+            tiedDeleteFromAlias();
         }
+    }
+
+    private RuntimeScalar tiedFetchFromAlias() {
+        return tieHandle == null ? TieHash.tiedFetch(parent, key)
+                : TieHash.tiedFetch(tieHandle, key);
+    }
+
+    private RuntimeScalar tiedStoreFromAlias(RuntimeScalar value) {
+        return tieHandle == null ? TieHash.tiedStore(parent, key, value)
+                : TieHash.tiedStore(tieHandle, key, value);
+    }
+
+    private RuntimeScalar tiedExistsFromAlias() {
+        return tieHandle == null ? TieHash.tiedExists(parent, key)
+                : TieHash.tiedExists(tieHandle, key);
+    }
+
+    private RuntimeScalar tiedDeleteFromAlias() {
+        return tieHandle == null ? TieHash.tiedDelete(parent, key)
+                : TieHash.tiedDelete(tieHandle, key);
     }
 }

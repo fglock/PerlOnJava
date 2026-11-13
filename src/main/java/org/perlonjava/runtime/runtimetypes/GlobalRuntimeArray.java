@@ -67,7 +67,16 @@ public class GlobalRuntimeArray implements DynamicState {
     }
 
     @Override
+    public RuntimeBase suspendedOwnerValue() {
+        return GlobalVariable.getGlobalArray(fullName);
+    }
+
+    @Override
     public void dynamicRestoreState() {
+        restoreState(false);
+    }
+
+    private void restoreState(boolean preserveSuspendedArray) {
         Stack<SavedGlobalArrayState> localizedStack = localizedStack();
         if (!localizedStack.isEmpty()) {
             SavedGlobalArrayState saved = localizedStack.peek();
@@ -80,7 +89,7 @@ public class GlobalRuntimeArray implements DynamicState {
                 // discarded. Test: postfixderef.t #38 "no stooges outlast
                 // their scope".
                 RuntimeArray localArray = GlobalVariable.globalArrays.get(saved.fullName);
-                if (localArray != null && localArray.blessId != 0
+                if (!preserveSuspendedArray && localArray != null && localArray.blessId != 0
                         && !localArray.destroyFired
                         && (saved.originalArray == null || localArray != saved.originalArray)) {
                     localArray.refCount = Integer.MIN_VALUE;
@@ -91,7 +100,8 @@ public class GlobalRuntimeArray implements DynamicState {
                 // Release references held by the temporary localized array
                 // before discarding it, matching RuntimeArray's local-scope
                 // restoration path.
-                if (localArray != null && localArray != saved.originalArray) {
+                if (!preserveSuspendedArray && localArray != null
+                        && localArray != saved.originalArray) {
                     // A $# proxy made inside local @array belongs to the
                     // discarded temporary AV, not the restored package array.
                     localArray.orphanArraySizeLvalues();
@@ -119,26 +129,20 @@ public class GlobalRuntimeArray implements DynamicState {
     @Override
     public Object dynamicSuspendState() {
         RuntimeArray activeVariable = GlobalVariable.getGlobalArray(fullName);
-        RuntimeArray activeState = new RuntimeArray();
-        if (activeVariable != null) {
-            activeState.type = activeVariable.type;
-            activeState.blessId = activeVariable.blessId;
-            activeState.scalarContextSize = activeVariable.scalarContextSize;
-            activeState.elements.addAll(activeVariable.elements);
-        }
-        dynamicRestoreState();
-        return activeState;
+        restoreState(true);
+        return activeVariable;
     }
 
     @Override
     public void dynamicResumeState(Object token) {
         dynamicSaveState();
-        if (token instanceof RuntimeArray activeState) {
-            RuntimeArray activeVariable = GlobalVariable.getGlobalArray(fullName);
-            activeVariable.type = activeState.type;
-            activeVariable.blessId = activeState.blessId;
-            activeVariable.scalarContextSize = activeState.scalarContextSize;
-            activeVariable.elements.addAll(activeState.elements);
+        if (token instanceof RuntimeArray activeVariable) {
+            GlobalVariable.globalArrays.put(fullName, activeVariable);
+            for (String alias : GlobalVariable.getGlobAliasGroup(fullName)) {
+                if (!alias.equals(fullName)) {
+                    GlobalVariable.globalArrays.put(alias, activeVariable);
+                }
+            }
         }
     }
 

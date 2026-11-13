@@ -4,11 +4,14 @@ import org.perlonjava.runtime.operators.ModuleOperators;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.PerlJavaUnimplementedException;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
+import org.perlonjava.runtime.runtimetypes.RuntimeIO;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
+import java.lang.ref.WeakReference;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.function.Function;
 
@@ -86,6 +89,16 @@ public class LayeredIOHandle implements IOHandle {
      * Maintained for proper cleanup and reset operations.
      */
     public final List<IOLayer> activeLayers = new ArrayList<>();
+    /** RuntimeIO wrappers that currently contain this layer stack, held weakly. */
+    private final List<WeakRuntimeIOOwner> runtimeIOOwners = new ArrayList<>();
+
+    private static final class WeakRuntimeIOOwner {
+        private final WeakReference<RuntimeIO> runtimeIO;
+
+        private WeakRuntimeIOOwner(RuntimeIO runtimeIO) {
+            this.runtimeIO = new WeakReference<>(runtimeIO);
+        }
+    }
     /** Full layer stack, including built-in layers represented as flags. */
     private final List<String> layerStack = new ArrayList<>();
     /**
@@ -128,6 +141,57 @@ public class LayeredIOHandle implements IOHandle {
      */
     public LayeredIOHandle(IOHandle delegate) {
         this.delegate = delegate;
+    }
+
+    /** Attach one RuntimeIO wrapper that contains this layer stack. */
+    public synchronized void addRuntimeIOOwner(RuntimeIO owner) {
+        if (owner == null) return;
+        for (Iterator<WeakRuntimeIOOwner> iterator = runtimeIOOwners.iterator();
+                iterator.hasNext();) {
+            WeakRuntimeIOOwner existing = iterator.next();
+            RuntimeIO current = existing.runtimeIO.get();
+            if (current == null) {
+                iterator.remove();
+            } else if (current == owner) {
+                return;
+            }
+        }
+        runtimeIOOwners.add(new WeakRuntimeIOOwner(owner));
+        for (IOLayer layer : activeLayers) {
+            if (layer instanceof ViaLayer viaLayer) viaLayer.addRuntimeIOOwner(owner);
+        }
+    }
+
+    /** Detach one RuntimeIO wrapper that stopped containing this layer stack. */
+    public synchronized void removeRuntimeIOOwner(RuntimeIO owner) {
+        if (owner == null) return;
+        for (Iterator<WeakRuntimeIOOwner> iterator = runtimeIOOwners.iterator();
+                iterator.hasNext();) {
+            WeakRuntimeIOOwner existing = iterator.next();
+            RuntimeIO current = existing.runtimeIO.get();
+            if (current == null) {
+                iterator.remove();
+            } else if (current == owner) {
+                iterator.remove();
+                for (IOLayer layer : activeLayers) {
+                    if (layer instanceof ViaLayer viaLayer) {
+                        viaLayer.removeRuntimeIOOwner(owner);
+                    }
+                }
+                return;
+            }
+        }
+    }
+
+    private synchronized List<RuntimeIO> runtimeIOOwnerSnapshot() {
+        List<RuntimeIO> snapshot = new ArrayList<>();
+        for (Iterator<WeakRuntimeIOOwner> iterator = runtimeIOOwners.iterator();
+                iterator.hasNext();) {
+            RuntimeIO owner = iterator.next().runtimeIO.get();
+            if (owner == null) iterator.remove();
+            else snapshot.add(owner);
+        }
+        return snapshot;
     }
 
     /**
@@ -672,6 +736,9 @@ public class LayeredIOHandle implements IOHandle {
                     String className = layerSpec.substring(4, layerSpec.length() - 1);
                     ViaLayer layer = new ViaLayer(className, currentLowerHandle(), currentMode());
                     activeLayers.add(layer);
+                    for (RuntimeIO owner : runtimeIOOwnerSnapshot()) {
+                        layer.addRuntimeIOOwner(owner);
+                    }
                 } else {
                     throw new IllegalArgumentException("Unknown PerlIO layer \"" + layerSpec + "\"");
                 }

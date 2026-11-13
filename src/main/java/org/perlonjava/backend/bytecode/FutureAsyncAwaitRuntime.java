@@ -98,14 +98,19 @@ public final class FutureAsyncAwaitRuntime {
             }
             return;
         }
-        // Future::AsyncAwait requires cancellation to flow from the Future returned by
-        // the async sub to the Future currently being awaited.  Do this for every
-        // suspension segment, since a resumed frame may await a different Future.
-        call(outer, "AWAIT_CHAIN_CANCEL",
-                new RuntimeArray(suspension.awaited), RuntimeContextType.VOID);
-
         PerlRuntime runtime = PerlRuntime.current();
-        RuntimeCode callback = new RuntimeCode((callbackArgs, callbackContext) -> {
+        suspension.frame.registerEndBoundaryOwnerRoots(runtime.executionState());
+
+        AtomicBoolean callbackEntered = new AtomicBoolean();
+        try {
+            // Future::AsyncAwait requires cancellation to flow from the Future returned by
+            // the async sub to the Future currently being awaited.  Do this for every
+            // suspension segment, since a resumed frame may await a different Future.
+            call(outer, "AWAIT_CHAIN_CANCEL",
+                    new RuntimeArray(suspension.awaited), RuntimeContextType.VOID);
+
+            RuntimeCode callback = new RuntimeCode((callbackArgs, callbackContext) -> {
+            callbackEntered.set(true);
             // Capture the callback's dynamic warning handler before enqueueing.
             // Nested Future completions can defer this resume until after the
             // readiness callback (and its localized %SIG scope) has returned.
@@ -118,15 +123,25 @@ public final class FutureAsyncAwaitRuntime {
                         state.callbackActive.set(false);
                     }
                     if (callbackWarningHandler != null) {
-                        callbackWarningHandler.releaseClosureCapture();
                         RuntimeScalar.scopeExitCleanup(callbackWarningHandler);
                     }
                 }
             });
             return new RuntimeList();
-        }, null).bindCallbackTo(runtime);
-        call(suspension.awaited, "AWAIT_ON_READY",
-                new RuntimeArray(new RuntimeScalar(callback)), RuntimeContextType.VOID);
+            }, null).bindCallbackTo(runtime);
+            call(suspension.awaited, "AWAIT_ON_READY",
+                    new RuntimeArray(new RuntimeScalar(callback)), RuntimeContextType.VOID);
+        } catch (RuntimeException | Error attachFailure) {
+            if (!callbackEntered.get()) {
+                state.terminal.set(true);
+                try {
+                    suspension.releaseAwaitedOwner();
+                } finally {
+                    cleanupAbandonedFrame(suspension.frame);
+                }
+            }
+            throw attachFailure;
+        }
     }
 
     private static void resume(InterpreterSuspension suspension, AwaitState state,
@@ -215,6 +230,7 @@ public final class FutureAsyncAwaitRuntime {
         outer = state.outerAfterResume();
         if (outer == null) {
             state.terminal.set(true);
+            suspension.frame.releaseSuspendedLexicalOwners();
             warnLostReturningFuture(suspension.frame, callbackWarningHandler);
             return;
         }
@@ -223,9 +239,13 @@ public final class FutureAsyncAwaitRuntime {
         }
         try {
             if (isCancelled(outer)) {
+                suspension.frame.releaseSuspendedLexicalOwners();
                 state.clearOuterProbe();
                 return;
             }
+            // The interpreter has produced and transferred its return value;
+            // retire frame lexicals before AWAIT_DONE can invoke callbacks.
+            suspension.frame.releaseSuspendedLexicalOwners();
             call(outer, "AWAIT_DONE", new RuntimeArray(result), RuntimeContextType.VOID);
             state.clearOuterProbe();
         } catch (Throwable error) {
@@ -238,6 +258,7 @@ public final class FutureAsyncAwaitRuntime {
         RuntimeScalar outer = state.outerAfterResume();
         if (outer == null) {
             state.terminal.set(true);
+            frame.releaseSuspendedLexicalOwners();
             warnAbandonedFailure(frame, error, callbackWarningHandler);
             return;
         }
@@ -245,9 +266,11 @@ public final class FutureAsyncAwaitRuntime {
             return;
         }
         if (isCancelled(outer)) {
+            frame.releaseSuspendedLexicalOwners();
             state.clearOuterProbe();
             return;
         }
+        frame.releaseSuspendedLexicalOwners();
         call(outer, "AWAIT_FAIL", new RuntimeArray(exceptionValue(error)),
                 RuntimeContextType.VOID);
         state.clearOuterProbe();
@@ -322,9 +345,7 @@ public final class FutureAsyncAwaitRuntime {
                 return null;
             }
             if (outerWeak.value instanceof RuntimeBase referent
-                    && !ReachabilityWalker.isReachableFromRoots(referent)
-                    && !ReachabilityWalker.isReachableFromLiveScalarRegistry(referent)
-                    && !ReachabilityWalker.isReachableFromLiveCodeCaptures(referent)) {
+                    && !referent.hasPerlStrongOwner()) {
                 WeakRefRegistry.clearWeakRefsTo(referent);
                 return null;
             }
@@ -446,7 +467,6 @@ public final class FutureAsyncAwaitRuntime {
         // anonymous handler and its lexical captures before it emits the
         // self-abandonment warning. Keep the closure graph alive until the
         // queued resume has completed.
-        retained.retainClosureCapture();
         return retained;
     }
 

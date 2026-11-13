@@ -5,10 +5,14 @@ import org.perlonjava.runtime.io.ClosedIOHandle;
 import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.operators.WarnDie;
 
+import java.lang.ref.WeakReference;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Stack;
+import java.util.WeakHashMap;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
 
@@ -18,6 +22,169 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
  * This class provides methods to manipulate and interact with typeglobs in the runtime environment.
  */
 public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference {
+    private static final Map<RuntimeScalar, WeakReference<IOOwnerState>> IO_OWNER_STATES =
+            Collections.synchronizedMap(new WeakHashMap<>());
+
+    /** Weak identity owners of one shared IO scalar cell. */
+    private static final class IOOwnerState {
+        private final WeakReference<RuntimeScalar> ioCell;
+        private final List<WeakReference<RuntimeGlob>> owners = new ArrayList<>();
+        private WeakReference<RuntimeIO> currentRuntimeIO = new WeakReference<>(null);
+
+        private IOOwnerState(RuntimeScalar ioCell) {
+            this.ioCell = new WeakReference<>(ioCell);
+            currentRuntimeIO = new WeakReference<>(runtimeIOFrom(ioCell));
+        }
+
+        synchronized void addOwner(RuntimeGlob owner) {
+            refreshRuntimeIO();
+            if (containsOwner(owner)) return;
+            owners.add(new WeakReference<>(owner));
+            RuntimeIO current = currentRuntimeIO.get();
+            if (current != null) current.retainEndBoundaryOwnerGlob(owner);
+        }
+
+        synchronized void removeOwner(RuntimeGlob owner) {
+            refreshRuntimeIO();
+            boolean removed = false;
+            for (Iterator<WeakReference<RuntimeGlob>> iterator = owners.iterator();
+                    iterator.hasNext();) {
+                RuntimeGlob current = iterator.next().get();
+                if (current == null || current == owner) {
+                    iterator.remove();
+                    removed |= current == owner;
+                }
+            }
+            RuntimeIO current = currentRuntimeIO.get();
+            if (removed && current != null) current.releaseEndBoundaryOwnerGlob(owner);
+        }
+
+        synchronized void refreshRuntimeIO() {
+            RuntimeScalar cell = ioCell.get();
+            RuntimeIO next = runtimeIOFrom(cell);
+            RuntimeIO previous = currentRuntimeIO.get();
+            if (previous == next) {
+                if (next != null) next.refreshEndBoundaryLayerOwners();
+                return;
+            }
+            for (Iterator<WeakReference<RuntimeGlob>> iterator = owners.iterator();
+                    iterator.hasNext();) {
+                RuntimeGlob owner = iterator.next().get();
+                if (owner == null) {
+                    iterator.remove();
+                    continue;
+                }
+                if (previous != null) previous.releaseEndBoundaryOwnerGlob(owner);
+                if (next != null) next.retainEndBoundaryOwnerGlob(owner);
+            }
+            currentRuntimeIO = new WeakReference<>(next);
+        }
+
+        private boolean containsOwner(RuntimeGlob owner) {
+            for (Iterator<WeakReference<RuntimeGlob>> iterator = owners.iterator();
+                    iterator.hasNext();) {
+                RuntimeGlob current = iterator.next().get();
+                if (current == null) iterator.remove();
+                else if (current == owner) return true;
+            }
+            return false;
+        }
+    }
+
+    private static IOOwnerState stateFor(RuntimeScalar ioCell) {
+        synchronized (IO_OWNER_STATES) {
+            WeakReference<IOOwnerState> reference = IO_OWNER_STATES.get(ioCell);
+            IOOwnerState state = reference == null ? null : reference.get();
+            if (state == null) {
+                state = new IOOwnerState(ioCell);
+                IO_OWNER_STATES.put(ioCell, new WeakReference<>(state));
+            }
+            return state;
+        }
+    }
+
+    private IOOwnerState ioOwnerState;
+
+    private static RuntimeIO runtimeIOFrom(RuntimeScalar ioCell) {
+        if (ioCell == null) return null;
+        if (ioCell.value instanceof RuntimeIO runtimeIO) return runtimeIO;
+        if (ioCell.value instanceof TieHandle tieHandle) {
+            return tieHandle.getPreviousValue();
+        }
+        return null;
+    }
+
+    private void refreshIOOwnerState() {
+        if (IO == null) {
+            if (ioOwnerState != null) ioOwnerState.removeOwner(this);
+            ioOwnerState = null;
+            return;
+        }
+        if (ioOwnerState == null || ioOwnerState.ioCell.get() != IO) {
+            if (ioOwnerState != null) ioOwnerState.removeOwner(this);
+            ioOwnerState = stateFor(IO);
+            ioOwnerState.addOwner(this);
+            return;
+        }
+        ioOwnerState.refreshRuntimeIO();
+    }
+
+    void refreshIOOwnerStateForEndBoundary() {
+        refreshIOOwnerState();
+    }
+
+    void replaceIOScalar(RuntimeScalar next) {
+        if (IO == next) {
+            refreshIOOwnerState();
+            return;
+        }
+        // A source glob is needed only while this glob shares its IO cell.
+        // Rebinding the cell must not keep the old source glob (and its IO)
+        // alive through this Java-side compatibility link.
+        retainedIoGlob = null;
+        if (ioOwnerState != null) ioOwnerState.removeOwner(this);
+        ioOwnerState = null;
+        IO = next;
+        refreshIOOwnerState();
+    }
+
+    /** Install a tied wrapper into the existing IO cell and refresh its owner links. */
+    public void setTiedIOHandle(TieHandle handle) {
+        if (IO == null) IO = new RuntimeScalar();
+        installTiedIOHandle(IO, handle);
+        refreshIOOwnerState();
+    }
+
+    /** Install a tied wrapper into an aliased IO cell and refresh any glob owners. */
+    public static void installTiedIOHandle(RuntimeScalar ioCell, TieHandle handle) {
+        if (ioCell == null) return;
+        ioCell.type = RuntimeScalarType.TIED_SCALAR;
+        ioCell.value = handle;
+        synchronized (IO_OWNER_STATES) {
+            WeakReference<IOOwnerState> reference = IO_OWNER_STATES.get(ioCell);
+            IOOwnerState state = reference == null ? null : reference.get();
+            if (state != null) state.refreshRuntimeIO();
+        }
+    }
+
+    private void setLocalizedOriginalIO(RuntimeScalar next) {
+        if (localizedOriginalIO == next) return;
+        RuntimeIO previousOwner = localizedOriginalIOOwner == null
+                ? null : localizedOriginalIOOwner.get();
+        if (previousOwner != null) previousOwner.releaseEndBoundaryOwnerGlob(this);
+        localizedOriginalIO = next;
+        RuntimeIO nextOwner = runtimeIOFrom(next);
+        localizedOriginalIOOwner = nextOwner == null ? null : new WeakReference<>(nextOwner);
+        if (nextOwner != null) nextOwner.retainEndBoundaryOwnerGlob(this);
+    }
+
+    /** Whether this glob's current or saved IO field retains {@code runtimeIO}. */
+    boolean ownsRuntimeIOForEndBoundary(RuntimeIO runtimeIO) {
+        return runtimeIO != null
+                && (runtimeIOFrom(IO) == runtimeIO
+                    || runtimeIOFrom(localizedOriginalIO) == runtimeIO);
+    }
+
     /**
      * Select the value assigned to a typeglob.  A direct array expression is
      * consumed as a list here (not as the array's scalar element count), which
@@ -124,6 +291,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     // assignment must retain it: `local *FH = *OTHER{FORMAT}` does not replace
     // FH's filehandle.
     private RuntimeScalar localizedOriginalIO;
+    private WeakReference<RuntimeIO> localizedOriginalIOOwner;
     // Local scalar slot for anonymous globs (when globName is null)
     RuntimeScalar scalarSlot;
     // Local array slot for anonymous globs (when globName is null)
@@ -140,6 +308,8 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     // did not exist at copy time. A later `%{*$copy}` should vivify/share the
     // canonical GV hash, matching Perl's behavior for globs passed through @_.
     private boolean hashSlotAliasesNamedGlob;
+    /** Owner identities for slots retained by a detached typeglob snapshot. */
+    private List<PerlOwnerSlot> detachedComponentOwnerSlots;
     // Dynamic name override set by `*foo = $string` glob-as-scalar assignment.
     // Used to honor the `local *PKG::__ANON__ = 'name'` idiom (see SUPER.pm,
     // Try::Tiny, namespace::clean) — caller()/Sub::Util::subname report this
@@ -147,11 +317,16 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     // See dev/modules/anon_sub_naming.md.
     public String nameOverride;
 
-    /** Number of scalar wrappers currently pointing at this anonymous IO glob. */
-    public int ioHolderCount = 0;
+    /** Number of active scalar owner identities retaining this anonymous IO glob. */
+    public int ioHolderCount() {
+        return ownerSlotCount(PerlOwnerSlot.Kind.IO_RESOURCE_HOLDER);
+    }
 
     /** True when this glob's current IO was created by accept(). */
     public boolean acceptedSocket;
+
+    /** True for the generated Symbol::GEN<n> globs, which are not stash slots. */
+    public boolean symbolGensym;
 
     /**
      * Constructor for RuntimeGlob.
@@ -165,6 +340,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         this.type = RuntimeScalarType.GLOB;
         this.value = this;
         this.IO = new RuntimeScalar();
+        refreshIOOwnerState();
     }
 
     private static boolean isStashGlobName(String name) {
@@ -213,8 +389,13 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     public RuntimeGlob createDetachedCopy() {
         RuntimeGlob copy = new RuntimeGlob(this.globName);
         copy.stringificationName = this.stringificationName;
+        copy.symbolGensym = this.symbolGensym;
         copy.slotSnapshot = true;
-        copy.IO = this.IO;  // Share the current IO reference
+        copy.replaceIOScalar(this.IO);  // Share the current IO reference
+        if (this.namespaceMove != null) {
+            copy.retainDetachedNamespaceComponents(this.namespaceMove);
+            return copy;
+        }
         // A copied typeglob retains the CODE slot that was visible when it was
         // copied.  This matters for `my $glob = *name; undef *name; &$glob`.
         // Snapshot the container as well as its CV. `undef *name` clears the
@@ -229,11 +410,14 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         }
         copy.codeSlot = new RuntimeScalar(visibleCode != null
                 ? visibleCode : GlobalVariable.getGlobalCodeRef(this.globName));
-        copy.scalarSlot = GlobalVariable.scalarSlots().get(this.globName);
+        copy.scalarSlot = symbolGensym
+                ? this.scalarSlot : GlobalVariable.scalarSlots().get(this.globName);
         if (copy.scalarSlot == null) {
             copy.scalarSlot = new RuntimeScalar();
         }
-        if (GlobalVariable.existsGlobalArray(this.globName)) {
+        if (symbolGensym) {
+            copy.arraySlot = this.arraySlot;
+        } else if (GlobalVariable.existsGlobalArray(this.globName)) {
             copy.arraySlot = GlobalVariable.getGlobalArray(this.globName);
         }
         if (this.hashSlot != null) {
@@ -242,11 +426,14 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                     && GlobalVariable.peekGlobalIO(this.globName) == this) {
                 copy.hashSlotAliasesNamedGlob = true;
             }
+        } else if (symbolGensym) {
+            copy.hashSlot = this.hashSlot;
         } else if (GlobalVariable.existsGlobalHash(this.globName) || isStashGlobName(this.globName)) {
             copy.hashSlot = GlobalVariable.getGlobalHash(this.globName);
         } else if (GlobalVariable.peekGlobalIO(this.globName) == this) {
             copy.hashSlotAliasesNamedGlob = true;
         }
+        copy.retainDetachedComponentOwners();
         return copy;
     }
 
@@ -275,15 +462,85 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         glob.hashSlot = hash;
         glob.codeSlot = code;
         if (io != null) {
-            glob.IO = io.IO;
+            glob.replaceIOScalar(io.IO);
         }
+        glob.retainDetachedComponentOwners();
         return glob;
+    }
+
+    private void retainDetachedComponentOwners() {
+        retainDetachedComponentOwner(scalarSlot);
+        retainDetachedComponentOwner(arraySlot);
+        retainDetachedComponentOwner(hashSlot);
+        retainDetachedComponentOwner(codeSlot);
+        if (IO != null && IO != this) retainDetachedComponentOwner(IO);
+    }
+
+    private void retainDetachedNamespaceComponents(NamespaceMove move) {
+        namespaceMove = move;
+        for (RuntimeScalar scalar : move.scalars.values()) {
+            retainDetachedComponentOwner(scalar);
+        }
+        for (RuntimeArray array : move.arrays.values()) {
+            retainDetachedComponentOwner(array);
+        }
+        for (RuntimeHash hash : move.hashes.values()) {
+            retainDetachedComponentOwner(hash);
+        }
+        for (RuntimeScalar code : move.codes.values()) {
+            retainDetachedComponentOwner(code);
+        }
+    }
+
+    private void retainDetachedComponentOwner(RuntimeBase component) {
+        if (component == null) return;
+        PerlOwnerSlot ownerSlot = new PerlOwnerSlot(PerlOwnerSlot.Kind.GLOB_COMPONENT_SLOT);
+        ownerSlot.acquireGlobComponentIdentity(this, component);
+        if (detachedComponentOwnerSlots == null) detachedComponentOwnerSlots = new java.util.ArrayList<>();
+        detachedComponentOwnerSlots.add(ownerSlot);
+    }
+
+    boolean retainsDetachedComponents() {
+        return detachedComponentOwnerSlots != null && !detachedComponentOwnerSlots.isEmpty();
+    }
+
+    /** Release snapshot slots when the final scalar value owner leaves this glob. */
+    synchronized void releaseDetachedComponentsIfUnowned() {
+        if (!retainsDetachedComponents()
+                || ownerSlotCount(PerlOwnerSlot.Kind.GLOB_VALUE) != 0
+                || ownerSlotCount(PerlOwnerSlot.Kind.STASH_NAMESPACE_MOVE) != 0) return;
+        List<PerlOwnerSlot> owners = detachedComponentOwnerSlots;
+        detachedComponentOwnerSlots = null;
+        namespaceMove = null;
+        List<RuntimeBase> components = new java.util.ArrayList<>(owners.size());
+        for (PerlOwnerSlot owner : owners) {
+            RuntimeBase component = owner.referent();
+            if (component != null) components.add(component);
+            owner.release();
+        }
+        for (RuntimeBase component : components) {
+            if (component instanceof RuntimeScalar scalar) {
+                scalar.refreshUntrackedReferenceOwner();
+                if (!scalar.hasPerlStrongOwnerIdentity()
+                        && !MyVarCleanupStack.isRegistered(scalar)) {
+                    RuntimeScalar.scopeExitCleanup(scalar);
+                }
+            } else if (!component.hasPerlStrongOwnerIdentity()
+                    && !MyVarCleanupStack.isRegistered(component)) {
+                if (component instanceof RuntimeArray array) {
+                    MortalList.scopeExitCleanupArray(array);
+                } else if (component instanceof RuntimeHash hash) {
+                    MortalList.scopeExitCleanupHash(hash);
+                }
+            }
+        }
+        MortalList.flush();
     }
 
     static RuntimeGlob createDetachedNamespaceMove(NamespaceMove move) {
         RuntimeGlob glob = new RuntimeGlob(move.sourcePrefix);
         glob.slotSnapshot = true;
-        glob.namespaceMove = move;
+        glob.retainDetachedNamespaceComponents(move);
         return glob;
     }
 
@@ -406,17 +663,13 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             throw new IllegalArgumentException("A named CODE reference is required");
         }
         RuntimeScalar oldCodeRef = GlobalVariable.globalCodeRefs.get(globName);
-        if (oldCodeRef == sourceCodeRef) {
+        if (oldCodeRef == sourceCodeRef && !WeakRefRegistry.isweak(sourceCodeRef)) {
             return;
         }
-        if (oldCodeRef != null && oldCodeRef.value instanceof RuntimeCode oldCode
-                && oldCode.stashRefCount > 0) {
-            oldCode.stashRefCount--;
-        }
         GlobalVariable.globalCodeRefs.put(globName, sourceCodeRef);
-        GlobalVariable.replacePinnedCodeRef(globName, sourceCodeRef);
+        GlobalVariable.replacePinnedCodeRef(
+                globName, GlobalVariable.globalCodeRefs.get(globName));
         newCode.hadStashRef = true;
-        newCode.stashRefCount++;
         GlobalVariable.isSubs.put(globName, true);
         GlobalVariable.invalidatePackageRootSnapshot();
         InheritanceResolver.invalidateCache();
@@ -464,7 +717,6 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         }
         attachCoderefToNamedGlob(existingCode, globName);
         existingCode.hadStashRef = true;
-        existingCode.stashRefCount++;
         return true;
     }
 
@@ -669,6 +921,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 boolean updateWholeGlobAliasGroup = writesThroughGlobAlias
                         || (!isLocalizedGlob(this.globName)
                         && GlobalVariable.isInGlobAliasGroup(this.globName));
+                RuntimeCode replacedStashCode = null;
 
                 // A non-local typeglob assignment is a redefinition for
                 // prototype purposes too.  Parser-time checks do not see
@@ -754,8 +1007,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                         // the normal alias group alone cannot make a later
                         // glob definition visible to direct lexical calls.
                         // Point that storage at the target's live placeholder.
-                        value.type = codeContainer.type;
-                        value.value = codeContainer.value;
+                        value.set(codeContainer);
                     }
                     // Preserve the target's cached placeholder; the shared
                     // alias group will populate it when either name is defined.
@@ -773,15 +1025,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                     return value;
                 }
 
-                // Before overwriting, clear weak refs to the old sub's pad constants.
-                // This emulates Perl 5's behavior where replacing a sub frees its op-tree,
-                // causing compile-time constants to be freed and weak refs to be cleared.
+                // Replacing this glob drops only its CODE-slot owner. A saved
+                // coderef may still keep the old CV and its optree constants alive;
+                // final CV cleanup releases those constants after the last owner leaves.
                 if (codeContainer.value instanceof RuntimeCode oldCode) {
-                    oldCode.clearPadConstantWeakRefs();
-                    // Decrement stashRefCount on the old CODE ref being replaced
-                    if (oldCode.stashRefCount > 0) {
-                        oldCode.stashRefCount--;
-                    }
+                    replacedStashCode = oldCode;
                 }
 
                 // A BEGIN-installed `sub () { $lexical }` becomes a constant
@@ -811,7 +1059,9 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                     // install as anonymous).
                     RuntimeGlob.attachCoderefToNamedGlob(newCode, this.globName);
                     newCode.hadStashRef = true;
-                    newCode.stashRefCount++;
+                }
+                if (replacedStashCode != null) {
+                    replacedStashCode.noteStashOwnerReleased();
                 }
 
                 // Invalidate the method resolution cache
@@ -873,14 +1123,15 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                     // resolved through Outer:: for @ISA and method lookup.
                     if (isStashGlobName(this.globName) && hash instanceof RuntimeStash sourceStash) {
                         if (sourceStash.savedNamespaceMove != null) {
-                            GlobalVariable.installNamespaceMove(sourceStash.savedNamespaceMove, this.globName);
+                            sourceStash.installSavedNamespaceMove(this.globName);
                         } else if (GlobalVariable.globalHashes.get(sourceStash.namespace) != sourceStash) {
                             // A saved \%Pkg:: can outlive a rebind of *Pkg::.
                             // Move its old descendants under the new name
                             // instead of resolving through Pkg's replacement.
-                            RuntimeGlob.NamespaceMove move =
-                                    GlobalVariable.detachNamespaceForStaleStash(sourceStash.namespace);
-                            GlobalVariable.installNamespaceMove(move, this.globName);
+                            RuntimeGlob moveOwner =
+                                    GlobalVariable.detachNamespaceForStaleStash(
+                                            sourceStash.namespace, sourceStash);
+                            sourceStash.installDetachedNamespaceMove(moveOwner, this.globName);
                         } else {
                             GlobalVariable.setStashAlias(this.globName, sourceStash.namespace);
                         }
@@ -986,14 +1237,25 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 // `local *data = "$mod\::DATA"`.
                 String aliasName = NameNormalizer.normalizeVariableName(
                         value.toString(), RuntimeCode.getCurrentPackage());
+                RuntimeStash detachedStash = null;
                 if (isStashGlobName(this.globName)) {
                     RuntimeHash oldStash = GlobalVariable.globalHashes.get(this.globName);
                     if (oldStash instanceof RuntimeStash oldRuntimeStash) {
-                        oldRuntimeStash.savedNamespaceMove =
-                                GlobalVariable.detachNamespaceForStaleStash(this.globName);
+                        detachedStash = oldRuntimeStash;
+                        oldRuntimeStash.saveNamespaceMove(
+                                GlobalVariable.detachNamespaceForStaleStash(
+                                        this.globName, oldRuntimeStash));
                     }
                 }
                 this.set(GlobalVariable.getGlobalIO(aliasName));
+                if (detachedStash != null
+                        && GlobalVariable.globalHashes.get(this.globName) != detachedStash) {
+                    // The package name no longer supplies a local binding to
+                    // the old stash. A saved Perl hash reference may still own
+                    // it; that reference's final release will retire the move.
+                    detachedStash.localBindingExists = false;
+                    MortalList.scopeExitCleanupHash(detachedStash);
+                }
 
                 // Perl also uses `local *PKG::__ANON__ = 'name'` to provide a
                 // dynamic display name for anonymous subs.  Keep that metadata
@@ -1004,6 +1266,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                     if (currentGlob == null) currentGlob = this;
                     currentGlob.nameOverride = value.toString();
                 }
+                // LOAD_GLOB may provide a detached snapshot as the lvalue.
+                // Once this assignment has rebound the named GV, that
+                // temporary snapshot must release its old component slots;
+                // a surviving Perl scalar owner keeps them through GLOB_VALUE.
+                if (slotSnapshot) releaseDetachedComponentsIfUnowned();
                 return value;
             case FORMAT:
                 // Handle format assignments to typeglobs
@@ -1011,9 +1278,9 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 if (value.value instanceof RuntimeFormat sourceFormat) {
                     GlobalVariable.setGlobalFormatRef(this.globName, sourceFormat);
                     if (localizedOriginalIO != null) {
-                        this.IO = localizedOriginalIO;
+                        replaceIOScalar(localizedOriginalIO);
                         RuntimeGlob currentGlob = GlobalVariable.getGlobalIO(this.globName);
-                        currentGlob.IO = localizedOriginalIO;
+                        currentGlob.replaceIOScalar(localizedOriginalIO);
                     }
                 }
                 return value;
@@ -1077,12 +1344,12 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 oldRuntimeIO = rio;
             }
 
-            this.IO = value.IO;
+            replaceIOScalar(value.IO);
             this.retainedIoGlob = value;
             // Also update the global IO entry for this glob
             if (this.globName != null) {
                 RuntimeGlob targetIO = GlobalVariable.getGlobalIO(this.globName);
-                targetIO.IO = value.IO;
+                targetIO.replaceIOScalar(value.IO);
             }
 
             // Update selectedHandle if the old IO was the currently selected output handle.
@@ -1218,9 +1485,9 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         }
 
         if (!isLocalizedGlob(this.globName)) {
-            this.IO = ioSource;
+            replaceIOScalar(ioSource);
         }
-        targetIO.IO = ioSource;
+        targetIO.replaceIOScalar(ioSource);
 
         // Update selectedHandle if the old IO was the currently selected output handle
         if (oldRuntimeIO != null && oldRuntimeIO == RuntimeIO.getSelectedHandle()
@@ -1238,12 +1505,12 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // `@Fooo::ISA = (...)` visible through Baro even when neither side
         // had an ARRAY slot at alias time.  Ordinary absent ARRAY slots stay
         // unmaterialized so `defined *glob{ARRAY}` retains its Perl meaning.
-        if ((value.slotSnapshot && value.arraySlot != null)
+        if (((value.slotSnapshot || value.symbolGensym) && value.arraySlot != null)
                 || GlobalVariable.existsGlobalArray(globName)
                 || this.globName.endsWith("::ISA")
                 || globName.endsWith("::ISA")) {
             RuntimeArray sourceArray;
-            if (value.slotSnapshot) {
+            if (value.slotSnapshot || value.symbolGensym) {
                 sourceArray = value.arraySlot;
             } else if (this.globName.endsWith("::ISA") || globName.endsWith("::ISA")) {
                 // Read the source slot directly.  Alias-group lookup here can
@@ -1288,7 +1555,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // that mirrors the package's symbol table — getGlobSlot("HASH") returns
         // it unconditionally for stashes, so we must materialise the alias here
         // even if globalHashes hasn't been populated yet.
-        boolean sourceHasHash = (value.slotSnapshot && value.hashSlot != null)
+        boolean sourceHasHash = ((value.slotSnapshot || value.symbolGensym) && value.hashSlot != null)
                 || GlobalVariable.existsGlobalHash(globName)
                 || isStashGlobName(globName)
                 || (!isLocalizedGlob(this.globName)
@@ -1296,7 +1563,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                         || globName.equals("main::+")
                         || globName.equals("main::-")));
         if (sourceHasHash) {
-            RuntimeHash sourceHash = value.slotSnapshot
+            RuntimeHash sourceHash = value.slotSnapshot || value.symbolGensym
                     ? value.hashSlot
                     : GlobalVariable.getGlobalHash(globName);
             if ("main::ENV".equals(this.globName) || "ENV".equals(this.globName)) {
@@ -1318,7 +1585,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // neither has been written yet. Without this, the second `*& = 0`
         // hits the original read-only `$&` instead of the freshly-aliased
         // scalar (refstack.t GH#15752).
-        RuntimeScalar sourceScalar = value.slotSnapshot
+        RuntimeScalar sourceScalar = value.slotSnapshot || value.symbolGensym
                 ? value.getGlobScalarSlot()
                 : GlobalVariable.getGlobalVariable(globName);
         GlobalVariable.markPackageGlobalRoot(sourceScalar);
@@ -1447,7 +1714,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             }
             case "SCALAR" -> {
                 // For anonymous globs (null globName), use local scalarSlot
-                if (this.globName == null || this.slotSnapshot) {
+                if (this.globName == null || this.slotSnapshot || this.symbolGensym) {
                     if (this.scalarSlot == null) {
                         this.scalarSlot = new RuntimeScalar();
                     }
@@ -1473,7 +1740,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                     }
                 }
                 // For anonymous globs (null globName), use local arraySlot
-                if (this.globName == null) {
+                if (this.globName == null || this.symbolGensym) {
                     if (this.arraySlot == null) {
                         this.arraySlot = new RuntimeArray();
                     }
@@ -1493,7 +1760,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             case "HASH" -> {
                 // For *glob{HASH} (glob slot access), always use the global hash.
                 // The local hashSlot is only for *glob->{key} (arrow hash deref via getGlobHash()).
-                if (this.globName == null) {
+                if (this.globName == null || this.symbolGensym) {
                     // Anonymous globs use local hashSlot since they have no global name
                     if (this.hashSlot == null) {
                         this.hashSlot = new RuntimeHash();
@@ -1544,7 +1811,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
      * This is distinct from *glob{SCALAR}, which returns a reference to the slot.
      */
     public RuntimeScalar getGlobScalarSlot() {
-        if (this.globName == null || this.slotSnapshot) {
+        if (this.globName == null || this.slotSnapshot || this.symbolGensym) {
             if (this.scalarSlot == null) {
                 this.scalarSlot = new RuntimeScalar();
             }
@@ -1554,6 +1821,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     }
 
     public RuntimeScalar getIO() {
+        refreshIOOwnerState();
         return this.IO;
     }
 
@@ -1563,9 +1831,10 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
      * For named globs without a local hashSlot, retrieves from GlobalVariable.
      */
     public RuntimeHash getGlobHash() {
-        if (this.slotSnapshot) {
+        if (this.slotSnapshot || this.symbolGensym) {
             if (this.hashSlot == null) {
-                this.hashSlot = this.hashSlotAliasesNamedGlob && this.globName != null
+                this.hashSlot = !this.symbolGensym
+                        && this.hashSlotAliasesNamedGlob && this.globName != null
                         ? GlobalVariable.getGlobalHash(this.globName)
                         : new RuntimeHash();
             }
@@ -1600,7 +1869,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
      * For named globs, retrieves from GlobalVariable.
      */
     public RuntimeArray getGlobArray() {
-        if (this.globName == null || this.slotSnapshot) {
+        if (this.globName == null || this.slotSnapshot || this.symbolGensym) {
             if (this.arraySlot == null) {
                 this.arraySlot = new RuntimeArray();
             }
@@ -1610,7 +1879,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     }
 
     public RuntimeGlob setIO(RuntimeScalar io) {
-        GlobalVariable.markStashEntryVisible(this.globName);
+        if (symbolGensym || GlobalVariable.isIORefHiddenAfterStashDelete(this.globName)) {
+            GlobalVariable.hideIORefAfterStashDelete(this.globName);
+        } else {
+            GlobalVariable.markStashEntryVisible(this.globName);
+        }
         acceptedSocket = false;
         // Check if the current IO is the selected handle - if so, update it
         RuntimeIO oldIO = null;
@@ -1620,10 +1893,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // If IO slot is tied (TIED_SCALAR with TieHandle), replace it entirely
         // Otherwise use set() to modify in place, preserving sharing with detached copies
         if (this.IO.type == RuntimeScalarType.TIED_SCALAR) {
-            this.IO = io;
+            replaceIOScalar(io);
         } else {
             this.IO.type = io.type;
             this.IO.value = io.value;
+            refreshIOOwnerState();
         }
         // If the IO scalar contains a RuntimeIO, set its glob name
         if (io.value instanceof RuntimeIO runtimeIO) {
@@ -1652,7 +1926,10 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     }
 
     private RuntimeGlob setIO(RuntimeIO io, boolean makeStashEntryVisible) {
-        if (makeStashEntryVisible) {
+        if (symbolGensym || !makeStashEntryVisible
+                || GlobalVariable.isIORefHiddenAfterStashDelete(this.globName)) {
+            GlobalVariable.hideIORefAfterStashDelete(this.globName);
+        } else {
             GlobalVariable.markStashEntryVisible(this.globName);
         }
         acceptedSocket = false;
@@ -1666,10 +1943,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // If IO slot is tied (TIED_SCALAR with TieHandle), replace it entirely
         // Otherwise modify in place, preserving sharing with detached copies
         if (this.IO.type == RuntimeScalarType.TIED_SCALAR) {
-            this.IO = new RuntimeScalar(io);
+            replaceIOScalar(new RuntimeScalar(io));
         } else {
             this.IO.type = RuntimeScalarType.GLOB;  // RuntimeIO is stored as GLOB type
             this.IO.value = io;
+            refreshIOOwnerState();
         }
         // Update selectedHandle if the old IO was the selected handle
         // This ensures that when STDOUT is redirected, print without explicit
@@ -1726,8 +2004,9 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     }
 
     private void updateStandardRuntimeHandle(RuntimeIO io) {
-        if (PerlRuntime.current().standardIOGlob(globName) != null) {
-            PerlRuntime.current().replaceStandardHandle(globName, io);
+        PerlRuntime runtime = PerlRuntime.currentOrNull();
+        if (runtime != null && runtime.standardIOGlob(globName) != null) {
+            runtime.replaceStandardHandle(globName, io);
         }
     }
 
@@ -1961,6 +2240,14 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
      * @return The current RuntimeGlob instance after undefining its elements.
      */
     public RuntimeGlob undefine() {
+        if (namespaceMove != null) {
+            releaseDetachedComponentsIfUnowned();
+            return this;
+        }
+        if (globName == null && retainsDetachedComponents()) {
+            releaseDetachedComponentsIfUnowned();
+            return this;
+        }
         if (isHintsGlobName(this.globName)) {
             HintHashRegistry.clearCurrentHintHash();
         }
@@ -1987,23 +2274,16 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         }
         // Undefine CODE
         RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(this.globName);
-        RuntimeCode displacedCode = codeRef.value instanceof RuntimeCode code ? code : null;
-        boolean displacedCodeHadWalkableEdges = displacedCode != null
-                && ReachabilityWalker.hasWalkableCodeEdges(displacedCode, true);
+        RuntimeCode removedStashCode = codeRef.value instanceof RuntimeCode code
+                ? code : null;
         codeRef.set(new RuntimeScalar());
+        if (removedStashCode != null) {
+            removedStashCode.noteStashOwnerReleased();
+        }
         // The CODE scalar can be pinned separately from the stash-map entry.
         // Undefining a whole glob must invalidate root indexes even when that
         // scalar was not marked as a package-global root itself.
         GlobalVariable.noteGlobalCodeRefSlotMutation(codeRef);
-        // A CODE-owned state variable can be the only strong Perl owner of an
-        // unblessed object with weak observers. Removing the glob drops that
-        // owner immediately in Perl, so clear weak observers before returning
-        // instead of waiting for a later statement-boundary sweep.
-        if (displacedCodeHadWalkableEdges
-                && WeakRefRegistry.weakRefsExist()
-                && !ModuleInitGuard.inModuleInit()) {
-            ReachabilityWalker.sweepWeakRefs(true);
-        }
 
         // Invalidate the method resolution cache
         InheritanceResolver.invalidateCache();
@@ -2062,11 +2342,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // so a saved *Pkg::name{IO} reference can be re-installed later.
         RuntimeGlob ioGlob = GlobalVariable.getExistingGlobalIO(this.globName);
         if (ioGlob != null) {
-            ioGlob.IO = new RuntimeScalar();
+            ioGlob.replaceIOScalar(new RuntimeScalar());
             GlobalVariable.hideIORefAfterStashDelete(this.globName);
         }
         if (ioGlob != this) {
-            this.IO = new RuntimeScalar();
+            replaceIOScalar(new RuntimeScalar());
         }
         GlobalVariable.invalidateStashEnumerationCache();
 
@@ -2191,6 +2471,8 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         }
         RuntimeScalar newCode = new RuntimeScalar();
         GlobalVariable.markPackageGlobalRoot(newCode);
+        // The saved GP owns its CV before the last visible name is replaced.
+        GlobalVariable.enterLocalizedCodeRef(this.globName, savedCode);
         // A localized whole-glob alias still addresses one temporary CODE
         // slot.  In particular, `*A = *Base::method; local *A = sub { ... }`
         // must make Base::method visible to MRO until the scope unwinds.
@@ -2198,11 +2480,8 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             GlobalVariable.globalCodeRefs.put(alias, newCode);
         }
         GlobalVariable.invalidatePackageRootSnapshot();
-        // Decrement stashRefCount on the saved CODE ref being removed from the stash
         if (savedCode != null && savedCode.value instanceof RuntimeCode savedCodeObj) {
-            if (savedCodeObj.stashRefCount > 0) {
-                savedCodeObj.stashRefCount--;
-            }
+            savedCodeObj.noteStashOwnerReleased();
         }
         // Also redirect pinnedCodeRefs to the new empty code for the local scope.
         // Without this, getGlobalCodeRef() returns the saved (pinned) object, and
@@ -2211,7 +2490,6 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         for (String alias : codeAliasGroup) {
             GlobalVariable.replacePinnedCodeRef(alias, newCode);
         }
-        GlobalVariable.enterLocalizedCodeRef(this.globName, savedCode);
         GlobalVariable.getGlobalFormatRef(this.globName).dynamicSaveState();
 
         // Create a NEW RuntimeGlob for the local scope and install it in globalIORefs.
@@ -2219,7 +2497,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // References captured during the local scope (e.g. \do { local *FH }) will point to the
         // new glob, which remains valid after the local scope ends and this old glob is restored.
         RuntimeGlob newGlob = new RuntimeGlob(this.globName);
-        newGlob.localizedOriginalIO = this.IO;
+        newGlob.setLocalizedOriginalIO(this.IO);
         // Give the new glob its own hash/array/scalar slots so that orphaned globs
         // (captured via \do { local *FH }) have independent per-instance storage.
         // This is needed by IO::Scalar which stores state via *$self->{Key}.
@@ -2234,7 +2512,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         if (isSelectedHandle) {
             RuntimeIO stubIO = new RuntimeIO();
             stubIO.globName = this.globName;
-            newGlob.IO = new RuntimeScalar(stubIO);
+            newGlob.replaceIOScalar(new RuntimeScalar(stubIO));
         }
 
         GlobalVariable.replaceGlobalIO(this.globName, newGlob);
@@ -2263,7 +2541,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         }
 
         // Restore the saved IO object reference on this (old) glob.
-        this.IO = snap.io;
+        replaceIOScalar(snap.io);
         if (this.IO != null && this.IO.value instanceof RuntimeIO runtimeIO) {
             String restoredIoGlobName = snap.savedIOGlobName;
             runtimeIO.globName = restoredIoGlobName != null
@@ -2328,35 +2606,42 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         }
         GlobalVariable.invalidatePackageRootSnapshot();
 
-        // Before replacing the code ref, decrement the refCount of the CODE
-        // that was installed during the local scope. The local scope's code
-        // was set via setLarge (which incremented refCount), but the restore
-        // via put() bypasses setLarge, so we must decrement manually.
-        // Without this, CODE refs installed in localized globs (e.g.,
-        // `local *Foo::bar; sub bar { ... }` in Sub::Quote's unquote_sub)
-        // have permanently overcounted refCount, preventing releaseCaptures
-        // from firing at the right time.
+        // Retire the local CODE slot's own counted edge before restoring the
+        // saved stash entry. The scalar owner token identifies which count this
+        // slot acquired; a positive referent count alone cannot prove this CODE
+        // slot is the edge to decrement.
         RuntimeScalar localCode = GlobalVariable.globalCodeRefs.get(snap.globName);
-        RuntimeCode removedLocalCodeForReachabilityCheck = null;
-        if (localCode != null && (localCode.type & REFERENCE_BIT) != 0 && localCode.value instanceof RuntimeBase localBase) {
-            boolean removedLastStashRef = false;
-            // Decrement stashRefCount on the local scope's CODE ref being removed
+        RuntimeCode removedLocalCodeForStashRelease = null;
+        PerlOwnerSlot localCodeOwner = localCode == null ? null : localCode.countedOwnerSlot();
+        boolean hasExactLocalCodeOwner = localCode != null && localCode.refCountOwned
+                && localCodeOwner != null && localCodeOwner.isActive()
+                && localCodeOwner.referent() == localCode.value;
+        if (localCode != null && (localCode.type & REFERENCE_BIT) != 0
+                && localCode.value instanceof RuntimeBase localBase
+                // A CV can have other counted stash slots while this localized
+                // slot still owns its own exact token. Retire that token on
+                // restore; only keep the conservative guard for legacy slots
+                // whose decrement has no identity proof.
+                && (hasExactLocalCodeOwner
+                    || !(localBase instanceof RuntimeCode code && code.hasCountedCodeSlots))) {
             if (localBase instanceof RuntimeCode localCodeObj) {
-                if (localCodeObj.stashRefCount > 0) {
-                    localCodeObj.stashRefCount--;
-                    removedLastStashRef = localCodeObj.stashRefCount == 0;
-                }
+                removedLocalCodeForStashRelease = localCodeObj;
             }
-            if (localBase.refCount > 0 && --localBase.refCount == 0) {
-                localBase.refCount = Integer.MIN_VALUE;
-                DestroyDispatch.callDestroy(localBase);
+            if (localCode.refCountOwned) {
+                MortalList.releaseCountedOwnerImmediately(
+                        localCode, "RuntimeGlob.restoreLocalizedCodeRef");
+            } else if (localCode.hasCodeSlotBinding() && localBase.refCount > 0) {
+                // Older direct CODE-slot stores did not create a scalar owner
+                // token. The current stash binding is the exact storage proof;
+                // attach that existing count to a token before normal release.
+                RuntimeScalar.adoptExistingCountedOwnerForCurrentValue(
+                        localCode, localBase, PerlOwnerSlot.Kind.CODE_SLOT,
+                        "RuntimeGlob.restoreLocalizedCodeRef");
+                MortalList.releaseCountedOwnerImmediately(
+                        localCode, "RuntimeGlob.restoreLocalizedCodeRef");
             } else if (localBase.refCount == 0 && localBase instanceof RuntimeCode) {
                 localBase.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroy(localBase);
-            } else if (localBase instanceof RuntimeCode localCodeObj
-                    && removedLastStashRef
-                    && (localCodeObj.capturedScalars != null || localCodeObj.capturedAggregates != null)) {
-                removedLocalCodeForReachabilityCheck = localCodeObj;
             }
         }
         for (var entry : snap.aliasedCodes.entrySet()) {
@@ -2368,18 +2653,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             }
         }
         GlobalVariable.invalidatePackageRootSnapshot();
-        if (removedLocalCodeForReachabilityCheck != null
-                && removedLocalCodeForReachabilityCheck.activeOwnerCount() == 0
-                && !ReachabilityWalker.isReachableFromLiveScalarRegistry(removedLocalCodeForReachabilityCheck)
-                && !ReachabilityWalker.isReachableFromLiveCodeCaptures(removedLocalCodeForReachabilityCheck)
-                && !ReachabilityWalker.isReachableFromRoots(removedLocalCodeForReachabilityCheck)) {
-            removedLocalCodeForReachabilityCheck.refCount = Integer.MIN_VALUE;
-            DestroyDispatch.callDestroy(removedLocalCodeForReachabilityCheck);
-        }
-        // Increment stashRefCount on the restored CODE ref being put back in the stash
         if (snap.code != null && snap.code.value instanceof RuntimeCode restoredCode) {
             restoredCode.hadStashRef = true;
-            restoredCode.stashRefCount++;
+        }
+        if (removedLocalCodeForStashRelease != null) {
+            removedLocalCodeForStashRelease.noteStashOwnerReleased();
         }
         // Also restore the pinned code ref so getGlobalCodeRef() returns the
         // original code object again.

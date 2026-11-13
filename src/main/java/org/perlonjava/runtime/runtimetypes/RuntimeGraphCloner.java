@@ -39,9 +39,10 @@ public class RuntimeGraphCloner {
     private final IdentityHashMap<IOHandle, InheritedHandlePair> inheritedHandles =
             new IdentityHashMap<>();
     private final List<RuntimeScalar> weakReferences = new ArrayList<>();
-    private final List<RuntimeBase> snapshotStrongRoots = new ArrayList<>();
     private final Set<String> skippedClasses;
     private int publicDepth;
+
+    record SnapshotRoots(List<RuntimeBase> roots, List<PerlOwnerSlot> ownerSlots) {}
 
     public RuntimeGraphCloner(PerlRuntime sourceRuntime, PerlRuntime targetRuntime) {
         this(sourceRuntime, targetRuntime, Set.of());
@@ -90,11 +91,48 @@ public class RuntimeGraphCloner {
      * Weak edges and observed-address publication are finalized only after the
      * package graph, entry CODE, and arguments all share this identity map.
      */
-    List<RuntimeBase> cloneSnapshotRoots(List<? extends RuntimeBase> roots) {
+    SnapshotRoots cloneSnapshotRoots(List<? extends RuntimeBase> roots) {
         List<RuntimeBase> result = new ArrayList<>(roots.size());
-        for (RuntimeBase root : roots) result.add(cloneValue(root));
-        snapshotStrongRoots.addAll(result);
-        return result;
+        List<PerlOwnerSlot> ownerSlots = new ArrayList<>(roots.size() * 2);
+        try {
+            for (RuntimeBase root : roots) {
+                RuntimeBase clonedRoot = cloneValue(root);
+                result.add(clonedRoot);
+                retainSnapshotRoot(clonedRoot, ownerSlots);
+                if (clonedRoot instanceof RuntimeScalar scalar
+                        && RuntimeScalarType.isReference(scalar)
+                        && scalar.value instanceof RuntimeBase referent
+                        && referent != clonedRoot) {
+                    retainSnapshotRoot(referent, ownerSlots);
+                }
+            }
+        } catch (Throwable failure) {
+            Throwable pendingException = failure;
+            for (int i = 0; i < ownerSlots.size(); i++) {
+                try {
+                    ownerSlots.get(i).release();
+                } catch (Throwable cleanupFailure) {
+                    pendingException = cleanupFailure;
+                }
+            }
+            throw cleanupFailure(pendingException);
+        }
+        return new SnapshotRoots(
+                java.util.Collections.unmodifiableList(new ArrayList<>(result)),
+                List.copyOf(ownerSlots));
+    }
+
+    private static RuntimeException cleanupFailure(Throwable failure) {
+        if (failure instanceof RuntimeException runtimeException) return runtimeException;
+        if (failure instanceof Error error) throw error;
+        return new RuntimeException(failure);
+    }
+
+    private static void retainSnapshotRoot(
+            RuntimeBase root, List<PerlOwnerSlot> ownerSlots) {
+        PerlOwnerSlot owner = new PerlOwnerSlot(PerlOwnerSlot.Kind.TEMPORARY_ROOT);
+        owner.acquireTemporaryRootIdentity(root);
+        ownerSlots.add(owner);
     }
 
     /**
@@ -164,6 +202,22 @@ public class RuntimeGraphCloner {
         finishCloneBoundary();
     }
 
+    void restoreCodeSlotBindings(java.util.Collection<RuntimeScalar> slots) {
+        try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
+            for (RuntimeScalar slot : slots) {
+                if (slot != null) slot.retainCodeSlotBinding();
+            }
+        }
+    }
+
+    void restoreStashCodeSlotBindings(java.util.Collection<RuntimeScalar> slots) {
+        try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
+            for (RuntimeScalar slot : slots) {
+                if (slot != null) slot.retainStashCodeSlotBinding();
+            }
+        }
+    }
+
     /** Package/runtime snapshot entry point that retains the shared graph map. */
     RuntimeBase cloneValue(RuntimeBase value) {
         if (value == null) return null;
@@ -173,6 +227,17 @@ public class RuntimeGraphCloner {
         // shared synchronization identity.
         if (value.threadShared && !needsSharedRuntimeView(value)) return value;
         Object existing = clones.get(value);
+        if (existing instanceof RuntimeScalar clonedScalar
+                && clonedScalar.refCount == Integer.MIN_VALUE
+                && value instanceof RuntimeScalar sourceScalar
+                && sourceScalar.refCount != Integer.MIN_VALUE) {
+            // A lazy CODE definition can expose a pad cell after the initial
+            // thread snapshot. If this snapshot already cloned that source
+            // cell and the child has since retired the clone, reuse would
+            // attach the new closure metadata to a destroyed cell.
+            clones.remove(value);
+            existing = null;
+        }
         if (existing != null) return (RuntimeBase) existing;
 
         if (value instanceof RuntimeScalarReadOnly scalar
@@ -199,6 +264,8 @@ public class RuntimeGraphCloner {
         if (existing != null) return (RuntimeCode) existing;
 
         RuntimeCode target;
+        RuntimeBase[] captureValues = null;
+        InterpretedCode captureOwnerBody = null;
         if (source instanceof InterpretedCode interpreted) {
             // cloneInterpretedCode copies metadata itself because it is also
             // used for an interpreted body nested inside a lazy RuntimeCode
@@ -213,12 +280,15 @@ public class RuntimeGraphCloner {
             // the parent's capturedVars array even though the placeholder's
             // metadata had been cloned correctly.
             target = new RuntimeCode((PerlSubroutine) null, source.prototype);
+            copyBase(source, target);
             clones.put(source, target);
             InterpretedCode clonedBody = cloneInterpretedCode(interpreted);
             target.subroutine = clonedBody;
             target.codeObject = clonedBody;
+            captureOwnerBody = clonedBody;
         } else {
             target = new RuntimeCode((PerlSubroutine) null, source.prototype);
+            copyBase(source, target);
             clones.put(source, target);
             if (source.subroutine instanceof CloneablePerlSubroutine cloneable) {
                 RuntimeBase[] captures = cloneable.capturedValues();
@@ -229,6 +299,7 @@ public class RuntimeGraphCloner {
                 CloneablePerlSubroutine clonedSubroutine = cloneable.cloneWithCaptures(clonedCaptures);
                 target.subroutine = clonedSubroutine;
                 target.codeObject = clonedSubroutine;
+                captureValues = clonedCaptures;
             } else {
                 // Java/native PerlSubroutine implementations carry no Perl pad.
                 target.subroutine = source.subroutine;
@@ -236,7 +307,20 @@ public class RuntimeGraphCloner {
                 target.methodHandle = source.methodHandle;
             }
         }
-        copyCodeMetadata(source, target);
+        copyCodeMetadata(source, target, captureValues, captureOwnerBody == null);
+        if (captureOwnerBody != null) {
+            // The wrapper and its interpreted body are one Perl CV. Share the
+            // body's capture-owner identities instead of retaining each cell
+            // once for the body and again for its wrapper.
+            target.capturedScalars = captureOwnerBody.capturedScalars;
+            target.capturedScalarOwnerSlots = captureOwnerBody.capturedScalarOwnerSlots;
+            target.capturedAggregates = captureOwnerBody.capturedAggregates;
+            target.capturedAggregateOwnerSlots = captureOwnerBody.capturedAggregateOwnerSlots;
+            if (target.capturedScalars != null || target.capturedAggregates != null) {
+                target.refCount = 0;
+            }
+            target.rebindCaptureOwnerSlots();
+        }
         return target;
     }
 
@@ -281,6 +365,8 @@ public class RuntimeGraphCloner {
                     source.evalSitePragmaFlags,
                     source.warningBitsString);
         }
+        copyBase(source, target);
+        target.setMyScalarNamesByRegister(source.myScalarNamesByRegister);
         clones.put(source, target);
         target.ourVariableRegistry = source.ourVariableRegistry;
         target.declaredOurVariables = source.declaredOurVariables;
@@ -293,7 +379,7 @@ public class RuntimeGraphCloner {
         target.signatureKeyword = source.signatureKeyword;
         target.gotoLabelPcs = source.gotoLabelPcs;
         target.gotoLabelsInsideLoop = source.gotoLabelsInsideLoop;
-        copyCodeMetadata(source, target);
+        copyCodeMetadata(source, target, captures);
         return target;
     }
 
@@ -305,6 +391,16 @@ public class RuntimeGraphCloner {
     }
 
     private void copyCodeMetadata(RuntimeCode source, RuntimeCode target) {
+        copyCodeMetadata(source, target, null, true);
+    }
+
+    private void copyCodeMetadata(
+            RuntimeCode source, RuntimeCode target, RuntimeBase[] captureValues) {
+        copyCodeMetadata(source, target, captureValues, true);
+    }
+
+    private void copyCodeMetadata(RuntimeCode source, RuntimeCode target,
+                                  RuntimeBase[] captureValues, boolean copyCaptureOwnership) {
         target.prototype = source.prototype;
         target.signatureNamedParams = source.signatureNamedParams;
         target.signatureRequiredNamedParams = source.signatureRequiredNamedParams;
@@ -378,7 +474,12 @@ public class RuntimeGraphCloner {
                             clones.put(source, target);
                         }
                     }
-                    target.adoptDefinitionFrom(completed);
+                    try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
+                        target.adoptDefinitionFrom(completed);
+                        // The materialized child copy was an intermediate CV;
+                        // the installed placeholder now owns its pad constants.
+                        completed.clearPadConstantWeakRefs();
+                    }
                     target.compilerSupplier = null;
                 } finally {
                     org.perlonjava.app.scriptengine.PerlLanguageProvider.COMPILE_LOCK.unlock();
@@ -396,9 +497,11 @@ public class RuntimeGraphCloner {
         target.lexicalSubDisplayName = source.lexicalSubDisplayName;
         target.isConstantCv = source.isConstantCv;
         target.isLexicalConstantCv = source.isLexicalConstantCv;
+        RuntimeCode.copyPadConstantTree(source, target, this::cloneRuntimeBases);
         target.stashInstallPackage = source.stashInstallPackage;
         target.stashInstallSub = source.stashInstallSub;
         target.hadStashRef = source.hadStashRef;
+        target.hasCountedCodeSlots = source.hasCountedCodeSlots;
         target.explicitlyMaterializedGlob = source.explicitlyMaterializedGlob;
         target.captureFieldsRecorded = source.captureFieldsRecorded;
         target.installedViaAnonGlobAssign = source.installedViaAnonGlobAssign;
@@ -420,6 +523,10 @@ public class RuntimeGraphCloner {
         target.stateVariable = cloneScalarMap(source.stateVariable);
         target.stateArray = cloneArrayMap(source.stateArray);
         target.stateHash = cloneHashMap(source.stateHash);
+        target.stateAggregateAliasOwners = cloneScalarMap(source.stateAggregateAliasOwners);
+        try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
+            target.retainClonedStateOwnerSlots();
+        }
         if (source.__SUB__ != null) {
             target.restoreClonedSelfReference(
                     (RuntimeScalar) cloneValue(source.__SUB__));
@@ -440,39 +547,81 @@ public class RuntimeGraphCloner {
             }
         }
 
-        // capturedScalars/capturedAggregates are the authoritative ownership
-        // lists built by makeCodeObject()/CREATE_CLOSURE. closedOverVariables
-        // is diagnostic/name metadata and can legitimately omit executable
-        // captures, so rebuilding ownership from that map allowed a method
-        // return to DESTROY a still-live captured object in an ithread.
-        if (source.capturedScalars != null) {
-            target.capturedScalars = new RuntimeScalar[source.capturedScalars.length];
-            for (int i = 0; i < source.capturedScalars.length; i++) {
-                target.capturedScalars[i] =
-                        (RuntimeScalar) cloneValue(source.capturedScalars[i]);
-            }
-            try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
-                for (RuntimeScalar captured : target.capturedScalars) {
-                    captured.retainThreadCloneClosureCapture();
+        // The executable closure fields / bytecode capturedVars are the
+        // authoritative captured cells. Re-cloning RuntimeCode's parallel
+        // metadata array can create a second scalar cell for the same source
+        // capture; its legacy capture bridge then retains the referent after
+        // the executable cell is assigned undef in an ithread.
+        if (copyCaptureOwnership) {
+            List<RuntimeScalar> clonedCaptureScalars = new ArrayList<>();
+            List<RuntimeBase> clonedCaptureAggregates = new ArrayList<>();
+            Set<RuntimeBase> seenCaptureValues = java.util.Collections.newSetFromMap(
+                    new IdentityHashMap<>());
+            if (captureValues != null) {
+                for (RuntimeBase capture : captureValues) {
+                    // Preserve the bytecode capture indexes, but do not create
+                    // ownership metadata for a dead cell left in a lazy CV's
+                    // conservative capture array. Such cells are placeholders,
+                    // not live Perl captures.
+                    if (capture == null || capture.refCount == Integer.MIN_VALUE
+                            || !seenCaptureValues.add(capture)) continue;
+                    if (capture instanceof RuntimeScalar scalar) {
+                        clonedCaptureScalars.add(scalar);
+                    } else if (capture instanceof RuntimeArray || capture instanceof RuntimeHash) {
+                        clonedCaptureAggregates.add(capture);
+                    }
+                }
+            } else {
+                RuntimeScalar[] sourceCapturedScalars = source.capturedScalars;
+                if (sourceCapturedScalars != null) {
+                    for (RuntimeScalar scalar : sourceCapturedScalars) {
+                        // Conservative capture metadata can outlive the pad
+                        // cell it once described, especially while lazy named
+                        // CODE definitions are copied into an ithread. A dead
+                        // cell is not a Perl owner and must not be resurrected
+                        // as a child closure capture.
+                        if (scalar == null || scalar.refCount == Integer.MIN_VALUE) continue;
+                        RuntimeScalar cloned = (RuntimeScalar) cloneValue(scalar);
+                        if (cloned != null && cloned.refCount != Integer.MIN_VALUE
+                                && seenCaptureValues.add(cloned)) {
+                            clonedCaptureScalars.add(cloned);
+                        }
+                    }
+                }
+                if (source.capturedAggregates != null) {
+                    for (RuntimeBase aggregate : source.capturedAggregates) {
+                        RuntimeBase cloned = cloneValue(aggregate);
+                        if (cloned != null && seenCaptureValues.add(cloned)) {
+                            clonedCaptureAggregates.add(cloned);
+                        }
+                    }
                 }
             }
-        }
-        if (source.capturedAggregates != null) {
-            target.capturedAggregates = new RuntimeBase[source.capturedAggregates.length];
-            for (int i = 0; i < source.capturedAggregates.length; i++) {
-                target.capturedAggregates[i] = cloneValue(source.capturedAggregates[i]);
-            }
-            try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
-                target.capturedAggregateOwnerSlots =
-                        new PerlOwnerSlot[target.capturedAggregates.length];
-                for (int i = 0; i < target.capturedAggregates.length; i++) {
-                    target.capturedAggregateOwnerSlots[i] =
-                            target.capturedAggregates[i].retainClosureCaptureOwner();
+            if (!clonedCaptureScalars.isEmpty()) {
+                target.capturedScalars = clonedCaptureScalars.toArray(new RuntimeScalar[0]);
+                try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
+                    target.capturedScalarOwnerSlots =
+                            new PerlOwnerSlot[target.capturedScalars.length];
+                    for (int i = 0; i < target.capturedScalars.length; i++) {
+                        target.capturedScalarOwnerSlots[i] = target.capturedScalars[i]
+                                .retainThreadCloneClosureCapture(target);
+                    }
                 }
             }
-        }
-        if (target.capturedScalars != null || target.capturedAggregates != null) {
-            target.refCount = 0;
+            if (!clonedCaptureAggregates.isEmpty()) {
+                target.capturedAggregates = clonedCaptureAggregates.toArray(new RuntimeBase[0]);
+                try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
+                    target.capturedAggregateOwnerSlots =
+                            new PerlOwnerSlot[target.capturedAggregates.length];
+                    for (int i = 0; i < target.capturedAggregates.length; i++) {
+                        target.capturedAggregateOwnerSlots[i] =
+                                target.capturedAggregates[i].retainClosureCaptureOwner(target);
+                    }
+                }
+            }
+            if (target.capturedScalars != null || target.capturedAggregates != null) {
+                target.refCount = 0;
+            }
         }
     }
 
@@ -581,6 +730,15 @@ public class RuntimeGraphCloner {
             weakReferences.add(target);
         } else {
             restoreScalarReferenceOwnership(source, target);
+            if (source.hasIoOwner()) {
+                // IO holder identities are runtime-local just like counted
+                // scalar edges. The source scalar keeps its parent lease;
+                // the cloned Perl scalar owns a fresh lease on the cloned
+                // anonymous glob so child cleanup cannot outlive its handle.
+                try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
+                    RuntimeScalar.retainUnstashedIoForDurableSlot(target);
+                }
+            }
         }
         if (target.value instanceof RuntimeCode code && code.__SUB__ == null) {
             // JVM CODE commonly stores its generated implementation in
@@ -599,20 +757,8 @@ public class RuntimeGraphCloner {
                 || !(target.value instanceof RuntimeBase referent)) {
             return;
         }
-        if (referent.refCount < 0
-                && (referent instanceof RuntimeHash || referent instanceof RuntimeArray)) {
-            referent.refCount = 0;
-        }
-        if (referent.refCount < 0) return;
-        if (referent.refCount == 0) referent.registerSharedFetchedView();
-        referent.traceRefCount(+1, "RuntimeGraphCloner.restoreScalarReferenceOwnership");
-        referent.recordOwner(target, "thread clone scalar owner");
-        referent.recordActiveOwner(target);
-        referent.refCount++;
-        referent.hadCountedReference = true;
-        target.refCountOwned = true;
         try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
-            ScalarRefRegistry.registerRef(target);
+            RuntimeScalar.incrementRefCountForContainerStore(target);
         }
     }
 
@@ -668,8 +814,12 @@ public class RuntimeGraphCloner {
         } else {
             try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
                 for (Map.Entry<String, RuntimeScalar> entry : source.elements.entrySet()) {
-                    target.putClonedElement(entry.getKey(),
-                            (RuntimeScalar) cloneValue(entry.getValue()));
+                    RuntimeScalar clonedValue = (RuntimeScalar) cloneValue(entry.getValue());
+                    if (source.ownsHashAliasCell(entry.getKey(), entry.getValue())) {
+                        target.putClonedAliasElement(entry.getKey(), clonedValue);
+                    } else {
+                        target.putClonedElement(entry.getKey(), clonedValue);
+                    }
                 }
             }
         }
@@ -699,6 +849,7 @@ public class RuntimeGraphCloner {
         target.type = source.type;
         target.value = target;
         target.nameOverride = source.nameOverride;
+        target.symbolGensym = source.symbolGensym;
         target.scalarSlot = (RuntimeScalar) cloneValue(source.scalarSlot);
         target.arraySlot = (RuntimeArray) cloneValue(source.arraySlot);
         target.hashSlot = (RuntimeHash) cloneValue(source.hashSlot);
@@ -709,9 +860,9 @@ public class RuntimeGraphCloner {
         // glob handles cross the snapshot using the same explicit resource policy
         // as lexical and aggregate-held handles.
         if (source.IO != null && source.IO.value instanceof RuntimeIO) {
-            target.IO = (RuntimeScalar) cloneValue(source.IO);
+            target.replaceIOScalar((RuntimeScalar) cloneValue(source.IO));
         } else {
-            target.IO = new RuntimeScalar();
+            target.replaceIOScalar(new RuntimeScalar());
         }
         return target;
     }
@@ -753,8 +904,8 @@ public class RuntimeGraphCloner {
         // Shared transports replace the parent's raw owner with its lease. For
         // wrapper stacks this also ensures the parent and child have independent
         // layer state over the same underlying transport.
-        source.ioHandle = pair.parent();
-        target.ioHandle = pair.child();
+        source.replaceIOHandle(pair.parent());
+        target.replaceIOHandle(pair.child());
         try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
             RuntimeIO.addHandle(target.ioHandle);
         }
@@ -856,7 +1007,7 @@ public class RuntimeGraphCloner {
         target.lexicalSubPackageName = source.lexicalSubPackageName;
         target.lexicalSubPackageCodeDefinedAtDeclaration =
                 source.lexicalSubPackageCodeDefinedAtDeclaration;
-        target.ioOwner = false;
+        target.ioOwnerSlot = null;
     }
 
     private void copyBase(RuntimeBase source, RuntimeBase target) {
@@ -874,6 +1025,10 @@ public class RuntimeGraphCloner {
             target.blessId = cloneBlessId(source.blessId);
         }
         target.localBindingExists = source.localBindingExists;
+        // Keep targeted refcount diagnostics useful across ithreads.  This is
+        // inert unless PJ_REFCOUNT_TRACE is enabled and a class was selected
+        // with PJ_REFCOUNT_TRACE_CLASS in its source runtime.
+        target.refCountTrace = source.refCountTrace;
         target.storedInPackageGlobal = source.storedInPackageGlobal;
         target.isPackageGlobalRoot = source.isPackageGlobalRoot;
         // Refcount/lifecycle queues are reconstructed in the child runtime.
@@ -916,11 +1071,17 @@ public class RuntimeGraphCloner {
     private void finishWeakReferences() {
         if (weakReferences.isEmpty()) return;
         try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
+            int pendingBeforeWeakEdges = MortalList.pendingSize();
             for (RuntimeScalar weakReference : weakReferences) {
-                WeakRefRegistry.weakenForSnapshot(weakReference, snapshotStrongRoots);
+                WeakRefRegistry.weaken(weakReference);
             }
+            // Cloned captures can temporarily contribute a strong bridge until
+            // their weak edges are installed. Retire those releases only after
+            // every snapshot weak edge is registered, so a DESTROY callback
+            // sees the complete weak graph and no stale capture owner survives
+            // into the child thread's first statement.
+            MortalList.drainPendingSince(pendingBeforeWeakEdges);
         }
         weakReferences.clear();
-        snapshotStrongRoots.clear();
     }
 }

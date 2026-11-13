@@ -4,11 +4,12 @@ import java.util.ArrayList;
 import java.util.IdentityHashMap;
 
 /**
- * Runtime cleanup stack for my-variables during exception unwinding.
+ * Runtime cleanup stack for my-variables when a Perl frame exits early.
  * <p>
  * Parallels the {@code local} mechanism (InterpreterState save/restore):
- * my-variables are registered at creation time, and cleaned up on exception
- * via {@link #unwindTo(int)}. On normal scope exit, existing
+ * my-variables are registered at creation time, and cleaned up when an
+ * exception or non-local control-flow return bypasses normal teardown via
+ * {@link #unwindTo(int)}. On normal scope exit, existing
  * {@code scopeExitCleanup} bytecodes handle cleanup, and {@link #popMark(int)}
  * discards the registrations without cleanup.
  * <p>
@@ -32,36 +33,20 @@ public class MyVarCleanupStack {
         return PerlRuntime.current().executionState().myVarCleanupStack;
     }
 
-    // Phase I: parallel identity-counted set for O(1) `isLive(var)` check
-    // from the reachability walker. Maps var -> registration count
-    // (a single var can be registered multiple times if declared in
-    // nested scopes with the same slot reuse).
-    private static IdentityHashMap<Object, Integer> liveCounts() {
-        return PerlRuntime.current().executionState().liveMyVarCounts;
-    }
-
     private static IdentityHashMap<Object, Integer> registeredCounts() {
         return PerlRuntime.current().executionState().registeredMyVarCounts;
     }
 
-    /**
-     * Phase I: O(1) check whether the given object is currently registered
-     * (its declaration scope hasn't exited). Used by the reachability
-     * walker to filter out stale ScalarRefRegistry entries — scalars
-     * whose scopes have exited but whose Java-level lifetime persists
-     * (e.g. via MortalList.deferredCaptures) were falsely marking
-     * their referents as reachable.
-     */
+    /** True when the declaration scope for this lexical has not exited. */
     public static boolean isLive(Object var) {
-        if (var == null) return false;
-        return liveCounts().containsKey(var);
+        return isRegistered(var);
     }
 
     /**
-     * True when {@code var} is currently registered as a lexical, regardless
-     * of whether weak-ref tracking has populated the live-count map. Used by
-     * first-bless paths that can run before the first {@code weaken()} call.
-     * The identity-counted registration map keeps this check O(1).
+     * True when {@code var} is currently registered as a lexical. Used by
+     * lifecycle checks that need to distinguish an active lexical from a
+     * stale Java reference. The identity-counted registration map keeps this
+     * check O(1).
      */
     public static boolean isRegistered(Object var) {
         if (var == null) return false;
@@ -74,11 +59,11 @@ public class MyVarCleanupStack {
      * ({@link ReachabilityWalker#isReachableFromRoots}) to seed from
      * still-in-scope lexical containers (e.g. {@code my %METAS}
      * declared at file scope of a still-loading module). The
-     * live-counts map keys are stable identity references to
-     * RuntimeScalar / RuntimeArray / RuntimeHash instances.
+     * returned objects are the active RuntimeScalar / RuntimeArray /
+     * RuntimeHash registrations, keyed by Java identity.
      */
     public static java.util.List<Object> snapshotLiveVars() {
-        return new java.util.ArrayList<>(liveCounts().keySet());
+        return new java.util.ArrayList<>(registeredCounts().keySet());
     }
 
     /** Snapshot registered lexical slots without requiring weak-ref tracking. */
@@ -114,35 +99,21 @@ public class MyVarCleanupStack {
      */
     public static void register(Object var) {
         stack().add(var);
-        if (var != null) registeredCounts().merge(var, 1, Integer::sum);
-        // liveCounts is consulted by ReachabilityWalker.sweepWeakRefs and
-        // .isReachableFromRoots. We populate it lazily — only after the
-        // first weaken() call (which sets WeakRefRegistry.weakRefsExist).
-        // Tests that never weaken pay zero per-`my` cost; tests that do
-        // weaken trigger a one-time backfill via
-        // {@link #snapshotStackToLiveCounts()} from WeakRefRegistry,
-        // which seeds liveCounts with all already-registered my-vars.
-        if (var != null && WeakRefRegistry.weakRefsExist()) {
-            liveCounts().merge(var, 1, Integer::sum);
+        if (var != null) {
+            registeredCounts().merge(var, 1, Integer::sum);
             MortalList.invalidateLiveRootSnapshot();
+        }
+        if (var instanceof RuntimeScalar scalar) scalar.refreshUntrackedReferenceOwner();
+        if (var instanceof RuntimeBase base) {
+            RuntimeCode.noteMyVarRegistered(base);
         }
     }
 
     /**
-     * Phase D-W2b (perf): one-time backfill of the live-count map with
-     * all currently registered my-vars. Called by
-     * {@link WeakRefRegistry#registerWeakRef} the first time
-     * {@code weakRefsExist} flips to true. Without this, my-vars
-     * declared before the first {@code weaken()} would never be
-     * inserted into {@code liveCounts} and the walker would miss them.
+     * Compatibility hook for callers that used to seed a separate live-root
+     * cache. Root diagnostics now read the authoritative registration map.
      */
     public static synchronized void snapshotStackToLiveCounts() {
-        IdentityHashMap<Object, Integer> liveCounts = liveCounts();
-        for (Object var : stack()) {
-            if (var != null) {
-                liveCounts.merge(var, 1, Integer::sum);
-            }
-        }
         MortalList.invalidateLiveRootSnapshot();
     }
 
@@ -163,6 +134,15 @@ public class MyVarCleanupStack {
      * @param var the RuntimeScalar/Array/Hash previously registered
      */
     public static void unregister(Object var) {
+        unregister(var, true);
+    }
+
+    /** Remove a registration after the exact named lexical owner was unbound. */
+    public static void unregisterAfterActiveLexicalUnbind(Object var) {
+        unregister(var, false);
+    }
+
+    private static void unregister(Object var, boolean releaseActiveOwner) {
         if (var == null) return;
         // Block-scoped my-vars pop in reverse declaration order, so
         // scan from the top of the stack for a fast amortized match.
@@ -171,7 +151,7 @@ public class MyVarCleanupStack {
             if (stack.get(i) == var) {
                 stack.remove(i);
                 decRegisteredCount(var);
-                decLiveCount(var);
+                MortalList.invalidateLiveRootSnapshot();
                 if (var instanceof RuntimeBase base
                         && (base instanceof RuntimeArray || base instanceof RuntimeHash)
                         && !isRegistered(var)) {
@@ -179,6 +159,12 @@ public class MyVarCleanupStack {
                     // unregistering. Keep the stack authoritative as well for
                     // callers that release a lexical slot directly.
                     base.localBindingExists = false;
+                }
+                if (releaseActiveOwner) {
+                    releaseActiveAggregateOwnerAfterCleanup(var);
+                } else if (var instanceof RuntimeBase base
+                        && !MyVarCleanupStack.isRegistered(base)) {
+                    RuntimeCode.releaseAllActiveLexicalOwners(base);
                 }
                 noteVarLeftScope(var);
                 return;
@@ -196,18 +182,17 @@ public class MyVarCleanupStack {
         if (oldVar == null || newVar == null || oldVar == newVar) return;
         ArrayList<Object> stack = stack();
         IdentityHashMap<Object, Integer> registeredCounts = registeredCounts();
-        IdentityHashMap<Object, Integer> liveCounts = liveCounts();
         for (int i = stack.size() - 1; i >= 0; i--) {
             if (stack.get(i) == oldVar) {
                 stack.set(i, newVar);
                 decCount(registeredCounts, oldVar);
                 registeredCounts.merge(newVar, 1, Integer::sum);
-                Integer count = liveCounts.get(oldVar);
-                if (count != null) {
-                    if (count <= 1) liveCounts.remove(oldVar);
-                    else liveCounts.put(oldVar, count - 1);
-                    liveCounts.merge(newVar, 1, Integer::sum);
-                    MortalList.invalidateLiveRootSnapshot();
+                MortalList.invalidateLiveRootSnapshot();
+                if (oldVar instanceof RuntimeScalar scalar) {
+                    scalar.refreshUntrackedReferenceOwner();
+                }
+                if (newVar instanceof RuntimeScalar scalar) {
+                    scalar.refreshUntrackedReferenceOwner();
                 }
                 return;
             }
@@ -225,20 +210,11 @@ public class MyVarCleanupStack {
         else counts.put(var, count - 1);
     }
 
-    private static void decLiveCount(Object var) {
-        IdentityHashMap<Object, Integer> liveCounts = liveCounts();
-        Integer c = liveCounts.get(var);
-        if (c == null) return;
-        if (c <= 1) liveCounts.remove(var);
-        else liveCounts.put(var, c - 1);
-        MortalList.invalidateLiveRootSnapshot();
-    }
-
     private static void noteVarLeftScope(Object var) {
-        if (var instanceof RuntimeBase base
-                && (base instanceof RuntimeArray || base instanceof RuntimeHash)
-                && WeakRefRegistry.weakRefsExist()) {
-            MortalList.requestWeakSweepsForDestroyedContainer(base);
+        if (var instanceof RuntimeScalar scalar) {
+            PerlOwnerSlot valueOwner = scalar.untrackedReferenceOwnerSlot();
+            RuntimeBase referent = valueOwner == null ? null : valueOwner.referent();
+            scalar.finalizeUntrackedValueAfterScopeExit(referent);
         }
         if (var instanceof RuntimeBase base && WeakRefRegistry.hasWeakRefsTo(base)) {
             requestWeakCleanupAfterScopeExit(base);
@@ -252,15 +228,11 @@ public class MyVarCleanupStack {
 
     private static void requestWeakCleanupAfterScopeExit(RuntimeBase base) {
         MortalList.finalizeClearedAggregateOwnerAfterScopeExit(base);
-        // Selective owner records can outlive the Perl lexical that created
-        // them when a closure graph is being torn down. Recheck weak refs at
-        // the scope boundary so the reachability walker can reconcile those
-        // records with the remaining Perl-visible roots.
-        MortalList.requestImmediateWeakSweep();
     }
 
     /**
-     * Called on exception in {@code RuntimeCode.apply()}.
+     * Called when a Perl frame exits before its ordinary scope cleanup runs.
+     * This includes exception propagation and non-local returns.
      * Runs {@link MortalList#evalExceptionScopeCleanup(Object)} for all
      * registered-but-not-yet-cleaned variables since the mark, in LIFO order.
      * <p>
@@ -279,14 +251,28 @@ public class MyVarCleanupStack {
     }
 
     private static void unwindTo(int mark, ArrayList<Object> stack) {
+        if (stack.size() > mark) MortalList.invalidateLiveRootSnapshot();
         for (int i = stack.size() - 1; i >= mark; i--) {
             Object var = stack.removeLast();
             if (var != null) {
                 decRegisteredCount(var);
-                decLiveCount(var);
                 MortalList.evalExceptionScopeCleanup(var);
+                releaseActiveAggregateOwnerAfterCleanup(var);
                 noteVarLeftScope(var);
             }
+        }
+    }
+
+    private static void releaseActiveAggregateOwnerAfterCleanup(Object var) {
+        if (!(var instanceof RuntimeBase base)
+                || (!(base instanceof RuntimeArray) && !(base instanceof RuntimeHash)
+                    && !(base instanceof RuntimeScalar scalar
+                        && scalar.referencedByScalarReference))) return;
+        // Multiple lexical names may alias the same cell. Keep its pad owners
+        // while any such lexical registration remains; the last registration
+        // retires all pad bindings left by normal or exceptional scope exit.
+        if (!MyVarCleanupStack.isRegistered(base)) {
+            RuntimeCode.releaseAllActiveLexicalOwners(base);
         }
     }
 
@@ -307,11 +293,17 @@ public class MyVarCleanupStack {
     }
 
     private static void popMark(int mark, ArrayList<Object> stack) {
+        if (stack.size() > mark) MortalList.invalidateLiveRootSnapshot();
         while (stack.size() > mark) {
             Object var = stack.removeLast();
             if (var != null) {
                 decRegisteredCount(var);
-                decLiveCount(var);
+                if (var instanceof RuntimeBase base
+                        && (base instanceof RuntimeArray || base instanceof RuntimeHash)
+                        && !isRegistered(var)) {
+                    base.localBindingExists = false;
+                }
+                releaseActiveAggregateOwnerAfterCleanup(var);
                 noteVarLeftScope(var);
             }
         }
@@ -331,10 +323,46 @@ public class MyVarCleanupStack {
         }
     }
 
-    /** Acquire IO ownership for every currently-live lexical alias of a glob. */
+    /**
+     * Acquire IO ownership for current scalar-cell aliases and registered
+     * lexical aliases of a glob after its IO slot becomes live.
+     *
+     * <p>The glob's owner ledger finds scalar and aggregate storage without a
+     * runtime-root walk. The cleanup stack supplements it for registered
+     * lexicals whose referent has not entered selective counting.</p>
+     */
     public static void retainLiveIoGlobOwners(RuntimeGlob glob) {
         if (glob == null) return;
         IdentityHashMap<RuntimeScalar, Boolean> seen = new IdentityHashMap<>();
+        for (PerlOwnerSlot slot : glob.ownerSlotSnapshot()) {
+            RuntimeScalar scalar = null;
+            if (slot.kind() == PerlOwnerSlot.Kind.UNTRACKED_REFERENCE) {
+                RuntimeScalar candidate = slot.untrackedScalarOwner();
+                if (candidate != null
+                        && candidate.untrackedReferenceOwnerSlot() == slot
+                        && candidate.value == glob
+                        && candidate.type == RuntimeScalarType.GLOBREFERENCE
+                        && !WeakRefRegistry.isweak(candidate)) {
+                    scalar = candidate;
+                }
+            } else if (PerlOwnerSlot.isCountedKind(slot.kind())) {
+                RuntimeScalar candidate = slot.countedScalarOwner();
+                if (candidate != null
+                        && candidate.value == glob
+                        && candidate.type == RuntimeScalarType.GLOBREFERENCE
+                        && !WeakRefRegistry.isweak(candidate)) {
+                    boolean current = switch (slot.kind()) {
+                        case ARRAY_ELEMENT, HASH_ELEMENT ->
+                                candidate.isCurrentAggregateElementOwner(glob, slot);
+                        default -> candidate.isCurrentCountedScalarOwner(glob, slot);
+                    };
+                    if (current) scalar = candidate;
+                }
+            }
+            if (scalar != null && seen.put(scalar, Boolean.TRUE) == null) {
+                RuntimeScalar.retainUnstashedIoForDurableSlot(scalar);
+            }
+        }
         for (Object var : stack()) {
             if (var instanceof RuntimeScalar scalar
                     && scalar.type == RuntimeScalarType.GLOBREFERENCE
@@ -343,6 +371,12 @@ public class MyVarCleanupStack {
                 RuntimeScalar.retainUnstashedIoForDurableSlot(scalar);
             }
         }
+    }
+
+    /** Acquire leases for current aliases and the explicit destination scalar. */
+    public static void retainLiveIoGlobOwners(RuntimeGlob glob, RuntimeScalar handle) {
+        retainLiveIoGlobOwners(glob);
+        RuntimeScalar.retainUnstashedIoForDurableSlot(handle);
     }
 
     /**
@@ -360,14 +394,12 @@ public class MyVarCleanupStack {
                     && (scalar.type == RuntimeScalarType.GLOB
                         || scalar.type == RuntimeScalarType.GLOBREFERENCE)
                     && scalar.value == glob
+                    && !WeakRefRegistry.isweak(scalar)
                     && !scalar.refCountOwned
                     && seen.put(scalar, Boolean.TRUE) == null) {
-                scalar.refCountOwned = true;
-                referent.recordOwner(scalar, "blessed glob lexical alias");
-                referent.recordActiveOwner(scalar);
-                referent.traceRefCount(+1, "MyVarCleanupStack.retainBlessedGlobAliases");
-                referent.refCount++;
-                referent.hadCountedReference = true;
+                RuntimeScalar.acquireCountedOwnerForCurrentValue(
+                        scalar, referent, scalar.countedOwnerKind(),
+                        "MyVarCleanupStack.retainBlessedGlobAliases (lexical alias)");
             }
         }
         for (RuntimeScalar scalar : GlobalVariable.scalarSlots().values()) {
@@ -375,14 +407,12 @@ public class MyVarCleanupStack {
                     && (scalar.type == RuntimeScalarType.GLOB
                     || scalar.type == RuntimeScalarType.GLOBREFERENCE)
                     && scalar.value == glob
+                    && !WeakRefRegistry.isweak(scalar)
                     && !scalar.refCountOwned
                     && seen.put(scalar, Boolean.TRUE) == null) {
-                scalar.refCountOwned = true;
-                referent.recordOwner(scalar, "blessed glob package alias");
-                referent.recordActiveOwner(scalar);
-                referent.traceRefCount(+1, "MyVarCleanupStack.retainBlessedGlobAliases");
-                referent.refCount++;
-                referent.hadCountedReference = true;
+                RuntimeScalar.acquireCountedOwnerForCurrentValue(
+                        scalar, referent, scalar.countedOwnerKind(),
+                        "MyVarCleanupStack.retainBlessedGlobAliases (package alias)");
             }
         }
     }

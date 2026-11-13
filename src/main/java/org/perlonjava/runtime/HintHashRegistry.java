@@ -336,17 +336,18 @@ public class HintHashRegistry {
      * Object::HashBase's deferred Role::Tiny composition).
      */
     public static void restoreHintHash(RuntimeHash active, Map<String, RuntimeScalar> saved) {
-        List<RuntimeScalar> discarded = new ArrayList<>();
         List<String> discardedKeys = new ArrayList<>();
         for (Map.Entry<String, RuntimeScalar> entry : active.elements.entrySet()) {
             RuntimeScalar retained = saved.get(entry.getKey());
             RuntimeScalar current = entry.getValue();
             if (retained == null || retained.type != current.type || retained.value != current.value) {
-                discarded.add(current);
                 discardedKeys.add(entry.getKey());
             }
         }
-        MortalList.deferDestroyForContainerClear(discarded);
+        // RuntimeHash.elements is an owner-aware map. Removing through it retires
+        // the %^H slot identity and queues any compile-time scope-guard DESTROY.
+        // Do not separately defer the values here: that would release each
+        // discarded Perl edge twice.
         for (String key : discardedKeys) {
             active.elements.remove(key);
         }

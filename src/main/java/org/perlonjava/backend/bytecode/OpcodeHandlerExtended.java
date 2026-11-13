@@ -1099,6 +1099,7 @@ public class OpcodeHandlerExtended {
         // Without this, scopeExitCleanup() doesn't know the variable is still alive
         // via this closure, and may prematurely clear weak references to its value.
         java.util.List<RuntimeScalar> capturedScalars = new java.util.ArrayList<>();
+        java.util.List<PerlOwnerSlot> capturedScalarOwnerSlots = new java.util.ArrayList<>();
         java.util.List<RuntimeBase> capturedAggregates = new java.util.ArrayList<>();
         java.util.List<PerlOwnerSlot> capturedAggregateOwnerSlots = new java.util.ArrayList<>();
         java.util.Set<RuntimeScalar> seenScalars = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
@@ -1107,16 +1108,18 @@ public class OpcodeHandlerExtended {
             if (captured instanceof RuntimeScalar s) {
                 if (!seenScalars.add(s)) continue;
                 capturedScalars.add(s);
-                s.retainClosureCapture();
+                capturedScalarOwnerSlots.add(s.retainClosureCaptureSlot(closureCode));
             } else if (captured instanceof RuntimeArray || captured instanceof RuntimeHash) {
                 if (!seenAggregates.add(captured)) continue;
                 capturedAggregates.add(captured);
-                PerlOwnerSlot ownerSlot = captured.retainClosureCaptureOwner();
+                PerlOwnerSlot ownerSlot = captured.retainClosureCaptureOwner(closureCode);
                 capturedAggregateOwnerSlots.add(ownerSlot);
             }
         }
         if (!capturedScalars.isEmpty()) {
             closureCode.capturedScalars = capturedScalars.toArray(new RuntimeScalar[0]);
+            closureCode.capturedScalarOwnerSlots =
+                    capturedScalarOwnerSlots.toArray(new PerlOwnerSlot[0]);
         }
         if (!capturedAggregates.isEmpty()) {
             closureCode.capturedAggregates = capturedAggregates.toArray(new RuntimeBase[0]);

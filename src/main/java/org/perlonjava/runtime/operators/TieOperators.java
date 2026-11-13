@@ -163,7 +163,6 @@ public class TieOperators {
                 RuntimeScalar directPvioWrapper = directPvioWrapper(variable);
                 RuntimeGlob glob = variable.globDeref();
                 RuntimeIO previousValue = (RuntimeIO) glob.IO.value;
-                glob.IO.type = TIED_SCALAR;
                 boolean selfIsTiedGlob = self != null && (self.value == glob
                         || isSameHandle(self, previousValue));
                 TieHandle tieHandle = new TieHandle(className, previousValue, self, !selfIsTiedGlob);
@@ -172,13 +171,12 @@ public class TieOperators {
                 if (previousValue != null) {
                     tieHandle.globName = previousValue.globName;
                 }
-                glob.IO.value = tieHandle;
+                glob.setTiedIOHandle(tieHandle);
                 if (selfIsTiedGlob) {
                     RuntimeIO.registerTiedAlias(previousValue, tieHandle);
                 }
-                if (directPvioWrapper != null) {
-                    directPvioWrapper.type = TIED_SCALAR;
-                    directPvioWrapper.value = tieHandle;
+                if (directPvioWrapper != null && directPvioWrapper != glob.IO) {
+                    RuntimeGlob.installTiedIOHandle(directPvioWrapper, tieHandle);
                 }
                 // Update selectedHandle so that `print` without explicit filehandle
                 // goes through the tied handle (e.g., Test2::Plugin::IOEvents)
@@ -362,7 +360,10 @@ public class TieOperators {
         if (self == null || !(self.value instanceof RuntimeBase base)) {
             return;
         }
-        int externalReferences = Math.max(0, base.refCount - 1);
+        int argumentAliasReferences = base.ownerSlotCount(
+                PerlOwnerSlot.Kind.ARGUMENT_TIE_HANDLER);
+        int externalReferences = Math.max(0,
+                base.refCount - 1 - argumentAliasReferences);
         if (externalReferences != 0) {
             WarnDie.warnWithCategory(new RuntimeScalar("untie attempted while " + externalReferences
                     + " inner references still exist"), RuntimeScalarCache.scalarEmptyString, "untie");

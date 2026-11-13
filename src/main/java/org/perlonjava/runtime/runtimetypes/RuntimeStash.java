@@ -15,7 +15,8 @@ public class RuntimeStash extends RuntimeHash {
     // Map to store the elements of the hash
     public Map<String, RuntimeScalar> elements;
     public String namespace;
-    RuntimeGlob.NamespaceMove savedNamespaceMove;
+    RuntimeGlob savedNamespaceMove;
+    private PerlOwnerSlot savedNamespaceMoveOwnerSlot;
     // Iterator for traversing the hash elements
     Iterator<RuntimeScalar> hashIterator;
 
@@ -31,6 +32,66 @@ public class RuntimeStash extends RuntimeHash {
         // RuntimeHash operations (e.g. setFromList used by `%{Pkg::} = ()`) operate
         // on RuntimeHash.elements.
         super.elements = this.elements;
+    }
+
+    void saveNamespaceMove(RuntimeGlob moveOwner) {
+        PerlOwnerSlot nextOwner = null;
+        if (moveOwner != null) {
+            if (moveOwner.namespaceMove == null) {
+                throw new IllegalArgumentException("saved namespace move has no captured slots");
+            }
+            nextOwner = new PerlOwnerSlot(PerlOwnerSlot.Kind.STASH_NAMESPACE_MOVE);
+            nextOwner.acquireStashNamespaceMoveIdentity(moveOwner, this);
+        }
+
+        RuntimeGlob previousMove = savedNamespaceMove;
+        PerlOwnerSlot previousOwner = savedNamespaceMoveOwnerSlot;
+        savedNamespaceMove = moveOwner;
+        savedNamespaceMoveOwnerSlot = nextOwner;
+        if (previousOwner != null) previousOwner.release();
+        if (previousMove != null && previousMove != moveOwner) {
+            previousMove.releaseDetachedComponentsIfUnowned();
+        }
+    }
+
+    void installSavedNamespaceMove(String destinationNamespace) {
+        RuntimeGlob moveOwner = savedNamespaceMove;
+        if (moveOwner == null) return;
+        RuntimeGlob.NamespaceMove move = moveOwner.namespaceMove;
+        if (move == null) {
+            releaseSavedNamespaceMove();
+            return;
+        }
+        GlobalVariable.installNamespaceMove(move, destinationNamespace);
+        rebindNamespace(destinationNamespace);
+        releaseSavedNamespaceMove();
+    }
+
+    void installDetachedNamespaceMove(RuntimeGlob moveOwner, String destinationNamespace) {
+        try {
+            GlobalVariable.installNamespaceMove(moveOwner.namespaceMove, destinationNamespace);
+            rebindNamespace(destinationNamespace);
+        } finally {
+            moveOwner.releaseDetachedComponentsIfUnowned();
+        }
+    }
+
+    void releaseSavedNamespaceMove() {
+        RuntimeGlob moveOwner = savedNamespaceMove;
+        PerlOwnerSlot ownerSlot = savedNamespaceMoveOwnerSlot;
+        savedNamespaceMove = null;
+        savedNamespaceMoveOwnerSlot = null;
+        if (ownerSlot != null) ownerSlot.release();
+        if (moveOwner != null) moveOwner.releaseDetachedComponentsIfUnowned();
+    }
+
+    void rebindNamespace(String destinationNamespace) {
+        String nextNamespace = destinationNamespace.endsWith("::")
+                ? destinationNamespace : destinationNamespace + "::";
+        if (nextNamespace.equals(namespace)) return;
+        namespace = nextNamespace;
+        elements = new HashSpecialVariable(HashSpecialVariable.Id.STASH, namespace);
+        super.elements = elements;
     }
 
     /**
@@ -185,22 +246,30 @@ public class RuntimeStash extends RuntimeHash {
      */
     @Override
     public RuntimeScalar delete(String key) {
-        return deleteGlob(key);
+        return deleteInContext(key, RuntimeContextType.LIST);
     }
 
     @Override
     public RuntimeScalar delete(RuntimeScalar key) {
-        return deleteGlob(key.toString());
+        return deleteInContext(key, RuntimeContextType.LIST);
     }
 
     @Override
     public RuntimeScalar deleteInContext(RuntimeScalar key, int callContext) {
-        return delete(key);
+        return deleteInContext(key.toString(), callContext);
     }
 
     @Override
     public RuntimeScalar deleteInContext(String key, int callContext) {
-        return delete(key);
+        RuntimeScalar deleted = deleteGlob(key);
+        if (callContext == RuntimeContextType.VOID) {
+            // Stash deletion returns a detached glob that owns its captured
+            // slots. In void context there is no Perl value owner to release
+            // that glob later, so retire the temporary result here.
+            RuntimeScalar.scopeExitCleanup(deleted);
+            return new RuntimeScalar();
+        }
+        return deleted;
     }
 
     private RuntimeScalar deleteGlob(String k) {
@@ -234,53 +303,39 @@ public class RuntimeStash extends RuntimeHash {
         RuntimeGlob savedIO = GlobalVariable.getExistingGlobalIO(fullKey);
         RuntimeScalar savedCode = GlobalVariable.globalCodeRefs.get(fullKey);
 
-        // Delete all slots from GlobalVariable. The CODE slot helper removes
-        // the visible stash entry while keeping already-pinned CVs alive for
-        // previously compiled call sites.
+        // Transfer the component slots to the detached glob before removing
+        // their package owners.  The returned GV is the new strong owner of
+        // the cells and aggregates even when the old package scalar had the
+        // only counted edge to its referent.
+        RuntimeGlob detached = RuntimeGlob.createDetachedWithSlots(
+                savedScalar, savedArray, savedHash, savedIO, savedCode);
+
+        // Delete all slots from GlobalVariable. The CODE slot helper transfers
+        // surviving compiled-call edges to their owning RuntimeCode objects.
         GlobalVariable.removeGlobalCodeRefForStashDelete(fullKey);
         GlobalVariable.clearGlobalPseudoConstant(fullKey);
         GlobalVariable.scalarSlots().remove(fullKey);
         GlobalVariable.detachScalarPin(fullKey, savedScalar);
         GlobalVariable.globalArrays.remove(fullKey);
         GlobalVariable.globalHashes.remove(fullKey);
-        if (savedIO != null) {
+        if (GlobalVariable.isSymbolGensymName(fullKey)) {
+            // The glob reference returned by Symbol::gensym remains live after
+            // this deletion. Mark that object as anonymous so later scalar,
+            // array, or hash dereferences stay on its local slots instead of
+            // recreating package roots under the generated name.
+            if (savedIO != null) savedIO.symbolGensym = true;
+            GlobalVariable.hideIORefAfterStashDelete(fullKey);
+        } else if (savedIO != null) {
+            // Symbol::gensym deletes the generated GV before its IO slot is
+            // installed. Remember the hidden identity even when this lookup
+            // table has not materialized the IO slot yet.
             GlobalVariable.hideIORefAfterStashDelete(fullKey);
         }
         GlobalVariable.globalFormatRefs.remove(fullKey);
         GlobalVariable.invalidatePackageRootSnapshot();
 
-        // Clear weak refs when a reference-holding scalar is deleted from the stash.
-        // In Perl 5, removing a global variable drops the strong reference to its referent.
-        // If the referent's only strong ref was the global, its refcount reaches 0, the
-        // referent is freed, and all weak refs to it become undef. In PerlOnJava, the
-        // JVM keeps the referent alive, so we must manually clear weak refs.
-        // This is critical for Class::Unload + DBIC AccessorGroup reload pattern.
-        if (savedScalar != null && (savedScalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                && savedScalar.value instanceof RuntimeBase base) {
-            if (base.refCount == WeakRefRegistry.WEAKLY_TRACKED) {
-                // Unblessed object with weak refs: clear all weak refs to it.
-                // Safe because unblessed objects have no DESTROY side effects.
-                base.refCount = Integer.MIN_VALUE;
-                DestroyDispatch.callDestroy(base);
-            } else if (base.refCount > 0 && savedScalar.refCountOwned) {
-                // Tracked object: decrement refCount (the stash was holding a strong ref).
-                savedScalar.refCountOwned = false;
-                base.releaseActiveOwner(savedScalar);
-                if (--base.refCount == 0) {
-                    base.refCount = Integer.MIN_VALUE;
-                    DestroyDispatch.callDestroy(base);
-                }
-            }
-        }
-
         // Removing symbols from a stash can affect method lookup.
         InheritanceResolver.invalidateCache();
-
-        // Create a detached glob that holds the saved slot values including CODE.
-        // In Perl 5, delete $stash->{name} returns the glob with all its old slot values.
-        // Use globName=null so getGlobSlot() uses local slots instead of GlobalVariable.
-        RuntimeGlob detached = RuntimeGlob.createDetachedWithSlots(
-                savedScalar, savedArray, savedHash, savedIO, savedCode);
 
         return detached;
     }
@@ -306,6 +361,13 @@ public class RuntimeStash extends RuntimeHash {
         Map<String, RuntimeHash> movedHashes = snapshotNamespace(GlobalVariable.globalHashes, childPrefix);
         Map<String, RuntimeScalar> movedCodes = snapshotNamespace(GlobalVariable.globalCodeRefs, childPrefix);
 
+        // Acquire detached-glob owners before removing the package-map owners
+        // below. The returned glob keeps each moved slot alive until its final
+        // Perl owner is released.
+        RuntimeGlob.NamespaceMove movedNamespace = new RuntimeGlob.NamespaceMove(
+                childPrefix, movedScalars, movedArrays, movedHashes, movedCodes);
+        RuntimeGlob detachedNamespace = RuntimeGlob.createDetachedNamespaceMove(movedNamespace);
+
         // Remove all symbols with this prefix from all global maps (prefix-based removal)
         GlobalVariable.globalCodeRefs.keySet().removeIf(key -> key.startsWith(childPrefix));
         GlobalVariable.globalCodeRefs.keySet().removeIf(key -> key.startsWith(mainQualifiedChildPrefix));
@@ -329,8 +391,6 @@ public class RuntimeStash extends RuntimeHash {
         // *one::`.  Deleting one:: must not empty the stash still reachable
         // as two::. Materialise the saved slots under each such alias before
         // discarding the obsolete source mapping.
-        RuntimeGlob.NamespaceMove movedNamespace = new RuntimeGlob.NamespaceMove(
-                childPrefix, movedScalars, movedArrays, movedHashes, movedCodes);
         for (Map.Entry<String, String> alias : new HashMap<>(GlobalVariable.stashAliases).entrySet()) {
             if (childPrefix.equals(alias.getValue())) {
                 GlobalVariable.installNamespaceMove(movedNamespace, alias.getKey());
@@ -365,7 +425,7 @@ public class RuntimeStash extends RuntimeHash {
         GlobalVariable.clearPackageCache();
         GlobalVariable.markStashPackageFreed(childPrefix);
 
-        return RuntimeGlob.createDetachedNamespaceMove(movedNamespace);
+        return detachedNamespace;
     }
 
     private static <T> Map<String, T> snapshotNamespace(Map<String, T> values, String prefix) {
@@ -521,6 +581,7 @@ public class RuntimeStash extends RuntimeHash {
      * @return The current RuntimeStash instance after undefining its elements.
      */
     public RuntimeStash undefine() {
+        releaseSavedNamespaceMove();
         // Perl: undef %pkg:: clears the package symbol table and makes the stash anonymous.
         // We must remove all slots from the GlobalVariable maps, not just clear the view.
         String prefix = this.namespace;

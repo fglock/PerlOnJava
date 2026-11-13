@@ -24,6 +24,9 @@ final class LifecycleRuntimeState {
     // Parallel to pending.  Weak provenance permits a tail-call handoff to
     // drain only the decrement whose owning argument it actually replaces.
     final ArrayList<java.lang.ref.WeakReference<RuntimeScalar>> pendingOwnerScalars = new ArrayList<>();
+    // Parallel to pending. Captured when a scalar decrement is queued so a
+    // tail-call handoff can match its source argument frame by identity.
+    final ArrayList<Object> pendingArgumentFrames = new ArrayList<>();
     // Parallel to pending. A non-scalar transient owner kind is recorded only
     // for trace attribution; it never changes runtime reachability.
     final ArrayList<String> pendingTransientOwnerKinds = new ArrayList<>();
@@ -31,6 +34,7 @@ final class LifecycleRuntimeState {
             new ArrayList<>();
     final ArrayList<TiedVariableBase> pendingTiedReleases = new ArrayList<>();
     final ArrayList<RuntimeScalar> pendingIoReleases = new ArrayList<>();
+    final ArrayList<RuntimeScalar> pendingUntrackedReturnOwnerReleases = new ArrayList<>();
     final ArrayList<RuntimeScalar> deferredCaptures = new ArrayList<>();
     final IdentityHashMap<RuntimeScalar, Integer> deferredCapturesSet = new IdentityHashMap<>();
     final Set<RuntimeScalar> deferredScopeExitCaptureCandidates =
@@ -39,32 +43,28 @@ final class LifecycleRuntimeState {
     // are per referent because several independent pad slots can own one base.
     final IdentityHashMap<RuntimeBase, Integer> positiveOwnerReferents = new IdentityHashMap<>();
     boolean deferredCapturesMayBeReady;
-    final ArrayDeque<RuntimeBase> temporaryRoots = new ArrayDeque<>();
-    final IdentityHashMap<RuntimeBase, Integer> suspendedRoots = new IdentityHashMap<>();
+    final ArrayDeque<TemporaryRootLease> temporaryRoots = new ArrayDeque<>();
+    final ArrayDeque<RuntimeBase> deferredTemporaryRootAggregateRefreshes = new ArrayDeque<>();
+    final Set<RuntimeBase> deferredTemporaryRootAggregateRefreshSet =
+            Collections.newSetFromMap(new IdentityHashMap<>());
+    final ArrayDeque<RuntimeCode> deferredTemporaryRootCaptureReleases = new ArrayDeque<>();
+    final Set<RuntimeCode> deferredTemporaryRootCaptureReleaseSet =
+            Collections.newSetFromMap(new IdentityHashMap<>());
+    boolean drainingTemporaryRootCleanup;
     private static final int INITIAL_MARK_CAPACITY = 16;
     int[] marks = new int[INITIAL_MARK_CAPACITY];
     int[] tiedReleaseMarks = new int[INITIAL_MARK_CAPACITY];
     int[] ioReleaseMarks = new int[INITIAL_MARK_CAPACITY];
+    int[] untrackedReturnOwnerMarks = new int[INITIAL_MARK_CAPACITY];
     int markDepth;
     boolean flushing;
     int reachabilityDrainDepth;
-    int topLevelFlushDepth;
-    // Start within the configured quiet-sweep throttle window. A zero value
-    // would trigger a full root walk at the first statement boundary, often
-    // between callbacks that are expected to dispatch together.
-    long lastAutoSweepNanos = System.nanoTime();
-    boolean inAutoSweep;
     /** Suppress sweeps while clone hooks and the first child entry build Perl roots. */
     int weakSweepSuppressionDepth;
     boolean immediateWeakSweepRequested;
-    boolean deferCaptureReachabilityToBoundarySweep;
-    final ArrayList<RuntimeBase> deferredCaptureSweepCandidates = new ArrayList<>();
-    long boundaryWeakSweepGeneration;
-    long deferredCaptureSweepGeneration;
     final Set<RuntimeBase> targetedWeakSweepReferents =
             Collections.newSetFromMap(new IdentityHashMap<>());
     Set<RuntimeBase> flushReachableCache;
-    ReachabilityWalker.TiedHashReachabilitySnapshot flushTiedReachableCache;
     ReachabilityWalker.ExternalRootSnapshot externalRootSnapshot;
     ReachabilityWalker.LiveRootSnapshot liveRootSnapshot;
     ReachabilityWalker.ScalarRootReachabilitySnapshot scalarRootSnapshot;
@@ -79,16 +79,19 @@ final class LifecycleRuntimeState {
             weakSweepRootWitnesses = new IdentityHashMap<>();
     ReachabilityQueryStats activeReachabilityQueryStats;
 
-    void pushMortalMark(int pendingSize, int tiedReleaseSize, int ioReleaseSize) {
+    void pushMortalMark(int pendingSize, int tiedReleaseSize, int ioReleaseSize,
+                        int untrackedReturnOwnerReleaseSize) {
         if (markDepth == marks.length) {
             int capacity = marks.length * 2;
             marks = Arrays.copyOf(marks, capacity);
             tiedReleaseMarks = Arrays.copyOf(tiedReleaseMarks, capacity);
             ioReleaseMarks = Arrays.copyOf(ioReleaseMarks, capacity);
+            untrackedReturnOwnerMarks = Arrays.copyOf(untrackedReturnOwnerMarks, capacity);
         }
         marks[markDepth] = pendingSize;
         tiedReleaseMarks[markDepth] = tiedReleaseSize;
         ioReleaseMarks[markDepth] = ioReleaseSize;
+        untrackedReturnOwnerMarks[markDepth] = untrackedReturnOwnerReleaseSize;
         markDepth++;
     }
 
@@ -125,6 +128,32 @@ final class LifecycleRuntimeState {
     final ScalarRefRegistry.WeakIdentityMap<Throwable> scalarRegisterStacks =
             new ScalarRefRegistry.WeakIdentityMap<>();
 
+    /** One expression-root stack entry and its exact temporary owner identity. */
+    static final class TemporaryRootLease {
+        private final RuntimeBase root;
+        private final PerlOwnerSlot ownerSlot;
+
+        TemporaryRootLease(RuntimeBase root) {
+            this.root = root;
+            if (root.refCount == Integer.MIN_VALUE) {
+                // Preserve snapshot visibility without resurrecting a destroyed value.
+                this.ownerSlot = null;
+            } else {
+                PerlOwnerSlot owner = new PerlOwnerSlot(PerlOwnerSlot.Kind.TEMPORARY_ROOT);
+                owner.acquireTemporaryRootIdentity(root);
+                this.ownerSlot = owner;
+            }
+        }
+
+        RuntimeBase root() {
+            return root;
+        }
+
+        void release() {
+            if (ownerSlot != null) ownerSlot.release();
+        }
+    }
+
     void clear() {
         mortalActive = true;
         for (int i = 0; i < pending.size(); i++) {
@@ -139,9 +168,14 @@ final class LifecycleRuntimeState {
         pending.clear();
         pendingOwnerReleases.clear();
         pendingOwnerScalars.clear();
+        pendingArgumentFrames.clear();
         pendingTransientOwnerKinds.clear();
         pendingTiedReleases.clear();
         pendingIoReleases.clear();
+        for (RuntimeScalar scalar : pendingUntrackedReturnOwnerReleases) {
+            if (scalar != null) scalar.releaseMortalReturnValueOwner();
+        }
+        pendingUntrackedReturnOwnerReleases.clear();
         deferredCaptures.clear();
         deferredCapturesSet.clear();
         deferredScopeExitCaptureCandidates.clear();
@@ -149,26 +183,23 @@ final class LifecycleRuntimeState {
             positiveOwnerReferents.clear();
         }
         deferredCapturesMayBeReady = false;
-        temporaryRoots.clear();
-        suspendedRoots.clear();
+        while (true) {
+            while (!temporaryRoots.isEmpty()) temporaryRoots.pop().release();
+            MortalList.drainDeferredTemporaryRootCleanup(this);
+            if (temporaryRoots.isEmpty()
+                    && deferredTemporaryRootAggregateRefreshes.isEmpty()
+                    && deferredTemporaryRootCaptureReleases.isEmpty()) break;
+        }
         markDepth = 0;
         flushing = false;
         reachabilityDrainDepth = 0;
-        topLevelFlushDepth = 0;
-        lastAutoSweepNanos = System.nanoTime();
-        inAutoSweep = false;
         fullRootSnapshot = null;
         unblessedAggregateRootSnapshot = null;
         weakSweepRootWitnesses.clear();
         activeReachabilityQueryStats = null;
         immediateWeakSweepRequested = false;
-        deferCaptureReachabilityToBoundarySweep = false;
-        deferredCaptureSweepCandidates.clear();
-        boundaryWeakSweepGeneration = 0;
-        deferredCaptureSweepGeneration = 0;
         targetedWeakSweepReferents.clear();
         flushReachableCache = null;
-        flushTiedReachableCache = null;
         externalRootSnapshot = null;
         liveRootSnapshot = null;
         scalarRootSnapshot = null;
@@ -194,4 +225,5 @@ final class LifecycleRuntimeState {
         scalarRegistry.clear();
         scalarRegisterStacks.clear();
     }
+
 }

@@ -9,6 +9,12 @@ our $Verbose ||= 0;
 our $VERSION = '5.79';
 our %Cache;
 
+# Load the delegated helpers before any compile-time import invokes them.
+# PerlOnJava's `caller` frames include the lazy `require` path when Exporter
+# first loads Heavy from inside an import, which can shift export_to_level's
+# caller depth and install symbols into the wrong package.
+require Exporter::Heavy;
+
 sub as_heavy {
   require Exporter::Heavy;
   # Unfortunately, this does not work if the caller is aliased as *name = \&foo

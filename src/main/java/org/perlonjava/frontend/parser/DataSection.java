@@ -267,7 +267,7 @@ public class DataSection {
             RuntimeScalar contentScalar = dataContentScalar(content);
             ScalarBackedIO newScalarIO = new ScalarBackedIO(contentScalar);
             newScalarIO.seek(initialPosition, IOHandle.SEEK_SET);
-            existingIO.ioHandle = newScalarIO;
+            existingIO.replaceIOHandle(newScalarIO);
             if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("Updated existing DATA handle with new content");
         } else {
             // Fallback: create new handle if no placeholder exists
