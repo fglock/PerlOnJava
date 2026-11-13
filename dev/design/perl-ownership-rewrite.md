@@ -13,9 +13,9 @@ remain in place.
 | Phase 2: retire reachability fallbacks | Active | Owner-source proofs and exact-head CPAN acceptance remain. |
 
 **Current checkpoint (2026-11-13):** Issue #2043 continues on
-`wip/issue2043-standard-owner-removal-20261112`, at commit `f0762ff4a6` plus the
-current working-tree batch. This work has not been published to PR #1938; its
-separate branch needs reconciliation before any publication.
+`wip/issue2043-standard-owner-removal-20261112`, source candidate commit
+`e5e72d11f4`. This work has not been published to PR #1938; its separate
+branch needs reconciliation before any publication.
 
 The localized-hash-restore fix scopes cleanup to the restored entry, so it
 cannot drain a pending return owner before the caller receives it. Its
