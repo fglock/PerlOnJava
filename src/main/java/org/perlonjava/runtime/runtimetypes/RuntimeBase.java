@@ -915,19 +915,19 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             }
             if (slot.kind() == PerlOwnerSlot.Kind.UNTRACKED_REFERENCE) {
                 RuntimeScalar scalar = slot.untrackedScalarOwner();
-                if (scalar == null) {
+                if (scalar == null && blessId == 0
+                        && WeakRefRegistry.hasWeakRefsTo(this)) {
                     slot.release();
                     WeakRefRegistry.onStrongOwnerSlotReleased(this);
                     continue;
                 }
-                if (scalar.hasPackageAggregateUntrackedReferenceOwner()) {
+                if (scalar != null && blessId == 0
+                        && WeakRefRegistry.hasWeakRefsTo(this)
+                        && !scalar.hasLiveDurableStrongValueSlot()) {
+                    scalar.releaseUntrackedReferenceOwner(this);
                     continue;
                 }
-                // A scalar can remain in a detached method-argument array after
-                // its frame has ended. Its owner-slot identity is not a live Perl
-                // edge unless the scalar still has current storage or transfer.
-                if (!scalar.hasLiveCurrentStrongValueSlot()) {
-                    scalar.releaseUntrackedReferenceOwner(this);
+                if (scalar != null && scalar.hasPackageAggregateUntrackedReferenceOwner()) {
                     continue;
                 }
             }
