@@ -1,60 +1,43 @@
 # Perl-compatible ownership rewrite
 
-**Status:** Phase 1 is complete; Phase 2 is active. Default production cleanup
-no longer calls corrective reachability sweeps, and the tokenless decrement
-fallback is removed. Temporary-root ancestry and END rescued-graph decisions
-are also removed. Remaining work covers owner-count alignment, two production
-graph-query consumers, sweep-only diagnostics, and exact-head CPAN acceptance.
-Thread-clone snapshots remain explicit runtime ownership.
+**Status:** Phase 1 is complete; Phase 2 remains active. Ordinary production
+cleanup no longer invokes corrective whole-graph sweeps. Completion requires
+balanced owner counts, direct owner-slot lifetime decisions, removal of sweep
+and diagnostic-only machinery, and exact-head acceptance. See [issue #2043](https://github.com/fglock/PerlOnJava/issues/2043)
+for the current handoff. Historical context: [issue #1649](https://github.com/fglock/PerlOnJava/issues/1649).
 
 | Phase | Status | Acceptance |
 | --- | --- | --- |
-| Phase 1: remove default corrective sweeps | Complete | Full no-sweeps gates and lifecycle coverage are recorded below. |
-| Phase 2: retire reachability fallbacks | Active | Owner-source proofs, remaining graph-query consumers, and exact-head CPAN acceptance remain. |
+| Remove default corrective sweeps | Complete | Earlier no-sweep gates and behavior regressions are recorded below. |
+| Complete owner-slot lifetime model | Active | Resolve the DBIx owner transition, finish remaining direct owner paths, remove recovery and graph-query decisions. |
+| Remove obsolete sweep and diagnostic code | Pending | No production or test-only sweep hooks, wrappers, counters, or walker APIs remain without an independent purpose. |
+| Final acceptance | Pending | Both backends, full repository tests, DBIx leak/populate, fresh-home CPAN, and required link checks pass on one immutable candidate. |
 
-**Current checkpoint (2026-11-13):** Issue #2043 continues on
-`wip/issue2043-late-test-preflight-20261113-054154`, source commit
-`d077cafc54`, in `/private/tmp/issue2043-head-8521-review-20261112`. PR #1938
-remains open/draft at `1b80749914`; this work is not published there.
+## Current handoff: 2026-11-13
 
-Selective counts now start at zero and use explicit `UNTRACKED`, `TRACKED`, and
-`WEAKLY_TRACKED` modes. Runtime producers, clone/restore paths, release gates,
-and white-box fixtures use the state instead of negative count sentinels. The
-remaining `Internals::SvREFCNT` sentinel branch was migrated in `d077cafc54`.
-`nice -n 19 timeout 1800 make` passes in 6m23
-(`/tmp/issue2043-explicit-state-svrefcnt-make.log`); `make check-links` passed
-with 835 documents before this Java-only follow-up
-(`/tmp/issue2043-current-check-links.log`).
+Candidate: `/private/tmp/issue2043-head-8521-review-20261112`, branch
+`wip/issue2043-preserve-diagnostic-20261113-082631`, commit
+`386856ab308665ed07d18b1d1903dec2dafa3386`. This commit preserves pending
+owner-release and diagnostic edits; it is not published to PR #1938. Review
+those edits before extending them. The direct CODE-root owner-slot change
+passed a full `make` on its earlier candidate. The current WIP owner-release,
+`Internals::SvREFCNT`, and walker changes have not passed final acceptance.
 
-The untouched upstream DBIx::Class 0.082844 `t/52leaks.t` passes under system
-Perl (with two upstream TODO leak assertions) but reports 17 weak-registry
-leaks on the JVM (`/tmp/issue2043-dbic-upstream-52leaks-{system,jvm}.log`). A
-test-local reduction with prefetch and resultset firing removed passes on both
-runtimes through the first 12 phantom-chain operations. Adding operation 13,
-`$cd->artist`, produces seven JVM leak assertions while the same 13-operation
-slice passes on system Perl (`/tmp/issue2043-phantom-prefix-{12,13}-{jvm,system}.log`).
-The owner trace shows the returned `Artist` row held under the CD row's
-`_inflated_column->{artist}` slot; the CD row's selective count reaches zero
-without clearing its weak observer. The full failure also retains schema,
-storage, and DBI handles. This isolates the first failing DBIx operation, but
-the exact owner-release or schema-handoff mismatch is still unproven. A minimal
-direct hash-field `weaken()` probe passes on both runtimes. The raw upstream
-interpreter run still stops earlier at missing
-`DBIx::Class::Storage::DBI::is_literal_value`, so it needs the repository's
-normal DBIx compatibility setup before it can serve as acceptance.
+The project-owned DBIx phantom-chain test passes system Perl and fails on the
+JVM. Its trace shows a count-zero CD row with an untracked edge in a size-five
+ownerless array; the actual acquire or release site is not yet identified.
+Do not infer the cause from the final trace alone. The raw interpreter run
+stops before leak assertions at the missing
+`DBIx::Class::Storage::DBI::is_literal_value` import; resolve and validate that
+prerequisite before claiming interpreter acceptance.
 
-Two production paths still ask `ReachabilityWalker` for liveness: installed
-CODE-edge selection in `GlobalRuntimeState.isCodeRefEdgeRoot`, and the
-`Internals::svRefcount` field-owned method-result adjustment. Root-query
-counters and diagnostics remain until both paths have owner-ledger proofs.
-
-Next: trace the `$cd->artist` return and the CD row's final owner release to the
-schema-handoff boundary, then add a project-owned regression that passes system
-Perl and fails on this parent. Replace the two graph-query decisions with
-direct owner identities, remove walker APIs and sweep-only
-diagnostics/compatibility hooks, and run DBIx leak/populate,
-JVM/interpreter, fresh-home CPAN, and full-repository gates on the exact final
-head before reconciling PR #1938.
+Next: trace the edge from acquisition to its Perl lifetime boundary with
+bounded diagnostics, fix that owner transition, and establish exact-parent
+failure evidence. Then validate direct owner queries, integrate the separate
+hook/walker cleanup, remove obsolete recovery and diagnostic-only calls, and
+run final acceptance on one immutable commit. Keep the current issue handoff
+and PR description authoritative; the PR remains draft until acceptance and
+review are complete.
 
 ### Phase 2 progress (2026-10-27)
 
