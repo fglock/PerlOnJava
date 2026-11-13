@@ -562,7 +562,6 @@ public class Internals extends PerlModuleBase {
         }
         if (base != null) {
             int rc = base.refCount;
-            if (rc == Integer.MIN_VALUE) return new RuntimeScalar(0).getList();
             boolean compileHintsHash = base == GlobalVariable.getGlobalHash(
                     GlobalContext.encodeSpecialVar("H"));
             int nativeOwners = base.nativeOwnerSlotCount();
@@ -578,7 +577,7 @@ public class Internals extends PerlModuleBase {
                 // that same Perl owner, so do not count its identity twice.
                 nativeOwners--;
             }
-            if (rc < 0) {
+            if (!base.isRefCountTracked()) {
                 if (nativeOwners == 0) return new RuntimeScalar(1).getList(); // untracked
                 rc = nativeOwners;
             } else {
