@@ -39,7 +39,8 @@ class UntrackedAggregateFirstWeakenFastPathTest {
                 assertFalse(WeakRefRegistry.isweak(weakObserver),
                         "the durable package slot's final release clears the weak observer");
                 assertEquals(RuntimeScalarType.UNDEF, weakObserver.type);
-                assertEquals(Integer.MIN_VALUE, target.refCount);
+                assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, target.perlLifecycleState());
+                assertEquals(0, target.refCount);
             } finally {
                 if (WeakRefRegistry.isweak(weakObserver)) {
                     WeakRefRegistry.unweaken(weakObserver);

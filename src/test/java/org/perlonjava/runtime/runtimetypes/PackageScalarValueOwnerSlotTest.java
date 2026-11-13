@@ -44,8 +44,9 @@ class PackageScalarValueOwnerSlotTest {
                         "the independent counted scalar owner remains");
 
                 countedOwner.set(new RuntimeScalar());
-                assertEquals(Integer.MIN_VALUE, referent.refCount,
+                assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, referent.perlLifecycleState(),
                         "the final counted owner performs final release");
+                assertEquals(0, referent.refCount);
             } finally {
                 GlobalVariable.globalVariables.remove(globalName);
                 countedOwner.set(new RuntimeScalar());

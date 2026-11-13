@@ -55,8 +55,9 @@ class DeferredReleaseRejectsStaleAggregateSlotTest {
 
                 assertEquals(RuntimeScalarType.UNDEF, weak.type,
                         "a detached aggregate slot is not a current Perl owner");
-                assertEquals(Integer.MIN_VALUE, target.refCount,
+                assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, target.perlLifecycleState(),
                         "a stale aggregate slot cannot restore the compatibility count");
+                assertEquals(0, target.refCount);
             } finally {
                 released.set(new RuntimeScalar());
                 staleOwner.set(new RuntimeScalar());

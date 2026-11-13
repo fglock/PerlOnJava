@@ -27,7 +27,8 @@ class PerlReferentDestroyLifecycleTest {
                 assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED,
                         referent.perlLifecycleState());
                 assertFalse(referent.currentlyDestroying);
-                assertEquals(Integer.MIN_VALUE, referent.refCount);
+                assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, referent.perlLifecycleState());
+                assertEquals(0, referent.refCount);
             } finally {
                 GlobalVariable.removeGlobalCodeRefForStashDelete(className + "::DESTROY");
             }

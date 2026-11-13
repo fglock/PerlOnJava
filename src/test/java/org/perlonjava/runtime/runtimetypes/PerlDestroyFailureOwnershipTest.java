@@ -43,7 +43,8 @@ class PerlDestroyFailureOwnershipTest {
                 assertEquals(RuntimeScalarType.UNDEF, weakChild.type);
                 assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, parent.perlLifecycleState());
                 assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, child.perlLifecycleState());
-                assertEquals(Integer.MIN_VALUE, parent.refCount);
+                assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, parent.perlLifecycleState());
+                assertEquals(0, parent.refCount);
                 assertFalse(parent.currentlyDestroying);
             } finally {
                 GlobalVariable.removeGlobalCodeRefForStashDelete(className + "::DESTROY");

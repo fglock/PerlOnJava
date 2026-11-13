@@ -27,8 +27,9 @@ class TailCallCodeRefDoesNotPinFromLocalBindingFlagTest {
 
             assertFalse(codeRef.refCountOwned);
             assertEquals(0, code.countedOwnerSlotCount());
-            assertEquals(Integer.MIN_VALUE, code.refCount,
+            assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, code.perlLifecycleState(),
                     "the final real CODE slot release must complete lifecycle cleanup");
+            assertEquals(0, code.refCount);
         }
     }
 }

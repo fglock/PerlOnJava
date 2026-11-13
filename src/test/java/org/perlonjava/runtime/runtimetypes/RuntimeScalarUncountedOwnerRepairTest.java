@@ -54,7 +54,8 @@ class RuntimeScalarUncountedOwnerRepairTest {
                 assertFalse(WeakRefRegistry.isweak(weakObserver),
                         "the last uncounted owner release clears weak observers");
                 assertEquals(RuntimeScalarType.UNDEF, weakObserver.type);
-                assertEquals(Integer.MIN_VALUE, target.refCount);
+                assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, target.perlLifecycleState());
+                assertEquals(0, target.refCount);
             } finally {
                 if (WeakRefRegistry.isweak(weakObserver)) {
                     WeakRefRegistry.unweaken(weakObserver);

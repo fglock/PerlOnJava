@@ -1972,7 +1972,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     void deferFinalReleaseToActiveCode() {
         finalReleaseDeferredToActiveCode = true;
-        if (refCount == Integer.MIN_VALUE) refCount = 0;
     }
 
     void finishActiveCodeOwnerRelease() {

@@ -31,7 +31,8 @@ class CountedScalarOwnerReplacementTest {
             assertEquals(1, replacement.refCount);
             assertEquals(1, replacement.countedOwnerSlotCount());
             assertEquals(0, previous.countedOwnerSlotCount());
-            assertEquals(Integer.MIN_VALUE, previous.refCount);
+            assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, previous.perlLifecycleState());
+            assertEquals(0, previous.refCount);
         }
     }
 

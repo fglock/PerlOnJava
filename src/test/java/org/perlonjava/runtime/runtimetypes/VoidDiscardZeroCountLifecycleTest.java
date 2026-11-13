@@ -30,7 +30,8 @@ class VoidDiscardZeroCountLifecycleTest {
 
                 MortalList.popAndFlush();
 
-                assertEquals(Integer.MIN_VALUE, target.refCount);
+                assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, target.perlLifecycleState());
+                assertEquals(0, target.refCount);
                 assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED,
                         target.perlLifecycleState());
                 assertFalse(target.hasPendingOwnerRelease(),

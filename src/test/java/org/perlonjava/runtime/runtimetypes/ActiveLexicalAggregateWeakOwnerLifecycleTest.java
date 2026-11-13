@@ -44,7 +44,8 @@ class ActiveLexicalAggregateWeakOwnerLifecycleTest {
 
                     assertEquals(0, array.ownerSlotCount(PerlOwnerSlot.Kind.ACTIVE_LEXICAL));
                     assertEquals(RuntimeScalarType.UNDEF, weakOwner.type);
-                    assertEquals(Integer.MIN_VALUE, array.refCount);
+                    assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, array.perlLifecycleState());
+                    assertEquals(0, array.refCount);
                     assertFalse(array.deferredFinalReleaseForUncountedOwners);
                     assertEquals(0, measurement.stats().rootQueries);
                 }

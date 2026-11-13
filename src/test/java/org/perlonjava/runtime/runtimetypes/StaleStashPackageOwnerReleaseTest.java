@@ -152,8 +152,9 @@ class StaleStashPackageOwnerReleaseTest {
 
                 lexical.undefine();
 
-                assertEquals(Integer.MIN_VALUE, stale.refCount,
+                assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, stale.perlLifecycleState(),
                         "the final Perl reference must retire the stale stash");
+                assertEquals(0, stale.refCount);
                 assertEquals(0, savedMove.ownerSlotCount(
                         PerlOwnerSlot.Kind.STASH_NAMESPACE_MOVE));
                 assertEquals(0, child.ownerSlotCount(

@@ -61,7 +61,7 @@ public class ViaLayer implements IOLayer {
         static SelfReferenceOwner retain(RuntimeScalar self) {
             if (self == null || !RuntimeScalarType.isReference(self)
                     || !(self.value instanceof RuntimeBase base)
-                    || base.refCount == Integer.MIN_VALUE) {
+                    || base.isPerlDestroyed()) {
                 return null;
             }
             return new SelfReferenceOwner(base);

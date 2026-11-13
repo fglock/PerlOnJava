@@ -40,8 +40,9 @@ class ViaLayerSelfOwnerSlotTest {
             assertFalse(slot.isActive());
             assertEquals(0, referent.ownerSlotCount(PerlOwnerSlot.Kind.IO_VIA_LAYER));
             assertFalse(slot.isCountedNativeOwner());
-            assertEquals(Integer.MIN_VALUE, referent.refCount,
+            assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, referent.perlLifecycleState(),
                     "the counted hold is released exactly once after its owner identity");
+            assertEquals(0, referent.refCount);
         }
     }
 

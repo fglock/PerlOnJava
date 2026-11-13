@@ -78,7 +78,8 @@ class UncountedOwnerSlotZeroCountReleaseTest {
 
                 rawOwner.release();
 
-                assertEquals(Integer.MIN_VALUE, target.refCount);
+                assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, target.perlLifecycleState());
+                assertEquals(0, target.refCount);
                 assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED,
                         target.perlLifecycleState());
                 assertEquals(1, destroyCalls.get(),
@@ -148,7 +149,8 @@ class UncountedOwnerSlotZeroCountReleaseTest {
             assertFalse(fixture.ownerSlot.isActive());
             assertEquals(0,
                     fixture.target.ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE));
-            assertEquals(Integer.MIN_VALUE, fixture.target.refCount);
+            assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, fixture.target.perlLifecycleState());
+            assertEquals(0, fixture.target.refCount);
             assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED,
                     fixture.target.perlLifecycleState());
             assertEquals(1, fixture.destroyCalls.get(),

@@ -38,6 +38,10 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     }
 
     void markPerlDestroyed() {
+        // A destroyed referent has no live Perl owner slots. Keep the public
+        // count in its ordinary nonnegative domain; lifecycle is represented
+        // only by perlLifecycleState.
+        refCount = 0;
         perlLifecycleState = PerlLifecycleState.DESTROYED;
     }
 
@@ -335,10 +339,6 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         // contribute to the selective refcount. Reconcile stale bridge state
         // before adding another owner; a blessed or already-destroyed object
         // must never be revived here.
-        if (refCount == Integer.MIN_VALUE && blessId == 0 && !destroyFired
-                && hasClosureCaptureOwner() && hasSemanticCaptureOwner()) {
-            refCount = 0;
-        }
         PerlOwnerSlot ownerSlot = new PerlOwnerSlot(PerlOwnerSlot.Kind.CLOSURE_PAD);
         ownerSlot.acquireCapture(this, captureOwner);
         retainClosureCaptureCount(false);

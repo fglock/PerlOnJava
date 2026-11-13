@@ -59,8 +59,9 @@ class TemporaryCodeArgumentOwnerIdentityTest {
             MortalList.pushMark();
             RuntimeScalar.scopeExitCleanup(durableCell);
             MortalList.popAndFlush();
-            assertEquals(Integer.MIN_VALUE, closure.refCount,
+            assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, closure.perlLifecycleState(),
                     "the final durable CODE owner retires the closure");
+            assertEquals(0, closure.refCount);
             assertEquals(0, closure.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_VALUE));
         }
     }

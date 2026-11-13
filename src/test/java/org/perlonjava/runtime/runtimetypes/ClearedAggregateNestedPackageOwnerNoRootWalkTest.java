@@ -53,7 +53,8 @@ class ClearedAggregateNestedPackageOwnerNoRootWalkTest {
                         "the exact package owner remains authoritative despite the stale zero count");
                 strongOwner.undefine();
                 assertFalse(WeakRefRegistry.isweak(weakObserver));
-                assertEquals(Integer.MIN_VALUE, referent.refCount);
+                assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, referent.perlLifecycleState());
+                assertEquals(0, referent.refCount);
             } finally {
                 if (WeakRefRegistry.isweak(weakObserver)) {
                     WeakRefRegistry.unweaken(weakObserver);

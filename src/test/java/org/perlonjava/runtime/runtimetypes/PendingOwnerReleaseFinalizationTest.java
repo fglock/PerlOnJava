@@ -44,7 +44,8 @@ class PendingOwnerReleaseFinalizationTest {
 
                 assertFalse(WeakRefRegistry.isweak(weakObserver),
                         "draining the final counted release clears the weak observer");
-                assertEquals(Integer.MIN_VALUE, referent.refCount);
+                assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, referent.perlLifecycleState());
+                assertEquals(0, referent.refCount);
                 assertFalse(referent.hasPendingOwnerRelease());
             } finally {
                 if (WeakRefRegistry.isweak(weakObserver)) {
