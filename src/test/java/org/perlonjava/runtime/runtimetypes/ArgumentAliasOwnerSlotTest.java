@@ -283,7 +283,7 @@ class ArgumentAliasOwnerSlotTest {
             RuntimeScalar.ArgumentAliasOwner alias = cell.retainArgumentAliasOwner();
             assertEquals(1, target.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_ALIAS));
 
-            target.refCount = Integer.MIN_VALUE;
+            target.markPerlDestroyed();
             cell.refreshArgumentAliasOwnerSlots();
 
             assertEquals(0, target.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_ALIAS));

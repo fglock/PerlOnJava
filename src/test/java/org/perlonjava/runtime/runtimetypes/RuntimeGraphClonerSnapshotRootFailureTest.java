@@ -17,7 +17,7 @@ class RuntimeGraphClonerSnapshotRootFailureTest {
         RuntimeHash firstRoot = new RuntimeHash();
         RuntimeScalar destroyedSharedRoot = new RuntimeScalar();
         destroyedSharedRoot.threadShared = true;
-        destroyedSharedRoot.refCount = Integer.MIN_VALUE;
+        destroyedSharedRoot.markPerlDestroyed();
         RuntimeGraphCloner cloner = new RuntimeGraphCloner(source, target);
 
         try (PerlRuntime.Binding ignored = target.bind()) {

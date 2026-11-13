@@ -286,26 +286,24 @@ class UntrackedReferenceOwnerSlotTest {
     }
 
     @Test
-    void packageScalarSlotTracksDestroyedLegacyCellWithoutRevivingIt() {
+    void packageScalarSlotTracksItsCellWithoutChangingTheValueCount() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
-            RuntimeScalar legacyDestroyedCell = new RuntimeScalar("retired");
-            legacyDestroyedCell.refCount = Integer.MIN_VALUE;
+            RuntimeScalar packageCell = new RuntimeScalar("value");
+            packageCell.refCount = 0;
             String key = "RuntimeScalarOwnerSlotTest::retired_cell";
 
             try {
-                GlobalVariable.globalVariables.put(key, legacyDestroyedCell);
+                GlobalVariable.globalVariables.put(key, packageCell);
 
-                assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, legacyDestroyedCell.perlLifecycleState(),
-                        "identity tracking must not revive the legacy lifecycle count");
-                assertEquals(0, legacyDestroyedCell.refCount);
-                assertEquals(1, legacyDestroyedCell.ownerSlotCount(
+                assertEquals(0, packageCell.refCount,
+                        "the package slot identifies the cell but does not own its value");
+                assertEquals(1, packageCell.ownerSlotCount(
                         PerlOwnerSlot.Kind.PACKAGE_SCALAR_SLOT));
 
                 GlobalVariable.globalVariables.remove(key);
-                assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, legacyDestroyedCell.perlLifecycleState());
-                assertEquals(0, legacyDestroyedCell.refCount);
-                assertEquals(0, legacyDestroyedCell.ownerSlotCount(
+                assertEquals(0, packageCell.refCount);
+                assertEquals(0, packageCell.ownerSlotCount(
                         PerlOwnerSlot.Kind.PACKAGE_SCALAR_SLOT));
             } finally {
                 GlobalVariable.globalVariables.remove(key);

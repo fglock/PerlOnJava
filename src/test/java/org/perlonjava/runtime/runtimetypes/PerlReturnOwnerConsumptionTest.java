@@ -37,7 +37,7 @@ class PerlReturnOwnerConsumptionTest {
 
                 RuntimeHash unrelated = new RuntimeHash();
                 unrelated.blessId = NameNormalizer.getBlessId(cleanupClass);
-                unrelated.refCount = Integer.MIN_VALUE;
+                unrelated.refCount = 0;
                 DestroyDispatch.callDestroy(unrelated);
 
                 assertEquals(1, returnedReferent.refCount,
