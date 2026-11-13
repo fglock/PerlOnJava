@@ -1986,7 +1986,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // closure captures could outlive their final owner.
         if (hasPerlOwnerForCaptureOtherThan(null) || SpecialBlock.hasPendingEndBlock(this)) return;
         finalReleaseDeferredToActiveCode = false;
-        refCount = Integer.MIN_VALUE;
         DestroyDispatch.callDestroyFromCountedOwner(this);
     }
 
@@ -3628,7 +3627,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (base.blessId == 0) {
             return null;
         }
-        if (base.refCount == Integer.MIN_VALUE || base.currentlyDestroying) {
+        if (base.isPerlDestroyed() || base.currentlyDestroying) {
             return null;
         }
         if (base.refCount < 0) {
@@ -5082,7 +5081,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         for (RuntimeBase constant : constants) {
             if (constant != null && seen.add(constant)
                     && constant.ownerSlotCount(PerlOwnerSlot.Kind.CODE_PAD_CONSTANT) == 0
-                    && constant.refCount != Integer.MIN_VALUE
+                    && !constant.isPerlDestroyed()
                     && constant.refCount <= 0) {
                 // A caller may retain a backslash-addressed literal through an
                 // uncounted scalar reference after this CV dies. Carry the

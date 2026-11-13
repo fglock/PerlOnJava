@@ -119,7 +119,6 @@ public class GlobalDestruction {
             stdout.setBlessId(blessId);
         }
         if (!visited.add(stdout)) return;
-        stdout.refCount = Integer.MIN_VALUE;
         DestroyDispatch.callDestroy(stdout);
     }
 
@@ -153,7 +152,6 @@ public class GlobalDestruction {
                 // also finalized during global destruction.
                 code.releaseCaptures();
             }
-            base.refCount = Integer.MIN_VALUE;
             DestroyDispatch.callDestroy(base);
             return;
         }

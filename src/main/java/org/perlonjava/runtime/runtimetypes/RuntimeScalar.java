@@ -983,7 +983,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             base.refCount = 0;
         }
         if (base.refCount < 0 || base.refCount == WeakRefRegistry.WEAKLY_TRACKED
-                || base.refCount == Integer.MIN_VALUE) {
+                || base.isPerlDestroyed()) {
             return null;
         }
         return base;
@@ -995,7 +995,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 || (type & RuntimeScalarType.REFERENCE_BIT) == 0
                 || !(value instanceof RuntimeBase base)
                 || base.refCount == WeakRefRegistry.WEAKLY_TRACKED
-                || base.refCount == Integer.MIN_VALUE) {
+                || base.isPerlDestroyed()) {
             return null;
         }
         return base;
@@ -1011,7 +1011,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (WeakRefRegistry.isweak(this)
                 || (type & RuntimeScalarType.REFERENCE_BIT) == 0
                 || !(value instanceof RuntimeBase base)
-                || base.refCount == Integer.MIN_VALUE) {
+                || base.isPerlDestroyed()) {
             return null;
         }
         return base;
@@ -1469,7 +1469,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && hasLiveDurableStrongValueSlot();
         boolean untrackedStrongValue = !weakValue
                 && referent != null
-                && referent.refCount != Integer.MIN_VALUE
+                && !referent.isPerlDestroyed()
                 && (referent.refCount < 0
                     || existingOwnerForReferent
                     || packageScalarValueOwner
@@ -1624,7 +1624,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if ((runtime != null && WeakRefRegistry.isweak(this))
                 || ((type & RuntimeScalarType.REFERENCE_BIT) == 0 && type != RuntimeScalarType.GLOB)
                 || !(value instanceof RuntimeBase referent)
-                || referent.refCount == Integer.MIN_VALUE) {
+                || referent.isPerlDestroyed()) {
             return null;
         }
         return referent;
@@ -1718,7 +1718,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     && scalar.type != RuntimeScalarType.GLOB
                     && scalar.type != RuntimeScalarType.CODE)
                 || referent.refCount <= 0
-                || referent.refCount == Integer.MIN_VALUE) {
+                || referent.isPerlDestroyed()) {
             throw new IllegalStateException(
                     "legacy owner adoption requires an existing counted storage edge at "
                             + acquisitionSite);
@@ -2315,7 +2315,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // check before the proxy/null handling below.
         if (scalar != null
                 && scalar.getClass() == RuntimeScalar.class
-                && scalar.refCount != Integer.MIN_VALUE) {
+                && !scalar.isPerlDestroyed()) {
             return scalar;
         }
         // A foreach literal alias deliberately occupies a lexical slot.  It
@@ -2337,7 +2337,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             materialized.materializedBeforeLexicalDeclaration = true;
             return materialized;
         }
-        if (scalar.refCount == Integer.MIN_VALUE) {
+        if (scalar.isPerlDestroyed()) {
             // JVM local-slot reuse can assign a new declaration's initializer
             // into a destroyed prior cell before refgen materializes it. Keep
             // that new payload, but give the declaration a fresh scalar
@@ -2370,7 +2370,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // earlier frame (notably a literal signature argument).
         boolean retainForwardReference = scalar != null
                 && scalar.retainMaterializedForwardReference
-                && scalar.refCount != Integer.MIN_VALUE
+                && !scalar.isPerlDestroyed()
                 && !(scalar instanceof RuntimeScalarReadOnly)
                 && scalar.type != RuntimeScalarType.READONLY_SCALAR;
         if (retainForwardReference) {
@@ -3745,7 +3745,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             return;
         }
         // Destroyed / weaken sentinel states must not be reactivated here.
-        if (base.refCount == Integer.MIN_VALUE) {
+        if (base.isPerlDestroyed()) {
             return;
         }
         if (base.refCount == WeakRefRegistry.WEAKLY_TRACKED) {
@@ -4826,13 +4826,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             // owner already represents it.
             boolean rescueNeedsCountedOwner = !newOwned
                     && !scalarContentsOwnedByEscapedReference;
-            if (rescueNeedsCountedOwner && base.refCount == Integer.MIN_VALUE) {
-                // DESTROY resurrection makes the dying object eligible for a
-                // new owner again. Reset only the lifecycle sentinel here;
-                // the shared acquisition below installs the count and exact
-                // scalar-slot identity together.
-                base.refCount = 0;
-            }
             if (rescueNeedsCountedOwner && base.refCount >= 0) {
                 acquireCountedOwnerForPendingValue(
                         this, base, countedOwnerKind(),
@@ -4871,7 +4864,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 // weak lifecycle obligation on that exact owner until it leaves.
                 oldBase.deferFinalReleaseToUncountedOwnerSlots();
             } else if (!oldBase.hasPerlStrongOwner()) {
-                oldBase.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroy(oldBase);
             }
         }
@@ -6870,7 +6862,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
             PerlOwnerSlot.PendingRelease oldCodeRelease = null;
             if (this.refCountOwned) {
-                if (code.refCount == Integer.MIN_VALUE) {
+                if (code.isPerlDestroyed()) {
                     throw new IllegalStateException(
                             "counted global CODE slot refers to an already destroyed CV");
                 }
@@ -8498,7 +8490,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         scalar.localBindingExists = false;
         if (scalar.refCount == 0 && !scalar.hasScalarCellOwner()
                 && !scalar.hasUncountedPerlOwnerSlotIdentity()) {
-            scalar.refCount = Integer.MIN_VALUE;
             DestroyDispatch.callDestroy(scalar);
         }
     }

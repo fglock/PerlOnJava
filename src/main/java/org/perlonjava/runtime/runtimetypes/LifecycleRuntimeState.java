@@ -135,7 +135,7 @@ final class LifecycleRuntimeState {
 
         TemporaryRootLease(RuntimeBase root) {
             this.root = root;
-            if (root.refCount == Integer.MIN_VALUE) {
+            if (root.isPerlDestroyed()) {
                 // Keep the boundary entry balanced without reviving a destroyed value.
                 this.ownerSlot = null;
             } else {

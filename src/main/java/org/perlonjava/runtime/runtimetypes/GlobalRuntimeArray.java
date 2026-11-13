@@ -92,7 +92,6 @@ public class GlobalRuntimeArray implements DynamicState {
                 if (!preserveSuspendedArray && localArray != null && localArray.blessId != 0
                         && !localArray.destroyFired
                         && (saved.originalArray == null || localArray != saved.originalArray)) {
-                    localArray.refCount = Integer.MIN_VALUE;
                     DestroyDispatch.callDestroy(localArray);
                 }
 

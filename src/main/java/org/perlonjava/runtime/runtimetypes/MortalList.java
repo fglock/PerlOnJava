@@ -497,7 +497,7 @@ public class MortalList {
      */
     public static void deferBlessTemporary(RuntimeBase base, boolean strongPerlOwner) {
         if (base == null) return;
-        if (base.refCount == Integer.MIN_VALUE) {
+        if (base.isPerlDestroyed()) {
             throw new IllegalStateException("cannot bless a destroyed referent");
         }
         PerlOwnerSlot temporaryOwner = new PerlOwnerSlot(PerlOwnerSlot.Kind.SCALAR_CELL);
@@ -1896,7 +1896,6 @@ public class MortalList {
         // queue drains. Let that exact release decide finalization instead of
         // racing it with scope-exit cleanup.
         if (base.hasPendingOwnerRelease()) return;
-        base.refCount = Integer.MIN_VALUE;
         DestroyDispatch.callDestroy(base);
     }
 
@@ -2227,7 +2226,6 @@ public class MortalList {
                     // subroutine exits.  Do not let that stale lexical marker
                     // suppress DESTROY after the final container deletion.
                     base.localBindingExists = false;
-                    base.refCount = Integer.MIN_VALUE;
                     DestroyDispatch.callDestroy(base);
                     return;
                 }
@@ -2257,7 +2255,6 @@ public class MortalList {
                 // This decrement retired an identified scalar/element edge.
                 // Every other migrated edge is already absent from the ledger;
                 // a cached root snapshot must not invent a replacement owner.
-                base.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroyFromCountedOwner(base);
             } else if (base.restoreVerifiedCurrentCountedOwnerSlotRefCount()) {
                 // Exact active scalar, element, invocant, or native slots are
@@ -2284,7 +2281,6 @@ public class MortalList {
                 // Call depth is not ownership. If every counted and direct
                 // owner check above is empty, a weak referent is final here;
                 // leaving it for a later sweep would strand the weak scalars.
-                base.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroy(base);
             }
         }
@@ -2300,7 +2296,6 @@ public class MortalList {
                 && !(base instanceof RuntimeCode code
                     && (code.hasActiveCodeOwner()
                         || code.hasStashCodeSlotOwner()))) {
-            base.refCount = Integer.MIN_VALUE;
             DestroyDispatch.callDestroyFromCountedOwner(base);
         }
         if (base instanceof RuntimeCode code) code.finishActiveCodeOwnerRelease();

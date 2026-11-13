@@ -62,6 +62,8 @@ class RescuedObjectOwnerIdentityTest {
             }
             assertEquals(0, rescued.ownerSlotCount(PerlOwnerSlot.Kind.EXPRESSION_VALUE));
             assertEquals(0, rescued.refCount);
+            assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED,
+                    rescued.perlLifecycleState());
         }
     }
 }

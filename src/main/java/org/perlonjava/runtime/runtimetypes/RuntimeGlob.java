@@ -2640,7 +2640,6 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 MortalList.releaseCountedOwnerImmediately(
                         localCode, "RuntimeGlob.restoreLocalizedCodeRef");
             } else if (localBase.refCount == 0 && localBase instanceof RuntimeCode) {
-                localBase.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroy(localBase);
             }
         }
