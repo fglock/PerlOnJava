@@ -317,54 +317,16 @@ Run on JVM and interpreter backends with `timeout` and complete output logs:
 
 ## Progress Tracking
 
-### Current Status: sweep-free integration passes the repository gate (2026-11-13)
+### Current Status: explicit count states pass the repository gate (2026-11-13)
 
-Issue #2043 is active on branch
-`wip/issue2043-late-test-preflight-20261113-054154` in
-`/private/tmp/issue2043-head-8521-review-20261112`. Source checkpoint
-`5052e77de1` integrates lifecycle-state work from `d39be7963b` with the
-sweep-removal candidate `5a8b5c335e`. PR #1938 remains open/draft at
-`1b80749914`; this integration has not been published.
-
-The integration removes lifecycle weak sweeps, temporary-root ancestry search,
-rescued-object graph clearing, END-boundary owner proofs, no-op sweep hooks,
-and the module-initialization guard that suppressed weak CODE cleanup. Temporary
-and deferred cleanup use current owner-slot identities. Destruction state is
-separate from the count; a destroyed referent now has count zero, and white-box
-tests assert the lifecycle state instead of the former `Integer.MIN_VALUE`
-marker.
-
-`nice -n 19 timeout 3600 make` passes on source checkpoint `5052e77de1` in
-8m49s (`/tmp/issue2043-5052e77de1-make.log`). The system Perl check for both
-changed Perl unit files passes 10/10, and `make check-links` passes with 834
-documents and zero errors. The first integrated gate failed 50 tests, mostly on
-the obsolete destroyed sentinel; the intermediate gate exposed two stale test
-setups, now corrected (`/tmp/issue2043-ab32e49b31-make.log` and
-`/tmp/issue2043-e4523a8153-make.log`).
-
-The issue's live-owner count contract is still incomplete: untracked and weak
-tracking states remain negative in `refCount`, and some owner-slot producers do
-not yet contribute to the count. DBIx
-`t/52leaks-resultset-source-only.t` remains a known failure on both backends,
-retaining one `BaseResultSet` from the first `chained_resultset` hash slot. Its
-trace shows that slot as strong but uncounted while the referent is
-`WEAKLY_TRACKED`; this is a candidate missing owner transition, not a proven
-root cause. The reduced DBIx-style reproducer passes 1/1 on system Perl, JVM,
-and interpreter (`/tmp/issue2043-dbic-resultset-subframe-system-perl.log`,
-`/tmp/issue2043-dbic-resultset-subframe-jvm.log`, and
-`/tmp/issue2043-dbic-resultset-subframe-interpreter.log`), so it does not yet
-reproduce the leak and must not drive a runtime fix.
-
-Next: make a focused regression preserve the real DBIx construction and weak
-registry ordering, and capture the owner-slot state before destruction clears
-it. In parallel, introduce explicit tracking state for the legacy untracked
-and weak-tracked cases, then migrate the count gates and clone paths before
-counting every remaining strong owner slot. Keep DBIx owner tracing only until
-that edge is identified. Remove obsolete root-query diagnostics and tests when
-their behavior is no longer needed; keep liveness assertions. After source
-changes, run focused JVM and interpreter checks, the full repository gate,
-DBIx leak/populate tests, and fresh-home exact-head CPAN acceptance. Update PR
-#1938 only with current evidence after those gates pass.
+Issue #2043 checkpoint and remaining acceptance work are maintained in the
+[ownership rewrite design](perl-ownership-rewrite.md#current-checkpoint). Source
+commit `311e8b4fbd` replaces negative count sentinels with explicit tracking
+modes; its full Make and link-check evidence is listed there. Owner-count
+alignment and the DBIx owner transition are still incomplete. Two production
+graph-query consumers remain in `GlobalRuntimeState` and `Internals`; remove
+the walker counters and diagnostic-only tests after those liveness decisions
+use owner identities.
 
 ### Historical handoff: issue #1132 / PR #1204
 
