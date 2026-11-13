@@ -125,6 +125,46 @@ class RuntimeScalarOwnerSlotTest {
     }
 
     @Test
+    void scopedCleanupDrainsItsEntriesDuringFlushSuppression() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            MortalList.setActive(true);
+            MortalList.pushScopeMark();
+
+            RuntimeHash earlier = new RuntimeHash();
+            RuntimeScalar earlierOwner = new RuntimeScalar();
+            earlierOwner.set(earlier.createReference());
+            MortalList.deferDecrementIfTracked(earlierOwner);
+            PerlOwnerSlot.PendingRelease earlierRelease =
+                    runtime.lifecycleState.pendingOwnerReleases.getLast().ownerSlotRelease;
+
+            MortalList.pushScopeMark();
+            RuntimeHash scoped = new RuntimeHash();
+            RuntimeScalar scopedOwner = new RuntimeScalar();
+            scopedOwner.set(scoped.createReference());
+            MortalList.deferDecrementIfTracked(scopedOwner);
+            PerlOwnerSlot.PendingRelease scopedRelease =
+                    runtime.lifecycleState.pendingOwnerReleases.getLast().ownerSlotRelease;
+
+            boolean previousSuppression = MortalList.suppressFlush(true);
+            try {
+                MortalList.popScopeMarkAndFlush();
+            } finally {
+                MortalList.suppressFlush(previousSuppression);
+            }
+
+            assertTrue(scopedRelease.isCompleted(),
+                    "scope cleanup drains entries created within its mark");
+            assertFalse(earlierRelease.isCompleted(),
+                    "scope cleanup leaves releases from before its mark pending");
+            assertEquals(1, runtime.lifecycleState.pendingOwnerReleases.size());
+
+            MortalList.popScopeMarkAndFlush();
+            assertTrue(earlierRelease.isCompleted());
+        }
+    }
+
+    @Test
     void hashKeysOwnDistinctElementSlotsEvenWhenTheyStoreTheSameInputScalar() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
