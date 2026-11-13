@@ -2,69 +2,50 @@
 
 **Status:** Phase 1 is complete; Phase 2 is active. Default production cleanup
 no longer calls corrective reachability sweeps, and the tokenless decrement
-fallback is removed. Remaining work covers temporary-root fallback traversal,
-owner-count alignment, sweep-only state and diagnostics, and exact-head CPAN
-acceptance. Thread-clone root snapshots are separate runtime ownership and
-remain in place.
+fallback is removed. Temporary-root ancestry and END rescued-graph decisions
+are also removed. Remaining work covers owner-count alignment, two production
+graph-query consumers, sweep-only diagnostics, and exact-head CPAN acceptance.
+Thread-clone snapshots remain explicit runtime ownership.
 
 | Phase | Status | Acceptance |
 | --- | --- | --- |
 | Phase 1: remove default corrective sweeps | Complete | Full no-sweeps gates and lifecycle coverage are recorded below. |
-| Phase 2: retire reachability fallbacks | Active | Owner-source proofs and exact-head CPAN acceptance remain. |
+| Phase 2: retire reachability fallbacks | Active | Owner-source proofs, remaining graph-query consumers, and exact-head CPAN acceptance remain. |
 
 **Current checkpoint (2026-11-13):** Issue #2043 continues on
-`wip/issue2043-standard-owner-removal-20261112`, source candidate commit
-`e5e72d11f4`. This work has not been published to PR #1938; its separate
-branch needs reconciliation before any publication.
+`wip/issue2043-late-test-preflight-20261113-054154`, source commit
+`311e8b4fbd`, in `/private/tmp/issue2043-head-8521-review-20261112`. PR #1938
+remains open/draft at `1b80749914`; this work is not published there.
 
-The localized-hash-restore fix scopes cleanup to the restored entry, so it
-cannot drain a pending return owner before the caller receives it. Its
-`returned_object_survives_local_hash_restore.t` regression passes 4/4 on system
-Perl, JVM, and interpreter; the unfixed JVM failed 2/4. The unused tokenless
-decrement API and its reachable-owner-count repair path are removed. Current
-owner-slot lifetime tests remain. Scoped block cleanup now distinguishes an
-active deferred-entry drain from flush suppression: it drains entries created
-above its own mark and leaves earlier entries pending. The added
-`RuntimeScalarOwnerSlotTest.scopedCleanupDrainsItsEntriesDuringFlushSuppression`
-case verifies that boundary. Failure-side `jperl_owner_trace` calls were
-removed from four behavior tests, and the BaseResultSet-only trace block was
-removed after it produced no evidence in the reduced case.
+The selective count now starts at zero and uses explicit `UNTRACKED`, `TRACKED`,
+and `WEAKLY_TRACKED` modes. Runtime promotion, clone/restore, release gates, and
+white-box fixtures use that state instead of negative count values. The new
+`RuntimeBaseRefCountTrackingStateTest` checks the nonnegative count invariant.
+`nice -n 19 timeout 3600 make` passes in 7m13
+(`/tmp/issue2043-explicit-tracking-make.log`); `make check-links` passes with
+834 documents (`/tmp/issue2043-explicit-tracking-check-links.log`). The reduced
+DBIx-style reproducer passes 1/1 under system Perl, JVM, and interpreter
+(`/tmp/issue2043-explicit-dbic-reduced-{system,jvm,interpreter}.log`), but it
+does not reproduce the known leak. The DBIx::Class distribution and its
+`t/52leaks-resultset-source-only.t` are absent from the current local CPAN build
+cache, so the original failure has not been rechecked on this commit.
 
-The latest `nice -n 19 timeout 3600 make` passes in 7m31; log:
-`/tmp/issue2043-diagnostic-removal-make.log`. The four changed Perl regressions
-pass system Perl (33 assertions), log:
-`/tmp/issue2043-diagnostic-call-removal-system-perl.log`. The reduced external
-`t/52leaks-resultset-source-only.t` passes system Perl but still fails one
-assertion of two on both JVM and interpreter after this build. Owner tracing
-shows the chained `BaseResultSet` retains a final owner through the assertion;
-the source of that edge remains unconfirmed. A fresh uninstrumented JVM run still
-fails; extracting the chained resultset to a lexical and adding owner-trace
-calls makes the staged variant pass, so that variant perturbs the lifetime and
-is not valid acceptance evidence. A generic method-return-to-hash case passes
-system Perl and both backends; a blessed-lexical-return chain with method calls
-also passes on all three runtimes. This narrows the reproduction to DBIx's
-actual construction/method path rather than a general return or hash-store
-rule. Logs:
-`/tmp/issue2043-dbic-source-only-final-jvm.log`,
-`/tmp/issue2043-dbic-source-only-final-interpreter.log`, and
-`/tmp/issue2043-dbic-source-only-after-guard-ownertrace.log`; current fresh
-reproduction `/tmp/issue2043-source-only-original-current-jperl.log`, staged
-variant `/tmp/issue2043-source-only-staged-jperl.log`, and generic control
-`/tmp/issue2043-generic-system.log`, `/tmp/issue2043-generic-jvm.log`,
-`/tmp/issue2043-generic-interpreter.log`; blessed return control
-`/tmp/issue2043-blessed-lexical-system.log`,
-`/tmp/issue2043-blessed-lexical-jvm.log`, and
-`/tmp/issue2043-blessed-lexical-interpreter.log`.
+Two production paths still ask `ReachabilityWalker` for liveness: installed
+CODE-edge selection in `GlobalRuntimeState.isCodeRefEdgeRoot`, and the
+`Internals::svRefcount` field-owned method-result adjustment. Owner-count
+alignment is also incomplete, and the DBIx `BaseResultSet` owner transition is
+unproven. Root-query counters and tests remain until these callers no longer
+need graph traversal.
 
-Next, trace the uninstrumented `BaseResultSet` count through construction,
-return, hash insertion, and block cleanup without querying it from Perl at the
-measurement boundary; fix that owner transition and add permanent focused
-coverage. Then continue removing temporary-root ancestry and sweep-only state
-and diagnostics while keeping thread-clone snapshots as separate runtime
-ownership. Before publishing, finish the no-sweep owner migration, remove
-obsolete diagnostic-only coverage, run full `make` and focused DBIx acceptance
-on the exact candidate, refresh the issue claim, and reconcile PR #1938 without
-overwriting its separate branch.
+Next: restore the exact DBIx test source and reproduce its owner edge without
+instrumentation that changes lifetime; fix it with permanent source-level
+coverage. In parallel, audit the CODE-edge cache and `Internals::svRefcount`
+queries against current owner slots, keeping shared lifecycle edits for the
+integration pass. Once those liveness decisions use owner identities, remove
+the graph walker, query counters, and diagnostic-only test blocks while
+retaining liveness and Perl-visible `SvREFCNT` assertions. Then run full
+repository, DBIx leak/populate, fresh-home exact-head CPAN, and final-base gates
+before reconciling PR #1938.
 
 ### Phase 2 progress (2026-10-27)
 
