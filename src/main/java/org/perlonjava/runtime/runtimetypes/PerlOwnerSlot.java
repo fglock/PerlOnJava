@@ -69,8 +69,10 @@ public final class PerlOwnerSlot {
         UNTRACKED_REFERENCE,
         /** Scalar slot retaining an anonymous IO glob's live resource. */
         IO_RESOURCE_HOLDER,
-        /** Runtime-owned temporary value retained across a cleanup drain. */
+        /** Runtime snapshot root retained while a thread or graph snapshot is built. */
         TEMPORARY_ROOT,
+        /** A Perl temporary expression value retained through its temp scope. */
+        EXPRESSION_VALUE,
         /** Persistent scalar or aggregate state binding retained by a CODE object. */
         CODE_STATE,
         /** Scalar wrapper retaining the current contents of a referenced scalar cell. */
@@ -242,7 +244,8 @@ public final class PerlOwnerSlot {
     /** Mark a direct count paired with a native owner identity. */
     public synchronized void markCountedNativeOwner() {
         if ((kind != Kind.IO_VIA_LAYER && kind != Kind.REGEX_CALLBACK
-                    && kind != Kind.TIED_HASH_ITERATOR_KEY)
+                    && kind != Kind.TIED_HASH_ITERATOR_KEY
+                    && kind != Kind.EXPRESSION_VALUE)
                 || referent == null || !nativeOwner
                 || countedNativeOwner) {
             throw new IllegalStateException("counted native owner requires an active supported slot");
@@ -253,7 +256,8 @@ public final class PerlOwnerSlot {
     /** Whether this active native slot contributes one direct count. */
     public synchronized boolean isCountedNativeOwner() {
         return (kind == Kind.IO_VIA_LAYER || kind == Kind.REGEX_CALLBACK
-                    || kind == Kind.TIED_HASH_ITERATOR_KEY)
+                    || kind == Kind.TIED_HASH_ITERATOR_KEY
+                    || kind == Kind.EXPRESSION_VALUE)
                 && referent != null && countedNativeOwner;
     }
 
@@ -521,7 +525,8 @@ public final class PerlOwnerSlot {
         Objects.requireNonNull(target, "target");
         Objects.requireNonNull(acquisitionSite, "acquisitionSite");
         if (kind != Kind.IO_VIA_LAYER && kind != Kind.REGEX_CALLBACK
-                && kind != Kind.TIED_HASH_ITERATOR_KEY) {
+                && kind != Kind.TIED_HASH_ITERATOR_KEY
+                && kind != Kind.EXPRESSION_VALUE) {
             throw new IllegalStateException("unsupported counted native owner slot: " + kind);
         }
         if (referent != null || nativeOwner || countedNativeOwner) {

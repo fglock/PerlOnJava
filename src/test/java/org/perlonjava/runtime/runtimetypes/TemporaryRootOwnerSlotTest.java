@@ -51,19 +51,19 @@ class TemporaryRootOwnerSlotTest {
             MortalList.pushTemporaryRoot(first);
             MortalList.pushTemporaryRoot(second);
 
-            assertEquals(2, first.ownerSlotCount(PerlOwnerSlot.Kind.TEMPORARY_ROOT));
-            assertEquals(1, second.ownerSlotCount(PerlOwnerSlot.Kind.TEMPORARY_ROOT));
+            assertEquals(2, first.ownerSlotCount(PerlOwnerSlot.Kind.EXPRESSION_VALUE));
+            assertEquals(1, second.ownerSlotCount(PerlOwnerSlot.Kind.EXPRESSION_VALUE));
             assertEquals(List.of(second, first, first), MortalList.snapshotTemporaryRoots());
             assertTrue(MortalList.temporaryRootDirectlyReferences(first));
 
             MortalList.popTemporaryRoot(first);
-            assertEquals(1, first.ownerSlotCount(PerlOwnerSlot.Kind.TEMPORARY_ROOT));
+            assertEquals(1, first.ownerSlotCount(PerlOwnerSlot.Kind.EXPRESSION_VALUE));
             assertEquals(List.of(second, first), MortalList.snapshotTemporaryRoots());
 
             MortalList.popTemporaryRoot(second);
             MortalList.popTemporaryRoot(first);
-            assertEquals(0, first.ownerSlotCount(PerlOwnerSlot.Kind.TEMPORARY_ROOT));
-            assertEquals(0, second.ownerSlotCount(PerlOwnerSlot.Kind.TEMPORARY_ROOT));
+            assertEquals(0, first.ownerSlotCount(PerlOwnerSlot.Kind.EXPRESSION_VALUE));
+            assertEquals(0, second.ownerSlotCount(PerlOwnerSlot.Kind.EXPRESSION_VALUE));
             assertEquals(List.of(), MortalList.snapshotTemporaryRoots());
             assertFalse(MortalList.temporaryRootDirectlyReferences(first));
         }
@@ -87,11 +87,11 @@ class TemporaryRootOwnerSlotTest {
             }
 
             assertEquals(List.of(callerRoot), MortalList.snapshotTemporaryRoots());
-            assertEquals(1, callerRoot.ownerSlotCount(PerlOwnerSlot.Kind.TEMPORARY_ROOT));
-            assertEquals(0, failedCallRoot.ownerSlotCount(PerlOwnerSlot.Kind.TEMPORARY_ROOT));
+            assertEquals(1, callerRoot.ownerSlotCount(PerlOwnerSlot.Kind.EXPRESSION_VALUE));
+            assertEquals(0, failedCallRoot.ownerSlotCount(PerlOwnerSlot.Kind.EXPRESSION_VALUE));
 
             MortalList.popTemporaryRoot(callerRoot);
-            assertEquals(0, callerRoot.ownerSlotCount(PerlOwnerSlot.Kind.TEMPORARY_ROOT));
+            assertEquals(0, callerRoot.ownerSlotCount(PerlOwnerSlot.Kind.EXPRESSION_VALUE));
         }
     }
 
@@ -103,15 +103,40 @@ class TemporaryRootOwnerSlotTest {
             MortalList.pushTemporaryRoot(root);
             MortalList.pushTemporaryRoot(root);
 
-            assertEquals(2, root.ownerSlotCount(PerlOwnerSlot.Kind.TEMPORARY_ROOT));
+            assertEquals(2, root.ownerSlotCount(PerlOwnerSlot.Kind.EXPRESSION_VALUE));
             MortalList.clearTemporaryRoots();
-            assertEquals(0, root.ownerSlotCount(PerlOwnerSlot.Kind.TEMPORARY_ROOT));
+            assertEquals(0, root.ownerSlotCount(PerlOwnerSlot.Kind.EXPRESSION_VALUE));
 
             MortalList.pushTemporaryRoot(root);
             MortalList.clearCurrentRuntimeState();
 
-            assertEquals(0, root.ownerSlotCount(PerlOwnerSlot.Kind.TEMPORARY_ROOT));
+            assertEquals(0, root.ownerSlotCount(PerlOwnerSlot.Kind.EXPRESSION_VALUE));
             assertEquals(List.of(), MortalList.snapshotTemporaryRoots());
+        }
+    }
+
+    @Test
+    void expressionOwnerBalancesTheTrackedReferentCount() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeHash value = new RuntimeHash();
+            value.refCount = 0;
+
+            MortalList.pushTemporaryRoot(value);
+            assertEquals(1, value.refCount,
+                    "the expression scope is a counted Perl owner");
+            assertEquals(1, value.ownerSlotCount(PerlOwnerSlot.Kind.EXPRESSION_VALUE));
+
+            MortalList.pushTemporaryRoot(value);
+            assertEquals(2, value.refCount,
+                    "each live expression slot contributes one owner count");
+            MortalList.popTemporaryRoot(value);
+            assertEquals(1, value.refCount,
+                    "popping one duplicate expression owner releases exactly one count");
+            assertEquals(1, value.ownerSlotCount(PerlOwnerSlot.Kind.EXPRESSION_VALUE));
+
+            MortalList.popTemporaryRoot(value);
+            assertEquals(0, value.ownerSlotCount(PerlOwnerSlot.Kind.EXPRESSION_VALUE));
         }
     }
 

@@ -589,14 +589,16 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         int temporaryCountedOwners = ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_VALUE)
                 + ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_CONTAINER)
                 + ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_TIE_HANDLER)
-                + ownerSlotCount(PerlOwnerSlot.Kind.RETURN_VALUE);
+                + ownerSlotCount(PerlOwnerSlot.Kind.RETURN_VALUE)
+                + ownerSlotCount(PerlOwnerSlot.Kind.EXPRESSION_VALUE);
         if (refCount > temporaryCountedOwners) return true;
 
         for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
             if (!slot.isActive() || !PerlOwnerSlot.isPerlOwnerKind(slot.kind())) continue;
             switch (slot.kind()) {
                 case ARGUMENT_VALUE, ARGUMENT_CONTAINER, ARGUMENT_ALIAS,
-                        ARGUMENT_TIE_HANDLER, RETURN_VALUE, ACTIVE_CODE -> { }
+                        ARGUMENT_TIE_HANDLER, RETURN_VALUE, ACTIVE_CODE,
+                        EXPRESSION_VALUE -> { }
                 case UNTRACKED_REFERENCE, SCALAR_REFERENCE_CONTENTS,
                         ARRAY_ELEMENT, HASH_ELEMENT -> {
                     if (DestroyDispatch.isCurrentPerlOwnerSlot(this, slot)) return true;
