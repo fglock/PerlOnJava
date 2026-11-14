@@ -6,6 +6,8 @@ priorities and future plans.
 
 ## Work in progress
 
+- Remove reachability-based lifetime decisions, root-query state, and sweep-only hooks; use current Perl owner slots for cleanup (#2043).
+
 - Preserve file contents on `sysopen` without `O_TRUNC`, fail `open` on undefined paths, avoid duplicate `closedir` warnings, and match Socket lookup flags and return values (#2128, #2125, #2095).
 - Register pure-Perl Encode codecs, preserve Unicode input in `decode_utf8`, implement `Unicode::Normalize::getComposite`, and provide Java-backed URI::Fast support (#2124, #2121, #2104, #2079, #2117).
 - Honor tied `*ARGV` for diamond reads, including after a previous traversal reaches EOF (#2110, #2111).
