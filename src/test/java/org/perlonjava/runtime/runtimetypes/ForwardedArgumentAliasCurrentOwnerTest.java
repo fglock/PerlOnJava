@@ -10,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Tag("unit")
 class ForwardedArgumentAliasCurrentOwnerTest {
     @Test
-    void forwardedCellAliasMakesItsCurrentCountedOwnerVerifiable() {
+    void forwardedCellAliasPreservesItsCurrentCountedOwner() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeHash target = new RuntimeHash();
@@ -41,11 +41,8 @@ class ForwardedArgumentAliasCurrentOwnerTest {
                 assertTrue(argumentCell.isCurrentCountedScalarOwner(
                                 target, argumentCell.countedOwnerSlot()),
                         "a live forwarded alias makes its current scalar cell authoritative");
-
-                target.setTrackedRefCount(0);
-                assertTrue(target.restoreVerifiedCurrentCountedOwnerSlotRefCount(),
-                        "verified count repair accepts the active forwarded cell");
                 assertEquals(1, target.refCount);
+                assertEquals(1, target.countedOwnerSlotCount());
             } finally {
                 if (innerArgsActive) RuntimeCode.popArgs();
                 staged.finish();

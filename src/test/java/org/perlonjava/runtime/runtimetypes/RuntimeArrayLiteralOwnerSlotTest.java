@@ -27,8 +27,6 @@ class RuntimeArrayLiteralOwnerSlotTest {
             assertEquals(PerlOwnerSlot.Kind.ARRAY_ELEMENT, owner.kind());
             assertTrue(stored.isCurrentAggregateElementOwner(referent, owner));
             assertEquals(1, referent.refCount);
-            assertTrue(referent.restoreVerifiedCurrentCountedOwnerSlotRefCount(),
-                    "the live array slot proves its count without a root walk");
         }
     }
 }

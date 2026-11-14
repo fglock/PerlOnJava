@@ -8,9 +8,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("unit")
-class TiedHandlerNestedOwnerSlotRepairTest {
+class TiedHandlerNestedOwnerSlotTest {
     @Test
-    void nestedHandlerHashSlotRepairsDeferredUnderCountWithoutRootWalk() {
+    void nestedHandlerHashSlotRetainsItsBalancedOwner() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeHash handler = new RuntimeHash();
@@ -32,7 +32,8 @@ class TiedHandlerNestedOwnerSlotRepairTest {
                 assertEquals(1, target.ownerSlotCount(PerlOwnerSlot.Kind.HASH_ELEMENT));
                 assertTrue(target.possiblyStoredInTiedHandler);
 
-                target.setTrackedRefCount(1); // Model a legacy count missing the tied hash owner.
+                assertEquals(2, target.refCount,
+                        "the scalar and nested handler hash each contribute one owner count");
                 try (MortalList.ReachabilityQueryMeasurement measurement =
                              MortalList.measureReachabilityQueries()) {
                     MortalList.deferDecrementIfTracked(released);

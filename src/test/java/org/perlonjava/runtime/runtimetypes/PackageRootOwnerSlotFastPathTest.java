@@ -10,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Tag("unit")
 class PackageRootOwnerSlotFastPathTest {
     @Test
-    void survivingPackageHashSlotRepairsTransientZeroWithoutRootWalk() {
+    void releasingOnePackageHashSlotPreservesTheOtherOwner() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             String leftName = "PackageRootOwnerSlotFastPath::left";
@@ -33,9 +33,6 @@ class PackageRootOwnerSlotFastPathTest {
                 assertEquals(2, target.countedOwnerSlotCount());
                 assertTrue(WeakRefRegistry.isweak(observer));
 
-                // Model the selective count's transient undercount. The two
-                // package hash slots remain the authoritative owner ledger.
-                target.setTrackedRefCount(1);
                 try (MortalList.ReachabilityQueryMeasurement measurement =
                              MortalList.measureReachabilityQueries()) {
                     left.elements.get("target").set(new RuntimeScalar());
@@ -45,7 +42,7 @@ class PackageRootOwnerSlotFastPathTest {
                     assertTrue(WeakRefRegistry.isweak(observer));
                     assertFalse(target.destroyFired);
                     assertEquals(0, measurement.stats().rootQueries,
-                            "the remaining counted slot repairs the transient zero");
+                            "the current package slot directly proves the remaining owner");
                     assertEquals(0, measurement.stats().snapshotsBuilt);
                 }
 

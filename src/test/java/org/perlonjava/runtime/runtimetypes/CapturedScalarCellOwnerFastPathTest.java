@@ -11,12 +11,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Tag("unit")
 class CapturedScalarCellOwnerFastPathTest {
     @Test
-    void activeClosureCaptureRepairsUnblessedScalarCellOwnerWithoutRootWalk() {
+    void activeClosureCaptureKeepsItsScalarCellOwner() {
         exerciseCaptureOwnerRepair(false);
     }
 
     @Test
-    void deferredCleanupUsesActiveClosureCaptureWithoutRootWalk() {
+    void deferredCleanupPreservesTheActiveClosureCaptureOwner() {
         exerciseCaptureOwnerRepair(true);
     }
 
@@ -68,9 +68,6 @@ class CapturedScalarCellOwnerFastPathTest {
                                     target, capturedOwner.countedOwnerSlot()),
                             "the exact scalar-cell and closure-capture identities prove ownership");
 
-                    // Model a selective-count undercount while preserving the
-                    // active closure's scalar-cell owner identity.
-                    target.setTrackedRefCount(1);
                     try (MortalList.ReachabilityQueryMeasurement measurement =
                                  MortalList.measureReachabilityQueries()) {
                         transientOwner.set(new RuntimeScalar());

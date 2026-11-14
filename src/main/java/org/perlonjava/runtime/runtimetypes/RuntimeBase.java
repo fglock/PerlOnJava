@@ -982,52 +982,6 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         return false;
     }
 
-    private int verifiedCurrentCountedOwnerSlotCount() {
-        int count = 0;
-        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
-            if (!slot.isActive()) continue;
-            if (slot.isMethodInvocantOwner(this) || slot.isCountedNativeOwner()) {
-                count++;
-                continue;
-            }
-            RuntimeScalar owner = slot.countedScalarOwner();
-            if (owner == null) continue;
-            PerlOwnerSlot.Kind kind = slot.kind();
-            if ((kind == PerlOwnerSlot.Kind.ARRAY_ELEMENT
-                    || kind == PerlOwnerSlot.Kind.HASH_ELEMENT)
-                    && owner.isCurrentAggregateElementOwner(this, slot)) {
-                count++;
-            } else if ((kind == PerlOwnerSlot.Kind.SCALAR_CELL
-                    || kind == PerlOwnerSlot.Kind.CODE_SLOT
-                    || kind == PerlOwnerSlot.Kind.ARGUMENT_VALUE
-                    || kind == PerlOwnerSlot.Kind.ARGUMENT_CONTAINER
-                    || kind == PerlOwnerSlot.Kind.RETURN_VALUE
-                    || kind == PerlOwnerSlot.Kind.TIE_HANDLER
-                    || kind == PerlOwnerSlot.Kind.ARGUMENT_TIE_HANDLER)
-                    && owner.isCurrentCountedScalarOwner(this, slot)) {
-                count++;
-            }
-        }
-        if (count == 0 && blessId != 0) {
-            for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
-                if (!slot.isActive() || slot.kind() != PerlOwnerSlot.Kind.SCALAR_CELL) continue;
-                RuntimeScalar owner = slot.countedScalarOwner();
-                if (owner != null && owner.isUnregisteredCountedScalarCellOwner(this, slot)) {
-                    count++;
-                }
-            }
-        }
-        return count;
-    }
-
-    /** Test-only proof helper; production lifecycle paths must not repair counts from slots. */
-    boolean restoreVerifiedCurrentCountedOwnerSlotRefCount() {
-        int count = verifiedCurrentCountedOwnerSlotCount();
-        if (count == 0) return false;
-        setTrackedRefCount(count);
-        return true;
-    }
-
     /** Number of distinct captured pad slots that own this referent. */
     public int semanticCaptureOwnerCount() {
         return ownerSlotCount(PerlOwnerSlot.Kind.CLOSURE_PAD);
