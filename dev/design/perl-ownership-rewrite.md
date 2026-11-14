@@ -1,7 +1,7 @@
 # Perl-compatible ownership rewrite
 
 **Status:** The sweep-removal candidate is checkpointed, and the reproduced
-DBIx phantom-chain leak now passes its focused and upstream leak checks.
+DBIx phantom-chain leak now passes its focused leak checks.
 [Issue #2043](https://github.com/PerlOnJava/issues/2043) contains the single
 current handoff. [Issue #1649](https://github.com/PerlOnJava/issues/1649) is
 historical context.
@@ -11,13 +11,17 @@ historical context.
 | Use explicit owner slots for lifecycle decisions | Candidate delivered | Owner-slot behavior remains covered by runtime and Perl-level regressions. |
 | Remove memory-sweep infrastructure | Candidate delivered | The walker, scalar registry, root-query state, sweep hooks, END-boundary owner scans, and suspended-frame root snapshots are removed. |
 | Resolve DBIx leak lifecycle | Target chain fixed | The phantom-chain assertions pass; the fresh-home leak report no longer contains DBIx result-source survivors. Remaining entries are the cached `DBI::dr` and Test2/Test::Builder harness objects. |
-| Final acceptance | Pending | Fresh-home CPAN failure comparison is recorded; commit the validated diff and reconcile it with PR #1938. |
+| Final acceptance | Pending | Candidate is committed locally; reconcile the existing PR history and rerun required gates on the final immutable candidate. |
 
 ## Current handoff: 2026-11-14
 
-Source checkpoint `73dcb133d7f88c3e856dc52e8476687e38713fc9` is on local branch
-`wip/issue2043-remove-sweeps-20261114`; the DBIx fix is an uncommitted diff in
-`/private/tmp/issue2043-remove-sweeps`.
+Source checkpoint `4a6d70f09f3ac7cd8e5a7d30eea5544f5c7a8b01` is on local branch
+`wip/issue2043-resume-20261114-215232` in `/private/tmp/issue2043-remove-sweeps`.
+The candidate is committed locally but is not yet on PR #1938. That PR has two
+commits beyond the shared base (`007887c3a7`, `1b80749914`); reconcile them
+without restoring sweep code or superseded handoff text. The shared base is
+`ccede5ff7558768ce4695e7a6826145ce29574f4`; PR #1938 targets `master` at
+`3590efc959e647c16d2172ae8cc63b3f57773e9a`.
 
 The leak came from fresh anonymous hash references passed as call arguments.
 `@_` borrowed the reference scalar but had no counted owner for its hash, so
@@ -56,15 +60,29 @@ unchanged. Logs:
 The generalized void-assignment optimization was removed after it caused
 unrelated lifetime regressions; the original narrow compiler path is restored.
 Only the anonymous-hash argument ownership rule and scoped hash-assignment
-flush remain from this DBIx fix.
+flush remain from this DBIx fix. The change is committed with four focused Perl
+regressions. `make check-links` reports 842 links and no errors; offline lychee
+reports no errors for the changed Markdown.
 
 ### Next iteration
 
-1. Commit the validated source and test changes on this branch; the full
-   repository gate and required Markdown link checks pass.
-2. Reconcile the fresh-home failure delta with [PR #1938](https://github.com/PerlOnJava/pull/1938),
-   update the single current handoff on [issue #2043](https://github.com/PerlOnJava/issues/2043),
-   then request review and merge after approval.
+1. Merge the PR branch into the local candidate without rewriting its history.
+   Resolve overlaps in favor of the completed sweep removal and current
+   handoff; inspect the integrated diff and verify the candidate source tree.
+2. Run a final `nice -n 19 timeout 3600 make` plus focused system Perl,
+   JVM/interpreter, and DBIx leak/populate checks on the reconciled immutable
+   commit. The prior full CPAN comparison is complete; classify the residual
+   failures against that run and fix any newly attributable regression before
+   publishing.
+3. Advance PR #1938 by a fast-forward push of the merge result, keep it draft
+   through acceptance, then refresh issue/PR evidence, request review, and merge
+   only after review.
+
+Work that can proceed independently during reconciliation: audit the final
+tree for any live sweep/root-query path, and classify the remaining DBIx
+failures against the prior run, especially cached `DBI::dr` entries. Combine
+both findings before the final gate; neither requires changes to the owner
+implementation.
 
 Completion requires no reachability-based root walk or sweep to affect Perl
 lifetime, passing owner-slot oracles and required acceptance on one immutable
