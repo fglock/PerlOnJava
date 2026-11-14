@@ -669,8 +669,27 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             if (owner != null) containerOwners.add(owner);
             this.containerOwner = owner;
         }
+        associateCountedAggregateOwnerIfAbsent(owner);
         refreshDetachedGlobValueOwner();
         propagateTiedHandlerMarkerToReferent();
+    }
+
+    void associateCountedAggregateOwner(RuntimeBase owner) {
+        PerlOwnerSlot slot = countedOwnerSlot;
+        if (owner != null && slot != null && slot.isActive()
+                && slot.countedScalarOwner() == this && slot.referent() == value
+                && isStoredAggregateElementOwner(owner, slot.kind())) {
+            slot.associateCountedAggregateOwner(owner);
+        }
+    }
+
+    private void associateCountedAggregateOwnerIfAbsent(RuntimeBase owner) {
+        PerlOwnerSlot slot = countedOwnerSlot;
+        if (owner != null && slot != null && slot.isActive()
+                && slot.countedScalarOwner() == this && slot.referent() == value
+                && isStoredAggregateElementOwner(owner, slot.kind())) {
+            slot.associateCountedAggregateOwnerIfAbsent(owner);
+        }
     }
 
     private boolean isSharedImmutableLiteralWithoutOwnerTracking() {
@@ -1703,6 +1722,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
             slot.reclassifyCountedIdentity(intendedOwnerKind == null
                     ? scalar.countedOwnerKind() : intendedOwnerKind);
+            scalar.associateCountedAggregateOwnerIfAbsent(scalar.containerOwner);
             return;
         }
         PerlOwnerSlot slot = scalar.countedOwnerSlot;
@@ -1746,6 +1766,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         slot.associateCountedScalarOwner(scalar);
         scalar.refCountOwned = true;
         referent.recordOwner(scalar, acquisitionSite);
+        scalar.associateCountedAggregateOwnerIfAbsent(scalar.containerOwner);
     }
 
     /** Acquire a paired count and identity before a pending scalar value is published. */
@@ -1780,6 +1801,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             slot.reclassifyCountedIdentity(ownerKind);
         }
         slot.acquireCountedScalarOwner(scalar, referent, acquisitionSite);
+        scalar.associateCountedAggregateOwnerIfAbsent(scalar.containerOwner);
     }
 
     boolean isCurrentAggregateElementOwner(RuntimeBase referent, PerlOwnerSlot slot) {
@@ -1797,7 +1819,40 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
         return slot.kind() == PerlOwnerSlot.Kind.HASH_ELEMENT
                 && containerOwner instanceof RuntimeHash hash
-                && hash.elements.containsValue(this);
+                && hash.containsElementCellIdentity(this);
+    }
+
+    private boolean isStoredAggregateElementOwner(RuntimeBase container,
+                                                   PerlOwnerSlot.Kind kind) {
+        return switch (kind) {
+            case ARRAY_ELEMENT -> container instanceof RuntimeArray array
+                    && !array.elementsAliased && array.elements != null
+                    && array.elements.contains(this);
+            case HASH_ELEMENT -> container instanceof RuntimeHash hash
+                    && hash.containsElementCellIdentity(this);
+            default -> false;
+        };
+    }
+
+    /** Whether a live container holding this counted owner has Perl storage. */
+    boolean hasCurrentAggregateElementPerlStorageOwner(
+            RuntimeBase referent, PerlOwnerSlot slot) {
+        if (countedOwnerSlot != slot || !refCountOwned || value != referent
+                || !slot.isActive() || slot.referent() != referent) {
+            return false;
+        }
+        if (localizedSavedCountedOwner) {
+            RuntimeBase container = containerOwner;
+            return container != null
+                    && (container.perlLifecycleState() == RuntimeBase.PerlLifecycleState.DESTROYING
+                        || container.hasCurrentPerlStorageOwner());
+        }
+        RuntimeBase container = slot.countedAggregateOwner();
+        if (container == null) container = containerOwner;
+        return container != null
+                && isStoredAggregateElementOwner(container, slot.kind())
+                && (container.perlLifecycleState() == RuntimeBase.PerlLifecycleState.DESTROYING
+                    || container.hasCurrentPerlStorageOwner());
     }
 
     /** Return a validated ordinary aggregate owner for temporary-root proofs. */
@@ -3742,6 +3797,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
             slot.reclassifyCountedIdentity(intendedOwnerKind == null
                     ? scalar.countedOwnerKind() : intendedOwnerKind);
+            scalar.associateCountedAggregateOwnerIfAbsent(scalar.containerOwner);
             if (scalar.untrackedReferenceOwnerSlot != null) {
                 scalar.releaseUntrackedReferenceOwner(
                         scalar.untrackedReferenceOwnerSlot.referent());
@@ -3805,6 +3861,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             Collection<RuntimeScalar> displaced,
             Collection<RuntimeScalar> replacements,
             PerlOwnerSlot.Kind ownerKind,
+            RuntimeBase aggregateOwner,
             Runnable publish,
             Consumer<Collection<RuntimeScalar>> releaseDisplaced) {
         Set<RuntimeScalar> retained = Collections.newSetFromMap(new IdentityHashMap<>());
@@ -3815,6 +3872,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
         }
         publish.run();
+        if (ownerKind == PerlOwnerSlot.Kind.ARRAY_ELEMENT
+                || ownerKind == PerlOwnerSlot.Kind.HASH_ELEMENT) {
+            for (RuntimeScalar replacement : retained) {
+                replacement.associateCountedAggregateOwner(aggregateOwner);
+            }
+        }
         if (displaced == null || displaced.isEmpty() || releaseDisplaced == null) return;
 
         Set<RuntimeScalar> alreadyReleased = Collections.newSetFromMap(new IdentityHashMap<>());

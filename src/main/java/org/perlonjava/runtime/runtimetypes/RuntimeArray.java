@@ -1289,6 +1289,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                                 List.of(),
                                 elem == null ? List.of() : Collections.singletonList(elem),
                                 ownerKind,
+                                runtimeArray,
                                 () -> {
                                     runtimeArray.elements.add(elem);
                                     runtimeArray.markPackageRootedValues(index);
@@ -1311,7 +1312,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                         }
                     }
                     RuntimeScalar.transitionContainerSlots(
-                            List.of(), staged.elements, ownerKind,
+                            List.of(), staged.elements, ownerKind, runtimeArray,
                             () -> {
                                 runtimeArray.elements.addAll(staged.elements);
                                 runtimeArray.markPackageRootedValues(sizeBefore);
@@ -1481,6 +1482,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         }
         RuntimeScalar.transitionContainerSlots(
                 List.of(), Collections.singletonList(copy), PerlOwnerSlot.Kind.ARRAY_ELEMENT,
+                this,
                 () -> elements.add(copy), null);
     }
 
@@ -1503,6 +1505,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         RuntimeScalar.transitionContainerSlots(
                 List.of(), value == null ? List.of() : Collections.singletonList(value),
                 PerlOwnerSlot.Kind.ARRAY_ELEMENT,
+                this,
                 () -> elements.add(value), null);
     }
 
@@ -2175,6 +2178,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 ? List.of() : Collections.singletonList(value);
         RuntimeScalar.transitionContainerSlots(
                 displaced, replacements, PerlOwnerSlot.Kind.ARRAY_ELEMENT,
+                this,
                 () -> {
                     this.elements.clear();
                     releaseReferenceListAliasCellOwners();
@@ -2241,7 +2245,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                     // same partial result as system Perl.
                     List<RuntimeScalar> displaced = ownedElementReleaseSnapshot();
                     RuntimeScalar.transitionContainerSlots(
-                            displaced, List.of(), PerlOwnerSlot.Kind.ARRAY_ELEMENT,
+                            displaced, List.of(), PerlOwnerSlot.Kind.ARRAY_ELEMENT, this,
                             () -> {
                                 this.elements.clear();
                                 releaseReferenceListAliasCellOwners();
@@ -2261,6 +2265,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                                 List.of(),
                                 elem == null ? List.of() : Collections.singletonList(elem),
                                 PerlOwnerSlot.Kind.ARRAY_ELEMENT,
+                                this,
                                 () -> {
                                     this.elements.add(elem);
                                     this.markPackageRootedValues(index);
@@ -2286,7 +2291,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
 
                 List<RuntimeScalar> displaced = ownedElementReleaseSnapshot();
                 RuntimeScalar.transitionContainerSlots(
-                        displaced, staged.elements, PerlOwnerSlot.Kind.ARRAY_ELEMENT,
+                        displaced, staged.elements, PerlOwnerSlot.Kind.ARRAY_ELEMENT, this,
                         () -> {
                             this.elements.clear();
                             releaseReferenceListAliasCellOwners();
@@ -2534,6 +2539,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             RuntimeScalar.retainUnstashedIoForDurableSlot(elem);
             RuntimeScalar.incrementRefCountForContainerStore(
                     elem, PerlOwnerSlot.Kind.ARRAY_ELEMENT);
+            if (elem != null) elem.associateCountedAggregateOwner(this);
         }
         // The literal owns the element copies above. Removal paths use this
         // aggregate flag in addition to each scalar's refCountOwned bit when

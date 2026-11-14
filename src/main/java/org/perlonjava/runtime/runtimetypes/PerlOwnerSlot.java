@@ -89,6 +89,8 @@ public final class PerlOwnerSlot {
     private WeakReference<RuntimeScalar> untrackedScalarOwner;
     /** Weak back-reference to the scalar implementing a counted cell owner. */
     private WeakReference<RuntimeScalar> countedScalarOwner;
+    /** Aggregate storage that owns an ARRAY_ELEMENT or HASH_ELEMENT edge. */
+    private WeakReference<RuntimeBase> countedAggregateOwner;
     /** Scalar cell currently carrying a non-counted native resource identity. */
     private WeakReference<RuntimeScalar> resourceScalarOwner;
     /** Last carrier identity for diagnostics, retained after its wrapper is gone. */
@@ -361,6 +363,32 @@ public final class PerlOwnerSlot {
     /** Scalar cell implementing this counted edge, when it has one. */
     public synchronized RuntimeScalar countedScalarOwner() {
         return countedScalarOwner == null ? null : countedScalarOwner.get();
+    }
+
+    synchronized RuntimeBase countedAggregateOwner() {
+        return countedAggregateOwner == null ? null : countedAggregateOwner.get();
+    }
+
+    synchronized void associateCountedAggregateOwner(RuntimeBase owner) {
+        boolean matchingKind = kind == Kind.ARRAY_ELEMENT && owner instanceof RuntimeArray
+                || kind == Kind.HASH_ELEMENT && owner instanceof RuntimeHash;
+        if (!isCountedKind(kind) || (owner != null && !matchingKind)) {
+            throw new IllegalStateException(
+                    "aggregate owner association requires a matching element slot");
+        }
+        countedAggregateOwner = owner == null ? null : new WeakReference<>(owner);
+    }
+
+    synchronized void associateCountedAggregateOwnerIfAbsent(RuntimeBase owner) {
+        boolean matchingKind = kind == Kind.ARRAY_ELEMENT && owner instanceof RuntimeArray
+                || kind == Kind.HASH_ELEMENT && owner instanceof RuntimeHash;
+        if (!isCountedKind(kind) || !matchingKind) {
+            throw new IllegalStateException(
+                    "aggregate owner association requires a matching element slot");
+        }
+        if (countedAggregateOwner == null || countedAggregateOwner.get() == null) {
+            countedAggregateOwner = new WeakReference<>(owner);
+        }
     }
 
     synchronized void associateResourceScalarOwner(RuntimeScalar scalar) {
@@ -1158,6 +1186,7 @@ public final class PerlOwnerSlot {
         if (nativeOwner || !isCountedKind(kind) || !isCountedKind(nextKind)) {
             throw new IllegalStateException("only counted scalar and element slots can move storage");
         }
+        if (kind != nextKind) countedAggregateOwner = null;
         if (kind != nextKind && referent != null) {
             if (nextKind == Kind.ARGUMENT_VALUE) {
                 ownerRuntime = PerlRuntime.currentOrNull();
@@ -1341,6 +1370,7 @@ public final class PerlOwnerSlot {
         methodInvocantOwner = false;
         countedNativeOwner = false;
         countedScalarOwner = null;
+        countedAggregateOwner = null;
         captureOwner = null;
         scalarReferenceCell = null;
         scalarContentsOwner = null;

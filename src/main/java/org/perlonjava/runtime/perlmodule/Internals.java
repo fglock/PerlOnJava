@@ -667,7 +667,8 @@ public class Internals extends PerlModuleBase {
                 if (!compileHintsHash && !base.localBindingExists && !fieldOwnedMethodResult) {
                     adjust++;
                 }
-                adjust -= base.currentArgumentFrameReferentOwnerCount();
+                int argumentFrameOwners = base.currentArgumentFrameReferentOwnerCount();
+                adjust -= argumentFrameOwners;
             }
             int reported = rc + extra + adjust;
             return new RuntimeScalar(reported).getList();

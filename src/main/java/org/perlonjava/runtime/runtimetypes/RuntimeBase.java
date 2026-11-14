@@ -593,7 +593,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     public int currentArgumentFrameReferentOwnerCount() {
         PerlRuntime runtime = PerlRuntime.currentOrNull();
         if (runtime == null) return 0;
-        java.util.Deque<RuntimeArray> activeArgs = runtime.executionState().argsStack;
+        java.util.List<RuntimeArray> activeArgs = RuntimeCode.snapshotArgsStack();
         int count = 0;
         for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
             if (!slot.isActive()) continue;
@@ -602,9 +602,17 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                 continue;
             }
             RuntimeScalar owner = slot.countedScalarOwner();
-            if (owner != null && owner.value == this
-                    && owner.containerOwner instanceof RuntimeArray array
-                    && activeArgs.contains(array)) count++;
+            if (owner == null || owner.value != this
+                    || !(owner.containerOwner instanceof RuntimeArray array)) continue;
+            for (int depth = 0; depth < activeArgs.size(); depth++) {
+                if (activeArgs.get(depth) != array) continue;
+                RuntimeCode activeCode = RuntimeCode.getActiveCodeAt(depth);
+                boolean destroyInvocant = activeCode != null
+                        && "DESTROY".equals(activeCode.subName)
+                        && !array.elements.isEmpty() && array.elements.get(0) == owner;
+                if (!destroyInvocant) count++;
+                break;
+            }
         }
         return count;
     }

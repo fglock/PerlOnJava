@@ -1060,6 +1060,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             if (trackValues) {
                 RuntimeScalar.incrementRefCountForContainerStore(
                         val, PerlOwnerSlot.Kind.HASH_ELEMENT);
+                val.associateCountedAggregateOwner(result);
             }
         }
         return result;
@@ -1086,6 +1087,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             if (trackValues) {
                 RuntimeScalar.incrementRefCountForContainerStore(
                         val, PerlOwnerSlot.Kind.HASH_ELEMENT);
+                val.associateCountedAggregateOwner(result);
             }
         }
         return result;
@@ -1373,6 +1375,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 previous == null ? Collections.emptyList() : Collections.singletonList(previous),
                 Collections.singletonList(stored),
                 PerlOwnerSlot.Kind.HASH_ELEMENT,
+                this,
                 () -> elements.put(key, stored),
                 displaced -> {
                     if (PerlRuntime.currentOrNull() != null) {
@@ -2128,6 +2131,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             }
             RuntimeScalar.incrementRefCountForContainerStore(
                     elem, PerlOwnerSlot.Kind.HASH_ELEMENT);
+            if (elem != null) elem.associateCountedAggregateOwner(this);
             if ("1".equals(System.getenv("PJ_ISSUE2043_HASH_OWNER_TRACE"))) {
                 RuntimeBase referent = elem != null && elem.value instanceof RuntimeBase base
                         ? base : null;
