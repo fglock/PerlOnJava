@@ -705,11 +705,8 @@ public class DestroyDispatch {
             }
             case ARRAY_ELEMENT, HASH_ELEMENT -> {
                 RuntimeScalar owner = slot.countedScalarOwner();
-                if (owner == null || !owner.isCurrentAggregateElementOwner(referent, slot)) {
-                    return false;
-                }
-                RuntimeBase container = owner.getContainerOwner();
-                return container != null && container.hasCurrentPerlStorageOwner();
+                return owner != null
+                        && owner.hasCurrentAggregateElementPerlStorageOwner(referent, slot);
             }
             case SCALAR_CELL, CODE_SLOT, TIE_HANDLER, ARGUMENT_TIE_HANDLER -> {
                 RuntimeScalar owner = slot.countedScalarOwner();
