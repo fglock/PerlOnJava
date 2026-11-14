@@ -170,6 +170,20 @@ public class DestroyDispatch {
     }
 
     private static void callDestroy(RuntimeBase referent, boolean finalCountedOwner) {
+        String issue2043ClassName = NameNormalizer.getBlessStr(referent.blessId);
+        if ("1".equals(System.getenv("PJ_ISSUE2043_DESTROY_TRACE"))
+                && referent instanceof RuntimeHash
+                && (issue2043ClassName.contains("DBIx::Class::ResultSource")
+                        || issue2043ClassName.equals("DBICTest::Schema"))) {
+            System.err.println("[ISSUE2043-DESTROY-ENTRY] referent="
+                    + System.identityHashCode(referent) + " class="
+                    + issue2043ClassName
+                    + " refCount=" + referent.refCount + " state="
+                    + referent.refCountTrackingState() + " destroyed="
+                    + referent.isPerlDestroyed() + " finalCountedOwner="
+                    + finalCountedOwner);
+            new Throwable().printStackTrace(System.err);
+        }
         if (referent instanceof RuntimeCode code && code.hasActiveCodeOwner()) {
             code.deferFinalReleaseToActiveCode();
             return;

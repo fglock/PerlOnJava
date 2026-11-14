@@ -4538,6 +4538,33 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if ((this.type & RuntimeScalarType.REFERENCE_BIT) != 0 && this.value != null) {
             oldBase = (RuntimeBase) this.value;
         }
+        if ("1".equals(System.getenv("PJ_ISSUE2043_REPLACE_TRACE"))
+                && oldBase instanceof RuntimeHash
+                && NameNormalizer.getBlessStr(oldBase.blessId).equals("DBICTest::Schema")) {
+            String containerSlot = "none";
+            if (containerOwner instanceof RuntimeHash hash) {
+                containerSlot = hash.elements.entrySet().stream()
+                        .filter(entry -> entry.getValue() == this)
+                        .map(Map.Entry::getKey).findFirst().orElse("<not-in-hash>");
+            } else if (containerOwner instanceof RuntimeArray array) {
+                containerSlot = "index=" + array.elements.indexOf(this);
+            }
+            RuntimeBase replacementReferent = value != null
+                    && value.value instanceof RuntimeBase base ? base : null;
+            System.err.println("[ISSUE2043-SCALAR-REPLACE] scalar="
+                    + System.identityHashCode(this) + " type=" + this.type
+                    + " owns=" + this.refCountOwned + " slot="
+                    + (countedOwnerSlot == null ? "none"
+                            : countedOwnerSlot.identity() + ":" + countedOwnerSlot.kind())
+                    + " container=" + (containerOwner == null ? "none"
+                            : System.identityHashCode(containerOwner) + ":" + containerSlot)
+                    + " old=" + System.identityHashCode(oldBase)
+                    + " oldCount=" + oldBase.refCount + " new="
+                    + (replacementReferent == null ? "none"
+                            : System.identityHashCode(replacementReferent))
+                    + " newType=" + (value == null ? -1 : value.type));
+            new Throwable().printStackTrace(System.err);
+        }
         boolean oldRefCountOwned = this.refCountOwned;
         // Scope unwind can clear a cell's payload after scheduling its array
         // edge release while leaving the stable storage token on the cell.
