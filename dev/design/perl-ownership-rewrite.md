@@ -1,52 +1,70 @@
 # Perl-compatible ownership rewrite
 
-**Status:** The sweep-removal candidate is checkpointed; DBIx lifecycle
-acceptance remains active. [Issue #2043](https://github.com/PerlOnJava/issues/2043)
-contains the single current handoff. [Issue #1649](https://github.com/PerlOnJava/issues/1649)
-is historical context.
+**Status:** The sweep-removal candidate is checkpointed, and the reproduced
+DBIx phantom-chain leak now passes its focused and upstream leak checks.
+[Issue #2043](https://github.com/PerlOnJava/issues/2043) contains the single
+current handoff. [Issue #1649](https://github.com/PerlOnJava/issues/1649) is
+historical context.
 
 | Work | Status | Evidence or acceptance |
 | --- | --- | --- |
 | Use explicit owner slots for lifecycle decisions | Candidate delivered | Owner-slot behavior remains covered by runtime and Perl-level regressions. |
 | Remove memory-sweep infrastructure | Candidate delivered | The walker, scalar registry, root-query state, sweep hooks, END-boundary owner scans, and suspended-frame root snapshots are removed. |
-| Resolve DBIx leak lifecycle | Active | Candidate and clean parent both fail `t/52leaks.t` with 134 failures out of 146 checks; the generic owner retention path still needs diagnosis. |
-| Final acceptance | Pending | Exact committed `make`, focused interpreter checks, DBIx leak/populate and fresh-home CPAN, links, and PR reconciliation. |
+| Resolve DBIx leak lifecycle | Target chain fixed | The phantom-chain assertions pass; the fresh-home leak report no longer contains DBIx result-source survivors. Remaining entries are the cached `DBI::dr` and Test2/Test::Builder harness objects. |
+| Final acceptance | Pending | Fresh-home CPAN failure comparison is recorded; commit the validated diff and reconcile it with PR #1938. |
 
 ## Current handoff: 2026-11-14
 
-Checkpoint commit `2dea20676b82ba8f93a93f8e3ec26422637b035e` is on local
-branch `wip/issue2043-remove-sweeps-20261114`, based on `3f9cfea095`. It removes
-the production reachability walker and scalar registry, root-query diagnostics,
-sweep-only state and hooks, END-boundary owner-source scans, and suspended-frame
-root snapshots. `IO_VIA_LAYER` and `SUSPENDED_FRAME` owner slots remain explicit;
-the async reset guard still protects active continuations.
+Source checkpoint `73dcb133d7f88c3e856dc52e8476687e38713fc9` is on local branch
+`wip/issue2043-remove-sweeps-20261114`; the DBIx fix is an uncommitted diff in
+`/private/tmp/issue2043-remove-sweeps`.
 
-The content-identical pre-commit `nice -n 19 make` passed in 7m39s. The new
-`owner_slot_lifecycle_perl_oracle.t` passes 24/24 on system Perl, JVM, and
-interpreter. The full interpreter runner reported 50 failed assertions in 29
-files and 7 incomplete files; the checked destructor, glob, tied, and thread
-failures also reproduce on the clean parent at `3f9cfea095`.
+The leak came from fresh anonymous hash references passed as call arguments.
+`@_` borrowed the reference scalar but had no counted owner for its hash, so
+`self_result_object` and nested hash elements could keep DBIx result sources
+alive after the phantom chain ended. `CallArguments` now stages an argument
+value owner only for a zero-owner `HASHREFERENCE` with no current storage
+owner. Return snapshots retain their existing path. Hash assignment drains
+displaced values above the active mark so an enclosing expression keeps its
+pending return values until capture.
 
-Fresh-home `jcpan -t DBIx::Class` completed 325 test programs and 42,911
-assertions, with 37 programs and 253 assertions failing. `t/100populate.t`
-passed. `t/52leaks.t` reported the same 134 failures out of 146 checks on the
-candidate and the clean parent, so this is an existing generic ownership gap,
-not a regression from deleting the walker. Logs: `/tmp/issue2043-remove-sweeps-full-make.log`,
-`/tmp/issue2043-remove-sweeps-test-interpreter.log`,
-`/tmp/issue2043-remove-sweeps-dbix-cpan.log`, and
-`/tmp/issue2043-dbix-52leaks-parent.log`.
+Evidence on this source tree: `nice -n 19 timeout 3600 make` passes in 7m16s;
+the new anonymous-hash regression passes on system Perl, JVM, and interpreter;
+the no-owner predecessor failed both JVM assertions in that regression;
+the focused DBIx phantom-chain regression passes 3/3 on system Perl and JPerl;
+`t/100populate.t` passes 108/108 on system Perl and JPerl, with five references
+checked and none leaking. The direct upstream `t/52leaks.t` invocation checks
+57 references with no leaks (two documented circular-reference TODOs and two
+optional persistent-run skips). In the isolated fresh-home CPAN run, all
+phantom-chain assertions pass and no DBIx result-source object remains in the
+leak report; its 24/36 reported survivors are the cached `DBI::dr` and
+Test2/Test::Builder events. Across 325 test programs, the overall failure set
+remains the same 37 programs as the preceding run, while failed assertions drop
+from 253 to 140; the changes are in `t/52leaks.t` (134 to 24) and
+`t/88result_set_column.t` (4 to 1). The other program failure counts are
+unchanged. Logs:
+`/tmp/issue2043-dbic-make-final-narrow.log`,
+`/tmp/issue2043-dbic-focused-system-with-local-lib.log`,
+`/tmp/issue2043-dbic-focused-jvm.log`,
+`/tmp/issue2043-focused-jperl-tests-narrow-path.log`,
+`/tmp/issue2043-dbic-t52-system.log`, `/tmp/issue2043-dbic-t52-jperl.log`,
+`/tmp/issue2043-dbic-100populate-system.log`, and
+`/tmp/issue2043-dbic-100populate-jperl.log`,
+`/tmp/issue2043-dbic-jcpan-after-hash-owner.log`, and
+`/tmp/issue2043-remove-sweeps-dbix-cpan.log`.
+
+The generalized void-assignment optimization was removed after it caused
+unrelated lifetime regressions; the original narrow compiler path is restored.
+Only the anonymous-hash argument ownership rule and scoped hash-assignment
+flush remain from this DBIx fix.
 
 ### Next iteration
 
-1. Trace the first `t/52leaks.t` retention failure through current owner-slot
-   identities and identify its generic producer or release path.
-2. Add or strengthen a project-owned Perl regression for that owner transition;
-   validate its expected behavior with system Perl, then fix the generic path.
-3. Run the focused leak and populate tests on JVM and interpreter, then repeat
-   DBIx acceptance and compare with the clean parent.
-4. Once lifecycle behavior is qualified, run the exact-commit repository,
-   interpreter, CPAN, and link gates and reconcile the candidate with draft
-   [PR #1938](https://github.com/PerlOnJava/pull/1938).
+1. Commit the validated source and test changes on this branch; the full
+   repository gate and required Markdown link checks pass.
+2. Reconcile the fresh-home failure delta with [PR #1938](https://github.com/PerlOnJava/pull/1938),
+   update the single current handoff on [issue #2043](https://github.com/PerlOnJava/issues/2043),
+   then request review and merge after approval.
 
 Completion requires no reachability-based root walk or sweep to affect Perl
 lifetime, passing owner-slot oracles and required acceptance on one immutable
