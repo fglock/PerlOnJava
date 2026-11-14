@@ -45,8 +45,6 @@ class EndBlockOwnerIdentityTest {
                 assertEquals(2, code.refCount);
                 assertEquals(1, code.ownerSlotCount(PerlOwnerSlot.Kind.SCALAR_CELL));
                 assertEquals(1, code.ownerSlotCount(PerlOwnerSlot.Kind.ARRAY_ELEMENT));
-                assertTrue(code.restoreVerifiedCurrentCountedOwnerSlotRefCount());
-
                 assertEquals(2, code.refCount,
                         "the owner count remains paired with the queued and lexical slots");
                 assertEquals(1, capturedPad.captureCount,

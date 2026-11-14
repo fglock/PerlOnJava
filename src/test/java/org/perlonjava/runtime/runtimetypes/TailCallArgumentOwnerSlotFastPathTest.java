@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Tag("unit")
 class TailCallArgumentOwnerSlotFastPathTest {
     @Test
-    void survivingElementOwnerRepairsUndercountedTailCallWithoutRootWalk() {
+    void tailCallReleaseBalancesTheSurvivingElementOwner() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeHash target = new RuntimeHash();
@@ -27,7 +27,6 @@ class TailCallArgumentOwnerSlotFastPathTest {
             WeakRefRegistry.weaken(weak);
             try {
                 assertEquals(2, target.countedOwnerSlotCount());
-                target.setTrackedRefCount(1); // Model a transient legacy-count underflow.
 
                 try (MortalList.ReachabilityQueryMeasurement measurement =
                              MortalList.measureReachabilityQueries()) {

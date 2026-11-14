@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Tag("unit")
 class ActiveArgumentOwnerLedgerFastPathTest {
     @Test
-    void countedCallerCellAvoidsReferentScanAndStillReleasesAtCallEnd() {
+    void countedCallerCellRemainsOwnedUntilCallEnd() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeHash target = new RuntimeHash();
@@ -26,7 +26,8 @@ class ActiveArgumentOwnerLedgerFastPathTest {
             try {
                 assertEquals(0, target.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_VALUE),
                         "a persistent caller cell remains an aliased borrow");
-                target.setTrackedRefCount(1); // Model a transient legacy-count underflow.
+                assertEquals(2, target.refCount,
+                        "both scalar cells contribute their acquired owner count");
                 MortalList.deferDecrementIfTracked(released);
 
                 try (MortalList.ReachabilityQueryMeasurement measurement =

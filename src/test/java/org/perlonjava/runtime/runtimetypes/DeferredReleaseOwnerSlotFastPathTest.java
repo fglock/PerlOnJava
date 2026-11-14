@@ -10,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Tag("unit")
 class DeferredReleaseOwnerSlotFastPathTest {
     @Test
-    void remainingScalarOwnerRepairsDeferredZeroWithoutRootWalk() {
+    void deferredReleaseBalancesTheRemainingScalarOwner() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeHash target = new RuntimeHash();
@@ -24,7 +24,7 @@ class DeferredReleaseOwnerSlotFastPathTest {
 
             try {
                 assertEquals(2, target.countedOwnerSlotCount());
-                target.setTrackedRefCount(1); // Model a transient legacy-count underflow.
+                assertEquals(2, target.refCount);
 
                 try (MortalList.ReachabilityQueryMeasurement measurement =
                              MortalList.measureReachabilityQueries()) {

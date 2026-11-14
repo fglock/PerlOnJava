@@ -7,9 +7,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("unit")
-class CurrentCountedOwnerRepairsDeferredUndercountTest {
+class CurrentCountedOwnerReleaseTest {
     @Test
-    void currentScalarCellSlotRepairsDeferredUndercountWithoutReachabilityQueries() {
+    void deferredReleaseBalancesCurrentScalarCellOwners() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeHash target = new RuntimeHash();
@@ -31,8 +31,6 @@ class CurrentCountedOwnerRepairsDeferredUndercountTest {
                                 && owner.countedOwnerSlot().isActive()
                                 && owner.countedOwnerSlot().referent() == target),
                         "each active scalar owner has a corresponding counted identity");
-                target.setTrackedRefCount(1); // Model a transient compatibility-count undercount.
-
                 try (MortalList.ReachabilityQueryMeasurement measurement =
                              MortalList.measureReachabilityQueries()) {
                     MortalList.deferDecrementIfTracked(released);

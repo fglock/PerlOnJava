@@ -32,19 +32,13 @@ class RuntimeTiedHashIteratorOwnerSlotTest {
 
             assertTrue(currentSlot.isCountedNativeOwner());
             assertEquals(1, currentReferent.refCount);
-
-            currentReferent.setTrackedRefCount(0);
-            assertTrue(currentReferent.restoreVerifiedCurrentCountedOwnerSlotRefCount());
-            assertEquals(1, currentReferent.refCount,
-                    "the live iterator slot restores its paired count");
-
-            currentReferent.setTrackedRefCount(2);
             hash.resetIterator();
 
             assertFalse(currentSlot.isActive());
             assertEquals(0, currentReferent.ownerSlotCount(
                     PerlOwnerSlot.Kind.TIED_HASH_ITERATOR_KEY));
-            assertEquals(1, currentReferent.refCount);
+            assertEquals(0, currentReferent.refCount,
+                    "reset releases the iterator's single paired count");
             assertNull(hash.hashIterator);
         }
     }

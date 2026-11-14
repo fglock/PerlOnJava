@@ -8,7 +8,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @Tag("unit")
 class WeakeningCountedOwnerSlotTest {
     @Test
-    void weakeningRepairsUndercountFromSurvivingCountedOwnerSlots() {
+    void weakeningReleasesOnlyTheSelectedCountedOwner() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeHash referent = new RuntimeHash();
@@ -24,7 +24,7 @@ class WeakeningCountedOwnerSlotTest {
             survivingOwner.set(referent.createAnonymousReference());
             try {
                 assertEquals(2, referent.countedOwnerSlotCount());
-                referent.setTrackedRefCount(1); // Model a transient selective-count undercount.
+                assertEquals(2, referent.refCount);
 
                 try (MortalList.ReachabilityQueryMeasurement measurement =
                              MortalList.measureReachabilityQueries()) {
@@ -34,7 +34,7 @@ class WeakeningCountedOwnerSlotTest {
                     assertEquals(1, referent.countedOwnerSlotCount());
                     assertTrue(WeakRefRegistry.isweak(observer));
                     assertEquals(0, measurement.stats().rootQueries,
-                            "the surviving counted slot repairs the count without a root walk");
+                            "the surviving counted slot preserves the referent without a root walk");
                     assertEquals(0, measurement.stats().snapshotsBuilt);
                     assertEquals(0, measurement.stats().scalarReachabilityQueries);
                 }

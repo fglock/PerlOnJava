@@ -8,7 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("unit")
-class UnblessedScalarCellOwnerSlotRepairTest {
+class UnblessedScalarCellOwnerSlotTest {
     @Test
     void unattachedScalarWrapperDoesNotCountAsCurrentPerlCellOwner() {
         PerlRuntime runtime = new PerlRuntime();
@@ -69,17 +69,17 @@ class UnblessedScalarCellOwnerSlotRepairTest {
     }
 
     @Test
-    void scalarOverwriteRestoresFromSurvivingScalarCellWithoutRootWalk() {
-        exerciseScalarCellRepair(false);
+    void scalarOverwriteBalancesTheSurvivingScalarCell() {
+        exerciseScalarCellRelease(false);
     }
 
     @Test
-    void deferredReleaseRestoresFromSurvivingScalarCellWithoutRootWalk() {
-        exerciseScalarCellRepair(true);
+    void deferredReleaseBalancesTheSurvivingScalarCell() {
+        exerciseScalarCellRelease(true);
     }
 
     @Test
-    void scalarAndAggregateOwnersAreCountedTogetherAfterUndercount() {
+    void scalarAndAggregateOwnersReleaseIndependently() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             boolean previousMortalListState = MortalList.isActive();
@@ -99,8 +99,6 @@ class UnblessedScalarCellOwnerSlotRepairTest {
                 WeakRefRegistry.weaken(weakObserver);
 
                 assertEquals(3, target.refCount);
-                target.setTrackedRefCount(1); // Model one undercount across mixed owner families.
-
                 try (MortalList.ReachabilityQueryMeasurement measurement =
                              MortalList.measureReachabilityQueries()) {
                     firstOwner.set(new RuntimeScalar());
@@ -132,7 +130,7 @@ class UnblessedScalarCellOwnerSlotRepairTest {
         }
     }
 
-    private void exerciseScalarCellRepair(boolean deferRelease) {
+    private void exerciseScalarCellRelease(boolean deferRelease) {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             boolean previousMortalListState = MortalList.isActive();

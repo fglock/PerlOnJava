@@ -10,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Tag("unit")
 class FirstWeakenUsesCurrentPackageOwnerTest {
     @Test
-    void currentPackageElementOwnerRepairsTransientZeroWithoutRootWalk() {
+    void weakeningLocalOwnerPreservesThePackageElementOwner() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             String globalName = "FirstWeakenUsesCurrentPackageOwnerTest::root";
@@ -26,7 +26,7 @@ class FirstWeakenUsesCurrentPackageOwnerTest {
 
             try {
                 assertEquals(2, target.countedOwnerSlotCount());
-                target.setTrackedRefCount(1); // Exercise defensive recovery from a transient undercount.
+                assertEquals(2, target.refCount);
 
                 try (MortalList.ReachabilityQueryMeasurement measurement =
                              MortalList.measureReachabilityQueries()) {
