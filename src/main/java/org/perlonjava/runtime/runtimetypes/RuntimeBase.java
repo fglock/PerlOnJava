@@ -982,21 +982,11 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         return false;
     }
 
-    /** Count surviving counted slots after verifying their current storage cells. */
-    int verifiedCurrentCountedOwnerSlotCount() {
+    private int verifiedCurrentCountedOwnerSlotCount() {
         int count = 0;
         for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
             if (!slot.isActive()) continue;
-            if (slot.isMethodInvocantOwner(this)) {
-                // A method call directly owns its invocant for the frame's
-                // lifetime. It has no scalar storage cell, so the slot's
-                // producer identity is its current-storage proof.
-                count++;
-                continue;
-            }
-            if (slot.isCountedNativeOwner()) {
-                // Native wrappers such as PerlIO::via layers, regex callbacks,
-                // and tied-hash iterators pair their direct count with this slot.
+            if (slot.isMethodInvocantOwner(this) || slot.isCountedNativeOwner()) {
                 count++;
                 continue;
             }
@@ -1018,11 +1008,6 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                 count++;
             }
         }
-        // Some blessed referents can retain a live counted scalar-cell slot
-        // before the scalar has acquired lexical, package, or aggregate
-        // storage metadata. Preserve the legacy fallback's precedence: use
-        // these exact standalone-cell proofs only when no ordinary verified
-        // counted owner was found.
         if (count == 0 && blessId != 0) {
             for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
                 if (!slot.isActive() || slot.kind() != PerlOwnerSlot.Kind.SCALAR_CELL) continue;
@@ -1035,7 +1020,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         return count;
     }
 
-    /** Restore from verified counted identities while the compatibility bridge remains. */
+    /** Test-only proof helper; production lifecycle paths must not repair counts from slots. */
     boolean restoreVerifiedCurrentCountedOwnerSlotRefCount() {
         int count = verifiedCurrentCountedOwnerSlotCount();
         if (count == 0) return false;

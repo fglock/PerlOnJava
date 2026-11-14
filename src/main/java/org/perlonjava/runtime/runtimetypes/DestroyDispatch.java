@@ -278,16 +278,8 @@ public class DestroyDispatch {
         // This allows captured variables to be properly cleaned up
         // (e.g., blessed objects in captured scalars can fire DESTROY).
         // A current counted CODE_SLOT owner must still have its paired count.
-        // Tokenless lifecycle entry still has a narrow verified-slot bridge;
-        // it uses explicit owner identities and does not walk roots.
         if (referent instanceof RuntimeCode code) {
             if (code.hasCountedCodeSlots || !code.hasStashCodeSlotOwner()) {
-                if (!finalCountedOwner
-                        && code.restoreVerifiedCurrentCountedOwnerSlotRefCount()) {
-                    ReachabilityQueryStats stats = MortalList.activeReachabilityQueryStats();
-                    if (stats != null) stats.codeOwnerSlotRestorations++;
-                    return;
-                }
                 if (SpecialBlock.hasPendingEndBlock(code)) {
                     // The current END queue cell is a strong owner even if
                     // its legacy count is unavailable. Defer cleanup until

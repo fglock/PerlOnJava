@@ -1838,10 +1838,6 @@ public class MortalList {
                 // Every other migrated edge is already absent from the ledger;
                 // a cached root snapshot must not invent a replacement owner.
                 DestroyDispatch.callDestroyFromCountedOwner(base);
-            } else if (base.restoreVerifiedCurrentCountedOwnerSlotRefCount()) {
-                // Exact active scalar, element, invocant, or native slots are
-                // the ownership proof here. This narrow count-alignment bridge
-                // does not inspect roots or walk the runtime object graph.
             } else if (base instanceof RuntimeScalarReadOnly
                     && RuntimeCode.isInstalledPadConstant(base)) {
                 // A readonly scalar referenced through \("literal") has an
@@ -1854,10 +1850,9 @@ public class MortalList {
                             ? (base.blessId != 0 && !hasWeakRefs
                                 && base.hasUntrackedReferenceOwnerSlotIdentity())
                             : hasUntrackedReferenceOwner)) {
-                // Counted owner recovery is complete above. A surviving
-                // non-package aggregate slot, or an untracked package owner of
-                // a blessed aggregate without direct weak observers, defers
-                // cleanup until its release.
+                // A surviving non-package aggregate slot, or an untracked
+                // package owner of a blessed aggregate without direct weak
+                // observers, defers cleanup until its release.
                 base.deferFinalReleaseToUncountedOwnerSlots();
             } else {
                 // Call depth is not ownership. If every counted and direct
