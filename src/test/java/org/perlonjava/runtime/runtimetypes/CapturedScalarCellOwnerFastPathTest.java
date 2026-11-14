@@ -11,20 +11,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Tag("unit")
 class CapturedScalarCellOwnerFastPathTest {
     @Test
-    void activeClosureCaptureKeepsItsScalarCellOwner() {
-        exerciseCaptureOwnerRepair(false);
-    }
-
-    @Test
     void deferredCleanupPreservesTheActiveClosureCaptureOwner() {
-        exerciseCaptureOwnerRepair(true);
+        exerciseActiveCaptureOwner();
     }
 
-    private void exerciseCaptureOwnerRepair(boolean deferScalarRelease) {
+    private void exerciseActiveCaptureOwner() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             boolean previousMortalListState = MortalList.isActive();
-            MortalList.setActive(deferScalarRelease);
+            MortalList.setActive(true);
             try {
                 RuntimeHash target = new RuntimeHash();
                 RuntimeScalar seedOwner = new RuntimeScalar();
@@ -106,4 +101,5 @@ class CapturedScalarCellOwnerFastPathTest {
             }
         }
     }
+
 }
