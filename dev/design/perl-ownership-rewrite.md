@@ -13,34 +13,31 @@ for the current handoff. Historical context: [issue #1649](https://github.com/fg
 | Remove obsolete sweep and diagnostic code | Pending | No production or test-only sweep hooks, wrappers, counters, or walker APIs remain without an independent purpose. |
 | Final acceptance | Pending | Both backends, full repository tests, DBIx leak/populate, fresh-home CPAN, and required link checks pass on one immutable candidate. |
 
-## Current handoff: 2026-11-13
+## Current handoff: 2026-11-14
 
-Candidate: `/private/tmp/issue2043-owner-trace-isolated-20261113`, branch
-`feature/issue2043-borrowed-list-result`, implementation commit `00f10d09f0`.
-The focused `dbic_t52_phantom_related_release.t` regression passes 7/7 on system
-Perl and the JVM, including DBIx's six leak checks; evidence:
-`/private/tmp/issue2043-borrowed-list-result-system-final.log` and
-`/private/tmp/issue2043-borrowed-list-result-jvm-final.log`.
+The active local branch is `feature/issue2043-owner-accounting-followup` at
+`8d1b510c69`, a preservation snapshot of the prior local candidate. The public
+branch for [PR #1938](https://github.com/fglock/PerlOnJava/pull/1938) remains at
+`1b8074991495c913c00453452c1e8c91a9daa325`; the PR stays draft. Phase 1,
+no-sweep qualification, is complete. Phase 2 owner accounting remains active.
 
-Root cause: both simple scalar branches in
-`RuntimeList.assignSimpleScalarsFromArray` inserted returned LHS cells with
-ordinary `RuntimeArray` ownership. The expression-only result array then
-became the owner of an `UNTRACKED_REFERENCE` slot after its Perl lifetime had
-ended. The generic transition trace located the acquisition in the fast path:
-the array had four elements when the cell was inserted, then grew to five. Both
-branches now use `addBorrowedListResultValue`, matching the other list-result
-paths. Temporary owner-transition tracing and its diagnostic-only test call
-have been removed; no fixture-class filter or tracing hook remains in runtime
-code.
+The latest full `nice -n 19 make` evidence is from parent source `0a301d9946`,
+not the active snapshot. It failed only
+`unit/refcount/b_refcount_destroy_aggregate_owner.t`: system Perl expects nested
+counts `[3,2]`, while PerlOnJava reports `[3,1]`. The targeted trace shows an
+`ARGUMENT_CONTAINER` owner release taking the source from 2 to 1, followed by
+`DestroyDispatch` balancing the synthetic `$_[0]` edge. Identify the exact
+owner-slot identity and fix this generic lifecycle boundary.
 
-System Perl and JVM now pass the same seven assertions and six DBIx leak checks.
-The interpreter path and full repository gate have not run on this source
-commit; the previous passing full gate applies only to its parent. Run
-`nice -n 19 make` and documentation link checks on the exact candidate. Then
-continue the remaining #2043 phases: close the direct owner-slot audit, remove
-obsolete sweep hooks and graph-recovery paths, resolve the interpreter DBIx
-dependency prerequisite, and run full DBIx leak/populate plus fresh-home CPAN
-acceptance. PR #1938 remains draft until those gates and review are complete.
+The expanded DBIx phantom chain passes on system Perl and still fails on JVM at
+`Artist->search_related('cds')->next` with a detached `CD` source. The next
+loop is: correct the nested-destruction/argument-frame transition; pass the
+nested-destruction and expanded DBIx regressions on system Perl and both
+PerlOnJava backends; remove the two counted-owner reconstruction fallbacks;
+remove walker-only root snapshots, sweep hooks/counters, and diagnostic-only
+compatibility APIs; then integrate the separate END/IO owner-proof cleanup.
+Run DBIx leak/populate, fresh-home CPAN, focused interpreter, `nice -n 19 make`,
+and link checks on one immutable candidate before updating PR #1938 for review.
 
 ### Phase 2 progress (2026-10-27)
 
