@@ -8412,12 +8412,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Preserve LVALUE here: generated code performs the callable check
             // from the raw context. Normalizing it first would silently turn a
             // forbidden lvalue method assignment into an ordinary scalar call.
+            RuntimeList result;
             if (cachedRuntime != null && code.compilerSupplier == null
                     && (code.boundRuntime == null || code.boundRuntime == cachedRuntime)
                     && code.constantValue == null) {
-                return code.apply(args, callContext, cachedRuntime);
+                result = code.apply(args, callContext, cachedRuntime);
+            } else {
+                result = code.apply(args, callContext);
             }
-            return code.apply(args, callContext);
+            return finishCachedMethodResult(code, callContext, result);
         } catch (PerlNonLocalReturnException e) {
             if (e.targetCode != null && e.targetCode != code) {
                 throw e;
@@ -8427,10 +8430,32 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
             RuntimeList result = e.returnValue != null
                     ? e.returnValue.getList() : new RuntimeList();
-            return coerceScalarCallResult(
+            RuntimeList returned = coerceScalarCallResult(
                     result, effectiveCallContext(code, callContext),
                     callContext, !isLvalueCode(code));
+            return finishCachedMethodResult(code, callContext, returned);
         }
+    }
+
+    /**
+     * Inline method dispatch calls {@link RuntimeCode#apply(RuntimeArray, int)}
+     * directly, bypassing the static apply boundary that retires discarded
+     * results and flushes scalar-only returns. Keep the same ownership boundary
+     * here for ordinary method results and consumed non-local returns.
+     */
+    private static RuntimeList finishCachedMethodResult(
+            RuntimeCode code, int callContext, RuntimeList result) {
+        if (result instanceof RuntimeControlFlowList || result == null) {
+            return result;
+        }
+        int effectiveContext = effectiveCallContext(code, callContext);
+        if (effectiveContext == RuntimeContextType.VOID) {
+            MortalList.mortalizeForVoidDiscard(result);
+            MortalList.flushAboveMark();
+        } else if (containsNoReference(result)) {
+            MortalList.flushAboveMark();
+        }
+        return result;
     }
 
     /** Preserve literal immutability when a constant becomes a method's $_[0]. */
