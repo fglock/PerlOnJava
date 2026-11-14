@@ -1378,7 +1378,6 @@ public class MortalList {
             if (!visited.add(base)) continue;  // already visited — cycle
 
             if (base.blessId != 0) {
-                boolean releasingLastOwner = false;
                 if (s.refCountOwned && base.refCount > 0) {
                     if (base.refCountTrace) {
                         base.traceRefCount(0, "MortalList.deferDecrementRecursive (blessed, queued)");
@@ -1390,8 +1389,6 @@ public class MortalList {
                     // still keep this container and its fields in use after
                     // this counted edge leaves. Walk the fields only when no
                     // current Perl owner identity remains.
-                    releasingLastOwner = base.refCount == 1
-                            && !base.hasPerlStrongOwnerIdentity();
                     LifecycleRuntimeState state = state();
                     markBoundaryWork(state);
                     queueDeferredBase(state, base, ownerRelease, null, s);
@@ -1402,29 +1399,12 @@ public class MortalList {
                             base.queueLifecycleOnlyAtZero(
                                     "MortalList.deferDecrementRecursive zero-count temporary");
                     queueDeferredBase(state, base, ownerRelease, null, s);
-                    // A zero-count temporary's fields disappear with it only
-                    // when no separate Perl owner still retains the container.
-                    // Keep recursive cleanup aligned with the lifecycle token
-                    // that will check those same owner identities at drain.
-                    releasingLastOwner = !base.hasPerlStrongOwnerIdentity();
                 }
-                // A blessed hash/array is still a container.  When this slot
-                // releases its final counted owner, its fields disappear with
-                // it and must release their own referents too.  Do not walk a
-                // shared object: another strong owner may still use its fields
-                // (Sub::Quote keeps exactly this kind of external metadata
-                // owner while its registry entry is weak).
-                if (releasingLastOwner) {
-                    if (base instanceof RuntimeArray arr) {
-                        for (RuntimeScalar elem : arr.elements) {
-                            if (elem != null) work.add(elem);
-                        }
-                    } else if (base instanceof RuntimeHash hash) {
-                        for (RuntimeScalar val : hash.elements.values()) {
-                            if (val != null) work.add(val);
-                        }
-                    }
-                }
+                // Do not walk a blessed container's fields here. Its DESTROY
+                // callback can rescue the object, in which case those child
+                // owner slots must remain live. DestroyDispatch performs the
+                // cascade after the callback has made the final ownership
+                // decision (and also handles classes without DESTROY).
             } else {
                 boolean hasDirectWeakElementRefs = containerHasWeakElementRefs(base);
                 boolean hasCleanupTargets = hasDirectWeakElementRefs
