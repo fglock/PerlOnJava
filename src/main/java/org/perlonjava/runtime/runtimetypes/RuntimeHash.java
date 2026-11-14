@@ -1242,8 +1242,9 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                     RuntimeArray result = new RuntimeArray(this);
                     // Store the original size as an annotation for scalar context
                     result.scalarContextSize = originalSize;
-                    // Flush deferred DESTROY for refs removed from the container
-                    MortalList.flush();
+                    // Release displaced values created by this assignment, but
+                    // preserve pending returns owned by the surrounding expression.
+                    MortalList.flushAboveMark();
                     yield result;
                 } finally {
                     // These scalar copies only stage the RHS while the hash is

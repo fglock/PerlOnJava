@@ -146,7 +146,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         || pendingStrongRelease) {
                     argumentAliasOwners.add(scalar.retainArgumentAliasOwner());
                 }
-                if (needsMortalArgumentValueOwner(scalar)) {
+                if (needsStagedArgumentValueOwner(scalar)) {
                     listResultOwners.add(RuntimeScalar.retainStagedArgumentValue(scalar));
                 }
             } else if (value instanceof RuntimeList) {
@@ -154,18 +154,31 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
         }
 
-        private boolean needsMortalArgumentValueOwner(RuntimeScalar scalar) {
-            if (scalar == null || !scalar.isMortalReturnSnapshot()
-                    || WeakRefRegistry.isweak(scalar)
+        private boolean needsStagedArgumentValueOwner(RuntimeScalar scalar) {
+            if (scalar == null || WeakRefRegistry.isweak(scalar)
                     || (scalar.type & RuntimeScalarType.REFERENCE_BIT) == 0
                     || !(scalar.value instanceof RuntimeBase referent)) {
                 return false;
             }
-            // A return snapshot backed by a durable storage edge only aliases
-            // its source cell. If it is the sole counted edge, the call frame
-            // must acquire its own value owner before later argument cleanup
-            // can consume the pending return release.
-            return !referent.hasIndependentPerlOwnerSlotForArgument();
+            if (scalar.isMortalReturnSnapshot()) {
+                // A return snapshot backed by a durable storage edge only
+                // aliases its source cell. If it is the sole counted edge,
+                // the call frame must acquire its own value owner before
+                // later argument cleanup can consume the pending return
+                // release.
+                return !referent.hasIndependentPerlOwnerSlotForArgument();
+            }
+            // An anonymous hash literal passed directly to a call has no
+            // source cell whose lifetime covers @_ . The argument alias is a
+            // borrow, so retain otherwise ownerless hash literals for the
+            // argument frame. Restrict this to a zero-owner hash; stored
+            // references and other temporary values retain their own rules.
+            return scalar.type == RuntimeScalarType.HASHREFERENCE
+                    && referent instanceof RuntimeHash hash
+                    && !hasPersistentArgumentCell(scalar)
+                    && !hasCurrentCountedCellOwner(scalar)
+                    && hash.refCount == 0
+                    && !hash.hasCurrentPerlStorageOwner();
         }
 
         private void retainListResultOwners(RuntimeBase value) {
@@ -186,7 +199,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
                     && !WeakRefRegistry.isweak(scalar)) {
                 if (scalar.isMortalReturnSnapshot()) {
-                    if (needsMortalArgumentValueOwner(scalar)) {
+                    if (needsStagedArgumentValueOwner(scalar)) {
                         listResultOwners.add(
                                 RuntimeScalar.retainStagedArgumentValue(scalar));
                     } else {
