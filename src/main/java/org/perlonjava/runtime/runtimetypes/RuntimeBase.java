@@ -1352,9 +1352,16 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             .computeIfAbsent(this, k -> new java.util.LinkedHashMap<>())
             .put(System.identityHashCode(owner), new OwnerTrace(owner, site));
         StackTraceElement[] st = new Throwable().getStackTrace();
+        PerlOwnerSlot slot = owner.countedOwnerSlot();
+        RuntimeBase aggregateOwner = slot == null ? null : slot.countedAggregateOwner();
         StringBuilder sb = new StringBuilder();
         sb.append("[REFCOUNT-RECORD] base=").append(System.identityHashCode(this))
           .append(" owner=").append(System.identityHashCode(owner))
+          .append(" kind=").append(slot == null ? "<none>" : slot.kind())
+          .append(" slot=").append(slot == null ? 0 : slot.identity())
+          .append(" aggregate=").append(aggregateOwner == null ? 0
+                  : System.identityHashCode(aggregateOwner))
+          .append(" transient=").append(owner.isTransientArgumentValueOwner())
           .append("   ").append(site);
         for (int i = 1; i < Math.min(st.length, 12); i++) {
             sb.append("\n      at ").append(st[i]);
