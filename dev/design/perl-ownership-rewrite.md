@@ -1,43 +1,60 @@
 # Perl-compatible ownership rewrite
 
-**Status:** Phase 1 is complete; Phase 2 remains active. Ordinary production
-cleanup no longer invokes corrective whole-graph sweeps. Completion requires
-balanced owner counts, direct owner-slot lifetime decisions, removal of sweep
-and diagnostic-only machinery, and exact-head acceptance. See [issue #2043](https://github.com/fglock/PerlOnJava/issues/2043)
-for the current handoff. Historical context: [issue #1649](https://github.com/fglock/PerlOnJava/issues/1649).
+**Status:** The sweep-removal candidate is checkpointed; DBIx lifecycle
+acceptance remains active. [Issue #2043](https://github.com/PerlOnJava/issues/2043)
+contains the single current handoff. [Issue #1649](https://github.com/PerlOnJava/issues/1649)
+is historical context.
 
-| Phase | Status | Acceptance |
+| Work | Status | Evidence or acceptance |
 | --- | --- | --- |
-| Remove default corrective sweeps | Complete | Earlier no-sweep gates and behavior regressions are recorded below. |
-| Complete owner-slot lifetime model | Active | Resolve the DBIx owner transition, finish remaining direct owner paths, remove recovery and graph-query decisions. |
-| Remove obsolete sweep and diagnostic code | Pending | No production or test-only sweep hooks, wrappers, counters, or walker APIs remain without an independent purpose. |
-| Final acceptance | Pending | Both backends, full repository tests, DBIx leak/populate, fresh-home CPAN, and required link checks pass on one immutable candidate. |
+| Use explicit owner slots for lifecycle decisions | Candidate delivered | Owner-slot behavior remains covered by runtime and Perl-level regressions. |
+| Remove memory-sweep infrastructure | Candidate delivered | The walker, scalar registry, root-query state, sweep hooks, END-boundary owner scans, and suspended-frame root snapshots are removed. |
+| Resolve DBIx leak lifecycle | Active | Candidate and clean parent both fail `t/52leaks.t` with 134 failures out of 146 checks; the generic owner retention path still needs diagnosis. |
+| Final acceptance | Pending | Exact committed `make`, focused interpreter checks, DBIx leak/populate and fresh-home CPAN, links, and PR reconciliation. |
 
 ## Current handoff: 2026-11-14
 
-The active local branch is `feature/issue2043-owner-accounting-followup` at
-`8d1b510c69`, a preservation snapshot of the prior local candidate. The public
-branch for [PR #1938](https://github.com/fglock/PerlOnJava/pull/1938) remains at
-`1b8074991495c913c00453452c1e8c91a9daa325`; the PR stays draft. Phase 1,
-no-sweep qualification, is complete. Phase 2 owner accounting remains active.
+Checkpoint commit `2dea20676b82ba8f93a93f8e3ec26422637b035e` is on local
+branch `wip/issue2043-remove-sweeps-20261114`, based on `3f9cfea095`. It removes
+the production reachability walker and scalar registry, root-query diagnostics,
+sweep-only state and hooks, END-boundary owner-source scans, and suspended-frame
+root snapshots. `IO_VIA_LAYER` and `SUSPENDED_FRAME` owner slots remain explicit;
+the async reset guard still protects active continuations.
 
-The latest full `nice -n 19 make` evidence is from parent source `0a301d9946`,
-not the active snapshot. It failed only
-`unit/refcount/b_refcount_destroy_aggregate_owner.t`: system Perl expects nested
-counts `[3,2]`, while PerlOnJava reports `[3,1]`. The targeted trace shows an
-`ARGUMENT_CONTAINER` owner release taking the source from 2 to 1, followed by
-`DestroyDispatch` balancing the synthetic `$_[0]` edge. Identify the exact
-owner-slot identity and fix this generic lifecycle boundary.
+The content-identical pre-commit `nice -n 19 make` passed in 7m39s. The new
+`owner_slot_lifecycle_perl_oracle.t` passes 24/24 on system Perl, JVM, and
+interpreter. The full interpreter runner reported 50 failed assertions in 29
+files and 7 incomplete files; the checked destructor, glob, tied, and thread
+failures also reproduce on the clean parent at `3f9cfea095`.
 
-The expanded DBIx phantom chain passes on system Perl and still fails on JVM at
-`Artist->search_related('cds')->next` with a detached `CD` source. The next
-loop is: correct the nested-destruction/argument-frame transition; pass the
-nested-destruction and expanded DBIx regressions on system Perl and both
-PerlOnJava backends; remove the two counted-owner reconstruction fallbacks;
-remove walker-only root snapshots, sweep hooks/counters, and diagnostic-only
-compatibility APIs; then integrate the separate END/IO owner-proof cleanup.
-Run DBIx leak/populate, fresh-home CPAN, focused interpreter, `nice -n 19 make`,
-and link checks on one immutable candidate before updating PR #1938 for review.
+Fresh-home `jcpan -t DBIx::Class` completed 325 test programs and 42,911
+assertions, with 37 programs and 253 assertions failing. `t/100populate.t`
+passed. `t/52leaks.t` reported the same 134 failures out of 146 checks on the
+candidate and the clean parent, so this is an existing generic ownership gap,
+not a regression from deleting the walker. Logs: `/tmp/issue2043-remove-sweeps-full-make.log`,
+`/tmp/issue2043-remove-sweeps-test-interpreter.log`,
+`/tmp/issue2043-remove-sweeps-dbix-cpan.log`, and
+`/tmp/issue2043-dbix-52leaks-parent.log`.
+
+### Next iteration
+
+1. Trace the first `t/52leaks.t` retention failure through current owner-slot
+   identities and identify its generic producer or release path.
+2. Add or strengthen a project-owned Perl regression for that owner transition;
+   validate its expected behavior with system Perl, then fix the generic path.
+3. Run the focused leak and populate tests on JVM and interpreter, then repeat
+   DBIx acceptance and compare with the clean parent.
+4. Once lifecycle behavior is qualified, run the exact-commit repository,
+   interpreter, CPAN, and link gates and reconcile the candidate with draft
+   [PR #1938](https://github.com/PerlOnJava/pull/1938).
+
+Completion requires no reachability-based root walk or sweep to affect Perl
+lifetime, passing owner-slot oracles and required acceptance on one immutable
+candidate, and the implementation PR merged.
+
+Historical reference: [#1649](https://github.com/PerlOnJava/issues/1649).
+
+## Historical implementation evidence
 
 ### Phase 2 progress (2026-10-27)
 

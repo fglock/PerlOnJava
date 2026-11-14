@@ -19,92 +19,22 @@ delivery for removing lifecycle decisions based on memory sweeps; #1649 is its
 historical origin. The design replaces selective-refcount heuristics with
 explicit, auditable owner tokens.
 
-## New Findings
+## Current Status (2026-11-14)
 
-### Phase 1 owner-source inventory (2026-10-04)
+Issue #2043 is the current delivery for removing memory-sweep lifetime
+decisions; #1649 is its historical origin. Candidate commit
+`2dea20676b82ba8f93a93f8e3ec26422637b035e` removes `ReachabilityWalker`,
+`ScalarRefRegistry`, root-query state, sweep hooks, END-boundary owner-source
+scans, and suspended-frame root snapshots. Temporary and async liveness still
+use their exact owner slots.
 
-A strict source search across `src/main/java/org/perlonjava` finds 135
-non-comment lines that mutate `refCount` (17 `++`, 13 `--`, and 105 direct
-assignments) and 36 lines that assign `refCountOwned`. This is a static source
-inventory, not a runtime instruction count. It includes lifecycle/sentinel
-transitions as well as ownership changes.
-
-| Owner or lifecycle path | Main implementation sites | Classification |
-|---|---|---|
-| Scalar and lexical slots | `RuntimeScalar.setLargeRefCounted`, `undefine`, `ReferenceOperators` | Counted strong stores can set `refCountOwned` and record an active scalar owner. Some references remain untracked (`refCount == -1`); promoted values can have earlier stores that were never recorded. |
-| Array and hash elements | `incrementRefCountForContainerStore`, `RuntimeArray`, `RuntimeHash`, `RuntimeList` | Ordinary stored cells can acquire counted ownership. Alias arrays, borrowed copies, list materialization, and pop/shift/delete paths transfer or deliberately omit a count; the slot flag alone does not describe these transitions. |
-| Package globals, stashes, and globs | `GlobalRuntimeScalar/Array/Hash`, `RuntimeStash`, `RuntimeGlob` | Globals and stash entries are strong Perl roots, but several paths use local-binding or root-map state instead of a matching scalar-owner token. Root membership must remain represented independently. |
-| Closures and CODE | `RuntimeCode`, `RuntimeScalar` capture transitions, `BytecodeInterpreter`, `SlowOpcodeHandler` | Semantic pad ownership is distinct from conservative captures and temporary invocation holds. `semanticCaptureOwners` models captured pad cells; general `activeOwners` does not. |
-| Temporaries and deferred release | `MortalList`, `RuntimeCode`, `DestroyDispatch`, `RuntimeBase` | Some holds are scalar-owned and deferred; others are non-scalar dispatch/rescue holds. Their count is temporary and cannot be treated as a persistent Perl slot. |
-| Weakening, sweeping, and destruction | `WeakRefRegistry`, `ReachabilityWalker`, `DestroyDispatch` | `-1`, `WEAKLY_TRACKED`, and `Integer.MIN_VALUE` are tracking or lifecycle states, not owner cardinalities. Sweeps also adjust counts when reconciling stale ownership. |
-| Tied, regex, I/O, and thread wrappers | `Tie*`, `RuntimeRegex*`, `runtime/io/*`, `RuntimeGraphCloner` | These classes have resource- or runtime-specific reference holds. Thread cloning reconstructs ownership for cloned cells; it cannot be inferred from the source cell's current flag. |
-
-This inventory confirms that neither `refCount > 0` nor `activeOwners` can
-authorize skipping the AnyEvent weak-reference root walk. `refCount` combines
-counted slots, untracked references, local-binding state, transient holds, and
-sentinels. `activeOwners` is populated only after tracking activation and only
-by selected scalar-store paths. The next audit pass must trace the exact
-AnyEvent referent's owners through each owning storage class before choosing
-any sweep shortcut.
-
-The latest unchanged `AnyEvent::Tools/t/02_rw_mutex.t` trace reports repeated
-scope-exit requests for `RuntimeArray` targets with `refCount=2` and
-`activeOwners=0`. A diagnostic scan of the scalar registry finds 4 to 13
-nonweak cells pointing at these arrays across successive requests; all show
-`refCountOwned=false` and `captureRefCountOwned=0`. The cells include `$self`,
-`$timer`, and captured `$t` values. Optional registration stacks include
-assignments from `AnyEvent::Loop.pm` and the test's timer callbacks, as well as
-array materialization paths. These are observed scalar holders, not verified
-Perl owner tokens: the flags do not distinguish a shared pad, a temporary
-alias, or a stale cell. The two counted references have not yet been traced to
-their actual slots. Do not use the positive count or this holder list as a
-fast-path until those ownership transitions are established.
-
-The original issue #1132 plan proposed adding one referent token for each
-closure capture when the captured scalar did not already have a
-`refCountOwned` token. Verification exposed two problems with that model:
-
-1. The focused issue reproducer captures a pad scalar that already has
-   `refCountOwned = true`. A borrowed-only token does not protect its referent
-   from a weak-reference sweep on either backend.
-2. Adding one referent token for every closure makes the issue reproducer live,
-   but overcounts real Perl references. It regresses existing captured-scalar,
-   weak-callback, tail-call, and exact-refcount tests.
-3. The existing `activeOwners` set is not an authoritative ledger. A referent
-   activates it only when `weaken()` is first called, and earlier
-   `recordActiveOwner()` calls are discarded while the set is null. The current
-   implementation avoids backfilling from `ScalarRefRegistry` because that
-   path regressed DBIx::Class leak tests. Thus an `activeOwnerCount()` of zero
-   can mean either “no counted scalar owns this referent” or “its stores
-   happened before tracking began.” It cannot justify skipping a complete
-   sweep.
-4. In the failing HTML::Tree interpreter test, temporary instrumentation sees
-   two surviving `HTML::TreeBuilder` objects and two `HTML::Element` objects
-   after the first tree is dropped; their observer slots still report weak.
-   A minimal nested hash/array graph with a weak parent edge passes on both
-   backends, so the parity regression depends on the real parser construction
-   path. The weak edge itself is installed; the unresolved lifetime is an
-   extra strong owner or stale owner count.
-
-A system Perl oracle confirms that a lexical's referent count remains one when
-one or two closures share that lexical:
-
-```text
-lexical=1
-one_closure=1
-two_closures=1
-```
-
-The closure retains the lexical pad scalar. The pad scalar, in turn, owns one
-strong edge to its referent. Multiple closures sharing the pad do not each own
-the referent independently.
-
-The current reachability walker deliberately excludes captured and
-scope-exited scalars to avoid treating conservative captures as Perl roots.
-Consequently, a weak sweep can destroy an issue #1132 referent even while the
-captured pad retains a positive selective count. The fix therefore requires an
-authoritative ownership distinction, not broader walking or unconditional
-capture increments.
+The 24-assertion `owner_slot_lifecycle_perl_oracle.t` passes on system Perl and
+both PerlOnJava backends. The candidate full JVM `make` passed before the
+checkpoint commit. The fresh-home DBIx suite passed `t/100populate.t`; its
+`t/52leaks.t` failures match the clean parent (134 failed out of 146 checks).
+The generic DBIx owner transition remains the next correctness task. See the
+[current ownership handoff](perl-ownership-rewrite.md#current-handoff-2026-11-14)
+and [issue #2043](https://github.com/PerlOnJava/issues/2043).
 
 ## Semantic Ownership Model
 
@@ -130,7 +60,7 @@ These edges have different meanings:
 5. Reassignment releases the old pad token before acquiring the new one.
 6. `weaken()` releases the pad token and captures do not recreate it.
 7. The final pad owner releases the token exactly once.
-8. Weak sweeping cannot destroy a referent with authoritative strong owners.
+8. Lifecycle decisions follow owner slots directly; Java reachability does not create or retire Perl owners.
 9. Java reachability alone cannot create a Perl owner.
 10. Strong Perl cycles remain alive until a strong edge is explicitly broken.
 
@@ -224,29 +154,26 @@ recorded separately so they cannot prevent weak cleanup indefinitely.
 
 ## Lifecycle Ownership and Diagnostic Queries
 
-Weak-reference cleanup and destruction follow current owner-slot identities.
-A referent remains alive while any Perl strong slot remains, including edges in
+Weak-reference cleanup and destruction follow current owner-slot identities. A
+referent remains alive while any Perl strong slot remains, including edges in
 strong cycles. Releasing the final slot performs cleanup through the ordinary
 container and lifecycle paths.
 
 No root traversal, snapshot, or sweep may change reference counts, weak
-observers, or destruction timing. `ReachabilityWalker` and `ScalarRefRegistry`
-are read-only diagnostic facilities only; lifecycle code must not call them to
-make ownership decisions.
+observers, or destruction timing. The reachability walker and scalar registry
+are removed; lifecycle code uses owner-slot identities for final-release
+decisions. Temporary leases and suspended-frame owners remain explicit slots.
 
-## Implementation Phases
+## Current Work
 
-1. Define the owner-slot acquire, transfer, and release contract with exact
-   count, weak-release, and destruction tests.
-2. Migrate scalar, package, glob, aggregate, tied, closure, call/return,
-   temporary, and thread-snapshot producers to explicit slots.
-3. Remove tokenless recovery, lifecycle root snapshots, temporary-root graph
-   traversal, rescued-object graph traversal, and END-boundary owner proofs.
-4. Remove sweep implementations, sweep-only state, no-op hooks, Perl sweep
-   wrappers, and their direct callers. Retain only explicit read-only
-   diagnostics.
-5. Validate one immutable candidate with the full repository, DBIx lifecycle,
-   and exact-parent CPAN acceptance gates.
+1. Trace the generic owner producer or release path behind the remaining DBIx
+   `t/52leaks.t` failures.
+2. Keep a project-owned Perl regression and validate its expected behavior on
+   system Perl, JVM, and interpreter.
+3. Re-run DBIx leak/populate acceptance and the full repository gate on one
+   immutable candidate; compare failures with the clean parent.
+4. Reconcile the candidate with PR #1938 and finish review after all required
+   gates pass.
 
 ## Regression Matrix
 
@@ -292,7 +219,7 @@ Preserve and run:
 - DBIx::Class leak-tracer and weak-registry tests
 - Exact-refcount tests using `B::REFCNT` or `Test2::Tools::Refcount`
 
-## Issue #1132 and Ecosystem Acceptance
+## Historical issue #1132 ecosystem acceptance
 
 Run on JVM and interpreter backends with `timeout` and complete output logs:
 
@@ -317,16 +244,13 @@ Run on JVM and interpreter backends with `timeout` and complete output logs:
 
 ## Progress Tracking
 
-### Current Status: explicit count states pass the repository gate (2026-11-13)
+### Current checkpoint
 
-Issue #2043 checkpoint and remaining acceptance work are maintained in the
-[ownership rewrite design](perl-ownership-rewrite.md#current-checkpoint). Source
-commit `311e8b4fbd` replaces negative count sentinels with explicit tracking
-modes; its full Make and link-check evidence is listed there. Owner-count
-alignment and the DBIx owner transition are still incomplete. Two production
-graph-query consumers remain in `GlobalRuntimeState` and `Internals`; remove
-the walker counters and diagnostic-only tests after those liveness decisions
-use owner identities.
+The current status and evidence are maintained in the
+[ownership rewrite handoff](perl-ownership-rewrite.md#current-handoff-2026-11-14).
+The candidate has removed production reachability decisions and sweep
+infrastructure. The DBIx leak transition remains open; do not restore graph
+traversal to mask stale owner state.
 
 ### Historical handoff: issue #1132 / PR #1204
 
