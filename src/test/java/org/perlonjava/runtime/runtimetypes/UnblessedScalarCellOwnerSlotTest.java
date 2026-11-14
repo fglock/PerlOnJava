@@ -99,14 +99,11 @@ class UnblessedScalarCellOwnerSlotTest {
                 WeakRefRegistry.weaken(weakObserver);
 
                 assertEquals(3, target.refCount);
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     firstOwner.set(new RuntimeScalar());
 
                     assertEquals(2, target.refCount);
                     assertTrue(WeakRefRegistry.isweak(weakObserver));
-                    assertEquals(0, measurement.stats().rootQueries);
-                    assertEquals(0, measurement.stats().snapshotsBuilt);
                 }
 
                 survivingScalarOwner.set(new RuntimeScalar());
@@ -150,8 +147,7 @@ class UnblessedScalarCellOwnerSlotTest {
                 assertEquals(2, target.refCount);
                 assertEquals(2, target.ownerSlotCount(PerlOwnerSlot.Kind.SCALAR_CELL));
 
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     if (deferRelease) {
                         MortalList.pushMark();
                         MortalList.deferDecrementIfTracked(firstOwner);
@@ -162,8 +158,6 @@ class UnblessedScalarCellOwnerSlotTest {
 
                     assertEquals(1, target.refCount);
                     assertTrue(WeakRefRegistry.isweak(weakObserver));
-                    assertEquals(0, measurement.stats().rootQueries);
-                    assertEquals(0, measurement.stats().snapshotsBuilt);
                 }
 
                 firstOwner.set(new RuntimeScalar());

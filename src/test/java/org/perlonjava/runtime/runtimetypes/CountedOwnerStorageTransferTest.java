@@ -13,7 +13,6 @@ class CountedOwnerStorageTransferTest {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeHash arrayReferent = new RuntimeHash();
-            arrayReferent.activateOwnerTracking();
             RuntimeScalar arrayScalar = arrayReferent.createAnonymousReference();
 
             RuntimeScalar.incrementRefCountForContainerStore(arrayScalar);
@@ -31,7 +30,6 @@ class CountedOwnerStorageTransferTest {
                     "moving the scalar owner changes provenance without changing its count");
 
             RuntimeHash hashReferent = new RuntimeHash();
-            hashReferent.activateOwnerTracking();
             RuntimeScalar hashScalar = hashReferent.createAnonymousReference();
             RuntimeScalar.incrementRefCountForContainerStore(hashScalar);
 

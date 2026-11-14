@@ -8,7 +8,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @Tag("unit")
 class WeakCodeOwnerSlotTest {
     @Test
-    void packageArrayCodeOwnerSlotSkipsReachabilityFallbacks() {
+    void packageArrayOwnerSlotPreservesWeakCodeObserver() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeCode code = new RuntimeCode((args, context) -> new RuntimeList(), null);
@@ -26,14 +26,10 @@ class WeakCodeOwnerSlotTest {
                                 slot -> slot.isActive()
                                         && slot.kind() != PerlOwnerSlot.Kind.CODE_SLOT),
                         "package arrays create a direct owner identity for their CODE values");
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     WeakRefRegistry.clearWeakRefsTo(code);
 
                     assertTrue(WeakRefRegistry.isweak(weakCodeRef));
-                    assertEquals(0, measurement.stats().rootQueries);
-                    assertEquals(0, measurement.stats().snapshotsBuilt);
-                    assertEquals(0, measurement.stats().scalarReachabilityQueries);
                 }
             } finally {
                 GlobalVariable.globalArrays.remove(globalName);
@@ -60,14 +56,10 @@ class WeakCodeOwnerSlotTest {
             WeakRefRegistry.weaken(observer);
 
             try {
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     WeakRefRegistry.clearWeakRefsTo(code);
 
                     assertTrue(WeakRefRegistry.isweak(observer));
-                    assertEquals(0, measurement.stats().scalarReachabilityQueries,
-                            "the live lexical owner identity avoids the scalar-root scan");
-                    assertEquals(0, measurement.stats().rootQueries);
                 }
             } finally {
                 owner.set(new RuntimeScalar());

@@ -61,12 +61,10 @@ class CodeSlotOwnerTest {
             assertEquals(identity, slot.countedOwnerSlot().identity());
             RuntimeScalar.scopeExitCleanup(slot); // A borrow cannot retire a GP slot.
             assertEquals(1, code.refCount);
-            try (MortalList.ReachabilityQueryMeasurement measurement = MortalList.measureReachabilityQueries()) {
+            {
                 GlobalVariable.globalCodeRefs.remove("CodeOwner::second");
                 assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, code.perlLifecycleState());
                 assertEquals(0, code.ownerSlotCount(PerlOwnerSlot.Kind.CODE_SLOT));
-                assertEquals(0, measurement.stats().rootQueries);
-                assertEquals(0, measurement.stats().snapshotsBuilt);
             }
         }
     }
@@ -121,12 +119,10 @@ class CodeSlotOwnerTest {
             GlobalVariable.globalCodeRefs.remove("CodeOwner::active");
             assertEquals(0, code.refCount);
             assertEquals(RuntimeBase.PerlLifecycleState.LIVE, code.perlLifecycleState());
-            try (MortalList.ReachabilityQueryMeasurement measurement = MortalList.measureReachabilityQueries()) {
+            {
                 RuntimeCode.popActiveCode(code);
                 assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, code.perlLifecycleState());
                 assertEquals(0, code.ownerSlotCount(PerlOwnerSlot.Kind.ACTIVE_CODE));
-                assertEquals(0, measurement.stats().rootQueries);
-                assertEquals(0, measurement.stats().snapshotsBuilt);
             }
         }
     }
@@ -166,13 +162,10 @@ class CodeSlotOwnerTest {
             RuntimeScalar weakRef = new RuntimeScalar(code);
             WeakRefRegistry.weaken(weakRef);
 
-            try (MortalList.ReachabilityQueryMeasurement measurement =
-                         MortalList.measureReachabilityQueries()) {
+            {
                 WeakRefRegistry.clearWeakRefsTo(code);
 
                 assertTrue(WeakRefRegistry.isweak(weakRef));
-                assertEquals(0, measurement.stats().rootQueries);
-                assertEquals(0, measurement.stats().snapshotsBuilt);
             }
 
             GlobalVariable.globalCodeRefs.remove("CodeOwner::weakObserver");

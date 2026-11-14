@@ -130,8 +130,7 @@ class UncountedOwnerSlotZeroCountReleaseTest {
 
     private static void assertFinalOwnerRelease(Fixture fixture, Runnable countedRelease) {
         try {
-            try (MortalList.ReachabilityQueryMeasurement measurement =
-                         MortalList.measureReachabilityQueries()) {
+            {
                 countedRelease.run();
 
                 assertEquals(RuntimeBase.RefCountTrackingState.WEAKLY_TRACKED, fixture.target.refCountTrackingState());
@@ -139,9 +138,6 @@ class UncountedOwnerSlotZeroCountReleaseTest {
                         fixture.target.perlLifecycleState());
                 assertEquals(1,
                         fixture.target.ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE));
-                assertEquals(0, measurement.stats().rootQueries,
-                        "the surviving owner slot replaces root-graph rescue");
-                assertEquals(0, measurement.stats().snapshotsBuilt);
             }
 
             fixture.uncountedOwner.set(new RuntimeScalar());

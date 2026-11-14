@@ -8,9 +8,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("unit")
-class ClearedAggregateOwnerIdentityNoRootWalkTest {
+class ClearedAggregateOwnerIdentityTest {
     @Test
-    void finalUntrackedCellReleaseIgnoresStaleCountWithoutWalkingRoots() {
+    void finalUntrackedCellReleaseIgnoresStaleCount() {
         PerlRuntime runtime = new PerlRuntime();
         RuntimeHash referent = new RuntimeHash();
         RuntimeScalar weakObserver = referenceTo(referent);
@@ -40,18 +40,12 @@ class ClearedAggregateOwnerIdentityNoRootWalkTest {
                 nestedCell.set(new RuntimeScalar());
                 assertFalse(nestedOwner.isActive());
 
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
-                    MortalList.finalizeClearedAggregateOwnerAfterScopeExit(referent);
+                MortalList.finalizeClearedAggregateOwnerAfterScopeExit(referent);
 
-                    assertEquals(RuntimeScalarType.UNDEF, weakObserver.type,
-                            "a stale count cannot preserve the cleared referent");
-                    assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, referent.perlLifecycleState());
-                    assertEquals(0, referent.refCount);
-                    assertEquals(0, measurement.stats().rootQueries);
-                    assertEquals(0, measurement.stats().snapshotsBuilt);
-                    assertEquals(0, measurement.stats().externalRootSnapshotsBuilt);
-                }
+                assertEquals(RuntimeScalarType.UNDEF, weakObserver.type,
+                        "a stale count cannot preserve the cleared referent");
+                assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, referent.perlLifecycleState());
+                assertEquals(0, referent.refCount);
             } finally {
                 if (nestedCell.untrackedReferenceOwnerSlot() != null
                         && nestedCell.untrackedReferenceOwnerSlot().isActive()) {

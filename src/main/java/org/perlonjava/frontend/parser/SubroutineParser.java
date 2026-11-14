@@ -2511,7 +2511,7 @@ public class SubroutineParser {
                 // Eval STRING requires conservatively retaining every visible
                 // runtime value, but that implementation capture is not a
                 // semantic closure edge. Record only names explicitly used by
-                // the sub AST for lifecycle/reachability decisions.
+                // the sub AST for lifecycle decisions.
                 capturedNames.add((!entry.decl().equals("our") || isEvalSeedLexical(entry))
                         && explicitlyUsedVars.contains(entry.name())
                         ? entry.name() : null);
@@ -2960,7 +2960,6 @@ public class SubroutineParser {
         }
         if (code != null) {
             code.captureFieldsRecorded = true;
-            GlobalVariable.invalidateGlobalCodeRefGraphRoots();
         }
         if (code == null || capturedValues == null || capturedValues.isEmpty()
                 || code.capturedScalars != null || code.capturedAggregates != null) {
@@ -2999,7 +2998,6 @@ public class SubroutineParser {
             code.capturedAggregateOwnerSlots =
                     capturedAggregateOwnerSlots.toArray(new PerlOwnerSlot[0]);
         }
-        GlobalVariable.invalidateGlobalCodeRefGraphRoots();
         if ((!capturedScalars.isEmpty() || !capturedAggregates.isEmpty())
                 && code.isRefCountUntracked()) {
             code.startRefCountTracking();

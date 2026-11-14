@@ -5,14 +5,11 @@ import org.perlonjava.runtime.io.ClosedIOHandle;
 import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.operators.WarnDie;
 
-import java.lang.ref.WeakReference;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Stack;
-import java.util.WeakHashMap;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
 
@@ -22,167 +19,27 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
  * This class provides methods to manipulate and interact with typeglobs in the runtime environment.
  */
 public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference {
-    private static final Map<RuntimeScalar, WeakReference<IOOwnerState>> IO_OWNER_STATES =
-            Collections.synchronizedMap(new WeakHashMap<>());
-
-    /** Weak identity owners of one shared IO scalar cell. */
-    private static final class IOOwnerState {
-        private final WeakReference<RuntimeScalar> ioCell;
-        private final List<WeakReference<RuntimeGlob>> owners = new ArrayList<>();
-        private WeakReference<RuntimeIO> currentRuntimeIO = new WeakReference<>(null);
-
-        private IOOwnerState(RuntimeScalar ioCell) {
-            this.ioCell = new WeakReference<>(ioCell);
-            currentRuntimeIO = new WeakReference<>(runtimeIOFrom(ioCell));
-        }
-
-        synchronized void addOwner(RuntimeGlob owner) {
-            refreshRuntimeIO();
-            if (containsOwner(owner)) return;
-            owners.add(new WeakReference<>(owner));
-            RuntimeIO current = currentRuntimeIO.get();
-            if (current != null) current.retainEndBoundaryOwnerGlob(owner);
-        }
-
-        synchronized void removeOwner(RuntimeGlob owner) {
-            refreshRuntimeIO();
-            boolean removed = false;
-            for (Iterator<WeakReference<RuntimeGlob>> iterator = owners.iterator();
-                    iterator.hasNext();) {
-                RuntimeGlob current = iterator.next().get();
-                if (current == null || current == owner) {
-                    iterator.remove();
-                    removed |= current == owner;
-                }
-            }
-            RuntimeIO current = currentRuntimeIO.get();
-            if (removed && current != null) current.releaseEndBoundaryOwnerGlob(owner);
-        }
-
-        synchronized void refreshRuntimeIO() {
-            RuntimeScalar cell = ioCell.get();
-            RuntimeIO next = runtimeIOFrom(cell);
-            RuntimeIO previous = currentRuntimeIO.get();
-            if (previous == next) {
-                if (next != null) next.refreshEndBoundaryLayerOwners();
-                return;
-            }
-            for (Iterator<WeakReference<RuntimeGlob>> iterator = owners.iterator();
-                    iterator.hasNext();) {
-                RuntimeGlob owner = iterator.next().get();
-                if (owner == null) {
-                    iterator.remove();
-                    continue;
-                }
-                if (previous != null) previous.releaseEndBoundaryOwnerGlob(owner);
-                if (next != null) next.retainEndBoundaryOwnerGlob(owner);
-            }
-            currentRuntimeIO = new WeakReference<>(next);
-        }
-
-        private boolean containsOwner(RuntimeGlob owner) {
-            for (Iterator<WeakReference<RuntimeGlob>> iterator = owners.iterator();
-                    iterator.hasNext();) {
-                RuntimeGlob current = iterator.next().get();
-                if (current == null) iterator.remove();
-                else if (current == owner) return true;
-            }
-            return false;
-        }
-    }
-
-    private static IOOwnerState stateFor(RuntimeScalar ioCell) {
-        synchronized (IO_OWNER_STATES) {
-            WeakReference<IOOwnerState> reference = IO_OWNER_STATES.get(ioCell);
-            IOOwnerState state = reference == null ? null : reference.get();
-            if (state == null) {
-                state = new IOOwnerState(ioCell);
-                IO_OWNER_STATES.put(ioCell, new WeakReference<>(state));
-            }
-            return state;
-        }
-    }
-
-    private IOOwnerState ioOwnerState;
-
-    private static RuntimeIO runtimeIOFrom(RuntimeScalar ioCell) {
-        if (ioCell == null) return null;
-        if (ioCell.value instanceof RuntimeIO runtimeIO) return runtimeIO;
-        if (ioCell.value instanceof TieHandle tieHandle) {
-            return tieHandle.getPreviousValue();
-        }
-        return null;
-    }
-
-    private void refreshIOOwnerState() {
-        if (IO == null) {
-            if (ioOwnerState != null) ioOwnerState.removeOwner(this);
-            ioOwnerState = null;
-            return;
-        }
-        if (ioOwnerState == null || ioOwnerState.ioCell.get() != IO) {
-            if (ioOwnerState != null) ioOwnerState.removeOwner(this);
-            ioOwnerState = stateFor(IO);
-            ioOwnerState.addOwner(this);
-            return;
-        }
-        ioOwnerState.refreshRuntimeIO();
-    }
-
-    void refreshIOOwnerStateForEndBoundary() {
-        refreshIOOwnerState();
-    }
-
     void replaceIOScalar(RuntimeScalar next) {
-        if (IO == next) {
-            refreshIOOwnerState();
-            return;
-        }
-        // A source glob is needed only while this glob shares its IO cell.
-        // Rebinding the cell must not keep the old source glob (and its IO)
-        // alive through this Java-side compatibility link.
+        if (IO == next) return;
         retainedIoGlob = null;
-        if (ioOwnerState != null) ioOwnerState.removeOwner(this);
-        ioOwnerState = null;
         IO = next;
-        refreshIOOwnerState();
     }
 
-    /** Install a tied wrapper into the existing IO cell and refresh its owner links. */
+    /** Install a tied wrapper into the existing IO cell. */
     public void setTiedIOHandle(TieHandle handle) {
         if (IO == null) IO = new RuntimeScalar();
         installTiedIOHandle(IO, handle);
-        refreshIOOwnerState();
     }
 
-    /** Install a tied wrapper into an aliased IO cell and refresh any glob owners. */
+    /** Install a tied wrapper into an aliased IO cell. */
     public static void installTiedIOHandle(RuntimeScalar ioCell, TieHandle handle) {
         if (ioCell == null) return;
         ioCell.type = RuntimeScalarType.TIED_SCALAR;
         ioCell.value = handle;
-        synchronized (IO_OWNER_STATES) {
-            WeakReference<IOOwnerState> reference = IO_OWNER_STATES.get(ioCell);
-            IOOwnerState state = reference == null ? null : reference.get();
-            if (state != null) state.refreshRuntimeIO();
-        }
     }
 
     private void setLocalizedOriginalIO(RuntimeScalar next) {
-        if (localizedOriginalIO == next) return;
-        RuntimeIO previousOwner = localizedOriginalIOOwner == null
-                ? null : localizedOriginalIOOwner.get();
-        if (previousOwner != null) previousOwner.releaseEndBoundaryOwnerGlob(this);
         localizedOriginalIO = next;
-        RuntimeIO nextOwner = runtimeIOFrom(next);
-        localizedOriginalIOOwner = nextOwner == null ? null : new WeakReference<>(nextOwner);
-        if (nextOwner != null) nextOwner.retainEndBoundaryOwnerGlob(this);
-    }
-
-    /** Whether this glob's current or saved IO field retains {@code runtimeIO}. */
-    boolean ownsRuntimeIOForEndBoundary(RuntimeIO runtimeIO) {
-        return runtimeIO != null
-                && (runtimeIOFrom(IO) == runtimeIO
-                    || runtimeIOFrom(localizedOriginalIO) == runtimeIO);
     }
 
     /**
@@ -291,7 +148,6 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     // assignment must retain it: `local *FH = *OTHER{FORMAT}` does not replace
     // FH's filehandle.
     private RuntimeScalar localizedOriginalIO;
-    private WeakReference<RuntimeIO> localizedOriginalIOOwner;
     // Local scalar slot for anonymous globs (when globName is null)
     RuntimeScalar scalarSlot;
     // Local array slot for anonymous globs (when globName is null)
@@ -340,7 +196,6 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         this.type = RuntimeScalarType.GLOB;
         this.value = this;
         this.IO = new RuntimeScalar();
-        refreshIOOwnerState();
     }
 
     private static boolean isStashGlobName(String name) {
@@ -1813,7 +1668,6 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     }
 
     public RuntimeScalar getIO() {
-        refreshIOOwnerState();
         return this.IO;
     }
 
@@ -1889,7 +1743,6 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         } else {
             this.IO.type = io.type;
             this.IO.value = io.value;
-            refreshIOOwnerState();
         }
         // If the IO scalar contains a RuntimeIO, set its glob name
         if (io.value instanceof RuntimeIO runtimeIO) {
@@ -1939,7 +1792,6 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         } else {
             this.IO.type = RuntimeScalarType.GLOB;  // RuntimeIO is stored as GLOB type
             this.IO.value = io;
-            refreshIOOwnerState();
         }
         // Update selectedHandle if the old IO was the selected handle
         // This ensures that when STDOUT is redirected, print without explicit

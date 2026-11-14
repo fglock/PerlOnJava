@@ -19,16 +19,11 @@ class UntrackedAggregateFirstWeakenFastPathTest {
             String key = "UntrackedAggregateFirstWeakenFastPathTest::target";
 
             try {
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     WeakRefRegistry.weaken(weakObserver);
 
                     assertTrue(WeakRefRegistry.isweak(weakObserver));
                     assertEquals(RuntimeBase.RefCountTrackingState.WEAKLY_TRACKED, target.refCountTrackingState());
-                    assertEquals(0, measurement.stats().rootQueries,
-                            "an untracked temporary needs no root-graph fallback");
-                    assertEquals(0, measurement.stats().edgesInspected);
-                    assertEquals(0, measurement.stats().nodesVisited);
                 }
 
                 GlobalVariable.globalArrays.put(key, target);

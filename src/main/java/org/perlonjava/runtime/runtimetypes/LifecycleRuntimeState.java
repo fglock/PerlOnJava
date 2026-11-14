@@ -28,7 +28,7 @@ final class LifecycleRuntimeState {
     // tail-call handoff can match its source argument frame by identity.
     final ArrayList<Object> pendingArgumentFrames = new ArrayList<>();
     // Parallel to pending. A non-scalar transient owner kind is recorded only
-    // for trace attribution; it never changes runtime reachability.
+    // for trace attribution; it does not create a Perl owner.
     final ArrayList<String> pendingTransientOwnerKinds = new ArrayList<>();
     final ArrayList<MortalList.DeferredArgumentOwnerRelease> deferredArgumentOwnerReleases =
             new ArrayList<>();
@@ -37,8 +37,6 @@ final class LifecycleRuntimeState {
     final ArrayList<RuntimeScalar> pendingUntrackedReturnOwnerReleases = new ArrayList<>();
     final ArrayList<RuntimeScalar> deferredCaptures = new ArrayList<>();
     final IdentityHashMap<RuntimeScalar, Integer> deferredCapturesSet = new IdentityHashMap<>();
-    final Set<RuntimeScalar> deferredScopeExitCaptureCandidates =
-            Collections.newSetFromMap(new IdentityHashMap<>());
     // Strong semantic referents retained by explicit Perl owner slots. Counts
     // are per referent because several independent pad slots can own one base.
     final IdentityHashMap<RuntimeBase, Integer> positiveOwnerReferents = new IdentityHashMap<>();
@@ -52,7 +50,6 @@ final class LifecycleRuntimeState {
     int markDepth;
     boolean flushing;
     int deferredReleaseDrainDepth;
-    ReachabilityQueryStats activeReachabilityQueryStats;
 
     void pushMortalMark(int pendingSize, int tiedReleaseSize, int ioReleaseSize,
                         int untrackedReturnOwnerReleaseSize) {
@@ -95,10 +92,6 @@ final class LifecycleRuntimeState {
     boolean blessedObjectExists;
     final Map<RuntimeBase, LinkedHashMap<Integer, String>> traceOwners =
             Collections.synchronizedMap(new IdentityHashMap<>());
-    final ScalarRefRegistry.WeakIdentityMap<Boolean> scalarRegistry =
-            new ScalarRefRegistry.WeakIdentityMap<>();
-    final ScalarRefRegistry.WeakIdentityMap<Throwable> scalarRegisterStacks =
-            new ScalarRefRegistry.WeakIdentityMap<>();
 
     /** One expression-root stack entry and its exact temporary owner identity. */
     static final class TemporaryRootLease {
@@ -156,7 +149,6 @@ final class LifecycleRuntimeState {
         pendingUntrackedReturnOwnerReleases.clear();
         deferredCaptures.clear();
         deferredCapturesSet.clear();
-        deferredScopeExitCaptureCandidates.clear();
         synchronized (this) {
             positiveOwnerReferents.clear();
         }
@@ -165,7 +157,6 @@ final class LifecycleRuntimeState {
         markDepth = 0;
         flushing = false;
         deferredReleaseDrainDepth = 0;
-        activeReachabilityQueryStats = null;
         weakScalars.clear();
         referentToWeakRefs.clear();
         weakRefsExist = false;
@@ -179,8 +170,6 @@ final class LifecycleRuntimeState {
         rescuedObjects.clear();
         blessedObjectExists = false;
         traceOwners.clear();
-        scalarRegistry.clear();
-        scalarRegisterStacks.clear();
     }
 
 }

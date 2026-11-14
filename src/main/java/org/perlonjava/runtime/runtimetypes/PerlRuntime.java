@@ -518,7 +518,7 @@ public final class PerlRuntime implements AutoCloseable {
                 if (activeBindings.get() != 0) {
                     throw new IllegalStateException("PerlRuntime reset requires all bindings to be closed");
                 }
-                if (executionState.hasSuspendedOwnerRootProviders()) {
+                if (executionState.hasSuspendedContinuations()) {
                     throw new IllegalStateException(
                             "PerlRuntime reset requires suspended async frames to finish");
                 }

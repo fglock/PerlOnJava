@@ -26,7 +26,6 @@ final class InterpreterSuspension extends RuntimeList {
         this.awaitedOwner = this.awaited;
         this.awaitedFrameOwner = new PerlOwnerSlot(PerlOwnerSlot.Kind.SUSPENDED_FRAME);
         awaitedOwner.attachSuspendedFrameOwner(awaitedFrameOwner);
-        if (frame != null) frame.setAwaitedFrameOwner(awaitedFrameOwner);
         this.destinationRegister = destinationRegister;
         this.context = context;
     }
@@ -45,11 +44,7 @@ final class InterpreterSuspension extends RuntimeList {
             try {
                 awaitedOwner.detachSuspendedFrameOwner(awaitedFrameOwner);
             } finally {
-                try {
-                    if (frame != null) frame.clearAwaitedFrameOwner(awaitedFrameOwner);
-                } finally {
-                    WeakRefRegistry.onSuspendedFrameOwnerReleased(previousReferent);
-                }
+                WeakRefRegistry.onSuspendedFrameOwnerReleased(previousReferent);
             }
         }
     }

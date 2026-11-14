@@ -21,8 +21,7 @@ class PerlClosureArgumentOwnerTest {
             RuntimeScalar argument = new RuntimeScalar(closure);
             RuntimeCode.CallArguments staged = RuntimeCode.newCallArguments(1);
 
-            try (MortalList.ReachabilityQueryMeasurement measurement =
-                         MortalList.measureReachabilityQueries()) {
+            {
                 MortalList.pushMark();
                 boolean markActive = true;
                 boolean argsActive = false;
@@ -49,11 +48,6 @@ class PerlClosureArgumentOwnerTest {
                     assertNull(closure.capturedScalars,
                             "the final argument release retires the temporary CV's captures");
 
-                    ReachabilityQueryStats stats = measurement.stats();
-                    assertEquals(0, stats.rootQueries,
-                            "argument release does not query Java graph reachability");
-                    assertEquals(0, stats.snapshotsBuilt,
-                            "argument release does not build a reachability snapshot");
                 } finally {
                     if (argsActive) RuntimeCode.popArgs();
                     staged.finish();

@@ -20,14 +20,11 @@ class StrongCycleOwnerSlotTest {
             try {
                 assertEquals(1, hash.refCount);
                 assertEquals(1, hash.ownerSlotCount(PerlOwnerSlot.Kind.HASH_ELEMENT));
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     MortalList.scopeExitCleanupHash(hash);
 
                     assertEquals(1, hash.refCount);
                     assertTrue(WeakRefRegistry.isweak(weakObserver));
-                    assertEquals(0, measurement.stats().rootQueries);
-                    assertEquals(0, measurement.stats().snapshotsBuilt);
                 }
 
                 hash.elements.get("self").set(new RuntimeScalar());
@@ -53,14 +50,11 @@ class StrongCycleOwnerSlotTest {
             try {
                 assertEquals(1, array.refCount);
                 assertEquals(1, array.ownerSlotCount(PerlOwnerSlot.Kind.ARRAY_ELEMENT));
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     MortalList.scopeExitCleanupArray(array);
 
                     assertEquals(1, array.refCount);
                     assertTrue(WeakRefRegistry.isweak(weakObserver));
-                    assertEquals(0, measurement.stats().rootQueries);
-                    assertEquals(0, measurement.stats().snapshotsBuilt);
                 }
 
                 array.elements.getFirst().set(new RuntimeScalar());

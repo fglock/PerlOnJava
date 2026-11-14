@@ -3,8 +3,6 @@ package org.perlonjava.runtime.runtimetypes;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
-import java.util.List;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 @Tag("unit")
@@ -22,17 +20,17 @@ class TemporaryRootOwnerSlotTest {
 
             assertEquals(2, first.ownerSlotCount(PerlOwnerSlot.Kind.EXPRESSION_VALUE));
             assertEquals(1, second.ownerSlotCount(PerlOwnerSlot.Kind.EXPRESSION_VALUE));
-            assertEquals(List.of(second, first, first), MortalList.snapshotTemporaryRoots());
+            assertEquals(3, MortalList.temporaryRootDepth());
 
             MortalList.popTemporaryRoot(first);
             assertEquals(1, first.ownerSlotCount(PerlOwnerSlot.Kind.EXPRESSION_VALUE));
-            assertEquals(List.of(second, first), MortalList.snapshotTemporaryRoots());
+            assertEquals(2, MortalList.temporaryRootDepth());
 
             MortalList.popTemporaryRoot(second);
             MortalList.popTemporaryRoot(first);
             assertEquals(0, first.ownerSlotCount(PerlOwnerSlot.Kind.EXPRESSION_VALUE));
             assertEquals(0, second.ownerSlotCount(PerlOwnerSlot.Kind.EXPRESSION_VALUE));
-            assertEquals(List.of(), MortalList.snapshotTemporaryRoots());
+            assertEquals(0, MortalList.temporaryRootDepth());
         }
     }
 
@@ -53,7 +51,7 @@ class TemporaryRootOwnerSlotTest {
                 MortalList.restoreTemporaryRootDepth(depth);
             }
 
-            assertEquals(List.of(callerRoot), MortalList.snapshotTemporaryRoots());
+            assertEquals(depth, MortalList.temporaryRootDepth());
             assertEquals(1, callerRoot.ownerSlotCount(
                     PerlOwnerSlot.Kind.EXPRESSION_VALUE));
             assertEquals(0, failedCallRoot.ownerSlotCount(
@@ -87,7 +85,7 @@ class TemporaryRootOwnerSlotTest {
             assertEquals(1, root.refCount);
             assertEquals(0, root.ownerSlotCount(
                     PerlOwnerSlot.Kind.EXPRESSION_VALUE));
-            assertEquals(List.of(), MortalList.snapshotTemporaryRoots());
+            assertEquals(0, MortalList.temporaryRootDepth());
         }
     }
 

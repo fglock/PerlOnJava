@@ -28,15 +28,12 @@ class TailCallArgumentOwnerSlotFastPathTest {
             try {
                 assertEquals(2, target.countedOwnerSlotCount());
 
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     MortalList.releaseTailCallArgs(tailArguments);
 
                     assertEquals(1, target.refCount);
                     assertEquals(1, target.countedOwnerSlotCount());
                     assertTrue(WeakRefRegistry.isweak(weak));
-                    assertEquals(0, measurement.stats().rootQueries);
-                    assertEquals(0, measurement.stats().snapshotsBuilt);
                 }
             } finally {
                 WeakRefRegistry.unweaken(weak);

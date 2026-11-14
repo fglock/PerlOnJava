@@ -26,17 +26,12 @@ class WeakeningCountedOwnerSlotTest {
                 assertEquals(2, referent.countedOwnerSlotCount());
                 assertEquals(2, referent.refCount);
 
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     WeakRefRegistry.weaken(weakenedOwner);
 
                     assertEquals(1, referent.refCount);
                     assertEquals(1, referent.countedOwnerSlotCount());
                     assertTrue(WeakRefRegistry.isweak(observer));
-                    assertEquals(0, measurement.stats().rootQueries,
-                            "the surviving counted slot preserves the referent without a root walk");
-                    assertEquals(0, measurement.stats().snapshotsBuilt);
-                    assertEquals(0, measurement.stats().scalarReachabilityQueries);
                 }
             } finally {
                 if (WeakRefRegistry.isweak(weakenedOwner)) {

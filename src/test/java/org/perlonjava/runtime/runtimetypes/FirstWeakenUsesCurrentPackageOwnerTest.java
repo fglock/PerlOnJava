@@ -28,16 +28,12 @@ class FirstWeakenUsesCurrentPackageOwnerTest {
                 assertEquals(2, target.countedOwnerSlotCount());
                 assertEquals(2, target.refCount);
 
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     WeakRefRegistry.weaken(weakOwner);
 
                     assertTrue(WeakRefRegistry.isweak(weakOwner));
                     assertEquals(1, target.refCount);
                     assertEquals(1, target.countedOwnerSlotCount());
-                    assertEquals(0, measurement.stats().rootQueries,
-                            "the current package element identity proves ownership");
-                    assertEquals(0, measurement.stats().snapshotsBuilt);
                 }
 
                 RuntimeArray.pop(packageRoot);

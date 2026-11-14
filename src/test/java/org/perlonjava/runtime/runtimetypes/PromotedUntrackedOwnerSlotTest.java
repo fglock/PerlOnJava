@@ -57,15 +57,12 @@ class PromotedUntrackedOwnerSlotTest {
                 assertTrue(ownerSlot.isActive(),
                         "promotion must not retire the earlier uncounted Perl slot");
 
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     countedOwner.set(new RuntimeScalar());
 
                     assertEquals(RuntimeBase.RefCountTrackingState.WEAKLY_TRACKED, target.refCountTrackingState());
                     assertTrue(WeakRefRegistry.isweak(weak),
                             "the surviving package scalar keeps the weak referent alive");
-                    assertEquals(0, measurement.stats().rootQueries);
-                    assertEquals(0, measurement.stats().snapshotsBuilt);
                 }
 
                 GlobalVariable.globalVariables.remove(globalName);

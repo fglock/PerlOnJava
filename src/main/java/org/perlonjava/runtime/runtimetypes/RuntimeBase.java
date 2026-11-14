@@ -296,9 +296,8 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
 
     /**
      * Marks a scalar/container whose contents are reachable from package
-     * globals. Mutating such an object can change cached root-reachability
-     * answers, so mutation paths invalidate MortalList's external-root
-     * snapshot when this flag is set.
+     * globals. Owner and lifecycle operations use this flag to preserve the
+     * package slot's Perl ownership semantics when values are replaced.
      */
     public boolean isPackageGlobalRoot = false;
 
@@ -503,7 +502,6 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
 
     // ─────────────────────────────────────────────────────────────────────
     // D-W6.13: counted scalar owners are derived from the slot ledger below.
-    // Keep the legacy activation method as a no-op for callers that still use it.
     // ─────────────────────────────────────────────────────────────────────
     /** Identity ledger for migrated slots; selective refCount remains the
      * lifecycle bridge while owner families move to this API. */
@@ -1010,51 +1008,6 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         return count;
     }
 
-    // Conservative gate for the tied-handler reachability fallback. Once a
-    // base has appeared in a tie handler's strong object graph it remains
-    // marked; a stale true only permits the exact walker to run, while false
-    // means the expensive tied-root query cannot rescue this object.
-    boolean possiblyStoredInTiedHandler;
-
-    void markPossiblyStoredInTiedHandler() {
-        java.util.Set<RuntimeBase> seen = java.util.Collections.newSetFromMap(
-                new java.util.IdentityHashMap<>());
-        java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
-        todo.add(this);
-        while (!todo.isEmpty()) {
-            RuntimeBase current = todo.removeFirst();
-            if (!seen.add(current)) continue;
-            current.possiblyStoredInTiedHandler = true;
-            if (current instanceof RuntimeHash hash) {
-                if (hash.elements instanceof TieHash tieHash) {
-                    addTiedHandlerReferent(tieHash.getSelf(), todo);
-                }
-                for (RuntimeScalar value : hash.elements.values()) {
-                    addTiedHandlerReferent(value, todo);
-                }
-            } else if (current instanceof RuntimeArray array) {
-                for (RuntimeScalar value : array.elements) {
-                    addTiedHandlerReferent(value, todo);
-                }
-            } else if (current instanceof RuntimeScalar scalar) {
-                addTiedHandlerReferent(scalar, todo);
-            }
-        }
-    }
-
-    private static void addTiedHandlerReferent(
-            RuntimeScalar scalar, java.util.ArrayDeque<RuntimeBase> todo) {
-        if (scalar != null
-                && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                && scalar.value instanceof RuntimeBase base) {
-            todo.addLast(base);
-        }
-    }
-
-    /** Compatibility no-op: counted owner identities are recorded eagerly. */
-    public void activateOwnerTracking() {
-    }
-
     public void recordActiveOwner(RuntimeScalar scalar) {
         scalar.recordCountedOwner(this);
     }
@@ -1112,20 +1065,6 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     /** Snapshot semantic owner-slot identities, including closure pads. */
     public synchronized java.util.Set<PerlOwnerSlot> ownerSlotSnapshot() {
         if (ownerSlots == null || ownerSlots.isEmpty()) {
-            return java.util.Collections.emptySet();
-        }
-        java.util.Set<PerlOwnerSlot> snapshot = java.util.Collections.newSetFromMap(
-                new java.util.IdentityHashMap<>());
-        snapshot.addAll(ownerSlots);
-        return snapshot;
-    }
-
-    /** Bounded owner-slot snapshot for positive reachability proofs. */
-    synchronized java.util.Set<PerlOwnerSlot> ownerSlotSnapshot(int maximumSlots) {
-        if (maximumSlots < 0) {
-            throw new IllegalArgumentException("Owner-slot snapshot limit must not be negative");
-        }
-        if (ownerSlots == null || ownerSlots.isEmpty() || ownerSlots.size() > maximumSlots) {
             return java.util.Collections.emptySet();
         }
         java.util.Set<PerlOwnerSlot> snapshot = java.util.Collections.newSetFromMap(
@@ -1912,8 +1851,8 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     /**
      * True once a scalar/container slot has taken a counted reference to this
      * base. If later refcount drift leaves the count at zero during scope
-     * cleanup, this tells cleanup that an external owner may have existed and a
-     * bounded reachability check is worthwhile.
+     * cleanup, this lets queueing verify that the scalar still has its exact
+     * counted owner slot.
      */
     public boolean hadCountedReference = false;
 

@@ -41,43 +41,6 @@ public class MortalList {
             RuntimeBase.PendingOwnerRelease ownerRelease,
             String transientOwnerKind) {}
 
-    static final class ReachabilityQueryMeasurement implements AutoCloseable {
-        private final LifecycleRuntimeState state;
-        private final ReachabilityQueryStats stats;
-        private final ReachabilityQueryStats previous;
-
-        private ReachabilityQueryMeasurement(LifecycleRuntimeState state,
-                                             ReachabilityQueryStats stats,
-                                             ReachabilityQueryStats previous) {
-            this.state = state;
-            this.stats = stats;
-            this.previous = previous;
-        }
-
-        ReachabilityQueryStats stats() {
-            return stats;
-        }
-
-        @Override
-        public void close() {
-            if (state.activeReachabilityQueryStats == stats) {
-                state.activeReachabilityQueryStats = previous;
-            }
-        }
-    }
-
-    static ReachabilityQueryMeasurement measureReachabilityQueries() {
-        LifecycleRuntimeState state = state();
-        ReachabilityQueryStats previous = state.activeReachabilityQueryStats;
-        ReachabilityQueryStats stats = new ReachabilityQueryStats();
-        state.activeReachabilityQueryStats = stats;
-        return new ReachabilityQueryMeasurement(state, stats, previous);
-    }
-
-    static ReachabilityQueryStats activeReachabilityQueryStats() {
-        return state().activeReachabilityQueryStats;
-    }
-
     // Always-on: refCount tracking for birth-tracked objects (anonymous hashes,
     // arrays, closures with captures) requires balanced increment/decrement.
     // The increment side fires unconditionally in setLarge() when count tracking is active,
@@ -151,14 +114,6 @@ public class MortalList {
                 }
             }
         }
-    }
-
-    public static java.util.List<RuntimeBase> snapshotTemporaryRoots() {
-        ArrayList<RuntimeBase> roots = new ArrayList<>();
-        for (LifecycleRuntimeState.TemporaryRootLease lease : state().temporaryRoots) {
-            roots.add(lease.root());
-        }
-        return roots;
     }
 
     public static boolean hasTemporaryRoots() {
@@ -666,11 +621,6 @@ public class MortalList {
         state.pendingUntrackedReturnOwnerReleases.add(scalar);
     }
 
-    /** Snapshot return cells held until the caller's lifecycle boundary. */
-    static java.util.List<RuntimeScalar> snapshotPendingUntrackedReturnOwners() {
-        return new java.util.ArrayList<>(state().pendingUntrackedReturnOwnerReleases);
-    }
-
     /**
      * Record a captured scalar whose scope has exited but whose refCount
      * could not be decremented because a closure owner remains.
@@ -689,10 +639,6 @@ public class MortalList {
         if (!scalar.hasClosureCaptureOwner() && scalar.scopeExited) {
             state.deferredCapturesMayBeReady = true;
         }
-    }
-
-    /** Compatibility hook; capture ownership no longer needs a reachability candidate. */
-    public static void noteDeferredScopeExitCaptureCandidate(RuntimeScalar scalar) {
     }
 
     static void noteDeferredCaptureMayBeReady() {
@@ -1438,8 +1384,8 @@ public class MortalList {
                     // This scalar is a non-owning copy of a still-live container.
                     // Cleaning it up must not walk into the shared container and
                     // release the original owner's children. A live Perl edge
-                    // is identified by its owner slot; root reachability cannot
-                    // reconstruct a missing edge after the fact.
+                    // is identified by its owner slot; it must not be inferred
+                    // from Java references after the fact.
                     continue;
                 }
                 // A registered lexical aggregate owns its element slots even
@@ -1707,8 +1653,6 @@ public class MortalList {
                             transientOwnerKind));
             return;
         }
-        ReachabilityQueryStats queryStats = activeReachabilityQueryStats();
-        if (queryStats != null) queryStats.deferredBasesProcessed++;
         if (ownerRelease != null
                 && !base.completeQueuedOwnerRelease(
                         ownerRelease, "MortalList.processDeferredBase")) {
@@ -1723,7 +1667,7 @@ public class MortalList {
         boolean hasWeakRefs = WeakRefRegistry.hasWeakRefsTo(base);
         // Production edge releases carry an exact slot token. A lifecycle-only
         // boundary carries completion provenance but no released edge; its
-        // cleanup decision follows current owner identities, not a root walk.
+        // cleanup decision follows current owner identities.
         boolean finalRelease = false;
         if (base.refCount > 0) {
             finalRelease = base.releaseTrackedOwnerCount(
@@ -1831,12 +1775,12 @@ public class MortalList {
                 // A current lexical, package, alias, or resource slot proves
                 // that the referent still has a Perl owner.
                 // Carry the lifecycle obligation on the exact identity instead
-                // of rebuilding a root graph to rediscover the owner.
+                // of searching for another owner.
                 base.deferFinalReleaseToUncountedOwnerSlots();
             } else if (isFinalCountedReferentRelease(base, ownerRelease)) {
                 // This decrement retired an identified scalar/element edge.
                 // Every other migrated edge is already absent from the ledger;
-                // a cached root snapshot must not invent a replacement owner.
+                // there is no remaining Perl owner to preserve.
                 DestroyDispatch.callDestroyFromCountedOwner(base);
             } else if (base instanceof RuntimeScalarReadOnly
                     && RuntimeCode.isInstalledPadConstant(base)) {

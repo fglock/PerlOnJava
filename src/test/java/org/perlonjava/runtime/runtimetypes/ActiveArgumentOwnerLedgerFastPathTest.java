@@ -30,8 +30,7 @@ class ActiveArgumentOwnerLedgerFastPathTest {
                         "both scalar cells contribute their acquired owner count");
                 MortalList.deferDecrementIfTracked(released);
 
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     MortalList.flushAboveMark();
 
                     assertEquals(1, target.refCount);
@@ -39,8 +38,6 @@ class ActiveArgumentOwnerLedgerFastPathTest {
                     assertTrue(runtime.lifecycleState.deferredArgumentOwnerReleases.isEmpty(),
                             "the owner ledger avoids scanning the active argument frame");
                     assertTrue(WeakRefRegistry.isweak(weak));
-                    assertEquals(0, measurement.stats().rootQueries);
-                    assertEquals(0, measurement.stats().snapshotsBuilt);
                 }
 
                 arguments.finish();

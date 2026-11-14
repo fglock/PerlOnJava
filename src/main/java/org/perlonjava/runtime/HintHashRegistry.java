@@ -65,7 +65,7 @@ public class HintHashRegistry {
                     state().clearedConstantHandlerCategoryStack.pop();
             // %^H scope guards implement compile-time callbacks in DESTROY.
             // They must run before parsing/executing the next statement, not
-            // at the interpreter's later top-level mortal sweep.
+            // at the interpreter's later top-level mortal cleanup.
             MortalList.flush();
         }
     }

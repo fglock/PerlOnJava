@@ -133,7 +133,7 @@ class PackageAggregateOwnerSlotTest {
     }
 
     @Test
-    void finalPackageAggregateRootClearsWeakObserverWithoutSweeps() {
+    void finalPackageAggregateOwnerClearsWeakObserver() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeArray array = new RuntimeArray();
@@ -146,17 +146,13 @@ class PackageAggregateOwnerSlotTest {
                 GlobalVariable.globalArrays.put(key, array);
                 assertEquals(1, array.ownerSlotCount(PerlOwnerSlot.Kind.PACKAGE_AGGREGATE_SLOT));
 
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     GlobalVariable.globalArrays.remove(key);
 
                     assertEquals(0, array.ownerSlotCount(
                             PerlOwnerSlot.Kind.PACKAGE_AGGREGATE_SLOT));
                     assertFalse(WeakRefRegistry.isweak(weakObserver));
                     assertEquals(RuntimeScalarType.UNDEF, weakObserver.type);
-                    assertEquals(0, measurement.stats().rootQueries);
-                    assertEquals(0, measurement.stats().snapshotsBuilt);
-                    assertEquals(0, measurement.stats().scalarReachabilityQueries);
                 }
             } finally {
                 GlobalVariable.globalArrays.remove(key);
@@ -166,7 +162,7 @@ class PackageAggregateOwnerSlotTest {
     }
 
     @Test
-    void finalPackageScalarRootClearsWeakObserverToCellWithoutSweeps() {
+    void finalPackageScalarOwnerClearsWeakObserverToCell() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeScalar packageCell = new RuntimeScalar("package scalar cell");

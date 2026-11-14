@@ -35,7 +35,7 @@ class PerlFinalWeakOwnerTest {
     }
 
     @Test
-    void finalNestedArraySlotOverwriteReleasesWithoutRequestingASweep() {
+    void finalNestedArraySlotOverwriteReleasesItsObserver() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeCode.pushArgs(new RuntimeArray());
@@ -50,13 +50,11 @@ class PerlFinalWeakOwnerTest {
                 observer.set(element);
                 WeakRefRegistry.weaken(observer);
                 PerlOwnerSlot slot = element.countedOwnerSlot();
-                try (MortalList.ReachabilityQueryMeasurement measurement = MortalList.measureReachabilityQueries()) {
+                {
                     element.set(new RuntimeScalar());
                     assertEquals(RuntimeScalarType.UNDEF, observer.type);
                     assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, referent.perlLifecycleState());
                     assertFalse(slot.isActive());
-                    assertEquals(0, measurement.stats().rootQueries);
-                    assertEquals(0, measurement.stats().snapshotsBuilt);
                 }
             } finally {
                 RuntimeCode.popArgs();
@@ -66,22 +64,18 @@ class PerlFinalWeakOwnerTest {
     }
 
     @Test
-    void weakeningTheLastIdentifiedOwnerDoesNotConsultReachability() {
+    void weakeningTheLastIdentifiedOwnerClearsItsObserver() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeHash referent = new RuntimeHash();
             RuntimeScalar owner = new RuntimeScalar();
             owner.set(referent.createAnonymousReference());
             PerlOwnerSlot slot = owner.countedOwnerSlot();
-            try (MortalList.ReachabilityQueryMeasurement measurement = MortalList.measureReachabilityQueries()) {
+            {
                 WeakRefRegistry.weaken(owner);
                 assertEquals(RuntimeScalarType.UNDEF, owner.type);
                 assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, referent.perlLifecycleState());
                 assertFalse(slot.isActive());
-                assertEquals(0, measurement.stats().rootQueries);
-                assertEquals(0, measurement.stats().snapshotsBuilt);
-                assertEquals(0, measurement.stats().scalarReachabilityQueries);
-            } finally {
             }
         }
     }
@@ -104,17 +98,12 @@ class PerlFinalWeakOwnerTest {
 
             try {
                 assertEquals(2, referent.countedOwnerSlotCount());
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     WeakRefRegistry.weaken(weakenedOwner);
 
                     assertTrue(WeakRefRegistry.isweak(observer));
                     assertTrue(WeakRefRegistry.isweak(weakenedOwner));
                     assertEquals(1, referent.countedOwnerSlotCount());
-                    assertEquals(0, measurement.stats().scalarReachabilityQueries,
-                            "the surviving owner slot is direct liveness evidence");
-                    assertEquals(0, measurement.stats().rootQueries);
-                    assertEquals(0, measurement.stats().snapshotsBuilt);
                 }
             } finally {
                 if (WeakRefRegistry.isweak(weakenedOwner)) {

@@ -27,8 +27,7 @@ class LegacyClosureAggregateReleaseOwnerTest {
             assertEquals(1, capturedPad.refCount,
                     "the scalar cell is the only counted owner");
 
-            try (MortalList.ReachabilityQueryMeasurement measurement =
-                         MortalList.measureReachabilityQueries()) {
+            try {
                 capturedPad.releaseClosureCapture();
                 MortalList.flush();
 
@@ -36,9 +35,6 @@ class LegacyClosureAggregateReleaseOwnerTest {
                         "releasing a capture must not decrement the scalar cell's edge");
                 assertTrue(WeakRefRegistry.isweak(weakObserver),
                         "the remaining scalar cell keeps the weak referent alive");
-                assertEquals(0, measurement.stats().deferredBasesProcessed,
-                        "capture release must not enqueue a synthetic count decrement");
-                assertEquals(0, measurement.stats().rootQueries);
             } finally {
                 if (WeakRefRegistry.isweak(weakObserver)) {
                     WeakRefRegistry.unweaken(weakObserver);

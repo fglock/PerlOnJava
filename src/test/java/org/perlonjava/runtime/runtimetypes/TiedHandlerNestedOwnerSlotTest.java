@@ -30,21 +30,14 @@ class TiedHandlerNestedOwnerSlotTest {
             try {
                 assertEquals(1, handler.ownerSlotCount(PerlOwnerSlot.Kind.TIE_HANDLER));
                 assertEquals(1, target.ownerSlotCount(PerlOwnerSlot.Kind.HASH_ELEMENT));
-                assertTrue(target.possiblyStoredInTiedHandler);
-
                 assertEquals(2, target.refCount,
                         "the scalar and nested handler hash each contribute one owner count");
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
-                    MortalList.deferDecrementIfTracked(released);
-                    MortalList.flushAboveMark();
+                MortalList.deferDecrementIfTracked(released);
+                MortalList.flushAboveMark();
 
-                    assertEquals(1, target.refCount);
-                    assertTrue(WeakRefRegistry.isweak(weak));
-                    assertEquals(1, target.ownerSlotCount(PerlOwnerSlot.Kind.HASH_ELEMENT));
-                    assertEquals(0, measurement.stats().rootQueries);
-                    assertEquals(0, measurement.stats().snapshotsBuilt);
-                }
+                assertEquals(1, target.refCount);
+                assertTrue(WeakRefRegistry.isweak(weak));
+                assertEquals(1, target.ownerSlotCount(PerlOwnerSlot.Kind.HASH_ELEMENT));
 
                 handler.elements.get("target").set(new RuntimeScalar());
                 assertFalse(WeakRefRegistry.isweak(weak));

@@ -26,8 +26,7 @@ class ActiveCodeOwnerReleaseOrderingTest {
             assertEquals(1, pad.captureCount,
                     "the active CODE frame defers capture retirement");
 
-            try (MortalList.ReachabilityQueryMeasurement measurement =
-                         MortalList.measureReachabilityQueries()) {
+            {
                 RuntimeCode.popActiveCode(code);
 
                 assertFalse(code.lastActiveOwnerReleasedWhileOnStack,
@@ -36,8 +35,6 @@ class ActiveCodeOwnerReleaseOrderingTest {
                 assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, code.perlLifecycleState());
                 assertNull(code.capturedScalars);
                 assertEquals(0, pad.captureCount);
-                assertEquals(0, measurement.stats().rootQueries);
-                assertEquals(0, measurement.stats().snapshotsBuilt);
             }
         }
     }

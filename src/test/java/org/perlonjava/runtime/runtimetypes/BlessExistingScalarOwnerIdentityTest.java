@@ -25,8 +25,7 @@ class BlessExistingScalarOwnerIdentityTest {
             MyVarCleanupStack.register(scalarOwner);
 
             try {
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     ReferenceOperators.bless(scalarOwner,
                             new RuntimeScalar("Issue1649::Reblessed"));
 
@@ -46,7 +45,6 @@ class BlessExistingScalarOwnerIdentityTest {
                             "draining the bless temporary leaves the scalar slot's count");
                     assertEquals(1, referent.countedOwnerSlotCount());
                     assertTrue(scalarOwner.isCurrentCountedScalarOwner(referent, scalarSlot));
-                    assertEquals(0, measurement.stats().rootQueries);
                 }
             } finally {
                 if (scalarOwner.refCountOwned) scalarOwner.set(new RuntimeScalar());

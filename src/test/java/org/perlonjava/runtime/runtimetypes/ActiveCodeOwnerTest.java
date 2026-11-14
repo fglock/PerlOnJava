@@ -57,14 +57,11 @@ class ActiveCodeOwnerTest {
             RuntimeCode.popActiveCode(code);
             assertEquals(1, code.nativeOwnerSlotCount());
             assertEquals(RuntimeScalarType.CODE, weak.type);
-            try (MortalList.ReachabilityQueryMeasurement measurement = MortalList.measureReachabilityQueries()) {
+            {
                 RuntimeCode.popActiveCode(code);
                 assertEquals(0, code.nativeOwnerSlotCount());
                 assertEquals(RuntimeScalarType.UNDEF, weak.type);
                 assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, code.perlLifecycleState());
-                assertEquals(0, measurement.stats().rootQueries);
-                assertEquals(0, measurement.stats().snapshotsBuilt);
-                assertEquals(0, measurement.stats().scalarReachabilityQueries);
             }
         }
     }
@@ -117,7 +114,7 @@ class ActiveCodeOwnerTest {
         }
     }
     @Test
-    void inactiveClosureCaptureIsNotRetiredByScopeBoundaryReachabilityCorrection() {
+    void inactiveClosureCaptureRemainsLiveUntilClosureOwnerLeaves() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeHash guard = new RuntimeHash();
@@ -137,7 +134,6 @@ class ActiveCodeOwnerTest {
             MortalList.flushAboveMark();
             assertEquals(1, pad.captureCount);
             assertEquals(RuntimeScalarType.HASHREFERENCE, weak.type);
-            assertTrue(runtime.lifecycleState.deferredScopeExitCaptureCandidates.isEmpty());
             owner.set(RuntimeScalarCache.scalarUndef);
             assertEquals(0, pad.captureCount);
             assertEquals(RuntimeScalarType.UNDEF, weak.type);

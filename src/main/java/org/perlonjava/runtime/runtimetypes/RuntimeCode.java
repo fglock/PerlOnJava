@@ -4202,7 +4202,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         PerlOwnerSlot replacementSlot = scalar.retainCodeStateOwner(this);
         RuntimeScalar previous = stateVariable.put(name, scalar);
         PerlOwnerSlot previousSlot = stateScalarOwnerSlots.put(name, replacementSlot);
-        GlobalVariable.invalidateGlobalCodeRefGraphRoots();
         if (previous != null && (previous != scalar || previousSlot != replacementSlot)) {
             releaseStateScalarBinding(previous, previousSlot);
         }
@@ -4220,7 +4219,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 : stateHashOwnerSlots.put(name, replacementSlot);
         RuntimeScalar previousAlias = stateAggregateAliasOwners.remove(aliasKey);
         PerlOwnerSlot previousAliasSlot = stateAggregateAliasOwnerSlots.remove(aliasKey);
-        GlobalVariable.invalidateGlobalCodeRefGraphRoots();
         if (previousAlias != null) releaseStateScalarBinding(previousAlias, previousAliasSlot);
         if (previous != null && previous != aggregate) {
             if (previousSlot != null) releaseStateAggregateBinding(previous, previousSlot);
@@ -4253,7 +4251,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         PerlOwnerSlot previousOwnerSlot = stateAggregateAliasOwnerSlots.put(ownerKey, ownerSlot);
         PerlOwnerSlot previousAggregateSlot = array
                 ? stateArrayOwnerSlots.remove(name) : stateHashOwnerSlots.remove(name);
-        GlobalVariable.invalidateGlobalCodeRefGraphRoots();
         if (previousOwner != null) releaseStateScalarBinding(previousOwner, previousOwnerSlot);
         if (previous != null) releaseStateAggregateBinding(previous, previousAggregateSlot);
     }
@@ -4505,7 +4502,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      */
     public RuntimeBase[] capturedAggregates;
 
-    /** Owner slots that keep each captured aggregate pad in Perl reachability. */
+    /** Owner slots that retain each captured aggregate pad for Perl closure lifetime. */
     public PerlOwnerSlot[] capturedAggregateOwnerSlots;
 
     private static final class RetiredCaptureEdges {
@@ -5026,7 +5023,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         for (RuntimeBase constant : constants) {
             if (constant == null) continue;
             PerlOwnerSlot owner = new PerlOwnerSlot(PerlOwnerSlot.Kind.CODE_PAD_CONSTANT);
-            owner.acquireCodePadConstantIdentity(constant, this);
+            owner.acquireCodePadConstantIdentity(constant);
             padConstantOwnerSlots.add(owner);
         }
     }
@@ -6239,7 +6236,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         this.declaredOurVariables = codeFrom.declaredOurVariables;
         copyPadConstantTree(codeFrom, this, values -> values.clone());
         rebindCaptureOwnerSlots();
-        GlobalVariable.invalidateGlobalCodeRefGraphRoots();
         retireReplacedCaptureEdges(replacedCaptures);
     }
 
@@ -8086,9 +8082,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (padConsts != null || embeddedPadConsts != null && !embeddedPadConsts.isEmpty()) {
             code.installPadConstantTree(internalClassName, padConsts,
                     embeddedPadConsts, embeddedPadDescendants);
-            GlobalVariable.invalidateGlobalCodeRefGraphRoots();
         }
-        GlobalVariable.invalidateGlobalCodeRefGraphRoots();
 
         // A BEGIN-installed `sub () { $lexical }` is a Perl constant CV.
         if ((deparseFlags & 0x40000000) != 0) {

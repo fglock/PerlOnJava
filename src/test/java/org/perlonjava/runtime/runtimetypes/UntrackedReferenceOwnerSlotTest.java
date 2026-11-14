@@ -28,16 +28,12 @@ class UntrackedReferenceOwnerSlotTest {
             assertNotNull(hashValueOwner);
             assertSame(hashTarget, hashValueOwner.referent());
 
-            try (MortalList.ReachabilityQueryMeasurement measurement =
-                         MortalList.measureReachabilityQueries()) {
+            {
                 MortalList.scopeExitCleanupArray(array);
                 MortalList.scopeExitCleanupHash(hash);
 
                 assertFalse(arrayValueOwner.isActive());
                 assertFalse(hashValueOwner.isActive());
-                assertEquals(0, measurement.stats().rootQueries);
-                assertEquals(0, measurement.stats().snapshotsBuilt);
-                assertEquals(0, measurement.stats().scalarReachabilityQueries);
 
                 MortalList.scopeExitCleanupArray(array);
                 MortalList.scopeExitCleanupHash(hash);
@@ -232,12 +228,8 @@ class UntrackedReferenceOwnerSlotTest {
                         PerlOwnerSlot.Kind.PACKAGE_SCALAR_SLOT),
                         "each package key has an independent scalar-cell owner identity");
 
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     WeakRefRegistry.weaken(observer);
-                    assertEquals(0, measurement.stats().rootQueries,
-                            "explicit package owners avoid a root walk during weaken");
-                    assertEquals(0, measurement.stats().snapshotsBuilt);
                 }
                 assertEquals(1, target.ownerSlotCount(
                         PerlOwnerSlot.Kind.UNTRACKED_REFERENCE));
@@ -331,13 +323,9 @@ class UntrackedReferenceOwnerSlotTest {
                     "the tie handler slot must not promote the legacy referent count");
 
             try {
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     WeakRefRegistry.weaken(observer);
                     assertEquals(RuntimeBase.RefCountTrackingState.WEAKLY_TRACKED, target.refCountTrackingState());
-                    assertEquals(0, measurement.stats().rootQueries,
-                            "the tied handler identity avoids a root walk during weaken");
-                    assertEquals(0, measurement.stats().snapshotsBuilt);
                 }
 
                 RuntimeScalar.releaseTiedHandlerValue(handlerOwner);

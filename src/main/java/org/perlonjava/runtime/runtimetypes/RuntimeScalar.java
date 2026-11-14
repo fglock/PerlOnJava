@@ -374,7 +374,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         PerlOwnerSlot nextSlot = null;
         if (next != null) {
             nextSlot = new PerlOwnerSlot(PerlOwnerSlot.Kind.GLOB_VALUE);
-            nextSlot.acquireGlobValueIdentity(next, this);
+            nextSlot.acquireGlobValueIdentity(next);
         }
         PerlOwnerSlot previousSlot = detachedGlobValueOwnerSlot;
         detachedGlobValueOwnerSlot = nextSlot;
@@ -671,7 +671,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
         associateCountedAggregateOwnerIfAbsent(owner);
         refreshDetachedGlobValueOwner();
-        propagateTiedHandlerMarkerToReferent();
     }
 
     void associateCountedAggregateOwner(RuntimeBase owner) {
@@ -726,7 +725,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 containerOwners.add(owner);
                 containerOwner = owner;
             }
-            propagateTiedHandlerMarkerToReferent();
         } else {
             removeContainerOwnerTracking(owner);
         }
@@ -787,19 +785,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             synchronized (this) {
                 if (containerOwner == null) containerOwner = replacement;
             }
-        }
-    }
-
-    private void propagateTiedHandlerMarkerToReferent() {
-        RuntimeBase owner;
-        RuntimeBase base;
-        synchronized (this) {
-            owner = containerOwner;
-            base = (type & RuntimeScalarType.REFERENCE_BIT) != 0
-                    && value instanceof RuntimeBase referent ? referent : null;
-        }
-        if (owner != null && owner.possiblyStoredInTiedHandler && base != null) {
-            base.markPossiblyStoredInTiedHandler();
         }
     }
 
@@ -951,17 +936,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (!legacyOwner) {
             verifyClosureCaptureOwnerCount(PerlOwnerSlot.Kind.SCALAR_CAPTURE);
         }
-    }
-
-    /**
-     * Retire this pad cell's semantic edge once its declaring scope has exited
-     * and the pre-END reachability walk has established that no END block can
-     * reach it.  The capture count intentionally remains intact: the compiled
-     * eval code may still be Java-reachable, but it can no longer represent a
-     * Perl lifetime owner at global-destruction time.
-     */
-    public void releaseUnreachableSemanticCaptureOwner() {
-        releaseClosureOwnerSlot();
     }
 
     private void retainClosureCaptureReferent() {
@@ -1334,15 +1308,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     private synchronized List<RuntimeBase> containerOwnerSnapshot() {
         return new ArrayList<>(containerOwners);
-    }
-
-    /** Current aggregates that store this scalar cell, for reverse owner walks. */
-    synchronized List<RuntimeBase> endBoundaryContainerOwners() {
-        List<RuntimeBase> owners = new ArrayList<>();
-        for (RuntimeBase owner : containerOwners) {
-            if (owner != null && isStoredInAnyContainer(owner)) owners.add(owner);
-        }
-        return owners;
     }
 
     boolean hasContainerOwnerIn(Set<RuntimeBase> candidates) {
@@ -2352,8 +2317,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     /**
      * True when {@link #createReference()} promoted an otherwise-unbound
      * scalar temporary into selective reference counting. Such a referent has
-     * no hidden lexical, closure, global, or aggregate owner, so weakening its
-     * sole reference can clear it without a reachability walk.
+     * no hidden lexical, closure, global, or aggregate owner, so releasing its
+     * sole owner can clear it directly.
      */
     boolean ephemeralScalarReferenceReferent;
 
@@ -3844,10 +3809,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             scalar.releaseUntrackedReferenceOwner(
                     scalar.untrackedReferenceOwnerSlot.referent());
         }
-        // Phase B1 (refcount_alignment_52leaks_plan.md): track the
-        // container element so ReachabilityWalker can see it via
-        // ScalarRefRegistry.
-        if (PerlRuntime.currentOrNull() != null) ScalarRefRegistry.registerRef(scalar);
     }
 
     /**
@@ -4804,10 +4765,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             } else if (replacementIoOwnerSlot != null) {
                 attachIoOwnerSlot(this, replacementIoOwnerSlot);
             }
-            // Hash and array assignment normally preserves the aggregate's existing
-            // scalar slot. If that slot belongs to a tied-handler graph, propagate
-            // its conservative marker to the newly installed reference graph too.
-            propagateTiedHandlerMarkerToReferent();
             if (this.globalCodeRefFqn != null && this.value instanceof RuntimeCode code) {
                 code.hadStashRef = true;
             }
@@ -4923,13 +4880,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
         }
 
-        // Phase B1 (refcount_alignment_52leaks_plan.md): register this scalar
-        // once, after rescue handling has had a chance to acquire ownership.
-        // This used to run both before and after the assignment, causing two
-        // WeakHashMap.put() calls for every ordinary tracked reference store.
-        if (newOwned) {
-            ScalarRefRegistry.registerRef(this);
-        }
 
         // A returned blessed container may have no selective count even though
         // this scalar is its final Perl owner.  It will not enter the counted
@@ -7122,9 +7072,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             // Mark that this variable's scope has exited. When releaseCaptures
             // later decrements captureCount to 0, it will know the scope is gone.
             scalar.scopeExited = true;
-            if (scalar.type != RuntimeScalarType.CODE) {
-                MortalList.noteDeferredScopeExitCaptureCandidate(scalar);
-            }
             // For CODE refs: still decrement the VALUE's refCount so the RuntimeCode
             // is eventually destroyed and its releaseCaptures fires (decrementing
             // captureCount on all the variables IT captured). This is critical for

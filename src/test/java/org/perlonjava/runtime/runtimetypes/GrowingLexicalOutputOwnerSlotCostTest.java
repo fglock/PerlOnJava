@@ -37,24 +37,14 @@ class GrowingLexicalOutputOwnerSlotCostTest {
                     weakLeaves[i] = weakLeaf;
                 }
 
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     for (RuntimeArray record : records) {
                         // Model a recursive callback frame ending after its
                         // result has been appended to the live output array.
                         MortalList.scopeExitCleanupArray(record);
                     }
 
-                    ReachabilityQueryStats stats = measurement.stats();
                     assertEquals(resultCount, output.size());
-                    assertEquals(0, stats.rootQueries,
-                            "explicit nested owner slots should replace per-result root proofs");
-                    assertEquals(0, stats.liveRootSnapshotsBuilt,
-                            "a growing lexical output must not rebuild live-root snapshots");
-                    assertEquals(0, stats.externalRootSnapshotsBuilt);
-                    assertEquals(0, stats.snapshotsBuilt);
-                    assertEquals(0, stats.edgesInspected,
-                            "no output-root edges should be revisited during local cleanup");
                     for (RuntimeScalar weakLeaf : weakLeaves) {
                         assertTrue(WeakRefRegistry.isweak(weakLeaf),
                                 "a live output row keeps its nested aggregate alive");

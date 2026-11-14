@@ -159,16 +159,13 @@ class ArgumentAliasOwnerSlotTest {
                 RuntimeCode.pushArgs(args);
                 argsActive = true;
 
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     released.set(new RuntimeScalar());
                     MortalList.flushAboveMark();
 
                     assertEquals(1, target.refCount);
                     assertEquals(2, target.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_ALIAS));
                     assertTrue(WeakRefRegistry.isweak(weak));
-                    assertEquals(0, measurement.stats().rootQueries);
-                    assertEquals(0, measurement.stats().snapshotsBuilt);
                 }
 
                 RuntimeCode.popArgs();

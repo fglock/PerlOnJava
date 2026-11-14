@@ -28,13 +28,9 @@ class ClearedAggregateOwnerIdentityFinalizationTest {
                 WeakRefRegistry.weaken(weakPackageRoot);
                 packageRoot.setTrackedRefCount(0);
 
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     MortalList.finalizeClearedAggregateOwnerAfterScopeExit(packageRoot);
 
-                    assertEquals(0, measurement.stats().rootQueries,
-                            "the package aggregate owner identity replaces the root walk");
-                    assertEquals(0, measurement.stats().snapshotsBuilt);
                     assertTrue(WeakRefRegistry.isweak(weakPackageRoot),
                             "the package slot keeps the aggregate alive");
                 }

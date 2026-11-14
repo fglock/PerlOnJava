@@ -54,24 +54,6 @@ public class MyVarCleanupStack {
     }
 
     /**
-     * Snapshot the currently-live my-variables. Used by the
-     * reachability walker's per-object query
-     * ({@link ReachabilityWalker#isReachableFromRoots}) to seed from
-     * still-in-scope lexical containers (e.g. {@code my %METAS}
-     * declared at file scope of a still-loading module). The
-     * returned objects are the active RuntimeScalar / RuntimeArray /
-     * RuntimeHash registrations, keyed by Java identity.
-     */
-    public static java.util.List<Object> snapshotLiveVars() {
-        return new java.util.ArrayList<>(registeredCounts().keySet());
-    }
-
-    /** Snapshot registered lexical slots without requiring weak-ref tracking. */
-    public static java.util.List<Object> snapshotRegisteredVars() {
-        return new java.util.ArrayList<>(stack());
-    }
-
-    /**
      * Called at subroutine entry (in {@code RuntimeCode.apply()}).
      * Returns a mark position for later {@link #popMark(int)} or
      * {@link #unwindTo(int)}.
@@ -109,21 +91,12 @@ public class MyVarCleanupStack {
     }
 
     /**
-     * Compatibility hook for callers that used to seed a separate live-root
-     * cache. Root diagnostics now read the authoritative registration map.
-     */
-    public static synchronized void snapshotStackToLiveCounts() {
-    }
-
-    /**
      * Called by emitted bytecode at normal block scope exit AFTER
      * {@code scopeExitCleanup} has run. Removes the most recent entry
-     * matching {@code var} (by object identity) so the static stack no
-     * longer holds the scalar alive. Without this, block-scoped
-     * my-variables stayed registered until the enclosing subroutine
-     * returned, keeping their RuntimeBase targets alive past their
-     * Perl-level scope and causing leaks visible through the
-     * reachability walker.
+     * matching {@code var} (by object identity) so scope-exit and owner-slot
+     * checks stop treating that lexical cell as live. Without this,
+     * block-scoped my-variables stayed registered until the enclosing
+     * subroutine returned.
      * <p>
      * Paired with {@link #register(Object)} — every register has a
      * matching unregister on normal exit, and a matching
@@ -173,7 +146,7 @@ public class MyVarCleanupStack {
      * Replace the Java object backing a live lexical slot without ending the
      * lexical's Perl scope. The interpreter uses replace-on-assignment for
      * ordinary scalars, so leaving the old object on this stack would make
-     * reachability analysis overlook references stored in the new slot.
+     * lifecycle checks observe the stale cell instead of the current slot.
      */
     public static void replace(Object oldVar, Object newVar) {
         if (oldVar == null || newVar == null || oldVar == newVar) return;
@@ -321,9 +294,9 @@ public class MyVarCleanupStack {
      * Acquire IO ownership for current scalar-cell aliases and registered
      * lexical aliases of a glob after its IO slot becomes live.
      *
-     * <p>The glob's owner ledger finds scalar and aggregate storage without a
-     * runtime-root walk. The cleanup stack supplements it for registered
-     * lexicals whose referent has not entered selective counting.</p>
+     * <p>The glob's owner ledger finds scalar and aggregate storage. The cleanup
+     * stack supplements it for registered lexicals whose referent has not
+     * entered selective counting.</p>
      */
     public static void retainLiveIoGlobOwners(RuntimeGlob glob) {
         if (glob == null) return;

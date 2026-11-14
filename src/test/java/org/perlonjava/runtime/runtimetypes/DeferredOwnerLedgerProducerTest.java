@@ -43,23 +43,11 @@ class DeferredOwnerLedgerProducerTest {
                 options.code = SOURCE;
                 options.useInterpreter = interpreter;
 
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     RuntimeList result = PerlLanguageProvider.executePerlCode(options, false);
 
                     assertEquals("1:1:1", result.scalar().toString(),
                             "the nested package owner preserves and then releases the value");
-                    ReachabilityQueryStats stats = measurement.stats();
-                    assertEquals(0, stats.rootQueries,
-                            "ordinary deferred cleanup relies on current owner identities");
-                    assertEquals(0, stats.scalarReachabilityQueries,
-                            "ordinary stores do not need scalar reachability recovery");
-                    assertEquals(0, stats.snapshotsBuilt,
-                            "unrelated live roots do not cause lifecycle graph snapshots");
-                    assertEquals(0, stats.externalRootSnapshotsBuilt,
-                            "package roots are represented by owner slots");
-                    assertEquals(0, stats.edgesInspected,
-                            "cleanup cost does not grow with unrelated live aggregate edges");
                 }
             }
         }

@@ -27,8 +27,7 @@ import java.util.Map;
  * representation avoids a second async-only dispatch loop and makes every
  * newly-added interpreter stack explicit.</p>
  */
-public final class SuspendedInterpreterFrame
-        implements ExecutionRuntimeState.SuspendedOwnerRootProvider {
+public final class SuspendedInterpreterFrame {
     final InterpretedCode code;
     final RuntimeBase[] registers;
     final int callContext;
@@ -56,8 +55,7 @@ public final class SuspendedInterpreterFrame
     final ArrayList<RuntimeBase> methodInvocantHolds = new ArrayList<>();
     final ArrayDeque<ArrayList<Integer>> scopeCleanupBatches = new ArrayDeque<>();
     private final Map<Integer, PerlOwnerSlot> suspendedLexicalOwners = new HashMap<>();
-    private ExecutionRuntimeState endBoundaryRootState;
-    private PerlOwnerSlot awaitedFrameOwner;
+    private ExecutionRuntimeState registeredExecutionState;
     List<DynamicVariableManager.SuspendedState> suspendedDynamicStates;
 
     boolean suspended;
@@ -77,61 +75,27 @@ public final class SuspendedInterpreterFrame
         this.selfReference = code.__SUB__ == null ? null : new RuntimeScalar(code.__SUB__);
     }
 
-    /** Register this frame as a live source of end-boundary roots. */
-    void registerEndBoundaryOwnerRoots(ExecutionRuntimeState state) {
+    /** Register this live continuation so runtime reset waits for its completion. */
+    void registerSuspendedContinuation(ExecutionRuntimeState state) {
         if (state == null) return;
         synchronized (this) {
-            if (endBoundaryRootState == state) return;
-            if (endBoundaryRootState != null) {
+            if (registeredExecutionState == state) return;
+            if (registeredExecutionState != null) {
                 throw new IllegalStateException("suspended frame is registered to another runtime");
             }
-            endBoundaryRootState = state;
-            state.registerSuspendedOwnerRootProvider(this);
+            registeredExecutionState = state;
+            state.registerSuspendedContinuation(this);
         }
     }
 
-    /** Retire the root source after terminal frame cleanup releases its slots. */
-    private void unregisterEndBoundaryOwnerRoots() {
+    /** Retire the reset guard after terminal frame cleanup releases its slots. */
+    private void unregisterSuspendedContinuation() {
         ExecutionRuntimeState state;
         synchronized (this) {
-            state = endBoundaryRootState;
-            endBoundaryRootState = null;
+            state = registeredExecutionState;
+            registeredExecutionState = null;
         }
-        if (state != null) state.unregisterSuspendedOwnerRootProvider(this);
-    }
-
-    synchronized void setAwaitedFrameOwner(PerlOwnerSlot owner) {
-        awaitedFrameOwner = owner;
-    }
-
-    synchronized void clearAwaitedFrameOwner(PerlOwnerSlot owner) {
-        if (awaitedFrameOwner == owner) awaitedFrameOwner = null;
-    }
-
-    /** Current referents retained by lexical and detached dynamic frame slots. */
-    @Override
-    public synchronized List<RuntimeBase> snapshotSuspendedOwnerRoots() {
-        List<RuntimeBase> roots = new ArrayList<>();
-        for (PerlOwnerSlot owner : suspendedLexicalOwners.values()) {
-            addSuspendedOwnerRoot(roots, owner);
-        }
-        if (suspendedDynamicStates != null) {
-            for (DynamicVariableManager.SuspendedState state : suspendedDynamicStates) {
-                for (PerlOwnerSlot owner : state.ownerSlots()) {
-                    addSuspendedOwnerRoot(roots, owner);
-                }
-            }
-        }
-        addSuspendedOwnerRoot(roots, awaitedFrameOwner);
-        return roots;
-    }
-
-    private static void addSuspendedOwnerRoot(
-            List<RuntimeBase> roots, PerlOwnerSlot owner) {
-        if (owner == null || !owner.isActive()
-                || owner.kind() != PerlOwnerSlot.Kind.SUSPENDED_FRAME) return;
-        RuntimeBase referent = owner.referent();
-        if (referent != null) roots.add(referent);
+        if (state != null) state.unregisterSuspendedContinuation(this);
     }
 
     /** Retain the current strong values in lexical registers across an await. */
@@ -192,7 +156,7 @@ public final class SuspendedInterpreterFrame
         for (Integer register : new ArrayList<>(suspendedLexicalOwners.keySet())) {
             releaseSuspendedOwnerForRegister(register);
         }
-        unregisterEndBoundaryOwnerRoots();
+        unregisterSuspendedContinuation();
     }
 
     private static RuntimeBase suspendedLexicalReferent(RuntimeBase value) {

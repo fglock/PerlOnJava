@@ -8,9 +8,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("unit")
-class TailCallScalarRegistryOwnershipTest {
+class TailCallReleasedOwnerLifecycleTest {
     @Test
-    void javaLiveScalarRegistryDoesNotRescueReleasedTailCallReferent() {
+    void releasingTailCallOwnerClearsTheFinalWeakObserver() {
         try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
             RuntimeHash referent = new RuntimeHash();
             RuntimeScalar owner = new RuntimeScalar();
@@ -18,18 +18,12 @@ class TailCallScalarRegistryOwnershipTest {
 
             RuntimeScalar weak = referent.createReference();
             WeakRefRegistry.weaken(weak);
-            ScalarRefRegistry.registerRef(owner);
-            assertTrue(ScalarRefRegistry.snapshot().contains(owner));
-            assertTrue(WeakRefRegistry.hasWeakRefsTo(referent));
-
             RuntimeArray tailArguments = new RuntimeArray(1);
             tailArguments.elements.add(owner);
             tailArguments.elementsOwned = true;
             MortalList.releaseTailCallArgs(tailArguments);
 
             assertFalse(owner.refCountOwned);
-            assertTrue(ScalarRefRegistry.snapshot().contains(owner),
-                    "the Java-live scalar remains registered after its Perl owner leaves");
             assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, referent.perlLifecycleState());
             assertEquals(0, referent.refCount);
             assertEquals(RuntimeScalarType.UNDEF, weak.type);

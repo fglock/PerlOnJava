@@ -33,7 +33,6 @@ class RuntimeScalarDirectSetterOwnerReleaseTest {
 
     private static void assertSetterReleasesCurrentOwner(Consumer<RuntimeScalar> setter) {
         RuntimeHash referent = new RuntimeHash();
-        referent.activateOwnerTracking();
 
         RuntimeScalar cell = new RuntimeScalar();
         cell.set(referent.createAnonymousReference());

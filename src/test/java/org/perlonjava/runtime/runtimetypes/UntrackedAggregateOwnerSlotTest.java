@@ -34,14 +34,10 @@ class UntrackedAggregateOwnerSlotTest {
                 assertEquals(RuntimeBase.RefCountTrackingState.UNTRACKED, target.refCountTrackingState(),
                         "explicit owner slots must not promote the legacy count");
 
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     WeakRefRegistry.weaken(weakObserver);
                     assertEquals(RuntimeBase.RefCountTrackingState.WEAKLY_TRACKED, target.refCountTrackingState());
                     assertTrue(WeakRefRegistry.isweak(weakObserver));
-                    assertEquals(0, measurement.stats().rootQueries,
-                            "surviving owner identities avoid a root walk at first weaken");
-                    assertEquals(0, measurement.stats().snapshotsBuilt);
                 }
 
                 firstOwner.set(new RuntimeScalar());
@@ -97,13 +93,9 @@ class UntrackedAggregateOwnerSlotTest {
                 assertEquals(1,
                         target.ownerSlotCount(PerlOwnerSlot.Kind.ACTIVE_LEXICAL));
 
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     WeakRefRegistry.weaken(weakObserver);
                     assertTrue(WeakRefRegistry.isweak(weakObserver));
-                    assertEquals(0, measurement.stats().rootQueries,
-                            "an active lexical owner identity replaces the root proof");
-                    assertEquals(0, measurement.stats().snapshotsBuilt);
                 }
 
                 MortalList.scopeExitCleanupArray(target);
@@ -135,13 +127,9 @@ class UntrackedAggregateOwnerSlotTest {
                 assertEquals(1,
                         target.ownerSlotCount(PerlOwnerSlot.Kind.PACKAGE_AGGREGATE_SLOT));
 
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     WeakRefRegistry.weaken(weakObserver);
                     assertTrue(WeakRefRegistry.isweak(weakObserver));
-                    assertEquals(0, measurement.stats().rootQueries,
-                            "a package aggregate slot replaces the root proof");
-                    assertEquals(0, measurement.stats().snapshotsBuilt);
                 }
 
                 GlobalVariable.globalArrays.remove(globalName);

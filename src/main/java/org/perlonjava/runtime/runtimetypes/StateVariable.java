@@ -201,7 +201,6 @@ public class StateVariable {
             GlobalVariable.aliasGlobalArray(beginVar, array);
         } else {
             ((RuntimeCode) codeRef.value).bindStateAggregateAlias(beginVar, array);
-            GlobalVariable.invalidateGlobalCodeRefGraphRoots();
         }
         markInitializedStateVariable(codeRef, var, id);
     }
@@ -226,7 +225,6 @@ public class StateVariable {
             GlobalVariable.aliasGlobalHash(beginVar, hash);
         } else {
             ((RuntimeCode) codeRef.value).bindStateAggregateAlias(beginVar, hash);
-            GlobalVariable.invalidateGlobalCodeRefGraphRoots();
         }
         markInitializedStateVariable(codeRef, var, id);
     }

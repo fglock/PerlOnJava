@@ -271,15 +271,9 @@ public class EmitStatement {
         java.util.List<Integer> allIndices = includeCaptured
                 ? ctx.symbolTable.getMyVariableIndicesInScope(scopeIndex)
                 : withoutCaptured(ctx, ctx.symbolTable.getMyVariableIndicesInScope(scopeIndex));
-        // Phase E (refcount_alignment_52leaks_plan.md): deregister each
-        // my-variable from MyVarCleanupStack before nulling the local slot.
-        // Without this, the static stack holds strong references to
-        // block-scoped scalars until the enclosing subroutine returns,
-        // preventing JVM GC and keeping their RuntimeBase targets alive
-        // past their Perl-level scope. The reachability walker would then
-        // treat the scalar as a live lexical and mark its referent as
-        // reachable, causing false-positive leaks (basic rerefrozen in
-        // DBIC's t/52leaks.t).
+        // Deregister each my-variable before nulling its local slot. Otherwise
+        // the cleanup stack retains a stale lexical cell after its Perl scope
+        // ends and lifecycle checks can treat it as live.
         //
         // When skipMyVarCleanup is true (CleanupNeededVisitor proved this
         // sub never uses bless/weaken/user-sub-calls/etc.), the stack is

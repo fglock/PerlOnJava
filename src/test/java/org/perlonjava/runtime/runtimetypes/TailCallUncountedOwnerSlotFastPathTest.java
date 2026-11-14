@@ -31,14 +31,11 @@ class TailCallUncountedOwnerSlotFastPathTest {
             try {
                 assertEquals(1, target.ownerSlotCount(PerlOwnerSlot.Kind.PACKAGE_SCALAR_SLOT));
 
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     MortalList.releaseTailCallArgs(tailArguments);
 
                     assertEquals(RuntimeBase.RefCountTrackingState.WEAKLY_TRACKED, target.refCountTrackingState());
                     assertTrue(WeakRefRegistry.isweak(weak));
-                    assertEquals(0, measurement.stats().rootQueries);
-                    assertEquals(0, measurement.stats().snapshotsBuilt);
                 }
 
                 GlobalVariable.globalVariables.remove(globalName);

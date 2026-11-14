@@ -20,8 +20,8 @@ import org.perlonjava.frontend.astnode.*;
  *   <li><b>bless</b> — creates blessed-with-DESTROY targets that need
  *       refCount decrement on scope exit.</li>
  *   <li><b>weaken</b> / <b>isweak</b> (any Scalar::Util qualified form)
- *       — sets the global {@code weakRefsExist} flag and requires the
- *       reachability walker to see our live lexicals.</li>
+ *       — changes weak-reference lifecycle state and requires full lexical
+ *       scope cleanup.</li>
  *   <li><b>local</b> — dynamic-scope bookkeeping changes.</li>
  *   <li><b>eval STRING</b> — can do anything.</li>
  *   <li>nested <b>SubroutineNode</b> — might capture our lexicals via

@@ -16,7 +16,6 @@ class RuntimeArraySingleValueOwnerTransferTest {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeHash target = new RuntimeHash();
-            target.activateOwnerTracking();
             RuntimeScalar value = new RuntimeScalar();
             value.set(target.createAnonymousReference());
             PerlOwnerSlot owner = value.countedOwnerSlot();
@@ -37,16 +36,12 @@ class RuntimeArraySingleValueOwnerTransferTest {
                 // The two live cells own the target, but simulate the transient
                 // selective-count undercount that deferred cleanup must repair.
                 target.setTrackedRefCount(1);
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     WeakRefRegistry.weaken(observer);
 
                     assertTrue(WeakRefRegistry.isweak(observer));
                     assertEquals(1, target.refCount,
                             "the current array element identity restores its count");
-                    assertEquals(0, measurement.stats().rootQueries);
-                    assertEquals(0, measurement.stats().snapshotsBuilt);
-                    assertEquals(0, measurement.stats().scalarReachabilityRootWalks);
                 }
 
                 value.set(new RuntimeScalar());

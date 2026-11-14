@@ -44,8 +44,7 @@ class TiedHandlerNestedOwnerCountInvariantTest {
                         "releasing the scalar owner leaves the nested handler edge counted");
                 assertTrue(WeakRefRegistry.isweak(weak));
 
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     ((TieHash) tied.elements).releaseTiedObject();
 
                     assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, target.perlLifecycleState(),
@@ -54,8 +53,6 @@ class TiedHandlerNestedOwnerCountInvariantTest {
                     assertEquals(0, target.countedOwnerSlotCount());
                     assertEquals(RuntimeScalarType.UNDEF, weak.type,
                             "the final owner release clears the weak observer");
-                    assertEquals(0, measurement.stats().rootQueries);
-                    assertEquals(0, measurement.stats().snapshotsBuilt);
                 }
             } finally {
                 ((TieHash) tied.elements).releaseTiedObject();

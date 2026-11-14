@@ -18,7 +18,7 @@ class TemporaryReturnOwnerTraversalTest {
         for (boolean useInterpreter : new boolean[] {false, true}) {
             PerlRuntime runtime = new PerlRuntime();
             try (PerlRuntime.Binding ignored = runtime.bind()) {
-                java.util.List<RuntimeBase> rootsBefore = MortalList.snapshotTemporaryRoots();
+                int rootDepth = MortalList.temporaryRootDepth();
                 CompilerOptions options = new CompilerOptions();
                 options.fileName = "temporary_return_owner_root_balance.t";
                 options.useInterpreter = useInterpreter;
@@ -39,8 +39,8 @@ class TemporaryReturnOwnerTraversalTest {
 
                 PerlLanguageProvider.executePerlCode(options, false);
 
-                assertEquals(rootsBefore, MortalList.snapshotTemporaryRoots(),
-                        "implicit return scope cleanup must balance its temporary-root stack "
+                assertEquals(rootDepth, MortalList.temporaryRootDepth(),
+                        "implicit return scope cleanup must balance its temporary-root leases "
                                 + "(interpreter=" + useInterpreter + ")");
             }
         }

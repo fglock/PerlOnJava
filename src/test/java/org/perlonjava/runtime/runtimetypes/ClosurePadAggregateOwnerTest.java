@@ -7,9 +7,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("unit")
-class ReachabilityWalkerCapturedAggregateReleaseTest {
+class ClosurePadAggregateOwnerTest {
     @Test
-    void closurePadOwnerKeepsAnAggregateAliveWithoutSweep() {
+    void closurePadOwnerKeepsAnAggregateAlive() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeHash captured = new RuntimeHash();
