@@ -5683,6 +5683,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     // The cached constructor clears these before each compile, keeping the
                     // backing arrays alive across 2M+ iterations instead of reallocating.
                     ctx.evalCachedBytecodeArr = new int[64];
+                    ctx.evalCachedStringPoolIndex = new HashMap<>(16);  // Round 37
+                    ctx.evalCachedConstantPoolIndex = new HashMap<>(16);  // Round 37
                     ctx.evalCachedConstants = new ArrayList<>(16);
                     ctx.evalCachedStringPool = new ArrayList<>(16);
                     ctx.evalCachedScopeIndices = new ArrayDeque<>();

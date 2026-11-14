@@ -149,6 +149,10 @@ public class EmitterContext {
     // ---- Pooled BytecodeCompiler collections (round 21) ----
     // Each list/deque is empty after a successful compile(); we clear() and reuse
     // the backing arrays instead of allocating new ones on every warm-path eval.
+    /** Round 37: pooled string-pool lookup index (cleared, not reallocated, on each warm eval). */
+    public java.util.Map<String, Integer> evalCachedStringPoolIndex;
+    /** Round 37: pooled constant-pool lookup index (cleared, not reallocated, on each warm eval). */
+    public java.util.Map<Object, Integer> evalCachedConstantPoolIndex;
     /** Round 34: pooled primitive bytecode buffer; avoids Integer boxing. Size is reset to 0; array is reused. */
     public int[] evalCachedBytecodeArr;
     /** Round 35: pre-computed physicalLineNumbers array for the eval source; valid only when evalCachedSourceStr == the eval string object. */

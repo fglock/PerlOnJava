@@ -543,19 +543,19 @@ public class BytecodeCompiler implements Visitor {
     // Lexical scalar variables currently used as foreach loop aliases. Assignments
     // through these variables must update the aliased element in place, matching
     // Perl's `foreach my $x (@array)` and `foreach $x (@array)` semantics.
-    private final Map<String, Integer> foreachAliasLexicalCounts = new HashMap<>();
+    // Round 37: lazy — only allocated when a foreach loop over a lexical is encountered.
+    private Map<String, Integer> foreachAliasLexicalCounts;
 
-    /** Persistent identities for state scalars whose declaration may be skipped on re-entry. */
-    private final Map<String, Integer> stateScalarPersistIds = new HashMap<>();
-    /** Persistent identities for state arrays whose declaration may be skipped on re-entry. */
-    private final Map<String, Integer> stateArrayPersistIds = new HashMap<>();
-    /** Persistent identities for state hashes whose declaration may be skipped on re-entry. */
-    private final Map<String, Integer> stateHashPersistIds = new HashMap<>();
+    // Round 37: lazy — only allocated when a `state` variable is encountered.
+    private Map<String, Integer> stateScalarPersistIds;
+    private Map<String, Integer> stateArrayPersistIds;
+    private Map<String, Integer> stateHashPersistIds;
     // Active package-global foreach aliases need their iterator register for
     // in-place compound assignment. An `our` declaration has a different,
     // older symbol-table register that must not be used while the loop alias
     // is installed. A stack preserves nested loops over the same name.
-    private final Map<String, Deque<Integer>> foreachGlobalAliasRegisters = new HashMap<>();
+    // Round 37: lazy — only allocated when a foreach over a package global is encountered.
+    private Map<String, Deque<Integer>> foreachGlobalAliasRegisters;
     // A key/value hash slice is special when it supplies a foreach source:
     // Perl aliases only its values, not its (temporary) keys.
     private boolean compilingForeachList;
@@ -569,8 +569,11 @@ public class BytecodeCompiler implements Visitor {
     // Non-final + no field initializer: pooled on the cached eval path (round 21).
     private List<Object> constants;
     private List<String> stringPool;
-    private final Map<String, Integer> stringPoolIndex = new HashMap<>(16);  // O(1) lookup
-    private final Map<Object, Integer> constantPoolIndex = new HashMap<>(16);  // O(1) lookup
+    // Round 37: non-final; pooled on the warm eval path (evalCachedStringPoolIndex /
+    // evalCachedConstantPoolIndex on the EmitterContext). initMutableCollections() allocates
+    // fresh maps for the cold path; the cached-path constructor clears and reuses them.
+    private Map<String, Integer> stringPoolIndex;
+    private Map<Object, Integer> constantPoolIndex;
     // Scope index stack for proper ScopedSymbolTable.exitScope() calls
     // Non-final + no field initializer: pooled by cached-eval constructor (round 21).
     private Deque<Integer> scopeIndices;
@@ -722,6 +725,8 @@ public class BytecodeCompiler implements Visitor {
         this.bytecodeSize = 0;
         this.constants = new ArrayList<>(16);
         this.stringPool = new ArrayList<>(16);
+        this.stringPoolIndex = new HashMap<>(16);
+        this.constantPoolIndex = new HashMap<>(16);
         this.scopeIndices = new ArrayDeque<>();
         this.savedNextRegister = new ArrayDeque<>();
         this.savedBaseRegister = new ArrayDeque<>();
@@ -907,6 +912,11 @@ public class BytecodeCompiler implements Visitor {
         this.evalReturnGotoPatchPositions.clear();
         this.tryFinallyReturnTargets = (Deque<TryFinallyReturnTarget>) (Deque<?>) evalCtx.evalCachedTryFinallyReturnTargets;
         this.tryFinallyReturnTargets.clear();
+        // Round 37: pool the two lookup-index maps (avoids HashMap<>(16) alloc + Node[] per warm eval).
+        this.stringPoolIndex = evalCtx.evalCachedStringPoolIndex;
+        this.stringPoolIndex.clear();
+        this.constantPoolIndex = evalCtx.evalCachedConstantPoolIndex;
+        this.constantPoolIndex.clear();
     }
 
     /**
@@ -1040,6 +1050,7 @@ public class BytecodeCompiler implements Visitor {
 
     void registerStateScalarVariable(String name, int reg, int persistId) {
         symbolTable.addVariableWithIndex(name, reg, "state");
+        if (stateScalarPersistIds == null) stateScalarPersistIds = new HashMap<>();  // Round 37: lazy
         stateScalarPersistIds.put(name, persistId);
     }
 
@@ -1053,11 +1064,11 @@ public class BytecodeCompiler implements Visitor {
         // nested lexical-sub compilation.  The persist-ID map is populated
         // only by registerStateScalarVariable(), so it is the stable source
         // of truth for code generation that must preserve the state cell.
-        return stateScalarPersistIds.get(name);
+        return stateScalarPersistIds == null ? null : stateScalarPersistIds.get(name);  // Round 37
     }
 
     private void retrieveStateScalarForRead(String name, int register) {
-        Integer persistId = stateScalarPersistIds.get(name);
+        Integer persistId = stateScalarPersistIds == null ? null : stateScalarPersistIds.get(name);  // Round 37
         if (persistId == null || !isStateVariable(name)) return;
         emit(Opcodes.STATE_RETRIEVE_SCALAR);
         emitReg(register);
@@ -1067,11 +1078,12 @@ public class BytecodeCompiler implements Visitor {
 
     void registerStateArrayVariable(String name, int reg, int persistId) {
         symbolTable.addVariableWithIndex(name, reg, "state");
+        if (stateArrayPersistIds == null) stateArrayPersistIds = new HashMap<>();  // Round 37: lazy
         stateArrayPersistIds.put(name, persistId);
     }
 
     private void retrieveStateArrayForRead(String name, int register) {
-        Integer persistId = stateArrayPersistIds.get(name);
+        Integer persistId = stateArrayPersistIds == null ? null : stateArrayPersistIds.get(name);  // Round 37
         if (persistId == null || !isStateVariable(name)) return;
         emit(Opcodes.STATE_RETRIEVE_ARRAY);
         emitReg(register);
@@ -1081,11 +1093,12 @@ public class BytecodeCompiler implements Visitor {
 
     void registerStateHashVariable(String name, int reg, int persistId) {
         symbolTable.addVariableWithIndex(name, reg, "state");
+        if (stateHashPersistIds == null) stateHashPersistIds = new HashMap<>();  // Round 37: lazy
         stateHashPersistIds.put(name, persistId);
     }
 
     private void retrieveStateHashForRead(String name, int register) {
-        Integer persistId = stateHashPersistIds.get(name);
+        Integer persistId = stateHashPersistIds == null ? null : stateHashPersistIds.get(name);  // Round 37
         if (persistId == null || !isStateVariable(name)) return;
         emit(Opcodes.STATE_RETRIEVE_HASH);
         emitReg(register);
@@ -1094,14 +1107,17 @@ public class BytecodeCompiler implements Visitor {
     }
 
     boolean isForeachAliasLexical(String name) {
-        return foreachAliasLexicalCounts.getOrDefault(name, 0) > 0;
+        // Round 37: null-check before map access (map is never allocated for simple evals)
+        return foreachAliasLexicalCounts != null && foreachAliasLexicalCounts.getOrDefault(name, 0) > 0;
     }
 
     private void pushForeachAliasLexical(String name) {
+        if (foreachAliasLexicalCounts == null) foreachAliasLexicalCounts = new HashMap<>();
         foreachAliasLexicalCounts.merge(name, 1, Integer::sum);
     }
 
     private void popForeachAliasLexical(String name) {
+        if (foreachAliasLexicalCounts == null) return;
         Integer count = foreachAliasLexicalCounts.get(name);
         if (count == null) {
             return;
@@ -1114,15 +1130,19 @@ public class BytecodeCompiler implements Visitor {
     }
 
     Integer getForeachGlobalAliasRegister(String name) {
+        // Round 37: null-check before map access (map is never allocated for simple evals)
+        if (foreachGlobalAliasRegisters == null) return null;
         Deque<Integer> registers = foreachGlobalAliasRegisters.get(name);
         return registers == null ? null : registers.peek();
     }
 
     private void pushForeachGlobalAliasRegister(String name, int register) {
+        if (foreachGlobalAliasRegisters == null) foreachGlobalAliasRegisters = new HashMap<>();
         foreachGlobalAliasRegisters.computeIfAbsent(name, ignored -> new ArrayDeque<>()).push(register);
     }
 
     private void popForeachGlobalAliasRegister(String name) {
+        if (foreachGlobalAliasRegisters == null) return;
         Deque<Integer> registers = foreachGlobalAliasRegisters.get(name);
         if (registers == null) {
             return;

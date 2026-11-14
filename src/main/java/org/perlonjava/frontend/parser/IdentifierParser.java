@@ -47,6 +47,9 @@ public class IdentifierParser {
         // Perl has a slightly different boundary for typeglob identifiers:
         //   - $ / @ / % / & / $# contexts: 1020 bytes is already too long
         //   - * (typeglob) context: 1020 bytes is allowed; only > 1020 is too long
+        // Round 38: fast path — if char count <= 254, UTF-8 bytes <= 4*254 = 1016 < 1020,
+        // so the identifier is never too long. Avoids toString().getBytes() allocation.
+        if (variableName.length() <= 254) return false;
         int byteLen = variableName.toString().getBytes(StandardCharsets.UTF_8).length;
         return isTypeglob ? byteLen > 1020 : byteLen >= 1020;
     }
