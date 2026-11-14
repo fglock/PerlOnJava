@@ -133,12 +133,9 @@ class CodePadConstantOwnerSlotTest {
                 // identity is the only remaining proof of Perl liveness.
                 closure.setTrackedRefCount(7);
 
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     codeSlot.set(new RuntimeScalar());
 
-                    assertEquals(0, measurement.stats().rootQueries);
-                    assertEquals(0, measurement.stats().snapshotsBuilt);
                 }
 
                 assertEquals(0,
@@ -179,15 +176,11 @@ class CodePadConstantOwnerSlotTest {
                         "each constant occurrence in each CV has a distinct strong slot");
                 assertEquals(3, constant.ownerSlotCount(PerlOwnerSlot.Kind.CODE_PAD_CONSTANT));
 
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     WeakRefRegistry.weaken(weakObserver);
 
                     assertTrue(WeakRefRegistry.isweak(weakObserver));
                     assertTrue(RuntimeCode.isInstalledPadConstant(constant));
-                    assertEquals(0, measurement.stats().rootQueries,
-                            "optree owner identities replace the global CODE scan");
-                    assertEquals(0, measurement.stats().snapshotsBuilt);
                 }
 
                 assertTrue(WeakRefRegistry.isweak(weakObserver),

@@ -28,16 +28,13 @@ class ClosureAggregateOwnerIdentityReleaseTest {
             closure.setTrackedRefCount(7); // stale compatibility count, with no strong owner slot
             assertFalse(closure.hasPerlOwnerForCaptureOtherThan(null));
 
-            try (MortalList.ReachabilityQueryMeasurement measurement =
-                         MortalList.measureReachabilityQueries()) {
+            try {
                 MortalList.scopeExitCleanupArray(capturedPad);
 
                 assertNull(closure.capturedAggregates);
                 assertNull(closure.capturedAggregateOwnerSlots);
                 assertFalse(padOwner.isActive());
                 assertEquals(0, capturedPad.captureCount);
-                assertEquals(0, measurement.stats().rootQueries);
-                assertEquals(0, measurement.stats().snapshotsBuilt);
             } finally {
                 WeakRefRegistry.removeWeakRef(weakCode, closure);
             }

@@ -29,8 +29,7 @@ class LegacyClosureCaptureOwnerReleaseTest {
             RuntimeScalar weak = referenceTo(referent);
             WeakRefRegistry.weaken(weak);
 
-            try (MortalList.ReachabilityQueryMeasurement measurement =
-                         MortalList.measureReachabilityQueries()) {
+            {
                 CountedOwnerFixture.queueRelease(temporaryOwner);
                 MortalList.flush();
 
@@ -47,10 +46,6 @@ class LegacyClosureCaptureOwnerReleaseTest {
                 assertEquals(RuntimeScalarType.UNDEF, weak.type,
                         "the final owner release clears weak observers");
                 assertFalse(referent.deferredFinalReleaseForUncountedOwners);
-                assertEquals(0, measurement.stats().rootQueries,
-                        "the owner identity drives cleanup without a root query");
-                assertEquals(0, measurement.stats().snapshotsBuilt,
-                        "the owner identity drives cleanup without a root snapshot");
             }
 
             GlobalVariable.removeGlobalCodeRefForStashDelete(className + "::DESTROY");

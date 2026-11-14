@@ -29,8 +29,7 @@ class WeakeningPrunesStaleUntrackedOwnerSlotTest {
 
             try {
                 lexicalOwner.localBindingExists = false;
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     WeakRefRegistry.weaken(weakObserver);
 
                     assertFalse(staleOwner.isActive(),
@@ -40,8 +39,6 @@ class WeakeningPrunesStaleUntrackedOwnerSlotTest {
                     assertEquals(RuntimeScalarType.UNDEF, weakObserver.type);
                     assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, target.perlLifecycleState());
                     assertEquals(0, target.refCount);
-                    assertEquals(0, measurement.stats().rootQueries);
-                    assertEquals(0, measurement.stats().snapshotsBuilt);
                 }
             } finally {
                 if (WeakRefRegistry.isweak(weakObserver)) {

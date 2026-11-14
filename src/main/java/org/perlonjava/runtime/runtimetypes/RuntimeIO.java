@@ -76,17 +76,6 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef
 public class RuntimeIO extends RuntimeScalar {
     /** The glob from which this escaped IO-slot value originated, if still live. */
     private WeakReference<RuntimeGlob> ownerGlob;
-    /** Current glob sources, weak so an IO/layer cycle is not a Perl root. */
-    private final List<EndBoundaryGlobOwner> endBoundaryGlobOwners = new ArrayList<>();
-
-    private static final class EndBoundaryGlobOwner {
-        private final WeakReference<RuntimeGlob> glob;
-        private int references = 1;
-
-        private EndBoundaryGlobOwner(RuntimeGlob glob) {
-            this.glob = new WeakReference<>(glob);
-        }
-    }
     /** Ties visible through escaped PVIO values without retaining their glob cycle. */
     private static final Map<RuntimeIO, WeakReference<TieHandle>> tiedAliases =
             Collections.synchronizedMap(new WeakHashMap<>());
@@ -105,125 +94,10 @@ public class RuntimeIO extends RuntimeScalar {
         return ownerGlob == null ? null : ownerGlob.get();
     }
 
-    /** Record one current RuntimeGlob field that retains this IO object. */
-    synchronized void retainEndBoundaryOwnerGlob(RuntimeGlob glob) {
-        if (glob == null) return;
-        for (Iterator<EndBoundaryGlobOwner> iterator = endBoundaryGlobOwners.iterator();
-                iterator.hasNext();) {
-            EndBoundaryGlobOwner existing = iterator.next();
-            RuntimeGlob current = existing.glob.get();
-            if (current == null) {
-                iterator.remove();
-            } else if (current == glob) {
-                attachRuntimeIOLayerOwners();
-                existing.references++;
-                return;
-            }
-        }
-        endBoundaryGlobOwners.add(new EndBoundaryGlobOwner(glob));
-        attachRuntimeIOLayerOwners();
-    }
-
-    /** Retire one RuntimeGlob field that stopped retaining this IO object. */
-    synchronized void releaseEndBoundaryOwnerGlob(RuntimeGlob glob) {
-        if (glob == null) return;
-        for (Iterator<EndBoundaryGlobOwner> iterator = endBoundaryGlobOwners.iterator();
-                iterator.hasNext();) {
-            EndBoundaryGlobOwner existing = iterator.next();
-            RuntimeGlob current = existing.glob.get();
-            if (current == null) {
-                iterator.remove();
-            } else if (current == glob) {
-                if (--existing.references <= 0) iterator.remove();
-                return;
-            }
-        }
-    }
-
-    /** Identity snapshot of live glob sources that currently retain this IO. */
-    synchronized List<RuntimeGlob> endBoundaryOwnerGlobs() {
-        attachRuntimeIOLayerOwners();
-        Set<RuntimeGlob> snapshot = Collections.newSetFromMap(new IdentityHashMap<>());
-        for (Iterator<EndBoundaryGlobOwner> iterator = endBoundaryGlobOwners.iterator();
-                iterator.hasNext();) {
-            RuntimeGlob glob = iterator.next().glob.get();
-            if (glob == null) iterator.remove();
-            else if (glob.ownsRuntimeIOForEndBoundary(this)) snapshot.add(glob);
-        }
-
-        // Standard handles and a few bootstrap paths install their IO scalar
-        // directly while constructing the package glob. Include those owners
-        // even though they did not pass through RuntimeGlob.setIO().
-        for (RuntimeGlob glob : GlobalVariable.globalIORefs.values()) {
-            if (glob != null && glob.ownsRuntimeIOForEndBoundary(this)) snapshot.add(glob);
-        }
-        PerlRuntime runtime = PerlRuntime.currentOrNull();
-        if (runtime != null) {
-            for (String name : runtime.standardIOGlobNames()) {
-                if (!runtime.isStandardIOGlobVisible(name)) continue;
-                RuntimeGlob glob = runtime.standardIOGlob(name);
-                if (glob != null && glob.ownsRuntimeIOForEndBoundary(this)) snapshot.add(glob);
-            }
-        }
-
-        RuntimeGlob hinted = getOwnerGlob();
-        if (hinted != null && hinted.ownsRuntimeIOForEndBoundary(this)) snapshot.add(hinted);
-        return new ArrayList<>(snapshot);
-    }
-
-    /** RuntimeIO is the weak provenance source stored on each PerlIO::via owner slot. */
-    public void associateViaLayerOwner(PerlOwnerSlot ownerSlot) {
-        if (ownerSlot != null) ownerSlot.associateEndBoundaryOwnerSource(this);
-    }
-
-    /** Remove this RuntimeIO from one via-layer owner slot before layer teardown. */
-    public void releaseViaLayerOwner(PerlOwnerSlot ownerSlot) {
-        if (ownerSlot != null) ownerSlot.releaseEndBoundaryOwnerSource(this);
-    }
-
-    /** Replace the handle while keeping layer-stack provenance in sync. */
+    /** Replace the IO handle held by this filehandle scalar. */
     public void replaceIOHandle(IOHandle next) {
         if (ioHandle == next) return;
-        IOHandle previous = ioHandle;
-        updateRuntimeIOLayerOwners(previous, this, false);
         ioHandle = next;
-        updateRuntimeIOLayerOwners(next, this, true);
-    }
-
-    private void attachRuntimeIOLayerOwners() {
-        updateRuntimeIOLayerOwners(ioHandle, this, true);
-    }
-
-    void refreshEndBoundaryLayerOwners() {
-        attachRuntimeIOLayerOwners();
-    }
-
-    private static void updateRuntimeIOLayerOwners(
-            IOHandle root, RuntimeIO owner, boolean retain) {
-        if (root == null || owner == null) return;
-        Set<IOHandle> seen = Collections.newSetFromMap(new IdentityHashMap<>());
-        ArrayDeque<IOHandle> todo = new ArrayDeque<>();
-        todo.add(root);
-        while (!todo.isEmpty()) {
-            IOHandle current = todo.removeFirst();
-            if (!seen.add(current)) continue;
-            if (current instanceof LayeredIOHandle layered) {
-                if (retain) layered.addRuntimeIOOwner(owner);
-                else layered.removeRuntimeIOOwner(owner);
-                enqueueLayeredHandleDelegate(todo, layered.getDelegate());
-            } else if (current instanceof BorrowedIOHandle borrowed) {
-                enqueueLayeredHandleDelegate(todo, borrowed.getDelegate());
-            } else if (current instanceof DupIOHandle duplicate) {
-                enqueueLayeredHandleDelegate(todo, duplicate.getDelegate());
-            } else if (current instanceof SharedTransportIOHandle shared) {
-                enqueueLayeredHandleDelegate(todo, shared.getDelegate());
-            }
-        }
-    }
-
-    private static void enqueueLayeredHandleDelegate(
-            ArrayDeque<IOHandle> todo, IOHandle delegate) {
-        if (delegate != null) todo.addLast(delegate);
     }
 
     /** Glob slot currently owning this IO object, when it has one. */

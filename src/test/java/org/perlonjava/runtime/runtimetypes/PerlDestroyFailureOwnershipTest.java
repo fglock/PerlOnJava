@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 @Tag("unit")
 class PerlDestroyFailureOwnershipTest {
     @Test
-    void throwingDestructorReleasesObserversAndOwnedChildrenWithSweepsSuppressed() {
+    void throwingDestructorReleasesObserversAndOwnedChildren() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             String className = "Issue1649::FailedOwnerCleanup";

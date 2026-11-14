@@ -81,16 +81,13 @@ public final class RuntimeRegexCallback {
             } else {
                 ownerReference.references++;
             }
-            if (codeOwnerSlot != null) {
-                codeOwnerSlot.associateEndBoundaryOwnerSource(owner);
-            }
         }
     }
 
     synchronized void releaseOwner() {
         if (unassociatedOwnerCount <= 0) return;
         unassociatedOwnerCount--;
-        releaseOwnerReference(null);
+        releaseOwnerReference();
     }
 
     synchronized void releaseOwner(RuntimeRegex owner) {
@@ -98,13 +95,12 @@ public final class RuntimeRegexCallback {
         RegexOwnerReference ownerReference = findOwner(owner);
         if (ownerReference == null) return;
         if (--ownerReference.references == 0) regexOwners.remove(ownerReference);
-        releaseOwnerReference(owner);
+        releaseOwnerReference();
     }
 
-    private void releaseOwnerReference(RuntimeRegex owner) {
+    private void releaseOwnerReference() {
         ownerCount--;
         PerlOwnerSlot slot = codeOwnerSlot;
-        if (slot != null && owner != null) slot.releaseEndBoundaryOwnerSource(owner);
         if (ownerCount != 0) return;
         if (slot != null) {
             codeOwnerSlot = null;

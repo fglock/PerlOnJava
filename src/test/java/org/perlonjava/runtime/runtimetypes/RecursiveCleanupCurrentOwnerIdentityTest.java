@@ -43,16 +43,10 @@ class RecursiveCleanupCurrentOwnerIdentityTest {
             captured.refCount++;
 
             try {
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     MortalList.deferDestroyForContainerClear(List.of(removedOwner));
                     MortalList.flush();
 
-                    ReachabilityQueryStats stats = measurement.stats();
-                    assertEquals(0, stats.rootQueries,
-                            "the closure owner identity avoids a package-root query");
-                    assertEquals(0, stats.externalRootSnapshotsBuilt,
-                            "unrelated package roots do not add lifecycle cleanup work");
                     assertTrue(WeakRefRegistry.isweak(weak));
                     assertTrue(weak.value == referent,
                             "the captured aggregate keeps its nested referent alive");

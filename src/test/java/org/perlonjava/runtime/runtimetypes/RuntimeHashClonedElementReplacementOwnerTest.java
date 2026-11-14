@@ -15,14 +15,12 @@ class RuntimeHashClonedElementReplacementOwnerTest {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeHash displaced = new RuntimeHash();
-            displaced.activateOwnerTracking();
             RuntimeScalar displacedValue = countedValue(displaced);
             RuntimeHash destination = new RuntimeHash();
             destination.putClonedElement("slot", displacedValue);
 
             RuntimeScalar weakObserver = displaced.createAnonymousReference();
             RuntimeHash replacement = new RuntimeHash();
-            replacement.activateOwnerTracking();
             RuntimeScalar replacementValue = countedValue(replacement);
             try {
                 WeakRefRegistry.weaken(weakObserver);

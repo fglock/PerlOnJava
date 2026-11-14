@@ -30,18 +30,10 @@ class PackageNestedUntrackedAggregateReleaseTest {
                 assertEquals(1,
                         target.ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE));
 
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     WeakRefRegistry.weaken(weak);
 
-                    ReachabilityQueryStats stats = measurement.stats();
                     assertTrue(WeakRefRegistry.isweak(weak));
-                    assertEquals(0, stats.rootQueries,
-                            "the scalar owner identity needs no root query");
-                    assertEquals(0, stats.edgesInspected,
-                            "an active untracked owner slot avoids scanning package roots");
-                    assertEquals(0, stats.nodesVisited);
-                    assertEquals(0, stats.rootsSeeded);
                 }
             } finally {
                 WeakRefRegistry.clearWeakRefsTo(target);

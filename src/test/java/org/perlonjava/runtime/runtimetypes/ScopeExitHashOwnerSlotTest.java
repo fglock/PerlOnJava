@@ -39,15 +39,9 @@ class ScopeExitHashOwnerSlotTest {
                 assertEquals(1,
                         sourceRegistrations.ownerSlotCount(PerlOwnerSlot.Kind.ACTIVE_LEXICAL));
 
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     MortalList.scopeExitCleanupHash(sourceRegistrations);
 
-                    ReachabilityQueryStats stats = measurement.stats();
-                    assertEquals(0, stats.rootQueries,
-                            "the schema's hash-element owner proves the escaped aggregate is live");
-                    assertEquals(0, stats.externalRootSnapshotsBuilt,
-                            "unrelated package roots do not add scope-cleanup work");
                     assertEquals(1,
                             sourceRegistrations.ownerSlotCount(PerlOwnerSlot.Kind.HASH_ELEMENT));
                     assertEquals(0,

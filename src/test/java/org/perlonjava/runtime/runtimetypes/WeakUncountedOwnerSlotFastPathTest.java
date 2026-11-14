@@ -32,16 +32,12 @@ class WeakUncountedOwnerSlotFastPathTest {
             target.setTrackedRefCount(1);
             weakObserver.refCountOwned = true;
             try {
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     WeakRefRegistry.weaken(weakObserver);
 
                     assertTrue(WeakRefRegistry.isweak(weakObserver));
                     assertEquals(RuntimeBase.RefCountTrackingState.WEAKLY_TRACKED, target.refCountTrackingState(),
                             "an uncounted slot retains the target without a compatibility pin");
-                    assertEquals(0, measurement.stats().rootQueries,
-                            "the direct owner identity avoids a graph query");
-                    assertEquals(0, measurement.stats().snapshotsBuilt);
                 }
 
                 strong.set(new RuntimeScalar());

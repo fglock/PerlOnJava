@@ -22,12 +22,8 @@ class RescuedObjectOwnerIdentityTest {
                 global.set(referent.createReference());
                 assertTrue(DestroyDispatch.hasLivePerlOwnerIdentity(referent));
 
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     assertTrue(DestroyDispatch.hasLivePerlOwnerIdentity(referent));
-                    assertEquals(0, measurement.stats().rootQueries);
-                    assertEquals(0, measurement.stats().snapshotsBuilt);
-                    assertEquals(0, measurement.stats().externalRootSnapshotsBuilt);
                 }
             } finally {
                 global.set(new RuntimeScalar());
@@ -44,11 +40,8 @@ class RescuedObjectOwnerIdentityTest {
             assertFalse(DestroyDispatch.hasLivePerlOwnerIdentity(rescued));
             MortalList.pushTemporaryRoot(rescued);
 
-            try (MortalList.ReachabilityQueryMeasurement measurement =
-                         MortalList.measureReachabilityQueries()) {
+            try {
                 assertTrue(DestroyDispatch.hasLivePerlOwnerIdentity(rescued));
-                assertEquals(0, measurement.stats().rootQueries);
-                assertEquals(0, measurement.stats().snapshotsBuilt);
             } finally {
                 MortalList.popTemporaryRoot(rescued);
                 runtime.lifecycleState.rescuedObjects.remove(rescued);

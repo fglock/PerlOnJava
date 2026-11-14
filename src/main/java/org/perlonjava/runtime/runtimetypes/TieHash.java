@@ -55,10 +55,6 @@ public class TieHash extends HashMap<String, RuntimeScalar> {
         this.tiedPackage = tiedPackage;
         this.previousValue = previousValue;
         this.self = RuntimeScalar.retainTiedHandlerValue(self);
-        if (self != null && (self.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                && self.value instanceof RuntimeBase base) {
-            base.markPossiblyStoredInTiedHandler();
-        }
     }
 
     /**

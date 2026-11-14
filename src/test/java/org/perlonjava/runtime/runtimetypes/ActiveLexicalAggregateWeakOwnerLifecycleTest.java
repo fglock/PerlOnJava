@@ -27,8 +27,7 @@ class ActiveLexicalAggregateWeakOwnerLifecycleTest {
                 assertEquals(1, array.refCount);
                 assertEquals(1, array.ownerSlotCount(PerlOwnerSlot.Kind.ACTIVE_LEXICAL));
 
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     WeakRefRegistry.weaken(weakOwner);
 
                     assertTrue(WeakRefRegistry.isweak(weakOwner));
@@ -36,8 +35,6 @@ class ActiveLexicalAggregateWeakOwnerLifecycleTest {
                             "the active lexical edge must not be fabricated as a count");
                     assertTrue(array.deferredFinalReleaseForUncountedOwners,
                             "the zero-count lifecycle must wait on the exact pad owner");
-                    assertEquals(0, measurement.stats().rootQueries,
-                            "weakening must consult owner identities without walking roots");
 
                     MortalList.scopeExitCleanupArray(array);
                     MyVarCleanupStack.unregister(array);
@@ -47,7 +44,6 @@ class ActiveLexicalAggregateWeakOwnerLifecycleTest {
                     assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, array.perlLifecycleState());
                     assertEquals(0, array.refCount);
                     assertFalse(array.deferredFinalReleaseForUncountedOwners);
-                    assertEquals(0, measurement.stats().rootQueries);
                 }
             } finally {
                 MyVarCleanupStack.unregister(array);

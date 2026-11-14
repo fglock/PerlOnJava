@@ -24,8 +24,7 @@ class FinalCodeOwnerCaptureReleaseFastPathTest {
             codeOwner.set(new RuntimeScalar(closure));
             assertEquals(1, closure.refCount);
 
-            try (MortalList.ReachabilityQueryMeasurement measurement =
-                         MortalList.measureReachabilityQueries()) {
+            {
                 codeOwner.set(new RuntimeScalar());
 
                 assertNull(closure.capturedScalars,
@@ -33,8 +32,6 @@ class FinalCodeOwnerCaptureReleaseFastPathTest {
                 assertNull(closure.capturedScalarOwnerSlots);
                 assertEquals(0, capturedPad.captureCount);
                 assertFalse(captureSlot.isActive());
-                assertEquals(0, measurement.stats().rootQueries);
-                assertEquals(0, measurement.stats().snapshotsBuilt);
             }
         }
     }

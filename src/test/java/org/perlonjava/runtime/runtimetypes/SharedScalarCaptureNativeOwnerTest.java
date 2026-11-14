@@ -37,8 +37,7 @@ class SharedScalarCaptureNativeOwnerTest {
                         "one captured pad cell owns its value once across multiple closures");
                 assertEquals(0, capturedPad.captureRefCountOwned());
 
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     source.set(new RuntimeScalar());
                     assertTrue(WeakRefRegistry.isweak(weakObserver),
                             "the shared pad cell keeps the target after its source leaves");
@@ -56,10 +55,6 @@ class SharedScalarCaptureNativeOwnerTest {
                     assertFalse(WeakRefRegistry.isweak(weakObserver),
                             "the final capture release clears weak observers");
                     assertEquals(RuntimeScalarType.UNDEF, weakObserver.type);
-                    assertEquals(0, measurement.stats().rootQueries,
-                            "capture lifetime is decided from owner identities");
-                    assertEquals(0, measurement.stats().snapshotsBuilt);
-                    assertEquals(0, measurement.stats().externalRootSnapshotsBuilt);
                 }
             } finally {
                 if (firstClosure.capturedScalars != null) firstClosure.releaseCaptures();

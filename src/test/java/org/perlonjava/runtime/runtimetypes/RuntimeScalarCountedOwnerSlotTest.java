@@ -32,17 +32,13 @@ class RuntimeScalarCountedOwnerSlotTest {
 
                 assertEquals(2, target.refCount,
                         "the scalar cell and array element each contribute one owner count");
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     scalarOwner.set(new RuntimeScalar());
 
                     assertEquals(1, target.refCount);
                     assertEquals(1, target.countedOwnerSlotCount());
                     assertEquals(1, target.ownerSlotCount(PerlOwnerSlot.Kind.ARRAY_ELEMENT));
                     assertTrue(WeakRefRegistry.isweak(observer));
-                    assertEquals(0, measurement.stats().rootQueries,
-                            "the surviving array slot is handled through its owner identity");
-                    assertEquals(0, measurement.stats().snapshotsBuilt);
                 }
 
                 arrayOwner.elements.get(0).set(new RuntimeScalar());

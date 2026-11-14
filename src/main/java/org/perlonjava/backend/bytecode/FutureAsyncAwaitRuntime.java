@@ -99,7 +99,7 @@ public final class FutureAsyncAwaitRuntime {
             return;
         }
         PerlRuntime runtime = PerlRuntime.current();
-        suspension.frame.registerEndBoundaryOwnerRoots(runtime.executionState());
+        suspension.frame.registerSuspendedContinuation(runtime.executionState());
 
         AtomicBoolean callbackEntered = new AtomicBoolean();
         try {

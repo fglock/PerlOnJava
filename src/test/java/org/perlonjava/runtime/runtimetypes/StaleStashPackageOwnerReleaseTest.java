@@ -102,7 +102,6 @@ class StaleStashPackageOwnerReleaseTest {
                 + " stale.namespace=" + stale.namespace + " stale.refCount=" + stale.refCount
                 + " stale.localBinding=" + stale.localBindingExists
                 + " stale.owners=" + owners
-                + " roots=" + ReachabilityWalker.findPathTo(stale, true)
                 + " move=" + moveDescription;
     }
 

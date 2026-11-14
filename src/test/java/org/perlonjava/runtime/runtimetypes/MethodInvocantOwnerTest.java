@@ -52,7 +52,7 @@ class MethodInvocantOwnerTest {
             WeakRefRegistry.weaken(weak);
             RuntimeBase hold = RuntimeCode.acquireMethodInvocantHold(source);
             source.set(RuntimeScalarCache.scalarUndef);
-            try (MortalList.ReachabilityQueryMeasurement measurement = MortalList.measureReachabilityQueries()) {
+            {
                 RuntimeCode.releaseMethodInvocantHold(hold);
                 RuntimeCode.releaseMethodInvocantHold(hold);
                 assertEquals(RuntimeScalarType.HASHREFERENCE, weak.type);
@@ -61,14 +61,12 @@ class MethodInvocantOwnerTest {
                 MortalList.flush();
                 assertEquals(RuntimeScalarType.UNDEF, weak.type);
                 assertEquals(0, runtime.positiveOwnerSlotReferentCount(value));
-                assertEquals(0, measurement.stats().rootQueries);
-                assertEquals(0, measurement.stats().snapshotsBuilt);
             }
         }
     }
 
     @Test
-    void abandonedFinalHoldReleasesImmediatelyWithoutAReachabilityReplacement() {
+    void abandonedFinalHoldReleasesImmediately() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeHash value = invocant();
@@ -79,15 +77,13 @@ class MethodInvocantOwnerTest {
             WeakRefRegistry.weaken(weak);
             RuntimeBase hold = RuntimeCode.acquireMethodInvocantHold(source);
             source.set(RuntimeScalarCache.scalarUndef);
-            try (MortalList.ReachabilityQueryMeasurement measurement = MortalList.measureReachabilityQueries()) {
+            {
                 RuntimeCode.releaseAbandonedMethodInvocantHold(hold);
                 RuntimeCode.releaseAbandonedMethodInvocantHold(hold);
                 assertEquals(RuntimeScalarType.UNDEF, weak.type);
                 assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, value.perlLifecycleState());
                 assertFalse(value.hasOwnerSlots());
                 assertEquals(0, runtime.positiveOwnerSlotReferentCount(value));
-                assertEquals(0, measurement.stats().rootQueries);
-                assertEquals(0, measurement.stats().snapshotsBuilt);
             }
         }
     }

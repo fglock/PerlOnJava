@@ -8,7 +8,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @Tag("unit")
 class ActiveLexicalAggregateOwnerSlotTest {
     @Test
-    void activeArrayAndHashPadsOwnAndReleaseAggregateSlotsWithoutSweeps() {
+    void activeArrayAndHashPadsOwnAndReleaseAggregateSlots() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             MortalList.setActive(true);

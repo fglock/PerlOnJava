@@ -4,6 +4,7 @@ use Test::More;
 use Scalar::Util qw(weaken isweak);
 
 our %DESTROYED;
+our (@PACKAGE_CODE, $CODE_WEAK);
 
 {
     package Issue2043::OwnerSlotLifecycle;
@@ -73,6 +74,21 @@ sub make_owner_reader {
     undef $Issue2043::PACKAGE_OWNER;
     ok(!defined($weak), 'removing the package owner clears its weak observer');
     is($DESTROYED{package}, 1, 'package-slot release calls DESTROY once');
+}
+
+{
+    my $value = 0;
+    my $code = sub { ++$value };
+    $CODE_WEAK = $code;
+    weaken($CODE_WEAK);
+    @PACKAGE_CODE = ($code);
+    undef $code;
+
+    ok(defined($CODE_WEAK), 'a package array element keeps a capturing CODE value alive');
+    is($PACKAGE_CODE[0]->(), 1, 'the captured CODE value remains callable through its array slot');
+
+    @PACKAGE_CODE = ();
+    ok(!defined($CODE_WEAK), 'releasing the final array CODE slot clears its weak observer');
 }
 
 {

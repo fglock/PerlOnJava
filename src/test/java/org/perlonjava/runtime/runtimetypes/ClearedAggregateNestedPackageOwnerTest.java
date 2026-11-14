@@ -8,15 +8,15 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("unit")
-class ClearedAggregateNestedPackageOwnerNoRootWalkTest {
+class ClearedAggregateNestedPackageOwnerTest {
     @Test
-    void nestedPackageSlotPreservesWeakObserverWithoutRootSnapshot() {
+    void nestedPackageSlotPreservesWeakObserver() {
         PerlRuntime runtime = new PerlRuntime();
         RuntimeArray packageRoot = new RuntimeArray();
         RuntimeHash referent = new RuntimeHash();
         RuntimeScalar strongOwner = referent.createAnonymousReference();
         RuntimeScalar weakObserver = referent.createAnonymousReference();
-        String globalName = "ClearedAggregateNestedPackageOwnerNoRootWalkTest::root";
+        String globalName = "ClearedAggregateNestedPackageOwnerTest::root";
 
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             boolean previousMortalListState = MortalList.isActive();
@@ -38,16 +38,10 @@ class ClearedAggregateNestedPackageOwnerNoRootWalkTest {
                 // the current strong edge.
                 referent.clearedOwnedAggregateElement = true;
                 referent.setTrackedRefCount(0);
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
-                    MortalList.finalizeClearedAggregateOwnerAfterScopeExit(referent);
+                MortalList.finalizeClearedAggregateOwnerAfterScopeExit(referent);
 
-                    assertTrue(WeakRefRegistry.isweak(weakObserver),
-                            "the nested package scalar owner keeps its weak observer live");
-                    assertEquals(0, measurement.stats().rootQueries);
-                    assertEquals(0, measurement.stats().snapshotsBuilt);
-                    assertEquals(0, measurement.stats().externalRootSnapshotsBuilt);
-                }
+                assertTrue(WeakRefRegistry.isweak(weakObserver),
+                        "the nested package scalar owner keeps its weak observer live");
 
                 assertEquals(0, referent.refCount,
                         "the exact package owner remains authoritative despite the stale zero count");

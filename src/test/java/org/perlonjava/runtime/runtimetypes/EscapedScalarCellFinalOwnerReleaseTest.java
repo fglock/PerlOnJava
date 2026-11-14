@@ -33,7 +33,6 @@ class EscapedScalarCellFinalOwnerReleaseTest {
             cell.type = RuntimeScalarType.HASHREFERENCE;
             cell.value = target;
             cell.refCountOwned = true;
-            target.activateOwnerTracking();
             target.recordActiveOwner(cell);
 
             RuntimeScalar weak = new RuntimeScalar();

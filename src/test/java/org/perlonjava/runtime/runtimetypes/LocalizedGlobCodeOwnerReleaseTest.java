@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 @Tag("unit")
 class LocalizedGlobCodeOwnerReleaseTest {
     @Test
-    void unownedLocalizedCodeReleasesCaptureWithoutReachabilityWalk() {
+    void unownedLocalizedCodeReleasesCapture() {
         try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
             String name = "LocalizedGlobCodeOwnerReleaseTest::sub";
             RuntimeCode original = code();
@@ -35,17 +35,13 @@ class LocalizedGlobCodeOwnerReleaseTest {
             localizedSlot.globalCodeRefFqn = name;
 
             try {
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     glob.dynamicRestoreState();
 
                     assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED,
                             localized.perlLifecycleState());
                     assertNull(localized.capturedScalars);
                     assertEquals(0, capturedPad.captureCount);
-                    assertEquals(0, measurement.stats().rootQueries);
-                    assertEquals(0, measurement.stats().edgesInspected);
-                    assertEquals(0, measurement.stats().nodesVisited);
                 }
             } finally {
                 GlobalVariable.globalCodeRefs.remove(name);

@@ -28,15 +28,12 @@ class CodeOwnerSlotReleaseFastPathTest {
             assertEquals(2, closure.ownerSlotCount(PerlOwnerSlot.Kind.SCALAR_CELL));
             assertEquals(0, closure.ownerSlotCount(PerlOwnerSlot.Kind.CODE_SLOT));
 
-            try (MortalList.ReachabilityQueryMeasurement measurement =
-                         MortalList.measureReachabilityQueries()) {
+            {
                 local.set(new RuntimeScalar());
 
                 assertNotNull(closure.capturedScalars,
                         "the other scalar owner keeps closure captures alive");
                 assertEquals(1, closure.ownerSlotCount(PerlOwnerSlot.Kind.SCALAR_CELL));
-                assertEquals(0, measurement.stats().rootQueries,
-                        "an explicit owner slot replaces the closure-root query");
             }
 
             external.set(new RuntimeScalar());

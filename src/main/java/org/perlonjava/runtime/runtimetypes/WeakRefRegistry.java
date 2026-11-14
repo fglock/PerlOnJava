@@ -71,7 +71,7 @@ public class WeakRefRegistry {
 
         ref.noteReferenceSlotMutation();
 
-        // Weakness changes the strong root graph even though the scalar's
+        // Weakness retires the scalar's strong owner identity even though its
         // referent field is unchanged.
 
         // If referent was already destroyed, immediately undef the weak ref.
@@ -193,8 +193,8 @@ public class WeakRefRegistry {
                 || (code.hadStashRef
                 && !isInstalledGlobalCodeRef(code)))) {
             // Keep this path targeted to the CODE referent. DBIC weakens
-            // callback CODE refs in hot cursor paths; a graph query here would
-            // add repeated root traversal to that callback path.
+            // callback CODE refs in hot cursor paths, so use the CODE-specific
+            // lifetime checks below.
             // The CODE-specific stale-ref decision below is enough: live CODE
             // refs are protected by clearWeakRefsTo()/shouldKeepCodeWeakRefs,
             // while expired anonymous or former-stash CODE refs can still clear
@@ -202,9 +202,7 @@ public class WeakRefRegistry {
             if (hasWeakRefsTo(code)
                     && !isInstalledGlobalCodeRef(code)) {
                 // clearWeakRefsTo() makes the final decision from stash state,
-                // active frames, and explicit owner-slot identities. A scalar
-                // root walk here duplicates that proof and misses the purpose
-                // of the owner ledger.
+                // active frames, and explicit owner-slot identities.
                 clearWeakRefsTo(code);
             }
         }
@@ -474,8 +472,8 @@ public class WeakRefRegistry {
             }
             return true;
         }
-        // A Perl-visible owner must have an active slot identity. Diagnostic
-        // root snapshots and scalar registry scans are not ownership.
+        // A Perl-visible owner must have an active slot identity. Java-side
+        // diagnostic references are not Perl ownership.
         return false;
     }
 
@@ -505,30 +503,6 @@ public class WeakRefRegistry {
             return true;
         }
         return false;
-    }
-
-    /**
-     * Clear weak refs for ALL blessed, non-CODE objects in the registry.
-     * Called after flushDeferredCaptures() — at this point the main script
-     * has returned and all lexical scopes have exited. Objects with inflated
-     * selective refCounts (due to JVM temporaries, method-call argument
-     * copies, etc.) may still appear "alive" even though no Perl code holds
-     * a reference. Clearing their weak refs allows DBIC's leak tracer
-     * (which runs in an END block) to see them as "collected".
-     * <p>
-     * This is safe because:
-     * 1. Only weak refs are cleared — the Java objects remain alive
-     * 2. CODE refs are excluded (they may still be called from stashes)
-     * 3. END blocks that check for leaks run AFTER this method
-     */
-    /**
-     * Phase 4 (refcount_alignment_plan.md): snapshot all referents currently
-     * in the weak-ref registry. Used by {@link ReachabilityWalker} to iterate
-     * safely (the registry may be modified by concurrent DESTROY / weak-ref
-     * clearing during the walk).
-     */
-    public static java.util.List<RuntimeBase> snapshotWeakRefReferents() {
-        return new java.util.ArrayList<>(state().referentToWeakRefs.keySet());
     }
 
 }

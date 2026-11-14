@@ -8,7 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("unit")
-class CaptureOwnerReleaseWithoutWalkerTest {
+class CaptureOwnerReleaseTest {
     @Test
     void explicitCodeOwnerSlotReleasesItsCapturedAggregateDirectly() {
         PerlRuntime runtime = new PerlRuntime();
@@ -22,18 +22,12 @@ class CaptureOwnerReleaseWithoutWalkerTest {
             closure.capturedAggregates = new RuntimeBase[] {referent};
             closure.capturedAggregateOwnerSlots = new PerlOwnerSlot[] {capture};
 
-            try (MortalList.ReachabilityQueryMeasurement measurement =
-                         MortalList.measureReachabilityQueries()) {
-                assertTrue(capture.isActive());
-                closure.releaseCaptures();
+            assertTrue(capture.isActive());
+            closure.releaseCaptures();
 
-                assertFalse(capture.isActive(),
-                        "releasing the CODE owner retires its capture slot");
-                assertEquals(0, referent.semanticCaptureOwnerCount());
-                assertEquals(0, measurement.stats().rootQueries,
-                        "capture release requires no reachability walk");
-                assertEquals(0, measurement.stats().snapshotsBuilt);
-            }
+            assertFalse(capture.isActive(),
+                    "releasing the CODE owner retires its capture slot");
+            assertEquals(0, referent.semanticCaptureOwnerCount());
         }
     }
 }

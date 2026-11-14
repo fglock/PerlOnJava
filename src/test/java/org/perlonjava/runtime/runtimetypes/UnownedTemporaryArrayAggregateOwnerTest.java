@@ -95,7 +95,7 @@ class UnownedTemporaryArrayAggregateOwnerTest {
                     assertEquals(RuntimeScalarType.UNDEF, weakObserver.type);
                 }
                 assertFalse(temporary.hasPerlStrongOwner(),
-                        "Java reachability does not restore the array's Perl ownership");
+                        "a Java reference does not restore the array's Perl ownership");
             } finally {
                 if (temporaryRootPushed) MortalList.popTemporaryRoot(temporary);
                 MortalList.scopeExitCleanupArray(temporary);

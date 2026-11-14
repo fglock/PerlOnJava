@@ -91,17 +91,6 @@ public class DestroyDispatch {
 
     // Rescued objects stay in this lifecycle list until their exact owner slots
     // leave. The list is bookkeeping and never owns or traverses the object graph.
-    /**
-     * Read-only snapshot for explicit root diagnostics. Rescued objects are
-     * diagnostic roots, not lifecycle owners.
-     */
-    public static java.util.List<RuntimeBase> snapshotRescuedForDiagnostics() {
-        java.util.List<RuntimeBase> objects = state().rescuedObjects;
-        synchronized (objects) {
-            return new java.util.ArrayList<>(objects);
-        }
-    }
-
     public static boolean isRescued(RuntimeBase referent) {
         if (referent == null) return false;
         java.util.List<RuntimeBase> objects = state().rescuedObjects;

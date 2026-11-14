@@ -160,21 +160,21 @@ public class GlobalVariable {
     }
 
     private static void invalidateCodeRefNames() {
-        globalState().invalidateCodeRefs();
+        globalState().noteCodeRefMutation();
     }
 
     private static void noteCodeRefMutation(
             String key, RuntimeScalar previous, RuntimeScalar replacement) {
-        globalState().noteCodeRefMutation(previous, replacement);
+        globalState().noteCodeRefMutation();
         if (key == null) return;
         for (String related : compiledDirectCallSiteKeys(key)) {
             globalState().notifyCompiledDirectCallSites(related, previous, replacement);
         }
     }
 
-    /** Invalidate CODE-root caches after a stash CODE slot changes in place. */
+    /** Advance the compiled CODE-name cache version after an in-place slot change. */
     static void noteGlobalCodeRefSlotMutation(RuntimeScalar slot) {
-        globalState().noteCodeRefMutation(slot, slot);
+        globalState().noteCodeRefMutation();
         if (slot != null && slot.globalCodeRefFqn != null) {
             for (String related : compiledDirectCallSiteKeys(slot.globalCodeRefFqn)) {
                 globalState().notifyCompiledDirectCallSites(related, slot, slot);
@@ -781,47 +781,9 @@ public class GlobalVariable {
         }
     }
 
-    /** Read-only, allocation-free view for hot reachability traversals. */
+    /** Read-only view used while running registered global CODE blocks at END. */
     static Collection<RuntimeScalar> globalCodeRefValuesView() {
         return globalState().codeRefs().values();
-    }
-
-    static Set<RuntimeCode> installedGlobalCodeRefsView() {
-        return globalState().installedCodeRefs();
-    }
-
-    static List<RuntimeScalar> globalCodeRefEdgeRootsView() {
-        return globalState().codeRefRootsWithEdges();
-    }
-
-    /** Invalidate the cached CODE-root edge list after capture/state metadata changes. */
-    public static void invalidateGlobalCodeRefGraphRoots() {
-        globalState().invalidateCodeRefGraphRoots();
-    }
-
-    /** Read-only backing-map views for reachability walks; bypass map facade entries. */
-    static Collection<RuntimeScalar> globalVariableValuesView() {
-        return globalState().scalarValues().values();
-    }
-
-    static Collection<RuntimeArray> globalArrayValuesView() {
-        return globalState().arrayValues().values();
-    }
-
-    static Collection<RuntimeHash> globalHashValuesView() {
-        return globalState().hashValues().values();
-    }
-
-    static Set<Map.Entry<String, RuntimeScalar>> globalVariableEntriesView() {
-        return globalState().scalarValues().entrySet();
-    }
-
-    static Set<Map.Entry<String, RuntimeArray>> globalArrayEntriesView() {
-        return globalState().arrayValues().entrySet();
-    }
-
-    static Set<Map.Entry<String, RuntimeHash>> globalHashEntriesView() {
-        return globalState().hashValues().entrySet();
     }
 
     /** Runtime-selecting facade for named IO and FORMAT stash slots. */
@@ -1961,7 +1923,7 @@ public class GlobalVariable {
     /**
      * Temporarily aliases a package scalar without permanently labelling the
      * aliased value as package-global. Operators such as map and grep localize
-     * {@code $_} to each input element; the global slot is a reachability root
+     * {@code $_} to each input element; the global slot is a Perl owner
      * while the alias is installed, but the input SV must become ephemeral
      * again when the operator restores the old slot.
      */

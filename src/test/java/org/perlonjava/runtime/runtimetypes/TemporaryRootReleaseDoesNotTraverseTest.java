@@ -13,7 +13,7 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 @Tag("unit")
-class TemporaryRootFallbackSingleTraversalTest {
+class TemporaryRootReleaseDoesNotTraverseTest {
     private static final class CountingHashValues extends AbstractMap<String, RuntimeScalar> {
         private int valuesCalls;
 
@@ -30,7 +30,7 @@ class TemporaryRootFallbackSingleTraversalTest {
     }
 
     @Test
-    void cleanupDoesNotWalkNestedTemporaryRootGraphs() {
+    void cleanupDoesNotTraverseNestedTemporaryValues() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeHash nested = new RuntimeHash();

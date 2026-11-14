@@ -24,7 +24,7 @@ class TargetedWeakReleaseOwnerSlotFastPathTest {
                 assertTrue(WeakRefRegistry.isweak(weak),
                         "the active element slot keeps the target's weak observer intact");
                 assertTrue(target.refCount > 0,
-                        "the element's strong owner remains counted without a root walk");
+                        "the element's strong owner remains counted");
             } finally {
                 WeakRefRegistry.unweaken(weak);
             }

@@ -63,16 +63,11 @@ class CapturedScalarCellOwnerFastPathTest {
                                     target, capturedOwner.countedOwnerSlot()),
                             "the exact scalar-cell and closure-capture identities prove ownership");
 
-                    try (MortalList.ReachabilityQueryMeasurement measurement =
-                                 MortalList.measureReachabilityQueries()) {
+                    {
                         transientOwner.set(new RuntimeScalar());
 
                         assertEquals(1, target.refCount);
                         assertTrue(WeakRefRegistry.isweak(weakObserver));
-                        assertEquals(0, measurement.stats().scalarReachabilityQueries,
-                                "the active capture identity is the liveness proof");
-                        assertEquals(0, measurement.stats().scalarReachabilityRootWalks);
-                        assertEquals(0, measurement.stats().rootQueries);
                     }
 
                     MortalList.setActive(true);

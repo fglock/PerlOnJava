@@ -3,8 +3,6 @@ package org.perlonjava.runtime.runtimetypes;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
-import java.util.List;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -19,7 +17,7 @@ class TemporaryRootExceptionUnwindTest {
             RuntimeHash failedCallValue = new RuntimeHash();
             MortalList.pushTemporaryRoot(callerValue);
             try {
-                List<RuntimeBase> rootsBeforeCall = MortalList.snapshotTemporaryRoots();
+                int rootDepth = MortalList.temporaryRootDepth();
                 RuntimeCode failingCode = new RuntimeCode((args, context) -> {
                     MortalList.pushTemporaryRoot(failedCallValue);
                     throw new PerlDieException(new RuntimeScalar("expected failure"));
@@ -30,8 +28,11 @@ class TemporaryRootExceptionUnwindTest {
                         () -> RuntimeCode.apply(
                                 callable, new RuntimeArray(), RuntimeContextType.SCALAR));
 
-                assertEquals(rootsBeforeCall, MortalList.snapshotTemporaryRoots(),
-                        "exceptional call cleanup must preserve caller roots and drop frame roots");
+                assertEquals(rootDepth, MortalList.temporaryRootDepth(),
+                        "exceptional call cleanup must preserve caller leases and drop frame leases");
+                assertEquals(1, callerValue.ownerSlotCount(PerlOwnerSlot.Kind.EXPRESSION_VALUE));
+                assertEquals(0, failedCallValue.ownerSlotCount(
+                        PerlOwnerSlot.Kind.EXPRESSION_VALUE));
             } finally {
                 MortalList.popTemporaryRoot(callerValue);
             }
@@ -46,7 +47,7 @@ class TemporaryRootExceptionUnwindTest {
             RuntimeHash returnedReferent = new RuntimeHash();
             MortalList.pushTemporaryRoot(callerValue);
             try {
-                List<RuntimeBase> rootsBeforeCall = MortalList.snapshotTemporaryRoots();
+                int rootDepth = MortalList.temporaryRootDepth();
                 RuntimeScalar returnValue = returnedReferent.createAnonymousReference();
                 RuntimeCode[] target = new RuntimeCode[1];
                 RuntimeCode transferringCode = new RuntimeCode((args, context) -> {
@@ -60,8 +61,11 @@ class TemporaryRootExceptionUnwindTest {
                 RuntimeList result = RuntimeCode.apply(
                         new RuntimeScalar(target[0]), new RuntimeArray(), RuntimeContextType.SCALAR);
 
-                assertEquals(rootsBeforeCall, MortalList.snapshotTemporaryRoots(),
-                        "the target must preserve caller roots and drop transferred frame roots");
+                assertEquals(rootDepth, MortalList.temporaryRootDepth(),
+                        "the target must preserve caller leases and drop transferred frame leases");
+                assertEquals(1, callerValue.ownerSlotCount(PerlOwnerSlot.Kind.EXPRESSION_VALUE));
+                assertEquals(0, returnValue.ownerSlotCount(
+                        PerlOwnerSlot.Kind.EXPRESSION_VALUE));
                 assertSame(returnedReferent, ((RuntimeScalar) result.getFirst()).value,
                         "return ownership must preserve the referent after its temporary root is removed");
             } finally {

@@ -24,13 +24,8 @@ class DestroyOwnerSlotResurrectionTest {
                 global.set(referenceTo(referent));
                 assertEquals(1, referent.ownerSlotCount(PerlOwnerSlot.Kind.SCALAR_CELL));
 
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     assertTrue(DestroyDispatch.hasNewPerlOwnerSlot(referent, ownersAtStart));
-                    assertEquals(0, measurement.stats().rootQueries,
-                            "a counted slot identity should replace the root walk");
-                    assertEquals(0, measurement.stats().snapshotsBuilt,
-                            "a counted slot identity should not build a root snapshot");
                 }
             } finally {
                 global.set(new RuntimeScalar());
@@ -53,14 +48,9 @@ class DestroyOwnerSlotResurrectionTest {
                 packageRoot.elements.add(globalOwner);
                 assertTrue(referent.hasUntrackedReferenceOwnerSlotIdentity());
 
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     assertTrue(DestroyDispatch.hasNewPerlOwnerSlot(referent, ownersAtStart));
                     assertTrue(referent.hasUntrackedReferenceOwnerSlotIdentity());
-                    assertEquals(0, measurement.stats().rootQueries,
-                            "owner-slot resurrection checks must not walk Perl roots");
-                    assertEquals(0, measurement.stats().snapshotsBuilt,
-                            "owner-slot resurrection checks must not build root snapshots");
                 }
             } finally {
                 packageRoot.elements.clear();
@@ -81,14 +71,9 @@ class DestroyOwnerSlotResurrectionTest {
                 global.set(referenceTo(referent));
                 assertEquals(1, referent.ownerSlotCount(PerlOwnerSlot.Kind.SCALAR_CELL));
 
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     assertTrue(DestroyDispatch.hasEscapedPerlOwner(referent, false, null),
                             "a durable current owner slot keeps a local DESTROY from finalizing");
-                    assertEquals(0, measurement.stats().rootQueries,
-                            "local DESTROY owner checks must not walk Perl roots");
-                    assertEquals(0, measurement.stats().snapshotsBuilt,
-                            "local DESTROY owner checks must not build root snapshots");
                 }
             } finally {
                 global.set(new RuntimeScalar());
@@ -107,12 +92,9 @@ class DestroyOwnerSlotResurrectionTest {
             Set<PerlOwnerSlot> ownersAtStart = Set.of();
             detachedCell.localBindingExists = false;
 
-            try (MortalList.ReachabilityQueryMeasurement measurement =
-                         MortalList.measureReachabilityQueries()) {
+            try {
                 assertFalse(DestroyDispatch.hasNewPerlOwnerSlot(referent, ownersAtStart),
                         "a scalar cell outside any live slot is stale bookkeeping");
-                assertEquals(0, measurement.stats().rootQueries,
-                        "stale scalar slots should be rejected without a root walk");
                 assertFalse(referent.hasSemanticCaptureOwner(),
                         "the detached scalar has no live closure capture");
                 String ownerSlotState = referent.ownerSlotSnapshot().stream()
@@ -122,8 +104,6 @@ class DestroyOwnerSlotResurrectionTest {
                 assertFalse(DestroyDispatch.hasCurrentPerlOwnerSlot(referent), ownerSlotState);
                 assertFalse(DestroyDispatch.hasEscapedPerlOwner(referent, false, null),
                         "a detached counted cell does not escape a local DESTROY");
-                assertEquals(0, measurement.stats().rootQueries,
-                        "local DESTROY must reject stale cells without a root walk");
             } finally {
                 detachedCell.set(new RuntimeScalar());
             }
@@ -135,20 +115,14 @@ class DestroyOwnerSlotResurrectionTest {
         try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
             RuntimeHash referent = new RuntimeHash();
             referent.setTrackedRefCount(0);
-            referent.activateOwnerTracking();
             Set<PerlOwnerSlot> ownersAtStart = referent.ownerSlotSnapshot();
             RuntimeScalar staged = RuntimeScalar.retainStagedArgumentValue(referenceTo(referent));
 
             try {
                 assertEquals(1, referent.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_VALUE));
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     assertFalse(DestroyDispatch.hasNewPerlOwnerSlot(referent, ownersAtStart),
                             "a staged call argument does not outlive DESTROY as a Perl owner");
-                    assertEquals(0, measurement.stats().rootQueries,
-                            "temporary-owner checks must not walk Perl roots");
-                    assertEquals(0, measurement.stats().snapshotsBuilt,
-                            "temporary-owner checks must not build root snapshots");
                 }
             } finally {
                 RuntimeScalar.releaseStagedArgumentValue(staged);

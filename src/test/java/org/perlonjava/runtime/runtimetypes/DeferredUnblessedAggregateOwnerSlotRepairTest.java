@@ -26,14 +26,11 @@ class DeferredUnblessedAggregateOwnerSlotRepairTest {
                 MortalList.pushMark();
                 CountedOwnerFixture.queueRelease(temporaryOwner);
 
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     MortalList.popAndFlush();
 
                     assertEquals(1, target.refCount);
                     assertTrue(WeakRefRegistry.isweak(weakObserver));
-                    assertEquals(0, measurement.stats().rootQueries);
-                    assertEquals(0, measurement.stats().snapshotsBuilt);
                 }
 
                 ownerArray.elements.getFirst().set(new RuntimeScalar());

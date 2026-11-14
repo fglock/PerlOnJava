@@ -235,18 +235,11 @@ class RuntimeScalarOwnerSlotTest {
                 metadataCell.set(metadata.createAnonymousReference());
                 MyVarCleanupStack.register(metadataCell);
                 strong.set(new RuntimeScalar(1));
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     metadataCell.set(new RuntimeScalar());
 
                     assertEquals(RuntimeScalarType.UNDEF, weak.type);
                     assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, child.perlLifecycleState());
-                    ReachabilityQueryStats stats = measurement.stats();
-                    assertEquals(0, stats.rootQueries);
-                    assertEquals(0, stats.snapshotsBuilt);
-                    assertEquals(0, stats.externalRootSnapshotsBuilt);
-                    assertEquals(0, stats.liveRootSnapshotsBuilt);
-                    assertEquals(0, stats.scalarReachabilityQueries);
                 }
             } finally {
                 MyVarCleanupStack.popMark(lexicalMark);

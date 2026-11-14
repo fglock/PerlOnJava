@@ -8,7 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("unit")
-class WeakBackrefCodeCaptureSweepTest {
+class ArrayElementOwnerReleaseClearsWeakObserverTest {
     @Test
     void arrayElementOwnerReleaseClearsTheWeakObserver() {
         PerlRuntime runtime = new PerlRuntime();
@@ -28,11 +28,7 @@ class WeakBackrefCodeCaptureSweepTest {
                 MortalList.flush();
                 assertEquals(0, target.ownerSlotCount(PerlOwnerSlot.Kind.ARRAY_ELEMENT));
                 assertFalse(WeakRefRegistry.isweak(weakTarget),
-                        "clearing the final strong Perl slot releases the weak observer: refCount="
-                                + target.refCount + ", local=" + target.localBindingExists
-                                + ", owners=" + target.ownerSlotSnapshot().stream()
-                                        .map(slot -> slot.kind() + ":" + slot.isActive())
-                                        .toList());
+                        "clearing the final strong Perl slot releases the weak observer");
             } finally {
                 if (WeakRefRegistry.isweak(weakTarget)) WeakRefRegistry.unweaken(weakTarget);
             }

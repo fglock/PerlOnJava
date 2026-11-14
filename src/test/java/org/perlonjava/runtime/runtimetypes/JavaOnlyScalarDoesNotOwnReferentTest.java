@@ -7,9 +7,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
 @Tag("unit")
-class ScalarRegistryIsNotPerlOwnerTest {
+class JavaOnlyScalarDoesNotOwnReferentTest {
     @Test
-    void jvmLiveRegistryOnlyScalarDoesNotRescueZeroCountReferent() {
+    void javaLiveScalarWithoutPerlOwnerDoesNotRescueZeroCountReferent() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             runtime.lifecycleState.weakRefsExist = true;
@@ -19,11 +19,10 @@ class ScalarRegistryIsNotPerlOwnerTest {
 
             // This wrapper remains Java-live in the test, but it has no Perl
             // storage slot, lexical binding, or owner identity.
-            RuntimeScalar registryOnly = new RuntimeScalar();
-            registryOnly.type = RuntimeScalarType.REFERENCE;
-            registryOnly.value = referent;
-            ScalarRefRegistry.registerRef(registryOnly);
-            assertFalse(registryOnly.hasOwnerSlots());
+            RuntimeScalar javaOnly = new RuntimeScalar();
+            javaOnly.type = RuntimeScalarType.REFERENCE;
+            javaOnly.value = referent;
+            assertFalse(javaOnly.hasOwnerSlots());
 
             RuntimeScalar observer = new RuntimeScalar();
             observer.type = RuntimeScalarType.REFERENCE;
@@ -32,7 +31,7 @@ class ScalarRegistryIsNotPerlOwnerTest {
             WeakRefRegistry.weaken(observer);
 
             assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, referent.perlLifecycleState(),
-                    "a JVM registry entry without a Perl owner cannot rescue the referent");
+                    "a Java-only scalar without a Perl owner cannot rescue the referent");
             assertEquals(0, referent.refCount);
             assertEquals(RuntimeScalarType.UNDEF, observer.type,
                     "the last real owner release clears the weak observer immediately");

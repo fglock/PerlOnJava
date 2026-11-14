@@ -41,14 +41,12 @@ class TiedHandlerOwnerTest {
             scalar.releaseTiedObject();
             scalar.releaseTiedObject();
             assertEquals(RuntimeScalarType.HASHREFERENCE, weak.type);
-            try (MortalList.ReachabilityQueryMeasurement measurement = MortalList.measureReachabilityQueries()) {
+            {
                 handle.releaseTiedObject();
                 handle.releaseTiedObject();
                 assertEquals(RuntimeScalarType.UNDEF, weak.type);
                 assertFalse(handler.hasOwnerSlots());
                 assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, handler.perlLifecycleState());
-                assertEquals(0, measurement.stats().rootQueries);
-                assertEquals(0, measurement.stats().snapshotsBuilt);
             }
         }
     }
@@ -98,7 +96,7 @@ class TiedHandlerOwnerTest {
             RuntimeScalar borrowedArray = array.createAnonymousReference();
             MortalList.pushTemporaryRoot(borrowedHash);
             MortalList.pushTemporaryRoot(borrowedArray);
-            try (MortalList.ReachabilityQueryMeasurement measurement = MortalList.measureReachabilityQueries()) {
+            try {
                 hash.setTrackedRefCount(0);
                 DestroyDispatch.callDestroyFromCountedOwner(hash);
                 array.setTrackedRefCount(0);
@@ -110,7 +108,6 @@ class TiedHandlerOwnerTest {
                 assertEquals(RuntimeScalarType.UNDEF, arrayWeak.type);
                 assertFalse(hashChild.hasOwnerSlots());
                 assertFalse(arrayChild.hasOwnerSlots());
-                assertEquals(0, measurement.stats().rootQueries);
             } finally {
                 MortalList.popTemporaryRoot(borrowedArray);
                 MortalList.popTemporaryRoot(borrowedHash);

@@ -7,23 +7,22 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
 @Tag("unit")
-class ClearedAggregateReachabilityNotOwnerTest {
+class ClearedAggregateRequiresOwnerSlotTest {
     @Test
-    void untrackedRootPathDoesNotReplaceAPerlOwnerSlot() {
+    void untrackedJavaReferenceDoesNotReplaceAPerlOwnerSlot() {
         PerlRuntime runtime = new PerlRuntime();
         RuntimeHash referent = new RuntimeHash();
         RuntimeHash packageRoot = new RuntimeHash();
         RuntimeScalar weakObserver = referenceTo(referent);
         RuntimeScalar untrackedElement = referenceTo(referent);
         String globalName =
-                "ClearedAggregateReachabilityNotOwnerTest::packageRoot";
+                "ClearedAggregateRequiresOwnerSlotTest::packageRoot";
 
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             boolean previousMortalListState = MortalList.isActive();
             GlobalVariable.globalHashes.put(globalName, packageRoot);
-            // This intentionally bypasses the normal hash store API. It creates
-            // graph reachability without the HASH_ELEMENT owner that production
-            // stores must acquire.
+            // This intentionally bypasses the normal hash store API. The Java
+            // reference it creates has no HASH_ELEMENT owner identity.
             packageRoot.elements = new java.util.LinkedHashMap<>();
             packageRoot.elements.put("referent", untrackedElement);
             MyVarCleanupStack.register(referent);
@@ -39,7 +38,7 @@ class ClearedAggregateReachabilityNotOwnerTest {
                 assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED,
                         referent.perlLifecycleState());
                 assertFalse(WeakRefRegistry.isweak(weakObserver),
-                        "graph reachability without an owner slot cannot preserve the observer");
+                        "a Java reference without an owner slot cannot preserve the observer");
             } finally {
                 MyVarCleanupStack.unregister(referent);
                 if (WeakRefRegistry.isweak(weakObserver)) {

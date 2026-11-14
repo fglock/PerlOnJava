@@ -31,17 +31,13 @@ class CurrentCountedOwnerReleaseTest {
                                 && owner.countedOwnerSlot().isActive()
                                 && owner.countedOwnerSlot().referent() == target),
                         "each active scalar owner has a corresponding counted identity");
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     MortalList.deferDecrementIfTracked(released);
                     MortalList.flushAboveMark();
 
                     assertEquals(1, target.refCount);
                     assertEquals(1, target.countedOwnerSlotCount());
                     assertTrue(WeakRefRegistry.isweak(weakObserver));
-                    assertEquals(0, measurement.stats().rootQueries);
-                    assertEquals(0, measurement.stats().scalarReachabilityQueries);
-                    assertEquals(0, measurement.stats().snapshotsBuilt);
                 }
 
                 surviving.set(new RuntimeScalar());

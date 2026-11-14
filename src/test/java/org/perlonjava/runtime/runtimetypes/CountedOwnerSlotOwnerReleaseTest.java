@@ -25,15 +25,12 @@ class CountedOwnerSlotOwnerReleaseTest {
                 assertEquals(2, target.countedOwnerSlotCount());
                 assertEquals(2, target.refCount);
 
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     scalarOwner.set(new RuntimeScalar());
 
                     assertEquals(1, target.refCount);
                     assertEquals(1, target.ownerSlotCount(PerlOwnerSlot.Kind.ARRAY_ELEMENT));
                     assertTrue(WeakRefRegistry.isweak(observer));
-                    assertEquals(0, measurement.stats().rootQueries);
-                    assertEquals(0, measurement.stats().snapshotsBuilt);
                 }
 
                 arrayOwner.elements.getFirst().set(new RuntimeScalar());

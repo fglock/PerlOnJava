@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Tag("unit")
 class MortalizeRegisteredCodeOwnerFastPathTest {
     @Test
-    void registeredContainerOwnerKeepsCodeWithoutScalarReachabilityQuery() {
+    void registeredContainerOwnerKeepsCodeAlive() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             MortalList.setActive(true);
@@ -25,16 +25,13 @@ class MortalizeRegisteredCodeOwnerFastPathTest {
             discardedResult.elements.add(owner);
 
             try {
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     MortalList.mortalizeForVoidDiscard(discardedResult);
 
                     assertTrue(owner.refCountOwned,
                             "the registered container still owns its CODE scalar slot");
                     assertEquals(1, code.refCount);
                     assertTrue(runtime.lifecycleState.pendingOwnerReleases.isEmpty());
-                    assertEquals(0, measurement.stats().scalarReachabilityQueries);
-                    assertEquals(0, measurement.stats().scalarReachabilityRootWalks);
                 }
             } finally {
                 registeredContainer.elements.remove(owner);

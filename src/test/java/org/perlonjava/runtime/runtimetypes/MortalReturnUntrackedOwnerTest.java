@@ -61,8 +61,7 @@ class MortalReturnUntrackedOwnerTest {
                 assertEquals(2,
                         target.ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE));
 
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     MortalList.popAndFlush();
                     assertFalse(returnOwner.isActive());
                     assertEquals(1,
@@ -76,9 +75,6 @@ class MortalReturnUntrackedOwnerTest {
                             target.ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE));
                     assertFalse(WeakRefRegistry.isweak(weakObserver));
                     assertEquals(RuntimeScalarType.UNDEF, weakObserver.type);
-                    assertEquals(0, measurement.stats().rootQueries);
-                    assertEquals(0, measurement.stats().snapshotsBuilt);
-                    assertEquals(0, measurement.stats().scalarReachabilityQueries);
                 }
             } finally {
                 RuntimeScalar.scopeExitCleanup(source);

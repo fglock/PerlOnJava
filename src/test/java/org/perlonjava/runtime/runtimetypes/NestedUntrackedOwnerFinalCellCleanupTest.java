@@ -41,8 +41,7 @@ class NestedUntrackedOwnerFinalCellCleanupTest {
                 assertEquals(1, referent.ownerSlotCount(
                         PerlOwnerSlot.Kind.UNTRACKED_REFERENCE));
 
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     GlobalVariable.globalArrays.remove(globalName);
                     MortalList.scopeExitCleanupArray(packageRoot);
 
@@ -55,8 +54,6 @@ class NestedUntrackedOwnerFinalCellCleanupTest {
                     assertEquals(1, referent.countedOwnerSlotCount());
                     assertTrue(WeakRefRegistry.isweak(weakObserver),
                             "the remaining counted owner keeps the weak observer live");
-                    assertEquals(0, measurement.stats().rootQueries);
-                    assertEquals(0, measurement.stats().snapshotsBuilt);
                 }
 
                 countedOwner.undefine();

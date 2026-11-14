@@ -33,17 +33,13 @@ class PackageRootOwnerSlotFastPathTest {
                 assertEquals(2, target.countedOwnerSlotCount());
                 assertTrue(WeakRefRegistry.isweak(observer));
 
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     left.elements.get("target").set(new RuntimeScalar());
 
                     assertEquals(1, target.refCount);
                     assertEquals(1, target.countedOwnerSlotCount());
                     assertTrue(WeakRefRegistry.isweak(observer));
                     assertFalse(target.destroyFired);
-                    assertEquals(0, measurement.stats().rootQueries,
-                            "the current package slot directly proves the remaining owner");
-                    assertEquals(0, measurement.stats().snapshotsBuilt);
                 }
 
                 right.elements.get("target").set(new RuntimeScalar());

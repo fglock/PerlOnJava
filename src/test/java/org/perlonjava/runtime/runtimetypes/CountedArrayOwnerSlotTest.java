@@ -6,9 +6,9 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 @Tag("unit")
-class ReachabilitySnapshotCompletenessTest {
+class CountedArrayOwnerSlotTest {
     @Test
-    void countedArraySlotsRetainNestedReferentsWithoutAReachabilitySnapshot() {
+    void countedArraySlotsRetainNestedReferents() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeArray parent = new RuntimeArray();

@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 @Tag("unit")
 class LocalizedGlobCodeOwnerSlotFastPathTest {
     @Test
-    void activeCallOwnerSkipsCaptureReachabilityWalkOnGlobRestore() {
+    void activeCallOwnerPreservesCaptureOnGlobRestore() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             String name = "LocalizedGlobCodeOwnerSlotFastPath::sub";
@@ -34,8 +34,7 @@ class LocalizedGlobCodeOwnerSlotFastPathTest {
             localizedSlot.globalCodeRefFqn = name;
             RuntimeCode.pushActiveCode(localized);
             try {
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     glob.dynamicRestoreState();
 
                     assertEquals(0, localized.activeOwnerCount());
@@ -44,9 +43,6 @@ class LocalizedGlobCodeOwnerSlotFastPathTest {
                             "restoring the glob retires only the localized stash owner");
                     assertNotNull(localized.capturedScalars,
                             "the active call keeps its captured pad alive");
-                    assertEquals(0, measurement.stats().rootQueries,
-                            "the active-code owner slot replaces all three root checks");
-                    assertEquals(0, measurement.stats().snapshotsBuilt);
                 }
             } finally {
                 RuntimeCode.popActiveCode(localized);

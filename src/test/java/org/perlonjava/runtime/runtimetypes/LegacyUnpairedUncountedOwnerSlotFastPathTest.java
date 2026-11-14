@@ -32,14 +32,10 @@ class LegacyUnpairedUncountedOwnerSlotFastPathTest {
 
                 assertTrue(strongOwnerSlot.isActive());
                 assertTrue(target.hasCurrentUncountedPerlOwnerSlotIdentity());
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     assertTrue(WeakRefRegistry.isweak(weakObserver));
                     assertEquals(RuntimeBase.RefCountTrackingState.WEAKLY_TRACKED, target.refCountTrackingState(),
                             "weak tracking preserves the current uncounted Perl owner");
-                    assertEquals(0, measurement.stats().rootQueries,
-                            "a current owner identity makes root recovery unnecessary");
-                    assertEquals(0, measurement.stats().snapshotsBuilt);
                 }
 
                 strongOwner.set(new RuntimeScalar());

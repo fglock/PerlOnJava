@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Tag("unit")
 class PackageAggregateValueOwnerSlotTest {
     @Test
-    void prepopulatedPackageArrayOwnsUncountedValueWithoutSweeps() {
+    void prepopulatedPackageArrayOwnsUncountedValue() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeScalar referent = new RuntimeScalar("package aggregate referent");
@@ -34,8 +34,7 @@ class PackageAggregateValueOwnerSlotTest {
                         referent.ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE));
 
                 WeakRefRegistry.weaken(weakObserver);
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     countedOwner.set(new RuntimeScalar());
                     assertTrue(WeakRefRegistry.isweak(weakObserver),
                             "the package aggregate value keeps the referent alive");
@@ -47,8 +46,6 @@ class PackageAggregateValueOwnerSlotTest {
                             referent.ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE));
                     assertFalse(WeakRefRegistry.isweak(weakObserver));
                     assertEquals(RuntimeScalarType.UNDEF, weakObserver.type);
-                    assertEquals(0, measurement.stats().rootQueries);
-                    assertEquals(0, measurement.stats().snapshotsBuilt);
                 }
             } finally {
                 if (valueOwner != null && valueOwner.isActive()) {
@@ -64,7 +61,7 @@ class PackageAggregateValueOwnerSlotTest {
     }
 
     @Test
-    void prepopulatedPackageHashOwnsUncountedValueWithoutSweeps() {
+    void prepopulatedPackageHashOwnsUncountedValue() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeScalar referent = new RuntimeScalar("package hash referent");
@@ -87,8 +84,7 @@ class PackageAggregateValueOwnerSlotTest {
                         referent.ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE));
 
                 WeakRefRegistry.weaken(weakObserver);
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     countedOwner.set(new RuntimeScalar());
                     assertTrue(WeakRefRegistry.isweak(weakObserver),
                             "the package hash value keeps the referent alive");
@@ -100,8 +96,6 @@ class PackageAggregateValueOwnerSlotTest {
                             referent.ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE));
                     assertFalse(WeakRefRegistry.isweak(weakObserver));
                     assertEquals(RuntimeScalarType.UNDEF, weakObserver.type);
-                    assertEquals(0, measurement.stats().rootQueries);
-                    assertEquals(0, measurement.stats().snapshotsBuilt);
                 }
             } finally {
                 if (valueOwner != null && valueOwner.isActive()) {
@@ -117,7 +111,7 @@ class PackageAggregateValueOwnerSlotTest {
     }
 
     @Test
-    void packageAggregateValuesOwnArrayAndHashReferentsWithoutSweeps() {
+    void packageAggregateValuesOwnArrayAndHashReferents() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             assertPackageAggregateValueKeepsReferentAlive(
@@ -153,8 +147,7 @@ class PackageAggregateValueOwnerSlotTest {
                         referent.ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE));
                 WeakRefRegistry.weaken(weakObserver);
 
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
+                {
                     packageArray.elements.remove(sharedValue);
 
                     assertTrue(WeakRefRegistry.isweak(weakObserver),
@@ -166,8 +159,6 @@ class PackageAggregateValueOwnerSlotTest {
                     assertFalse(owner.isActive(), "the shared value owner releases once");
                     assertFalse(WeakRefRegistry.isweak(weakObserver));
                     assertEquals(RuntimeScalarType.UNDEF, weakObserver.type);
-                    assertEquals(0, measurement.stats().rootQueries);
-                    assertEquals(0, measurement.stats().snapshotsBuilt);
                 }
             } finally {
                 GlobalVariable.globalArrays.remove(arrayKey);
@@ -198,8 +189,7 @@ class PackageAggregateValueOwnerSlotTest {
                     referent.ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE));
 
             WeakRefRegistry.weaken(weakObserver);
-            try (MortalList.ReachabilityQueryMeasurement measurement =
-                         MortalList.measureReachabilityQueries()) {
+            {
                 assertTrue(WeakRefRegistry.isweak(weakObserver));
 
                 aggregateValue.set(new RuntimeScalar());
@@ -209,8 +199,6 @@ class PackageAggregateValueOwnerSlotTest {
                         referent.ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE));
                 assertFalse(WeakRefRegistry.isweak(weakObserver));
                 assertEquals(RuntimeScalarType.UNDEF, weakObserver.type);
-                assertEquals(0, measurement.stats().rootQueries);
-                assertEquals(0, measurement.stats().snapshotsBuilt);
             }
         } finally {
             if (valueOwner != null && valueOwner.isActive()) {

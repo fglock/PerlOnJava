@@ -7,9 +7,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("unit")
-class WeakCodeOwnerSlotNoReachabilityTest {
+class WeakCodeOwnerSlotLifecycleTest {
     @Test
-    void liveLexicalCodeOwnerPreservesWeakObserverWithoutRootWalk() {
+    void liveLexicalCodeOwnerPreservesWeakObserver() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeCode code = new RuntimeCode((args, context) -> new RuntimeList(), null);
@@ -23,16 +23,10 @@ class WeakCodeOwnerSlotNoReachabilityTest {
             weakOwner.set(new RuntimeScalar(code));
 
             try {
-                try (MortalList.ReachabilityQueryMeasurement measurement =
-                             MortalList.measureReachabilityQueries()) {
-                    WeakRefRegistry.weaken(weakOwner);
+                WeakRefRegistry.weaken(weakOwner);
 
-                    assertTrue(WeakRefRegistry.isweak(weakOwner));
-                    assertEquals(RuntimeScalarType.CODE, weakOwner.type);
-                    assertEquals(0, measurement.stats().scalarReachabilityQueries,
-                            "the remaining lexical owner slot is the liveness proof");
-                    assertEquals(0, measurement.stats().rootQueries);
-                }
+                assertTrue(WeakRefRegistry.isweak(weakOwner));
+                assertEquals(RuntimeScalarType.CODE, weakOwner.type);
 
                 strongOwner.set(new RuntimeScalar());
                 assertEquals(RuntimeScalarType.UNDEF, weakOwner.type,
