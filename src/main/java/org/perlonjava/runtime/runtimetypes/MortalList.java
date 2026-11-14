@@ -545,7 +545,16 @@ public class MortalList {
                 || !ownerSlot.isMethodInvocantOwner(base)) return;
         PerlOwnerSlot.PendingRelease release = ownerSlot.releaseCountedIdentity();
         if (release == null) return;
-        if (base.refCount <= 0 || base.currentlyDestroying) {
+        if (base.refCount <= 0) {
+            release.complete();
+            return;
+        }
+        if (base.currentlyDestroying) {
+            // This temporary call edge has ended, even though the referent is
+            // still inside DESTROY. Retire its count without starting another
+            // destruction pass; the active DESTROY boundary decides whether
+            // any newly acquired owners resurrected the object.
+            base.releaseTrackedOwnerCount(releaseSite);
             release.complete();
             return;
         }
@@ -575,7 +584,15 @@ public class MortalList {
             throw new IllegalStateException(
                     "counted argument owner lost its release token at " + releaseSite);
         }
-        if (base.refCount <= 0 || base.currentlyDestroying) {
+        if (base.refCount <= 0) {
+            release.complete();
+            return;
+        }
+        if (base.currentlyDestroying) {
+            // The storage edge is gone. Keep the no-reentrant-DESTROY guard,
+            // but do not leave its legacy count behind if this object is
+            // rescued before the current destructor returns.
+            base.releaseTrackedOwnerCount(releaseSite);
             release.complete();
             return;
         }
