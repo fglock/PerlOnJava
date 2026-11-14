@@ -1428,11 +1428,17 @@ public class ScopedSymbolTable {
             return cachedWarningBitsString;
         }
         Map<String, Integer> positions = warningBitPositions();
-        BitSet enabled = (BitSet) warningFlagsStack.peek().clone();
-        BitSet fatal = (BitSet) warningFatalStack.peek().clone();
-        BitSet disabled = warningDisabledStack.peek();
+        BitSet rawEnabled = warningFlagsStack.peek();
+        BitSet rawFatal   = warningFatalStack.peek();
+        BitSet disabled   = warningDisabledStack.peek();
         Integer allBit = positions.get("all");
-        if (allBit != null && enabled.get(allBit) && !disabled.get(allBit)) {
+        // Round 39: only clone when we actually need to expand custom warning categories.
+        // For the common case (no 'use warnings "all"' expansion needed), pass the
+        // originals directly to toWarningBitsString() and avoid 2 BitSet + 2 long[] allocs.
+        BitSet enabled, fatal;
+        if (allBit != null && rawEnabled.get(allBit) && !disabled.get(allBit)) {
+            enabled = (BitSet) rawEnabled.clone();
+            fatal   = (BitSet) rawFatal.clone();
             for (String category : WarningFlags.getCustomWarningCategories()) {
                 Integer bit = positions.get(category);
                 if (bit == null) continue;
@@ -1443,6 +1449,9 @@ public class ScopedSymbolTable {
                     }
                 }
             }
+        } else {
+            enabled = rawEnabled;
+            fatal   = rawFatal;
         }
         cachedWarningBitsString = WarningFlags.toWarningBitsString(enabled, fatal, positions);
         return cachedWarningBitsString;

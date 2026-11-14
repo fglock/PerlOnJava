@@ -5428,6 +5428,28 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     ? runtimePackage
                     : topLevelMain ? runtimePackage : capturedSymbolTable.getCurrentPackage();
 
+            // Round 40: ultra-warm path — skip Lexer+Parser+Compiler for a hot repeated eval.
+            // Cache key: same eval string literal object + same compile package + same caller warning bits.
+            // Per-eval-site (EmitterContext is per-site per-thread), so no synchronization needed.
+            String r40CacheBits = WarningBitsRegistry.getCallerBitsAtFrame(0);
+            if (r40CacheBits == null) r40CacheBits = WarningBitsRegistry.getCallSiteBits();
+            if (r40CacheBits == null) r40CacheBits = WarningBitsRegistry.getCurrent();
+            if (r40CacheBits == null) r40CacheBits = "";
+            if (ctx.evalCachedInterpretedCode != null
+                    && evalString == ctx.evalCachedSourceStr
+                    && evalCurrentPackage.equals(ctx.evalCachedCodePackage)
+                    && r40CacheBits.equals(ctx.evalCachedCodeWarningBits)) {
+                interpretedCode = ctx.evalCachedInterpretedCode;
+                if (runtimeValues.length > 0) {
+                    RuntimeBase[] capturedVars2 = new RuntimeBase[runtimeValues.length];
+                    for (int i = 0; i < runtimeValues.length; i++) {
+                        capturedVars2[i] = (RuntimeBase) runtimeValues[i];
+                    }
+                    interpretedCode.setEvalCapturedVars(capturedVars2);
+                }
+                compiledSuccessfully = true;
+            } else {
+
             try {
                 // Parse the eval string (tokenize first so sawBegin is available for the alias gate below)
                 Lexer lexer = new Lexer(evalString);
@@ -5731,6 +5753,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     interpretedCode.setEvalCapturedVars(capturedVars2);
                 }
 
+                // Round 40: cache the compiled code for the ultra-warm path.
+                // Always update so a package/warning change replaces the stale entry.
+                if (evalString == ctx.evalCachedSourceStr) {
+                    ctx.evalCachedInterpretedCode = interpretedCode;
+                    ctx.evalCachedCodePackage = evalCurrentPackage;
+                    ctx.evalCachedCodeWarningBits = r40CacheBits;
+                }
+
             } catch (Throwable e) {
                 // A parse or compile error may have left parseSymbolTable at
                 // depth > 1 (partial scope).  Invalidate so the next call
@@ -5885,6 +5915,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     return new RuntimeList(new RuntimeScalar());
                 }
             }
+            } // end Round 40 ultra-warm else
 
             // Clean up BEGIN aliases BEFORE execution. These aliases were only needed during
             // parsing/compilation (for BEGIN blocks to access outer lexicals). If left in
