@@ -42,17 +42,19 @@ TODOs and two optional skips remain. Logs: `/tmp/issue2043-narrow-final-make.log
 `/tmp/issue2043-direct-52leaks-final.log`, and
 `/tmp/issue2043-direct-100populate-final.log`.
 
-The previous fresh-home DBIx run covered 325 programs and reported 37 programs
-with 140 failed assertions and no DBIx result-source survivors. Its leak report
-still listed cached `DBI::dr` and Test2/Test::Builder objects; that report
-predates the exact Test2 event fix, so the remaining harness inventory must be
-refreshed before drawing a new suite-wide conclusion.
+The previous fresh-home DBIx run covered 325 programs and reported 37 failing
+programs / 140 failed assertions, with no DBIx result-source survivors. Its
+failed-program set is identical to the preceding run; assertion failures fell
+from 253 to 140, with changes only in `t/52leaks.t` (134 to 24) and
+`t/88result_set_column.t` (4 to 1). That full leak inventory predates the exact
+Test2 event fix. Current direct checks of 57 references in `t/52leaks.t` and 5
+in `t/100populate.t` report no survivors.
 
 ### Next steps
 
-1. Publish `add89cd952` to PR #1938's existing branch and keep the PR in draft.
-2. Classify the 37 remaining fresh-home DBIx program failures against the
-   preceding run; keep that broad result marked incomplete until understood.
+1. Check PR #1938 CI once after it finishes; keep the PR in draft.
+2. Rebase onto current `master` and rerun the full repository gate plus focused
+   DBIx and Test2 checks on that exact candidate.
 3. Request review and merge PR #1938 after acceptance; close #2043 only after
    the sweep-free candidate is accepted.
 
