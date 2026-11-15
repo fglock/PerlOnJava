@@ -5438,10 +5438,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             if (r40CacheBits == null) r40CacheBits = WarningBitsRegistry.getCurrent();
             if (r40CacheBits == null) r40CacheBits = "";
             if (ctx.evalCachedInterpretedCode != null
+                    && !ctx.evalCachedHasSub                 // subs need recompile: JVM class-load installs them
                     && evalString == ctx.evalCachedSourceStr
                     && evalCurrentPackage.equals(ctx.evalCachedCodePackage)
                     && r40CacheBits.equals(ctx.evalCachedCodeWarningBits)) {
                 interpretedCode = ctx.evalCachedInterpretedCode;
+                // R40 fix: clear cached ScalarPins so stale detached pins (from a stash delete
+                // between eval calls) do not return the old frozen value.  Fresh pins re-vivify
+                // through the current stash, matching the cold-path (no-cache) behaviour.
+                interpretedCode.resetScalarPins();
                 if (runtimeValues.length > 0) {
                     RuntimeBase[] capturedVars2 = new RuntimeBase[runtimeValues.length];
                     for (int i = 0; i < runtimeValues.length; i++) {
@@ -5761,6 +5766,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     ctx.evalCachedInterpretedCode = interpretedCode;
                     ctx.evalCachedCodePackage = evalCurrentPackage;
                     ctx.evalCachedCodeWarningBits = r40CacheBits;
+                    ctx.evalCachedHasSub = lexer.sawBeginOrSub;
                 }
 
             } catch (Throwable e) {

@@ -37,6 +37,16 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
     private ScalarPin[] scalarPins;
 
     /**
+     * R40 fix: clear any cached ScalarPins so the next execution creates fresh ones.
+     * Necessary because a cached InterpretedCode may hold detached pins (stash entry was
+     * deleted between eval calls), which permanently return the stale scalar.  A fresh pin
+     * re-vivifies through the stash and sees the current state.
+     */
+    public void resetScalarPins() {
+        scalarPins = null;
+    }
+
+    /**
      * The pin this code's global scalar opcode at {@code nameIdx} reads through. Pins are
      * created on first execution and kept, so later calls keep the binding (see ScalarPin).
      */
