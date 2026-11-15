@@ -704,7 +704,12 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
             this.maxRegisters = capturedRegisterCount;
         }
         // Build closedOverVariables for PadWalker support (same logic as withCapturedVars).
-        this.closedOverVariables = new java.util.LinkedHashMap<>();
+        // R42: Reuse the existing map on warm calls — LinkedHashMap.put on an existing key
+        // updates the Entry in-place without allocating a new node.  The same InterpretedCode
+        // object is reused across eval calls (R40 cache), so the map's key set is stable.
+        if (this.closedOverVariables == null) {
+            this.closedOverVariables = new java.util.LinkedHashMap<>();
+        }
         for (Map.Entry<String, Integer> entry : this.variableRegistry.entrySet()) {
             int capturedIndex = entry.getValue() - 3;
             if (capturedIndex >= 0 && capturedIndex < capturedVars.length

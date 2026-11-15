@@ -546,11 +546,14 @@ public class BytecodeInterpreter {
                             case Opcodes.MORTAL_PUSH_MARK -> {
                                 // Push mark before scope-exit cleanup (SAVETMPS equivalent)
                                 MortalList.pushMark();
+                                // R44: lazily initialize — simple evals with no `my` vars never use this
+                                if (scopeCleanupBatches == null)
+                                    scopeCleanupBatches = frame.scopeCleanupBatches = new java.util.ArrayDeque<>();
                                 scopeCleanupBatches.push(new java.util.ArrayList<>());
                             }
 
                             case Opcodes.MORTAL_POP_FLUSH -> {
-                                if (!scopeCleanupBatches.isEmpty()) {
+                                if (scopeCleanupBatches != null && !scopeCleanupBatches.isEmpty()) {
                                     for (int cleanupReg : scopeCleanupBatches.pop()) {
                                         RuntimeBase slot = registers[cleanupReg];
                                         MyVarCleanupStack.unregister(slot);
@@ -592,7 +595,7 @@ public class BytecodeInterpreter {
                                 if (slot instanceof RuntimeScalar rs) {
                                     RuntimeScalar.scopeExitCleanup(rs);
                                 }
-                                if (!scopeCleanupBatches.isEmpty()) {
+                                if (scopeCleanupBatches != null && !scopeCleanupBatches.isEmpty()) {
                                     scopeCleanupBatches.peek().add(reg);
                                 } else {
                                     MyVarCleanupStack.unregister(slot);
@@ -692,7 +695,7 @@ public class BytecodeInterpreter {
                                 if (slot instanceof RuntimeHash rh) {
                                     MortalList.scopeExitCleanupHash(rh);
                                 }
-                                if (!scopeCleanupBatches.isEmpty()) {
+                                if (scopeCleanupBatches != null && !scopeCleanupBatches.isEmpty()) {
                                     scopeCleanupBatches.peek().add(reg);
                                 } else {
                                     MyVarCleanupStack.unregister(slot);
@@ -738,7 +741,7 @@ public class BytecodeInterpreter {
                                 if (slot instanceof RuntimeArray ra) {
                                     MortalList.scopeExitCleanupArray(ra);
                                 }
-                                if (!scopeCleanupBatches.isEmpty()) {
+                                if (scopeCleanupBatches != null && !scopeCleanupBatches.isEmpty()) {
                                     scopeCleanupBatches.peek().add(reg);
                                 } else {
                                     MyVarCleanupStack.unregister(slot);
@@ -2906,15 +2909,24 @@ public class BytecodeInterpreter {
 
                                 // Push catch PC onto eval stack
                                 evalCatchStack.push(catchPc);
+                                // R44: lazily initialize stacks used only by eval BLOCK
+                                if (frame.evalControlBlockDepthStack == null)
+                                    frame.evalControlBlockDepthStack = new java.util.ArrayDeque<>();
                                 frame.evalControlBlockDepthStack.push(new int[]{
                                         controlBlockStack.size(), labeledBlockStack.size()});
 
                                 // Save first body register for scope cleanup on exception
+                                if (evalBaseRegStack == null)
+                                    evalBaseRegStack = frame.evalBaseRegStack = new java.util.ArrayDeque<>();
                                 evalBaseRegStack.push(firstBodyReg);
 
+                                if (evalMethodInvocantHoldDepthStack == null)
+                                    evalMethodInvocantHoldDepthStack = frame.evalMethodInvocantHoldDepthStack = new java.util.ArrayDeque<>();
                                 evalMethodInvocantHoldDepthStack.push(methodInvocantHolds.size());
 
                                 // Save local level so we can restore local variables on eval exit
+                                if (evalLocalLevelStack == null)
+                                    evalLocalLevelStack = frame.evalLocalLevelStack = new java.util.ArrayDeque<>();
                                 evalLocalLevelStack.push(
                                         DynamicVariableManager.getLocalLevel() - savedLocalLevel);
 
@@ -2923,6 +2935,8 @@ public class BytecodeInterpreter {
 
                                 boolean pushedCallerFrame = visibleEvalFrame
                                         && InterpreterState.pushEvalFrameForCurrentInterpreter();
+                                if (evalCallerFrameStack == null)
+                                    evalCallerFrameStack = frame.evalCallerFrameStack = new java.util.ArrayDeque<>();
                                 evalCallerFrameStack.push(pushedCallerFrame);
                                 if (pushedCallerFrame) {
                                     frame.virtualEvalFrameDepth++;
@@ -4039,10 +4053,10 @@ public class BytecodeInterpreter {
     private static void unwindEvalMethodInvocantHolds(
             ArrayDeque<Integer> evalMethodInvocantHoldDepthStack,
             ArrayList<RuntimeBase> methodInvocantHolds) {
-        if (!evalMethodInvocantHoldDepthStack.isEmpty()) {
-            releaseMethodInvocantHoldsAbove(
-                    methodInvocantHolds, evalMethodInvocantHoldDepthStack.pop());
-        }
+        // R44: evalMethodInvocantHoldDepthStack is lazily initialized; null means never pushed
+        if (evalMethodInvocantHoldDepthStack == null || evalMethodInvocantHoldDepthStack.isEmpty()) return;
+        releaseMethodInvocantHoldsAbove(
+                methodInvocantHolds, evalMethodInvocantHoldDepthStack.pop());
     }
 
     /**
@@ -4986,7 +5000,8 @@ public class BytecodeInterpreter {
 
     /** Restore the control stacks and virtual caller frame owned by this eval. */
     private static void popEvalCallerFrame(SuspendedInterpreterFrame frame) {
-        if (!frame.evalControlBlockDepthStack.isEmpty()) {
+        // R44: fields are lazily initialized; guard against null (never pushed == nothing to unwind)
+        if (frame.evalControlBlockDepthStack != null && !frame.evalControlBlockDepthStack.isEmpty()) {
             int[] depths = frame.evalControlBlockDepthStack.pop();
             while (frame.controlBlockStack.size() > depths[0]) {
                 frame.controlBlockStack.removeLast();
@@ -4995,7 +5010,7 @@ public class BytecodeInterpreter {
                 frame.labeledBlockStack.removeLast();
             }
         }
-        if (frame.evalCallerFrameStack.isEmpty()) return;
+        if (frame.evalCallerFrameStack == null || frame.evalCallerFrameStack.isEmpty()) return;
         boolean pushed = frame.evalCallerFrameStack.pop();
         if (pushed && frame.virtualEvalFrameDepth > 0) {
             InterpreterState.pop();

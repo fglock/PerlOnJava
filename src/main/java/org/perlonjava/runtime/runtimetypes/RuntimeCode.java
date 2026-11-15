@@ -5305,7 +5305,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
         rejectTaintedEval(code);
 
-        evalTrace("evalStringWithInterpreter enter tag=" + evalTag + " ctx=" + callContext +
+        // R43: guard string concat behind EVAL_TRACE — the huge method prevents JIT from
+        // inlining evalTrace and dead-code-eliminating the argument when tracing is off.
+        if (EVAL_TRACE) evalTrace("evalStringWithInterpreter enter tag=" + evalTag + " ctx=" + callContext +
                 " codeType=" + code.type + " codeLen=" + (code.toString() != null ? code.toString().length() : -1));
 
         // Retrieve the eval context that was saved at program compile-time
@@ -5397,7 +5399,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             if (evalbytesUtf8Source || byteStringUtf8Source) {
                 evalString = decodeEvalbytesUtf8Source(evalString);
             }
-            evalTrace("evalStringWithInterpreter parse start tag=" + evalTag + " ctx=" + callContext +
+            if (EVAL_TRACE) evalTrace("evalStringWithInterpreter parse start tag=" + evalTag + " ctx=" + callContext +
                     " fileName=" + ctx.compilerOptions.fileName);
             // Handle Unicode source detection (same logic as evalStringHelper)
             boolean hasUnicode = false;
@@ -5731,7 +5733,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 compiler.setCompilePackage(evalCurrentPackage);
                 interpretedCode = compiler.compile(ast, evalCtx);
                 compiledSuccessfully = true;
-                evalTrace("evalStringWithInterpreter compiled tag=" + evalTag +
+                if (EVAL_TRACE) evalTrace("evalStringWithInterpreter compiled tag=" + evalTag +
                         " bytecodeLen=" + (interpretedCode != null ? interpretedCode.bytecode.length : -1) +
                         " src=" + (interpretedCode != null ? interpretedCode.sourceName : "null"));
                 if (isDisassemble()) {
@@ -5937,7 +5939,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // stored in $@ instead of escaping to the outer caller.
                 result = resolveTailCalls(interpretedCode.apply(args, callContext), callContext);
 
-                evalTrace("evalStringWithInterpreter exec ok tag=" + evalTag + " ctx=" + callContext +
+                if (EVAL_TRACE) evalTrace("evalStringWithInterpreter exec ok tag=" + evalTag + " ctx=" + callContext +
                         " resultClass=" + (result != null ? result.getClass().getSimpleName() : "null") +
                         " resultScalar=" + (result != null ? result.scalar().toString() : "null") +
                         " resultBool=" + (result != null && result.scalar() != null && result.scalar().getBoolean()));
@@ -5948,7 +5950,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 return result;
 
             } catch (PerlDieException e) {
-                evalTrace("evalStringWithInterpreter exec die tag=" + evalTag + " ctx=" + callContext +
+                if (EVAL_TRACE) evalTrace("evalStringWithInterpreter exec die tag=" + evalTag + " ctx=" + callContext +
                         " payload=" + (e.getPayload() != null ? e.getPayload().getFirst().toString() : "null"));
                 // Runtime error - set $@ and return undef/empty list
                 RuntimeScalar err = GlobalVariable.getGlobalVariable("main::@");
@@ -5979,7 +5981,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
 
             } catch (Throwable e) {
-                evalTrace("evalStringWithInterpreter exec throwable tag=" + evalTag + " ctx=" + callContext +
+                if (EVAL_TRACE) evalTrace("evalStringWithInterpreter exec throwable tag=" + evalTag + " ctx=" + callContext +
                         " ex=" + e.getClass().getSimpleName() + " msg=" + e.getMessage());
                 WarnDie.catchEval(e);
 
@@ -5997,7 +5999,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         } finally {
             PerlLanguageProvider.COMPILE_LOCK.lock();
             try {
-            evalTrace("evalStringWithInterpreter exit tag=" + evalTag + " ctx=" + callContext +
+            if (EVAL_TRACE) evalTrace("evalStringWithInterpreter exit tag=" + evalTag + " ctx=" + callContext +
                     " $@=" + GlobalVariable.getGlobalVariable("main::@"));
             // Restore dynamic variables (local) to their state before eval
             DynamicVariableManager.popToLocalLevel(dynamicVarLevel);

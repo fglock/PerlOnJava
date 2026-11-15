@@ -31,17 +31,22 @@ public final class SuspendedInterpreterFrame {
     Set<RuntimeCode> returnedClosures;
 
     final ArrayDeque<Integer> evalCatchStack = new ArrayDeque<>();
-    final ArrayDeque<Boolean> evalCallerFrameStack = new ArrayDeque<>();
-    final ArrayDeque<int[]> evalControlBlockDepthStack = new ArrayDeque<>();
-    final ArrayDeque<Integer> evalLocalLevelStack = new ArrayDeque<>();
-    final ArrayDeque<Integer> evalBaseRegStack = new ArrayDeque<>();
-    final ArrayDeque<Integer> evalMethodInvocantHoldDepthStack = new ArrayDeque<>();
+    // R44: stacks below are only needed when eval BLOCK (EVAL_TRY opcode) appears in the
+    // eval body, or for scopeCleanupBatches when `my` vars are declared (MORTAL_PUSH_MARK).
+    // Allocating them lazily on first push eliminates 6 ArrayDeque+backing-array pairs
+    // (~960 bytes) for common eval-string calls that never use these features.
+    // Invariant: when evalCatchStack is non-empty, all five EVAL-TRY stacks are non-null.
+    ArrayDeque<Boolean> evalCallerFrameStack;
+    ArrayDeque<int[]> evalControlBlockDepthStack;
+    ArrayDeque<Integer> evalLocalLevelStack;
+    ArrayDeque<Integer> evalBaseRegStack;
+    ArrayDeque<Integer> evalMethodInvocantHoldDepthStack;
+    ArrayDeque<ArrayList<Integer>> scopeCleanupBatches;
     final ArrayList<int[]> labeledBlockStack = new ArrayList<>();
     final ArrayList<int[]> controlBlockStack = new ArrayList<>();
     final ArrayDeque<RegexState> regexStateStack = new ArrayDeque<>();
     final ArrayList<RuntimeCode> createdClosures = new ArrayList<>();
     final ArrayList<RuntimeBase> methodInvocantHolds = new ArrayList<>();
-    final ArrayDeque<ArrayList<Integer>> scopeCleanupBatches = new ArrayDeque<>();
     List<DynamicVariableManager.SuspendedState> suspendedDynamicStates;
 
     boolean suspended;
