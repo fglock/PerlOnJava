@@ -22,8 +22,9 @@ explicit, auditable owner tokens.
 ## Current Status (2026-11-15)
 
 Issue #2043 remains the active delivery for removing memory-sweep lifecycle
-decisions; #1649 is its historical origin. Source fix `add89cd952` is
-published in draft [PR #1938](https://github.com/PerlOnJava/pull/1938). It removes
+decisions; #1649 is its historical origin. Candidate `35dfd818ff` integrates
+current `master` locally and is ready for publication to draft
+[PR #1938](https://github.com/PerlOnJava/pull/1938). It removes
 `ReachabilityWalker`, `ScalarRefRegistry`, root-query state, sweep hooks,
 END-boundary owner-source scans, and suspended-frame root snapshots.
 
@@ -33,10 +34,11 @@ covered. A separate Test2 event survivor was traced to a counted
 now retired after its lexical registration and argument frame end. The
 permanent event regression passes 4/4 on system Perl and both PerlOnJava
 backends. Configured DBIx `t/52leaks.t` and `t/100populate.t` pass all 121 tests;
-direct leak checks found no survivors among 57 and 5 references. `nice -n 19
-timeout 3600 make` passes in 7m02s with 3,608 unit tests, 3 skips, and zero failures. The prior fresh-home DBIx run reported 37 failed
-programs / 140 assertions, the same failing-program set as the preceding run;
-assertion counts fell from 253 to 140, with changes only in `t/52leaks.t`
+direct leak checks found no survivors among 57 and 5 references. The merged
+candidate passes `nice -n 19 timeout 3600 make` in 7m29s; its JUnit reports
+contain 4,153 tests, 4 skips, and zero failures. The prior fresh-home DBIx run
+reported 37 failed programs / 140 assertions, the same failing-program set as
+the preceding run; assertion counts fell from 253 to 140, with changes only in `t/52leaks.t`
 (134 to 24) and `t/88result_set_column.t` (4 to 1). Its leak inventory predates
 the Test2 event fix. Current direct checks cover 57 and 5 references with no
 survivors. See the [current ownership handoff](perl-ownership-rewrite.md#current-handoff-2026-11-15)
@@ -172,11 +174,10 @@ decisions. Temporary leases and suspended-frame owners remain explicit slots.
 
 ## Current Work
 
-1. Check CI once after it finishes on the published PR #1938 head; keep the PR
-   in draft.
-2. Rebase onto current `master` and rerun focused DBIx/Test2 checks and the full
-   repository gate on that exact candidate.
-3. Request review and merge after acceptance; close #2043 only after merge.
+1. Publish merged candidate `35dfd818ff` to PR #1938; keep the PR in draft.
+2. Check CI after it finishes. If green, mark ready and request review; rerun
+   affected gates for any requested changes.
+3. Merge after acceptance and close #2043 with the final commit and evidence.
 
 ## Regression Matrix
 
@@ -242,7 +243,7 @@ Run on JVM and interpreter backends with `timeout` and complete output logs:
 - Run `make` with complete captured output and zero failures.
 - Run `make check-links` and offline `lychee` where required.
 - Verify no unexpected high-CPU PerlOnJava JVM remains.
-- Rebase onto current `master`, rerun focused and full gates on the exact commit,
+- Integrate current `master`, rerun focused and full gates on the exact commit,
   and only then mark the issue-fix PR ready.
 
 ## Progress Tracking
@@ -253,7 +254,9 @@ The current status and evidence are maintained in the
 [ownership rewrite handoff](perl-ownership-rewrite.md#current-handoff-2026-11-15).
 The candidate has removed production reachability decisions and sweep
 infrastructure. The DBIx and Test2 owner transitions have focused regressions;
-the earlier broad DBIx report still needs refresh and failure classification.
+the merged candidate passes the focused DBIx leak tests and direct survivor
+checks. The broader 37-program failure inventory is retained as historical
+integration context; CI and review on the published candidate remain.
 
 ### Historical handoff: issue #1132 / PR #1204
 
