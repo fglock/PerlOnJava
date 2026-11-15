@@ -9,15 +9,15 @@ historical origin.
 | --- | --- | --- |
 | Replace sweep-based lifecycle decisions with owner slots | Candidate delivered | Reachability walker, scalar registry, root-query state, sweep hooks, END-boundary scans, and suspended-frame root snapshots are removed. |
 | Fix DBIx and Test2 retention | Candidate delivered | DBIx arguments carry an exact call-transfer owner; DBI handles use core `bless`; the Test2 event regression passes on system Perl and both PerlOnJava backends. |
-| Final acceptance | Pending | Current master is integrated locally and the merged candidate passes full and focused gates. Publish the exact commit to draft PR #1938, review CI, then request review and merge. |
+| Final acceptance | Pending | The merged candidate is published to draft PR #1938. Review CI, then request review and merge after acceptance. |
 
 ## Current handoff: 2026-11-15
 
 The local branch is `wip/test2-event-leak-20261114-235249`. Commit
 `35dfd818ff` merges fetched `master` (`3e725aa6e1`) into the PR #1938 candidate;
-it has not yet been published, so PR #1938 remains draft at `cc8061cc08`.
-Temporary and asynchronous lifetimes continue to use explicit owner slots; no
-graph walk participates in Perl liveness decisions.
+the candidate is published in draft PR #1938 at head `525fa89963`. Temporary
+and asynchronous lifetimes continue to use explicit owner slots; no graph walk
+participates in Perl liveness decisions.
 
 The DBIx phantom-chain fix gives otherwise-ownerless strong hash-reference
 arguments an explicit call-transfer owner. DBI constructors use core `bless`,
