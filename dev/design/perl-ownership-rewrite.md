@@ -9,15 +9,15 @@ historical origin.
 | --- | --- | --- |
 | Replace sweep-based lifecycle decisions with owner slots | Candidate delivered | Reachability walker, scalar registry, root-query state, sweep hooks, END-boundary scans, and suspended-frame root snapshots are removed. |
 | Fix DBIx and Test2 retention | Candidate delivered | DBIx arguments carry an exact call-transfer owner; DBI handles use core `bless`; the Test2 event regression passes on system Perl and both PerlOnJava backends. |
-| Final acceptance | Pending | Local full gate is green. Publish to draft PR #1938, refresh CI and leak evidence, then classify the remaining broad-suite failures. |
+| Final acceptance | Pending | Current master is integrated locally and the merged candidate passes full and focused gates. Publish the exact commit to draft PR #1938, review CI, then request review and merge. |
 
 ## Current handoff: 2026-11-15
 
-Source fix `add89cd952` is on local branch
-`wip/test2-event-leak-20261114-235249`, based on PR #1938's current history.
-PR #1938 remains draft at head `68108465ad`; this source commit has not yet
-been published. Temporary and asynchronous lifetimes continue to use explicit
-owner slots; no graph walk participates in Perl liveness decisions.
+The local branch is `wip/test2-event-leak-20261114-235249`. Commit
+`35dfd818ff` merges fetched `master` (`3e725aa6e1`) into the PR #1938 candidate;
+it has not yet been published, so PR #1938 remains draft at `cc8061cc08`.
+Temporary and asynchronous lifetimes continue to use explicit owner slots; no
+graph walk participates in Perl liveness decisions.
 
 The DBIx phantom-chain fix gives otherwise-ownerless strong hash-reference
 arguments an explicit call-transfer owner. DBI constructors use core `bless`,
@@ -28,19 +28,18 @@ now retires only that exact edge after the array leaves the active argument
 stack and has no current Perl storage owner. Queued counted releases are
 accounted for in that storage-owner proof.
 
-Evidence on this candidate: `nice -n 19 timeout 3600 make` passed in 7m02s;
-3,608 unit tests passed, 3 were skipped, and none failed. The permanent Test2
-event regression passes 4/4 on system Perl, JVM, and interpreter. Focused
-DESTROY/tie and DBI tests pass on JVM. The configured DBIx `t/52leaks.t` and
-`t/100populate.t` rerun passes all 121 tests; direct leak checks found no
-survivors among 57 and 5 references, respectively. The two documented upstream
-TODOs and two optional skips remain. Logs: `/tmp/issue2043-narrow-final-make.log`,
-`/tmp/issue2043-test2-event-final-perl.log`,
-`/tmp/issue2043-focused-refcount-test2_event_return_lifetime.t.log`,
-`/tmp/issue2043-test2-event-final-interpreter.log`,
-`/tmp/issue2043-dbix-focused-final.log`,
-`/tmp/issue2043-direct-52leaks-final.log`, and
-`/tmp/issue2043-direct-100populate-final.log`.
+Evidence on merged candidate `35dfd818ff`: `nice -n 19 timeout 3600 make`
+passed in 7m29s; the JUnit reports contain 4,153 tests, 4 skips, and no
+failures. The permanent Test2 event regression passes 4/4 on system Perl, JVM,
+and interpreter. Configured DBIx `t/52leaks.t` and `t/100populate.t` pass 121
+tests; direct leak checks found no survivors among 57 and 5 references,
+respectively. The two documented upstream TODOs and two optional skips remain.
+Logs: `/tmp/issue2043-master-merge-make.log`,
+`/tmp/issue2043-merged-test2-system.log`,
+`/tmp/issue2043-merged-test2-jvm.log`,
+`/tmp/issue2043-merged-test2-interpreter.log`,
+`/tmp/issue2043-merged-dbix-52leaks.log`, and
+`/tmp/issue2043-merged-dbix-100populate.log`.
 
 The previous fresh-home DBIx run covered 325 programs and reported 37 failing
 programs / 140 failed assertions, with no DBIx result-source survivors. Its
@@ -52,11 +51,11 @@ in `t/100populate.t` report no survivors.
 
 ### Next steps
 
-1. Check PR #1938 CI once after it finishes; keep the PR in draft.
-2. Rebase onto current `master` and rerun the full repository gate plus focused
-   DBIx and Test2 checks on that exact candidate.
-3. Request review and merge PR #1938 after acceptance; close #2043 only after
-   the sweep-free candidate is accepted.
+1. Publish `35dfd818ff` to the existing PR #1938 branch and keep the PR in draft.
+2. Check CI after it finishes. If CI is green, mark the PR ready and request
+   review; address any review findings and rerun affected gates.
+3. Merge PR #1938 after acceptance, then close #2043 with the merged commit and
+   validation evidence.
 
 Completion requires no reachability-based root walk or sweep to affect Perl
 lifetime, required ownership and integration acceptance on one immutable
