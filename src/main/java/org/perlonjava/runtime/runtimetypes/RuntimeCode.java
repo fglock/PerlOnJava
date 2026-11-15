@@ -5441,7 +5441,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     && !ctx.evalCachedHasSub                 // subs need recompile: JVM class-load installs them
                     && evalString == ctx.evalCachedSourceStr
                     && evalCurrentPackage.equals(ctx.evalCachedCodePackage)
-                    && r40CacheBits.equals(ctx.evalCachedCodeWarningBits)) {
+                    && r40CacheBits.equals(ctx.evalCachedCodeWarningBits)
+                    && ctx.evalCachedStashVersion == GlobalVariable.currentGlobalRuntimeState().scalarBindingVersion()) {
                 interpretedCode = ctx.evalCachedInterpretedCode;
                 // R40 fix: clear cached ScalarPins so stale detached pins (from a stash delete
                 // between eval calls) do not return the old frozen value.  Fresh pins re-vivify
@@ -5767,6 +5768,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     ctx.evalCachedCodePackage = evalCurrentPackage;
                     ctx.evalCachedCodeWarningBits = r40CacheBits;
                     ctx.evalCachedHasSub = lexer.sawBeginOrSub;
+                    ctx.evalCachedStashVersion = GlobalVariable.currentGlobalRuntimeState().scalarBindingVersion();
                 }
 
             } catch (Throwable e) {
