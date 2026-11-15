@@ -265,6 +265,21 @@ public class MyVarCleanupStack {
             Object var = stack.removeLast();
             if (var != null) {
                 decRegisteredCount(var);
+                if (var instanceof RuntimeScalar scalar && scalar.refCountOwned
+                        && scalar.countedOwnerSlot() != null
+                        && scalar.countedOwnerSlot().kind() == PerlOwnerSlot.Kind.ARRAY_ELEMENT
+                        && scalar.containerOwner instanceof RuntimeArray args
+                        && scalar.countedOwnerSlot().countedAggregateOwner() == args
+                        && !RuntimeCode.snapshotArgsStack().contains(args)
+                        && !args.hasCurrentPerlStorageOwner()
+                        && !scalar.hasStorageOwnerForVoidDiscard()
+                        && !RuntimeCode.isCurrentArgumentAlias(scalar)
+                        && !scalar.hasActiveMortalReturnValueOwner()) {
+                    // A value-cell edge transported through an exited
+                    // temporary @_ array can outlive both that array and its
+                    // lexical registration. Retire only that exact edge here.
+                    MortalList.deferDecrementIfTracked(scalar);
+                }
                 if (var instanceof RuntimeBase base
                         && (base instanceof RuntimeArray || base instanceof RuntimeHash)
                         && !isRegistered(var)) {
