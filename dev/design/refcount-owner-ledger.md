@@ -32,10 +32,11 @@ covered. A separate Test2 event survivor was traced to a counted
 `ARRAY_ELEMENT` edge on an exited temporary argument array; the exact edge is
 now retired after its lexical registration and argument frame end. The
 permanent event regression passes 4/4 on system Perl and both PerlOnJava
-backends. `nice -n 19 timeout 3600 make` passes in 7m02s with 3,608 unit tests,
-3 skips, and zero failures. The prior fresh-home DBIx result (37 programs / 140
-failed assertions) predates this event fix and remains open for refresh and
-classification. See the [current ownership handoff](perl-ownership-rewrite.md#current-handoff-2026-11-15)
+backends. Configured DBIx `t/52leaks.t` and `t/100populate.t` pass all 121 tests;
+direct leak checks found no survivors among 57 and 5 references. `nice -n 19
+timeout 3600 make` passes in 7m02s with 3,608 unit tests, 3 skips, and zero
+failures. The prior fresh-home DBIx result (37 programs / 140 failed assertions)
+predates this event fix and remains open for classification. See the [current ownership handoff](perl-ownership-rewrite.md#current-handoff-2026-11-15)
 and [issue #2043](https://github.com/PerlOnJava/issues/2043).
 
 ## Semantic Ownership Model
@@ -170,9 +171,8 @@ decisions. Temporary leases and suspended-frame owners remain explicit slots.
 
 1. Check CI once after it finishes on the published PR #1938 head; keep the PR
    in draft.
-2. Refresh the focused DBIx leak evidence, including the Test2 event survivor
-   inventory, and classify the prior 37-program / 140-assertion broad-suite
-   result against its baseline.
+2. Classify the prior 37-program / 140-assertion broad-suite result against its
+   baseline; its full leak inventory predates the current focused evidence.
 3. Rebase onto current `master` and rerun focused and full gates on that exact
    candidate.
 4. Request review and merge after acceptance; close #2043 only after merge.
