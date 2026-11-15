@@ -9,15 +9,15 @@ historical origin.
 | --- | --- | --- |
 | Replace sweep-based lifecycle decisions with owner slots | Candidate delivered | Reachability walker, scalar registry, root-query state, sweep hooks, END-boundary scans, and suspended-frame root snapshots are removed. |
 | Fix DBIx and Test2 retention | Candidate delivered | DBIx arguments carry an exact call-transfer owner; DBI handles use core `bless`; the Test2 event regression passes on system Perl and both PerlOnJava backends. |
-| Final acceptance | Pending | The merged candidate is published to draft PR #1938. Review CI, then request review and merge after acceptance. |
+| Final acceptance | Pending | Full local and CI gates pass; PR #1938 is ready and mergeable. Human review and merge remain. |
 
 ## Current handoff: 2026-11-15
 
 The local branch is `wip/test2-event-leak-20261114-235249`. Commit
 `35dfd818ff` merges fetched `master` (`3e725aa6e1`) into the PR #1938 candidate;
-the candidate is published in draft PR #1938 at head `525fa89963`. Temporary
-and asynchronous lifetimes continue to use explicit owner slots; no graph walk
-participates in Perl liveness decisions.
+runtime candidate `35dfd818ff` is published in PR #1938, which is ready for
+review and mergeable. Temporary and asynchronous lifetimes continue to use
+explicit owner slots; no graph walk participates in Perl liveness decisions.
 
 The DBIx phantom-chain fix gives otherwise-ownerless strong hash-reference
 arguments an explicit call-transfer owner. DBI constructors use core `bless`,
@@ -41,6 +41,12 @@ Logs: `/tmp/issue2043-master-merge-make.log`,
 `/tmp/issue2043-merged-dbix-52leaks.log`, and
 `/tmp/issue2043-merged-dbix-100populate.log`.
 
+CI passes on the published runtime candidate: Windows completed in 41m29s and
+Ubuntu in 45m20s, including the Linux Perl thread compatibility gate. CodeQL,
+the four analysis checks, and Gradle/Maven submission checks also pass. The
+PR is ready and mergeable; no individual review request is attached because
+the repository has no CODEOWNERS or configured reviewer.
+
 The previous fresh-home DBIx run covered 325 programs and reported 37 failing
 programs / 140 failed assertions, with no DBIx result-source survivors. Its
 failed-program set is identical to the preceding run; assertion failures fell
@@ -51,11 +57,13 @@ in `t/100populate.t` report no survivors.
 
 ### Next steps
 
-1. Publish `35dfd818ff` to the existing PR #1938 branch and keep the PR in draft.
-2. Check CI after it finishes. If CI is green, mark the PR ready and request
-   review; address any review findings and rerun affected gates.
-3. Merge PR #1938 after acceptance, then close #2043 with the merged commit and
+1. Complete human review of PR #1938; address findings and rerun affected gates.
+2. Merge PR #1938 after approval, then close #2043 with the merged commit and
    validation evidence.
+3. After #2043 lands, resume the separately tracked #2037 archive-lifetime and
+   #2034 localized-STDERR fixes with project-owned regressions and both-backend
+   validation. Both still reproduce on the current runtime candidate and are
+   follow-up work, not sweep-removal acceptance criteria.
 
 Completion requires no reachability-based root walk or sweep to affect Perl
 lifetime, required ownership and integration acceptance on one immutable

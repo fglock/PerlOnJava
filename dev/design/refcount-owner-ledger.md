@@ -22,9 +22,10 @@ explicit, auditable owner tokens.
 ## Current Status (2026-11-15)
 
 Issue #2043 remains the active delivery for removing memory-sweep lifecycle
-decisions; #1649 is its historical origin. Candidate `35dfd818ff` integrates
-current `master` and is published at head `525fa89963` in draft
-[PR #1938](https://github.com/PerlOnJava/pull/1938). It removes
+decisions; #1649 is its historical origin. Runtime candidate `35dfd818ff`
+integrates current `master` and is published in ready-for-review
+[PR #1938](https://github.com/PerlOnJava/pull/1938). Full local and CI gates
+pass; review and merge remain. It removes
 `ReachabilityWalker`, `ScalarRefRegistry`, root-query state, sweep hooks,
 END-boundary owner-source scans, and suspended-frame root snapshots.
 
@@ -174,10 +175,10 @@ decisions. Temporary leases and suspended-frame owners remain explicit slots.
 
 ## Current Work
 
-1. Publish merged candidate `35dfd818ff` to PR #1938; keep the PR in draft.
-2. Check CI after it finishes. If green, mark ready and request review; rerun
-   affected gates for any requested changes.
-3. Merge after acceptance and close #2043 with the final commit and evidence.
+1. Complete human review of PR #1938; address findings and rerun affected gates.
+2. Merge after approval and close #2043 with the final commit and evidence.
+3. After #2043 lands, resume separately tracked follow-ups #2037 and #2034;
+   their current regressions still fail on both PerlOnJava backends.
 
 ## Regression Matrix
 
@@ -255,8 +256,9 @@ The current status and evidence are maintained in the
 The candidate has removed production reachability decisions and sweep
 infrastructure. The DBIx and Test2 owner transitions have focused regressions;
 the merged candidate passes the focused DBIx leak tests and direct survivor
-checks. The broader 37-program failure inventory is retained as historical
-integration context; CI and review on the published candidate remain.
+checks. CI passes on the published candidate and PR #1938 is ready for human
+review. The broader 37-program failure inventory is retained as historical
+integration context. #2037 and #2034 remain separate post-merge follow-ups.
 
 ### Historical handoff: issue #1132 / PR #1204
 
