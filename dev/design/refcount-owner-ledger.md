@@ -34,9 +34,12 @@ now retired after its lexical registration and argument frame end. The
 permanent event regression passes 4/4 on system Perl and both PerlOnJava
 backends. Configured DBIx `t/52leaks.t` and `t/100populate.t` pass all 121 tests;
 direct leak checks found no survivors among 57 and 5 references. `nice -n 19
-timeout 3600 make` passes in 7m02s with 3,608 unit tests, 3 skips, and zero
-failures. The prior fresh-home DBIx result (37 programs / 140 failed assertions)
-predates this event fix and remains open for classification. See the [current ownership handoff](perl-ownership-rewrite.md#current-handoff-2026-11-15)
+timeout 3600 make` passes in 7m02s with 3,608 unit tests, 3 skips, and zero failures. The prior fresh-home DBIx run reported 37 failed
+programs / 140 assertions, the same failing-program set as the preceding run;
+assertion counts fell from 253 to 140, with changes only in `t/52leaks.t`
+(134 to 24) and `t/88result_set_column.t` (4 to 1). Its leak inventory predates
+the Test2 event fix. Current direct checks cover 57 and 5 references with no
+survivors. See the [current ownership handoff](perl-ownership-rewrite.md#current-handoff-2026-11-15)
 and [issue #2043](https://github.com/PerlOnJava/issues/2043).
 
 ## Semantic Ownership Model
@@ -171,11 +174,9 @@ decisions. Temporary leases and suspended-frame owners remain explicit slots.
 
 1. Check CI once after it finishes on the published PR #1938 head; keep the PR
    in draft.
-2. Classify the prior 37-program / 140-assertion broad-suite result against its
-   baseline; its full leak inventory predates the current focused evidence.
-3. Rebase onto current `master` and rerun focused and full gates on that exact
-   candidate.
-4. Request review and merge after acceptance; close #2043 only after merge.
+2. Rebase onto current `master` and rerun focused DBIx/Test2 checks and the full
+   repository gate on that exact candidate.
+3. Request review and merge after acceptance; close #2043 only after merge.
 
 ## Regression Matrix
 
