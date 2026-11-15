@@ -31,10 +31,16 @@ accounted for in that storage-owner proof.
 Evidence on this candidate: `nice -n 19 timeout 3600 make` passed in 7m02s;
 3,608 unit tests passed, 3 were skipped, and none failed. The permanent Test2
 event regression passes 4/4 on system Perl, JVM, and interpreter. Focused
-DESTROY/tie and DBI tests pass on JVM. Logs: `/tmp/issue2043-narrow-final-make.log`,
+DESTROY/tie and DBI tests pass on JVM. The configured DBIx `t/52leaks.t` and
+`t/100populate.t` rerun passes all 121 tests; direct leak checks found no
+survivors among 57 and 5 references, respectively. The two documented upstream
+TODOs and two optional skips remain. Logs: `/tmp/issue2043-narrow-final-make.log`,
 `/tmp/issue2043-test2-event-final-perl.log`,
-`/tmp/issue2043-focused-refcount-test2_event_return_lifetime.t.log`, and
-`/tmp/issue2043-test2-event-final-interpreter.log`.
+`/tmp/issue2043-focused-refcount-test2_event_return_lifetime.t.log`,
+`/tmp/issue2043-test2-event-final-interpreter.log`,
+`/tmp/issue2043-dbix-focused-final.log`,
+`/tmp/issue2043-direct-52leaks-final.log`, and
+`/tmp/issue2043-direct-100populate-final.log`.
 
 The previous fresh-home DBIx run covered 325 programs and reported 37 programs
 with 140 failed assertions and no DBIx result-source survivors. Its leak report
@@ -45,11 +51,9 @@ refreshed before drawing a new suite-wide conclusion.
 ### Next steps
 
 1. Publish `add89cd952` to PR #1938's existing branch and keep the PR in draft.
-2. Check updated PR CI once and refresh focused DBIx leak evidence, including
-   the Test2 event survivor report.
-3. Classify the 37 remaining fresh-home DBIx program failures against the
+2. Classify the 37 remaining fresh-home DBIx program failures against the
    preceding run; keep that broad result marked incomplete until understood.
-4. Request review and merge PR #1938 after acceptance; close #2043 only after
+3. Request review and merge PR #1938 after acceptance; close #2043 only after
    the sweep-free candidate is accepted.
 
 Completion requires no reachability-based root walk or sweep to affect Perl
