@@ -793,7 +793,7 @@ public class StatementResolver {
                                         varDecl.setAnnotation("lexicalSubScopeIndex",
                                                 parser.ctx.symbolTable.currentScopeIndex());
                                         varDecl.setAnnotation("lexicalSubWarningFrame",
-                                                parser.lexicalSubWarningFrames.peek());
+                                                parser.lexicalSubWarningFrames == null ? null : parser.lexicalSubWarningFrames.peek());
                                     }
                                     // For forward declarations, add &subName immediately since there's no body to be invisible in
                                     if (hadForwardDecl) {

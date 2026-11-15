@@ -7,8 +7,6 @@ import org.perlonjava.runtime.operators.PerlUtfString;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * The Lexer class is responsible for converting a sequence of characters (input string)
@@ -42,8 +40,6 @@ import java.util.regex.Pattern;
  * The Parser is aware of these issues and implements workarounds to handle them.
  */
 public class Lexer {
-    private static final Pattern HEREDOC_START = Pattern.compile(
-            "(?<!<)<<(?!<)[-~]?\\s*(?:'([^']*)'|\"([^\"]*)\"|([A-Za-z_][A-Za-z_0-9]*))");
     // End of File character constant
     public static final String EOF = Character.toString((char) -1);
     // Array to mark operator characters
@@ -256,76 +252,28 @@ public class Lexer {
                 return false;
             }
         }
-        return !isInsideLiteral(position);
-    }
-
-    /**
-     * Conflict markers are diagnostics for Perl source, not text embedded in
-     * quoted strings or heredoc bodies. The lexer otherwise leaves string
-     * contents as ordinary tokens, so determine this narrowly at the marker
-     * position before emitting the special token.
-     */
-    private boolean isInsideLiteral(int target) {
-        char quote = 0;
-        boolean escaped = false;
-        String heredoc = null;
-        int lineStart = 0;
-        int cursor = 0;
-        while (cursor < target) {
-            int newline = input.indexOf('\n', cursor);
-            int lineEnd = newline < 0 || newline > target ? target : newline;
-            if (heredoc != null) {
-                String line = input.substring(lineStart, lineEnd);
-                if (line.stripLeading().equals(heredoc)) {
-                    heredoc = null;
-                } else if (lineStart <= target) {
-                    return true;
-                }
-            } else {
-                boolean inComment = false;
-                for (int i = cursor; i < lineEnd; i++) {
-                    char c = input.charAt(i);
-                    if (quote != 0) {
-                        if (escaped) {
-                            escaped = false;
-                        } else if (c == '\\') {
-                            escaped = true;
-                        } else if (c == quote) {
-                            quote = 0;
-                        }
-                    } else if (c == '#') {
-                        inComment = true;
-                        break;
-                    } else if (c == '\'' || c == '"' || c == '`') {
-                        quote = c;
-                    }
-                }
-                if (quote == 0 && !inComment) {
-                    Matcher matcher = HEREDOC_START.matcher(input.substring(lineStart, lineEnd));
-                    if (matcher.find()) {
-                        heredoc = matcher.group(1) != null ? matcher.group(1)
-                                : matcher.group(2) != null ? matcher.group(2) : matcher.group(3);
-                    }
-                }
-            }
-            if (lineEnd == target) {
-                break;
-            }
-            cursor = lineEnd + 1;
-            lineStart = cursor;
-        }
-        return quote != 0 || heredoc != null;
+        return true;
     }
 
     public LexerToken consumeWhitespace() {
         int start = position;
-        while (position < length
-                && input.charAt(position) != '\n'
-                && (input.charAt(position) == ' ' || input.charAt(position) == '\t'
-                    || input.charAt(position) == '\r' || input.charAt(position) == '\f')) {
+        // Round 30: fast path for pure-space runs (the common case in formatted source).
+        while (position < length && input.charAt(position) == ' ') {
             position++;
         }
-        return LexerToken.of(LexerTokenType.WHITESPACE, input.substring(start, position));
+        // If we stopped at end-of-input, newline, or a non-tab/CR/FF char, it was pure spaces.
+        if (position >= length || input.charAt(position) == '\n'
+                || (input.charAt(position) != '\t' && input.charAt(position) != '\r'
+                    && input.charAt(position) != '\f')) {
+            return LexerToken.ofPureSpaces(position - start);
+        }
+        // Mixed whitespace (has tab/\r/\f): consume remaining chars and fall back to substring.
+        while (position < length && input.charAt(position) != '\n'
+                && (input.charAt(position) == '\t' || input.charAt(position) == '\r'
+                    || input.charAt(position) == '\f' || input.charAt(position) == ' ')) {
+            position++;
+        }
+        return new LexerToken(LexerTokenType.WHITESPACE, input.substring(start, position));
     }
 
     public LexerToken consumeNumber() {
@@ -395,6 +343,20 @@ public class Lexer {
             } else {
                 break;
             }
+        }
+        // Round 36: return a cached token for common Perl keywords — avoids both
+        // String.substring() and LexerToken allocation for cache hits.
+        int len = position - start;
+        LexerToken kwToken = LexerToken.ofKeyword(input, start, len);
+        if (kwToken != null) {
+            if (!sawBeginOrSub) {
+                char a = input.charAt(start);
+                // sub(len=3,'s'), use(len=3,'u'), no(len=2,'n'), BEGIN(len=5,'B')
+                if (len==3 && (a=='s'||a=='u') || len==2 && a=='n' || len==5 && a=='B') {
+                    sawBeginOrSub = true;
+                }
+            }
+            return kwToken;
         }
         // Build token text using substring to preserve surrogate pairs correctly
         String text = input.substring(start, position);
@@ -704,7 +666,7 @@ public class Lexer {
             }
         }
 
-        position++;
-        return LexerToken.of(LexerTokenType.OPERATOR, input.substring(start, start + 1));
+        // Round 29: use ofOperatorChar to avoid substring() for single-char operator cache hits.
+        return LexerToken.ofOperatorChar(input.charAt(position++));
     }
 }

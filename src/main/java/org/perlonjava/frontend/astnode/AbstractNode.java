@@ -14,11 +14,21 @@ import java.util.Map;
  */
 public abstract class AbstractNode implements Node {
     private static final int FLAG_BLOCK_ALREADY_REFACTORED = 1;
+    // Round 24: useInteger encoded as 2 bits instead of a HashMap entry.
+    // Avoids a HashMap allocation + HashMap.put in setAnnotation and a
+    // HashMap.get in every getAnnotation("useInteger") call — which fires
+    // for every arithmetic/bitwise operator node during eval compilation.
+    private static final int FLAG_USE_INTEGER_CHECKED = 1 << 1;
+    private static final int FLAG_USE_INTEGER_VALUE   = 1 << 2;
     public int tokenIndex;
     // Lazy initialization - only created when first annotation is set
     public Map<String, Object> annotations;
     private int internalAnnotationFlags;
     private int cachedBytecodeSize = Integer.MIN_VALUE;
+    // Round 33: direct int fields for the two most-common integer annotations,
+    // avoiding HashMap creation + resize for every my-declaration and statement.
+    private int bytecodeLexicalRegisterSlot = -1;
+    private int statementStartIndexSlot = -1;
 
     @Override
     public int getIndex() {
@@ -49,11 +59,21 @@ public abstract class AbstractNode implements Node {
     }
 
     public void setAnnotation(String key, Object value) {
-        if (value instanceof Boolean boolVal && boolVal) {
-            if ("blockAlreadyRefactored".equals(key)) {
-                internalAnnotationFlags |= FLAG_BLOCK_ALREADY_REFACTORED;
+        if (value instanceof Boolean boolVal) {
+            if (key == "blockAlreadyRefactored") {
+                if (boolVal) internalAnnotationFlags |= FLAG_BLOCK_ALREADY_REFACTORED;
                 return;
             }
+            if (key == "useInteger") {
+                internalAnnotationFlags |= FLAG_USE_INTEGER_CHECKED;
+                if (boolVal) internalAnnotationFlags |= FLAG_USE_INTEGER_VALUE;
+                return;
+            }
+        }
+        // Round 33: direct int slots for the most common integer annotations.
+        if (value instanceof Integer intVal) {
+            if (key == "bytecodeLexicalRegister") { bytecodeLexicalRegisterSlot = intVal; return; }
+            if (key == "statementStartIndex")     { statementStartIndexSlot = intVal;     return; }
         }
         if (annotations == null) {
             annotations = new HashMap<>();
@@ -70,8 +90,19 @@ public abstract class AbstractNode implements Node {
     }
 
     public Object getAnnotation(String key) {
-        if ("blockAlreadyRefactored".equals(key)) {
+        if (key == "blockAlreadyRefactored") {
             return (internalAnnotationFlags & FLAG_BLOCK_ALREADY_REFACTORED) != 0;
+        }
+        if (key == "useInteger") {
+            if ((internalAnnotationFlags & FLAG_USE_INTEGER_CHECKED) == 0) return null;
+            return (internalAnnotationFlags & FLAG_USE_INTEGER_VALUE) != 0;
+        }
+        // Round 33: read direct int slots without touching annotations map.
+        if (key == "bytecodeLexicalRegister") {
+            return bytecodeLexicalRegisterSlot < 0 ? null : bytecodeLexicalRegisterSlot;
+        }
+        if (key == "statementStartIndex") {
+            return statementStartIndexSlot < 0 ? null : statementStartIndexSlot;
         }
         return annotations == null ? null : annotations.get(key);
     }

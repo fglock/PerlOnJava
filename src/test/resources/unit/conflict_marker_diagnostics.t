@@ -26,10 +26,16 @@ for my $marker (map { $_ x 7 } qw(< = >)) {
         "my \$text = \"before\n$marker\nafter\";\n",
         "my \$text = '$marker';\n",
         "my \$text = \"$marker\";\n",
+        "my \$text = q{\n$marker\n};\n",
+        "my \$text = qq{\n$marker\n};\n",
     ) {
         eval $source;
         is $@, '', "marker $marker remains literal string content";
     }
+
+    eval "my \$text = q{literal};\n$marker\n";
+    like $@, qr/^Version control conflict marker at \(eval \d+\) line 2, near "\Q$marker\E"/,
+        "source marker after a completed quote-like string is diagnosed";
 }
 
 eval "<<<<<<< ours\nmy \$x;\n=======\nmy \$y;\n>>>>>>> theirs\n";

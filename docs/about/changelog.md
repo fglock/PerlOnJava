@@ -10,10 +10,23 @@ priorities and future plans.
 - Release DBIx::Class phantom-chain result sources after fresh anonymous hash arguments leave their call frame (#2043).
 - Construct DBI handles with core `bless`, matching native DBI and avoiding false leak reports for its cached driver handle (#2043).
 - Release Test2 assertion events after callbacks finish, including events passed through temporary method arguments (#2043).
+- Preserve standard MakeMaker `MY::test` prerequisites so generated test data is built before CPAN tests run (#2050).
+- Reduce per-eval allocation further on the `eval STRING` interpreter path (Rounds 33–36): store the two most-frequent integer AST annotations (`bytecodeLexicalRegister`, `statementStartIndex`) as direct `int` fields on `AbstractNode` instead of HashMap entries, skipping HashMap creation and resize for every `my`-declaration and statement node; replace `List<Integer> bytecode` in `BytecodeCompiler` with a raw `int[] bytecodeArr + int bytecodeSize` buffer, eliminating Integer autoboxing for every emitted opcode (482 of 610 opcodes have value ≥ 128, all bypassing the JVM Integer cache); inject a cached `physicalLineNumbers` array into each warm-eval `ErrorMessageUtil` instance (reference-equality check on the eval string object) to skip recomputing the token→line-number array per iteration; and add `LexerToken.ofKeyword(String, int, int)` — a static switch+char-comparison method covering ~35 common Perl keywords — so `consumeIdentifier` returns a pre-allocated token without calling `String.substring()` or `new LexerToken(...)` for cache hits. Net result: ~35% additional throughput gain on top of Rounds 29–32 (86 977 → ~117 000 eval/s; Perl/POJ ratio improves from 4.39× to 4.13×).
+- Eliminate `String.substring()` allocations on the lexer hot path and cut bytecode-compiler overhead (eval STRING Rounds 29–32): add `LexerToken.ofOperatorChar(char)` and `ofPureSpaces(int)` factories so `consumeOperator` and `consumeWhitespace` skip `substring()` for the common single-char operator and pure-space cases (combined 6.64% of all allocation samples in a 500k-eval profile); replace the 15-condition OR chain in `BytecodeCompiler.emit(short)` / `emitWithToken` with a static boolean array lookup, short-circuiting once `usesLocalization` is set; and cache the `shouldDecodeEvalbytesUtf8Source()` scan result in `evalStringWithInterpreter` to avoid a second O(n) `indexOf("use utf8")` pass. Net result: ~30% eval/s throughput gain (66 619 → 86 977 evals/s on a 500k-iteration benchmark; Perl/POJ ratio improves from 4.70× to 4.39×).
+
+- Preserve fatal taint-mode eval errors on the JVM, keep loaded-module pragmas out of the caller's lexical scope, and resolve shared Safe subs under strict subs (#1981, #2011, #2033).
+
+- Continue the `eval STRING` hot-path micro-optimisation series (Rounds 26–28): replace `.equals()` with identity (`==`) comparisons for compile-time-literal annotation keys in `AbstractNode`; add a fast path in `compileAssignmentOperator` that handles the dominant `my $scalar = expr` form with five structural checks and direct opcode emission, bypassing the full `LValueVisitor.getContext` traversal and general dispatch; cache the `ThreadLocal` state reference once per `ByteCodeSourceMapper.saveSourceLocation` call instead of four separate lookups (one per AST node compiled); and intern single-char `OPERATOR_CACHE` text strings so the comment-detection and POD-detection branches in `Whitespace.skipWhitespace` can use identity comparison on every token.
+
+- Reduce per-eval allocation and compilation overhead in the `eval STRING` hot path: make five `Parser` collection fields lazy (allocated only when first written, saving ~5 `ArrayDeque`/`HashMap` objects for simple evals); extract an inline `Set.of(9-element)` in `ParsePrimary` to a `private static final` constant; encode the `useInteger` annotation as two bit-flags in `AbstractNode.internalAnnotationFlags`, eliminating a per-AST-node `HashMap` entry and its `get` lookup for every arithmetic/bitwise operator; make `ErrorMessageUtil.literalQuoteRanges`, `JavaClassInfo.gotoLabelStack`, and `JavaClassInfo.finallyLabelScopes` lazy; and guard the five reference-alias matchers in `CompileAssignment.compileAssignmentOperator` behind a pre-check so the common `my $x = value` path skips all five calls. Net result: ~4.8% throughput gain on a 1 M-iteration `eval STRING` benchmark (62 492 → ~65 500 evals/s).
+
+- Add `B::GV::FILE` and `LINE` source location introspection (#1284).
+- Evaluate bound regex targets before pattern interpolation, recognize imported AUTOLOAD-backed placeholders, and preserve anonymous caller names and arguments through eval and method frames (#1377, #1548).
 - Bundle the `indirect` pragma and restore `Sys::Syslog` `openlog`, POSIX `:float_h`, and `Want::howmany` compatibility (#2016, #2022, #2020, #2014).
 - Bound RSA key generation to 1024–8192 bits, preserving explicitly requested 1024-bit legacy compatibility while documenting its security limitation (#2031).
 - Forward redirected Perl stdin to child processes, load `IO::Handle` without ambiguous `close` warnings, and accept trailing semicolons in Perl shebangs (#2023, #2024, #2018).
 - Prevent active overload-handler redispatch, expose subroutine arguments through English `@ARG`, keep deleted namespaces absent after scalar reads, and compare false Neo4j boolean properties consistently with JSON booleans (#2007, #2006, #1980, #2017).
+- Apply declared XML encodings to byte and UTF-8 flagged scalar input in `XML::LibXML` string parsing (#1989).
 - Preserve qualified indirect constructors under `strict subs`, `__DATA__` hash keys, inline terminal source markers, `our` self-references under `strict vars`, and bare unary `fc` after conditional feature imports (#2027, #2010, #2008, #1979).
 - Retain eval-block direct-call targets with their parent CV across repeated execution (#1649).
 - Preserve temporary-root identity across implicit return preparation so scope cleanup pops the root it pushed (#1649).
@@ -1270,6 +1283,8 @@ priorities and future plans.
   release them when the final closure is discarded.
 
 - Serialize XML::LibXSLT results directly instead of applying the stylesheet a second time (#1892).
+
+- Diagnose version-control conflict markers only in Perl source, preserving marker text in quote-like strings, heredocs, and `__DATA__`/`__END__` sections while retaining source-level errors.
 
 ## v5.44.1: Regex, Threads, Async/Await, and CPAN Compatibility
 

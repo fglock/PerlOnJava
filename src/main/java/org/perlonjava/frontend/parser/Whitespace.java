@@ -52,7 +52,7 @@ public class Whitespace {
                     }
 
                     tokenIndex++;
-                    if (tokenIndex < tokens.size() && tokens.get(tokenIndex).text.equals("=")) {
+                    if (tokenIndex < tokens.size() && tokens.get(tokenIndex).text == "=") {
                         // Check for pod section after '='
                         if (tokenIndex + 1 < tokens.size() && tokens.get(tokenIndex + 1).type == LexerTokenType.IDENTIFIER) {
                             boolean inPod = true;
@@ -77,7 +77,7 @@ public class Whitespace {
                     break;
 
                 case OPERATOR:
-                    if (token.text.equals("#")) {
+                    if (token.text == "#") {
                         // # line directive must appear at the beginning of the line
                         boolean maybeLineDirective = tokenIndex == 0 || tokens.get(tokenIndex - 1).type == LexerTokenType.NEWLINE;
 
@@ -94,7 +94,7 @@ public class Whitespace {
                         while (tokenIndex < tokens.size() && tokens.get(tokenIndex).type != LexerTokenType.NEWLINE) {
                             tokenIndex++;
                         }
-                    } else if (token.text.equals("=")
+                    } else if (token.text == "="
                             && tokenIndex > 0
                             && tokens.get(tokenIndex - 1).type == LexerTokenType.NEWLINE
                             && tokenIndex + 1 < tokens.size()

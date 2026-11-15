@@ -33,6 +33,28 @@ import java.util.concurrent.atomic.AtomicInteger;
  * - Generate 3-address code (rd = rs1 op rs2)
  */
 public class BytecodeCompiler implements Visitor {
+    // Round 31: Replace 15-condition OR chain in emit() with a single array lookup.
+    // Covers every opcode that sets usesLocalization. Max opcode value is 554 (LOCAL_SCALAR_DYNAMIC).
+    private static final boolean[] IS_LOCAL_OPCODE;
+    static {
+        IS_LOCAL_OPCODE = new boolean[600];
+        IS_LOCAL_OPCODE[Opcodes.LOCAL_SCALAR]            = true;
+        IS_LOCAL_OPCODE[Opcodes.LOCAL_ARRAY]             = true;
+        IS_LOCAL_OPCODE[Opcodes.LOCAL_HASH]              = true;
+        IS_LOCAL_OPCODE[Opcodes.LOCAL_GLOB]              = true;
+        IS_LOCAL_OPCODE[Opcodes.LOCAL_GLOB_REF]          = true;
+        IS_LOCAL_OPCODE[Opcodes.LOCAL_SCALAR_DYNAMIC]    = true;
+        IS_LOCAL_OPCODE[Opcodes.PUSH_LOCAL_VARIABLE]     = true;
+        IS_LOCAL_OPCODE[Opcodes.LOCAL_SCALAR_SAVE_LEVEL] = true;
+        IS_LOCAL_OPCODE[Opcodes.HASH_DELETE_LOCAL]       = true;
+        IS_LOCAL_OPCODE[Opcodes.ARRAY_DELETE_LOCAL]      = true;
+        IS_LOCAL_OPCODE[Opcodes.HASH_SLICE_DELETE_LOCAL] = true;
+        IS_LOCAL_OPCODE[Opcodes.ARRAY_SLICE_DELETE_LOCAL]= true;
+        IS_LOCAL_OPCODE[Opcodes.PUSH_DEFER]              = true;
+        IS_LOCAL_OPCODE[Opcodes.PUSH_CANCEL]             = true;
+        IS_LOCAL_OPCODE[Opcodes.SAVE_REGEX_STATE]        = true;
+    }
+
     /**
      * Labels nested in a loop body cannot be entered from an eval boundary:
      * the loop's iterator and control-block setup has not executed yet.  Keep
@@ -260,10 +282,11 @@ public class BytecodeCompiler implements Visitor {
         }
     }
 
-    // Pre-allocated with reasonable initial capacity to reduce resizing.
-    // Non-final + no field initializer: the cached-eval constructor clears and reuses
-    // pooled instances (round 21); regular constructors allocate them explicitly.
-    List<Integer> bytecode;
+    // Round 34: primitive int[] replaces List<Integer> to eliminate Integer boxing.
+    // bytecodeArr is the live buffer; bytecodeSize tracks how many ints are written.
+    // The cached-eval constructor (round 21) reuses evalCachedBytecodeArr across evals.
+    int[] bytecodeArr;
+    int bytecodeSize;
     // Scoped symbol table for variable tracking, package/class tracking, and eval STRING support.
     // Replaces the old variableScopes Stack + allDeclaredVariables flat map.
     // Using ScopedSymbolTable gives us proper scope-aware variable lookups and
@@ -704,7 +727,8 @@ public class BytecodeCompiler implements Visitor {
 
     /** Allocate the mutable collections used by regular (non-pooled) constructors. */
     private void initMutableCollections() {
-        this.bytecode = new ArrayList<>(64);
+        this.bytecodeArr = new int[64];
+        this.bytecodeSize = 0;
         this.constants = new ArrayList<>(16);
         this.stringPool = new ArrayList<>(16);
         this.scopeIndices = new ArrayDeque<>();
@@ -869,10 +893,9 @@ public class BytecodeCompiler implements Visitor {
         this.prebuiltVariableRegistry = prebuiltVariableRegistry;
         this.prebuiltOurVariableRegistry = prebuiltOurVariableRegistry;
         // Reuse pooled mutable collections from the per-site cache (round 21).
-        // clear() resets size to 0 but keeps the backing array, avoiding 7 allocations
-        // per warm-path eval (previously >3 KB of ArrayList/ArrayDeque per compile).
-        this.bytecode = evalCtx.evalCachedBytecodeList;
-        this.bytecode.clear();
+        // Round 34: bytecode uses a primitive int[] — reset size to 0 and reuse the array.
+        this.bytecodeArr = evalCtx.evalCachedBytecodeArr;
+        this.bytecodeSize = 0;
         this.constants = evalCtx.evalCachedConstants;
         this.constants.clear();
         this.stringPool = evalCtx.evalCachedStringPool;
@@ -1662,7 +1685,7 @@ public class BytecodeCompiler implements Visitor {
         }
         emitAliasWithTarget(evalReturnTargetRegs.peek(), exprReg);
         emit(Opcodes.GOTO);
-        int patchPos = bytecode.size();
+        int patchPos = bytecodeSize;
         emitInt(0);
         evalReturnGotoPatchPositions.peek().add(patchPos);
         lastResultReg = -1;
@@ -2244,15 +2267,15 @@ public class BytecodeCompiler implements Visitor {
         boolean switchContinueTarget = node.getBooleanAnnotation("switchContinueTarget");
         if (node.isLoop || switchContinueTarget) {
             boolean topicalizerLoopBody = node.getBooleanAnnotation("topicalizerLoopBody");
-            blockLoopStartPc = bytecode.size();
+            blockLoopStartPc = bytecodeSize;
             emit(Opcodes.PUSH_CONTROL_BLOCK);
             emit(addToStringPool(switchContinueTarget
                     ? org.perlonjava.runtime.runtimetypes.RuntimeControlFlowList.SWITCH_CONTINUE_BLOCK_LABEL
                     : node.labelName != null ? node.labelName : ""));
-            blockControlLastPatch = bytecode.size(); emitInt(0);
-            blockControlNextPatch = bytecode.size(); emitInt(0);
-            blockControlRedoPatch = bytecode.size(); emitInt(0);
-            blockLoopStartPc = bytecode.size();
+            blockControlLastPatch = bytecodeSize; emitInt(0);
+            blockControlNextPatch = bytecodeSize; emitInt(0);
+            blockControlRedoPatch = bytecodeSize; emitInt(0);
+            blockLoopStartPc = bytecodeSize;
             // For a bare block, `node.labelName` is null and the block is a
             // valid target for unlabeled last/next/redo (matches JVM
             // EmitBlock's pushLoopLabels(... isBareBlock, isBareBlock)).
@@ -2347,7 +2370,7 @@ public class BytecodeCompiler implements Visitor {
                 }
             }
             if (stmt != null) {
-                pcToTokenIndex.put(bytecode.size(), statementSourceTokenIndex);
+                pcToTokenIndex.put(bytecodeSize, statementSourceTokenIndex);
             }
 
             // Emit DEBUG opcode for debugger support (only when -d flag is active)
@@ -2448,7 +2471,7 @@ public class BytecodeCompiler implements Visitor {
         // last/next jump to here (end of body, before exit-scope cleanup so locals are restored).
         // redo jumps back to the start of the body.
         if (blockLoopInfo != null) {
-            int blockEndPc = bytecode.size();
+            int blockEndPc = bytecodeSize;
             patchJump(blockControlLastPatch, blockEndPc);
             patchJump(blockControlNextPatch, blockEndPc);
             patchJump(blockControlRedoPatch, blockLoopStartPc);
@@ -2467,7 +2490,7 @@ public class BytecodeCompiler implements Visitor {
         // A surrounding labeled-block dispatcher may need to enter this
         // block's teardown after a nested sub/eval returns a LAST marker.
         // Record the first cleanup opcode before regex/local/lexical unwind.
-        node.setAnnotation("interpreterNonLocalExitPc", bytecode.size());
+        node.setAnnotation("interpreterNonLocalExitPc", bytecodeSize);
 
         if (regexSaveReg >= 0) {
             emit(Opcodes.RESTORE_REGEX_STATE);
@@ -3668,19 +3691,19 @@ public class BytecodeCompiler implements Visitor {
             emit(Opcodes.DEFINED);
             emitReg(condReg);
             emitReg(targetReg);
-            jumpPos = bytecode.size();
+            jumpPos = bytecodeSize;
             emit(gotoIfTrueOpcode());
             emitReg(condReg);
             emitInt(0); // placeholder for end target
         } else if (op.equals("||=")) {
             // For ||=, skip RHS if LHS is truthy
-            jumpPos = bytecode.size();
+            jumpPos = bytecodeSize;
             emit(gotoIfTrueOpcode());
             emitReg(targetReg);
             emitInt(0); // placeholder for end target
         } else {
             // For &&=, skip RHS if LHS is falsy
-            jumpPos = bytecode.size();
+            jumpPos = bytecodeSize;
             emit(gotoIfFalseOpcode());
             emitReg(targetReg);
             emitInt(0); // placeholder for end target
@@ -3696,7 +3719,7 @@ public class BytecodeCompiler implements Visitor {
         emitReg(valueReg);
 
         // Step 5: Patch the forward jump to skip past the RHS evaluation
-        int endPc = bytecode.size();
+        int endPc = bytecodeSize;
         patchIntOffset(jumpPos + 2, endPc);
 
         lastResultReg = targetReg;
@@ -7245,19 +7268,20 @@ public class BytecodeCompiler implements Visitor {
         return index;
     }
 
+    // Round 34: primitive append — avoids Integer boxing entirely.
+    private void emitRaw(int v) {
+        if (bytecodeSize == bytecodeArr.length) {
+            bytecodeArr = java.util.Arrays.copyOf(bytecodeArr, bytecodeSize * 2);
+        }
+        bytecodeArr[bytecodeSize++] = v;
+    }
+
     void emit(short opcode) {
-        // Track if any localization opcodes are emitted (including defer blocks which use DVM)
-        if (opcode == Opcodes.LOCAL_SCALAR || opcode == Opcodes.LOCAL_ARRAY ||
-                opcode == Opcodes.LOCAL_HASH || opcode == Opcodes.LOCAL_GLOB || opcode == Opcodes.LOCAL_GLOB_REF ||
-                opcode == Opcodes.LOCAL_SCALAR_DYNAMIC ||
-                opcode == Opcodes.PUSH_LOCAL_VARIABLE || opcode == Opcodes.LOCAL_SCALAR_SAVE_LEVEL ||
-                opcode == Opcodes.HASH_DELETE_LOCAL || opcode == Opcodes.ARRAY_DELETE_LOCAL ||
-                opcode == Opcodes.HASH_SLICE_DELETE_LOCAL || opcode == Opcodes.ARRAY_SLICE_DELETE_LOCAL ||
-                opcode == Opcodes.PUSH_DEFER || opcode == Opcodes.PUSH_CANCEL
-                || opcode == Opcodes.SAVE_REGEX_STATE) {
+        // Round 31: single array lookup replaces a 15-condition OR chain.
+        if (!usesLocalization && opcode < IS_LOCAL_OPCODE.length && IS_LOCAL_OPCODE[opcode]) {
             usesLocalization = true;
         }
-        bytecode.add((int) opcode);
+        emitRaw(opcode);
     }
 
     /**
@@ -7265,24 +7289,17 @@ public class BytecodeCompiler implements Visitor {
      * Use this for opcodes that may throw exceptions (DIE, method calls, etc.)
      */
     void emitWithToken(short opcode, int tokenIndex) {
-        // Track if any localization opcodes are emitted (including defer blocks which use DVM)
-        if (opcode == Opcodes.LOCAL_SCALAR || opcode == Opcodes.LOCAL_ARRAY ||
-                opcode == Opcodes.LOCAL_HASH || opcode == Opcodes.LOCAL_GLOB || opcode == Opcodes.LOCAL_GLOB_REF ||
-                opcode == Opcodes.LOCAL_SCALAR_DYNAMIC ||
-                opcode == Opcodes.PUSH_LOCAL_VARIABLE || opcode == Opcodes.LOCAL_SCALAR_SAVE_LEVEL ||
-                opcode == Opcodes.HASH_DELETE_LOCAL || opcode == Opcodes.ARRAY_DELETE_LOCAL ||
-                opcode == Opcodes.HASH_SLICE_DELETE_LOCAL || opcode == Opcodes.ARRAY_SLICE_DELETE_LOCAL ||
-                opcode == Opcodes.PUSH_DEFER || opcode == Opcodes.PUSH_CANCEL
-                || opcode == Opcodes.SAVE_REGEX_STATE) {
+        // Round 31: single array lookup replaces a 15-condition OR chain.
+        if (!usesLocalization && opcode < IS_LOCAL_OPCODE.length && IS_LOCAL_OPCODE[opcode]) {
             usesLocalization = true;
         }
-        int pc = bytecode.size();
+        int pc = bytecodeSize;
         pcToTokenIndex.put(pc, tokenIndex);
-        bytecode.add((int) opcode);
+        emitRaw(opcode);
     }
 
     void emit(int value) {
-        bytecode.add(value);
+        emitRaw(value);
     }
 
     /** Call around compiling the operand of {@code local} when it may be a hash element lvalue. */
@@ -7327,14 +7344,14 @@ public class BytecodeCompiler implements Visitor {
     }
 
     void emitInt(int value) {
-        bytecode.add(value);  // Full int in one slot
+        emitRaw(value);
     }
 
     /**
      * Emit a short value (register index, small immediate, etc.).
      */
     private void emitShort(int value) {
-        bytecode.add(value);
+        emitRaw(value);
     }
 
     /**
@@ -7342,7 +7359,7 @@ public class BytecodeCompiler implements Visitor {
      * REGISTER_LIMIT) stored in one bytecode slot since the stream is int[].
      */
     void emitReg(int register) {
-        bytecode.add(register);
+        emitRaw(register);
     }
 
     /**
@@ -7350,8 +7367,7 @@ public class BytecodeCompiler implements Visitor {
      * Used for forward jumps where the target is unknown at emit time.
      */
     void patchIntOffset(int position, int target) {
-        // Store absolute target address in one slot
-        bytecode.set(position, target);
+        bytecodeArr[position] = target;
     }
 
     /**
@@ -7370,18 +7386,15 @@ public class BytecodeCompiler implements Visitor {
      * Used for forward jumps where the target is unknown at emit time.
      */
     private void patchShortOffset(int position, int target) {
-        bytecode.set(position, target);
+        bytecodeArr[position] = target;
     }
 
     /**
-     * Convert List<Integer> bytecode to int[] array.
+     * Return the bytecode as a trimmed int[] for InterpretedCode.
+     * Round 34: just trim the live primitive buffer — no unboxing loop needed.
      */
     private int[] toShortArray() {
-        int[] result = new int[bytecode.size()];
-        for (int i = 0; i < bytecode.size(); i++) {
-            result[i] = bytecode.get(i);
-        }
-        return result;
+        return java.util.Arrays.copyOf(bytecodeArr, bytecodeSize);
     }
 
     @Override
@@ -7953,7 +7966,7 @@ public class BytecodeCompiler implements Visitor {
         // Emit EVAL_TRY with placeholder for catch target (absolute address)
         // and the first body register for exception cleanup
         emitWithToken(Opcodes.EVAL_TRY, node.getIndex());
-        int catchTargetPos = bytecode.size();
+        int catchTargetPos = bytecodeSize;
         emitInt(0); // Placeholder for absolute catch address (4 bytes)
         emitReg(firstBodyReg); // First register allocated inside eval body
 
@@ -7987,7 +8000,7 @@ public class BytecodeCompiler implements Visitor {
             emitAliasWithTarget(resultReg, lastResultReg);
         }
 
-        int evalEndPc = bytecode.size();
+        int evalEndPc = bytecodeSize;
         for (int patchPos : returnGotoPatchPositions) {
             patchIntOffset(patchPos, evalEndPc);
         }
@@ -7997,11 +8010,11 @@ public class BytecodeCompiler implements Visitor {
 
         // Jump over catch block to end
         emit(Opcodes.GOTO);
-        int gotoEndPos = bytecode.size();
+        int gotoEndPos = bytecodeSize;
         emitInt(0); // Placeholder for absolute end address (4 bytes)
 
         // CATCH block starts here
-        int catchPc = bytecode.size();
+        int catchPc = bytecodeSize;
 
         // Patch EVAL_TRY with absolute catch target (4 bytes)
         patchIntOffset(catchTargetPos, catchPc);
@@ -8013,7 +8026,7 @@ public class BytecodeCompiler implements Visitor {
         emit(currentCallContext);
 
         // END label (after catch)
-        int endPc = bytecode.size();
+        int endPc = bytecodeSize;
 
         // Patch GOTO with absolute end target (4 bytes)
         patchIntOffset(gotoEndPos, endPc);
@@ -8401,16 +8414,16 @@ public class BytecodeCompiler implements Visitor {
         // Layout: GOTO check | body | check: FOREACH_NEXT_OR_EXIT → body | exit
         emit(Opcodes.PUSH_CONTROL_BLOCK);
         emit(addToStringPool(node.labelName != null ? node.labelName : ""));
-        int controlLastPatch = bytecode.size(); emitInt(0);
-        int controlNextPatch = bytecode.size(); emitInt(0);
-        int controlRedoPatch = bytecode.size(); emitInt(0);
+        int controlLastPatch = bytecodeSize; emitInt(0);
+        int controlNextPatch = bytecodeSize; emitInt(0);
+        int controlRedoPatch = bytecodeSize; emitInt(0);
 
         emit(Opcodes.GOTO);
-        int entryJumpPc = bytecode.size();
+        int entryJumpPc = bytecodeSize;
         emitInt(0);   // placeholder: will be patched to loopCheckPc
 
         // Step 7: Body start (redo jumps here)
-        int bodyStartPc = bytecode.size();
+        int bodyStartPc = bytecodeSize;
         if (lexicalLoopVarName != null) {
             emit(Opcodes.BIND_ACTIVE_LEXICAL);
             emitReg(varReg);
@@ -8468,7 +8481,7 @@ public class BytecodeCompiler implements Visitor {
             // intentionally targets this same entry point: Perl re-enters the
             // continue block, including looping forever for an unconditional
             // next, rather than advancing directly to the iterator check.
-            loopInfo.continuePc = bytecode.size();
+            loopInfo.continuePc = bytecodeSize;
             if (node.continueBlock != null) {
                 node.continueBlock.accept(this);
             }
@@ -8487,7 +8500,7 @@ public class BytecodeCompiler implements Visitor {
             // authoritative: every label emitted between the body entry and
             // the iterator check is unsafe to enter before this foreach has
             // initialized its iterator.
-            int loopBodyEndPc = bytecode.size();
+            int loopBodyEndPc = bytecodeSize;
             registerGotoLoopRanges(bodyStartPc, loopBodyEndPc);
             if (gotoLabelPcs != null) {
                 for (Map.Entry<String, Integer> label : gotoLabelPcs.entrySet()) {
@@ -8508,7 +8521,7 @@ public class BytecodeCompiler implements Visitor {
 
         // Step 9: The initial entry skips continue and proceeds directly to
         // the iterator check, since no loop value exists yet.
-        int loopCheckPc = bytecode.size();
+        int loopCheckPc = bytecodeSize;
         patchJump(entryJumpPc, loopCheckPc);   // patch the entry GOTO
 
         // Step 10: Emit the loop superinstruction at the bottom (do-while check).
@@ -8528,7 +8541,7 @@ public class BytecodeCompiler implements Visitor {
             emitReg(iterReg);
             emit(Opcodes.GOTO_IF_FALSE);
             emitReg(hasNextReg);
-            explicitLoopExitPatch = bytecode.size();
+            explicitLoopExitPatch = bytecodeSize;
             emitInt(0);
 
             for (int i = 0; i < multiVarRegs.size(); i++) {
@@ -8545,23 +8558,23 @@ public class BytecodeCompiler implements Visitor {
                     emitReg(iterReg);
                     emit(Opcodes.GOTO_IF_FALSE);
                     emitReg(hasNextReg);
-                    int undefPatch = bytecode.size();
+                    int undefPatch = bytecodeSize;
                     emitInt(0);
 
                     emit(Opcodes.ITERATOR_NEXT);
                     emitReg(valueReg);
                     emitReg(iterReg);
                     emit(Opcodes.GOTO);
-                    int assignedPatch = bytecode.size();
+                    int assignedPatch = bytecodeSize;
                     emitInt(0);
 
-                    patchJump(undefPatch, bytecode.size());
+                    patchJump(undefPatch, bytecodeSize);
                     // Preserve the read-only alias just as ITERATOR_NEXT
                     // does for an explicit undef element.
                     emit(Opcodes.LOAD_CONST);
                     emitReg(valueReg);
                     emit(addToConstantPool(ReadOnlyAlias.forForeach(RuntimeScalarCache.scalarUndef)));
-                    patchJump(assignedPatch, bytecode.size());
+                    patchJump(assignedPatch, bytecodeSize);
                 }
                 if (referenceSigil == null) {
                     emit(Opcodes.ALIAS);
@@ -8595,7 +8608,7 @@ public class BytecodeCompiler implements Visitor {
             emitReg(iterReg);
             emit(Opcodes.GOTO_IF_FALSE);
             emitReg(hasNextReg);
-            explicitLoopExitPatch = bytecode.size();
+            explicitLoopExitPatch = bytecodeSize;
             emitInt(0);
 
             int referenceReg = allocateRegister();
@@ -8660,7 +8673,7 @@ public class BytecodeCompiler implements Visitor {
         }
 
         // Step 11: Loop exit - fall-through after the superinstruction
-        int loopEndPc = bytecode.size();
+        int loopEndPc = bytecodeSize;
         patchJump(controlLastPatch, loopEndPc);
         patchJump(controlNextPatch, loopInfo.continuePc);
         patchJump(controlRedoPatch, bodyStartPc);
@@ -8786,14 +8799,14 @@ public class BytecodeCompiler implements Visitor {
                 labelIdx = addToStringPool(node.labelName != null ? node.labelName : "");
                 emit(Opcodes.PUSH_LABELED_BLOCK);
                 emit(labelIdx);
-                exitPcPlaceholder = bytecode.size();
+                exitPcPlaceholder = bytecodeSize;
                 emitInt(0);
             }
             emit(Opcodes.PUSH_CONTROL_BLOCK);
             emit(addToStringPool(node.labelName != null ? node.labelName : ""));
-            controlLastPatch = bytecode.size(); emitInt(0);
-            controlNextPatch = bytecode.size(); emitInt(0);
-            controlRedoPatch = bytecode.size(); emitInt(0);
+            controlLastPatch = bytecodeSize; emitInt(0);
+            controlNextPatch = bytecodeSize; emitInt(0);
+            controlRedoPatch = bytecodeSize; emitInt(0);
 
             // Save local variable level so that `last` exits restore `local` variables.
             // The body's BlockNode has its own GET_LOCAL_LEVEL/POP_LOCAL_LEVEL, but `last`
@@ -8810,7 +8823,7 @@ public class BytecodeCompiler implements Visitor {
             // (Perl 5 allows redo/next/last in bare blocks)
             // Unlabeled bare blocks are targets for unlabeled redo/next/last;
             // labeled blocks (like SKIP: { }) are only targeted by matching label.
-            int bodyStartPc = bytecode.size();
+            int bodyStartPc = bytecodeSize;
             boolean isUnlabeledTarget = (node.labelName == null);
             LoopInfo loopInfo = new LoopInfo(
                     isUnlabeledTarget ? null : node.labelName,
@@ -8836,14 +8849,14 @@ public class BytecodeCompiler implements Visitor {
             } finally {
                 // Exit scope to clean up lexical variables
                 if (nonLocalExitPc < 0) {
-                    nonLocalExitPc = bytecode.size();
+                    nonLocalExitPc = bytecodeSize;
                 }
                 exitScope(true);  // safe to flush — foreach body, not subroutine
             }
 
             // next jumps to the continue block after the body has unwound its
             // lexical and dynamic local state, matching a bare Perl block.
-            loopInfo.continuePc = bytecode.size();
+            loopInfo.continuePc = bytecodeSize;
             if (node.continueBlock != null) {
                 node.continueBlock.accept(this);
             }
@@ -8872,7 +8885,7 @@ public class BytecodeCompiler implements Visitor {
             // Patch last (break) PCs to jump to local cleanup (or past the block if no locals).
             // POP_LOCAL_LEVEL must be at endPc so `last` runs it.
             // On normal exit this is a no-op since the body's POP_LOCAL_LEVEL already ran.
-            int endPc = bytecode.size();
+            int endPc = bytecodeSize;
             patchJump(controlLastPatch, nonLocalExitPc);
             patchJump(controlNextPatch, nonLocalExitPc);
             patchJump(controlRedoPatch, bodyStartPc);
@@ -8943,10 +8956,10 @@ public class BytecodeCompiler implements Visitor {
         // Step 2: Push loop info onto stack for last/next/redo
         emit(Opcodes.PUSH_CONTROL_BLOCK);
         emit(addToStringPool(node.labelName != null ? node.labelName : ""));
-        int controlLastPatch = bytecode.size(); emitInt(0);
-        int controlNextPatch = bytecode.size(); emitInt(0);
-        int controlRedoPatch = bytecode.size(); emitInt(0);
-        int loopStartPc = bytecode.size();
+        int controlLastPatch = bytecodeSize; emitInt(0);
+        int controlNextPatch = bytecodeSize; emitInt(0);
+        int controlRedoPatch = bytecodeSize; emitInt(0);
+        int loopStartPc = bytecodeSize;
         // do-while is NOT a true loop (can't use last/next/redo); while/for are true loops
         LoopInfo loopInfo = new LoopInfo(node.labelName, loopStartPc, !node.isDoWhile);
         loopInfo.dynamicLocalLevelReg = for3LocalLevelReg;
@@ -8973,7 +8986,7 @@ public class BytecodeCompiler implements Visitor {
             }
 
             // Step 4: Continue point (next jumps here)
-            loopInfo.continuePc = bytecode.size();
+            loopInfo.continuePc = bytecodeSize;
 
             // Step 5: Execute continue block if present
             if (node.continueBlock != null) {
@@ -9049,21 +9062,21 @@ public class BytecodeCompiler implements Visitor {
             // Step 4: If condition is false, jump to end
             emit(gotoIfFalseOpcode());
             emitReg(condReg);
-            loopEndJumpPc = bytecode.size();
+            loopEndJumpPc = bytecodeSize;
             emitInt(0);  // Placeholder for jump target (will be patched)
 
             // Step 5: Execute body
             // Perl redo restarts the body without re-evaluating the condition.
-            redoTargetPc = bytecode.size();
+            redoTargetPc = bytecodeSize;
             int bodyStartPc = redoTargetPc;
             if (node.body != null) {
                 loopInfo.cleanupScopeIndex = symbolTable.currentScopeIndex() + 1;
             compileNode(node.body, -1, RuntimeContextType.VOID);
             }
-            registerGotoLoopRanges(bodyStartPc, bytecode.size());
+            registerGotoLoopRanges(bodyStartPc, bytecodeSize);
 
             // Step 6: Continue point (next jumps here)
-            loopInfo.continuePc = bytecode.size();
+            loopInfo.continuePc = bytecodeSize;
 
             // Step 7: Execute continue block if present
             if (node.continueBlock != null) {
@@ -9084,7 +9097,7 @@ public class BytecodeCompiler implements Visitor {
 
         // A condition-false exit produces that false value. A `last` jump
         // targets the common exit below and retains the initial undef result.
-        int normalLoopExitPc = bytecode.size();
+        int normalLoopExitPc = bytecodeSize;
         if (loopResultReg >= 0 && finalConditionReg >= 0) {
             emit(Opcodes.ALIAS);
             emitReg(loopResultReg);
@@ -9094,7 +9107,7 @@ public class BytecodeCompiler implements Visitor {
         // Step 10: Loop end - restore local variables and patch jumps.
         // POP_LOCAL_LEVEL must be at loopEndPc so `last` runs it.
         // On normal exit (condition false) this is a no-op since the body already cleaned up.
-        int loopEndPc = bytecode.size();
+        int loopEndPc = bytecodeSize;
         patchJump(controlLastPatch, loopEndPc);
         patchJump(controlNextPatch, loopInfo.continuePc);
         patchJump(controlRedoPatch, redoTargetPc);
@@ -9205,7 +9218,7 @@ public class BytecodeCompiler implements Visitor {
         }
 
         // Mark position for forward jump to else/end
-        int ifFalsePos = bytecode.size();
+        int ifFalsePos = bytecodeSize;
         // Invert condition for 'unless'
         if ("unless".equals(node.operator)) {
             emit(gotoIfTrueOpcode());
@@ -9223,12 +9236,12 @@ public class BytecodeCompiler implements Visitor {
 
         if (node.elseBranch != null) {
             // Need to jump over else block after then block executes
-            int gotoEndPos = bytecode.size();
+            int gotoEndPos = bytecodeSize;
             emit(Opcodes.GOTO);
             emitInt(0); // Placeholder for end target
 
             // Patch if-false jump to here (start of else block)
-            int elseStart = bytecode.size();
+            int elseStart = bytecodeSize;
             patchIntOffset(ifFalsePos + 2, elseStart);
 
             // Compile else block
@@ -9240,7 +9253,7 @@ public class BytecodeCompiler implements Visitor {
             }
 
             // Patch goto-end jump to here
-            int endPos = bytecode.size();
+            int endPos = bytecodeSize;
             patchIntOffset(gotoEndPos + 1, endPos);
 
             lastResultReg = thenResultReg >= 0 ? thenResultReg : elseResultReg;
@@ -9249,15 +9262,15 @@ public class BytecodeCompiler implements Visitor {
             // does not take its branch.  Materialize it in the conditional's
             // result register so a skipped then branch cannot expose stale data.
             int resultReg = thenResultReg >= 0 ? thenResultReg : allocateOutputRegister();
-            int gotoEndPos = bytecode.size();
+            int gotoEndPos = bytecodeSize;
             emit(Opcodes.GOTO);
             emitInt(0);
 
-            int falseStart = bytecode.size();
+            int falseStart = bytecodeSize;
             patchIntOffset(ifFalsePos + 2, falseStart);
             emitAliasWithTarget(resultReg, condReg);
 
-            int endPos = bytecode.size();
+            int endPos = bytecodeSize;
             patchIntOffset(gotoEndPos + 1, endPos);
             lastResultReg = resultReg;
         }
@@ -9298,7 +9311,7 @@ public class BytecodeCompiler implements Visitor {
         compileNode(node.condition, -1, RuntimeContextType.SCALAR);
         int condReg = lastResultReg;
 
-        int ifFalsePos = bytecode.size();
+        int ifFalsePos = bytecodeSize;
         emit(gotoIfFalseOpcode());
         emitReg(condReg);
         emitInt(0);
@@ -9309,18 +9322,18 @@ public class BytecodeCompiler implements Visitor {
         compileNode(trueExpr, rd, currentCallContext);
         emitAliasWithTarget(rd, lastResultReg);
 
-        int gotoEndPos = bytecode.size();
+        int gotoEndPos = bytecodeSize;
         emit(Opcodes.GOTO);
         emitInt(0);
 
-        int falseStart = bytecode.size();
+        int falseStart = bytecodeSize;
         patchIntOffset(ifFalsePos + 2, falseStart);
 
         compileNode(falseExpr, rd, currentCallContext);
         emitAliasWithTarget(rd, lastResultReg);
 
         // Patch goto-end jump to here
-        int endPos = bytecode.size();
+        int endPos = bytecodeSize;
         patchIntOffset(gotoEndPos + 1, endPos);
 
         lastResultReg = rd;
@@ -9373,7 +9386,7 @@ public class BytecodeCompiler implements Visitor {
         }
 
         emitWithToken(Opcodes.EVAL_TRY, node.getIndex());
-        int catchTargetPos = bytecode.size();
+        int catchTargetPos = bytecodeSize;
         emitInt(0);
         // Try/catch is not a Perl caller frame. Encode a negative register to
         // distinguish it from eval BLOCK, which shares EVAL_TRY but is visible
@@ -9387,10 +9400,10 @@ public class BytecodeCompiler implements Visitor {
         emit(Opcodes.EVAL_END);
 
         emit(Opcodes.GOTO);
-        int gotoEndPos = bytecode.size();
+        int gotoEndPos = bytecodeSize;
         emitInt(0);
 
-        int catchPc = bytecode.size();
+        int catchPc = bytecodeSize;
         patchIntOffset(catchTargetPos, catchPc);
 
         int ignoredEvalResult = allocateRegister();
@@ -9426,7 +9439,7 @@ public class BytecodeCompiler implements Visitor {
             emitAliasWithTarget(resultReg, lastResultReg);
         }
 
-        int finallyPc = bytecode.size();
+        int finallyPc = bytecodeSize;
         patchIntOffset(gotoEndPos, finallyPc);
         if (tryFinallyTarget != null) {
             for (int patchPos : tryFinallyTarget.gotoPatchPositions) {
@@ -9447,11 +9460,11 @@ public class BytecodeCompiler implements Visitor {
             tryFinallyReturnTargets.pop();
             emit(Opcodes.GOTO_IF_FALSE);
             emitReg(tryFinallyTarget.pendingReg);
-            int normalCompletionPos = bytecode.size();
+            int normalCompletionPos = bytecodeSize;
             emitInt(0);
             emit(Opcodes.RETURN_NONLOCAL);
             emitReg(tryFinallyTarget.valueReg);
-            patchIntOffset(normalCompletionPos, bytecode.size());
+            patchIntOffset(normalCompletionPos, bytecodeSize);
         }
         lastResultReg = resultReg;
     }
@@ -9474,7 +9487,7 @@ public class BytecodeCompiler implements Visitor {
         emitReg(target.pendingReg);
         emitInt(1);
         emit(Opcodes.GOTO);
-        int patchPos = bytecode.size();
+        int patchPos = bytecodeSize;
         emitInt(0);
         target.gotoPatchPositions.add(patchPos);
     }
@@ -9503,7 +9516,7 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(LabelNode node) {
-        int pc = bytecode.size();
+        int pc = bytecodeSize;
         // The active lexical scope may contain a target created after a
         // folding pass cloned this block.  Bind that scope's target here so
         // its pending static gotos receive this PC; otherwise their initial
@@ -9809,12 +9822,9 @@ public class BytecodeCompiler implements Visitor {
         return sourceLine;
     }
 
-    /**
-     * Get the bytecode list for position tracking.
-     * Used by refactored compiler classes for jump patching.
-     */
-    List<Integer> getBytecode() {
-        return bytecode;
+    /** Get current bytecode write position (replaces old bytecode.size()). */
+    int getBytecodeSize() {
+        return bytecodeSize;
     }
 
     Map<String, Integer> getCapturedVarIndices() {
@@ -9876,7 +9886,7 @@ public class BytecodeCompiler implements Visitor {
 
                 emit(Opcodes.GOTO_IF_TRUE);
                 emitReg(eqReg);
-                int matchPatchPos = bytecode.size();
+                int matchPatchPos = bytecodeSize;
                 emitInt(0); // patched to local handler for this matched label
 
                 localMatchPatchPositions.add(matchPatchPos);
@@ -9902,13 +9912,13 @@ public class BytecodeCompiler implements Visitor {
             for (int i = 0; i < localMatchPatchPositions.size(); i++) {
                 int matchPatchPos = localMatchPatchPositions.get(i);
                 LoopInfo targetLoop = localMatchLoops.get(i);
-                patchJump(matchPatchPos, bytecode.size());
+                patchJump(matchPatchPos, bytecodeSize);
 
                 emitLoopControlScopeCleanup(targetLoop);
                 emit(Opcodes.MORTAL_FLUSH);
                 emitLoopRegexRestoreForControl(targetLoop);
                 emitWithToken(localOpcode, node.getIndex());
-                int patchPc = bytecode.size();
+                int patchPc = bytecodeSize;
                 emitInt(0); // patched when loop boundaries are finalized
 
                 if (op.equals("last")) {
@@ -10038,7 +10048,7 @@ public class BytecodeCompiler implements Visitor {
         emitWithToken(opcode, node.getIndex());
 
         // Record the PC to be patched (it's the PC of the jump offset operand)
-        int patchPc = bytecode.size();
+        int patchPc = bytecodeSize;
         emitInt(0); // Placeholder offset to be patched later
 
         // Add to the appropriate list in the target loop

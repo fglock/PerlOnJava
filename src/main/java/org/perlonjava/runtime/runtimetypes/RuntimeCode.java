@@ -2882,6 +2882,33 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return null;
     }
 
+    private static RuntimeArray getOriginalArgsForCallerName(String callerName, int preferredFrame) {
+        if (callerName == null || callerName.isEmpty()) return null;
+        Iterator<RuntimeCode> codeIt = activeCodeStack().iterator();
+        Iterator<java.util.List<RuntimeScalar>> argsIt = pristineArgsStack().iterator();
+        RuntimeCode previous = null;
+        RuntimeArray bestArgs = null;
+        int bestDistance = Integer.MAX_VALUE;
+        int logicalFrame = 0;
+        while (codeIt.hasNext() && argsIt.hasNext()) {
+            RuntimeCode active = codeIt.next();
+            java.util.List<RuntimeScalar> arguments = argsIt.next();
+            if (isCompilerWrapperPair(active, previous)) continue;
+            String activeName = callerSubNameForCode(active);
+            if (callerName.equals(activeName)) {
+                int distance = Math.abs(logicalFrame - preferredFrame);
+                if (distance < bestDistance) {
+                    bestDistance = distance;
+                    bestArgs = new RuntimeArray();
+                    bestArgs.elements = new java.util.ArrayList<>(arguments);
+                }
+            }
+            previous = active;
+            logicalFrame++;
+        }
+        return bestArgs;
+    }
+
     /**
      * Get the hasargs flag for a given call depth.
      * depth=0 is the current (innermost) frame, depth=1 is its caller, etc.
@@ -7169,11 +7196,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
         try {
             String evalString = code.toString();
-            boolean evalbytesUtf8Source = ctx.isEvalbytes && shouldDecodeEvalbytesUtf8Source(evalString);
+            // Round 32: cache the scan result to avoid a second O(n) indexOf("use utf8") pass.
+            boolean decodeUtf8 = shouldDecodeEvalbytesUtf8Source(evalString);
+            boolean evalbytesUtf8Source = ctx.isEvalbytes && decodeUtf8;
             boolean byteStringUtf8Source = !ctx.isEvalbytes
                     && code.type == RuntimeScalarType.BYTE_STRING
                     && ((ctx.symbolTable.strictOptionsStack.peek() & Strict.HINT_UTF8) != 0
-                        || shouldDecodeEvalbytesUtf8Source(evalString))
+                        || decodeUtf8)
                     && !ctx.symbolTable.isFeatureCategoryEnabled("unicode_eval");
             if (evalbytesUtf8Source || byteStringUtf8Source) {
                 evalString = decodeEvalbytesUtf8Source(evalString);
@@ -7319,6 +7348,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         evalCompilerOptions,
                         new RuntimeArray());
 
+                // Round 35: inject cached physicalLineNumbers so buildPhysicalLineNumbers() is skipped.
+                // Safe only when the exact same String object is reused (reference equality).
+                if (ctx.evalCachedPhysicalLineNumbers != null && evalString == ctx.evalCachedSourceStr) {
+                    evalCtx.errorUtil.injectPhysicalLineNumbers(ctx.evalCachedPhysicalLineNumbers);
+                }
+
                 Parser parser = new Parser(evalCtx, tokens);
                 parser.parsingEvalString = true;
                 BHooksEndOfScope.beginFileLoad(evalCompilerOptions.fileName);
@@ -7329,6 +7364,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 } finally {
                     RegexQuoteMeta.setParserWarningBits(savedRegexWarningBits);
                     BHooksEndOfScope.endFileLoad(evalCompilerOptions.fileName);
+                }
+
+                // Round 35: populate the cache after first successful parse.
+                if (ctx.evalCachedPhysicalLineNumbers == null) {
+                    int[] pln = evalCtx.errorUtil.peekPhysicalLineNumbers();
+                    if (pln != null) {
+                        ctx.evalCachedPhysicalLineNumbers = pln;
+                        ctx.evalCachedSourceStr = evalString;
+                    }
                 }
 
                 // Transfer parse-time flags to the AST root so BytecodeCompiler can
@@ -7448,7 +7492,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     // Create pooled BytecodeCompiler collections once (round 21).
                     // The cached constructor clears these before each compile, keeping the
                     // backing arrays alive across 2M+ iterations instead of reallocating.
-                    ctx.evalCachedBytecodeList = new ArrayList<>(64);
+                    ctx.evalCachedBytecodeArr = new int[64];
                     ctx.evalCachedConstants = new ArrayList<>(16);
                     ctx.evalCachedStringPool = new ArrayList<>(16);
                     ctx.evalCachedScopeIndices = new ArrayDeque<>();
@@ -7774,8 +7818,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     /** Perl forbids compiling tainted eval STRING input while -T is active. */
     public static void rejectTaintedEval(RuntimeScalar code) {
         if (code != null && code.isTainted() && GlobalContext.isTaintModeActive()) {
-            throw new PerlCompilerException(
-                    "Insecure dependency in eval while running with -T switch");
+            throw new TaintedEvalException();
         }
     }
 
@@ -8409,17 +8452,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             RuntimeCode code, RuntimeArray args, int callContext,
             PerlRuntime cachedRuntime) {
         try {
-            // Preserve LVALUE here: generated code performs the callable check
-            // from the raw context. Normalizing it first would silently turn a
-            // forbidden lvalue method assignment into an ordinary scalar call.
-            RuntimeList result;
-            if (cachedRuntime != null && code.compilerSupplier == null
-                    && (code.boundRuntime == null || code.boundRuntime == cachedRuntime)
-                    && code.constantValue == null) {
-                result = code.apply(args, callContext, cachedRuntime);
-            } else {
-                result = code.apply(args, callContext);
-            }
+            RuntimeList result = withMethodHasArgs(code, () -> {
+                // Preserve LVALUE here: generated code performs the callable check
+                // from the raw context. Normalizing it first would silently turn a
+                // forbidden lvalue method assignment into an ordinary scalar call.
+                if (cachedRuntime != null && code.compilerSupplier == null
+                        && (code.boundRuntime == null || code.boundRuntime == cachedRuntime)
+                        && code.constantValue == null) {
+                    return code.apply(args, callContext, cachedRuntime);
+                }
+                return code.apply(args, callContext);
+            });
             return finishCachedMethodResult(code, callContext, result);
         } catch (PerlNonLocalReturnException e) {
             if (e.targetCode != null && e.targetCode != code) {
@@ -8466,6 +8509,38 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return invocant;
     }
 
+    private static RuntimeList applyMethodCode(RuntimeScalar method, RuntimeArray args,
+                                               int callContext) {
+        RuntimeCode code = method != null && method.type == RuntimeScalarType.CODE
+                && method.value instanceof RuntimeCode runtimeCode ? runtimeCode : null;
+        return withMethodHasArgs(code, () -> apply(method, args, callContext));
+    }
+
+    private static RuntimeList withMethodHasArgs(
+            RuntimeCode code, java.util.function.Supplier<RuntimeList> invocation) {
+        if (code != null && code.boundRuntime != null
+                && PerlRuntime.currentOrNull() != code.boundRuntime) {
+            try (PerlRuntime.Binding ignored = code.boundRuntime.bind()) {
+                return withMethodHasArgs(invocation);
+            }
+        }
+        return withMethodHasArgs(invocation);
+    }
+
+    private static RuntimeList withMethodHasArgs(
+            java.util.function.Supplier<RuntimeList> invocation) {
+        ExecutionRuntimeState state = PerlRuntime.current().executionState();
+        state.methodCallHasArgsOverrides.push(Boolean.TRUE);
+        try {
+            return invocation.get();
+        } finally {
+            if (!state.methodCallHasArgsOverrides.isEmpty()
+                    && state.methodCallHasArgsOverrides.peek() == Boolean.TRUE) {
+                state.methodCallHasArgsOverrides.pop();
+            }
+        }
+    }
+
     /**
      * Dispatches {@code METHOD $self, ...} after {@code $self} is already element 0 of {@code args}.
      * Caller must unwrap TIED_SCALAR and apply {@link #acquireMethodInvocantHold}/{@link
@@ -8482,7 +8557,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
         if (method.type == RuntimeScalarType.CODE) {
             // If method is a subroutine reference, just call it
-            return apply(method, args, callContext);
+            return applyMethodCode(method, args, callContext);
         }
 
         String methodName = method.toString();
@@ -8692,7 +8767,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 setAutoloadMethodName(autoloadVariableName, fullMethodName, requestedMethod);
             }
 
-            return apply(method, args, callContext);
+            return applyMethodCode(method, args, callContext);
         }
 
         // If the method is not found in any class, handle special cases
@@ -9111,6 +9186,26 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         && activeCode.lexicalSubDisplayName) {
                     subName = callerSubNameForCode(activeCode);
                 }
+                if (currentFrameIsInterpreter && activeCode != null
+                        && subName != null && !subName.startsWith("(eval")
+                        && activeCode.subName != null && !activeCode.subName.isBlank()
+                        && !activeCode.subName.startsWith("(")
+                        && activeCode.packageName != null && !activeCode.packageName.isBlank()) {
+                    String activeName = callerSubNameForCode(activeCode);
+                    // The interpreter frame can retain the package used when
+                    // its bytecode was first compiled (often main) even after
+                    // a fully qualified named CV is installed in another
+                    // stash. The active CV is authoritative when both names
+                    // identify the same final subroutine component.
+                    int reportedSeparator = subName.lastIndexOf("::");
+                    int activeSeparator = activeName == null ? -1 : activeName.lastIndexOf("::");
+                    if (reportedSeparator >= 0 && activeSeparator >= 0
+                            && !activeName.endsWith("::__ANON__")
+                            && subName.substring(reportedSeparator + 2)
+                                    .equals(activeName.substring(activeSeparator + 2))) {
+                        subName = activeName;
+                    }
+                }
                 if (virtualEvalFrame && !interpreterVirtualEvalFrame && activeCode != null
                         && !PerlRuntime.current().executionState().insideDieHandler) {
                     // A synthetic eval frame can occupy the formatted slot for
@@ -9186,6 +9281,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     }
                 }
 
+                if (subName != null && subName.endsWith("::__ANON__")
+                        && previousFrameIsEval
+                        && activeCode instanceof org.perlonjava.backend.bytecode.InterpretedCode) {
+                    String activeSubName = callerSubNameForCode(activeCode);
+                    if (activeSubName != null && activeSubName.endsWith("::__ANON__")) {
+                        subName = activeSubName;
+                    } else if (activeCode.subName == null && !activeCode.explicitlyRenamed
+                            && activeCode.packageName != null) {
+                        subName = normalizeCallerPackage(activeCode.packageName) + "::__ANON__";
+                    }
+                }
+
                 // Honor `local *PKG::__ANON__ = 'name'` for any anonymous-sub
                 // frame, not just the innermost one. After both fallbacks,
                 // an anon frame ends up as "Pkg::__ANON__"; if the package's
@@ -9238,10 +9345,30 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         // out from under the caller. Perl preserves the invocation
                         // args here — critical for DBIC TxnScopeGuard double-DESTROY
                         // detection.
-                        RuntimeArray frameArgs = getOriginalArgsAt(trackedArgsFrame);
+                        int dbArgsFrame = trackedArgsFrame;
+                        if (currentFrameIsInterpreter
+                                && (interpreterFrameBeforeVirtualEval
+                                        || interpreterFrameBeforeEvalString)) {
+                            // The interpreter's eval call site is represented
+                            // as a separate Perl-visible frame in the caller
+                            // trace, but it has no independent @_ snapshot.
+                            // Select the enclosing invocation's arguments.
+                            dbArgsFrame++;
+                        }
+                        RuntimeArray frameArgs = getOriginalArgsAt(dbArgsFrame);
                         RuntimeArray codeFrameArgs = getOriginalArgsForCode(activeCode);
-                        if (codeFrameArgs != null) {
+                        // The formatted interpreter trace and active-code stack
+                        // do not share a one-to-one depth mapping around eval
+                        // callbacks. In that case the code-object lookup can
+                        // select an adjacent frame; retain the caller-depth
+                        // snapshot, whose indexing follows Perl's caller(N).
+                        if (!currentFrameIsInterpreter && codeFrameArgs != null) {
                             frameArgs = codeFrameArgs;
+                        }
+                        if (currentFrameIsInterpreter) {
+                            RuntimeArray namedFrameArgs = getOriginalArgsForCallerName(
+                                    subName, trackedActiveCodeFrame);
+                            if (namedFrameArgs != null) frameArgs = namedFrameArgs;
                         }
                         if (WarnDie.isInsideUnhandledDieHandler() && syntheticOwnSubFramesBefore > 0) {
                             RuntimeArray activeFrameArgs = getOriginalArgsAt(trackedActiveCodeFrame);
@@ -12615,13 +12742,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             pushCallContext(callContext, executionState);
             pushActiveCode(this, executionState);
 
-            // hasArgs tracking for caller()[4]:
-            // This is the 2-arg instance method, called from the 3-arg static apply(scalar, array, ctx).
-            // That static method is the "shared args" path — used when Perl code calls &func (no parens),
-            // which inherits the caller's @_ instead of creating a fresh one.
-            // Perl's caller()[4] (hasargs) should be false/empty for these calls.
-            // See also: the 3-arg instance method apply(name, array, ctx) which pushes true.
-            executionState.hasArgsStack.push(false);
+            // A normal shared-args call inherits @_; a method dispatch is an
+            // explicit call with a fresh argument frame even though it reaches
+            // this same entry point. The dispatcher supplies a one-shot marker
+            // so we can report Perl's caller()[4] value without changing the
+            // invocation or argument-ownership path.
+            boolean methodHasArgs = !executionState.methodCallHasArgsOverrides.isEmpty()
+                    && executionState.methodCallHasArgsOverrides.pop();
+            executionState.hasArgsStack.push(methodHasArgs);
 
             // Check deep recursion BEFORE pushing the callee's warning bits,
             // so the "Deep recursion on subroutine" warning is gated on the

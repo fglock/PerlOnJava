@@ -1095,13 +1095,14 @@ public class XMLLibXML extends PerlModuleBase {
                 new RuntimeScalar("\n")).getList();
         }
         String xmlStr = strArg.toString();
+        int xmlScalarType = RuntimeScalarType.effectiveType(strArg);
         ParserOptions opts = getParserOptions(self);
         try {
             DocumentBuilder db = newBuilder(opts);
             Document doc;
             // Detect binary XML (UTF-16/UTF-32 BOM) and parse as byte stream
             // so the parser can auto-detect the encoding from the BOM/declaration
-            InputSource source = xmlInputSource(xmlStr);
+            InputSource source = xmlInputSource(xmlStr, xmlScalarType);
             if (args.size() > 2 && args.get(2).type != RuntimeScalarType.UNDEF) {
                 source.setSystemId(args.get(2).toString());
             }
@@ -1208,6 +1209,19 @@ public class XMLLibXML extends PerlModuleBase {
         return hasBinaryXmlBom(bytes)
                 ? new InputSource(new ByteArrayInputStream(bytes))
                 : new InputSource(new StringReader(xml));
+    }
+
+    /**
+     * Build a byte source for Perl scalar input. Perl's UTF-8 flag controls how
+     * the scalar is encoded before libxml2 applies the XML declaration; passing
+     * every scalar through a StringReader loses that distinction and bypasses
+     * the declaration entirely. BYTE_STRING values represent octets directly,
+     * while character values must first be encoded as UTF-8.
+     */
+    private static InputSource xmlInputSource(String xml, int scalarType) {
+        byte[] bytes = xml.getBytes(scalarType == RuntimeScalarType.BYTE_STRING
+                ? StandardCharsets.ISO_8859_1 : StandardCharsets.UTF_8);
+        return new InputSource(new ByteArrayInputStream(bytes));
     }
 
     /**

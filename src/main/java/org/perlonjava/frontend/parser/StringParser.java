@@ -209,6 +209,13 @@ public class StringParser {
 
         while (state != END_TOKEN) {
             LexerToken currentToken = tokens.get(tokPos);
+            if (state != END_TOKEN && currentToken.type == LexerTokenType.CONFLICT_MARKER) {
+                // The parser has established that this token belongs to a
+                // quote-like string. Keep its text, but no longer treat it as
+                // a source-level conflict marker.
+                currentToken = LexerToken.of(LexerTokenType.STRING, currentToken.text);
+                tokens.set(tokPos, currentToken);
+            }
             if (currentToken.type == LexerTokenType.EOF) {
                 int heredocTokenIndex = isRegex
                         ? interpolatedHeredocStart(tokens, index, tokPos) : -1;

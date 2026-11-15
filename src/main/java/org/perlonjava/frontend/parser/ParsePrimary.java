@@ -40,6 +40,10 @@ import static org.perlonjava.runtime.runtimetypes.GlobalVariable.existsGlobalCod
  */
 public class ParsePrimary {
 
+    // Round 23: was an inline Set.of() call inside parsePrimary() — recreated per call.
+    private static final java.util.Set<String> INFIX_KEYWORD_OPERATORS =
+            java.util.Set.of("eq", "ne", "equ", "neu", "lt", "gt", "le", "ge", "cmp");
+
     /**
      * Parses a primary expression from the parser's token stream.
      *
@@ -65,8 +69,7 @@ public class ParsePrimary {
         // comma (for example C<eq => '(==)'>). Handle this before dispatching
         // the operator token through the infix parser.
         if (token.type == LexerTokenType.OPERATOR
-                && java.util.Set.of("eq", "ne", "equ", "neu", "lt", "gt", "le", "ge", "cmp")
-                    .contains(operator)) {
+                && INFIX_KEYWORD_OPERATORS.contains(operator)) {
             int nextIndex = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
             if (parser.tokens.get(nextIndex).text.equals("=>")) {
                 return new StringNode(operator, parser.tokenIndex);
@@ -122,8 +125,7 @@ public class ParsePrimary {
                 // Handle end of input gracefully
                 return null;
             case CONFLICT_MARKER:
-                throw new PerlCompilerException(startIndex,
-                        "Version control conflict marker", parser.ctx.errorUtil);
+                return new StringNode(token.text, startIndex);
             default:
                 // Any other token type is a syntax error
                 throw new PerlCompilerException(parser.tokenIndex, "syntax error", parser.ctx.errorUtil);

@@ -33,7 +33,7 @@ my $alias_target_result = target_result_for_module(
 is($alias_target_result->{status}, 'PASS',
     'strict target matching accepts the selected distribution under its canonical alias');
 
-my ($canonical_source) = $source =~ /(sub canonical_module_for_archive \{.*?)(?=\n# Parse --modules)/s;
+my ($canonical_source) = $source =~ /(sub canonical_module_for_archive \{.*?)(?=\n# CPAN namespace resolution)/s;
 ok(defined $canonical_source, 'extracted archive canonical-module normalization');
 eval $canonical_source;
 die "cannot load archive canonical-module normalization: $@" if $@;
@@ -79,6 +79,11 @@ is(
     'ambiguous distribution matches do not rewrite report module names',
 );
 
+my ($unresolved_source) = $source =~ /(sub cpan_unresolved_selector_reason_from_file \{.*?)(?=\n\n# Recognize a failed fetch)/s;
+ok(defined $unresolved_source, 'extracted CPAN selector resolution classifier');
+eval $unresolved_source;
+die "cannot load CPAN selector resolution classifier: $@" if $@;
+
 my $unresolved_text = <<'LOG';
 >(error): Could not expand [EasyDB.0.5b2]. Check the module name.
 >(error): Skipping EasyDB.0.5b2 because I couldn't find a matching namespace.
@@ -95,6 +100,49 @@ is(
     cpan_unresolved_selector_reason_from_file($unresolved_path, 'EasyDB'),
     '',
     'namespace failure for a different selector is not attributed to this target',
+);
+
+my ($download_source) = $source =~ /(sub cpan_target_download_failure_from_file \{.*?)(?=\n\n# Parse --modules)/s;
+ok(defined $download_source, 'extracted CPAN target download failure classifier');
+eval $download_source;
+die "cannot load CPAN target download failure classifier: $@" if $@;
+
+my $download_failure = <<'LOG';
+Running test for module 'Leading::Zeros'
+Fetching with HTTP::Tiny:
+https://www.cpan.org/authors/id/D/DC/DCONWAY/Leading-Zeros-0.0.2.tar.gz
+HTTP::Tiny failed with an internal error: No route to host
+Giving up on '/Users/test/.cpan/sources/authors/id/D/DC/DCONWAY/Leading-Zeros-0.0.2.tar.gz'
+LOG
+my ($download_fh, $download_path) = tempfile();
+print {$download_fh} $download_failure;
+close $download_fh or die "cannot close $download_path: $!";
+is(
+    cpan_target_download_failure_from_file(
+        $download_path, 'Leading::Zeros',
+        'D/DC/DCONWAY/Leading-Zeros-0.0.2.tar.gz',
+    ),
+    'No route to host',
+    'target source download failures are reported as not tested with the cause',
+);
+is(
+    cpan_target_download_failure_from_file(
+        $download_path, 'Other::Module',
+        'O/OT/OTHER/Other-Module-1.0.tar.gz',
+    ),
+    '',
+    'a failed download is not attributed to a different selected distribution',
+);
+my ($incomplete_download_fh, $incomplete_download_path) = tempfile();
+print {$incomplete_download_fh} "HTTP::Tiny failed with an internal error: No route to host\n";
+close $incomplete_download_fh or die "cannot close $incomplete_download_path: $!";
+is(
+    cpan_target_download_failure_from_file(
+        $incomplete_download_path, 'Leading::Zeros',
+        'D/DC/DCONWAY/Leading-Zeros-0.0.2.tar.gz',
+    ),
+    '',
+    'a transient message without CPAN abandoning the target archive is inconclusive',
 );
 
 my $easydb_success = <<'LOG';

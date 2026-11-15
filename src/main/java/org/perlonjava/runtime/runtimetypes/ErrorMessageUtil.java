@@ -21,7 +21,11 @@ public class ErrorMessageUtil {
     private int lastLineNumber;
     private volatile int[] physicalLineNumbers;
     private volatile SourceDirectiveIndex sourceDirectiveIndex;
-    private final List<int[]> literalQuoteRanges = new ArrayList<>();
+    // Round 25: lazy – allocated only when a literal quote range is actually added.
+    // Most eval strings contain no heredocs or qw/qq constructs, so the list is
+    // never populated; allocating it on every ErrorMessageUtil construction was
+    // wasting one ArrayList per warm-path eval call.
+    private List<int[]> literalQuoteRanges;
 
     /**
      * Constructs an ErrorMessageUtil with the specified file name and list of tokens.
@@ -95,12 +99,14 @@ public class ErrorMessageUtil {
 
     /** Register a literal quote body whose apparent #line comments are data, not directives. */
     public void addLiteralQuoteRange(int startInclusive, int endExclusive) {
+        if (literalQuoteRanges == null) literalQuoteRanges = new ArrayList<>();
         literalQuoteRanges.add(new int[]{startInclusive, endExclusive});
         sourceDirectiveIndex = null;
     }
 
     /** Preserve parser-identified literal spans when code generation resets locations. */
     public void copyLiteralQuoteRangesTo(ErrorMessageUtil target) {
+        if (literalQuoteRanges == null) return;
         for (int[] range : literalQuoteRanges) {
             target.addLiteralQuoteRange(range[0], range[1]);
         }
@@ -685,6 +691,16 @@ public class ErrorMessageUtil {
         return lineNumbers[Math.min(index, lineNumbers.length - 1)];
     }
 
+    /** Round 35: inject pre-computed array to skip buildPhysicalLineNumbers() on warm eval path. */
+    public void injectPhysicalLineNumbers(int[] arr) {
+        this.physicalLineNumbers = arr;
+    }
+
+    /** Round 35: return the cached array (null if not yet computed). */
+    public int[] peekPhysicalLineNumbers() {
+        return physicalLineNumbers;
+    }
+
     private int[] buildPhysicalLineNumbers() {
         int[] lineNumbers = new int[tokens.size()];
         int lineNumber = 1;
@@ -763,11 +779,11 @@ public class ErrorMessageUtil {
         for (int i = 0; i < tokens.size(); i++) {
             LexerToken token = tokens.get(i);
             if (token.type == LexerTokenType.EOF) break;
-            while (literalQuoteRangeIndex < literalQuoteRanges.size()
+            while (literalQuoteRanges != null && literalQuoteRangeIndex < literalQuoteRanges.size()
                     && literalQuoteRanges.get(literalQuoteRangeIndex)[1] <= i) {
                 literalQuoteRangeIndex++;
             }
-            boolean insideLiteralQuote = literalQuoteRangeIndex < literalQuoteRanges.size()
+            boolean insideLiteralQuote = literalQuoteRanges != null && literalQuoteRangeIndex < literalQuoteRanges.size()
                     && literalQuoteRanges.get(literalQuoteRangeIndex)[0] <= i;
             if (insideLiteralQuote) {
                 if (token.type == LexerTokenType.NEWLINE) physicalLine++;

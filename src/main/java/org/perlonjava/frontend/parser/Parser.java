@@ -56,23 +56,29 @@ public class Parser {
         }
     }
 
-    public final Deque<LexicalSubWarningFrame> lexicalSubWarningFrames =
-            new ArrayDeque<>();
+    // Round 23: lazy-initialized — only created when a subroutine or anonymous
+    // closure is actually parsed.  A plain `eval "$x += $y"` never needs them.
+    public Deque<LexicalSubWarningFrame> lexicalSubWarningFrames;
 
     // Perl's constant-CV optimization is sensitive to the order in which
     // closures capture a lexical.  Keep the captures made by earlier
     // anonymous closures in each lexical scope so a later `sub () { $x }`
     // can decline the optimization when $x has already escaped.
-    private final Map<LexicalSubWarningFrame, Set<String>> anonymousClosureCaptures =
-            new IdentityHashMap<>();
-    private final Map<LexicalSubWarningFrame, Map<String, List<Node>>> lexicalConstantCandidates =
-            new IdentityHashMap<>();
-    private final Map<LexicalSubWarningFrame, Set<String>> refaliasLexicals =
-            new IdentityHashMap<>();
-    private final Map<String, Integer> priorLexicalMutations = new LinkedHashMap<>();
+    // Round 23: lazy-initialized — allocate only when an anonymous sub is parsed.
+    private Map<LexicalSubWarningFrame, Set<String>> anonymousClosureCaptures;
+    private Map<LexicalSubWarningFrame, Map<String, List<Node>>> lexicalConstantCandidates;
+    private Map<LexicalSubWarningFrame, Set<String>> refaliasLexicals;
+    private Map<String, Integer> priorLexicalMutations;
+
+    /** Lazy accessor for the subroutine-warning frame stack (only needed inside sub bodies). */
+    public Deque<LexicalSubWarningFrame> lexicalSubWarningFrames() {
+        if (lexicalSubWarningFrames == null) lexicalSubWarningFrames = new ArrayDeque<>();
+        return lexicalSubWarningFrames;
+    }
 
     /** The anonymous CV currently enclosing the subroutine being parsed. */
     public LexicalSubWarningFrame enclosingAnonymousClosureFrame() {
+        if (lexicalSubWarningFrames == null) return null;
         var frames = lexicalSubWarningFrames.iterator();
         if (frames.hasNext()) frames.next(); // current subroutine
         return frames.hasNext() ? frames.next() : null;
@@ -80,7 +86,7 @@ public class Parser {
 
     public boolean hasPriorAnonymousClosureCapture(LexicalSubWarningFrame owner,
                                                     Set<String> names) {
-        if (owner == null) return false;
+        if (owner == null || anonymousClosureCaptures == null) return false;
         Set<String> prior = anonymousClosureCaptures.get(owner);
         if (prior == null || prior.isEmpty()) return false;
         for (String name : names) {
@@ -92,19 +98,22 @@ public class Parser {
     public void noteAnonymousClosureCaptures(LexicalSubWarningFrame owner,
                                               Set<String> names) {
         if (owner == null || names.isEmpty()) return;
+        if (anonymousClosureCaptures == null) anonymousClosureCaptures = new IdentityHashMap<>();
         anonymousClosureCaptures.computeIfAbsent(owner, ignored -> new HashSet<>()).addAll(names);
     }
 
     public void noteLexicalConstantCandidate(LexicalSubWarningFrame owner, String name, Node node) {
         if (owner == null || name == null || node == null) return;
+        if (lexicalConstantCandidates == null) lexicalConstantCandidates = new IdentityHashMap<>();
         lexicalConstantCandidates.computeIfAbsent(owner, ignored -> new LinkedHashMap<>())
                 .computeIfAbsent(name, ignored -> new ArrayList<>()).add(node);
     }
 
     public void noteRefaliasLexical(String name) {
-        if (name == null) return;
+        if (name == null || lexicalSubWarningFrames == null) return;
         for (LexicalSubWarningFrame frame : lexicalSubWarningFrames) {
             if (frame.anonymous) {
+                if (refaliasLexicals == null) refaliasLexicals = new IdentityHashMap<>();
                 refaliasLexicals.computeIfAbsent(frame, ignored -> new HashSet<>()).add(name);
                 return;
             }
@@ -112,17 +121,20 @@ public class Parser {
     }
 
     public boolean hasRefaliasLexical(LexicalSubWarningFrame owner, String name) {
-        return owner != null && refaliasLexicals.getOrDefault(owner, Set.of()).contains(name);
+        return owner != null && refaliasLexicals != null
+                && refaliasLexicals.getOrDefault(owner, Set.of()).contains(name);
     }
 
     /** Record a write parsed after a candidate CV in the same anonymous scope. */
     public void noteLexicalConstantMutation(String name, int sourceIndex) {
         if (name == null) return;
+        if (priorLexicalMutations == null) priorLexicalMutations = new LinkedHashMap<>();
         priorLexicalMutations.putIfAbsent(name, sourceIndex);
+        if (lexicalSubWarningFrames == null) return;
         for (LexicalSubWarningFrame frame : lexicalSubWarningFrames) {
             if (!frame.anonymous) continue;
-            List<Node> candidates = lexicalConstantCandidates
-                    .getOrDefault(frame, Map.of()).get(name);
+            List<Node> candidates = lexicalConstantCandidates == null ? null
+                    : lexicalConstantCandidates.getOrDefault(frame, Map.of()).get(name);
             if (candidates == null) return;
             for (Node candidate : candidates) {
                 if (candidate instanceof AbstractNode annotated) {
@@ -139,6 +151,7 @@ public class Parser {
     }
 
     public boolean hasPriorLexicalMutationBefore(Set<String> names, int sourceIndex) {
+        if (priorLexicalMutations == null) return false;
         for (String name : names) {
             Integer mutationIndex = priorLexicalMutations.get(name);
             if (mutationIndex != null && mutationIndex < sourceIndex) return true;
@@ -195,6 +208,8 @@ public class Parser {
     private final List<String> specialBlockPrototypeWarnings = new ArrayList<>();
     // Current index in the token list.
     public int tokenIndex = 0;
+    /** Index of the parsed source-level __DATA__/__END__ boundary, or -1. */
+    int dataSectionTokenIndex = -1;
     /** Nesting depth of expression parsing, used by parser plugins to reject statements in expressions. */
     public int expressionParseDepth = 0;
     // Flags to indicate special parsing states.
@@ -474,25 +489,6 @@ public class Parser {
      * @return The root node of the parsed AST.
      */
     public Node parse() {
-        // Perl recognizes a seven-character merge-conflict marker before it
-        // attempts to reduce the surrounding statement.  Doing this as a
-        // lexical diagnostic is important for input such as "$_\n<<<<<<<":
-        // the incomplete preceding expression must not mask the marker.
-        StringBuilder conflictDiagnostics = new StringBuilder();
-        for (int i = 0; i < tokens.size(); i++) {
-            if (tokens.get(i).type == LexerTokenType.CONFLICT_MARKER) {
-                ErrorMessageUtil.SourceLocation location =
-                        ctx.errorUtil.getSourceLocationAccurate(i);
-                conflictDiagnostics.append("Version control conflict marker at ")
-                        .append(location.fileName()).append(" line ")
-                        .append(location.lineNumber()).append(", near \"")
-                        .append(tokens.get(i).text.substring(0, 7))
-                        .append("\"\n");
-            }
-        }
-        if (!conflictDiagnostics.isEmpty()) {
-            throw new PerlParserException(conflictDiagnostics.toString());
-        }
         if (tokens.get(tokenIndex).text.equals("=")) {
             // looks like pod: insert a newline to trigger pod parsing
             tokens.addFirst(new LexerToken(LexerTokenType.NEWLINE, "\n"));
@@ -508,6 +504,10 @@ public class Parser {
         try {
             ast = ParseBlock.parseBlock(this);
         } catch (PerlCompilerException | PerlParserException exception) {
+            String conflictMarkers = conflictMarkerDiagnostics();
+            if (!conflictMarkers.isEmpty()) {
+                throw new PerlParserException(conflictMarkers);
+            }
             // Recoverable diagnostics (such as strict vars) are normally
             // reported after parsing.  If a later syntax error aborts parsing,
             // retain those earlier diagnostics ahead of the terminal error,
@@ -541,6 +541,10 @@ public class Parser {
         } finally {
             compilationState.unitcheckQueueStack.get().pop();
         }
+        String conflictMarkers = conflictMarkerDiagnostics();
+        if (!conflictMarkers.isEmpty()) {
+            throw new PerlParserException(conflictMarkers);
+        }
         // ParseBlock stops before a closing brace so callers parsing a nested
         // block can consume it. At file/eval scope there is no such caller:
         // leaving it accepted makes `eval 'sub {} }'` silently compile.
@@ -568,6 +572,26 @@ public class Parser {
             throw new PerlCompilerException(String.join("", deferredDiagnostics));
         }
         return ast;
+    }
+
+    /** Report marker tokens that parser string readers did not consume as literal data. */
+    private String conflictMarkerDiagnostics() {
+        StringBuilder diagnostics = new StringBuilder();
+        for (int i = 0; i < tokens.size(); i++) {
+            if (dataSectionTokenIndex >= 0 && i >= dataSectionTokenIndex) {
+                break;
+            }
+            LexerToken token = tokens.get(i);
+            if (token.type == LexerTokenType.CONFLICT_MARKER) {
+                ErrorMessageUtil.SourceLocation location =
+                        ctx.errorUtil.getSourceLocationAccurate(i);
+                diagnostics.append("Version control conflict marker at ")
+                        .append(location.fileName()).append(" line ")
+                        .append(location.lineNumber()).append(", near \"")
+                        .append(token.text.substring(0, 7)).append("\"\n");
+            }
+        }
+        return diagnostics.toString();
     }
 
     /** Record a parse-time diagnostic after consuming a recoverable statement. */

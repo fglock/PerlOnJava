@@ -249,6 +249,11 @@ public class ParseHeredoc {
                     currentIndex++;
                 } else {
                     // Append the token to the current line
+                    if (token.type == LexerTokenType.CONFLICT_MARKER) {
+                        // This line is being consumed as heredoc data (or as
+                        // its terminator), so it is not a source marker.
+                        tokens.set(currentIndex, LexerToken.of(LexerTokenType.STRING, token.text));
+                    }
                     currentLine.append(token.text);
                     currentIndex++;
                 }
