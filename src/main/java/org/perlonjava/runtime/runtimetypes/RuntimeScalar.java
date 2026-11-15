@@ -1622,13 +1622,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     boolean hasStorageOwnerForVoidDiscard() {
-        if (hasClosureCaptureOwner() || isPackageGlobalRoot
-                || MyVarCleanupStack.isRegistered(this)) {
+        if (localBindingExists || hasClosureCaptureOwner() || isPackageGlobalRoot
+                || MyVarCleanupStack.isRegistered(this) || hasScalarCellOwner()) {
             return true;
         }
-        return countedOwnerSlot != null && countedOwnerSlot.isActive()
-                && (countedOwnerSlot.kind() == PerlOwnerSlot.Kind.ARRAY_ELEMENT
-                    || countedOwnerSlot.kind() == PerlOwnerSlot.Kind.HASH_ELEMENT);
+        PerlOwnerSlot slot = countedOwnerSlot;
+        return slot != null && slot.isActive()
+                && (slot.kind() == PerlOwnerSlot.Kind.ARRAY_ELEMENT
+                    || slot.kind() == PerlOwnerSlot.Kind.HASH_ELEMENT)
+                && value instanceof RuntimeBase referent
+                && hasCurrentAggregateElementPerlStorageOwner(referent, slot);
     }
 
     /** Whether this scalar is a durable Perl cell that can be aliased by a call. */

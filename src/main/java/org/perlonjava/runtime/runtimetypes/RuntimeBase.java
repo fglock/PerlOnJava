@@ -512,6 +512,8 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     private volatile int perlStrongOwnerSlots;
     private int pendingReturnOwners;
     private int pendingOwnerReleases;
+    /** Counted Perl edges whose slots retired but whose refCount release is queued. */
+    private int pendingCountedOwnerReleases;
 
     synchronized boolean hasPendingReturnOwner() {
         return pendingReturnOwners != 0;
@@ -549,6 +551,9 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     synchronized void registerPendingOwnerRelease(
             PerlOwnerSlot.PendingRelease release) {
         pendingOwnerReleases++;
+        if (release != null && PerlOwnerSlot.isCountedKind(release.kind())) {
+            pendingCountedOwnerReleases++;
+        }
         if (release != null && release.kind() == PerlOwnerSlot.Kind.RETURN_VALUE) {
             pendingReturnOwners++;
         }
@@ -757,7 +762,10 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     /** Whether this aggregate has a current Perl storage or call-transfer owner. */
     boolean hasCurrentPerlStorageOwner() {
         PerlRuntime runtime = PerlRuntime.currentOrNull();
-        if (refCount > 0 || localBindingExists || hasClosureCaptureOwner()
+        synchronized (this) {
+            if (refCount > pendingCountedOwnerReleases) return true;
+        }
+        if (localBindingExists || hasClosureCaptureOwner()
                 || hasPendingReturnOwner()
                 || ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_VALUE) != 0
                 || ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_CONTAINER) != 0
@@ -1330,6 +1338,12 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             PendingOwnerRelease release, String releaseSite) {
         if (release == null || !release.completed.compareAndSet(false, true)) return false;
         if (release.ownerSlotRelease != null) {
+            if (PerlOwnerSlot.isCountedKind(release.ownerSlotRelease.kind())) {
+                pendingCountedOwnerReleases--;
+                if (pendingCountedOwnerReleases < 0) {
+                    throw new IllegalStateException("pending counted owner release underflow");
+                }
+            }
             if (release.ownerSlotRelease.kind() == PerlOwnerSlot.Kind.RETURN_VALUE) {
                 pendingReturnOwners--;
             }
