@@ -19,21 +19,23 @@ delivery for removing lifecycle decisions based on memory sweeps; #1649 is its
 historical origin. The design replaces selective-refcount heuristics with
 explicit, auditable owner tokens.
 
-## Current Status (2026-11-14)
+## Current Status (2026-11-15)
 
-Issue #2043 is the current delivery for removing memory-sweep lifetime
-decisions; #1649 is its historical origin. Candidate commit
-`2dea20676b82ba8f93a93f8e3ec26422637b035e` removes `ReachabilityWalker`,
-`ScalarRefRegistry`, root-query state, sweep hooks, END-boundary owner-source
-scans, and suspended-frame root snapshots. Temporary and async liveness still
-use their exact owner slots.
+Issue #2043 remains the active delivery for removing memory-sweep lifecycle
+decisions; #1649 is its historical origin. Source fix `add89cd952` is
+published in draft [PR #1938](https://github.com/PerlOnJava/pull/1938). It removes
+`ReachabilityWalker`, `ScalarRefRegistry`, root-query state, sweep hooks,
+END-boundary owner-source scans, and suspended-frame root snapshots.
 
-The 24-assertion `owner_slot_lifecycle_perl_oracle.t` passes on system Perl and
-both PerlOnJava backends. The candidate full JVM `make` passed before the
-checkpoint commit. The fresh-home DBIx suite passed `t/100populate.t`; its
-`t/52leaks.t` failures match the clean parent (134 failed out of 146 checks).
-The generic DBIx owner transition remains the next correctness task. See the
-[current ownership handoff](perl-ownership-rewrite.md#current-handoff-2026-11-14)
+The DBIx phantom-chain transition and DBI cached-driver false-positive fix are
+covered. A separate Test2 event survivor was traced to a counted
+`ARRAY_ELEMENT` edge on an exited temporary argument array; the exact edge is
+now retired after its lexical registration and argument frame end. The
+permanent event regression passes 4/4 on system Perl and both PerlOnJava
+backends. `nice -n 19 timeout 3600 make` passes in 7m02s with 3,608 unit tests,
+3 skips, and zero failures. The prior fresh-home DBIx result (37 programs / 140
+failed assertions) predates this event fix and remains open for refresh and
+classification. See the [current ownership handoff](perl-ownership-rewrite.md#current-handoff-2026-11-15)
 and [issue #2043](https://github.com/PerlOnJava/issues/2043).
 
 ## Semantic Ownership Model
@@ -166,14 +168,14 @@ decisions. Temporary leases and suspended-frame owners remain explicit slots.
 
 ## Current Work
 
-1. Trace the generic owner producer or release path behind the remaining DBIx
-   `t/52leaks.t` failures.
-2. Keep a project-owned Perl regression and validate its expected behavior on
-   system Perl, JVM, and interpreter.
-3. Re-run DBIx leak/populate acceptance and the full repository gate on one
-   immutable candidate; compare failures with the clean parent.
-4. Reconcile the candidate with PR #1938 and finish review after all required
-   gates pass.
+1. Check CI once after it finishes on the published PR #1938 head; keep the PR
+   in draft.
+2. Refresh the focused DBIx leak evidence, including the Test2 event survivor
+   inventory, and classify the prior 37-program / 140-assertion broad-suite
+   result against its baseline.
+3. Rebase onto current `master` and rerun focused and full gates on that exact
+   candidate.
+4. Request review and merge after acceptance; close #2043 only after merge.
 
 ## Regression Matrix
 
@@ -247,10 +249,10 @@ Run on JVM and interpreter backends with `timeout` and complete output logs:
 ### Current checkpoint
 
 The current status and evidence are maintained in the
-[ownership rewrite handoff](perl-ownership-rewrite.md#current-handoff-2026-11-14).
+[ownership rewrite handoff](perl-ownership-rewrite.md#current-handoff-2026-11-15).
 The candidate has removed production reachability decisions and sweep
-infrastructure. The DBIx leak transition remains open; do not restore graph
-traversal to mask stale owner state.
+infrastructure. The DBIx and Test2 owner transitions have focused regressions;
+the earlier broad DBIx report still needs refresh and failure classification.
 
 ### Historical handoff: issue #1132 / PR #1204
 
