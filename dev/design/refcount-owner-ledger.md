@@ -23,7 +23,7 @@ explicit, auditable owner tokens.
 
 Issue #2043 remains the active delivery for removing memory-sweep lifecycle
 decisions; #1649 is its historical origin. Candidate `35dfd818ff` integrates
-current `master` locally and is ready for publication to draft
+current `master` and is published at head `525fa89963` in draft
 [PR #1938](https://github.com/PerlOnJava/pull/1938). It removes
 `ReachabilityWalker`, `ScalarRefRegistry`, root-query state, sweep hooks,
 END-boundary owner-source scans, and suspended-frame root snapshots.
