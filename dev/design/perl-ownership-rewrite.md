@@ -1,95 +1,59 @@
 # Perl-compatible ownership rewrite
 
-**Status:** The sweep-removal candidate is checkpointed, and the reproduced
-DBIx phantom-chain leak now passes its focused leak checks.
-[Issue #2043](https://github.com/PerlOnJava/issues/2043) contains the single
-current handoff. [Issue #1649](https://github.com/PerlOnJava/issues/1649) is
-historical context.
+**Status:** The sweep-free candidate fixes the DBIx phantom-chain ownership gap
+and the retained Test2 assertion-event path. [Issue #2043](https://github.com/PerlOnJava/issues/2043)
+is the current handoff; [#1649](https://github.com/PerlOnJava/issues/1649) is
+historical origin.
 
 | Work | Status | Evidence or acceptance |
 | --- | --- | --- |
-| Use explicit owner slots for lifecycle decisions | Candidate delivered | Owner-slot behavior remains covered by runtime and Perl-level regressions. |
-| Remove memory-sweep infrastructure | Candidate delivered | The walker, scalar registry, root-query state, sweep hooks, END-boundary owner scans, and suspended-frame root snapshots are removed. |
-| Resolve DBIx leak lifecycle | Target chain fixed | The phantom-chain assertions pass; the fresh-home leak report no longer contains DBIx result-source survivors. Remaining entries are the cached `DBI::dr` and Test2/Test::Builder harness objects. |
-| Final acceptance | Pending | Reconciled candidate is published in draft PR #1938; final `make` and focused DBIx gates pass. Review CI and classify the remaining broad-suite failures. |
+| Replace sweep-based lifecycle decisions with owner slots | Candidate delivered | Reachability walker, scalar registry, root-query state, sweep hooks, END-boundary scans, and suspended-frame root snapshots are removed. |
+| Fix DBIx and Test2 retention | Candidate delivered | DBIx arguments carry an exact call-transfer owner; DBI handles use core `bless`; the Test2 event regression passes on system Perl and both PerlOnJava backends. |
+| Final acceptance | Pending | Local full gate is green. Publish to draft PR #1938, refresh CI and leak evidence, then classify the remaining broad-suite failures. |
 
-## Current handoff: 2026-11-14
+## Current handoff: 2026-11-15
 
-Source checkpoint `3b09eb51aadac67793daa978c984f36c613ebc98` is on local branch
-`wip/issue2043-resume-20261114-215232` and published to PR #1938's
-`wip/alias-cell-ownership-20261030-185849` branch. The PR-only commits
-`007887c3a7` and `1b80749914` are preserved in the merge history. The merged
-tree keeps the walker deleted, retains the owner-slot test, and removes
-changelog entries for deleted graph-walk behavior. PR #1938 remains draft.
+Source fix `add89cd952` is on local branch
+`wip/test2-event-leak-20261114-235249`, based on PR #1938's current history.
+PR #1938 remains draft at head `68108465ad`; this source commit has not yet
+been published. Temporary and asynchronous lifetimes continue to use explicit
+owner slots; no graph walk participates in Perl liveness decisions.
 
-The leak came from fresh anonymous hash references passed as call arguments.
-`@_` borrowed the reference scalar but had no counted owner for its hash, so
-`self_result_object` and nested hash elements could keep DBIx result sources
-alive after the phantom chain ended. `CallArguments` now stages an argument
-value owner only for a zero-owner `HASHREFERENCE` with no current storage
-owner. Return snapshots retain their existing path. Hash assignment drains
-displaced values above the active mark so an enclosing expression keeps its
-pending return values until capture.
+The DBIx phantom-chain fix gives otherwise-ownerless strong hash-reference
+arguments an explicit call-transfer owner. DBI constructors use core `bless`,
+matching native Perl's cached driver-handle lifetime. The separate real Test2
+retention came from a counted `ARRAY_ELEMENT` owner left on a temporary
+argument array after its call frame and lexical registration exited. Cleanup
+now retires only that exact edge after the array leaves the active argument
+stack and has no current Perl storage owner. Queued counted releases are
+accounted for in that storage-owner proof.
 
-Evidence on this source tree: `nice -n 19 timeout 3600 make` passes in 7m10s on
-the reconciled commit;
-the new anonymous-hash regression passes on system Perl, JVM, and interpreter;
-the no-owner predecessor failed both JVM assertions in that regression;
-the focused DBIx phantom-chain regression passes 3/3 on system Perl and JPerl;
-`t/100populate.t` passes 108/108 on system Perl and JPerl, with five references
-checked and none leaking. The direct upstream `t/52leaks.t` invocation checks
-57 references with no leaks (two documented circular-reference TODOs and two
-optional persistent-run skips). In the isolated fresh-home CPAN run, all
-phantom-chain assertions pass and no DBIx result-source object remains in the
-leak report; its 24/36 reported survivors are cached `DBI::dr` and
-Test2/Test::Builder objects. A direct configured DBIx `make test` run for
-`t/52leaks.t` and `t/100populate.t` passes all 121 tests on JPerl; the full
-fresh-home harness report remains a separate result. Across 325 test programs,
-the overall failure set remains the same 37 programs as the preceding run,
-while failed assertions drop
-from 253 to 140; the changes are in `t/52leaks.t` (134 to 24) and
-`t/88result_set_column.t` (4 to 1). The other program failure counts are
-unchanged. Logs:
-`/tmp/issue2043-dbic-make-final-narrow.log`,
-`/tmp/issue2043-dbic-focused-system-with-local-lib.log`,
-`/tmp/issue2043-dbic-focused-jvm.log`,
-`/tmp/issue2043-focused-jperl-tests-narrow-path.log`,
-`/tmp/issue2043-dbic-t52-system.log`, `/tmp/issue2043-dbic-t52-jperl.log`,
-`/tmp/issue2043-dbic-100populate-system.log`, and
-`/tmp/issue2043-dbic-100populate-jperl.log`,
-`/tmp/issue2043-dbic-jcpan-after-hash-owner.log`,
-`/tmp/issue2043-final-dbic-jperl-focused.log`,
-`/tmp/issue2043-make-reconciled-3b09eb51aa.log`, and
-`/tmp/issue2043-remove-sweeps-dbix-cpan.log`.
+Evidence on this candidate: `nice -n 19 timeout 3600 make` passed in 7m02s;
+3,608 unit tests passed, 3 were skipped, and none failed. The permanent Test2
+event regression passes 4/4 on system Perl, JVM, and interpreter. Focused
+DESTROY/tie and DBI tests pass on JVM. Logs: `/tmp/issue2043-narrow-final-make.log`,
+`/tmp/issue2043-test2-event-final-perl.log`,
+`/tmp/issue2043-focused-refcount-test2_event_return_lifetime.t.log`, and
+`/tmp/issue2043-test2-event-final-interpreter.log`.
 
-The generalized void-assignment optimization was removed after it caused
-unrelated lifetime regressions; the original narrow compiler path is restored.
-Only the anonymous-hash argument ownership rule and scoped hash-assignment
-flush remain from this DBIx fix. The change is committed with four focused Perl
-regressions. Static production inventory finds no `ReachabilityWalker`,
-`ScalarRefRegistry`, `ReachabilityQueryStats`, or temporary-root graph-query
-API. `PerlRuntime.RootSnapshot` remains for explicit thread/Plack owner slots;
-`CustomFileChannel`'s fd-recycling sweep handles file descriptors, not Perl
-object liveness.
+The previous fresh-home DBIx run covered 325 programs and reported 37 programs
+with 140 failed assertions and no DBIx result-source survivors. Its leak report
+still listed cached `DBI::dr` and Test2/Test::Builder objects; that report
+predates the exact Test2 event fix, so the remaining harness inventory must be
+refreshed before drawing a new suite-wide conclusion.
 
-### Next iteration
+### Next steps
 
-1. Let CI finish for PR head `3b09eb51aa`, then check its results once. Compare
-   them with the passing local gate on the same source and fix any candidate
-   regression they expose.
-2. Classify the 37 remaining fresh-home DBIx program failures against the prior
-   37-program run; the count dropped from 253 to 140 failed assertions, and the
-   remaining `t/52leaks.t` report names cached `DBI::dr` and Test2/Test::Builder
-   objects rather than DBIx result sources. Keep this broad-suite result marked
-   incomplete until its status is understood.
-3. After CI and acceptance are reconciled, request review and merge PR #1938.
-
-The production sweep inventory is complete. While CI runs, the only useful
-independent work is failure classification against the prior DBIx run; current
-evidence does not indicate another owner implementation change.
+1. Publish `add89cd952` to PR #1938's existing branch and keep the PR in draft.
+2. Check updated PR CI once and refresh focused DBIx leak evidence, including
+   the Test2 event survivor report.
+3. Classify the 37 remaining fresh-home DBIx program failures against the
+   preceding run; keep that broad result marked incomplete until understood.
+4. Request review and merge PR #1938 after acceptance; close #2043 only after
+   the sweep-free candidate is accepted.
 
 Completion requires no reachability-based root walk or sweep to affect Perl
-lifetime, passing owner-slot oracles and required acceptance on one immutable
+lifetime, required ownership and integration acceptance on one immutable
 candidate, and the implementation PR merged.
 
 Historical reference: [#1649](https://github.com/PerlOnJava/issues/1649).
