@@ -21,9 +21,10 @@ origin.
 The publication checkout is on `feature/issue2043-cv-dbi-fixes-20261116` at
 source commit `549f482ad8`, based on the live PR #1938 head `1a5c3d37e7`.
 The source batch is `eb73c52f6e`; `549f482ad8` corrects its eval lexical
-capture policy. The branch is full-make green and ready for a fast-forward
-update to PR #1938. Temporary and asynchronous Perl lifetimes continue to use
-explicit owner slots, with no graph walk participating in liveness decisions.
+capture policy. The branch, including documentation commit `839af59745`, is
+published to PR #1938, now at head `839af59745`. Temporary and asynchronous
+Perl lifetimes continue to use explicit owner slots, with no graph walk
+participating in liveness decisions.
 
 The imported-CV fix counts current transient argument/return slots through
 their transfer boundary and defers global CV cleanup until scalar and aggregate
@@ -38,11 +39,12 @@ both PerlOnJava backends.
 
 `nice -n 19 timeout 3600 make` passes on `549f482ad8` in 7m42; the filtered
 eval unit gate also passes. The broad multi-target CPAN acceptance was stopped
-at the user's direction. The remaining focused DBIx evidence is limited to
-`t/storage/error.t` and `t/storage/txn.t`: the former still has the `wrap_txn`
-exception mismatch and six DBH collection assertions at refcount 1; the latter
-has only assertion 89's exception line-number mismatch, with no leak detected.
-Their interpreter runs hit timeouts. These findings and their captured logs
+at the user's direction. The last focused DBIx run was on source commit
+`eb73c52f6e`, before the eval-capture correction: `t/storage/error.t` had the
+`wrap_txn` exception mismatch and six DBH collection assertions at refcount 1;
+`t/storage/txn.t` had only assertion 89's exception line-number mismatch,
+with no leak detected. Their interpreter runs hit timeouts. Whether these
+findings persist after the parser correction is not yet verified. Captured logs
 are in `/private/tmp/issue2043-dbix-storage-error-fixed-jvm.log`,
 `/private/tmp/issue2043-dbix-storage-error-fixed-interpreter.log`,
 `/private/tmp/issue2043-dbix-storage-txn-fixed-jvm.log`, and
@@ -52,10 +54,11 @@ sub eval capture, and fixed before the passing full gate.
 
 ### Next steps
 
-1. Fast-forward the full-make-green source and documentation commits to PR
-   #1938; let CI and human review run.
-2. Continue only the already identified `storage/error.t` DBH owner and
-   `storage/txn.t` diagnostic mismatches; do not restart the broad CPAN sweep.
+1. Revalidate only `storage/error.t` and `storage/txn.t` against the corrected
+   source. Address any persistent DBH owner or diagnostic mismatch; do not
+   restart the broad CPAN sweep.
+2. Complete CI and human review of PR #1938 after targeted DBIx findings are
+   resolved or explicitly classified.
 3. After those targeted findings and PR review are resolved, merge PR #1938
    and close #2043 with the merged commit and acceptance evidence. Resume the
    separately tracked #2037 archive-lifetime and #2034 localized-STDERR fixes
