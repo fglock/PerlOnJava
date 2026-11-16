@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Supplier;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 
 public class UnicodeResolver {
@@ -2321,6 +2322,21 @@ public class UnicodeResolver {
         if (isGeneralCategoryProperty(name)) {
             return resolvePerlGeneralCategoryWildcard(wildcard);
         }
+        if (isCanonicalCombiningClassProperty(name)) {
+            return resolvePerlGeneratedValueWildcard(
+                    wildcard, PerlUnicodeCombiningClassData.wildcardAliases(),
+                    "Canonical_Combining_Class", PerlUnicodeCombiningClassData::resolve);
+        }
+        if (PerlUnicodeBidiClassData.isPropertyAlias(name)) {
+            return resolvePerlGeneratedValueWildcard(
+                    wildcard, PerlUnicodeBidiClassData.wildcardAliases(),
+                    "Bidi_Class", PerlUnicodeBidiClassData::valueSet);
+        }
+        if (PerlUnicodeEastAsianWidthData.isPropertyAlias(name)) {
+            return resolvePerlGeneratedValueWildcard(
+                    wildcard, PerlUnicodeEastAsianWidthData.wildcardAliases(),
+                    "East_Asian_Width", PerlUnicodeEastAsianWidthData::valueSet);
+        }
         if (PerlUnicodeIndicCategoryData.isPropertyAlias(name)) {
             return resolvePerlIndicCategoryWildcard(name, wildcard);
         }
@@ -2365,6 +2381,25 @@ public class UnicodeResolver {
                     "No Unicode property value wildcard matches General_Category");
         }
         return new PerlUnicodePropertyWildcard(result.freeze(), null, true);
+    }
+
+    private static PerlUnicodePropertyWildcard resolvePerlGeneratedValueWildcard(
+            PerlPropertyValueMatcher wildcard, String[] aliases, String propertyName,
+            Function<String, UnicodeSet> valueResolver) {
+        UnicodeSet result = new UnicodeSet();
+        boolean matched = false;
+        for (String alias : aliases) {
+            if (!matchesPerlUnicodePropertyWildcard(wildcard, alias)) continue;
+            UnicodeSet value = valueResolver.apply(alias);
+            if (value == null) continue;
+            matched = true;
+            result.addAll(value);
+        }
+        if (!matched) {
+            throw new IllegalArgumentException(
+                    "No Unicode property value wildcard matches " + propertyName);
+        }
+        return new PerlUnicodePropertyWildcard(result.freeze(), null, false);
     }
 
     private static PerlUnicodePropertyWildcard resolvePerlIndicCategoryWildcard(

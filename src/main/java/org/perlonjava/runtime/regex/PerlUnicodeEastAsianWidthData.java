@@ -37,6 +37,9 @@ final class PerlUnicodeEastAsianWidthData {
     private static final String[] VALUE_ALIASES = {
         "a", "ambiguous", "f", "fullwidth", "h", "halfwidth", "n", "na", "narrow", "neutral", "w", "wide"
     };
+    private static final String[] WILDCARD_ALIASES = {
+        "A", "Ambiguous", "F", "Fullwidth", "H", "Halfwidth", "N", "Na", "Narrow", "Neutral", "W", "Wide"
+    };
     private static final byte[] VALUE_ALIAS_INDEX = {
         0, 0, 1, 1, 2, 2, 3, 4, 4, 3, 5, 5
     };
@@ -227,6 +230,10 @@ final class PerlUnicodeEastAsianWidthData {
 
     static String[] canonicalValues() {
         return LONG_VALUES.clone();
+    }
+
+    static String[] wildcardAliases() {
+        return WILDCARD_ALIASES.clone();
     }
 
     private static int valueIndex(String alias) {

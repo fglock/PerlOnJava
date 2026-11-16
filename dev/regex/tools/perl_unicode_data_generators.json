@@ -13,7 +13,7 @@
          "generator" : "dev/regex/tools/generate_perl_unicode_bidi_class_data.pl",
          "name" : "bidi-class",
          "output" : "src/main/java/org/perlonjava/runtime/regex/PerlUnicodeBidiClassData.java",
-         "output_sha256" : "683d169f7b3c3fe3c68c6cce910554360f73e64bd9519feecb531257a37470ae",
+         "output_sha256" : "1172f1a3ea60a05715b9ef2cb98ef81b3ebebfb255719f51b1040e00aee83d8a",
          "sources" : {
             "extracted/DBidiClass.txt" : "d9e23222522551348ea1ccfbb4f62efbf98982afb95840f8959c08ed992c5607"
          }
@@ -47,7 +47,7 @@
          "generator" : "dev/regex/tools/generate_perl_unicode_combining_class_data.pl",
          "name" : "combining-class",
          "output" : "src/main/java/org/perlonjava/runtime/regex/PerlUnicodeCombiningClassData.java",
-         "output_sha256" : "fe7f104f9bc7b0fdc04ffc2a995e616159fd46942b55de1eedf75c96c84dc4f0",
+         "output_sha256" : "2ce4637b2ea9cc8c11249f69a00119f46e36d15fcbe89fa237309bcad28cf82c",
          "sources" : {
             "extracted/DCombiningClass.txt" : "ef6b2611cfb660dba3f6b458b9eb4b05f44ed2417302ee7749d7f0f348793121"
          }
@@ -83,7 +83,7 @@
          "generator" : "dev/regex/tools/generate_perl_unicode_east_asian_width_data.pl",
          "name" : "east-asian-width",
          "output" : "src/main/java/org/perlonjava/runtime/regex/PerlUnicodeEastAsianWidthData.java",
-         "output_sha256" : "88052adafb3844031edaaee0f9bad18c29798fa696d106a416e215dfac82b1b3",
+         "output_sha256" : "63210c6732d1917f4f5c92ebac34d8eb2043d5f60bcd27be7e82357188a5cd92",
          "sources" : {
             "extracted/DEastAsianWidth.txt" : "f4c7bc4537a71e12452f6347ecbbc71c31cba21b5190c92be1ae296b0ef32b09"
          }
@@ -92,7 +92,7 @@
          "generator" : "dev/regex/tools/generate_perl_unicode_general_category_data.pl",
          "name" : "general-category",
          "output" : "src/main/java/org/perlonjava/runtime/regex/PerlUnicodeGeneralCategoryData.java",
-         "output_sha256" : "4559ae8d0fc9fd069b0b2ba17639c979e89947cd9bb7f2722ea7af8b9a72a1b8",
+         "output_sha256" : "06e949f6f5e1213a5fa7eb2d7e2dcffe815996a116781bdfda702c2398a3a4f1",
          "sources" : {
             "extracted/DGeneralCategory.txt" : "d6b151d2d40ee9b1876d26f417980f45ffae47b6055ccf7203cb31f07a030f94"
          }

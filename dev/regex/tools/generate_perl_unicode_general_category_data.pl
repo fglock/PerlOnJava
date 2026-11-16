@@ -87,7 +87,7 @@ my $alias_text = read_pinned_file('PropValueAliases.txt');
 die "Property value aliases are not Unicode $expected_unicode_version\n"
     unless $alias_text =~ /^# PropertyValueAliases-\Q$expected_unicode_version\E\.txt/m;
 
-my %aliases;
+my (%aliases, %wildcard_aliases);
 for my $line (split /\n/, $alias_text) {
     $line =~ s/\s*#.*$//;
     next unless $line =~ /\S/;
@@ -102,6 +102,7 @@ for my $line (split /\n/, $alias_text) {
         unless exists $value_index{$canonical};
     for my $alias (@fields[1 .. $#fields]) {
         next unless length $alias;
+        $wildcard_aliases{$alias} = 1;
         my $loose = loose_name($alias);
         if (exists $aliases{$loose} && $aliases{$loose} ne $canonical) {
             die "Conflicting General_Category alias $alias\n";
@@ -111,6 +112,7 @@ for my $line (split /\n/, $alias_text) {
 }
 for my $value (@values) {
     $aliases{loose_name($value)} //= $value;
+    $wildcard_aliases{$value} = 1;
 }
 
 print "/*\n";
@@ -153,6 +155,9 @@ for my $chunk (0 .. $range_chunk_count - 1) {
 print "    private static final int[][] RANGE_CHUNKS = {\n        ";
 print join(', ', map { "rangeChunk$_()" } 0 .. $range_chunk_count - 1);
 print "\n    };\n\n";
+print "    private static final String[] WILDCARD_ALIASES = {\n        ";
+print join(', ', map { qq{\"$_\"} } sort keys %wildcard_aliases);
+print "\n    };\n";
 print "    private static final String[] ALIASES = {\n";
 my @alias_names = sort keys %aliases;
 for (my $i = 0; $i < @alias_names; $i += 4) {
@@ -174,11 +179,7 @@ print <<'FOOTER';
     }
 
     static String[] wildcardAliases() {
-        String[] aliases = new String[ALIASES.length / 2];
-        for (int index = 0; index < aliases.length; index++) {
-            aliases[index] = ALIASES[index * 2];
-        }
-        return aliases;
+        return WILDCARD_ALIASES.clone();
     }
 
     private static UnicodeSet[] buildSets() {

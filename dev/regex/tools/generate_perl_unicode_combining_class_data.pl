@@ -69,7 +69,7 @@ die "Unexpected Canonical_Combining_Class default\n"
 my $alias_text = read_pinned_file('PropValueAliases.txt');
 die "Property value aliases are not Unicode $expected_unicode_version\n"
     unless $alias_text =~ /^# PropertyValueAliases-\Q$expected_unicode_version\E\.txt/m;
-my %aliases;
+my (%aliases, %wildcard_aliases);
 for my $line (split /\n/, $alias_text) {
     $line =~ s/\s*#.*$//;
     next unless $line =~ /\S/;
@@ -86,6 +86,7 @@ for my $line (split /\n/, $alias_text) {
     }
     for my $alias (@fields[1 .. $#fields]) {
         next unless length $alias;
+        $wildcard_aliases{$alias} = 1;
         my $normalized = normalized_alias($alias);
         if (exists $aliases{$normalized} && $aliases{$normalized} != $canonical) {
             die "Conflicting combining-class alias $alias\n";
@@ -140,6 +141,9 @@ print "    private static final int[][] RANGE_CHUNKS = {\n        ";
 print join(', ', map { "rangeChunk$_()" } 0 .. $range_chunk_count - 1);
 print "\n    };\n\n";
 
+print "    private static final String[] WILDCARD_ALIASES = {\n        ";
+print join(', ', map { qq{\"$_\"} } sort keys %wildcard_aliases);
+print "\n    };\n";
 print "    private static final String[] ALIASES = {\n";
 my @alias_names = sort keys %aliases;
 for (my $i = 0; $i < @alias_names; $i += 4) {
@@ -159,6 +163,8 @@ print <<'FOOTER';
         Integer index = ALIAS_INDEX.get(normalizeValue(value));
         return index == null ? null : SETS[index];
     }
+
+    static String[] wildcardAliases() { return WILDCARD_ALIASES.clone(); }
 
     private static UnicodeSet[] buildSets() {
         UnicodeSet[] sets = new UnicodeSet[VALUES.length];
