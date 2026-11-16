@@ -1,7 +1,8 @@
 # Perl-compatible ownership rewrite
 
-**Status:** The sweep-free candidate fixes the DBIx phantom-chain ownership gap
-and the retained Test2 assertion-event path. [Issue #2043](https://github.com/PerlOnJava/issues/2043)
+**Status:** The sweep-free candidate fixes the DBIx phantom-chain ownership
+gap, the retained Test2 assertion-event path, and imported CV lifetime through
+namespace cleanup. Final local and CPAN acceptance remains. [Issue #2043](https://github.com/PerlOnJava/issues/2043)
 is the current handoff; [#1649](https://github.com/PerlOnJava/issues/1649) is
 historical origin.
 
@@ -9,61 +10,46 @@ historical origin.
 | --- | --- | --- |
 | Replace sweep-based lifecycle decisions with owner slots | Candidate delivered | Reachability walker, scalar registry, root-query state, sweep hooks, END-boundary scans, and suspended-frame root snapshots are removed. |
 | Fix DBIx and Test2 retention | Candidate delivered | DBIx arguments carry an exact call-transfer owner; DBI handles use core `bless`; the Test2 event regression passes on system Perl and both PerlOnJava backends. |
-| Final acceptance | Pending | Full local and CI gates pass; PR #1938 is ready and mergeable. Human review and merge remain. |
+| Preserve imported CVs through namespace cleanup | Candidate delivered | Live transient argument and return slots count as CV owners until their exact transfer boundary; focused Catalyst and imported-closure regressions pass on both backends. |
+| Final acceptance | Pending | Unfiltered `make` and eight-target CPAN acceptance remain; then publish the candidate, complete CI and review, and merge PR #1938. |
 
-## Current handoff: 2026-11-15
+## Current handoff: 2026-11-16
 
-The local branch is `wip/test2-event-leak-20261114-235249`. Commit
-`35dfd818ff` merges fetched `master` (`3e725aa6e1`) into the PR #1938 candidate;
-runtime candidate `35dfd818ff` is published in PR #1938, which is ready for
-review and mergeable. Temporary and asynchronous lifetimes continue to use
-explicit owner slots; no graph walk participates in Perl liveness decisions.
+The local candidate branch is `wip/issue2043-cv-import-lifetime-20261116` at
+source commit `9d5e6774c1`, based on PR #1938 head `8405ea360f`. The PR remains
+open at that published head; this candidate has not yet been pushed. Temporary
+and asynchronous lifetimes continue to use explicit owner slots, with no graph
+walk participating in Perl liveness decisions.
 
-The DBIx phantom-chain fix gives otherwise-ownerless strong hash-reference
-arguments an explicit call-transfer owner. DBI constructors use core `bless`,
-matching native Perl's cached driver-handle lifetime. The separate real Test2
-retention came from a counted `ARRAY_ELEMENT` owner left on a temporary
-argument array after its call frame and lexical registration exited. Cleanup
-now retires only that exact edge after the array leaves the active argument
-stack and has no current Perl storage owner. Queued counted releases are
-accounted for in that storage-owner proof.
+The imported-CV failure occurred when a stored closure called an imported
+function after `namespace::clean` removed its stash entry. CV cleanup now
+counts a current transient argument or return slot as an owner until that
+slot's exact transfer boundary releases it. The parser also retains a
+parse-time direct-call target until a deferred compiled callsite takes
+ownership.
 
-Evidence on merged candidate `35dfd818ff`: `nice -n 19 timeout 3600 make`
-passed in 7m29s; the JUnit reports contain 4,153 tests, 4 skips, and no
-failures. The permanent Test2 event regression passes 4/4 on system Perl, JVM,
-and interpreter. Configured DBIx `t/52leaks.t` and `t/100populate.t` pass 121
-tests; direct leak checks found no survivors among 57 and 5 references,
-respectively. The two documented upstream TODOs and two optional skips remain.
-Logs: `/tmp/issue2043-master-merge-make.log`,
-`/tmp/issue2043-merged-test2-system.log`,
-`/tmp/issue2043-merged-test2-jvm.log`,
-`/tmp/issue2043-merged-test2-interpreter.log`,
-`/tmp/issue2043-merged-dbix-52leaks.log`, and
-`/tmp/issue2043-merged-dbix-100populate.log`.
-
-CI passes on the published runtime candidate: Windows completed in 41m29s and
-Ubuntu in 45m20s, including the Linux Perl thread compatibility gate. CodeQL,
-the four analysis checks, and Gradle/Maven submission checks also pass. The
-PR is ready and mergeable; no individual review request is attached because
-the repository has no CODEOWNERS or configured reviewer.
-
-The previous fresh-home DBIx run covered 325 programs and reported 37 failing
-programs / 140 failed assertions, with no DBIx result-source survivors. Its
-failed-program set is identical to the preceding run; assertion failures fell
-from 253 to 140, with changes only in `t/52leaks.t` (134 to 24) and
-`t/88result_set_column.t` (4 to 1). That full leak inventory predates the exact
-Test2 event fix. Current direct checks of 57 references in `t/52leaks.t` and 5
-in `t/100populate.t` report no survivors.
+Evidence on the local candidate: `catalyst_stats_imported_cv_lifetime.t` fails
+on the pre-fix candidate with `Undefined subroutine
+&Catalyst::Stats::gettimeofday` and passes on JVM and interpreter. The existing
+Catalyst tempfile integration test passes its focused make gate. The nested
+metarole `super` regression and imported-closure regression pass on system Perl
+and both PerlOnJava backends; Catalyst dependencies are absent from system
+Perl, so its focused test skips there. Logs: `/private/tmp/issue2043-catalyst-stats-prefx-jperl.log`,
+`/private/tmp/issue2043-catalyst-stats-fixed-jvm.log`,
+`/private/tmp/issue2043-catalyst-stats-fixed-interpreter.log`,
+`/private/tmp/issue2043-catalyst-integration-fixed-make.log`,
+`/private/tmp/issue2043-super-fixed-jvm.log`, and
+`/private/tmp/issue2043-super-fixed-interpreter.log`.
 
 ### Next steps
 
-1. Complete human review of PR #1938; address findings and rerun affected gates.
-2. Merge PR #1938 after approval, then close #2043 with the merged commit and
-   validation evidence.
-3. After #2043 lands, resume the separately tracked #2037 archive-lifetime and
-   #2034 localized-STDERR fixes with project-owned regressions and both-backend
-   validation. Both still reproduce on the current runtime candidate and are
-   follow-up work, not sweep-removal acceptance criteria.
+1. Run unfiltered `nice -n 19 make` on the final local candidate and address any
+   failures with focused permanent regressions.
+2. After it passes, publish the candidate to PR #1938 and rerun the eight-target
+   CPAN acceptance on that exact commit; then complete CI and human review.
+3. Merge PR #1938 after approval and close #2043 with the merged commit and
+   validation evidence. Resume the separately tracked #2037 archive-lifetime
+   and #2034 localized-STDERR fixes afterward.
 
 Completion requires no reachability-based root walk or sweep to affect Perl
 lifetime, required ownership and integration acceptance on one immutable
