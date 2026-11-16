@@ -2,64 +2,64 @@
 
 **Status:** The sweep-free candidate fixes the DBIx phantom-chain ownership
 gap, the retained Test2 assertion-event path, and imported CV lifetime through
-namespace cleanup. Final local and CPAN acceptance remains. [Issue #2043](https://github.com/PerlOnJava/issues/2043)
-is the current handoff; [#1649](https://github.com/PerlOnJava/issues/1649) is
-historical origin.
+namespace cleanup. The full local `make` gate passes on the current source
+commit. The broad CPAN acceptance was stopped after the targeted findings; the
+remaining DBIx storage diagnostics and PR acceptance are still open.
+[Issue #2043](https://github.com/PerlOnJava/issues/2043) is the current
+handoff; [#1649](https://github.com/PerlOnJava/issues/1649) is historical
+origin.
 
 | Work | Status | Evidence or acceptance |
 | --- | --- | --- |
 | Replace sweep-based lifecycle decisions with owner slots | Candidate delivered | Reachability walker, scalar registry, root-query state, sweep hooks, END-boundary scans, and suspended-frame root snapshots are removed. |
 | Fix DBIx and Test2 retention | Candidate delivered | DBIx arguments carry an exact call-transfer owner; DBI handles use core `bless`; the Test2 event regression passes on system Perl and both PerlOnJava backends. |
 | Preserve imported CVs through namespace cleanup | Candidate delivered | Live transient argument and return slots count as CV owners until their transfer boundary; defined parse-time targets have one-shot compiler leases, while unresolved placeholders retain late BEGIN aliases. Focused regressions pass on both backends. |
-| Final acceptance | Pending | Unfiltered `make` passes on the published candidate; eight-target CPAN acceptance, CI, review, and merge remain. |
+| Final acceptance | Pending | `nice -n 19 timeout 3600 make` passes on local source commit `549f482ad8`; the broad CPAN run was stopped, targeted DBIx findings remain, and CI, review, and merge are pending. |
 
-## Current handoff: 2026-11-16
+## Current handoff: 2026-11-17
 
-The local candidate branch is `wip/issue2043-cv-import-lifetime-20261116` at
-runtime commit `b24874edd5` (including `8146f20e2a` and `9d5e6774c1`), based
-on PR #1938 head `8405ea360f`. It is published to the PR branch
-`wip/alias-cell-ownership-20261030-185849`; PR #1938 is open at `b24874edd5`,
-with no comments or reviews as of 2026-11-16. Temporary and asynchronous
-lifetimes continue to use explicit owner slots, with no graph walk
-participating in Perl liveness decisions.
+The publication checkout is on `feature/issue2043-cv-dbi-fixes-20261116` at
+source commit `549f482ad8`, based on the live PR #1938 head `1a5c3d37e7`.
+The source batch is `eb73c52f6e`; `549f482ad8` corrects its eval lexical
+capture policy. The branch is full-make green and ready for a fast-forward
+update to PR #1938. Temporary and asynchronous Perl lifetimes continue to use
+explicit owner slots, with no graph walk participating in liveness decisions.
 
-The imported-CV failure occurred when a stored closure called an imported
-function after `namespace::clean` removed its stash entry. CV cleanup now
-counts a current transient argument or return slot as an owner until that
-slot's exact transfer boundary releases it. For direct calls, the parser
-snapshots targets already defined at parse time and the compiler consumes each
-snapshot owner once, even if the same AST is compiled in multiple contexts.
-Unresolved placeholders keep their pinned slot so a later `BEGIN`-time alias
-can fill it, as in `CPAN::Meta::YAML`.
+The imported-CV fix counts current transient argument/return slots through
+their transfer boundary and defers global CV cleanup until scalar and aggregate
+destructors finish. Defined parse-time call targets use one-shot compiler
+leases; unresolved placeholders retain late `BEGIN` aliases. DBI now links a
+statement to its database only after prepare succeeds. The eval capture
+correction keeps broad captures for dynamic or variable-bearing eval source,
+while allowing a literal source such as `sub { 1 }` to release unrelated
+lexicals. Its permanent lifetime regression and the existing lexical-eval
+regressions pass on system Perl where available, and five focused cases pass on
+both PerlOnJava backends.
 
-An unfiltered run on interim commit `d834a8fc4b` found repeated deferred-owner
-releases and a stale snapshot of an unresolved alias. The follow-up fixes are
-in `8146f20e2a`. Targeted checks now pass: the formatter tests run in one unit
-worker, `CPAN::Meta::YAML` runs with its private `refaddr` stash entry removed,
-and the focused Catalyst test passes. The Catalyst CV, imported closure, and
-nested metarole regressions pass on JVM and interpreter. The new Catalyst test
-skips on system Perl because its CPAN dependencies are absent; the other new
-Perl-level regression passes there. `nice -n 19 timeout 3600 make` passes on
-published commit `b24874edd5` in 10m14s; the eight-target CPAN acceptance is
-next. Logs: `/private/tmp/issue2043-pr1938-full-make-final2.log`,
-`/private/tmp/issue2043-format-idempotent-filtered.log`,
-`/private/tmp/issue2043-cpan-meta-yaml-fixed-filtered.log`,
-`/private/tmp/issue2043-catalyst-integration-fixed-single-worker.log`,
-`/private/tmp/issue2043-final-catalyst-jvm.log`,
-`/private/tmp/issue2043-final-catalyst-interpreter.log`,
-`/private/tmp/issue2043-final-cpan-yaml-jvm.log`,
-`/private/tmp/issue2043-final-cpan-yaml-interpreter.log`,
-`/private/tmp/issue2043-final-super-jvm.log`, and
-`/private/tmp/issue2043-final-super-interpreter.log`.
+`nice -n 19 timeout 3600 make` passes on `549f482ad8` in 7m42; the filtered
+eval unit gate also passes. The broad multi-target CPAN acceptance was stopped
+at the user's direction. The remaining focused DBIx evidence is limited to
+`t/storage/error.t` and `t/storage/txn.t`: the former still has the `wrap_txn`
+exception mismatch and six DBH collection assertions at refcount 1; the latter
+has only assertion 89's exception line-number mismatch, with no leak detected.
+Their interpreter runs hit timeouts. These findings and their captured logs
+are in `/private/tmp/issue2043-dbix-storage-error-fixed-jvm.log`,
+`/private/tmp/issue2043-dbix-storage-error-fixed-interpreter.log`,
+`/private/tmp/issue2043-dbix-storage-txn-fixed-jvm.log`, and
+`/private/tmp/issue2043-dbix-storage-txn-fixed-interpreter.log`. The new unit
+gate failures on `eb73c52f6e` were reproduced, traced to ordinary-source named
+sub eval capture, and fixed before the passing full gate.
 
 ### Next steps
 
-1. Run the eight-target CPAN acceptance on published commit `b24874edd5` and
-   address any failures with focused permanent regressions.
-2. Complete CI and human review of PR #1938 after CPAN acceptance passes.
-3. Merge PR #1938 after approval and close #2043 with the merged commit and
-   validation evidence. Resume the separately tracked #2037 archive-lifetime
-   and #2034 localized-STDERR fixes afterward.
+1. Fast-forward the full-make-green source and documentation commits to PR
+   #1938; let CI and human review run.
+2. Continue only the already identified `storage/error.t` DBH owner and
+   `storage/txn.t` diagnostic mismatches; do not restart the broad CPAN sweep.
+3. After those targeted findings and PR review are resolved, merge PR #1938
+   and close #2043 with the merged commit and acceptance evidence. Resume the
+   separately tracked #2037 archive-lifetime and #2034 localized-STDERR fixes
+   afterward.
 
 Completion requires no reachability-based root walk or sweep to affect Perl
 lifetime, required ownership and integration acceptance on one immutable
