@@ -11,16 +11,17 @@ historical origin.
 | Replace sweep-based lifecycle decisions with owner slots | Candidate delivered | Reachability walker, scalar registry, root-query state, sweep hooks, END-boundary scans, and suspended-frame root snapshots are removed. |
 | Fix DBIx and Test2 retention | Candidate delivered | DBIx arguments carry an exact call-transfer owner; DBI handles use core `bless`; the Test2 event regression passes on system Perl and both PerlOnJava backends. |
 | Preserve imported CVs through namespace cleanup | Candidate delivered | Live transient argument and return slots count as CV owners until their transfer boundary; defined parse-time targets have one-shot compiler leases, while unresolved placeholders retain late BEGIN aliases. Focused regressions pass on both backends. |
-| Final acceptance | Pending | Unfiltered `make` and eight-target CPAN acceptance remain; then publish the candidate, complete CI and review, and merge PR #1938. |
+| Final acceptance | Pending | Unfiltered `make` passes on the published candidate; eight-target CPAN acceptance, CI, review, and merge remain. |
 
 ## Current handoff: 2026-11-16
 
 The local candidate branch is `wip/issue2043-cv-import-lifetime-20261116` at
-source commit `8146f20e2a` (after `9d5e6774c1`), based on PR #1938 head
-`8405ea360f`. The PR remains open at that published head; this candidate has
-not yet been pushed. Temporary and asynchronous lifetimes continue to use
-explicit owner slots, with no graph walk participating in Perl liveness
-decisions.
+runtime commit `b24874edd5` (including `8146f20e2a` and `9d5e6774c1`), based
+on PR #1938 head `8405ea360f`. It is published to the PR branch
+`wip/alias-cell-ownership-20261030-185849`; PR #1938 is open at `b24874edd5`,
+with no comments or reviews as of 2026-11-16. Temporary and asynchronous
+lifetimes continue to use explicit owner slots, with no graph walk
+participating in Perl liveness decisions.
 
 The imported-CV failure occurred when a stored closure called an imported
 function after `namespace::clean` removed its stash entry. CV cleanup now
@@ -38,7 +39,10 @@ worker, `CPAN::Meta::YAML` runs with its private `refaddr` stash entry removed,
 and the focused Catalyst test passes. The Catalyst CV, imported closure, and
 nested metarole regressions pass on JVM and interpreter. The new Catalyst test
 skips on system Perl because its CPAN dependencies are absent; the other new
-Perl-level regression passes there. Logs: `/private/tmp/issue2043-format-idempotent-filtered.log`,
+Perl-level regression passes there. `nice -n 19 timeout 3600 make` passes on
+published commit `b24874edd5` in 10m14s; the eight-target CPAN acceptance is
+next. Logs: `/private/tmp/issue2043-pr1938-full-make-final2.log`,
+`/private/tmp/issue2043-format-idempotent-filtered.log`,
 `/private/tmp/issue2043-cpan-meta-yaml-fixed-filtered.log`,
 `/private/tmp/issue2043-catalyst-integration-fixed-single-worker.log`,
 `/private/tmp/issue2043-final-catalyst-jvm.log`,
@@ -50,10 +54,9 @@ Perl-level regression passes there. Logs: `/private/tmp/issue2043-format-idempot
 
 ### Next steps
 
-1. Run unfiltered `nice -n 19 make` on the final local candidate and address any
-   failures with focused permanent regressions.
-2. After it passes, publish the candidate to PR #1938 and rerun the eight-target
-   CPAN acceptance on that exact commit; then complete CI and human review.
+1. Run the eight-target CPAN acceptance on published commit `b24874edd5` and
+   address any failures with focused permanent regressions.
+2. Complete CI and human review of PR #1938 after CPAN acceptance passes.
 3. Merge PR #1938 after approval and close #2043 with the merged commit and
    validation evidence. Resume the separately tracked #2037 archive-lifetime
    and #2034 localized-STDERR fixes afterward.
