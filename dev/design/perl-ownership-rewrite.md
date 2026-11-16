@@ -10,36 +10,43 @@ historical origin.
 | --- | --- | --- |
 | Replace sweep-based lifecycle decisions with owner slots | Candidate delivered | Reachability walker, scalar registry, root-query state, sweep hooks, END-boundary scans, and suspended-frame root snapshots are removed. |
 | Fix DBIx and Test2 retention | Candidate delivered | DBIx arguments carry an exact call-transfer owner; DBI handles use core `bless`; the Test2 event regression passes on system Perl and both PerlOnJava backends. |
-| Preserve imported CVs through namespace cleanup | Candidate delivered | Live transient argument and return slots count as CV owners until their exact transfer boundary; focused Catalyst and imported-closure regressions pass on both backends. |
+| Preserve imported CVs through namespace cleanup | Candidate delivered | Live transient argument and return slots count as CV owners until their transfer boundary; defined parse-time targets have one-shot compiler leases, while unresolved placeholders retain late BEGIN aliases. Focused regressions pass on both backends. |
 | Final acceptance | Pending | Unfiltered `make` and eight-target CPAN acceptance remain; then publish the candidate, complete CI and review, and merge PR #1938. |
 
 ## Current handoff: 2026-11-16
 
 The local candidate branch is `wip/issue2043-cv-import-lifetime-20261116` at
-source commit `9d5e6774c1`, based on PR #1938 head `8405ea360f`. The PR remains
-open at that published head; this candidate has not yet been pushed. Temporary
-and asynchronous lifetimes continue to use explicit owner slots, with no graph
-walk participating in Perl liveness decisions.
+source commit `8146f20e2a` (after `9d5e6774c1`), based on PR #1938 head
+`8405ea360f`. The PR remains open at that published head; this candidate has
+not yet been pushed. Temporary and asynchronous lifetimes continue to use
+explicit owner slots, with no graph walk participating in Perl liveness
+decisions.
 
 The imported-CV failure occurred when a stored closure called an imported
 function after `namespace::clean` removed its stash entry. CV cleanup now
 counts a current transient argument or return slot as an owner until that
-slot's exact transfer boundary releases it. The parser also retains a
-parse-time direct-call target until a deferred compiled callsite takes
-ownership.
+slot's exact transfer boundary releases it. For direct calls, the parser
+snapshots targets already defined at parse time and the compiler consumes each
+snapshot owner once, even if the same AST is compiled in multiple contexts.
+Unresolved placeholders keep their pinned slot so a later `BEGIN`-time alias
+can fill it, as in `CPAN::Meta::YAML`.
 
-Evidence on the local candidate: `catalyst_stats_imported_cv_lifetime.t` fails
-on the pre-fix candidate with `Undefined subroutine
-&Catalyst::Stats::gettimeofday` and passes on JVM and interpreter. The existing
-Catalyst tempfile integration test passes its focused make gate. The nested
-metarole `super` regression and imported-closure regression pass on system Perl
-and both PerlOnJava backends; Catalyst dependencies are absent from system
-Perl, so its focused test skips there. Logs: `/private/tmp/issue2043-catalyst-stats-prefx-jperl.log`,
-`/private/tmp/issue2043-catalyst-stats-fixed-jvm.log`,
-`/private/tmp/issue2043-catalyst-stats-fixed-interpreter.log`,
-`/private/tmp/issue2043-catalyst-integration-fixed-make.log`,
-`/private/tmp/issue2043-super-fixed-jvm.log`, and
-`/private/tmp/issue2043-super-fixed-interpreter.log`.
+An unfiltered run on interim commit `d834a8fc4b` found repeated deferred-owner
+releases and a stale snapshot of an unresolved alias. The follow-up fixes are
+in `8146f20e2a`. Targeted checks now pass: the formatter tests run in one unit
+worker, `CPAN::Meta::YAML` runs with its private `refaddr` stash entry removed,
+and the focused Catalyst test passes. The Catalyst CV, imported closure, and
+nested metarole regressions pass on JVM and interpreter. The new Catalyst test
+skips on system Perl because its CPAN dependencies are absent; the other new
+Perl-level regression passes there. Logs: `/private/tmp/issue2043-format-idempotent-filtered.log`,
+`/private/tmp/issue2043-cpan-meta-yaml-fixed-filtered.log`,
+`/private/tmp/issue2043-catalyst-integration-fixed-single-worker.log`,
+`/private/tmp/issue2043-final-catalyst-jvm.log`,
+`/private/tmp/issue2043-final-catalyst-interpreter.log`,
+`/private/tmp/issue2043-final-cpan-yaml-jvm.log`,
+`/private/tmp/issue2043-final-cpan-yaml-interpreter.log`,
+`/private/tmp/issue2043-final-super-jvm.log`, and
+`/private/tmp/issue2043-final-super-interpreter.log`.
 
 ### Next steps
 
