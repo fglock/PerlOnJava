@@ -2369,12 +2369,10 @@ public class SubroutineParser {
             placeholder.ourVariableRegistry = visibleOurs.isEmpty()
                     ? null : new LinkedHashMap<>(visibleOurs);
             explicitlyUsedVars = usedVarSet;
-            // A package sub defined by eval STRING may need the caller's whole
-            // visible lexical pad for a nested eval STRING in its body. A
-            // package sub compiled from ordinary source cannot close over the
-            // file's lexicals; eval inside that sub sees only its own pad.
-            // Keep the conservative capture set only for the former case.
-            if (!collector.requiresAllRuntimeLexicals() || !parser.parsingEvalString) {
+            // Runtime eval may read lexicals from the sub's definition context.
+            // Keep its broad capture set unless the collector proved the eval
+            // source is a constant string that cannot name a lexical.
+            if (!collector.requiresAllRuntimeLexicals()) {
                 usedVars = usedVarSet;
             }
             placeholder.tracksRuntimeRegexLexicals =
