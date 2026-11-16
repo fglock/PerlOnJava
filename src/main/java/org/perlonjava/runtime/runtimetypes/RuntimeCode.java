@@ -107,6 +107,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public static final class CallArguments extends RuntimeScalar {
         private final RuntimeBase[] values;
         private final java.util.ArrayList<RuntimeScalar> listResultOwners = new java.util.ArrayList<>();
+        private final java.util.ArrayList<PerlOwnerSlot> temporaryCodeArgumentOwners =
+                new java.util.ArrayList<>();
         private final java.util.ArrayList<RuntimeScalar.ArgumentAliasOwner> argumentAliasOwners =
                 new java.util.ArrayList<>();
         private final java.util.ArrayList<ArgumentContainerOwner> argumentContainerOwners =
@@ -135,6 +137,20 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // referent count. A mortal return keeps its exact RETURN_VALUE
             // release queued until this alias frame leaves.
             if (value instanceof RuntimeScalar scalar) {
+                // A stand-alone temporary CODE cell can own compiled pad
+                // constants without belonging to a lexical or aggregate.
+                // Keep a no-count call owner until the callee has entered and left.
+                if (!WeakRefRegistry.isweak(scalar)
+                        && scalar.type == RuntimeScalarType.CODE
+                        && scalar.value instanceof RuntimeCode code
+                        && argumentAliasContainer(scalar) == null
+                        && code.capturedScalars == null
+                        && code.capturedAggregates == null
+                        && !code.hasIndependentPerlOwnerSlotForArgument()) {
+                    PerlOwnerSlot owner = new PerlOwnerSlot(PerlOwnerSlot.Kind.ARGUMENT_VALUE);
+                    owner.acquireCountedIdentity(code);
+                    temporaryCodeArgumentOwners.add(owner);
+                }
                 boolean pendingStrongRelease = !WeakRefRegistry.isweak(scalar)
                         && ((scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
                             || scalar.type == RuntimeScalarType.GLOB
@@ -251,6 +267,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             failure = releaseStagedArgumentOwners(listResultOwners, failure);
             failure = releaseArgumentAliasOwners(argumentAliasOwners, failure);
             failure = releaseArgumentContainerOwners(argumentContainerOwners, failure);
+            failure = releaseOwnerSlots(temporaryCodeArgumentOwners, failure);
             failure = attemptCleanup(failure, MortalList::drainDeferredArgumentOwnerReleases);
             rethrowCleanupFailure(failure);
         }
@@ -438,6 +455,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 owners.toArray(new ArgumentContainerOwner[0]);
         owners.clear();
         for (ArgumentContainerOwner owner : pendingOwners) {
+            failure = attemptCleanup(failure, owner::release);
+        }
+        return failure;
+    }
+
+    private static Throwable releaseOwnerSlots(List<PerlOwnerSlot> owners, Throwable failure) {
+        PerlOwnerSlot[] pendingOwners = owners.toArray(new PerlOwnerSlot[0]);
+        owners.clear();
+        for (PerlOwnerSlot owner : pendingOwners) {
             failure = attemptCleanup(failure, owner::release);
         }
         return failure;
@@ -1895,8 +1921,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             if (slot == excludedOwner || !slot.isActive()) continue;
             if (slot.kind() == PerlOwnerSlot.Kind.UNTRACKED_REFERENCE) {
                 RuntimeScalar owner = slot.untrackedScalarOwner();
-                if (owner != null && !owner.isTransientArgumentValueOwner()
-                        && owner.hasLiveCurrentStrongValueSlot()
+                // A live argument or return transfer is still a Perl owner
+                // of this CV. Its exact owner slot is released at the transfer
+                // boundary, so it can safely keep the pad and direct-call
+                // targets alive until then.
+                if (owner != null && owner.hasLiveCurrentStrongValueSlot()
                         && !WeakRefRegistry.isweak(owner)
                         && (owner.type & RuntimeScalarType.REFERENCE_BIT) != 0
                         && owner.value == this) return true;
