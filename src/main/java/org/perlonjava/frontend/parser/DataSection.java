@@ -170,6 +170,31 @@ public class DataSection {
         for (int i = markerIndex + 1; i < tokens.size(); i++) {
             LexerToken token = tokens.get(i);
             if (token.type == LexerTokenType.WHITESPACE) continue;
+            // A trailing comment is part of the marker line, not Perl source
+            // following the marker. The lexer leaves comments as ordinary
+            // tokens, so recognize the comment introducer and ignore the rest
+            // of this physical line.
+            if (token.type == LexerTokenType.OPERATOR && token.text.equals("#")) {
+                while (i < tokens.size() && tokens.get(i).type != LexerTokenType.NEWLINE
+                        && tokens.get(i).type != LexerTokenType.EOF) {
+                    i++;
+                }
+                return i >= tokens.size() || tokens.get(i).type == LexerTokenType.NEWLINE
+                        || tokens.get(i).type == LexerTokenType.EOF;
+            }
+            // Perl accepts the terminal spelling `__END__;` in modules.
+            if (token.type == LexerTokenType.OPERATOR && token.text.equals(";")
+                    && tokens.get(markerIndex).text.equals("__END__")) {
+                i++;
+                while (i < tokens.size() && tokens.get(i).type == LexerTokenType.WHITESPACE) i++;
+                if (i < tokens.size() && tokens.get(i).type == LexerTokenType.OPERATOR
+                        && tokens.get(i).text.equals("#")) {
+                    while (i < tokens.size() && tokens.get(i).type != LexerTokenType.NEWLINE
+                            && tokens.get(i).type != LexerTokenType.EOF) i++;
+                }
+                return i >= tokens.size() || tokens.get(i).type == LexerTokenType.NEWLINE
+                        || tokens.get(i).type == LexerTokenType.EOF;
+            }
             return token.type == LexerTokenType.NEWLINE || token.type == LexerTokenType.EOF;
         }
         return true;
@@ -351,11 +376,22 @@ public class DataSection {
                 }
             }
 
-            // Skip past the marker and any trailing whitespace + newline
+            // Skip past the marker, accepted END semicolon, trailing
+            // whitespace/comment and the marker line's newline.
             int dataStart = afterMarker;
+            if (markerText.equals("__END__") && dataStart < rawBytes.length
+                    && rawBytes[dataStart] == ';') {
+                dataStart++;
+            }
             // Skip spaces/tabs
             while (dataStart < rawBytes.length && (rawBytes[dataStart] == ' ' || rawBytes[dataStart] == '\t')) {
                 dataStart++;
+            }
+            if (dataStart < rawBytes.length && rawBytes[dataStart] == '#') {
+                while (dataStart < rawBytes.length
+                        && rawBytes[dataStart] != '\n' && rawBytes[dataStart] != '\r') {
+                    dataStart++;
+                }
             }
             // Skip the newline (\n or \r\n)
             if (dataStart < rawBytes.length && rawBytes[dataStart] == '\r') {
@@ -418,9 +454,26 @@ public class DataSection {
 
             tokenIndex++;
 
+            if (token.text.equals("__END__") && tokenIndex < tokens.size()
+                    && tokens.get(tokenIndex).type == LexerTokenType.OPERATOR
+                    && tokens.get(tokenIndex).text.equals(";")) {
+                tokenIndex++;
+            }
+
             // Skip any whitespace immediately after __DATA__
             while (tokenIndex < tokens.size() && tokens.get(tokenIndex).type == LexerTokenType.WHITESPACE) {
                 tokenIndex++;
+            }
+
+            // A trailing comment belongs to the marker line and must not be
+            // exposed through DATA when a source buffer has no raw byte copy.
+            if (tokenIndex < tokens.size() && tokens.get(tokenIndex).type == LexerTokenType.OPERATOR
+                    && tokens.get(tokenIndex).text.equals("#")) {
+                while (tokenIndex < tokens.size()
+                        && tokens.get(tokenIndex).type != LexerTokenType.NEWLINE
+                        && tokens.get(tokenIndex).type != LexerTokenType.EOF) {
+                    tokenIndex++;
+                }
             }
 
             // Skip the newline after __DATA__
