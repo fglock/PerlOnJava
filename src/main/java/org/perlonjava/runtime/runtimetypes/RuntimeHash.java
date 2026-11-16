@@ -2110,40 +2110,9 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         RuntimeScalar result = createAnonymousReference();
         for (RuntimeScalar elem : this.elements.values()) {
             RuntimeScalar.retainUnstashedIoForDurableSlot(elem);
-            if ("1".equals(System.getenv("PJ_ISSUE2043_HASH_OWNER_TRACE"))) {
-                RuntimeBase referent = elem != null && elem.value instanceof RuntimeBase base
-                        ? base : null;
-                System.err.println("[ISSUE2043-HASH-OWNER] phase=before hash="
-                        + System.identityHashCode(this) + " key="
-                        + (elements.entrySet().stream()
-                                .filter(entry -> entry.getValue() == elem)
-                                .map(Map.Entry::getKey).findFirst().orElse("<no-key>"))
-                        + " cell=" + System.identityHashCode(elem)
-                        + " type=" + (elem == null ? -1 : elem.type)
-                        + " owns=" + (elem != null && elem.refCountOwned)
-                        + " nonOwning=" + (elem != null && elem.nonOwningBObjectReference)
-                        + " weak=" + (elem != null && WeakRefRegistry.isweak(elem))
-                        + " referent=" + (referent == null ? 0
-                                : System.identityHashCode(referent))
-                        + " refCount=" + (referent == null ? 0 : referent.refCount)
-                        + " trackingState=" + (referent == null ? "none"
-                                : referent.refCountTrackingState())
-                        + " destroyed=" + (referent != null && referent.isPerlDestroyed()));
-            }
             RuntimeScalar.incrementRefCountForContainerStore(
                     elem, PerlOwnerSlot.Kind.HASH_ELEMENT);
             if (elem != null) elem.associateCountedAggregateOwner(this);
-            if ("1".equals(System.getenv("PJ_ISSUE2043_HASH_OWNER_TRACE"))) {
-                RuntimeBase referent = elem != null && elem.value instanceof RuntimeBase base
-                        ? base : null;
-                System.err.println("[ISSUE2043-HASH-OWNER] phase=after hash="
-                        + System.identityHashCode(this) + " cell="
-                        + System.identityHashCode(elem)
-                        + " owns=" + (elem != null && elem.refCountOwned)
-                        + " referent=" + (referent == null ? 0
-                                : System.identityHashCode(referent))
-                        + " refCount=" + (referent == null ? 0 : referent.refCount));
-            }
         }
         return result;
     }

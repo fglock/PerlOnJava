@@ -539,6 +539,24 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return compiledDirectCallSiteDescriptor;
     }
 
+    /** Copy the installed callsite identity so ithread CV clones can reinstall its owner. */
+    void copyCompiledDirectCallSiteMetadataFrom(RuntimeScalar source) {
+        if (source.compiledDirectCallSiteName == null) return;
+        compiledDirectCallSiteName = source.compiledDirectCallSiteName;
+        compiledDirectCallSiteIndex = source.compiledDirectCallSiteIndex;
+        // Thread snapshots copy the installed cache, not the parser's temporary
+        // descriptor or its source-runtime owner slots. The cloned CV's pad
+        // installation creates a fresh child-runtime callsite from this metadata.
+        compiledDirectCallSiteDescriptor = false;
+        compiledDirectCallCompileTimePinned = source.compiledDirectCallCompileTimePinned;
+        compiledDirectCallRetainTargetIfDeletedBeforeInstall =
+                source.compiledDirectCallRetainTargetIfDeletedBeforeInstall;
+        compiledDirectCallHasDeferredParseOwner = false;
+        compiledDirectCallInitialTarget = null;
+        compiledDirectCallInitialSlot = null;
+        compiledDirectCallPinSlot = null;
+    }
+
     void releaseCompiledDirectCallSiteDescriptorBinding() {
         if (!compiledDirectCallSiteDescriptor) return;
         compiledDirectCallSiteDescriptor = false;
@@ -4575,33 +4593,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         RuntimeBase oldBase = null;
         if ((this.type & RuntimeScalarType.REFERENCE_BIT) != 0 && this.value != null) {
             oldBase = (RuntimeBase) this.value;
-        }
-        if ("1".equals(System.getenv("PJ_ISSUE2043_REPLACE_TRACE"))
-                && oldBase instanceof RuntimeHash
-                && NameNormalizer.getBlessStr(oldBase.blessId).equals("DBICTest::Schema")) {
-            String containerSlot = "none";
-            if (containerOwner instanceof RuntimeHash hash) {
-                containerSlot = hash.elements.entrySet().stream()
-                        .filter(entry -> entry.getValue() == this)
-                        .map(Map.Entry::getKey).findFirst().orElse("<not-in-hash>");
-            } else if (containerOwner instanceof RuntimeArray array) {
-                containerSlot = "index=" + array.elements.indexOf(this);
-            }
-            RuntimeBase replacementReferent = value != null
-                    && value.value instanceof RuntimeBase base ? base : null;
-            System.err.println("[ISSUE2043-SCALAR-REPLACE] scalar="
-                    + System.identityHashCode(this) + " type=" + this.type
-                    + " owns=" + this.refCountOwned + " slot="
-                    + (countedOwnerSlot == null ? "none"
-                            : countedOwnerSlot.identity() + ":" + countedOwnerSlot.kind())
-                    + " container=" + (containerOwner == null ? "none"
-                            : System.identityHashCode(containerOwner) + ":" + containerSlot)
-                    + " old=" + System.identityHashCode(oldBase)
-                    + " oldCount=" + oldBase.refCount + " new="
-                    + (replacementReferent == null ? "none"
-                            : System.identityHashCode(replacementReferent))
-                    + " newType=" + (value == null ? -1 : value.type));
-            new Throwable().printStackTrace(System.err);
         }
         boolean oldRefCountOwned = this.refCountOwned;
         // Scope unwind can clear a cell's payload after scheduling its array
