@@ -6,6 +6,7 @@ priorities and future plans.
 
 ## Work in progress
 
+- Preserve imported CV owners through global destruction, retain only the lexical captures needed by `eval STRING`, and release DBI parent handles after failed prepare (#2043).
 - Remove reachability-based lifetime decisions, root-query state, and sweep-only hooks; use current Perl owner slots for cleanup (#2043).
 
 - Preserve file contents on `sysopen` without `O_TRUNC`, fail `open` on undefined paths, avoid duplicate `closedir` warnings, and match Socket lookup flags and return values (#2128, #2125, #2095).
