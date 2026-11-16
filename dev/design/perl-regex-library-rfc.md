@@ -46,6 +46,26 @@ unit/core corpus is useful engine evidence, but does not satisfy the standalone
 artifact release gate. Phase 1 remains in progress until the blockers above are
 resolved and the extraction cost and maintenance obligation are accepted.
 
+## Extraction Boundary Audit — 2026-11-16
+
+This is an initial source and packaging audit, not release approval:
+
+| Area | Current evidence | Extraction implication |
+| --- | --- | --- |
+| Engine | `third_party/joni` is the PerlOnJava-maintained Joni 2.2.7 fork. The root build relocates `org.joni` and `org.jcodings` into private namespaces in the PerlOnJava uber-JAR and includes the Joni license and fork notice. | Preserve the fork namespace, source history, and notices. The existing uber-JAR is not a standalone regex artifact. |
+| Encoding | The build resolves JCodings 1.0.64 as a separate dependency. The adapter has a Perl-specific wide-scalar codec and byte/Unicode conversion paths. | JCodings is part of the minimal engine closure; Perl byte and scalar conversion behavior needs a runtime-neutral replacement or a justified extracted module. |
+| Property resolution | `UnicodeResolver` and generated data classes use ICU4J 78.3 (`UnicodeSet`, `UCharacter`, and `UProperty`). The root build has ICU4J on the application classpath. | Do not treat generated alias tables as a replacement for ICU. A standalone dependency boundary must decide which ICU-backed resolution behavior remains. |
+| Perl integration | `JoniRegexPattern` directly imports `WarnDie`, `PerlUtfString`, named-character expansion types, and Perl runtime types. `RuntimeRegex` supplies dynamic patterns, callbacks, warning handling, captures, and alarm integration. | The adapter cannot move unchanged into a data-only library. Callback and Perl execution paths must be split from a smaller core boundary. |
+| Unicode provenance | The generator manifest selects Perl 5.45.3 at commit `876f5f0999e8daa0b71343ec5da3835d874c838a` and UCD 18.0.0. Some generated data has distinct provenance, including named sequences at UCD 17.0.0 and Bidi inputs named for UCD 17.0.0. The application version remains 5.44.1. | “Perl-compatible” is not yet a single versioned data contract. Map every generated/runtime property family to its Perl and UCD source before choosing a public compatibility target. |
+| Licensing | The fork notice records upstream Joni MIT provenance; JCodings carries its own retained license file; PerlOnJava source is dual GPL/Artistic; generated Unicode sources retain Unicode notices. The generated SBOM records ICU4J's Unicode license URL. | These top-level records identify the audit scope but do not replace a file-by-file source, generator, and redistribution review. No relicensing conclusion is made. |
+| Resource limits | Joni exposes interruptible matching and an internal match-stack cap; the Perl runtime wraps alarm matching in a worker executor and cancels its future on timeout. | These mechanisms are evidence for possible controls, not yet proof of a public API's cancellation, per-match limits, or worker termination contract. Standalone limits need adversarial tests at the library boundary. |
+
+The first clean extraction experiment must therefore measure the closure of a
+runtime-neutral adapter, generated property data, ICU4J, and JCodings without
+including `RuntimeRegex` or the Perl compiler. Until that experiment exists,
+artifact size, external-consumer usability, and effective public resource
+controls remain unverified.
+
 ## Summary
 
 After the full Joni migration is complete, PerlOnJava could publish its regex
