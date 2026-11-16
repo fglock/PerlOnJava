@@ -3096,20 +3096,8 @@ public class UnicodeResolver {
 
         UnicodeSet result = new UnicodeSet();
         for (int valueId = 0; valueId < PerlUnicodeBlockData.valueCount(); valueId++) {
-            String candidate = PerlUnicodeBlockData.canonicalValue(valueId);
             boolean matches = matchesPerlUnicodePropertyWildcard(
                     valuePattern, PerlUnicodeBlockData.valueAliases(valueId));
-            int icuValue = unicodePropertyValue(UProperty.BLOCK, candidate);
-            for (int nameChoice = UProperty.NameChoice.SHORT;
-                    !matches && icuValue >= 0 && nameChoice <= UProperty.NameChoice.LONG;
-                    nameChoice++) {
-                String officialAlias = UCharacter.getPropertyValueName(
-                        UProperty.BLOCK, icuValue, nameChoice);
-                matches = officialAlias != null
-                        && (valuePattern.matchesPropertyValue(officialAlias)
-                            || valuePattern.matchesPropertyValue(
-                                    loosePropertyName(officialAlias)));
-            }
             if (matches) {
                 result.addAll(PerlUnicodeBlockData.set(valueId));
             }

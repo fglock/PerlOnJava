@@ -2,8 +2,49 @@
 
 ## Status
 
-Proposal only. This RFC does not authorize implementation and is not part of
-the regex implementation completion criteria.
+Feasibility investigation is active under issue #1592. No standalone public API,
+repository, or artifact has been delivered. The current PerlOnJava engine remains
+the only implementation source; a standalone release requires a separately
+reviewed extraction and packaging gate.
+
+## Feasibility Snapshot — 2026-11-16
+
+The supported runtime currently targets Perl 5.44.1 and Java 24. The production
+adapter, `JoniRegexPattern`, is package-private and directly depends on Perl
+runtime types for warnings, string provenance, scalar conversion, named
+characters, callbacks, dynamic patterns, and captures. The maintained engine
+is under `third_party/joni`; generated Perl Unicode/property tables and their
+resolver live under `src/main/java/org/perlonjava/runtime/regex`. These are
+concrete extraction dependencies, not yet a standalone module boundary.
+
+The initial extraction should use the standalone repository with PerlOnJava as
+a pinned Git submodule, as described by issue #1592. The build must select an
+explicit engine/core source boundary and declare its JCodings, ICU, and data
+provenance dependencies. It must not compile the full Perl runtime or publish
+fork internals as the Java API. Engine fixes remain in PerlOnJava until a later
+review establishes a shared source-of-truth repository and upgrade gates for
+both consumers.
+
+The following Phase 1 questions remain release blockers:
+
+- Pin the exact Perl compatibility and Unicode data versions together. The
+  runtime version alone does not establish which Unicode data snapshot defines
+  every regex property.
+- Complete a source-by-source license and generated-data provenance audit for
+  Joni, JCodings, ICU, aliases, named characters, and their generators.
+- Decide public byte and Unicode input types, offset units, flag behavior,
+  replacement/split scope, structured diagnostics, and concurrency contracts.
+- Measure the extracted artifact's dependency closure and resource controls;
+  the current runtime's backtracking behavior does not yet prove enforceable
+  standalone matching limits or cancellation.
+- Validate the dependency boundary with a clean external Java consumer and
+  differential, concurrency, cancellation, and packaging tests.
+
+The issue's proposed Java audience and use cases are hypotheses; no external
+consumer validation or market evidence is recorded yet. The existing PerlOnJava
+unit/core corpus is useful engine evidence, but does not satisfy the standalone
+artifact release gate. Phase 1 remains in progress until the blockers above are
+resolved and the extraction cost and maintenance obligation are accepted.
 
 ## Summary
 
