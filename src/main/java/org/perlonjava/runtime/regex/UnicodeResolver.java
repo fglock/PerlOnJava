@@ -2318,6 +2318,9 @@ public class UnicodeResolver {
         if (isPerlAcceptedBinaryPropertyAlias(name)) {
             return resolvePerlBinaryPropertyWildcard(name, wildcard);
         }
+        if (isGeneralCategoryProperty(name)) {
+            return resolvePerlGeneralCategoryWildcard(wildcard);
+        }
         if (PerlUnicodeIndicCategoryData.isPropertyAlias(name)) {
             return resolvePerlIndicCategoryWildcard(name, wildcard);
         }
@@ -2344,6 +2347,24 @@ public class UnicodeResolver {
                     PERL_VERTICAL_ORIENTATION_WILDCARD_VALUES, true);
         }
         return null;
+    }
+
+    private static PerlUnicodePropertyWildcard resolvePerlGeneralCategoryWildcard(
+            PerlPropertyValueMatcher wildcard) {
+        UnicodeSet result = new UnicodeSet();
+        boolean matched = false;
+        for (String alias : PerlUnicodeGeneralCategoryData.wildcardAliases()) {
+            if (!matchesPerlUnicodePropertyWildcard(wildcard, alias)) continue;
+            UnicodeSet value = PerlUnicodeGeneralCategoryData.resolve(alias);
+            if (value == null) continue;
+            matched = true;
+            result.addAll(value);
+        }
+        if (!matched) {
+            throw new IllegalArgumentException(
+                    "No Unicode property value wildcard matches General_Category");
+        }
+        return new PerlUnicodePropertyWildcard(result.freeze(), null, true);
     }
 
     private static PerlUnicodePropertyWildcard resolvePerlIndicCategoryWildcard(
@@ -2403,7 +2424,10 @@ public class UnicodeResolver {
             String value = PerlUnicodeResidualPropertyData.value(propertyName, index);
             String shortValue =
                     PerlUnicodeResidualPropertyData.shortValue(propertyName, index);
-            if (!matchesPerlUnicodePropertyWildcard(wildcard, shortValue, value)) continue;
+            String[] aliases = PerlUnicodeResidualPropertyData.valueAliases(
+                    propertyName, index);
+            if (!matchesPerlUnicodePropertyWildcard(
+                    wildcard, concatAliases(aliases, shortValue, value))) continue;
             matched = true;
             result.addAll(PerlUnicodeResidualPropertyData.valueSet(propertyName, value));
         }
@@ -2412,6 +2436,14 @@ public class UnicodeResolver {
                     "No Unicode property value wildcard matches " + propertyName.trim());
         }
         return new PerlUnicodePropertyWildcard(result.freeze(), null, false);
+    }
+
+    private static String[] concatAliases(
+            String[] aliases, String shortValue, String canonicalValue) {
+        String[] result = java.util.Arrays.copyOf(aliases, aliases.length + 2);
+        result[aliases.length] = shortValue;
+        result[aliases.length + 1] = canonicalValue;
+        return result;
     }
 
     private static PerlUnicodePropertyWildcard resolvePerlBinaryPropertyWildcard(

@@ -2623,6 +2623,14 @@ final class PerlUnicodeGeneralCategoryData {
         return index == null ? null : SETS[index];
     }
 
+    static String[] wildcardAliases() {
+        String[] aliases = new String[ALIASES.length / 2];
+        for (int index = 0; index < aliases.length; index++) {
+            aliases[index] = ALIASES[index * 2];
+        }
+        return aliases;
+    }
+
     private static UnicodeSet[] buildSets() {
         UnicodeSet[] sets = new UnicodeSet[VALUES.length];
         for (int i = 0; i < sets.length; i++) sets[i] = new UnicodeSet();
