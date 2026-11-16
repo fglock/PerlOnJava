@@ -39,12 +39,20 @@ final class PerlUnicodeCaseFoldData {
     static final String UNICODE_VERSION = "18.0.0";
     static final String CASE_FOLDING_SHA256 = "ff8d8fefbf123574205085d6714c36149eb946d717a0c585c27f0f4ef58c4183";
     static final String SPECIAL_CASING_SHA256 = "efc25faf19de21b92c1194c111c932e03d2a5eaf18194e33f1156e96de4c9588";
+    // Original source pin for this table family; current checkout hashes follow.
     static final String PERL_MULTI_FOLD_GENERATOR_SHA256 = "1ce43daf54162d0a267412453ce2a613f60f3a7631365775cc52d34213251a83";
     static final String PERL_INVERSION_GENERATOR_SHA256 = "2fe950c6526e41c25308da86647024cfe2a1a05108bb8b6a095ce8ab88f43eee";
     static final String PERL_MKTABLES_SHA256 = "9931e372f6528f37dccad70cc9280a6a0fcb3b9afd08eba16f212360881c4ffd";
     static final String PERL_INVERSION_DATA_SHA256 = "956ca2dbba6578d30b0627d0890b6818bde113bba3548c475f381475fbf74854";
     static final String PERL_REGCHARCLASS_SHA256 = "bb7f467fe4e71aa13664b3afa1d7066890e7f0ae16b9f83e721ae5a8d390e675";
     static final String PERL_REGCHARCLASS_GENERATOR_SHA256 = "cad98ca9e7be21f5f2a127f4f6304302e3ea1de98295124986eabd91ab2e9643";
+    // Hashes of the Perl sources validated by this generation.
+    static final String PERL_CURRENT_MULTI_FOLD_GENERATOR_SHA256 = "ea16ffd33f6130e7e38a027c21bdea415a7d96efb3741d7cd731243df769581b";
+    static final String PERL_CURRENT_INVERSION_GENERATOR_SHA256 = "2fe950c6526e41c25308da86647024cfe2a1a05108bb8b6a095ce8ab88f43eee";
+    static final String PERL_CURRENT_MKTABLES_SHA256 = "94644b4e53ef4f2590ef86a261dcd22ffadf79247fcc7f31c4ebf5b19111fd25";
+    static final String PERL_CURRENT_INVERSION_DATA_SHA256 = "4976e0a69990620396c031b95fe225f1abdb2f44b1aa86c3d282f13c675b43f8";
+    static final String PERL_CURRENT_REGCHARCLASS_SHA256 = "0835206aca7975106fe3b2d5177a8b934ead853a9a2e7322ff471a94a04bd321";
+    static final String PERL_CURRENT_REGCHARCLASS_GENERATOR_SHA256 = "cf707f1b19b018e6cf8a3e2228f3448ec31b20843d89e388beb471e809d0b5f5";
 
     static final int FULL_MAPPING_COUNT = 1606;
     static final int FULL_CODE_POINT_COUNT = 1727;

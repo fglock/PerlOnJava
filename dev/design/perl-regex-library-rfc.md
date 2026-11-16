@@ -25,26 +25,40 @@ fork internals as the Java API. Engine fixes remain in PerlOnJava until a later
 review establishes a shared source-of-truth repository and upgrade gates for
 both consumers.
 
-The following Phase 1 questions remain release blockers:
+The following Phase 1 decisions are now recorded; the validation items remain
+release blockers for a standalone artifact:
 
-- Pin the exact Perl compatibility and Unicode data versions together. The
-  runtime version alone does not establish which Unicode data snapshot defines
-  every regex property.
+- **Compatibility target:** track the current Perl blead checkout at `perl5/`,
+  with each data refresh pinned to its exact commit. At this RFC snapshot that
+  is Perl 5.45.5, commit
+  `29974cc644cdca03cbdc4d603b6965b0427934bf`, with Unicode 18.0.0. The runtime
+  release version remains 5.44.1; this does not make the whole runtime claim
+  blead compatibility. Each independently sourced data family must retain its
+  own version and provenance.
 - Complete a source-by-source license and generated-data provenance audit for
   Joni, JCodings, ICU, aliases, named characters, and their generators.
-- Decide public byte and Unicode input types, offset units, flag behavior,
-  replacement/split scope, structured diagnostics, and concurrency contracts.
+- **Initial API recommendation:** immutable compiled data-only patterns and
+  stateful matchers, with explicit Unicode `String` and byte-array inputs,
+  offsets in the corresponding input units, and explicit Perl flags. Keep
+  replacement and split, structured diagnostics, and concurrency guarantees
+  outside the initial contract until their semantics and retention behavior
+  are specified. Do not expose Joni classes. Perl code and host callbacks are
+  excluded from the default artifact; any later callout tier needs a separate
+  opt-in contract.
 - Measure the extracted artifact's dependency closure and resource controls;
   the current runtime's backtracking behavior does not yet prove enforceable
   standalone matching limits or cancellation.
 - Validate the dependency boundary with a clean external Java consumer and
   differential, concurrency, cancellation, and packaging tests.
 
-The issue's proposed Java audience and use cases are hypotheses; no external
-consumer validation or market evidence is recorded yet. The existing PerlOnJava
-unit/core corpus is useful engine evidence, but does not satisfy the standalone
-artifact release gate. Phase 1 remains in progress until the blockers above are
-resolved and the extraction cost and maintenance obligation are accepted.
+No external consumer validation or market evidence is recorded yet, so the
+audience and use cases remain hypotheses. Success for Phase 1 is a reviewed
+compatibility target, API boundary, dependency/license/provenance inventory,
+and an explicit extraction recommendation. Success for an implementation
+release additionally requires a clean external Java consumer, measured
+dependency closure, differential and concurrency coverage, and enforceable
+resource/cancellation behavior. The existing PerlOnJava unit/core corpus is
+useful engine evidence, but does not satisfy that standalone release gate.
 
 ## Extraction Boundary Audit — 2026-11-16
 
@@ -56,7 +70,7 @@ This is an initial source and packaging audit, not release approval:
 | Encoding | The build resolves JCodings 1.0.64 as a separate dependency. The adapter has a Perl-specific wide-scalar codec and byte/Unicode conversion paths. | JCodings is part of the minimal engine closure; Perl byte and scalar conversion behavior needs a runtime-neutral replacement or a justified extracted module. |
 | Property resolution | `UnicodeResolver` and generated data classes use ICU4J 78.3 (`UnicodeSet`, `UCharacter`, and `UProperty`). The root build has ICU4J on the application classpath. | Do not treat generated alias tables as a replacement for ICU. A standalone dependency boundary must decide which ICU-backed resolution behavior remains. |
 | Perl integration | `JoniRegexPattern` directly imports `WarnDie`, `PerlUtfString`, named-character expansion types, and Perl runtime types. `RuntimeRegex` supplies dynamic patterns, callbacks, warning handling, captures, and alarm integration. | The adapter cannot move unchanged into a data-only library. Callback and Perl execution paths must be split from a smaller core boundary. |
-| Unicode provenance | The generator manifest selects Perl 5.45.3 at commit `876f5f0999e8daa0b71343ec5da3835d874c838a` and UCD 18.0.0. Some generated data has distinct provenance, including named sequences at UCD 17.0.0 and Bidi inputs named for UCD 17.0.0. The application version remains 5.44.1. | “Perl-compatible” is not yet a single versioned data contract. Map every generated/runtime property family to its Perl and UCD source before choosing a public compatibility target. |
+| Unicode provenance | The generator manifest selects the current `perl5/` blead checkout, Perl 5.45.5 at commit `29974cc644cdca03cbdc4d603b6965b0427934bf`, and UCD 18.0.0. Some generated data has distinct provenance, including named sequences at UCD 17.0.0 and Bidi inputs named for UCD 17.0.0. The case-fold table also has an independently pinned Perl-source baseline, whose refresh is gated by an existing exact-provenance regression test. The application version remains 5.44.1. | Track blead for generated aliases and properties while preserving each data family's explicit source pin. “Perl-compatible” still requires family-by-family version/provenance documentation; the application runtime is not itself a blead release. |
 | Licensing | The fork notice records upstream Joni MIT provenance; JCodings carries its own retained license file; PerlOnJava source is dual GPL/Artistic; generated Unicode sources retain Unicode notices. The generated SBOM records ICU4J's Unicode license URL. | These top-level records identify the audit scope but do not replace a file-by-file source, generator, and redistribution review. No relicensing conclusion is made. |
 | Resource limits | Joni exposes interruptible matching and an internal match-stack cap; the Perl runtime wraps alarm matching in a worker executor and cancels its future on timeout. | These mechanisms are evidence for possible controls, not yet proof of a public API's cancellation, per-match limits, or worker termination contract. Standalone limits need adversarial tests at the library boundary. |
 

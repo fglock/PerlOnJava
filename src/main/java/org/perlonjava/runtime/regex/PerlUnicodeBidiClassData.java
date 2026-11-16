@@ -1,6 +1,6 @@
 /*
  * Generated from hash-verified Unicode Character Database sources in the
- * selected current Perl 5.45.3 checkout. Do not edit manually.
+ * selected current Perl 5.45.5 checkout. Do not edit manually.
  *
  * Source: DerivedBidiClass-17.0.0.txt
  * © 2026 Unicode®, Inc.
