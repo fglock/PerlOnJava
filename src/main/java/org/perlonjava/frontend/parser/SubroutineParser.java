@@ -907,7 +907,8 @@ public class SubroutineParser {
                 codeRefNode.setAnnotation("parseTimeCodeRef", parseTimeCodeRef);
                 if (codeRefNode.getBooleanAnnotation("directNamedCall")
                         && parseTimeCodeRef.type == RuntimeScalarType.CODE
-                        && parseTimeCodeRef.value instanceof RuntimeCode) {
+                        && parseTimeCodeRef.value instanceof RuntimeCode parseTimeCode
+                        && parseTimeCode.defined()) {
                     // A generated closure may be emitted after compile-time
                     // namespace cleanup has removed this imported CV's stash
                     // entry. Keep the parse-time target owned until its
