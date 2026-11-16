@@ -66,6 +66,37 @@ including `RuntimeRegex` or the Perl compiler. Until that experiment exists,
 artifact size, external-consumer usability, and effective public resource
 controls remain unverified.
 
+## Engine Gate Review — 2026-11-16
+
+The engine prerequisites in the Release Prerequisites section have been
+reviewed against the merged implementation work:
+
+- **Production matcher and backend routing: satisfied.** The regex
+  implementation design identifies Joni as the sole production matcher.
+  Remaining `java.util.regex.Pattern` uses in `RuntimeRegex` parse Perl source
+  metadata and diagnostics; user-pattern matching goes through
+  `JoniRegexPattern` and `RegexMatcher`.
+- **Migration cleanup and parity: satisfied by the recorded merged gates.**
+  [PR #1095](https://github.com/fglock/PerlOnJava/pull/1095) records the full
+  Perl comparison, JVM/interpreter regex corpus and stress results, warmed
+  performance comparison, packaging and provenance checks, and Ubuntu/Windows
+  CI. [PR #1101](https://github.com/fglock/PerlOnJava/pull/1101) records the
+  final release `make`, bundled-module, platform, and bounded regex stress
+  gates. Both PRs are merged.
+- **Standalone packaging and API boundary: still open.** The existing public
+  `RegexMatcher` interface is backend-neutral, but it lives in the runtime
+  package and is created by `RuntimeRegex` with `RuntimeScalar` and Perl
+  callback state. The underlying `JoniRegexPattern` directly imports Perl
+  warning, scalar-conversion, named-character, and runtime types. This is a
+  useful starting seam, not evidence that an external consumer can compile or
+  match without the Perl runtime.
+
+The next extraction experiment should preserve the completed matcher and
+parity gates while separating a runtime-neutral compile/match context from the
+Perl-specific services. The remaining design choices in this RFC and the
+requested single-PR versus separate-repository scope must be settled before
+the standalone artifact can be implemented and validated.
+
 ## Summary
 
 After the full Joni migration is complete, PerlOnJava could publish its regex
