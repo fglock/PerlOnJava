@@ -155,6 +155,20 @@ public class Variable {
             }
         }
 
+        // `%;` is Perl's punctuation-named hash. In a reference operand,
+        // expression parsing otherwise treats the semicolon as an attempted
+        // variable name and strict-vars validation rejects it. Keep this
+        // spelling on the ordinary global-hash path, which is also used by
+        // `%!`, `%+`, and similar punctuation variables.
+        if (sigil.equals("%") && nextNonWsToken.type == LexerTokenType.OPERATOR
+                && nextNonWsToken.text.equals(";") && nextNonWsIndex == parser.tokenIndex) {
+            parser.tokenIndex++;
+            String fullName = NameNormalizer.normalizeVariableName(";",
+                    parser.ctx.symbolTable.getCurrentPackage());
+            GlobalVariable.declareGlobalHash(fullName);
+            return new OperatorNode("%", new IdentifierNode(";", parser.tokenIndex), parser.tokenIndex);
+        }
+
         // Special case 3: ${...}, @{...}, %{...} - braced variable forms
         // PRE-CHECK: If next token is '{', skip identifier parsing and go directly to parseBracedVariable
         // This avoids backtracking and heredoc processing issues
@@ -1254,6 +1268,21 @@ public class Variable {
         if (TokenUtils.peek(parser).text.equals("}")) {
             TokenUtils.consume(parser); // Consume the '}'
             return new OperatorNode(sigil, new StringNode("", parser.tokenIndex), parser.tokenIndex);
+        }
+
+        // In `%{; EXPR}`, the semicolon disambiguates the braces as a
+        // dereference operand rather than `%;{...}` (the punctuation hash
+        // followed by a hash subscript). Parse the expression after the
+        // separator directly, preserving the hashref value for assignment.
+        if ("%".equals(sigil) && TokenUtils.peek(parser).text.equals(";")) {
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, ";");
+            Node expression = parser.parseExpression(0);
+            if (!TokenUtils.peek(parser).text.equals("}")) {
+                throw new PerlCompilerException(parser.tokenIndex,
+                        "Missing closing brace in variable interpolation", parser.ctx.errorUtil);
+            }
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+            return new OperatorNode(sigil, expression, parser.tokenIndex);
         }
 
         // *{EXPR}: either a glob NAME (`*{P2::ISA}`) or a full expression (`*{ qualify $_[0], ... }`).
