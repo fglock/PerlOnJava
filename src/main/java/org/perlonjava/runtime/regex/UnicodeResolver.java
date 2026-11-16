@@ -2409,14 +2409,9 @@ public class UnicodeResolver {
         for (int index = 0;
                 index < PerlUnicodeIndicCategoryData.valueCount(propertyName);
                 index++) {
-            String shortValue = PerlUnicodeIndicCategoryData.shortValue(
+            String[] aliases = PerlUnicodeIndicCategoryData.wildcardAliases(
                     propertyName, index);
-            String canonicalValue = PerlUnicodeIndicCategoryData.canonicalValue(
-                    propertyName, index);
-            if (!matchesPerlUnicodePropertyWildcard(
-                    wildcard, shortValue, canonicalValue)) {
-                continue;
-            }
+            if (!matchesPerlUnicodePropertyWildcard(wildcard, aliases)) continue;
             matched = true;
             result.addAll(PerlUnicodeIndicCategoryData.valueSet(
                     propertyName, index));

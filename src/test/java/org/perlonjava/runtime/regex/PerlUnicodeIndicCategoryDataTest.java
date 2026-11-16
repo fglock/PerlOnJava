@@ -95,6 +95,28 @@ class PerlUnicodeIndicCategoryDataTest {
         assertFalse(contains(positional.ranges, 'A'));
     }
 
+    @Test
+    void everyGeneratedValueAliasWorksAsAnAnchoredWildcard() {
+        for (String property : new String[] {"InSC", "InPC"}) {
+            for (int index = 0;
+                    index < PerlUnicodeIndicCategoryData.valueCount(property);
+                    index++) {
+                UnicodeSet expected = PerlUnicodeIndicCategoryData.valueSet(property, index);
+                String[] aliases = PerlUnicodeIndicCategoryData.wildcardAliases(
+                        property, index);
+                assertTrue(aliases.length > 0, property + " value " + index);
+                for (String alias : aliases) {
+                    CharacterPropertyResolver.Result result =
+                            UnicodeResolver.resolveJoniProperty(
+                                    property + "=:\\A" + alias + "\\z:", false);
+                    assertNotNull(result, property + " wildcard " + alias);
+                    assertEquals(expected, toUnicodeSet(result.ranges),
+                            property + " wildcard " + alias);
+                }
+            }
+        }
+    }
+
     private static void assertPartition(String property) {
         String[] values = PerlUnicodeIndicCategoryData.canonicalValues(property);
         UnicodeSet union = new UnicodeSet();
@@ -119,5 +141,15 @@ class PerlUnicodeIndicCategoryDataTest {
             if (ranges[i] <= codePoint && codePoint <= ranges[i + 1]) return true;
         }
         return false;
+    }
+
+    private static UnicodeSet toUnicodeSet(int[] ranges) {
+        UnicodeSet set = new UnicodeSet();
+        if (ranges != null) {
+            for (int index = 1; index + 1 < ranges.length; index += 2) {
+                set.add(ranges[index], ranges[index + 1]);
+            }
+        }
+        return set.freeze();
     }
 }

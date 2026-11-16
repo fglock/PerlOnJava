@@ -101,7 +101,7 @@
          "generator" : "dev/regex/tools/generate_perl_unicode_indic_category_data.pl",
          "name" : "indic-category",
          "output" : "src/main/java/org/perlonjava/runtime/regex/PerlUnicodeIndicCategoryData.java",
-         "output_sha256" : "17334b851054d1dd6a837135a6d3ef79c9e9e815cb322289aaf014c37abf41a9",
+         "output_sha256" : "a50722d3d36c468f7028a65543909b1fea0cad04d91a0e669a6d8af37f4cfe51",
          "sources" : {
             "IndicPositionalCategory.txt" : "c9ad44d267c317ee0e1ec66cbd4d15033c2964f905d11fc8905915f9a5a9ae52",
             "IndicSyllabicCategory.txt" : "a2b3aacf6b3e7bad4ca351ef985d9543825e20280ff280c25f646d9bc4ce304c"
