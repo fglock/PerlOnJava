@@ -207,9 +207,11 @@ public class BytecodeInterpreter {
      * @return RuntimeList containing the result (may be RuntimeControlFlowList)
      */
     public static RuntimeList execute(InterpretedCode code, RuntimeArray args, int callContext, String subroutineName) {
-        RuntimeBase[] registers = code.getRegisters();
-        SuspendedInterpreterFrame frame = new SuspendedInterpreterFrame(
-                code, registers, callContext, subroutineName);
+        // R46: borrow a pre-allocated frame from the per-code, per-thread pool.
+        // The pool holds only non-suspended frames; async frames stay owned by
+        // InterpreterSuspension and are never returned here.
+        SuspendedInterpreterFrame frame = code.acquireFrame(callContext, subroutineName);
+        RuntimeBase[] registers = frame.registers;
 
         // Initialize special registers (same as compiler).
         registers[0] = code;
@@ -218,7 +220,15 @@ public class BytecodeInterpreter {
         if (code.capturedVars != null && code.capturedVars.length > 0) {
             System.arraycopy(code.capturedVars, 0, registers, 3, code.capturedVars.length);
         }
-        return execute(frame);
+        try {
+            return execute(frame);
+        } finally {
+            // Return to pool only if the frame completed without suspending.
+            // Suspended frames are handed to InterpreterSuspension and must stay alive.
+            if (!frame.suspended) {
+                code.releaseFrame(frame);
+            }
+        }
     }
 
     /** Resume a heap-owned interpreter frame after an await callback. */

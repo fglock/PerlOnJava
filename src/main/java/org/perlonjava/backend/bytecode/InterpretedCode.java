@@ -6,6 +6,7 @@ import org.perlonjava.runtime.WarningBitsRegistry;
 import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.runtimetypes.*;
 
+import java.util.Arrays;
 import java.util.BitSet;
 import java.util.List;
 import java.util.Map;
@@ -101,6 +102,63 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
     // Pre-created InterpreterFrame to avoid allocation on every call
     // Created lazily on first use (after packageName/subName are set)
     public volatile InterpreterState.InterpreterFrame cachedFrame;
+
+    // R46: per-thread frame pool — one reusable SuspendedInterpreterFrame per code object per thread.
+    // Holds a frame whose registers array is already the right size and has been cleared.
+    // Only non-suspended, freshly-entered frames are ever returned here; resumed async
+    // frames are excluded by design (BytecodeInterpreter.execute(code,args,…) controls the lifecycle).
+    private final ThreadLocal<SuspendedInterpreterFrame> framePool = new ThreadLocal<>();
+
+    /**
+     * Borrow a frame from the per-thread pool, or allocate a fresh one.
+     * The caller must initialize registers[0..2] and capturedVars before dispatching.
+     */
+    SuspendedInterpreterFrame acquireFrame(int callContext, String subroutineName) {
+        SuspendedInterpreterFrame frame = framePool.get();
+        if (frame != null) {
+            framePool.remove();
+            frame.callContext = callContext;
+            frame.subroutineName = subroutineName;
+            return frame;
+        }
+        return new SuspendedInterpreterFrame(this, new RuntimeBase[maxRegisters], callContext, subroutineName);
+    }
+
+    /**
+     * Return a completed (non-suspended) frame to the pool for reuse.
+     * Clears all registers and resets all runtime state so the next borrower
+     * sees a pristine frame.  Must NOT be called for frames that suspended
+     * (those are owned by InterpreterSuspension and managed by FutureAsyncAwaitRuntime).
+     */
+    void releaseFrame(SuspendedInterpreterFrame frame) {
+        Arrays.fill(frame.registers, null);
+        // Reset scalar fields that execute() may have modified.
+        frame.pc = 0;
+        frame.virtualEvalFrameDepth = 0;
+        frame.propagatingException = null;
+        frame.resumeException = null;
+        frame.returnedClosures = null;
+        frame.suspended = false;
+        frame.suspendedRegexState = null;
+        frame.suspendedPackage = null;
+        frame.suspendedRuntimeWarningBits = null;
+        frame.suspendedRuntimeDisabledWarningCategories = null;
+        // Lazy collections: already null on the hot path; clear defensively for correctness.
+        frame.evalCatchStack = null;
+        frame.evalCallerFrameStack = null;
+        frame.evalControlBlockDepthStack = null;
+        frame.evalLocalLevelStack = null;
+        frame.evalBaseRegStack = null;
+        frame.evalMethodInvocantHoldDepthStack = null;
+        frame.scopeCleanupBatches = null;
+        frame.labeledBlockStack = null;
+        frame.controlBlockStack = null;
+        frame.regexStateStack = null;
+        frame.createdClosures = null;
+        frame.methodInvocantHolds = null;
+        frame.suspendedDynamicStates = null;
+        framePool.set(frame);
+    }
 
     /**
      * Allocate a fresh register array for execution.

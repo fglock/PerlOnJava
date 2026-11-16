@@ -21,8 +21,9 @@ import java.util.List;
 public final class SuspendedInterpreterFrame {
     final InterpretedCode code;
     final RuntimeBase[] registers;
-    final int callContext;
-    final String subroutineName;
+    // R46: non-final so the frame can be reset and reused from the per-code pool.
+    int callContext;
+    String subroutineName;
 
     int pc;
     int virtualEvalFrameDepth;
