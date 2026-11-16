@@ -497,7 +497,9 @@ public class RuntimeGraphCloner {
         target.lexicalSubDisplayName = source.lexicalSubDisplayName;
         target.isConstantCv = source.isConstantCv;
         target.isLexicalConstantCv = source.isLexicalConstantCv;
-        RuntimeCode.copyPadConstantTree(source, target, this::cloneRuntimeBases);
+        try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
+            RuntimeCode.copyPadConstantTree(source, target, this::cloneRuntimeBases);
+        }
         target.stashInstallPackage = source.stashInstallPackage;
         target.stashInstallSub = source.stashInstallSub;
         target.hadStashRef = source.hadStashRef;
@@ -1008,6 +1010,7 @@ public class RuntimeGraphCloner {
         target.lexicalSubPackageCodeDefinedAtDeclaration =
                 source.lexicalSubPackageCodeDefinedAtDeclaration;
         target.ioOwnerSlot = null;
+        target.copyCompiledDirectCallSiteMetadataFrom(source);
     }
 
     private void copyBase(RuntimeBase source, RuntimeBase target) {
