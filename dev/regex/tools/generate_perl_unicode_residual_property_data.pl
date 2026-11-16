@@ -78,13 +78,17 @@ for my $line (split /\n/, $text{'PropValueAliases.txt'}) {
     push @{$spec->{values}}, $field[2];
     push @{$spec->{short_values}}, $field[1];
     my $index = $#{$spec->{values}};
-    $spec->{value_alias}{loose_name($_)} = $index for grep { length } @field[1 .. $#field];
+    for my $alias (grep { length } @field[1 .. $#field]) {
+        $spec->{value_alias}{loose_name($alias)} = $index;
+        $spec->{wildcard_alias}{$alias} = $index;
+    }
 }
 for my $key (qw(IDTYPE KEHCORE)) {
     my $spec = $property{$key};
     $spec->{short_values} = [@{$spec->{values}}];
     for my $index (0 .. $#{$spec->{values}}) {
         $spec->{value_alias}{loose_name($spec->{values}[$index])} = $index;
+        $spec->{wildcard_alias}{$spec->{values}[$index]} = $index;
     }
 }
 for my $spec (values %property) {
@@ -200,12 +204,16 @@ sub emit_property {
     my ($key) = @_;
     my $spec = $property{$key};
     my @value_alias = sort keys %{$spec->{value_alias}};
+    my @wildcard_alias = sort keys %{$spec->{wildcard_alias}};
     my @property_alias = sort keys %{$spec->{property_alias}};
     emit_strings("${key}_VALUES", $spec->{values});
     emit_strings("${key}_SHORT_VALUES", $spec->{short_values});
     emit_strings("${key}_VALUE_ALIASES", \@value_alias);
     print "    private static final byte[] ${key}_VALUE_ALIAS_INDEX = {\n        ",
         join(', ', map { $spec->{value_alias}{$_} } @value_alias), "\n    };\n";
+    emit_strings("${key}_WILDCARD_ALIASES", \@wildcard_alias);
+    print "    private static final byte[] ${key}_WILDCARD_ALIAS_INDEX = {\n        ",
+        join(', ', map { $spec->{wildcard_alias}{$_} } @wildcard_alias), "\n    };\n";
     emit_strings("${key}_PROPERTY_ALIASES", \@property_alias);
     for my $index (0 .. $#{$spec->{ranges}}) {
         my $ranges = $spec->{ranges}[$index];
@@ -220,6 +228,7 @@ sub emit_property {
     print "    private static final Property $key = new Property(\n",
         "            ${key}_VALUES, ${key}_SHORT_VALUES,\n",
         "            ${key}_VALUE_ALIASES, ${key}_VALUE_ALIAS_INDEX,\n",
+        "            ${key}_WILDCARD_ALIASES, ${key}_WILDCARD_ALIAS_INDEX,\n",
         "            ${key}_PROPERTY_ALIASES, ${key}_RANGES);\n\n";
 }
 
@@ -281,6 +290,10 @@ print <<'JAVA';
         Property property = property(propertyAlias);
         return property == null ? null : property.valueSet(valueAlias);
     }
+    static UnicodeSet valueSet(String propertyAlias, int index) {
+        Property property = property(propertyAlias);
+        return property == null ? null : property.valueSet(index);
+    }
     static int valueCount(String propertyAlias) {
         Property property = property(propertyAlias);
         return property == null ? 0 : property.values.length;
@@ -303,6 +316,10 @@ print <<'JAVA';
             }
         }
         return aliases.toArray(new String[0]);
+    }
+    static String[] wildcardAliases(String propertyAlias, int index) {
+        Property property = property(propertyAlias);
+        return property == null ? new String[0] : property.wildcardAliases(index);
     }
     private static Property property(String alias) {
         String loose = loose(alias);
@@ -332,16 +349,21 @@ print <<'JAVA';
         private final String[] shortValues;
         private final String[] valueAliases;
         private final byte[] valueAliasIndex;
+        private final String[] wildcardAliases;
+        private final byte[] wildcardAliasIndex;
         private final String[] propertyAliases;
         private final int[][] ranges;
         private final UnicodeSet[] sets;
         private Property(String[] values, String[] shortValues,
                 String[] valueAliases, byte[] valueAliasIndex,
+                String[] wildcardAliases, byte[] wildcardAliasIndex,
                 String[] propertyAliases, int[][] ranges) {
             this.values = values;
             this.shortValues = shortValues;
             this.valueAliases = valueAliases;
             this.valueAliasIndex = valueAliasIndex;
+            this.wildcardAliases = wildcardAliases;
+            this.wildcardAliasIndex = wildcardAliasIndex;
             this.propertyAliases = propertyAliases;
             this.ranges = ranges;
             this.sets = new UnicodeSet[values.length];
@@ -349,10 +371,21 @@ print <<'JAVA';
         private boolean hasAlias(String alias) {
             return java.util.Arrays.binarySearch(propertyAliases, alias) >= 0;
         }
+        private String[] wildcardAliases(int index) {
+            java.util.ArrayList<String> aliases = new java.util.ArrayList<>();
+            for (int aliasIndex = 0; aliasIndex < wildcardAliases.length; aliasIndex++) {
+                if (wildcardAliasIndex[aliasIndex] == index) {
+                    aliases.add(wildcardAliases[aliasIndex]);
+                }
+            }
+            return aliases.toArray(new String[0]);
+        }
         private UnicodeSet valueSet(String alias) {
             int found = java.util.Arrays.binarySearch(valueAliases, loose(alias));
             if (found < 0) return null;
-            int index = valueAliasIndex[found];
+            return valueSet(valueAliasIndex[found]);
+        }
+        private UnicodeSet valueSet(int index) {
             UnicodeSet result = sets[index];
             if (result == null) sets[index] = result = buildSet(ranges[index]);
             return result;

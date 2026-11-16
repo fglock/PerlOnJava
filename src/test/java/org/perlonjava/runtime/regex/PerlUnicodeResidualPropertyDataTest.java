@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.regex;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -47,6 +48,17 @@ class PerlUnicodeResidualPropertyDataTest {
                                             property, value)),
                             property + " alias " + alias);
                 }
+                String[] wildcardAliases = PerlUnicodeResidualPropertyData.wildcardAliases(
+                        property, index);
+                assertTrue(wildcardAliases.length > 0, property + "=" + value);
+                for (String alias : wildcardAliases) {
+                    CharacterPropertyResolver.Result wildcard =
+                            UnicodeResolver.resolveJoniProperty(
+                                    property + "=:\\A" + alias + "\\z:", false);
+                    assertNotNull(wildcard, property + " wildcard " + alias);
+                    assertEquals(PerlUnicodeResidualPropertyData.valueSet(property, index),
+                            toUnicodeSet(wildcard.ranges), property + " wildcard " + alias);
+                }
             }
         }
     }
@@ -75,5 +87,15 @@ class PerlUnicodeResidualPropertyDataTest {
             if (ranges[index] <= codePoint && codePoint <= ranges[index + 1]) return true;
         }
         return false;
+    }
+
+    private static com.ibm.icu.text.UnicodeSet toUnicodeSet(int[] ranges) {
+        com.ibm.icu.text.UnicodeSet set = new com.ibm.icu.text.UnicodeSet();
+        if (ranges != null) {
+            for (int index = 1; index + 1 < ranges.length; index += 2) {
+                set.add(ranges[index], ranges[index + 1]);
+            }
+        }
+        return set.freeze();
     }
 }

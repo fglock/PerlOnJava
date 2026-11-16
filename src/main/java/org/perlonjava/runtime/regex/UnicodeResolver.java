@@ -2456,29 +2456,17 @@ public class UnicodeResolver {
         for (int index = 0;
                 index < PerlUnicodeResidualPropertyData.valueCount(propertyName);
                 index++) {
-            String value = PerlUnicodeResidualPropertyData.value(propertyName, index);
-            String shortValue =
-                    PerlUnicodeResidualPropertyData.shortValue(propertyName, index);
-            String[] aliases = PerlUnicodeResidualPropertyData.valueAliases(
+            String[] aliases = PerlUnicodeResidualPropertyData.wildcardAliases(
                     propertyName, index);
-            if (!matchesPerlUnicodePropertyWildcard(
-                    wildcard, concatAliases(aliases, shortValue, value))) continue;
+            if (!matchesPerlUnicodePropertyWildcard(wildcard, aliases)) continue;
             matched = true;
-            result.addAll(PerlUnicodeResidualPropertyData.valueSet(propertyName, value));
+            result.addAll(PerlUnicodeResidualPropertyData.valueSet(propertyName, index));
         }
         if (!matched) {
             throw new IllegalArgumentException(
                     "No Unicode property value wildcard matches " + propertyName.trim());
         }
         return new PerlUnicodePropertyWildcard(result.freeze(), null, false);
-    }
-
-    private static String[] concatAliases(
-            String[] aliases, String shortValue, String canonicalValue) {
-        String[] result = java.util.Arrays.copyOf(aliases, aliases.length + 2);
-        result[aliases.length] = shortValue;
-        result[aliases.length + 1] = canonicalValue;
-        return result;
     }
 
     private static PerlUnicodePropertyWildcard resolvePerlBinaryPropertyWildcard(

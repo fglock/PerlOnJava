@@ -161,7 +161,7 @@
          "generator" : "dev/regex/tools/generate_perl_unicode_residual_property_data.pl",
          "name" : "residual-property",
          "output" : "src/main/java/org/perlonjava/runtime/regex/PerlUnicodeResidualPropertyData.java",
-         "output_sha256" : "38f21c5a209576f62bd98e233577d860398c37f0c07dd1c039b264e82aae3729",
+         "output_sha256" : "869a193aef089086a21492dc4be56c48b66b8dd618be691cee6fca02311b14f1",
          "sources" : {
             "DCoreProperties.txt" : "09c928886a178fcafd93c29e4bd59073a058e5a100b716d425cb563ab50f68c9",
             "IdType.txt" : "fa24851acc669e58670e354e7b98a4ec8f52a809ec4f80524b6a60efdb868831",
