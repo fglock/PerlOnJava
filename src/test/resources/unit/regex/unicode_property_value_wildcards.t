@@ -87,6 +87,9 @@ my %generated_perl_values = (
     bc                  => [[qw(al Arabic_Letter)]],
     ea                  => [[qw(a Ambiguous)], [qw(f Fullwidth)]],
     ccc                 => [[qw(Above 230)], [qw(ATBL Attached_Below)]],
+    vo                  => [[qw(R Rotated)], [qw(Tr Transformed_Rotated)],
+                             [qw(Tu Transformed_Upright)], [qw(U Upright)]],
+    Age                 => [[qw(V15_1 15.1)]],
     InSC                => [[qw(Vowel_Dependent)]],
     InPC                => [[qw(NA)]],
     GCB                 => [[qw(Extend)]],
@@ -103,6 +106,8 @@ for my $property (sort keys %generated_perl_values) {
             "generated $property alias $alias");
     }
 }
+same_membership('Age=:\\ANA\\z:', 'Age=Unassigned',
+        'generated Age unassigned aliases');
 
 for my $property (sort keys %enumerated_values) {
     for my $value (@{$enumerated_values{$property}}) {

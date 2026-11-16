@@ -4,9 +4,18 @@
          "generator" : "dev/regex/tools/generate_perl_unicode_age_data.pl",
          "name" : "age",
          "output" : "src/main/java/org/perlonjava/runtime/regex/PerlUnicodeAgeData.java",
-         "output_sha256" : "ab1df8e489bb10af1bb1f18e80dab1d9e8a3245b713e6f63d979d4f58d6624c6",
+         "output_sha256" : "8dc7efc3ec13c15568ab35fcde1c74d8dc5fdf8914513e5999fe13e87e197663",
          "sources" : {
             "DAge.txt" : "58b04334e3a31f9612694bbc3f6bff4a302b7d424565bca9c47e30aa74f8dbac"
+         }
+      },
+      {
+         "generator" : "dev/regex/tools/generate_perl_unicode_vertical_orientation_data.pl",
+         "name" : "vertical-orientation",
+         "output" : "src/main/java/org/perlonjava/runtime/regex/PerlUnicodeVerticalOrientationData.java",
+         "output_sha256" : "3265dcf818e0c8207239f76bf0694dd407fb11f180402b85c343a0f4f8264206",
+         "sources" : {
+            "VerticalOrientation.txt" : "0803e09669d7aa7137de678e55b848bd418c6632694fa1b05f0b40941103c748"
          }
       },
       {

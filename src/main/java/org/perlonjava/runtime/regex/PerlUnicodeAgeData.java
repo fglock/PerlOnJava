@@ -2,11 +2,16 @@
  * Generated from hash-verified Unicode Character Database sources in the
  * selected current Perl 5.45.3 checkout. Do not edit manually.
  *
- * Unicode data source copyright:
- * © 2025 Unicode®, Inc.
- * Unicode and the Unicode Logo are registered trademarks of Unicode, Inc. in
- * the U.S. and other countries.
+ * Source: DerivedAge-18.0.0.txt
+ * © 2026 Unicode®, Inc.
+ * Unicode and the Unicode Logo are registered trademarks of Unicode, Inc. in the U.S. and other countries.
  * For terms of use and license, see https://www.unicode.org/terms_of_use.html
+ *
+ * Source: PropertyValueAliases-18.0.0.txt
+ * © 2026 Unicode®, Inc.
+ * Unicode and the Unicode Logo are registered trademarks of Unicode, Inc. in the U.S. and other countries.
+ * For terms of use and license, see https://www.unicode.org/terms_of_use.html
+ *
  */
 package org.perlonjava.runtime.regex;
 
@@ -16,6 +21,23 @@ final class PerlUnicodeAgeData {
     static final String UNICODE_VERSION = "18.0.0";
     private static final String[] VERSIONS = {
         "1.1", "2.0", "2.1", "3.0", "3.1", "3.2", "4.0", "4.1", "5.0", "5.1", "5.2", "6.0", "6.1", "6.2", "6.3", "7.0", "8.0", "9.0", "10.0", "11.0", "12.0", "12.1", "13.0", "14.0", "15.0", "15.1", "16.0", "17.0", "18.0"
+    };
+
+    static final String PROP_VALUE_ALIASES_SHA256 = "06c4c8eaf7b0bf34abe73b113da1215bd784ac254d4c223600b90267caa4bbbd";
+    private static final String[] VALUE_ALIASES = {
+        "1.1", "10.0", "11.0", "12.0", "12.1", "13.0", "14.0", "15.0", "15.1", "16.0", "17.0", "18.0", "2.0", "2.1", "3.0", "3.1", "3.2", "4.0", "4.1", "5.0", "5.1", "5.2", "6.0", "6.1", "6.2", "6.3", "7.0", "8.0", "9.0", "v100", "v11", "v110", "v120", "v121", "v130", "v140", "v150", "v151", "v160", "v170", "v180", "v20", "v21", "v30", "v31", "v32", "v40", "v41", "v50", "v51", "v52", "v60", "v61", "v62", "v63", "v70", "v80", "v90"
+    };
+    private static final byte[] VALUE_ALIAS_INDEX = {
+        0, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 0, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17
+    };
+    private static final String[] WILDCARD_ALIASES = {
+        "1.1", "10.0", "11.0", "12.0", "12.1", "13.0", "14.0", "15.0", "15.1", "16.0", "17.0", "18.0", "2.0", "2.1", "3.0", "3.1", "3.2", "4.0", "4.1", "5.0", "5.1", "5.2", "6.0", "6.1", "6.2", "6.3", "7.0", "8.0", "9.0", "V10_0", "V11_0", "V12_0", "V12_1", "V13_0", "V14_0", "V15_0", "V15_1", "V16_0", "V17_0", "V18_0", "V1_1", "V2_0", "V2_1", "V3_0", "V3_1", "V3_2", "V4_0", "V4_1", "V5_0", "V5_1", "V5_2", "V6_0", "V6_1", "V6_2", "V6_3", "V7_0", "V8_0", "V9_0"
+    };
+    private static final byte[] WILDCARD_ALIAS_INDEX = {
+        0, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17
+    };
+    private static final String[] UNASSIGNED_ALIASES = {
+        "NA", "Unassigned"
     };
 
     private static final int[] RANGES = {
@@ -500,12 +522,50 @@ final class PerlUnicodeAgeData {
         return UNASSIGNED;
     }
 
+    static String canonicalVersion(String alias) {
+        int index = valueIndex(alias);
+        return index < 0 ? null : VERSIONS[index];
+    }
+
+    static String[] wildcardAliases(int index) {
+        if (index < 0 || index >= VERSIONS.length) return new String[0];
+        java.util.List<String> aliases = new java.util.ArrayList<>();
+        for (int i = 0; i < WILDCARD_ALIAS_INDEX.length; i++) {
+            if (WILDCARD_ALIAS_INDEX[i] == index) aliases.add(WILDCARD_ALIASES[i]);
+        }
+        return aliases.toArray(String[]::new);
+    }
+
+    static String[] unassignedAliases() {
+        return UNASSIGNED_ALIASES.clone();
+    }
+
     static int valueCount() {
         return VERSIONS.length;
     }
 
     static String versionAt(int index) {
         return VERSIONS[index];
+    }
+
+    private static int valueIndex(String alias) {
+        String loose = looseName(alias);
+        if (loose == null) return -1;
+        for (int i = 0; i < VALUE_ALIASES.length; i++) {
+            if (VALUE_ALIASES[i].equals(loose)) return VALUE_ALIAS_INDEX[i];
+        }
+        return -1;
+    }
+
+    private static String looseName(String name) {
+        if (name == null) return null;
+        StringBuilder loose = new StringBuilder(name.length());
+        for (int i = 0; i < name.length(); i++) {
+            char character = name.charAt(i);
+            if (character == '_' || character == '-' || Character.isWhitespace(character)) continue;
+            loose.append(Character.toLowerCase(character));
+        }
+        return loose.toString();
     }
 
     private static UnicodeSet[] buildExactSets() {
@@ -529,10 +589,7 @@ final class PerlUnicodeAgeData {
     }
 
     private static int versionIndex(String version) {
-        for (int i = 0; i < VERSIONS.length; i++) {
-            if (VERSIONS[i].equals(version)) return i;
-        }
-        return -1;
+        return valueIndex(version);
     }
 
     private PerlUnicodeAgeData() {

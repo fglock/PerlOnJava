@@ -45,28 +45,6 @@ public class UnicodeResolver {
             "combiningmark", "connectorpunctuation", "dashpunctuation",
             "decimalnumber", "modifiercombiningmark", "othernumber",
             "otherpunctuation", "spaceseparator", "unassigned");
-    private static final String[][] PERL_WORD_BREAK_WILDCARD_VALUES = {
-            {"CR"}, {"DQ", "Double_Quote"}, {"EB", "E_Base"},
-            {"EBG", "E_Base_GAZ"}, {"EM", "E_Modifier"},
-            {"EX", "ExtendNumLet"}, {"Extend"}, {"FO", "Format"},
-            {"GAZ", "Glue_After_Zwj"}, {"HL", "Hebrew_Letter"},
-            {"KA", "Katakana"}, {"LE", "ALetter"}, {"LF"},
-            {"MB", "MidNumLet"}, {"ML", "MidLetter"},
-            {"MN", "MidNum"}, {"NL", "Newline"}, {"NU", "Numeric"},
-            {"RI", "Regional_Indicator"}, {"SQ", "Single_Quote"},
-            {"WSegSpace"}, {"XX", "Other"}, {"ZWJ"}
-    };
-    private static final String[][] PERL_SENTENCE_BREAK_WILDCARD_VALUES = {
-            {"AT", "ATerm"}, {"CL", "Close"}, {"CR"},
-            {"EX", "Extend"}, {"FO", "Format"}, {"LE", "OLetter"},
-            {"LF"}, {"LO", "Lower"}, {"NU", "Numeric"},
-            {"SC", "SContinue"}, {"SE", "Sep"}, {"SP", "Sp"},
-            {"ST", "STerm"}, {"UP", "Upper"}, {"XX", "Other"}
-    };
-    private static final String[][] PERL_VERTICAL_ORIENTATION_WILDCARD_VALUES = {
-            {"R", "Rotated"}, {"Tr", "Transformed_Rotated"},
-            {"Tu", "Transformed_Upright"}, {"U", "Upright"}
-    };
     private static final UnicodeSet PERL_VERTICAL_SPACE_SET =
             buildPerlVerticalSpaceSet();
     private static final UnicodeSet PERL_HORIZONTAL_SPACE_SET =
@@ -1565,6 +1543,7 @@ public class UnicodeResolver {
                 || PerlUnicodeDecompositionTypeData.isPropertyAlias(name)
                 || PerlUnicodeEastAsianWidthData.isPropertyAlias(name)
                 || PerlUnicodeIndicCategoryData.isPropertyAlias(name)
+                || PerlUnicodeVerticalOrientationData.isPropertyAlias(name)
                 || PerlUnicodeResidualPropertyData.isPropertyAlias(name)) {
             caseFold = false;
         } else if (PerlUnicodeNumericValueData.isPropertyAlias(name)
@@ -2270,15 +2249,12 @@ public class UnicodeResolver {
                         property.substring(0, assignment))) {
             return null;
         }
-        return unicodePropertyValueSet(
-                UProperty.VERTICAL_ORIENTATION, property.substring(assignment + 1));
+        return PerlUnicodeVerticalOrientationData.valueSet(
+                property.substring(assignment + 1));
     }
 
     private static boolean isPerlVerticalOrientationProperty(String property) {
-        return switch (loosePropertyName(property)) {
-            case "vo", "verticalorientation" -> true;
-            default -> false;
-        };
+        return PerlUnicodeVerticalOrientationData.isPropertyAlias(property);
     }
 
     private static boolean isPerlVerticalOrientationDefault(String property) {
@@ -2288,9 +2264,8 @@ public class UnicodeResolver {
                         property.substring(0, assignment))) {
             return false;
         }
-        int value = unicodePropertyValue(
-                UProperty.VERTICAL_ORIENTATION, property.substring(assignment + 1));
-        return value >= 0 && value == unicodePropertyValue(UProperty.VERTICAL_ORIENTATION, "R");
+        return "Rotated".equals(PerlUnicodeVerticalOrientationData.canonicalValue(
+                property.substring(assignment + 1)));
     }
 
     private static Boolean perlBooleanPropertyValue(String value) {
@@ -2346,21 +2321,8 @@ public class UnicodeResolver {
         if (PerlUnicodeResidualPropertyData.isPropertyAlias(name)) {
             return resolvePerlResidualPropertyWildcard(name, wildcard);
         }
-        if (isPerlWordBreakProperty(name)) {
-            return resolvePerlEnumeratedPropertyWildcard(
-                    UProperty.WORD_BREAK, wildcard, "Word_Break",
-                    PERL_WORD_BREAK_WILDCARD_VALUES, false);
-        }
-        if (isPerlSentenceBreakProperty(name)) {
-            return resolvePerlEnumeratedPropertyWildcard(
-                    UProperty.SENTENCE_BREAK, wildcard, "Sentence_Break",
-                    PERL_SENTENCE_BREAK_WILDCARD_VALUES, false);
-        }
-        if (isPerlVerticalOrientationProperty(name)) {
-            return resolvePerlEnumeratedPropertyWildcard(
-                    UProperty.VERTICAL_ORIENTATION, wildcard,
-                    "Vertical_Orientation",
-                    PERL_VERTICAL_ORIENTATION_WILDCARD_VALUES, true);
+        if (PerlUnicodeVerticalOrientationData.isPropertyAlias(name)) {
+            return resolvePerlVerticalOrientationWildcard(wildcard);
         }
         return null;
     }
@@ -2464,6 +2426,30 @@ public class UnicodeResolver {
         return new PerlUnicodePropertyWildcard(result.freeze(), null, false);
     }
 
+    private static PerlUnicodePropertyWildcard resolvePerlVerticalOrientationWildcard(
+            PerlPropertyValueMatcher wildcard) {
+        UnicodeSet result = new UnicodeSet();
+        boolean matched = false;
+        boolean includesWideDefault = false;
+        String[] values = PerlUnicodeVerticalOrientationData.canonicalValues();
+        for (int index = 0; index < values.length; index++) {
+            String[] aliases = PerlUnicodeVerticalOrientationData.wildcardAliases(index);
+            if (!matchesPerlUnicodePropertyWildcard(wildcard, aliases)) continue;
+            matched = true;
+            result.addAll(PerlUnicodeVerticalOrientationData.valueSet(values[index]));
+            includesWideDefault |= "Rotated".equals(
+                    PerlUnicodeVerticalOrientationData.canonicalValue(aliases[0]));
+        }
+        if (!matched) {
+            throw new IllegalArgumentException(
+                    "No Unicode property value wildcard matches Vertical_Orientation");
+        }
+        long[] wideRanges = includesWideDefault
+                ? new long[] {1, 0x110000L, Long.MAX_VALUE}
+                : null;
+        return new PerlUnicodePropertyWildcard(result.freeze(), wideRanges, false);
+    }
+
     private static PerlUnicodePropertyWildcard resolvePerlBinaryPropertyWildcard(
             String propertyName, PerlPropertyValueMatcher wildcard) {
         boolean positive = matchesPerlUnicodePropertyWildcard(
@@ -2493,41 +2479,6 @@ public class UnicodeResolver {
                 : null;
         return new PerlUnicodePropertyWildcard(
                 result.freeze(), wideRanges, true);
-    }
-
-    private static PerlUnicodePropertyWildcard resolvePerlEnumeratedPropertyWildcard(
-            int property, PerlPropertyValueMatcher wildcard, String propertyName,
-            String[][] valueAliases, boolean wideDefaultRotated) {
-        UnicodeSet result = new UnicodeSet();
-        boolean matched = false;
-        boolean includesWideDefault = false;
-        for (String[] aliases : valueAliases) {
-            if (!matchesPerlUnicodePropertyWildcard(wildcard, aliases)) continue;
-            matched = true;
-
-            UnicodeSet valueSet = null;
-            for (String alias : aliases) {
-                valueSet = unicodePropertyValueSet(property, alias);
-                if (valueSet != null) break;
-            }
-            if (valueSet == null) {
-                throw new IllegalArgumentException(
-                        "Unsupported pinned " + propertyName + " value: "
-                                + aliases[0]);
-            }
-            result.addAll(valueSet);
-            includesWideDefault |= wideDefaultRotated
-                    && loosePropertyName(aliases[0]).equals("r");
-        }
-        if (!matched) {
-            throw new IllegalArgumentException(
-                    "No Unicode property value wildcard matches " + propertyName);
-        }
-        long[] wideRanges = includesWideDefault
-                ? new long[] {1, 0x110000L, Long.MAX_VALUE}
-                : null;
-        return new PerlUnicodePropertyWildcard(
-                result.freeze(), wideRanges, false);
     }
 
     private static PerlPropertyValueMatcher compilePerlUnicodePropertyWildcard(
@@ -3609,7 +3560,8 @@ public class UnicodeResolver {
         if (allowWildcard && isPerlAgeWildcard(value)) {
             return resolvePerlAgeWildcard(value, exact);
         }
-        String requested = normalizeUnicodeAgeVersion(value);
+        String requested = PerlUnicodeAgeData.canonicalVersion(value);
+        if (requested == null) requested = normalizeUnicodeAgeVersion(value);
         if (requested.equalsIgnoreCase("NA") || requested.equalsIgnoreCase("Unassigned")) {
             return PerlUnicodeAgeData.unassignedSet();
         }
@@ -3643,18 +3595,15 @@ public class UnicodeResolver {
         UnicodeSet result = new UnicodeSet();
         for (int index = 0; index < PerlUnicodeAgeData.valueCount(); index++) {
             String version = PerlUnicodeAgeData.versionAt(index);
-            String compact = "v" + version.replace(".", "");
-            String longAlias = "V" + version.replace('.', '_');
-            if (wildcard.matchesPropertyValue(version)
-                    || wildcard.matchesPropertyValue(compact)
-                    || wildcard.matchesPropertyValue(longAlias)) {
+            if (matchesPerlUnicodePropertyWildcard(
+                    wildcard, PerlUnicodeAgeData.wildcardAliases(index))) {
                 result.addAll(exact
                         ? PerlUnicodeAgeData.exactSet(version)
                         : PerlUnicodeAgeData.cumulativeSet(version));
             }
         }
-        if (wildcard.matchesPropertyValue("NA")
-                || wildcard.matchesPropertyValue("Unassigned")) {
+        if (matchesPerlUnicodePropertyWildcard(
+                wildcard, PerlUnicodeAgeData.unassignedAliases())) {
             result.addAll(PerlUnicodeAgeData.unassignedSet());
         }
         if (result.isEmpty()) {
