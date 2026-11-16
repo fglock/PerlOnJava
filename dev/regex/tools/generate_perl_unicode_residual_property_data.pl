@@ -79,7 +79,14 @@ for my $line (split /\n/, $text{'PropValueAliases.txt'}) {
     push @{$spec->{short_values}}, $field[1];
     my $index = $#{$spec->{values}};
     for my $alias (grep { length } @field[1 .. $#field]) {
-        $spec->{value_alias}{loose_name($alias)} = $index;
+        my $loose = loose_name($alias);
+        die "$key value alias collision for '$alias'\n"
+            if exists $spec->{value_alias}{$loose}
+                && $spec->{value_alias}{$loose} != $index;
+        die "$key wildcard alias collision for '$alias'\n"
+            if exists $spec->{wildcard_alias}{$alias}
+                && $spec->{wildcard_alias}{$alias} != $index;
+        $spec->{value_alias}{$loose} = $index;
         $spec->{wildcard_alias}{$alias} = $index;
     }
 }
@@ -87,8 +94,16 @@ for my $key (qw(IDTYPE KEHCORE)) {
     my $spec = $property{$key};
     $spec->{short_values} = [@{$spec->{values}}];
     for my $index (0 .. $#{$spec->{values}}) {
-        $spec->{value_alias}{loose_name($spec->{values}[$index])} = $index;
-        $spec->{wildcard_alias}{$spec->{values}[$index]} = $index;
+        my $value = $spec->{values}[$index];
+        my $loose = loose_name($value);
+        die "$key value alias collision for '$value'\n"
+            if exists $spec->{value_alias}{$loose}
+                && $spec->{value_alias}{$loose} != $index;
+        die "$key wildcard alias collision for '$value'\n"
+            if exists $spec->{wildcard_alias}{$value}
+                && $spec->{wildcard_alias}{$value} != $index;
+        $spec->{value_alias}{$loose} = $index;
+        $spec->{wildcard_alias}{$value} = $index;
     }
 }
 for my $spec (values %property) {
@@ -99,6 +114,20 @@ for my $spec (values %property) {
     die "Missing default $spec->{default}\n" unless defined $default;
     $spec->{default_index} = $default;
     $spec->{ranges} = [map { [] } @{$spec->{values}}];
+    for my $index (0 .. $#{$spec->{values}}) {
+        my $value = $spec->{values}[$index];
+        my @wildcard_aliases = grep {
+            $spec->{wildcard_alias}{$_} == $index
+        } keys %{$spec->{wildcard_alias}};
+        die "Unreachable $value alias in $spec->{aliases}[0]\n"
+            unless @wildcard_aliases;
+        for my $alias (@wildcard_aliases) {
+            my $loose = loose_name($alias);
+            die "$spec->{aliases}[0] alias '$alias' does not resolve to $value\n"
+                unless defined $spec->{value_alias}{$loose}
+                    && $spec->{value_alias}{$loose} == $index;
+        }
+    }
 }
 
 sub add_range {
