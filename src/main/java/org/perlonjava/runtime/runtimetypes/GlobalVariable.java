@@ -2981,12 +2981,15 @@ public class GlobalVariable {
         snapshot.value = source.value;
         snapshot.globalCodeRefFqn = source.globalCodeRefFqn;
         snapshot.retainCodeSlotBinding();
+        snapshot.markDeferredDirectCallOwnerBinding();
         return snapshot;
     }
 
     /** Transfer a deferred parser owner after the compiled callsite has acquired its edge. */
     public static void releaseDeferredDirectCallOwner(RuntimeScalar codeRef) {
-        if (codeRef != null) codeRef.releaseCodeSlotBinding();
+        if (codeRef != null && codeRef.consumeDeferredDirectCallOwnerBinding()) {
+            codeRef.releaseCodeSlotBinding();
+        }
     }
 
     static void replacePinnedCodeRef(String key, RuntimeScalar codeRef) {

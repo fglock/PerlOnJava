@@ -1066,6 +1066,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // distinct so weak cleanup does not confuse them with compiler pins.
     private int codeSlotBindings;
     private int stashCodeSlotBindings;
+    private boolean deferredDirectCallOwnerBinding;
 
     boolean hasCodeSlotBinding() {
         return codeSlotBindings != 0;
@@ -1099,6 +1100,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (--codeSlotBindings != 0) return;
         refreshUntrackedReferenceOwner();
         MortalList.releaseTrackedCodeSlotAtExactBoundary(this);
+    }
+
+    synchronized void markDeferredDirectCallOwnerBinding() {
+        deferredDirectCallOwnerBinding = true;
+    }
+
+    synchronized boolean consumeDeferredDirectCallOwnerBinding() {
+        if (!deferredDirectCallOwnerBinding) return false;
+        deferredDirectCallOwnerBinding = false;
+        return true;
     }
 
     private void prepareCodeSlotValue(RuntimeScalar source) {
