@@ -905,6 +905,17 @@ public class SubroutineParser {
                     }
                 }
                 codeRefNode.setAnnotation("parseTimeCodeRef", parseTimeCodeRef);
+                if (codeRefNode.getBooleanAnnotation("directNamedCall")
+                        && parseTimeCodeRef.type == RuntimeScalarType.CODE
+                        && parseTimeCodeRef.value instanceof RuntimeCode) {
+                    // A generated closure may be emitted after compile-time
+                    // namespace cleanup has removed this imported CV's stash
+                    // entry. Keep the parse-time target owned until its
+                    // compiled callsite takes over, as for explicit &name calls.
+                    codeRefNode.setAnnotation("retainTargetIfDeletedBeforeCallsiteInstall", true);
+                    codeRefNode.setAnnotation("deferredDirectCallTarget",
+                            GlobalVariable.snapshotDeferredDirectCallTarget(parseTimeCodeRef));
+                }
                 if (parseTimeCodeRef.value instanceof RuntimeCode code
                         && RuntimeCode.isLvalueCode(code)) {
                     codeRefNode.setAnnotation("directLvalueCall", true);
