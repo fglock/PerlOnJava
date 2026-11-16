@@ -293,6 +293,17 @@ print <<'JAVA';
         Property property = property(propertyAlias);
         return property == null ? null : property.shortValues[index];
     }
+    static String[] valueAliases(String propertyAlias, int index) {
+        Property property = property(propertyAlias);
+        if (property == null) return new String[0];
+        java.util.ArrayList<String> aliases = new java.util.ArrayList<>();
+        for (int aliasIndex = 0; aliasIndex < property.valueAliases.length; aliasIndex++) {
+            if (property.valueAliasIndex[aliasIndex] == index) {
+                aliases.add(property.valueAliases[aliasIndex]);
+            }
+        }
+        return aliases.toArray(new String[0]);
+    }
     private static Property property(String alias) {
         String loose = loose(alias);
         if (GCB.hasAlias(loose)) return GCB;

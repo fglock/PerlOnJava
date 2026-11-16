@@ -31,6 +31,27 @@ class PerlUnicodeResidualPropertyDataTest {
     }
 
     @Test
+    void everyGeneratedEnumeratedValueExposesResolvableAliases() {
+        for (String property : new String[] {
+                "GCB", "InCB", "Identifier_Type", "kEH_Core", "WB", "SB"}) {
+            for (int index = 0;
+                    index < PerlUnicodeResidualPropertyData.valueCount(property);
+                    index++) {
+                String value = PerlUnicodeResidualPropertyData.value(property, index);
+                String[] aliases = PerlUnicodeResidualPropertyData.valueAliases(
+                        property, index);
+                assertTrue(aliases.length > 0, property + "=" + value);
+                for (String alias : aliases) {
+                    assertTrue(PerlUnicodeResidualPropertyData.valueSet(property, alias)
+                                    .equals(PerlUnicodeResidualPropertyData.valueSet(
+                                            property, value)),
+                            property + " alias " + alias);
+                }
+            }
+        }
+    }
+
+    @Test
     void pinsHexDigitAheadOfTheOlderIcuData() {
         assertContains("Hex", 0xFF46);
         assertContains("Hex=True", 0xFF46);

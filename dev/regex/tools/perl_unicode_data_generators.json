@@ -92,7 +92,7 @@
          "generator" : "dev/regex/tools/generate_perl_unicode_general_category_data.pl",
          "name" : "general-category",
          "output" : "src/main/java/org/perlonjava/runtime/regex/PerlUnicodeGeneralCategoryData.java",
-         "output_sha256" : "3fd0abc93db351ac5057c83b656be59728c37dd787bc273285d38f4d21a31d0a",
+         "output_sha256" : "4559ae8d0fc9fd069b0b2ba17639c979e89947cd9bb7f2722ea7af8b9a72a1b8",
          "sources" : {
             "extracted/DGeneralCategory.txt" : "d6b151d2d40ee9b1876d26f417980f45ffae47b6055ccf7203cb31f07a030f94"
          }
@@ -161,7 +161,7 @@
          "generator" : "dev/regex/tools/generate_perl_unicode_residual_property_data.pl",
          "name" : "residual-property",
          "output" : "src/main/java/org/perlonjava/runtime/regex/PerlUnicodeResidualPropertyData.java",
-         "output_sha256" : "64378bdc1724ec80491b889e30806e1e6a8a70a0dca46761c399f491c2cdef56",
+         "output_sha256" : "38f21c5a209576f62bd98e233577d860398c37f0c07dd1c039b264e82aae3729",
          "sources" : {
             "DCoreProperties.txt" : "09c928886a178fcafd93c29e4bd59073a058e5a100b716d425cb563ab50f68c9",
             "IdType.txt" : "fa24851acc669e58670e354e7b98a4ec8f52a809ec4f80524b6a60efdb868831",
