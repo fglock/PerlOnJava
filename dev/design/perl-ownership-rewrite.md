@@ -6,8 +6,9 @@ with current `master` `c832739ecc`. The UAT checkout at
 `make check-links` (855 links, 0 errors); `jperl -v` and the launcher smoke
 report the candidate commit and pass. Failed-connect regressions pass on both
 backends. The broad CPAN acceptance remains stopped at the user's direction.
-PR #1938 needs the integrated head published, then refreshed CI and human
-review.
+PR #1938 now points to `ccedc88cb4`, a documentation-only commit after the
+tested source. It targets current `master`, is mergeable, and refreshed hosted
+checks are in progress; human review remains pending.
 [Issue #2043](https://github.com/PerlOnJava/issues/2043) is the current
 handoff; [#1649](https://github.com/PerlOnJava/issues/1649) is historical
 origin.
@@ -19,16 +20,21 @@ origin.
 | Preserve imported CVs through namespace cleanup | Candidate delivered | Live transient argument and return slots count as CV owners until their transfer boundary; defined parse-time targets have one-shot compiler leases, while unresolved placeholders retain late BEGIN aliases. Focused regressions pass on both backends. |
 | Release DBI handles after failed `do` | Candidate delivered | `_do_impl` finishes any partial statement, clears its local DBI handle, and rethrows the DBI error. The permanent schema regression fails with the unfixed `do` implementation on JVM and passes 3/3 on system Perl, JVM, and interpreter. |
 | Preserve caller cleanup through interpreter aliases | Candidate delivered | `dev/modules/dbix_failed_connect_releases_storage.t` fails assertion 4 on the unfixed artifact and passes 4/4 on system Perl, JVM, and interpreter. The recursive-frame unit test covers same-CV callers. |
-| Final acceptance | Pending | Candidate `5c011dfa0e` integrates current `master`; full `make`, link check, launcher smoke, both failed-connect regressions and focused DBIx `t/storage/error.t` pass. `t/storage/txn.t` retains one pre-existing exception line-reporting mismatch and reports no reference leaks. The integrated head still needs publication, refreshed CI and human review. |
+| Final acceptance | Pending | Candidate `5c011dfa0e` integrates current `master`; full `make`, link check, launcher smoke, both failed-connect regressions and focused DBIx `t/storage/error.t` pass. `t/storage/txn.t` retains one pre-existing exception line-reporting mismatch and reports no reference leaks. Integrated PR head `ccedc88cb4` is published; refreshed CI and human review remain. |
 
 ## Current handoff: 2026-11-17
 
-UAT is on local branch `uat/issue2043-pr1938` at merge commit `5c011dfa0e`,
-whose parents are PR head `807cac9e83` and fetched `origin/master`
-`c832739ecc`. A merge commit preserves the long PR history; the only textual
-conflict was resolved by retaining both the #2043 and master changelog entries.
-The worktree is clean. The full build/unit gate passes in 9m36, the offline
-link check passes, and the launcher reports `5c011dfa0e` and prints `UAT_OK`.
+UAT is on local branch `uat/issue2043-pr1938` at `ccedc88cb4`, a documentation-
+only commit after tested merge commit `5c011dfa0e`. The merge commit integrates
+PR head `807cac9e83` with fetched `origin/master` `c832739ecc`, preserving the
+long PR history. Its only textual conflict was resolved by retaining both the
+#2043 and master changelog entries. The worktree is clean. The full build/unit
+gate passes in 9m36, the offline link check passes, and the launcher reports
+`5c011dfa0e` and prints `UAT_OK`.
+
+PR #1938 now targets `master` at `c832739ecc` with head `ccedc88cb4`; GitHub
+reports it mergeable. The refreshed Ubuntu, Windows and CodeQL checks are still
+running, and no human review has been submitted.
 
 The explicit-owner implementation removes reachability walking and sweep
 decisions from Perl lifetime management. The imported-CV, eval-capture, DBI
@@ -55,8 +61,7 @@ Evidence logs: `/private/tmp/issue2043-merged-uat-make.log`,
 
 ### Next steps
 
-1. Publish the integrated candidate to PR #1938 and update its description;
-   then wait for refreshed CI and human review. Keep the PR open until reviewers
+1. Wait for refreshed CI and human review. Keep the PR open until reviewers
    accept the classified `t/storage/txn.t` diagnostic mismatch or request
    follow-up work.
 2. After review and acceptance, merge PR #1938 and close #2043 with the merged
