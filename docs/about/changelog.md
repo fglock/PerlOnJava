@@ -6,6 +6,7 @@ priorities and future plans.
 
 ## Work in progress
 
+- Preserve `PerlIO::via` layer reconfiguration for BOM-aware decoding, resolve `Cwd::realpath` for a missing final path component, and bound memory allocation for large `sysread` requests (#2058, #2055, #2047).
 - Fix Perl parser handling of postfix increment in concatenated `print` arguments, commented DATA/END markers, the punctuation hash `%;`, and semicolon-disambiguated hash dereferences (#2066, #2065, #2061, #2054).
 - Preserve explicit wide-scalar character-class membership when compiling repeats, including newline, and use pinned Perl Block aliases for wildcard candidates without ICU fallback (#2070, #1487).
 - Preserve standard MakeMaker `MY::test` prerequisites so generated test data is built before CPAN tests run (#2050).
