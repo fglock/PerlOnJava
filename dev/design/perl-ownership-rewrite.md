@@ -1,11 +1,11 @@
 # Perl-compatible ownership rewrite
 
-**Status:** PR #1938 remains open at published head `db39c7e457`. All seven
-hosted checks on that head succeeded. Master has since advanced to
-`e01bb336af`; local merge candidate `a92ce0e5` incorporates it and passes the
-full `make` gate. Publish the candidate after the documentation link check.
-The user's UAT checkout remains unchanged at tested commit `5c011dfa0e`. Keep
-the PR open for human review; do not merge.
+**Status:** PR #1938 remains open at published head `c9f6e3d002`, based on
+current `master` `e01bb336af`. The merge candidate `a92ce0e5` incorporates
+current master and passes the full `make` and documentation link gates. GitHub
+reports the branch mergeable; hosted checks on the new head are running. The
+user's UAT checkout remains unchanged at tested commit `5c011dfa0e`. Keep the
+PR open for human review; do not merge.
 
 | Work | Status | Evidence or acceptance |
 | --- | --- | --- |
@@ -15,7 +15,7 @@ the PR open for human review; do not merge.
 | Release Moo's weakened optree constant | Verified locally | The permanent 4/4 regression passes on system Perl, JVM, and interpreter; assertion 4 fails on UAT parent `5c011dfa0e`. Both unchanged Moo accessor-weaken files pass 19/19 on all three runtimes. |
 | Release DBI handles after failed `do` | Candidate delivered | `_do_impl` finishes any partial statement, clears its local DBI handle, and rethrows the DBI error. The permanent schema regression fails with the unfixed `do` implementation on JVM and passes 3/3 on system Perl, JVM, and interpreter. |
 | Preserve caller cleanup through interpreter aliases | Candidate delivered | `dev/modules/dbix_failed_connect_releases_storage.t` fails assertion 4 on the unfixed artifact and passes 4/4 on system Perl, JVM, and interpreter. The recursive-frame unit test covers same-CV callers. |
-| Final local gate | Passed | After integrating current master at `a92ce0e5`, `nice -n 19 timeout 3600 make` succeeded in 7m26 and `make check-links` reported 0 errors. Earlier UAT evidence remains valid, including DBIx `t/storage/error.t` 49/49; `t/storage/txn.t` retains one pre-existing exception line-reporting mismatch and no leaks. Hosted checks on published head `db39c7e457` succeeded. |
+| Final local gate | Passed | After integrating current master at `a92ce0e5`, `nice -n 19 timeout 3600 make` succeeded in 7m26 and `make check-links` reported 0 errors. Earlier UAT evidence remains valid, including DBIx `t/storage/error.t` 49/49; `t/storage/txn.t` retains one pre-existing exception line-reporting mismatch and no leaks. All seven hosted checks on prior head `db39c7e457` succeeded; eight checks are running on `c9f6e3d002`. |
 
 ## Current handoff: 2026-11-17
 
@@ -55,11 +55,11 @@ sweep remains stopped at the user's direction.
 
 ### Next steps
 
-1. Run `make check-links`, then publish merge candidate `a92ce0e5` to PR #1938.
-2. Refresh hosted checks and mergeability for the new head. Tell the user when
-   the updated PR is ready for review; keep it open and do not merge until
-   human review accepts the classified `t/storage/txn.t` diagnostic mismatch
-   or requests follow-up.
+1. Wait for the eight hosted checks on `c9f6e3d002` and confirm GitHub keeps
+   the branch mergeable.
+2. Tell the user when the updated PR is ready for review; keep it open and do
+   not merge until human review accepts the classified `t/storage/txn.t`
+   diagnostic mismatch or requests follow-up.
 3. After PR acceptance, close #2043 with final evidence; resume #2037
    archive-lifetime and #2034 localized-STDERR separately.
 
