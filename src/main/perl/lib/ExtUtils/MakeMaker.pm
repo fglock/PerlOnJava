@@ -918,6 +918,8 @@ sub _create_install_makefile {
     # Use INSTALL_BASE for consistency with where we actually install modules
     my $inst_lib = $args->{INST_LIB} || 'blib/lib';
     my $inst_archlib = $args->{INST_ARCHLIB} || 'blib/arch';
+    my $fullext = $name;
+    $fullext =~ s/::/\//g;
     my $installsitelib = $args->{INSTALLSITELIB};
     my $siteprefix = $args->{SITEPREFIX} || $args->{PREFIX};
     my $install_dirs = defined $args->{INSTALLDIRS} ? $args->{INSTALLDIRS} : 'site';
@@ -1141,6 +1143,8 @@ FULLPERLRUN = \$(FULLPERL)
 PERLRUNINST = \$(PERLRUN) -I\$(INST_ARCHLIB) -I\$(INST_LIB)
 INST_LIB = $inst_lib
 INST_ARCHLIB = $inst_archlib
+FULLEXT = $fullext
+INST_AUTODIR = \$(INST_LIB)/auto/\$(FULLEXT)
 INST_LIBDIR = \$(INST_LIB)
 INST_ARCHLIBDIR = \$(INST_ARCHLIB)
 PERLONJAVA_CPAN_PERL5LIB = \$(shell if test -f blib/.perlonjava-cpan-perl5lib; then cat blib/.perlonjava-cpan-perl5lib; elif test -f .perlonjava-cpan-perl5lib; then cat .perlonjava-cpan-perl5lib; fi)
@@ -1170,7 +1174,7 @@ TEST_FILES = $test_glob
 RECORD_REVISION = \@true
 REVISION =
 OLD_REVISION =
-MOD_INSTALL = \$(NOECHO) \$(PERLRUN) -e "1"
+MOD_INSTALL = \$(NOECHO) \$(PERLRUN) -MExtUtils::Install -e "install({\@ARGV})"
 UNINSTALL = \$(NOECHO) \$(PERLRUN) -e "1"
 $extra_macros_str
 
@@ -1232,6 +1236,10 @@ $install_cmds_str
 \t\@if [ -d "\$(INST_LIB)/auto/share" ]; then \\
 \t\tmkdir -p "\$(INSTALLSITELIB)/auto/share" && \\
 \t\tcp -r "\$(INST_LIB)/auto/share/"* "\$(INSTALLSITELIB)/auto/share/" 2>/dev/null || true; \\
+\tfi
+\t\@if [ -d "\$(INST_AUTODIR)" ]; then \\
+\t\tmkdir -p "\$(INSTALLSITELIB)/auto/\$(FULLEXT)" && \\
+\t\tcp -r "\$(INST_AUTODIR)/"* "\$(INSTALLSITELIB)/auto/\$(FULLEXT)/" 2>/dev/null || true; \\
 \tfi
 \t\@echo "PerlOnJava: $name v$version installed ($file_count files) to \$(INSTALLSITELIB)"
 
