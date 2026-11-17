@@ -1056,7 +1056,15 @@ public class BytecodeInterpreter {
                                 RuntimeBase srcVal = registers[src];
                                 RuntimeBase aliasValue = isImmutableProxy(srcVal)
                                         ? ensureMutableScalar(srcVal) : srcVal;
-                                MyVarCleanupStack.replace(registers[dest], aliasValue);
+                                RuntimeBase displaced = registers[dest];
+                                boolean callerOwned = RuntimeCode.isActiveLexicalCellInCallerFrame(
+                                        displaced, code);
+                                if (!callerOwned) {
+                                    MyVarCleanupStack.replace(displaced, aliasValue);
+                                }
+                                // A register can be a borrowed alias to a caller's
+                                // lexical cell. Do not move that caller's cleanup-stack
+                                // entry into this frame; the caller still owns the cell.
                                 registers[dest] = aliasValue;
                             }
 

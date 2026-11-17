@@ -1688,6 +1688,13 @@ public class MortalList {
             boolean hasUntrackedReferenceOwner = !aggregateReferent
                     && base.ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE) != 0
                     && base.hasUntrackedReferenceOwnerSlotIdentity();
+            // A closure pad can outlive its CV's final Perl owner until the
+            // captured referent next reaches a lifecycle boundary. Retire only
+            // pads whose CODE owner ledger is already empty before deciding
+            // that the capture itself keeps this referent alive.
+            if (base.hasSemanticCaptureOwner()) {
+                base.releaseUnownedClosureCaptures();
+            }
             if (base instanceof RuntimeCode code && code.hasActiveCodeOwner()) {
                 code.deferFinalReleaseToActiveCode();
             } else if (base.hasSemanticCaptureOwner()) {

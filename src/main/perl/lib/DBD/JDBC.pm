@@ -92,11 +92,33 @@ sub _do_impl {
     my ($dbh, $statement, $attr, @params) = @_;
     return "0E0" if DBI::_is_comment_only_sql($statement);
     DBI::_cleanup_before_ddl($statement);
-    my $sth = $dbh->prepare($statement, $attr) or return undef;
-    $sth->execute(@params) or do { $sth->finish; return undef };
-    my $rows = $sth->rows;
-    $sth->finish;
-    return ($rows == 0) ? "0E0" : $rows;
+
+    my ($sth, $result);
+    my $ok = eval {
+        $sth = $dbh->prepare($statement, $attr);
+        if ($sth) {
+            if ($sth->execute(@params)) {
+                my $rows = $sth->rows;
+                $sth->finish;
+                $result = ($rows == 0) ? "0E0" : $rows;
+            }
+            else {
+                $sth->finish;
+            }
+        }
+        1;
+    };
+    if (!$ok) {
+        my $error = $@;
+        # HandleError can rethrow a DBI failure through this Perl method.
+        # Retire its local statement and database-handle owners before the
+        # exception crosses back to the caller.
+        eval { $sth->finish if $sth; 1 };
+        undef $sth;
+        undef $dbh;
+        die $error;
+    }
+    return $result;
 }
 *DBD::JDBC::db::do = \&_do_impl;
 
