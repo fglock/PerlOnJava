@@ -340,6 +340,10 @@ public class Internals extends PerlModuleBase {
 
     public static void rebindCapturedVariable(
             RuntimeCode code, String variableName, RuntimeBase replacement) {
+        boolean hasMappedCapture = code.closedOverVariables != null
+                && code.closedOverVariables.containsKey(variableName);
+        RuntimeBase mappedCapture = hasMappedCapture
+                ? code.closedOverVariables.get(variableName) : null;
         if (code.closedOverVariables != null) {
             code.putClosedOverVariable(variableName, replacement);
         }
@@ -359,6 +363,15 @@ public class Internals extends PerlModuleBase {
 
         Object closure = code.codeObject != null ? code.codeObject : code.subroutine;
         if (closure == null) {
+            if (hasMappedCapture) {
+                // Named JVM subs can keep captured lexicals solely in the
+                // runtime capture map, without a reflectable generated closure
+                // object. Preserve the replacement as a lexical alias too, so
+                // a not-yet-materialized sub installs it when its pad is made.
+                code.setLexicalAlias(variableName, replacement);
+                replaceCaptureTracking(code, mappedCapture, replacement);
+                return;
+            }
             throw new IllegalArgumentException(
                     "PadWalker::set_closed_over cannot inspect this coderef");
         }

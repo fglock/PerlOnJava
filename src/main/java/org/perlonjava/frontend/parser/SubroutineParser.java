@@ -204,6 +204,7 @@ public class SubroutineParser {
         String fullName = subName.contains("::")
                 ? subName
                 : NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
+        boolean dynamicCoreGlobalCall = fullName.startsWith("CORE::GLOBAL::");
 
         // Check if we are parsing a method;
         // Otherwise, check that the subroutine exists in the global namespace - then fetch prototype and attributes
@@ -226,7 +227,11 @@ public class SubroutineParser {
                 }
             }
             if (codeRef != null) {
-                parseTimeCodeRef = codeRef;
+                // CORE::GLOBAL overrides are dynamically replaceable (for
+                // example Sub::Uplevel localizes caller). Keep their call
+                // sites late-bound instead of retaining a temporary CV
+                // compiled from inside that localized scope.
+                if (!dynamicCoreGlobalCall) parseTimeCodeRef = codeRef;
                 if (codeRef.value instanceof RuntimeCode runtimeCode) {
                     prototype = runtimeCode.prototype;
                     attributes = runtimeCode.attributes;
@@ -845,6 +850,7 @@ public class SubroutineParser {
             boolean unshadowedCoreBuiltin = !isMethod
                     && CORE_PROTOTYPES.containsKey(subName)
                     && parseTimeCodeRef == null
+                    && !dynamicCoreGlobalCall
                     && !GlobalVariable.isSubs.containsKey(fullName);
             if (!unshadowedCoreBuiltin) {
                 codeRefNode.setAnnotation("directNamedCall", true);
@@ -856,7 +862,8 @@ public class SubroutineParser {
                     }
                 }
             }
-            if (!isMethod && parseTimeCodeRef == null && !unshadowedCoreBuiltin) {
+            if (!isMethod && parseTimeCodeRef == null && !unshadowedCoreBuiltin
+                    && !dynamicCoreGlobalCall) {
                 // Perl allocates and pins the call site's GV while parsing an
                 // unresolved direct call. A later BEGIN-time typeglob alias
                 // fills that same placeholder, so deleting the visible stash
@@ -2742,8 +2749,13 @@ public class SubroutineParser {
                     Class<?>[] parameterTypes = classList.toArray(new Class<?>[0]);
                     Constructor<?> constructor = generatedClass.getConstructor(parameterTypes);
 
-                    // Instantiate the subroutine with the captured variables
-                    Object[] parameters = paramList.toArray();
+                    // PadWalker::set_closed_over can replace captures before
+                    // the first invocation materializes this lazy named CV.
+                    // Use the live capture map just as the interpreter path
+                    // does, so the generated closure receives those cells.
+                    List<Object> materializedCaptures = closureCapturesForMaterialization(
+                            placeholder, capturedNames, paramList);
+                    Object[] parameters = materializedCaptures.toArray();
                     placeholder.codeObject = constructor.newInstance(parameters);
 
                     // Set the PerlSubroutine interface for direct invocation
@@ -2753,7 +2765,8 @@ public class SubroutineParser {
                     Field field = placeholder.codeObject.getClass().getDeclaredField("__SUB__");
                     field.set(placeholder.codeObject, definitionCodeRef);
 
-                    installClosureCaptureMetadata(placeholder, paramList);
+                    installClosureCaptureMetadata(
+                            placeholder, capturedNames, materializedCaptures);
                     placeholder.cvStartFile = compiledCode.cvStartFile;
                     placeholder.cvStartLine = compiledCode.cvStartLine;
                     compiledCode.transferPadConstantTreeTo(placeholder);

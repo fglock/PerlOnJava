@@ -781,6 +781,12 @@ sub _init {
 
         ($package, $file, $line, $sub) = CORE::caller($depth);
 
+        # caller() returns an empty list once we reach the end of the stack.
+        # Stop here instead of asking the missing package whether it inherits
+        # from Fatal/autodie; exception construction must preserve the original
+        # failure even when every visible frame is an internal wrapper.
+        last unless defined $package;
+
         # Skip up the call stack until we find something outside
         # of the Fatal/autodie/eval space.
 
