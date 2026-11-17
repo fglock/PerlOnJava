@@ -4,8 +4,9 @@
 `master` `c832739ecc`. Source fix `81500f6c8c` and its acceptance handoff are
 published on `fix/issue2043-moo-optree-reaping`. The user's UAT checkout
 remains unchanged at tested commit `5c011dfa0e`. The latest saved PR snapshot
-reports `mergeable_state: dirty`; hosted check runs could not be refreshed from
-this network. Do not merge before human review.
+reports six hosted checks in progress and `mergeable_state: dirty`. The PR base
+is an ancestor locally and a three-way merge tree is clean, so GitHub's
+mergeability result still needs refresh. Do not merge before human review.
 
 | Work | Status | Evidence or acceptance |
 | --- | --- | --- |
@@ -48,8 +49,8 @@ sweep remains stopped at the user's direction.
 
 ### Next steps
 
-1. Refresh hosted checks for published head `702f202e21`; investigate the
-   reported dirty mergeability state against the exact PR base.
+1. Wait for hosted checks on published head `02bb306f0c`; refresh mergeability
+   and investigate if GitHub still reports dirty against the exact PR base.
 2. Tell the user when the updated PR is ready for review. Keep it open and do
    not merge until human review accepts the classified `t/storage/txn.t`
    diagnostic mismatch or requests follow-up.
