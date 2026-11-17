@@ -1,12 +1,11 @@
 # Perl-compatible ownership rewrite
 
-**Status:** PR #1938 is open at published head `702f202e21`, based on current
-`master` `c832739ecc`. Source fix `81500f6c8c` and its acceptance handoff are
-published on `fix/issue2043-moo-optree-reaping`. The user's UAT checkout
-remains unchanged at tested commit `5c011dfa0e`. The latest saved PR snapshot
-reports six hosted checks in progress and `mergeable_state: dirty`. The PR base
-is an ancestor locally and a three-way merge tree is clean, so GitHub's
-mergeability result still needs refresh. Do not merge before human review.
+**Status:** PR #1938 remains open at published head `db39c7e457`. All seven
+hosted checks on that head succeeded. Master has since advanced to
+`e01bb336af`; local merge candidate `a92ce0e5` incorporates it and passes the
+full `make` gate. Publish the candidate after the documentation link check.
+The user's UAT checkout remains unchanged at tested commit `5c011dfa0e`. Keep
+the PR open for human review; do not merge.
 
 | Work | Status | Evidence or acceptance |
 | --- | --- | --- |
@@ -16,7 +15,7 @@ mergeability result still needs refresh. Do not merge before human review.
 | Release Moo's weakened optree constant | Verified locally | The permanent 4/4 regression passes on system Perl, JVM, and interpreter; assertion 4 fails on UAT parent `5c011dfa0e`. Both unchanged Moo accessor-weaken files pass 19/19 on all three runtimes. |
 | Release DBI handles after failed `do` | Candidate delivered | `_do_impl` finishes any partial statement, clears its local DBI handle, and rethrows the DBI error. The permanent schema regression fails with the unfixed `do` implementation on JVM and passes 3/3 on system Perl, JVM, and interpreter. |
 | Preserve caller cleanup through interpreter aliases | Candidate delivered | `dev/modules/dbix_failed_connect_releases_storage.t` fails assertion 4 on the unfixed artifact and passes 4/4 on system Perl, JVM, and interpreter. The recursive-frame unit test covers same-CV callers. |
-| Final local gate | Passed | `nice -n 19 make` passes 672 unit tests and Joni in 6m49; `make check-links` reports 0 errors. Earlier UAT evidence remains valid, including DBIx `t/storage/error.t` 49/49; `t/storage/txn.t` retains one pre-existing exception line-reporting mismatch and no leaks. Hosted checks for the new head and human review remain. |
+| Final local gate | Passed | After integrating current master at `a92ce0e5`, `nice -n 19 timeout 3600 make` succeeded in 7m26 and `make check-links` reported 0 errors. Earlier UAT evidence remains valid, including DBIx `t/storage/error.t` 49/49; `t/storage/txn.t` retains one pre-existing exception line-reporting mismatch and no leaks. Hosted checks on published head `db39c7e457` succeeded. |
 
 ## Current handoff: 2026-11-17
 
@@ -37,8 +36,15 @@ cleanup also retains temporary RHS cell storage through the Perl statement and
 preserves cells still owned by live aggregates.
 
 Validation on local source commit `81500f6c8c`: `nice -n 19 make` passed in
-6m49 (672 unit tests and Joni); `make check-links` found 0 errors. Logs:
+6m49 (672 unit tests and Joni); `make check-links` found 0 errors. After
+master advanced, commit `a92ce0e5` merged its caller-introspection changes;
+the only conflict was the top of the changelog, where both the #2043 and
+#2069 entries were retained. `nice -n 19 timeout 3600 make` passed on that
+immutable merge candidate in 7m26. `make check-links` then reported 0 errors.
+Logs:
 `/private/tmp/issue2043-final-owner-cleanup-make.log`,
+`/private/tmp/issue2043-after-master-make.log`,
+`/private/tmp/issue2043-after-master-check-links.log`,
 `/private/tmp/issue2043-final-check-links.log`,
 `/private/tmp/issue2043-moo-regression-system-perl-final.log`,
 `/private/tmp/issue2043-moo-regression-interpreter-final.log`,
@@ -49,11 +55,11 @@ sweep remains stopped at the user's direction.
 
 ### Next steps
 
-1. Wait for hosted checks on published head `02bb306f0c`; refresh mergeability
-   and investigate if GitHub still reports dirty against the exact PR base.
-2. Tell the user when the updated PR is ready for review. Keep it open and do
-   not merge until human review accepts the classified `t/storage/txn.t`
-   diagnostic mismatch or requests follow-up.
+1. Run `make check-links`, then publish merge candidate `a92ce0e5` to PR #1938.
+2. Refresh hosted checks and mergeability for the new head. Tell the user when
+   the updated PR is ready for review; keep it open and do not merge until
+   human review accepts the classified `t/storage/txn.t` diagnostic mismatch
+   or requests follow-up.
 3. After PR acceptance, close #2043 with final evidence; resume #2037
    archive-lifetime and #2034 localized-STDERR separately.
 
