@@ -153,18 +153,6 @@ public class EmitterContext {
     public java.util.Map<String, Integer> evalCachedStringPoolIndex;
     /** Round 37: pooled constant-pool lookup index (cleared, not reallocated, on each warm eval). */
     public java.util.Map<Object, Integer> evalCachedConstantPoolIndex;
-    /** Round 40: cached compiled InterpretedCode — skips Lexer+Parser+Compiler on repeated evals. */
-    public org.perlonjava.backend.bytecode.InterpretedCode evalCachedInterpretedCode;
-    /** Round 40: package active when evalCachedInterpretedCode was compiled. */
-    public String evalCachedCodePackage;
-    /** Round 40: caller warning bits active when evalCachedInterpretedCode was compiled. */
-    public String evalCachedCodeWarningBits;
-    /** Round 40 fix: true when the cached eval string defined named subs (sawBeginOrSub).
-     *  Eval strings with named subs always recompile so JVM class-loading installs them. */
-    public boolean evalCachedHasSub;
-    /** Round 40 fix: stash binding version at compile time; invalidates cache when stash changes
-     *  (e.g. local *time = ...) so ambiguous-call warnings are re-evaluated on each call. */
-    public long evalCachedStashVersion = -1;
     /** Round 34: pooled primitive bytecode buffer; avoids Integer boxing. Size is reset to 0; array is reused. */
     public int[] evalCachedBytecodeArr;
     /** Round 35: pre-computed physicalLineNumbers array for the eval source; valid only when evalCachedSourceStr == the eval string object. */

@@ -117,6 +117,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         SuspendedInterpreterFrame frame = framePool.get();
         if (frame != null) {
             framePool.remove();
+            frame.code = this;  // re-set after releaseFrame nulled it to break retention cycle
             frame.callContext = callContext;
             frame.subroutineName = subroutineName;
             return frame;
@@ -131,6 +132,11 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
      * (those are owned by InterpreterSuspension and managed by FutureAsyncAwaitRuntime).
      */
     void releaseFrame(SuspendedInterpreterFrame frame) {
+        // Null the code reference BEFORE pooling: the ThreadLocal entry (Thread →
+        // entry.value → frame → frame.code → InterpretedCode) would otherwise keep
+        // this InterpretedCode reachable forever, preventing GC of compiled modules.
+        // acquireFrame() re-sets frame.code = this before handing the frame back.
+        frame.code = null;
         Arrays.fill(frame.registers, null);
         // Reset scalar fields that execute() may have modified.
         frame.pc = 0;

@@ -4182,11 +4182,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     private static void registerEvalRuntimeAlias(EvalRuntimeContext context, char sigil, String fullName, RuntimeBase value) {
-        context.aliases().add(new EvalRuntimeAlias(sigil, fullName, value));
+        // R48: lazy init — warm eval calls never register aliases, so null is the common case.
+        if (context.aliases == null) context.aliases = new ArrayList<>();
+        context.aliases.add(new EvalRuntimeAlias(sigil, fullName, value));
     }
 
     private static void deactivateEvalRuntimeAliases(EvalRuntimeContext context) {
-        for (EvalRuntimeAlias alias : context.aliases()) {
+        if (context.aliases == null) return;  // R48: null means empty — nothing to deactivate
+        for (EvalRuntimeAlias alias : context.aliases) {
             if (!alias.active) {
                 continue;
             }
@@ -4212,7 +4215,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     private static void reactivateEvalRuntimeAliases(EvalRuntimeContext context) {
-        for (EvalRuntimeAlias alias : context.aliases()) {
+        if (context.aliases == null) return;  // R48: null means empty — nothing to reactivate
+        for (EvalRuntimeAlias alias : context.aliases) {
             if (alias.active) {
                 continue;
             }
@@ -5067,7 +5071,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // calls retrieveBeginScalar, finding the stale alias instead of creating
                 // a fresh variable.
                 deactivateEvalRuntimeAliases(runtimeCtx);
-                runtimeCtx.aliases().clear();
+                if (runtimeCtx.aliases != null) runtimeCtx.aliases.clear();  // R48: null means empty
 
                 // Store source lines in symbol table if $^P flags are set
                 // Do this on both success and failure paths when flags require retention
@@ -5299,8 +5303,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // Fallback: bind normally when called from a Java context with no prior binding.
         PerlRuntime pr = PerlRuntime.currentOrNull();
         try (PerlRuntime.Binding runtimeBinding = pr != null ? null : PerlRuntime.current().bind()) {
-        PerlLanguageProvider.CompilationLockGuard compilationLock =
-                PerlLanguageProvider.acquireCompilationLock();
+        // eval STRING is NEVER cached: the same source string can produce different behavior
+        // depending on the current symbol table, package bindings, and lexical scope.
+        // Previously the interpreter path had an eval-result cache (R40) but it was removed
+        // after correctness regressions (stash mutations, BEGIN-block side-effects, named-sub
+        // re-installation) proved that caching eval STRING violates Perl semantics.
+        // Do NOT re-add eval-result caching here; Perl itself never caches eval STRING results.
+        PerlLanguageProvider.CompilationLockGuard compilationLock = PerlLanguageProvider.acquireCompilationLock();
         try {
 
         rejectTaintedEval(code);
@@ -5429,34 +5438,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             String evalCurrentPackage = ClassRegistry.isClass(runtimePackage)
                     ? runtimePackage
                     : topLevelMain ? runtimePackage : capturedSymbolTable.getCurrentPackage();
-
-            // Round 40: ultra-warm path — skip Lexer+Parser+Compiler for a hot repeated eval.
-            // Cache key: same eval string literal object + same compile package + same caller warning bits.
-            // Per-eval-site (EmitterContext is per-site per-thread), so no synchronization needed.
-            String r40CacheBits = WarningBitsRegistry.getCallerBitsAtFrame(0);
-            if (r40CacheBits == null) r40CacheBits = WarningBitsRegistry.getCallSiteBits();
-            if (r40CacheBits == null) r40CacheBits = WarningBitsRegistry.getCurrent();
-            if (r40CacheBits == null) r40CacheBits = "";
-            if (ctx.evalCachedInterpretedCode != null
-                    && !ctx.evalCachedHasSub                 // subs need recompile: JVM class-load installs them
-                    && evalString == ctx.evalCachedSourceStr
-                    && evalCurrentPackage.equals(ctx.evalCachedCodePackage)
-                    && r40CacheBits.equals(ctx.evalCachedCodeWarningBits)
-                    && ctx.evalCachedStashVersion == GlobalVariable.currentGlobalRuntimeState().scalarBindingVersion()) {
-                interpretedCode = ctx.evalCachedInterpretedCode;
-                // R40 fix: clear cached ScalarPins so stale detached pins (from a stash delete
-                // between eval calls) do not return the old frozen value.  Fresh pins re-vivify
-                // through the current stash, matching the cold-path (no-cache) behaviour.
-                interpretedCode.resetScalarPins();
-                if (runtimeValues.length > 0) {
-                    RuntimeBase[] capturedVars2 = new RuntimeBase[runtimeValues.length];
-                    for (int i = 0; i < runtimeValues.length; i++) {
-                        capturedVars2[i] = (RuntimeBase) runtimeValues[i];
-                    }
-                    interpretedCode.setEvalCapturedVars(capturedVars2);
-                }
-                compiledSuccessfully = true;
-            } else {
 
             try {
                 // Parse the eval string (tokenize first so sawBegin is available for the alias gate below)
@@ -5761,16 +5742,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     interpretedCode.setEvalCapturedVars(capturedVars2);
                 }
 
-                // Round 40: cache the compiled code for the ultra-warm path.
-                // Always update so a package/warning change replaces the stale entry.
-                if (evalString == ctx.evalCachedSourceStr) {
-                    ctx.evalCachedInterpretedCode = interpretedCode;
-                    ctx.evalCachedCodePackage = evalCurrentPackage;
-                    ctx.evalCachedCodeWarningBits = r40CacheBits;
-                    ctx.evalCachedHasSub = lexer.sawBeginOrSub;
-                    ctx.evalCachedStashVersion = GlobalVariable.currentGlobalRuntimeState().scalarBindingVersion();
-                }
-
             } catch (Throwable e) {
                 // A parse or compile error may have left parseSymbolTable at
                 // depth > 1 (partial scope).  Invalidate so the next call
@@ -5925,7 +5896,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     return new RuntimeList(new RuntimeScalar());
                 }
             }
-            } // end Round 40 ultra-warm else
 
             // Clean up BEGIN aliases BEFORE execution. These aliases were only needed during
             // parsing/compilation (for BEGIN blocks to access outer lexicals). If left in
@@ -5933,9 +5903,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // function would find the alias via retrieveBeginScalar, sharing the same
             // RuntimeScalar object instead of creating a fresh one.
             deactivateEvalRuntimeAliases(runtimeCtx);
-            runtimeCtx.aliases().clear();
+            if (runtimeCtx.aliases != null) runtimeCtx.aliases.clear();  // R48: null means empty
             setCurrentScope(savedCurrentScope);
-            compilationLock.close();
+            compilationLock.close();  // release compilation lock before executing eval
 
             // Execute the interpreted code
             // Track eval depth for $^S support
@@ -6005,6 +5975,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
 
         } finally {
+            // Re-acquire the compilation lock for shared-map cleanup.
+            // storeSourceLines and removeEvalSourceInfo touch maps that are shared
+            // across threads; the lock must be held while they run.
             PerlLanguageProvider.COMPILE_LOCK.lock();
             try {
             if (EVAL_TRACE) evalTrace("evalStringWithInterpreter exit tag=" + evalTag + " ctx=" + callContext +
@@ -6043,7 +6016,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
         }
         } finally {
-            compilationLock.close();
+            compilationLock.close();  // safety net: idempotent, ensures lock released on early exception
         }
         }
     }
@@ -11186,12 +11159,26 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * Holds both the runtime values and variable names so SpecialBlockParser can
      * match variables to their values.
      */
-    public record EvalRuntimeContext(Object[] runtimeValues, String[] capturedEnv, String evalTag,
-                                     List<EvalRuntimeAlias> aliases) {
+    // R48: changed from record to class so `aliases` can be null until first use,
+    // eliminating one ArrayList allocation per warm eval-string call.
+    public static class EvalRuntimeContext {
+        public final Object[] runtimeValues;
+        public final String[] capturedEnv;
+        public final String evalTag;
+        // null until registerEvalRuntimeAlias is called; warm eval calls never add aliases.
+        List<EvalRuntimeAlias> aliases;
 
         public EvalRuntimeContext(Object[] runtimeValues, String[] capturedEnv, String evalTag) {
-            this(runtimeValues, capturedEnv, evalTag, new ArrayList<>());
+            this.runtimeValues = runtimeValues;
+            this.capturedEnv = capturedEnv;
+            this.evalTag = evalTag;
         }
+
+        // Record-compatible accessors.
+        public Object[] runtimeValues() { return runtimeValues; }
+        public String[] capturedEnv() { return capturedEnv; }
+        public String evalTag() { return evalTag; }
+        public List<EvalRuntimeAlias> aliases() { return aliases; }
 
         /**
          * Get the runtime value for a variable by name.

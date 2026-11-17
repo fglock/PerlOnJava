@@ -19,9 +19,10 @@ import java.util.List;
  * newly-added interpreter stack explicit.</p>
  */
 public final class SuspendedInterpreterFrame {
-    final InterpretedCode code;
+    // R46: non-final so the code reference can be nulled in releaseFrame to break the
+    // ThreadLocal retention cycle (Thread → pool entry → frame.code → InterpretedCode).
+    InterpretedCode code;
     final RuntimeBase[] registers;
-    // R46: non-final so the frame can be reset and reused from the per-code pool.
     int callContext;
     String subroutineName;
 
