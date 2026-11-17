@@ -45,6 +45,12 @@ final class PerlUnicodeIndicCategoryData {
     private static final byte[] INSC_VALUE_ALIAS_INDEX = {
         0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36
     };
+    private static final String[] INSC_WILDCARD_ALIASES = {
+        "Avagraha", "Bindu", "Brahmi_Joining_Number", "Cantillation_Mark", "Consonant", "Consonant_Dead", "Consonant_Final", "Consonant_Head_Letter", "Consonant_Initial_Postfixed", "Consonant_Killer", "Consonant_Medial", "Consonant_Placeholder", "Consonant_Preceding_Repha", "Consonant_Prefixed", "Consonant_Subjoined", "Consonant_Succeeding_Repha", "Consonant_With_Stacker", "Gemination_Mark", "Invisible_Stacker", "Joiner", "Modifying_Letter", "Non_Joiner", "Nukta", "Number", "Number_Joiner", "Other", "Pure_Killer", "Register_Shifter", "Reordering_Killer", "Syllable_Modifier", "Tone_Letter", "Tone_Mark", "Virama", "Visarga", "Vowel", "Vowel_Dependent", "Vowel_Independent"
+    };
+    private static final byte[] INSC_WILDCARD_ALIAS_INDEX = {
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36
+    };
     private static final String[] INSC_PROPERTY_ALIASES = {
         "indicsyllabiccategory", "insc"
     };
@@ -296,6 +302,7 @@ final class PerlUnicodeIndicCategoryData {
     private static final Property INSC = new Property(
             INSC_SHORT_VALUES, INSC_LONG_VALUES,
             INSC_VALUE_ALIASES, INSC_VALUE_ALIAS_INDEX,
+            INSC_WILDCARD_ALIASES, INSC_WILDCARD_ALIAS_INDEX,
             INSC_PROPERTY_ALIASES, INSC_RANGES,
             25);
 
@@ -309,6 +316,12 @@ final class PerlUnicodeIndicCategoryData {
         "bottom", "bottomandleft", "bottomandright", "left", "leftandright", "na", "notapplicable", "overstruck", "right", "top", "topandbottom", "topandbottomandleft", "topandbottomandright", "topandleft", "topandleftandright", "topandright", "visualorderleft"
     };
     private static final byte[] INPC_VALUE_ALIAS_INDEX = {
+        0, 1, 2, 3, 4, 5, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
+    };
+    private static final String[] INPC_WILDCARD_ALIASES = {
+        "Bottom", "Bottom_And_Left", "Bottom_And_Right", "Left", "Left_And_Right", "NA", "Not_Applicable", "Overstruck", "Right", "Top", "Top_And_Bottom", "Top_And_Bottom_And_Left", "Top_And_Bottom_And_Right", "Top_And_Left", "Top_And_Left_And_Right", "Top_And_Right", "Visual_Order_Left"
+    };
+    private static final byte[] INPC_WILDCARD_ALIAS_INDEX = {
         0, 1, 2, 3, 4, 5, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
     };
     private static final String[] INPC_PROPERTY_ALIASES = {
@@ -483,6 +496,7 @@ final class PerlUnicodeIndicCategoryData {
     private static final Property INPC = new Property(
             INPC_SHORT_VALUES, INPC_LONG_VALUES,
             INPC_VALUE_ALIASES, INPC_VALUE_ALIAS_INDEX,
+            INPC_WILDCARD_ALIASES, INPC_WILDCARD_ALIAS_INDEX,
             INPC_PROPERTY_ALIASES, INPC_RANGES,
             5);
 
@@ -533,6 +547,11 @@ final class PerlUnicodeIndicCategoryData {
                 ? null : property.valueSets[index];
     }
 
+    static String[] wildcardAliases(String propertyAlias, int index) {
+        Property property = property(propertyAlias);
+        return property == null ? new String[0] : property.wildcardAliases(index);
+    }
+
     private static Property property(String alias) {
         String loose = looseName(alias);
         if (loose == null) return null;
@@ -557,6 +576,8 @@ final class PerlUnicodeIndicCategoryData {
         private final String[] longValues;
         private final String[] valueAliases;
         private final byte[] valueAliasIndex;
+        private final String[] wildcardAliases;
+        private final byte[] wildcardAliasIndex;
         private final String[] propertyAliases;
         private final int[] ranges;
         private final int defaultIndex;
@@ -564,12 +585,15 @@ final class PerlUnicodeIndicCategoryData {
 
         private Property(String[] shortValues, String[] longValues,
                          String[] valueAliases, byte[] valueAliasIndex,
+                         String[] wildcardAliases, byte[] wildcardAliasIndex,
                          String[] propertyAliases, int[] ranges,
                          int defaultIndex) {
             this.shortValues = shortValues;
             this.longValues = longValues;
             this.valueAliases = valueAliases;
             this.valueAliasIndex = valueAliasIndex;
+            this.wildcardAliases = wildcardAliases;
+            this.wildcardAliasIndex = wildcardAliasIndex;
             this.propertyAliases = propertyAliases;
             this.ranges = ranges;
             this.defaultIndex = defaultIndex;
@@ -581,6 +605,16 @@ final class PerlUnicodeIndicCategoryData {
                 if (alias.equals(loose)) return true;
             }
             return false;
+        }
+
+        private String[] wildcardAliases(int index) {
+            java.util.ArrayList<String> aliases = new java.util.ArrayList<>();
+            for (int aliasIndex = 0; aliasIndex < wildcardAliases.length; aliasIndex++) {
+                if (wildcardAliasIndex[aliasIndex] == index) {
+                    aliases.add(wildcardAliases[aliasIndex]);
+                }
+            }
+            return aliases.toArray(new String[0]);
         }
 
         private UnicodeSet valueSet(String alias) {

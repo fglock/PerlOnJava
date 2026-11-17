@@ -50,6 +50,14 @@ class PerlUnicodeEastAsianWidthDataTest {
     }
 
     @Test
+    void wildcardCandidatesUsePinnedValueAliases() {
+        var result = UnicodeResolver.resolveJoniProperty(
+                "ea=:\\AAmbiguous\\z:", false);
+        assertNotNull(result);
+        assertTrue(contains(result.ranges, 0x00A1));
+    }
+
+    @Test
     void retainsEveryPinnedValue() {
         assertEquals(6, PerlUnicodeEastAsianWidthData.canonicalValues().length);
         for (String[] value : VALUES) {
@@ -95,5 +103,13 @@ class PerlUnicodeEastAsianWidthDataTest {
 
         assertTrue(pattern.contains("\\x{DFFF}"));
         assertFalse(pattern.matches(".*[\\uD800-\\uDFFF].*"));
+    }
+
+    private static boolean contains(int[] ranges, int codePoint) {
+        if (ranges == null) return false;
+        for (int index = 1; index + 1 < ranges.length; index += 2) {
+            if (ranges[index] <= codePoint && codePoint <= ranges[index + 1]) return true;
+        }
+        return false;
     }
 }

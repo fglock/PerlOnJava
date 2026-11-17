@@ -22,4 +22,21 @@ class PerlUnicodeGeneralCategoryDataTest {
         assertFalse(PerlUnicodeGeneralCategoryData.resolve("Cn").contains(0x33479));
         assertNull(PerlUnicodeGeneralCategoryData.resolve("not_a_category"));
     }
+
+    @Test
+    void wildcardCandidatesComeFromPinnedPerlAliases() {
+        var result = UnicodeResolver.resolveJoniProperty(
+                "General_Category=:\\Aletter\\z:", false);
+        assertTrue(result != null);
+        assertTrue(contains(result.ranges, 'A'));
+        assertTrue(contains(result.ranges, 0x20000));
+    }
+
+    private static boolean contains(int[] ranges, int codePoint) {
+        if (ranges == null) return false;
+        for (int index = 1; index + 1 < ranges.length; index += 2) {
+            if (ranges[index] <= codePoint && codePoint <= ranges[index + 1]) return true;
+        }
+        return false;
+    }
 }

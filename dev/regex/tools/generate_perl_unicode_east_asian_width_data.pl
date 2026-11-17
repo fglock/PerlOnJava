@@ -54,7 +54,7 @@ read_source($_) for @sources;
 my $unicode_version = read_unicode_version(
     path => File::Spec->catfile($unicore, 'version'), expected => $expected_version);
 
-my (@short_values, @long_values, %alias_index);
+my (@short_values, @long_values, %alias_index, %wildcard_aliases);
 for my $line (split /\n/, $sources[1]{text}) {
     next if $line =~ /^\s*#/;
     $line =~ s/#.*$//;
@@ -65,6 +65,7 @@ for my $line (split /\n/, $sources[1]{text}) {
     push @long_values, $fields[2];
     for my $alias (@fields[1 .. $#fields]) {
         next unless length $alias;
+        $wildcard_aliases{$alias} = 1;
         my $loose = loose_name($alias);
         die "East_Asian_Width alias collision for '$alias'\n"
             if exists $alias_index{$loose} && $alias_index{$loose} != $index;
@@ -156,6 +157,9 @@ my @aliases = sort keys %alias_index;
 print "    private static final String[] VALUE_ALIASES = {\n        ";
 print join(', ', map { qq{"$_"} } @aliases);
 print "\n    };\n";
+print "    private static final String[] WILDCARD_ALIASES = {\n        ";
+print join(', ', map { qq{"$_"} } sort keys %wildcard_aliases);
+print "\n    };\n";
 print "    private static final byte[] VALUE_ALIAS_INDEX = {\n        ";
 print join(', ', map { $alias_index{$_} } @aliases);
 print "\n    };\n";
@@ -198,6 +202,10 @@ print <<'FOOTER';
 
     static String[] canonicalValues() {
         return LONG_VALUES.clone();
+    }
+
+    static String[] wildcardAliases() {
+        return WILDCARD_ALIASES.clone();
     }
 
     private static int valueIndex(String alias) {

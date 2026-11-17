@@ -12,6 +12,7 @@ sub compile_property {
 my @samples = map { chr($_) } (
     0x0000, 0x000A, 0x000D, 0x0020, 0x0021, 0x0030, 0x0041, 0x005F,
     0x0061, 0x00A0, 0x0300, 0x05D0, 0x0600, 0x0903, 0x200D, 0x2029,
+    0x0323, 0x0620, 0x0915, 0x094D, 0x00A1, 0x13000, 0xFF01,
     0x30A2, 0xE000, 0x1F1E6, 0x1F3FB, 0x1F600, 0xE0100,
 );
 
@@ -80,6 +81,33 @@ my %enumerated_values = (
     vo => [qw(r tr tu u)],
     verticalorientation => [qw(rotated transformedrotated transformedupright upright)],
 );
+
+my %generated_perl_values = (
+    gc                  => [[qw(lu Uppercase_Letter)], [qw(l letter)]],
+    bc                  => [[qw(al Arabic_Letter)]],
+    ea                  => [[qw(a Ambiguous)], [qw(f Fullwidth)]],
+    ccc                 => [[qw(Above 230)], [qw(ATBL Attached_Below)]],
+    vo                  => [[qw(R Rotated)], [qw(Tr Transformed_Rotated)],
+                             [qw(Tu Transformed_Upright)], [qw(U Upright)]],
+    Age                 => [[qw(V15_1 15.1)]],
+    InSC                => [[qw(Vowel_Dependent)]],
+    InPC                => [[qw(NA)]],
+    GCB                 => [[qw(Extend)]],
+    InCB                => [[qw(Consonant)], [qw(Linker)]],
+    Identifier_Type     => [[qw(Recommended)]],
+);
+
+for my $property (sort keys %generated_perl_values) {
+    for my $spellings (@{$generated_perl_values{$property}}) {
+        my ($alias, $canonical) = @$spellings;
+        $canonical //= $alias;
+        same_membership(
+            "$property=:\\A$alias\\z:", "$property=$canonical",
+            "generated $property alias $alias");
+    }
+}
+same_membership('Age=:\\ANA\\z:', 'Age=Unassigned',
+        'generated Age unassigned aliases');
 
 for my $property (sort keys %enumerated_values) {
     for my $value (@{$enumerated_values{$property}}) {

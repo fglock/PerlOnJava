@@ -19,14 +19,15 @@ my %unicode_hash = (
     'CaseFolding.txt' => 'ff8d8fefbf123574205085d6714c36149eb946d717a0c585c27f0f4ef58c4183',
     'SpecialCasing.txt' => 'efc25faf19de21b92c1194c111c932e03d2a5eaf18194e33f1156e96de4c9588',
 );
-my %perl_hash = (
-    'regen/regcharclass_multi_char_folds.pl' => 'b2f896452d2b30da3e04800f478c60c1fd0b03d6b668689b020f1e3cf1f1cdd9',
-    'regen/mk_invlists.pl' => '20a6e3d507a66f4594586485568134873485b08e23383f3dc4e6b3047569267b',
-    'lib/unicore/mktables' => 'e3ac360c03d18779fea6d6497fbbe53798135da55e3764d3c9f90a79bbf7e8b5',
-    'charclass_invlists.inc' => 'c83c6471e7c188f21a20c6285af83f57d0bd09392f3243e4cc3743f0a5d5052c',
-    'regcharclass.h' => 'b6005d471764b31d04063ccd561c88d165a2a30f9bae9b75172eb7b59672754e',
-    'regen/regcharclass.pl' => '852a8a7814f08a155d79fead2656fe2b4450ab17a2bce8a1127016119c9c3bc3',
+my %perl_table_origin_hash = (
+    'regen/regcharclass_multi_char_folds.pl' => '1ce43daf54162d0a267412453ce2a613f60f3a7631365775cc52d34213251a83',
+    'regen/mk_invlists.pl' => '2fe950c6526e41c25308da86647024cfe2a1a05108bb8b6a095ce8ab88f43eee',
+    'lib/unicore/mktables' => '9931e372f6528f37dccad70cc9280a6a0fcb3b9afd08eba16f212360881c4ffd',
+    'charclass_invlists.inc' => '956ca2dbba6578d30b0627d0890b6818bde113bba3548c475f381475fbf74854',
+    'regcharclass.h' => 'bb7f467fe4e71aa13664b3afa1d7066890e7f0ae16b9f83e721ae5a8d390e675',
+    'regen/regcharclass.pl' => 'cad98ca9e7be21f5f2a127f4f6304302e3ea1de98295124986eabd91ab2e9643',
 );
+my %perl_hash = %perl_table_origin_hash;
 
 my $root = repo_root($FindBin::Bin);
 my $unicore = select_unicode_root(
@@ -371,12 +372,20 @@ HEADER
 print "    static final String UNICODE_VERSION = \"$unicode_version\";\n";
 print "    static final String CASE_FOLDING_SHA256 = \"$unicode_hash{'CaseFolding.txt'}\";\n";
 print "    static final String SPECIAL_CASING_SHA256 = \"$unicode_hash{'SpecialCasing.txt'}\";\n";
-print "    static final String PERL_MULTI_FOLD_GENERATOR_SHA256 = \"$perl_hash{'regen/regcharclass_multi_char_folds.pl'}\";\n";
-print "    static final String PERL_INVERSION_GENERATOR_SHA256 = \"$perl_hash{'regen/mk_invlists.pl'}\";\n";
-print "    static final String PERL_MKTABLES_SHA256 = \"$perl_hash{'lib/unicore/mktables'}\";\n";
-print "    static final String PERL_INVERSION_DATA_SHA256 = \"$perl_hash{'charclass_invlists.inc'}\";\n";
-print "    static final String PERL_REGCHARCLASS_SHA256 = \"$perl_hash{'regcharclass.h'}\";\n";
-print "    static final String PERL_REGCHARCLASS_GENERATOR_SHA256 = \"$perl_hash{'regen/regcharclass.pl'}\";\n\n";
+print "    // Original source pin for this table family; current checkout hashes follow.\n";
+print "    static final String PERL_MULTI_FOLD_GENERATOR_SHA256 = \"$perl_table_origin_hash{'regen/regcharclass_multi_char_folds.pl'}\";\n";
+print "    static final String PERL_INVERSION_GENERATOR_SHA256 = \"$perl_table_origin_hash{'regen/mk_invlists.pl'}\";\n";
+print "    static final String PERL_MKTABLES_SHA256 = \"$perl_table_origin_hash{'lib/unicore/mktables'}\";\n";
+print "    static final String PERL_INVERSION_DATA_SHA256 = \"$perl_table_origin_hash{'charclass_invlists.inc'}\";\n";
+print "    static final String PERL_REGCHARCLASS_SHA256 = \"$perl_table_origin_hash{'regcharclass.h'}\";\n";
+print "    static final String PERL_REGCHARCLASS_GENERATOR_SHA256 = \"$perl_table_origin_hash{'regen/regcharclass.pl'}\";\n";
+print "    // Hashes of the Perl sources validated by this generation.\n";
+print "    static final String PERL_CURRENT_MULTI_FOLD_GENERATOR_SHA256 = \"$perl_hash{'regen/regcharclass_multi_char_folds.pl'}\";\n";
+print "    static final String PERL_CURRENT_INVERSION_GENERATOR_SHA256 = \"$perl_hash{'regen/mk_invlists.pl'}\";\n";
+print "    static final String PERL_CURRENT_MKTABLES_SHA256 = \"$perl_hash{'lib/unicore/mktables'}\";\n";
+print "    static final String PERL_CURRENT_INVERSION_DATA_SHA256 = \"$perl_hash{'charclass_invlists.inc'}\";\n";
+print "    static final String PERL_CURRENT_REGCHARCLASS_SHA256 = \"$perl_hash{'regcharclass.h'}\";\n";
+print "    static final String PERL_CURRENT_REGCHARCLASS_GENERATOR_SHA256 = \"$perl_hash{'regen/regcharclass.pl'}\";\n\n";
 print "    static final int FULL_MAPPING_COUNT = " . scalar(keys %full) . ";\n";
 print "    static final int FULL_CODE_POINT_COUNT = $full_point_count;\n";
 print "    static final int SIMPLE_CLASS_COUNT = " . scalar(@simple_classes) . ";\n";

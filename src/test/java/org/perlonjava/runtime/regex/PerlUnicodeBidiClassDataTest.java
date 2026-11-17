@@ -67,6 +67,14 @@ class PerlUnicodeBidiClassDataTest {
     }
 
     @Test
+    void wildcardCandidatesUsePinnedValueAliases() {
+        var result = UnicodeResolver.resolveJoniProperty(
+                "bc=:\\AArabic_Letter\\z:", false);
+        assertNotNull(result);
+        assertTrue(contains(result.ranges, 0x0608));
+    }
+
+    @Test
     void retainsEveryPinnedValueIncludingDirectionalControls() {
         assertEquals(23, PerlUnicodeBidiClassData.canonicalValues().length);
         for (String[] value : VALUES) {
@@ -102,5 +110,13 @@ class PerlUnicodeBidiClassDataTest {
         }
         assertEquals(0x110000, union.size());
         assertTrue(union.contains(0, 0x10FFFF));
+    }
+
+    private static boolean contains(int[] ranges, int codePoint) {
+        if (ranges == null) return false;
+        for (int index = 1; index + 1 < ranges.length; index += 2) {
+            if (ranges[index] <= codePoint && codePoint <= ranges[index + 1]) return true;
+        }
+        return false;
     }
 }

@@ -33,7 +33,7 @@ final class PerlUnicodeBlockData {
     static final String BLOCKS_SHA256 = "a58f8d322f3c5e254f9f97b1cbf76a454a7e02de6ac35619a5e4f27aaabfd553";
     static final String PROPERTY_ALIASES_SHA256 = "83b8df695f9da543dba02b0be2b8bd72f0b52836ad264be113c6d285021ef025";
     static final String PROP_VALUE_ALIASES_SHA256 = "06c4c8eaf7b0bf34abe73b113da1215bd784ac254d4c223600b90267caa4bbbd";
-    static final String PERL_UNI_KEYWORDS_SHA256 = "2779e6971ce5bc772bab0cdc1638ebe77e16b1baaa817c38372c7b7f2592ed5c";
+    static final String PERL_UNI_KEYWORDS_SHA256 = "d3d6ba523a2240eeac928909d8c985470339f1bf4ebee44cd7c741e0638b751e";
     static final short INVALID = -1;
     static final short NO_BLOCK = 0;
 

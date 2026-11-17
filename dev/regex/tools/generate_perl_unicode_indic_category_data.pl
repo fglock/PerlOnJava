@@ -61,6 +61,7 @@ my %property = (
         short_values => [],
         long_values => [],
         alias_index => {},
+        wildcard_aliases => {},
         property_aliases => {},
         ranges => [],
     },
@@ -72,6 +73,7 @@ my %property = (
         short_values => [],
         long_values => [],
         alias_index => {},
+        wildcard_aliases => {},
         property_aliases => {},
         ranges => [],
     },
@@ -93,6 +95,7 @@ for my $line (split /\n/, $sources[2]{text}) {
             if exists $spec->{alias_index}{$loose}
                 && $spec->{alias_index}{$loose} != $index;
         $spec->{alias_index}{$loose} = $index;
+        $spec->{wildcard_aliases}{$alias} = $index;
     }
 }
 
@@ -153,6 +156,7 @@ sub emit_property {
     my ($short) = @_;
     my $spec = $property{$short};
     my @aliases = sort keys %{$spec->{alias_index}};
+    my @wildcard_aliases = sort keys %{$spec->{wildcard_aliases}};
     my @property_aliases = sort keys %{$spec->{property_aliases}};
     my $prefix = $spec->{java};
 
@@ -162,6 +166,10 @@ sub emit_property {
     print "    private static final byte[] ${prefix}_VALUE_ALIAS_INDEX = {\n        ";
     print join(', ', map { $spec->{alias_index}{$_} } @aliases);
     print "\n    };\n";
+    emit_string_array("${prefix}_WILDCARD_ALIASES", \@wildcard_aliases);
+    print "    private static final byte[] ${prefix}_WILDCARD_ALIAS_INDEX = {\n        ";
+    print join(', ', map { $spec->{wildcard_aliases}{$_} } @wildcard_aliases);
+    print "\n    };\n";
     emit_string_array("${prefix}_PROPERTY_ALIASES", \@property_aliases);
     print "    private static final int[] ${prefix}_RANGES = {\n";
     emit_java_range_triples($spec->{ranges});
@@ -169,6 +177,7 @@ sub emit_property {
     print "    private static final Property $prefix = new Property(\n";
     print "            ${prefix}_SHORT_VALUES, ${prefix}_LONG_VALUES,\n";
     print "            ${prefix}_VALUE_ALIASES, ${prefix}_VALUE_ALIAS_INDEX,\n";
+    print "            ${prefix}_WILDCARD_ALIASES, ${prefix}_WILDCARD_ALIAS_INDEX,\n";
     print "            ${prefix}_PROPERTY_ALIASES, ${prefix}_RANGES,\n";
     print "            $spec->{default_index});\n\n";
 }
@@ -244,6 +253,11 @@ print <<'FOOTER';
                 ? null : property.valueSets[index];
     }
 
+    static String[] wildcardAliases(String propertyAlias, int index) {
+        Property property = property(propertyAlias);
+        return property == null ? new String[0] : property.wildcardAliases(index);
+    }
+
     private static Property property(String alias) {
         String loose = looseName(alias);
         if (loose == null) return null;
@@ -268,6 +282,8 @@ print <<'FOOTER';
         private final String[] longValues;
         private final String[] valueAliases;
         private final byte[] valueAliasIndex;
+        private final String[] wildcardAliases;
+        private final byte[] wildcardAliasIndex;
         private final String[] propertyAliases;
         private final int[] ranges;
         private final int defaultIndex;
@@ -275,12 +291,15 @@ print <<'FOOTER';
 
         private Property(String[] shortValues, String[] longValues,
                          String[] valueAliases, byte[] valueAliasIndex,
+                         String[] wildcardAliases, byte[] wildcardAliasIndex,
                          String[] propertyAliases, int[] ranges,
                          int defaultIndex) {
             this.shortValues = shortValues;
             this.longValues = longValues;
             this.valueAliases = valueAliases;
             this.valueAliasIndex = valueAliasIndex;
+            this.wildcardAliases = wildcardAliases;
+            this.wildcardAliasIndex = wildcardAliasIndex;
             this.propertyAliases = propertyAliases;
             this.ranges = ranges;
             this.defaultIndex = defaultIndex;
@@ -292,6 +311,16 @@ print <<'FOOTER';
                 if (alias.equals(loose)) return true;
             }
             return false;
+        }
+
+        private String[] wildcardAliases(int index) {
+            java.util.ArrayList<String> aliases = new java.util.ArrayList<>();
+            for (int aliasIndex = 0; aliasIndex < wildcardAliases.length; aliasIndex++) {
+                if (wildcardAliasIndex[aliasIndex] == index) {
+                    aliases.add(wildcardAliases[aliasIndex]);
+                }
+            }
+            return aliases.toArray(new String[0]);
         }
 
         private UnicodeSet valueSet(String alias) {
