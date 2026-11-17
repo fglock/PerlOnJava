@@ -1,11 +1,11 @@
 # Perl-compatible ownership rewrite
 
-**Status:** PR #1938 remains open at published head `c9f6e3d002`, based on
-current `master` `e01bb336af`. The merge candidate `a92ce0e5` incorporates
-current master and passes the full `make` and documentation link gates. GitHub
-reports the branch mergeable; hosted checks on the new head are running. The
-user's UAT checkout remains unchanged at tested commit `5c011dfa0e`. Keep the
-PR open for human review; do not merge.
+**Status:** PR #1938 remains open and unmerged. The latest validated source
+merge is `195b4e689b`, incorporating current master `a2098dc5c6`; the full
+`make` gate and documentation link check pass. The user's UAT checkout remains
+unchanged at tested commit `5c011dfa0e`. Current master passes its unit gate
+but has a separate Linux Thread-Queue compatibility failure. Keep the PR open;
+do not merge before human review.
 
 | Work | Status | Evidence or acceptance |
 | --- | --- | --- |
@@ -15,9 +15,9 @@ PR open for human review; do not merge.
 | Release Moo's weakened optree constant | Verified locally | The permanent 4/4 regression passes on system Perl, JVM, and interpreter; assertion 4 fails on UAT parent `5c011dfa0e`. Both unchanged Moo accessor-weaken files pass 19/19 on all three runtimes. |
 | Release DBI handles after failed `do` | Candidate delivered | `_do_impl` finishes any partial statement, clears its local DBI handle, and rethrows the DBI error. The permanent schema regression fails with the unfixed `do` implementation on JVM and passes 3/3 on system Perl, JVM, and interpreter. |
 | Preserve caller cleanup through interpreter aliases | Candidate delivered | `dev/modules/dbix_failed_connect_releases_storage.t` fails assertion 4 on the unfixed artifact and passes 4/4 on system Perl, JVM, and interpreter. The recursive-frame unit test covers same-CV callers. |
-| Final local gate | Passed | After integrating current master at `a92ce0e5`, `nice -n 19 timeout 3600 make` succeeded in 7m26 and `make check-links` reported 0 errors. Earlier UAT evidence remains valid, including DBIx `t/storage/error.t` 49/49; `t/storage/txn.t` retains one pre-existing exception line-reporting mismatch and no leaks. All seven hosted checks on prior head `db39c7e457` succeeded; eight checks are running on `c9f6e3d002`. |
+| Final local gate | Passed | After integrating current master `a2098dc5c6` at `195b4e689b`, `nice -n 19 timeout 3600 make` succeeded in 7m35 and `make check-links` reported 0 errors. Earlier UAT evidence remains valid, including DBIx `t/storage/error.t` 49/49; `t/storage/txn.t` retains one pre-existing exception line-reporting mismatch and no leaks. Hosted checks on the older published PR head exposed a process-test timeout; current master passes that unit gate. |
 
-## Current handoff: 2026-11-17
+## Current handoff: 2026-11-18
 
 The UAT failures were in Moo's unchanged `accessor-weaken.t` and
 `accessor-weaken-pre-5_8_3.t`, each failing only `optree reaped, ro static
@@ -35,17 +35,31 @@ interpreter code has acquired its own edges. The existing statement-boundary
 cleanup also retains temporary RHS cell storage through the Perl statement and
 preserves cells still owned by live aggregates.
 
+After the PR head was updated, current master added CPAN numeric and MakeMaker
+compatibility changes. The Linux CI run on the prior PR head failed only
+`zz_perlonjava_process.t` because MakeMaker dependency extraction exceeded its
+10-second timeout; the unchanged test passes on system Perl and local JVM.
+Current master CI passes the full unit gate, including that test, but its later
+Linux Thread-Queue compatibility gate fails with a
+`ConcurrentModificationException`. The latest master merge is now locally
+validated; hosted CI must confirm which of those results apply to the PR.
+
 Validation on local source commit `81500f6c8c`: `nice -n 19 make` passed in
 6m49 (672 unit tests and Joni); `make check-links` found 0 errors. After
 master advanced, commit `a92ce0e5` merged its caller-introspection changes;
 the only conflict was the top of the changelog, where both the #2043 and
 #2069 entries were retained. `nice -n 19 timeout 3600 make` passed on that
-immutable merge candidate in 7m26. `make check-links` then reported 0 errors.
-Logs:
+immutable merge candidate in 7m26. The newer merge commit `195b4e689b` brings
+in current master `a2098dc5c6`; `make` passed in 7m35 and `make check-links`
+reported 0 errors. Logs:
 `/private/tmp/issue2043-final-owner-cleanup-make.log`,
 `/private/tmp/issue2043-after-master-make.log`,
 `/private/tmp/issue2043-after-master-check-links.log`,
+`/private/tmp/issue2043-after-master-a209-make.log`,
+`/private/tmp/issue2043-after-master-a209-check-links.log`,
 `/private/tmp/issue2043-final-check-links.log`,
+`/private/tmp/issue2043-master-linux-job.log`,
+`/private/tmp/issue2043-linux-job-logs.log`,
 `/private/tmp/issue2043-moo-regression-system-perl-final.log`,
 `/private/tmp/issue2043-moo-regression-interpreter-final.log`,
 `/private/tmp/issue2043-moo-regression-unfixed-5c011-jvm.log`, and
@@ -55,11 +69,10 @@ sweep remains stopped at the user's direction.
 
 ### Next steps
 
-1. Wait for the eight hosted checks on `c9f6e3d002` and confirm GitHub keeps
-   the branch mergeable.
-2. Tell the user when the updated PR is ready for review; keep it open and do
-   not merge until human review accepts the classified `t/storage/txn.t`
-   diagnostic mismatch or requests follow-up.
+1. Publish validated merge commit `195b4e689b` and refresh hosted checks.
+2. Compare any Linux Thread-Queue failure with the current-master baseline
+   before telling the user the PR is ready for review. Keep it open; do not
+   merge before human review.
 3. After PR acceptance, close #2043 with final evidence; resume #2037
    archive-lifetime and #2034 localized-STDERR separately.
 
