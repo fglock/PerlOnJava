@@ -336,19 +336,36 @@ public class HintHashRegistry {
      * Object::HashBase's deferred Role::Tiny composition).
      */
     public static void restoreHintHash(RuntimeHash active, Map<String, RuntimeScalar> saved) {
-        List<RuntimeScalar> discarded = new ArrayList<>();
-        List<String> discardedKeys = new ArrayList<>();
+        // R53: fast path — saved was empty, just clear active if needed.
+        if (saved.isEmpty()) {
+            if (!active.elements.isEmpty()) {
+                MortalList.deferDestroyForContainerClear(new ArrayList<>(active.elements.values()));
+                active.elements.clear();
+            }
+            return;
+        }
+        // R53: allocate discard lists lazily; common case (no pragma changes) allocates nothing.
+        List<RuntimeScalar> discarded = null;
+        List<String> discardedKeys = null;
         for (Map.Entry<String, RuntimeScalar> entry : active.elements.entrySet()) {
             RuntimeScalar retained = saved.get(entry.getKey());
             RuntimeScalar current = entry.getValue();
             if (retained == null || retained.type != current.type || retained.value != current.value) {
+                if (discarded == null) {
+                    discarded = new ArrayList<>();
+                    discardedKeys = new ArrayList<>();
+                }
                 discarded.add(current);
                 discardedKeys.add(entry.getKey());
             }
         }
-        MortalList.deferDestroyForContainerClear(discarded);
-        for (String key : discardedKeys) {
-            active.elements.remove(key);
+        // Fast path: nothing changed and no saved keys are missing from active.
+        if (discarded == null && active.elements.size() == saved.size()) return;
+        if (discarded != null) {
+            MortalList.deferDestroyForContainerClear(discarded);
+            for (String key : discardedKeys) {
+                active.elements.remove(key);
+            }
         }
         for (Map.Entry<String, RuntimeScalar> entry : saved.entrySet()) {
             if (!active.elements.containsKey(entry.getKey())) {

@@ -5341,14 +5341,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         ScopedSymbolTable savedCurrentScope = getCurrentScope();
         RuntimeHash activeHintHash = GlobalVariable.getGlobalHash(GlobalContext.encodeSpecialVar("H"));
         boolean hintHashEmpty = activeHintHash.elements.isEmpty();
+        // R53: shallow copy (same RuntimeScalar references), matching the JVM path (line 4796).
+        // Pragma entries are always replaced via elements.put(new RuntimeScalar(...)), never
+        // mutated in-place, so reference identity is sufficient for change detection in
+        // restoreHintHash. Avoids N new RuntimeScalar() allocations per eval.
         Map<String, RuntimeScalar> savedHintHash;
         if (hintHashEmpty) {
             savedHintHash = Collections.emptyMap();
         } else {
-            savedHintHash = new HashMap<>(activeHintHash.elements.size());
-            for (Map.Entry<String, RuntimeScalar> entry : activeHintHash.elements.entrySet()) {
-                savedHintHash.put(entry.getKey(), new RuntimeScalar(entry.getValue()));
-            }
+            savedHintHash = new HashMap<>(activeHintHash.elements);
         }
         int savedCallSiteHintHashId = HintHashRegistry.getCallSiteHintHashId();
         Map<String, RuntimeScalar> lexicalHintHash =

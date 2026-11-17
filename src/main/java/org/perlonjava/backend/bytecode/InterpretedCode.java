@@ -103,24 +103,39 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
     // Created lazily on first use (after packageName/subName are set)
     public volatile InterpreterState.InterpreterFrame cachedFrame;
 
-    // R46: per-thread frame pool — one reusable SuspendedInterpreterFrame per code object per thread.
-    // Holds a frame whose registers array is already the right size and has been cleared.
-    // Only non-suspended, freshly-entered frames are ever returned here; resumed async
-    // frames are excluded by design (BytecodeInterpreter.execute(code,args,…) controls the lifecycle).
-    private final ThreadLocal<SuspendedInterpreterFrame> framePool = new ThreadLocal<>();
+    // R52: per-thread frame pool, shared across ALL InterpretedCode instances.
+    // Array is indexed by maxRegisters (frames with more than MAX_POOLED_REGISTERS
+    // are not pooled). One entry per register count is kept per thread; extra frames
+    // from recursive calls at the same depth are discarded (eligible for GC).
+    //
+    // Replaces the R46 per-instance ThreadLocal: that design created one new
+    // ThreadLocal (one AtomicInteger.getAndAdd + heap allocation) per eval-string
+    // compile, and stale entries accumulated in the ThreadLocalMap, slowing all
+    // ThreadLocal lookups on the eval thread. A single static ThreadLocal has none
+    // of those costs.
+    //
+    // The slot at pool[n] holds at most one cleared frame with registers.length == n.
+    // Frames belonging to suspended (async) calls are never released here — they are
+    // owned by InterpreterSuspension and managed by FutureAsyncAwaitRuntime.
+    private static final int MAX_POOLED_REGISTERS = 256;
+    private static final ThreadLocal<SuspendedInterpreterFrame[]> FRAME_POOL =
+            ThreadLocal.withInitial(() -> new SuspendedInterpreterFrame[MAX_POOLED_REGISTERS + 1]);
 
     /**
      * Borrow a frame from the per-thread pool, or allocate a fresh one.
      * The caller must initialize registers[0..2] and capturedVars before dispatching.
      */
     SuspendedInterpreterFrame acquireFrame(int callContext, String subroutineName) {
-        SuspendedInterpreterFrame frame = framePool.get();
-        if (frame != null) {
-            framePool.remove();
-            frame.code = this;  // re-set after releaseFrame nulled it to break retention cycle
-            frame.callContext = callContext;
-            frame.subroutineName = subroutineName;
-            return frame;
+        if (maxRegisters <= MAX_POOLED_REGISTERS) {
+            SuspendedInterpreterFrame[] pool = FRAME_POOL.get();
+            SuspendedInterpreterFrame frame = pool[maxRegisters];
+            if (frame != null) {
+                pool[maxRegisters] = null;
+                frame.code = this;
+                frame.callContext = callContext;
+                frame.subroutineName = subroutineName;
+                return frame;
+            }
         }
         return new SuspendedInterpreterFrame(this, new RuntimeBase[maxRegisters], callContext, subroutineName);
     }
@@ -132,10 +147,10 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
      * (those are owned by InterpreterSuspension and managed by FutureAsyncAwaitRuntime).
      */
     void releaseFrame(SuspendedInterpreterFrame frame) {
-        // Null the code reference BEFORE pooling: the ThreadLocal entry (Thread →
-        // entry.value → frame → frame.code → InterpretedCode) would otherwise keep
-        // this InterpretedCode reachable forever, preventing GC of compiled modules.
-        // acquireFrame() re-sets frame.code = this before handing the frame back.
+        // Null the code reference so InterpretedCode is eligible for GC once the
+        // Perl runtime drops its last reference to the code (eval-generated code
+        // is only reachable via the compiled sub; once that sub is dropped, nothing
+        // else holds the InterpretedCode). acquireFrame() re-sets frame.code = this.
         frame.code = null;
         Arrays.fill(frame.registers, null);
         // Reset scalar fields that execute() may have modified.
@@ -163,7 +178,9 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         frame.createdClosures = null;
         frame.methodInvocantHolds = null;
         frame.suspendedDynamicStates = null;
-        framePool.set(frame);
+        if (maxRegisters <= MAX_POOLED_REGISTERS) {
+            FRAME_POOL.get()[maxRegisters] = frame;
+        }
     }
 
     /**
