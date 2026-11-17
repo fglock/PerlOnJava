@@ -137,15 +137,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // referent count. A mortal return keeps its exact RETURN_VALUE
             // release queued until this alias frame leaves.
             if (value instanceof RuntimeScalar scalar) {
-                // A stand-alone temporary CODE cell can own compiled pad
-                // constants without belonging to a lexical or aggregate.
-                // Keep a no-count call owner until the callee has entered and left.
+                // A temporary CODE value can own compiled pad constants or
+                // closure captures without belonging to a lexical or aggregate.
+                // A captured CV needs an independent call-frame owner because
+                // weakening a local copy can retire the scalar cell's own edge.
+                // Empty capture arrays continue to use the ordinary @_ owner.
                 if (!WeakRefRegistry.isweak(scalar)
                         && scalar.type == RuntimeScalarType.CODE
                         && scalar.value instanceof RuntimeCode code
                         && argumentAliasContainer(scalar) == null
-                        && code.capturedScalars == null
-                        && code.capturedAggregates == null
+                        && (hasNoCaptureMetadata(code) || hasCapturedPadValues(code))
                         && !code.hasIndependentPerlOwnerSlotForArgument()) {
                     PerlOwnerSlot owner = new PerlOwnerSlot(PerlOwnerSlot.Kind.ARGUMENT_VALUE);
                     owner.acquireCountedIdentity(code);
@@ -168,6 +169,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             } else if (value instanceof RuntimeList) {
                 retainListResultOwners(value);
             }
+        }
+
+        private static boolean hasNoCaptureMetadata(RuntimeCode code) {
+            return code.capturedScalars == null && code.capturedAggregates == null;
+        }
+
+        private static boolean hasCapturedPadValues(RuntimeCode code) {
+            return (code.capturedScalars != null && code.capturedScalars.length > 0)
+                    || (code.capturedAggregates != null && code.capturedAggregates.length > 0);
         }
 
         private boolean needsStagedArgumentValueOwner(RuntimeScalar scalar) {
@@ -2323,6 +2333,36 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return false;
     }
 
+    /** Whether an active lexical cell belongs to a caller of {@code currentCode}. */
+    public static boolean isActiveLexicalCellInCallerFrame(
+            RuntimeBase cell, RuntimeCode currentCode) {
+        if (cell == null) return false;
+        PerlRuntime runtime = PerlRuntime.current();
+        boolean skippedCurrentFrame = false;
+        for (ActiveLexicalFrame frame : activeLexicalFrames(runtime.executionState())) {
+            if (!skippedCurrentFrame && sameLogicalCode(frame.code(), currentCode)) {
+                skippedCurrentFrame = true;
+                continue;
+            }
+            boolean containsCell = false;
+            for (RuntimeBase activeCell : frame.cells().values()) {
+                if (activeCell == cell) {
+                    containsCell = true;
+                    break;
+                }
+            }
+            if (containsCell) return true;
+        }
+        if (runtime.executionState().topLevelLexicals.containsValue(cell)) {
+            boolean currentIsTopLevel = currentCode != null
+                    && "main".equals(currentCode.packageName)
+                    && (currentCode.subName == null || currentCode.subName.isBlank()
+                        || "<anonymous>".equals(currentCode.subName));
+            return !currentIsTopLevel;
+        }
+        return false;
+    }
+
     /** Bind a format's captured lexical to the currently executing pad frame. */
     public static void registerCurrentActiveLexical(String variableName, RuntimeBase cell) {
         ExecutionRuntimeState state = PerlRuntime.current().executionState();
@@ -2640,14 +2680,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 || args.hasPerlStrongOwner()) {
             return;
         }
-        Throwable failure = null;
+        Throwable failure = attemptCleanup(null,
+                () -> refreshUntrackedCellsAfterContainerTransfer(args));
         for (RuntimeScalar scalar : new ArrayList<>(args.elements)) {
             if (scalar != null) {
                 failure = attemptCleanup(failure, () -> scalar.releaseContainerOwner(args));
             }
         }
-        failure = attemptCleanup(failure,
-                () -> refreshUntrackedCellsAfterContainerTransfer(args));
         rethrowCleanupFailure(failure);
     }
 
@@ -12857,6 +12896,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             JvmClosureFrame closureFrame = jvmClosureFrameRequired
                     ? pushJvmClosureFrame() : null;
             boolean signatureCall = enterSignatureCall();
+            int cleanupMark = MyVarCleanupStack.pushMark(executionState);
             try {
                 validateNamedSignatureArguments(a);
                 if (!signatureNamedParams.isEmpty() || "%".equals(signatureSlurpySigil)) {
@@ -12878,7 +12918,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     protectReturnedJvmClosures(closureFrame, returned);
                 }
                 return returned;
+            } catch (PerlNonLocalReturnException e) {
+                MyVarCleanupStack.unwindTo(cleanupMark, executionState);
+                throw e;
             } catch (RuntimeException e) {
+                if (!(e instanceof PerlExitException)) {
+                    MyVarCleanupStack.unwindTo(cleanupMark, executionState);
+                    MortalList.flush();
+                }
                 throw WarnDie.maybeInvokeUnhandledDieHandler(e);
             } finally {
                 exitSignatureCall(signatureCall);
@@ -12887,6 +12934,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 restoreCallerWarningScope(warningScopeScalar, savedRuntimeWarningScope);
                 if (warningBits != null) {
                     WarningBitsRegistry.popCurrent(compilationState);
+                }
+                if (executionState.myVarCleanupStack.size() > cleanupMark) {
+                    MyVarCleanupStack.popMark(cleanupMark, executionState);
                 }
                 exitCall(executionState);
                 if (closureFrame != null) {
@@ -13033,6 +13083,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             JvmClosureFrame closureFrame = jvmClosureFrameRequired
                     ? pushJvmClosureFrame() : null;
             boolean signatureCall = enterSignatureCall();
+            // This overload can bind a callback to another PerlRuntime above.
+            // Keep the mark here so its lexicals unwind before that binding ends.
+            int cleanupMark = MyVarCleanupStack.pushMark();
             try {
                 validateNamedSignatureArguments(a);
                 if (!signatureNamedParams.isEmpty() || "%".equals(signatureSlurpySigil)) {
@@ -13054,7 +13107,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     protectReturnedJvmClosures(closureFrame, returned);
                 }
                 return returned;
+            } catch (PerlNonLocalReturnException e) {
+                MyVarCleanupStack.unwindTo(cleanupMark);
+                throw e;
             } catch (RuntimeException e) {
+                if (!(e instanceof PerlExitException)) {
+                    MyVarCleanupStack.unwindTo(cleanupMark);
+                    MortalList.flush();
+                }
                 throw WarnDie.maybeInvokeUnhandledDieHandler(e);
             } finally {
                 exitSignatureCall(signatureCall);
@@ -13065,6 +13125,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 if (warningBits != null) {
                     WarningBitsRegistry.popCurrent();
                 }
+                MyVarCleanupStack.popMark(cleanupMark);
                 exitCall();
                 if (closureFrame != null) {
                     popJvmClosureFrame(closureFrame);
