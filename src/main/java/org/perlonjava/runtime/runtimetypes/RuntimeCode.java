@@ -1651,7 +1651,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         PerlRuntime runtime = PerlRuntime.current();
         for (ActiveLexicalFrame frame : activeLexicalFrames(runtime.executionState())) {
             if (sameLogicalCode(frame.code(), code)) {
-                return new LinkedHashMap<>(frame.cells());
+                Map<String, RuntimeBase> snapshot = new LinkedHashMap<>(frame.cells());
+                // Lexicals captured from an enclosing pad belong to this CV's
+                // live Perl pad too, even when the generated JVM frame does
+                // not materialize them as local register cells.
+                if (code.closedOverVariables != null) {
+                    code.closedOverVariables.forEach(snapshot::putIfAbsent);
+                }
+                return snapshot;
             }
         }
         return Collections.emptyMap();
@@ -8147,21 +8154,30 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public static RuntimeCode getActiveCodeAtPadWalkerFrame(int level) {
         if (level < 0) return null;
         RuntimeCode previous = null;
-        int plumbingFrames = 2; // Internals::jperl_var_name and PadWalker::var_name
         int logicalIndex = 0;
         for (RuntimeCode active : activeCodeStack()) {
             if (isCompilerWrapperPair(active, previous)) {
                 continue;
             }
             previous = active;
-            if (active.isBuiltin || active.isMapGrepBlock) continue;
-            if (plumbingFrames > 0) {
-                plumbingFrames--;
-                continue;
-            }
+            if (active.isBuiltin || active.isMapGrepBlock || isPadWalkerBridgeFrame(active)) continue;
             if (logicalIndex++ == level) return active;
         }
         return null;
+    }
+
+    /** Java bridge and Perl shim frames do not count as PadWalker caller levels. */
+    private static boolean isPadWalkerBridgeFrame(RuntimeCode code) {
+        if (code == null || code.packageName == null || code.subName == null) return false;
+        if ("Internals".equals(code.packageName)) {
+            return "jperl_peek_my".equals(code.subName)
+                    || "jperl_peek_our".equals(code.subName)
+                    || "jperl_var_name".equals(code.subName);
+        }
+        return "PadWalker".equals(code.packageName)
+                && ("peek_my".equals(code.subName)
+                || "peek_our".equals(code.subName)
+                || "var_name".equals(code.subName));
     }
 
     private static boolean isCompilerWrapperPair(RuntimeCode left, RuntimeCode right) {
