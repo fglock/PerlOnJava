@@ -871,11 +871,17 @@ public class RuntimeList extends RuntimeBase {
 
         } finally {
             try {
-                // Assignment can throw while a tied or readonly target is being
-                // updated. Retire any transport copies that did not reach an LHS
-                // and avoid leaving flushing suppressed across exception unwind.
-                for (RuntimeScalar copy : rhs.elements) {
-                    RuntimeScalar.releaseMaterializedAssignmentCopy(copy, "unwind", null);
+                try {
+                    // Assignment can throw while a tied or readonly target is being
+                    // updated. Retire any transport copies that did not reach an LHS.
+                    for (RuntimeScalar copy : rhs.elements) {
+                        RuntimeScalar.releaseMaterializedAssignmentCopy(copy, "unwind", null);
+                    }
+                } finally {
+                    // Keep the copied cells alive until the enclosing Perl mortal
+                    // boundary, after the receiver slots have been registered.
+                    // The boundary then clears their untracked container owners.
+                    MortalList.deferTransientListAssignmentRhs(rhs);
                 }
             } finally {
                 MortalList.suppressFlush(wasFlushing);

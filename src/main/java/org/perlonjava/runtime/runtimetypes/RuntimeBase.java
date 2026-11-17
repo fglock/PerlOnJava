@@ -535,7 +535,8 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     boolean hasScalarCellOwner() {
         return this instanceof RuntimeScalar scalar && scalar.referencedByScalarReference
                 && (scalar.localBindingExists
-                    || hasOwnerSlots() || hasPendingReturnOwner());
+                    || hasOwnerSlots() || hasPendingReturnOwner()
+                    || scalar.hasLiveCurrentAggregateStorageOwner());
     }
 
     /** Storage identities that own a scalar cell itself, excluding its value edges. */

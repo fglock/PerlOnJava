@@ -32,6 +32,9 @@ public class Disassemble {
                     case Opcodes.MORTAL_FLUSH:
                         sb.append("MORTAL_FLUSH\n");
                         break;
+                    case Opcodes.MORTAL_STATEMENT_FLUSH:
+                        sb.append("MORTAL_STATEMENT_FLUSH\n");
+                        break;
                     case Opcodes.MORTAL_PUSH_MARK:
                         sb.append("MORTAL_PUSH_MARK\n");
                         break;

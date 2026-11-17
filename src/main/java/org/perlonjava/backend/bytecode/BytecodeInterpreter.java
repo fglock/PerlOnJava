@@ -554,9 +554,13 @@ public class BytecodeInterpreter {
                             }
 
                             case Opcodes.MORTAL_FLUSH -> {
-                                // Statement-boundary FREETMPS for the current function scope.
+                                // Scope/control cleanup without advancing a Perl
+                                // statement boundary.
                                 MortalList.flushAboveMark();
                             }
+
+                            case Opcodes.MORTAL_STATEMENT_FLUSH ->
+                                    MortalList.flushStatementBoundary();
 
                             case Opcodes.MORTAL_PUSH_MARK -> {
                                 // Push mark before scope-exit cleanup (SAVETMPS equivalent)

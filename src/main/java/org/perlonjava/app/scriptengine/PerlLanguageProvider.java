@@ -987,6 +987,7 @@ public class PerlLanguageProvider {
                 if (showFallback) {
                     System.err.println("Note: Using interpreter fallback (ASM frame compute crash).");
                 }
+                EmitterMethodCreator.discardUninstalledDirectCallDescriptors(ctx);
                 return fallback.interpretedCode;
             } catch (Throwable e) {
                 // Check if this is a recoverable compilation error that can use interpreter fallback
@@ -1026,6 +1027,7 @@ public class PerlLanguageProvider {
                             ctx.errorUtil
                     );
                     InterpretedCode interpretedCode = compiler.compile(ast, fallbackCtx);
+                    EmitterMethodCreator.discardUninstalledDirectCallDescriptors(ctx);
                     if (ctx.symbolTable != null && fallbackCtx.symbolTable != null) {
                         ctx.symbolTable.copyFlagsFrom(fallbackCtx.symbolTable);
                     }

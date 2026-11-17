@@ -865,7 +865,7 @@ public class EmitBlock {
                 if (i < lastNonNullIndex) {
                     mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                             "org/perlonjava/runtime/runtimetypes/MortalList",
-                            "flushAboveMark",
+                            "flushStatementBoundary",
                             "()V",
                             false);
                 }

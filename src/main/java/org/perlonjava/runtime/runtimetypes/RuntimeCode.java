@@ -2069,6 +2069,20 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return null;
     }
 
+    /** Number of Perl code frames currently executing on this thread. */
+    static int currentExecutionDepth() {
+        return activeCodeStack().size();
+    }
+
+    /** Whether the active Perl frame is the file-level main block. */
+    static boolean isCurrentExecutionTopLevel() {
+        RuntimeCode active = getActiveCodeAt(0);
+        return active == null || (activeCodeStack().size() <= 1
+                && "main".equals(active.packageName)
+                && (active.subName == null || active.subName.isBlank()
+                    || "<anonymous>".equals(active.subName)));
+    }
+
     /** True when the current Perl call chain is executing a sort BLOCK comparator. */
     public static boolean hasActiveSortComparator() {
         for (RuntimeCode active : activeCodeStack()) {
@@ -5097,6 +5111,29 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
         }
         return prepared;
+    }
+
+    /**
+     * Release parser-owned CODE edges when JVM generation abandons an optree
+     * before its pad constants can be transferred to a RuntimeCode.
+     */
+    public static void discardUninstalledCompiledDirectCallDescriptors(
+            RuntimeBase[] constants) {
+        if (constants == null) return;
+        for (RuntimeBase constant : constants) {
+            if (!(constant instanceof RuntimeScalar descriptor)
+                    || !descriptor.isCompiledDirectCallSiteDescriptor()) continue;
+            String name = descriptor.compiledDirectCallSiteName();
+            RuntimeScalar initialSlot = descriptor.compiledDirectCallInitialSlot();
+            RuntimeScalar pinSlot = descriptor.compiledDirectCallPinSlot();
+            boolean hasDeferredParseOwner = descriptor.compiledDirectCallHasDeferredParseOwner();
+            descriptor.releaseCompiledDirectCallSiteDescriptorBinding();
+            GlobalVariable.releaseCompiledDirectCallPin(
+                    name, pinSlot == null ? initialSlot : pinSlot);
+            if (hasDeferredParseOwner) {
+                GlobalVariable.releaseDeferredDirectCallOwner(initialSlot);
+            }
+        }
     }
 
     private void acquirePadConstantOwners(RuntimeBase[] constants) {

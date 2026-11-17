@@ -1964,6 +1964,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return false;
     }
 
+    /** Whether a stored aggregate containing this cell still has a Perl owner. */
+    boolean hasLiveCurrentAggregateStorageOwner() {
+        for (RuntimeBase owner : containerOwnerSnapshot()) {
+            if (isStoredInAnyContainer(owner) && owner.hasCurrentPerlStorageOwner()) return true;
+        }
+        return false;
+    }
+
     boolean isCurrentCapturedScalarCellOwner(RuntimeBase referent, PerlOwnerSlot slot) {
         if (slot.kind() != PerlOwnerSlot.Kind.SCALAR_CELL
                 || countedOwnerSlot != slot || !refCountOwned || value != referent

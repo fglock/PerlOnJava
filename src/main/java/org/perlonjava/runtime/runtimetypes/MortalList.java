@@ -65,6 +65,7 @@ public class MortalList {
                     || !state.pendingTiedReleases.isEmpty()
                     || !state.pendingIoReleases.isEmpty()
                     || !state.pendingUntrackedReturnOwnerReleases.isEmpty()
+                    || !state.pendingTransientListAssignmentRhs.isEmpty()
                     || state.deferredCapturesMayBeReady;
             if (!needed && state.boundaryWorkRegistered.compareAndSet(true, false)) {
                 runtimesWithBoundaryWork.decrementAndGet();
@@ -619,6 +620,63 @@ public class MortalList {
         LifecycleRuntimeState state = state();
         markBoundaryWork(state);
         state.pendingUntrackedReturnOwnerReleases.add(scalar);
+    }
+
+    /** Retire a one-shot list-assignment RHS at its enclosing Perl mortal boundary. */
+    static void deferTransientListAssignmentRhs(RuntimeArray rhs) {
+        if (rhs == null) return;
+        LifecycleRuntimeState state = state();
+        if (!state.mortalActive) {
+            releaseTransientListAssignmentRhs(rhs);
+            return;
+        }
+        RuntimeCode executionCode = RuntimeCode.getActiveCodeAt(0);
+        int executionDepth = RuntimeCode.currentExecutionDepth();
+        int drainAtExecutionDepth = RuntimeCode.isCurrentExecutionTopLevel()
+                ? executionDepth : Math.max(0, executionDepth - 1);
+        markBoundaryWork(state);
+        state.pendingTransientListAssignmentRhs.add(
+                new LifecycleRuntimeState.PendingTransientListAssignmentRhs(
+                        rhs, executionCode, executionDepth, drainAtExecutionDepth,
+                        state.statementBoundarySequence + 1));
+    }
+
+    static void releaseTransientListAssignmentRhs(RuntimeArray rhs) {
+        if (rhs == null) return;
+        if (rhs.elements != null) {
+            for (RuntimeScalar cell : rhs.elements) {
+                if (cell != null && cell.getContainerOwner() == rhs) {
+                    cell.releaseContainerOwner(rhs);
+                }
+            }
+            rhs.elements.clear();
+        }
+        rhs.transientListAssignmentRhs = false;
+    }
+    private static void releaseTransientListAssignmentRhsAtBoundary(
+            LifecycleRuntimeState state) {
+        RuntimeCode executionCode = RuntimeCode.getActiveCodeAt(0);
+        int executionDepth = RuntimeCode.currentExecutionDepth();
+        for (int index = 0; index < state.pendingTransientListAssignmentRhs.size();) {
+            LifecycleRuntimeState.PendingTransientListAssignmentRhs pending =
+                    state.pendingTransientListAssignmentRhs.get(index);
+            boolean returnedToSameDepthCaller =
+                    pending.drainAtExecutionDepth < pending.executionDepth
+                    && executionDepth == pending.executionDepth
+                    && executionCode != pending.executionCode;
+            boolean boundaryPassed = state.statementBoundarySequence
+                    >= pending.drainAtStatementBoundary;
+            boolean executionReturned = executionDepth <= pending.drainAtExecutionDepth
+                    || returnedToSameDepthCaller;
+            boolean ready = executionDepth == 0
+                    || (boundaryPassed && executionReturned);
+            if (ready) {
+                state.pendingTransientListAssignmentRhs.remove(index);
+                releaseTransientListAssignmentRhs(pending.array);
+            } else {
+                index++;
+            }
+        }
     }
 
     /**
@@ -1529,8 +1587,7 @@ public class MortalList {
             while (pendingIdx < state.pending.size()
                     || tiedReleaseIdx < state.pendingTiedReleases.size()
                     || ioReleaseIdx < state.pendingIoReleases.size()
-                    || untrackedReturnOwnerIdx
-                        < state.pendingUntrackedReturnOwnerReleases.size()) {
+                    || untrackedReturnOwnerIdx < state.pendingUntrackedReturnOwnerReleases.size()) {
                 while (tiedReleaseIdx < state.pendingTiedReleases.size()) {
                     state.pendingTiedReleases.get(tiedReleaseIdx++).releaseTiedObject();
                 }
@@ -1863,13 +1920,15 @@ public class MortalList {
         if (state.flushing) return;
         if (state.pending.isEmpty() && state.pendingTiedReleases.isEmpty()
                 && state.pendingIoReleases.isEmpty()
-                && state.pendingUntrackedReturnOwnerReleases.isEmpty()) {
+                && state.pendingUntrackedReturnOwnerReleases.isEmpty()
+                && state.pendingTransientListAssignmentRhs.isEmpty()) {
             processReadyDeferredCaptures(state);
             refreshBoundaryWork(state);
             return;
         }
         state.flushing = true;
         try {
+            releaseTransientListAssignmentRhsAtBoundary(state);
             processDeferredEntriesFrom(0, 0, 0, 0);
             state.pending.clear();
             state.pendingOwnerReleases.clear();
@@ -2085,7 +2144,8 @@ public class MortalList {
         if (state.flushing) return;
         if (state.pending.isEmpty() && state.pendingTiedReleases.isEmpty()
                 && state.pendingIoReleases.isEmpty()
-                && state.pendingUntrackedReturnOwnerReleases.isEmpty()) {
+                && state.pendingUntrackedReturnOwnerReleases.isEmpty()
+                && state.pendingTransientListAssignmentRhs.isEmpty()) {
             processReadyDeferredCaptures(state);
             refreshBoundaryWork(state);
             return;
@@ -2099,13 +2159,15 @@ public class MortalList {
                 ? state.untrackedReturnOwnerMarks[state.markDepth - 1] : 0;
         if (state.pending.size() <= mark && state.pendingTiedReleases.size() <= tiedMark
                 && state.pendingIoReleases.size() <= ioMark
-                && state.pendingUntrackedReturnOwnerReleases.size() <= untrackedReturnOwnerMark) {
+                && state.pendingUntrackedReturnOwnerReleases.size() <= untrackedReturnOwnerMark
+                && state.pendingTransientListAssignmentRhs.isEmpty()) {
             processReadyDeferredCaptures(state);
             refreshBoundaryWork(state);
             return;
         }
         state.flushing = true;
         try {
+            releaseTransientListAssignmentRhsAtBoundary(state);
             processDeferredEntriesFrom(mark, tiedMark, ioMark, untrackedReturnOwnerMark);
             // Remove only entries above the mark
             while (state.pending.size() > mark) {
@@ -2129,6 +2191,15 @@ public class MortalList {
         }
         processReadyDeferredCaptures(state);
         refreshBoundaryWork(state);
+    }
+
+    /** Advance Perl statement-lifetime temporaries at a compiled statement end. */
+    public static void flushStatementBoundary() {
+        if (runtimesWithBoundaryWork.get() == 0) return;
+        LifecycleRuntimeState state = state();
+        if (!state.mortalActive) return;
+        state.statementBoundarySequence++;
+        flushAboveMark();
     }
 
     /**
