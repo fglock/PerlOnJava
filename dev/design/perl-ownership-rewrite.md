@@ -1,72 +1,58 @@
 # Perl-compatible ownership rewrite
 
-**Status:** UAT candidate `5c011dfa0e` integrates PR #1938 head `807cac9e83`
-with current `master` `c832739ecc`. The UAT checkout at
-`~/projects/PerlOnJava2` passes `nice -n 19 timeout 1800 make` in 9m36 and
-`make check-links` (855 links, 0 errors); `jperl -v` and the launcher smoke
-report the candidate commit and pass. Failed-connect regressions pass on both
-backends. The broad CPAN acceptance remains stopped at the user's direction.
-PR #1938 now points to `ccedc88cb4`, a documentation-only commit after the
-tested source. It targets current `master`, is mergeable, and refreshed hosted
-checks are in progress; human review remains pending.
-[Issue #2043](https://github.com/PerlOnJava/issues/2043) is the current
-handoff; [#1649](https://github.com/PerlOnJava/issues/1649) is historical
-origin.
+**Status:** PR #1938 is open at published head `f67b6e675a`, based on current
+`master` `c832739ecc`. The verified follow-up is local commit `81500f6c8c` on
+`fix/issue2043-moo-optree-reaping`; it has not yet been published. The user's
+UAT checkout remains unchanged at tested commit `5c011dfa0e`. Do not merge
+before human review.
 
 | Work | Status | Evidence or acceptance |
 | --- | --- | --- |
 | Replace sweep-based lifecycle decisions with owner slots | Candidate delivered | Reachability walker, scalar registry, root-query state, sweep hooks, END-boundary scans, and suspended-frame root snapshots are removed. |
 | Fix DBIx and Test2 retention | Candidate delivered | DBIx arguments carry an exact call-transfer owner; DBI handles use core `bless`; the Test2 event regression passes on system Perl and both PerlOnJava backends. |
 | Preserve imported CVs through namespace cleanup | Candidate delivered | Live transient argument and return slots count as CV owners until their transfer boundary; defined parse-time targets have one-shot compiler leases, while unresolved placeholders retain late BEGIN aliases. Focused regressions pass on both backends. |
+| Release Moo's weakened optree constant | Verified locally | The permanent 4/4 regression passes on system Perl, JVM, and interpreter; assertion 4 fails on UAT parent `5c011dfa0e`. Both unchanged Moo accessor-weaken files pass 19/19 on all three runtimes. |
 | Release DBI handles after failed `do` | Candidate delivered | `_do_impl` finishes any partial statement, clears its local DBI handle, and rethrows the DBI error. The permanent schema regression fails with the unfixed `do` implementation on JVM and passes 3/3 on system Perl, JVM, and interpreter. |
 | Preserve caller cleanup through interpreter aliases | Candidate delivered | `dev/modules/dbix_failed_connect_releases_storage.t` fails assertion 4 on the unfixed artifact and passes 4/4 on system Perl, JVM, and interpreter. The recursive-frame unit test covers same-CV callers. |
-| Final acceptance | Pending | Candidate `5c011dfa0e` integrates current `master`; full `make`, link check, launcher smoke, both failed-connect regressions and focused DBIx `t/storage/error.t` pass. `t/storage/txn.t` retains one pre-existing exception line-reporting mismatch and reports no reference leaks. Integrated PR head `ccedc88cb4` is published; refreshed CI and human review remain. |
+| Final local gate | Passed | `nice -n 19 make` passes 672 unit tests and Joni in 6m49; `make check-links` reports 0 errors. Earlier UAT evidence remains valid, including DBIx `t/storage/error.t` 49/49; `t/storage/txn.t` retains one pre-existing exception line-reporting mismatch and no leaks. Hosted checks for the new head and human review remain. |
 
 ## Current handoff: 2026-11-17
 
-UAT is on local branch `uat/issue2043-pr1938` at `ccedc88cb4`, a documentation-
-only commit after tested merge commit `5c011dfa0e`. The merge commit integrates
-PR head `807cac9e83` with fetched `origin/master` `c832739ecc`, preserving the
-long PR history. Its only textual conflict was resolved by retaining both the
-#2043 and master changelog entries. The worktree is clean. The full build/unit
-gate passes in 9m36, the offline link check passes, and the launcher reports
-`5c011dfa0e` and prints `UAT_OK`.
+The UAT failures were in Moo's unchanged `accessor-weaken.t` and
+`accessor-weaken-pre-5_8_3.t`, each failing only `optree reaped, ro static
+value gone`. The focused regression
+[`pad_constant_weak_hash_slot_eval_redefinition.t`](../../src/test/resources/unit/refcount/pad_constant_weak_hash_slot_eval_redefinition.t)
+passes 4/4 on system Perl, JVM, and interpreter, and fails assertion 4 on the
+tested UAT parent. Both upstream files pass 19/19 on each runtime.
 
-PR #1938 now targets `master` at `c832739ecc` with head `ccedc88cb4`; GitHub
-reports it mergeable. The refreshed Ubuntu, Windows and CodeQL checks are still
-running, and no human review has been submitted.
+Root cause: the main JVM compilation can emit direct-call descriptors for an
+embedded optree, then abandon that generated code and return interpreter code
+after an ASM frame-computation failure. Those descriptors were not transferred
+to a `RuntimeCode` owner and kept the producer CV's CODE slot alive. The
+fallback handoff now releases the uninstalled descriptor owners after the
+interpreter code has acquired its own edges. The existing statement-boundary
+cleanup also retains temporary RHS cell storage through the Perl statement and
+preserves cells still owned by live aggregates.
 
-The explicit-owner implementation removes reachability walking and sweep
-decisions from Perl lifetime management. The imported-CV, eval-capture, DBI
-failed-operation, and interpreter `ALIAS` fixes have permanent regressions.
-On this merged candidate, `dbix_failed_connect_releases_handle.t` passes 3/3
-and `dbix_failed_connect_releases_storage.t` passes 4/4 on JVM and interpreter;
-system Perl validation is recorded in the earlier evidence below. Upstream
-`t/storage/error.t` passes 49/49 with no leaks. `t/storage/txn.t` has one
-exception line-reporting mismatch at assertion 89, also present before the
-ownership fix; it reports no leaked references, and system Perl passes 128/128.
-The interpreter CPAN attempts previously hit their 300-second limits and were
-not repeated. The broad multi-target CPAN sweep remains stopped as requested.
-
-Evidence logs: `/private/tmp/issue2043-merged-uat-make.log`,
-`/private/tmp/issue2043-merged-uat-check-links.log`,
-`/private/tmp/issue2043-merged-uat-version.log`,
-`/private/tmp/issue2043-merged-uat-smoke.log`,
-`/private/tmp/issue2043-merged-dbix-error-jvm.log`,
-`/private/tmp/issue2043-merged-dbix-txn-jvm.log`,
-`/private/tmp/issue2043-merged-storage-regression-jvm.log`,
-`/private/tmp/issue2043-merged-storage-regression-interpreter.log`,
-`/private/tmp/issue2043-merged-handle-regression-jvm.log`, and
-`/private/tmp/issue2043-merged-handle-regression-interpreter.log`.
+Validation on local source commit `81500f6c8c`: `nice -n 19 make` passed in
+6m49 (672 unit tests and Joni); `make check-links` found 0 errors. Logs:
+`/private/tmp/issue2043-final-owner-cleanup-make.log`,
+`/private/tmp/issue2043-final-check-links.log`,
+`/private/tmp/issue2043-moo-regression-system-perl-final.log`,
+`/private/tmp/issue2043-moo-regression-interpreter-final.log`,
+`/private/tmp/issue2043-moo-regression-unfixed-5c011-jvm.log`, and
+`/private/tmp/issue2043-final-moo-{system,jvm,interpreter,pre-system,pre-jvm,pre-interpreter}.log`.
+The UAT checkout `~/projects/PerlOnJava2` remains untouched. The broad CPAN
+sweep remains stopped at the user's direction.
 
 ### Next steps
 
-1. Wait for refreshed CI and human review. Keep the PR open until reviewers
-   accept the classified `t/storage/txn.t` diagnostic mismatch or request
-   follow-up work.
-2. After review and acceptance, merge PR #1938 and close #2043 with the merged
-   commit and evidence. Resume separately tracked #2037 archive-lifetime and
-   #2034 localized-STDERR fixes afterward.
+1. Publish local commit `81500f6c8c` to PR #1938 and refresh hosted CI.
+2. Tell the user when the updated PR is ready for review. Keep it open and do
+   not merge until human review accepts the classified `t/storage/txn.t`
+   diagnostic mismatch or requests follow-up.
+3. After PR acceptance, close #2043 with final evidence; resume #2037
+   archive-lifetime and #2034 localized-STDERR separately.
 
 Completion requires no reachability-based root walk or sweep to affect Perl
 lifetime, required ownership and integration acceptance on one immutable
