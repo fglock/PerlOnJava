@@ -94,7 +94,11 @@ public final class QuantifierNode extends StateNode {
     }
 
     public boolean isAnyCharStar() {
-        return greedy && isRepeatInfinite(upper) && target.getType() == CANY;
+        // CClassNode also uses CANY to keep authoritative wide-scalar classes
+        // opaque to analyser rewrites. Those classes still have explicit
+        // membership (and unlike dot, can include newlines), so only a real
+        // AnyCharNode may use the dot-star bytecode shortcut.
+        return greedy && isRepeatInfinite(upper) && target instanceof AnyCharNode;
     }
 
     /* ?:0, *:1, +:2, ??:3, *?:4, +?:5 */

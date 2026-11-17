@@ -1,6 +1,6 @@
 /*
  * Generated from hash-verified Unicode Character Database sources in the
- * selected current Perl 5.45.3 checkout. Do not edit manually.
+ * selected current Perl 5.45.5 checkout. Do not edit manually.
  *
  * Unicode data source copyright:
  * © 2025 Unicode®, Inc.
@@ -2592,6 +2592,9 @@ final class PerlUnicodeGeneralCategoryData {
         rangeChunk0(), rangeChunk1(), rangeChunk2(), rangeChunk3(), rangeChunk4(), rangeChunk5(), rangeChunk6(), rangeChunk7(), rangeChunk8(), rangeChunk9(), rangeChunk10(), rangeChunk11(), rangeChunk12(), rangeChunk13(), rangeChunk14(), rangeChunk15(), rangeChunk16(), rangeChunk17(), rangeChunk18(), rangeChunk19(), rangeChunk20(), rangeChunk21(), rangeChunk22(), rangeChunk23(), rangeChunk24()
     };
 
+    private static final String[] WILDCARD_ALIASES = {
+        "C", "Cased_Letter", "Cc", "Cf", "Close_Punctuation", "Cn", "Co", "Combining_Mark", "Connector_Punctuation", "Control", "Cs", "Currency_Symbol", "Dash_Punctuation", "Decimal_Number", "Enclosing_Mark", "Final_Punctuation", "Format", "Initial_Punctuation", "L", "LC", "Letter", "Letter_Number", "Line_Separator", "Ll", "Lm", "Lo", "Lowercase_Letter", "Lt", "Lu", "M", "Mark", "Math_Symbol", "Mc", "Me", "Mn", "Modifier_Letter", "Modifier_Symbol", "N", "Nd", "Nl", "No", "Nonspacing_Mark", "Number", "Open_Punctuation", "Other", "Other_Letter", "Other_Number", "Other_Punctuation", "Other_Symbol", "P", "Paragraph_Separator", "Pc", "Pd", "Pe", "Pf", "Pi", "Po", "Private_Use", "Ps", "Punctuation", "S", "Sc", "Separator", "Sk", "Sm", "So", "Space_Separator", "Spacing_Mark", "Surrogate", "Symbol", "Titlecase_Letter", "Unassigned", "Uppercase_Letter", "Z", "Zl", "Zp", "Zs", "cntrl", "digit", "punct"
+    };
     private static final String[] ALIASES = {
         "c", "C", "casedletter", "LC", "cc", "Cc", "cf", "Cf",
         "closepunctuation", "Pe", "cn", "Cn", "cntrl", "Cc", "co", "Co",
@@ -2621,6 +2624,10 @@ final class PerlUnicodeGeneralCategoryData {
     static UnicodeSet resolve(String value) {
         Integer index = ALIAS_INDEX.get(normalizeValue(value));
         return index == null ? null : SETS[index];
+    }
+
+    static String[] wildcardAliases() {
+        return WILDCARD_ALIASES.clone();
     }
 
     private static UnicodeSet[] buildSets() {

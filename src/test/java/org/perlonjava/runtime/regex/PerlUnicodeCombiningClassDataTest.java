@@ -28,4 +28,20 @@ class PerlUnicodeCombiningClassDataTest {
                 UnicodeResolver.translateUnicodeProperty("ccc=133", true));
         assertNull(PerlUnicodeCombiningClassData.resolve("not_a_class"));
     }
+
+    @Test
+    void wildcardCandidatesUsePinnedValueAliases() {
+        var result = UnicodeResolver.resolveJoniProperty(
+                "ccc=:\\AAbove\\z:", false);
+        assertTrue(result != null);
+        assertTrue(contains(result.ranges, 0x0301));
+    }
+
+    private static boolean contains(int[] ranges, int codePoint) {
+        if (ranges == null) return false;
+        for (int index = 1; index + 1 < ranges.length; index += 2) {
+            if (ranges[index] <= codePoint && codePoint <= ranges[index + 1]) return true;
+        }
+        return false;
+    }
 }

@@ -1,6 +1,6 @@
 /*
  * Generated from hash-verified Unicode Character Database sources in the
- * selected current Perl 5.45.3 checkout. Do not edit manually.
+ * selected current Perl 5.45.5 checkout. Do not edit manually.
  *
  * Source: DerivedBidiClass-17.0.0.txt
  * © 2026 Unicode®, Inc.
@@ -36,6 +36,9 @@ final class PerlUnicodeBidiClassData {
     };
     private static final String[] VALUE_ALIASES = {
         "al", "an", "arabicletter", "arabicnumber", "b", "bn", "boundaryneutral", "commonseparator", "cs", "en", "es", "et", "europeannumber", "europeanseparator", "europeanterminator", "firststrongisolate", "fsi", "l", "lefttoright", "lefttorightembedding", "lefttorightisolate", "lefttorightoverride", "lre", "lri", "lro", "nonspacingmark", "nsm", "on", "otherneutral", "paragraphseparator", "pdf", "pdi", "popdirectionalformat", "popdirectionalisolate", "r", "righttoleft", "righttoleftembedding", "righttoleftisolate", "righttoleftoverride", "rle", "rli", "rlo", "s", "segmentseparator", "whitespace", "ws"
+    };
+    private static final String[] WILDCARD_ALIASES = {
+        "AL", "AN", "Arabic_Letter", "Arabic_Number", "B", "BN", "Boundary_Neutral", "CS", "Common_Separator", "EN", "ES", "ET", "European_Number", "European_Separator", "European_Terminator", "FSI", "First_Strong_Isolate", "L", "LRE", "LRI", "LRO", "Left_To_Right", "Left_To_Right_Embedding", "Left_To_Right_Isolate", "Left_To_Right_Override", "NSM", "Nonspacing_Mark", "ON", "Other_Neutral", "PDF", "PDI", "Paragraph_Separator", "Pop_Directional_Format", "Pop_Directional_Isolate", "R", "RLE", "RLI", "RLO", "Right_To_Left", "Right_To_Left_Embedding", "Right_To_Left_Isolate", "Right_To_Left_Override", "S", "Segment_Separator", "WS", "White_Space"
     };
     private static final byte[] VALUE_ALIAS_INDEX = {
         0, 1, 0, 1, 2, 3, 3, 4, 4, 5, 6, 7, 5, 6, 7, 8, 8, 9, 9, 10, 11, 12, 10, 11, 12, 13, 13, 14, 14, 2, 15, 16, 15, 16, 17, 17, 18, 19, 20, 18, 19, 20, 21, 21, 22, 22
@@ -393,6 +396,10 @@ final class PerlUnicodeBidiClassData {
 
     static String[] canonicalValues() {
         return LONG_VALUES.clone();
+    }
+
+    static String[] wildcardAliases() {
+        return WILDCARD_ALIASES.clone();
     }
 
     private static int valueIndex(String alias) {

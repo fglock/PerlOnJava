@@ -99,6 +99,12 @@ final class PerlUnicodeResidualPropertyData {
     private static final byte[] GCB_VALUE_ALIAS_INDEX = {
         0, 0, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 8, 9, 10, 16, 11, 11, 12, 12, 13, 13, 14, 15, 16, 17
     };
+    private static final String[] GCB_WILDCARD_ALIASES = {
+        "CN", "CR", "Control", "EB", "EBG", "EM", "EX", "E_Base", "E_Base_GAZ", "E_Modifier", "Extend", "GAZ", "Glue_After_Zwj", "L", "LF", "LV", "LVT", "Other", "PP", "Prepend", "RI", "Regional_Indicator", "SM", "SpacingMark", "T", "V", "XX", "ZWJ"
+    };
+    private static final byte[] GCB_WILDCARD_ALIAS_INDEX = {
+        0, 1, 0, 2, 3, 4, 5, 2, 3, 4, 5, 6, 6, 7, 8, 9, 10, 16, 11, 11, 12, 12, 13, 13, 14, 15, 16, 17
+    };
     private static final String[] GCB_PROPERTY_ALIASES = {
         "gcb", "graphemeclusterbreak"
     };
@@ -623,6 +629,7 @@ final class PerlUnicodeResidualPropertyData {
     private static final Property GCB = new Property(
             GCB_VALUES, GCB_SHORT_VALUES,
             GCB_VALUE_ALIASES, GCB_VALUE_ALIAS_INDEX,
+            GCB_WILDCARD_ALIASES, GCB_WILDCARD_ALIAS_INDEX,
             GCB_PROPERTY_ALIASES, GCB_RANGES);
 
     private static final String[] InCB_VALUES = {
@@ -635,6 +642,12 @@ final class PerlUnicodeResidualPropertyData {
         "consonant", "extend", "linker", "none"
     };
     private static final byte[] InCB_VALUE_ALIAS_INDEX = {
+        0, 1, 2, 3
+    };
+    private static final String[] InCB_WILDCARD_ALIASES = {
+        "Consonant", "Extend", "Linker", "None"
+    };
+    private static final byte[] InCB_WILDCARD_ALIAS_INDEX = {
         0, 1, 2, 3
     };
     private static final String[] InCB_PROPERTY_ALIASES = {
@@ -894,6 +907,7 @@ final class PerlUnicodeResidualPropertyData {
     private static final Property InCB = new Property(
             InCB_VALUES, InCB_SHORT_VALUES,
             InCB_VALUE_ALIASES, InCB_VALUE_ALIAS_INDEX,
+            InCB_WILDCARD_ALIASES, InCB_WILDCARD_ALIAS_INDEX,
             InCB_PROPERTY_ALIASES, InCB_RANGES);
 
     private static final String[] IDTYPE_VALUES = {
@@ -906,6 +920,12 @@ final class PerlUnicodeResidualPropertyData {
         "defaultignorable", "deprecated", "exclusion", "inclusion", "limiteduse", "notcharacter", "notnfkc", "notxid", "obsolete", "recommended", "technical", "uncommonuse"
     };
     private static final byte[] IDTYPE_VALUE_ALIAS_INDEX = {
+        2, 1, 5, 10, 9, 0, 3, 4, 6, 11, 7, 8
+    };
+    private static final String[] IDTYPE_WILDCARD_ALIASES = {
+        "Default_Ignorable", "Deprecated", "Exclusion", "Inclusion", "Limited_Use", "Not_Character", "Not_NFKC", "Not_XID", "Obsolete", "Recommended", "Technical", "Uncommon_Use"
+    };
+    private static final byte[] IDTYPE_WILDCARD_ALIAS_INDEX = {
         2, 1, 5, 10, 9, 0, 3, 4, 6, 11, 7, 8
     };
     private static final String[] IDTYPE_PROPERTY_ALIASES = {
@@ -2278,6 +2298,7 @@ final class PerlUnicodeResidualPropertyData {
     private static final Property IDTYPE = new Property(
             IDTYPE_VALUES, IDTYPE_SHORT_VALUES,
             IDTYPE_VALUE_ALIASES, IDTYPE_VALUE_ALIAS_INDEX,
+            IDTYPE_WILDCARD_ALIASES, IDTYPE_WILDCARD_ALIAS_INDEX,
             IDTYPE_PROPERTY_ALIASES, IDTYPE_RANGES);
 
     private static final String[] KEHCORE_VALUES = {
@@ -2290,6 +2311,12 @@ final class PerlUnicodeResidualPropertyData {
         "c", "l", "n"
     };
     private static final byte[] KEHCORE_VALUE_ALIAS_INDEX = {
+        0, 1, 2
+    };
+    private static final String[] KEHCORE_WILDCARD_ALIASES = {
+        "C", "L", "N"
+    };
+    private static final byte[] KEHCORE_WILDCARD_ALIAS_INDEX = {
         0, 1, 2
     };
     private static final String[] KEHCORE_PROPERTY_ALIASES = {
@@ -2586,6 +2613,7 @@ final class PerlUnicodeResidualPropertyData {
     private static final Property KEHCORE = new Property(
             KEHCORE_VALUES, KEHCORE_SHORT_VALUES,
             KEHCORE_VALUE_ALIASES, KEHCORE_VALUE_ALIAS_INDEX,
+            KEHCORE_WILDCARD_ALIASES, KEHCORE_WILDCARD_ALIAS_INDEX,
             KEHCORE_PROPERTY_ALIASES, KEHCORE_RANGES);
 
     private static final String[] LB_VALUES = {
@@ -2599,6 +2627,12 @@ final class PerlUnicodeResidualPropertyData {
     };
     private static final byte[] LB_VALUE_ALIAS_INDEX = {
         0, 1, 1, 3, 4, 2, 2, 0, 3, 4, 5, 6, 7, 8, 6, 7, 5, 42, 14, 9, 10, 11, 13, 11, 12, 12, 39, 10, 9, 13, 14, 15, 15, 16, 16, 17, 17, 18, 18, 19, 20, 22, 21, 22, 23, 23, 24, 24, 25, 26, 25, 25, 26, 27, 28, 29, 30, 30, 8, 31, 31, 32, 32, 33, 33, 34, 34, 35, 35, 36, 36, 37, 37, 38, 38, 39, 40, 41, 41, 40, 42, 21, 46, 43, 44, 44, 43, 45, 45, 46, 47, 48, 47
+    };
+    private static final String[] LB_WILDCARD_ALIASES = {
+        "AI", "AK", "AL", "AP", "AS", "Aksara", "Aksara_Prebase", "Aksara_Start", "Alphabetic", "Ambiguous", "B2", "BA", "BB", "BK", "Break_After", "Break_Before", "Break_Both", "Break_Symbols", "CB", "CJ", "CL", "CM", "CP", "CR", "Carriage_Return", "Close_Parenthesis", "Close_Punctuation", "Combining_Mark", "Complex_Context", "Conditional_Japanese_Starter", "Contingent_Break", "EB", "EM", "EX", "E_Base", "E_Modifier", "Exclamation", "GL", "Glue", "H2", "H3", "HH", "HL", "HY", "Hebrew_Letter", "Hyphen", "ID", "IN", "IS", "Ideographic", "Infix_Numeric", "Inseparable", "Inseperable", "JL", "JT", "JV", "LF", "Line_Feed", "Mandatory_Break", "NL", "NS", "NU", "Next_Line", "Nonstarter", "Numeric", "OP", "Open_Punctuation", "PO", "PR", "Postfix_Numeric", "Prefix_Numeric", "QU", "Quotation", "RI", "Regional_Indicator", "SA", "SG", "SP", "SY", "Space", "Surrogate", "Unambiguous_Hyphen", "Unknown", "VF", "VI", "Virama", "Virama_Final", "WJ", "Word_Joiner", "XX", "ZW", "ZWJ", "ZWSpace"
+    };
+    private static final byte[] LB_WILDCARD_ALIAS_INDEX = {
+        0, 1, 2, 3, 4, 1, 3, 4, 2, 0, 5, 6, 7, 8, 6, 7, 5, 42, 9, 10, 11, 12, 13, 14, 14, 13, 11, 12, 39, 10, 9, 15, 16, 17, 15, 16, 17, 18, 18, 19, 20, 21, 22, 23, 22, 23, 24, 25, 26, 24, 26, 25, 25, 27, 28, 29, 30, 30, 8, 31, 32, 33, 31, 32, 33, 34, 34, 35, 36, 35, 36, 37, 37, 38, 38, 39, 40, 41, 42, 41, 40, 21, 46, 43, 44, 44, 43, 45, 45, 46, 47, 48, 47
     };
     private static final String[] LB_PROPERTY_ALIASES = {
         "lb", "linebreak"
@@ -3743,6 +3777,7 @@ final class PerlUnicodeResidualPropertyData {
     private static final Property LB = new Property(
             LB_VALUES, LB_SHORT_VALUES,
             LB_VALUE_ALIASES, LB_VALUE_ALIAS_INDEX,
+            LB_WILDCARD_ALIASES, LB_WILDCARD_ALIAS_INDEX,
             LB_PROPERTY_ALIASES, LB_RANGES);
 
     private static final String[] NT_VALUES = {
@@ -3755,6 +3790,12 @@ final class PerlUnicodeResidualPropertyData {
         "de", "decimal", "di", "digit", "none", "nu", "numeric"
     };
     private static final byte[] NT_VALUE_ALIAS_INDEX = {
+        0, 0, 1, 1, 2, 3, 3
+    };
+    private static final String[] NT_WILDCARD_ALIASES = {
+        "De", "Decimal", "Di", "Digit", "None", "Nu", "Numeric"
+    };
+    private static final byte[] NT_WILDCARD_ALIAS_INDEX = {
         0, 0, 1, 1, 2, 3, 3
     };
     private static final String[] NT_PROPERTY_ALIASES = {
@@ -3909,6 +3950,7 @@ final class PerlUnicodeResidualPropertyData {
     private static final Property NT = new Property(
             NT_VALUES, NT_SHORT_VALUES,
             NT_VALUE_ALIASES, NT_VALUE_ALIAS_INDEX,
+            NT_WILDCARD_ALIASES, NT_WILDCARD_ALIAS_INDEX,
             NT_PROPERTY_ALIASES, NT_RANGES);
 
     private static final String[] SB_VALUES = {
@@ -3922,6 +3964,12 @@ final class PerlUnicodeResidualPropertyData {
     };
     private static final byte[] SB_VALUE_ALIAS_INDEX = {
         0, 0, 1, 1, 2, 3, 3, 4, 4, 5, 6, 7, 7, 8, 8, 5, 14, 9, 9, 10, 10, 11, 12, 12, 13, 13, 14
+    };
+    private static final String[] SB_WILDCARD_ALIASES = {
+        "AT", "ATerm", "CL", "CR", "Close", "EX", "Extend", "FO", "Format", "LE", "LF", "LO", "Lower", "NU", "Numeric", "OLetter", "Other", "SC", "SContinue", "SE", "SP", "ST", "STerm", "Sep", "Sp", "UP", "Upper", "XX"
+    };
+    private static final byte[] SB_WILDCARD_ALIAS_INDEX = {
+        0, 0, 1, 2, 1, 3, 3, 4, 4, 5, 6, 7, 7, 8, 8, 5, 14, 9, 9, 10, 11, 12, 12, 10, 11, 13, 13, 14
     };
     private static final String[] SB_PROPERTY_ALIASES = {
         "sb", "sentencebreak"
@@ -4856,6 +4904,7 @@ final class PerlUnicodeResidualPropertyData {
     private static final Property SB = new Property(
             SB_VALUES, SB_SHORT_VALUES,
             SB_VALUE_ALIASES, SB_VALUE_ALIAS_INDEX,
+            SB_WILDCARD_ALIASES, SB_WILDCARD_ALIAS_INDEX,
             SB_PROPERTY_ALIASES, SB_RANGES);
 
     private static final String[] WB_VALUES = {
@@ -4869,6 +4918,12 @@ final class PerlUnicodeResidualPropertyData {
     };
     private static final byte[] WB_VALUE_ALIAS_INDEX = {
         11, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 6, 5, 7, 7, 8, 8, 9, 9, 10, 10, 11, 12, 13, 14, 15, 13, 14, 15, 16, 16, 17, 17, 21, 18, 18, 19, 19, 20, 21, 22
+    };
+    private static final String[] WB_WILDCARD_ALIASES = {
+        "ALetter", "CR", "DQ", "Double_Quote", "EB", "EBG", "EM", "EX", "E_Base", "E_Base_GAZ", "E_Modifier", "Extend", "ExtendNumLet", "FO", "Format", "GAZ", "Glue_After_Zwj", "HL", "Hebrew_Letter", "KA", "Katakana", "LE", "LF", "MB", "ML", "MN", "MidLetter", "MidNum", "MidNumLet", "NL", "NU", "Newline", "Numeric", "Other", "RI", "Regional_Indicator", "SQ", "Single_Quote", "WSegSpace", "XX", "ZWJ"
+    };
+    private static final byte[] WB_WILDCARD_ALIAS_INDEX = {
+        11, 0, 1, 1, 2, 3, 4, 5, 2, 3, 4, 6, 5, 7, 7, 8, 8, 9, 9, 10, 10, 11, 12, 13, 14, 15, 14, 15, 13, 16, 17, 16, 17, 21, 18, 18, 19, 19, 20, 21, 22
     };
     private static final String[] WB_PROPERTY_ALIASES = {
         "wb", "wordbreak"
@@ -5465,6 +5520,7 @@ final class PerlUnicodeResidualPropertyData {
     private static final Property WB = new Property(
             WB_VALUES, WB_SHORT_VALUES,
             WB_VALUE_ALIASES, WB_VALUE_ALIAS_INDEX,
+            WB_WILDCARD_ALIASES, WB_WILDCARD_ALIAS_INDEX,
             WB_PROPERTY_ALIASES, WB_RANGES);
 
     private static final int[] HEX_RANGES = {
@@ -8752,6 +8808,10 @@ final class PerlUnicodeResidualPropertyData {
         Property property = property(propertyAlias);
         return property == null ? null : property.valueSet(valueAlias);
     }
+    static UnicodeSet valueSet(String propertyAlias, int index) {
+        Property property = property(propertyAlias);
+        return property == null ? null : property.valueSet(index);
+    }
     static int valueCount(String propertyAlias) {
         Property property = property(propertyAlias);
         return property == null ? 0 : property.values.length;
@@ -8763,6 +8823,21 @@ final class PerlUnicodeResidualPropertyData {
     static String shortValue(String propertyAlias, int index) {
         Property property = property(propertyAlias);
         return property == null ? null : property.shortValues[index];
+    }
+    static String[] valueAliases(String propertyAlias, int index) {
+        Property property = property(propertyAlias);
+        if (property == null) return new String[0];
+        java.util.ArrayList<String> aliases = new java.util.ArrayList<>();
+        for (int aliasIndex = 0; aliasIndex < property.valueAliases.length; aliasIndex++) {
+            if (property.valueAliasIndex[aliasIndex] == index) {
+                aliases.add(property.valueAliases[aliasIndex]);
+            }
+        }
+        return aliases.toArray(new String[0]);
+    }
+    static String[] wildcardAliases(String propertyAlias, int index) {
+        Property property = property(propertyAlias);
+        return property == null ? new String[0] : property.wildcardAliases(index);
     }
     private static Property property(String alias) {
         String loose = loose(alias);
@@ -8792,16 +8867,21 @@ final class PerlUnicodeResidualPropertyData {
         private final String[] shortValues;
         private final String[] valueAliases;
         private final byte[] valueAliasIndex;
+        private final String[] wildcardAliases;
+        private final byte[] wildcardAliasIndex;
         private final String[] propertyAliases;
         private final int[][] ranges;
         private final UnicodeSet[] sets;
         private Property(String[] values, String[] shortValues,
                 String[] valueAliases, byte[] valueAliasIndex,
+                String[] wildcardAliases, byte[] wildcardAliasIndex,
                 String[] propertyAliases, int[][] ranges) {
             this.values = values;
             this.shortValues = shortValues;
             this.valueAliases = valueAliases;
             this.valueAliasIndex = valueAliasIndex;
+            this.wildcardAliases = wildcardAliases;
+            this.wildcardAliasIndex = wildcardAliasIndex;
             this.propertyAliases = propertyAliases;
             this.ranges = ranges;
             this.sets = new UnicodeSet[values.length];
@@ -8809,10 +8889,21 @@ final class PerlUnicodeResidualPropertyData {
         private boolean hasAlias(String alias) {
             return java.util.Arrays.binarySearch(propertyAliases, alias) >= 0;
         }
+        private String[] wildcardAliases(int index) {
+            java.util.ArrayList<String> aliases = new java.util.ArrayList<>();
+            for (int aliasIndex = 0; aliasIndex < wildcardAliases.length; aliasIndex++) {
+                if (wildcardAliasIndex[aliasIndex] == index) {
+                    aliases.add(wildcardAliases[aliasIndex]);
+                }
+            }
+            return aliases.toArray(new String[0]);
+        }
         private UnicodeSet valueSet(String alias) {
             int found = java.util.Arrays.binarySearch(valueAliases, loose(alias));
             if (found < 0) return null;
-            int index = valueAliasIndex[found];
+            return valueSet(valueAliasIndex[found]);
+        }
+        private UnicodeSet valueSet(int index) {
             UnicodeSet result = sets[index];
             if (result == null) sets[index] = result = buildSet(ranges[index]);
             return result;

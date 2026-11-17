@@ -1126,10 +1126,26 @@ public class Internals extends PerlModuleBase {
             if (!file.isAbsolute()) {
                 file = new java.io.File(RuntimeEnvironment.currentDirectory(), path);
             }
-            if (!file.exists()) {
-                return new RuntimeScalar().getList();  // return undef
+            if (file.exists()) {
+                return new RuntimeScalar(file.getCanonicalPath())
+                        .taintFromExternalInput()
+                        .getList();
             }
-            return new RuntimeScalar(file.getCanonicalPath())
+
+            // realpath resolves an existing parent and retains a missing final
+            // component. Java's canonical-path resolution handles symlinked
+            // parents, but File.exists() above is false for this valid case.
+            java.nio.file.Path missingPath = file.toPath();
+            if (java.nio.file.Files.isSymbolicLink(missingPath)) {
+                return new RuntimeScalar().getList();  // dangling final symlink
+            }
+            java.io.File parent = file.getParentFile();
+            if (parent == null || !parent.isDirectory()) {
+                return new RuntimeScalar().getList();
+            }
+            String resolvedMissingLeaf = new java.io.File(
+                    parent.getCanonicalPath(), file.getName()).getPath();
+            return new RuntimeScalar(resolvedMissingLeaf)
                     .taintFromExternalInput()
                     .getList();
         } catch (java.io.IOException e) {

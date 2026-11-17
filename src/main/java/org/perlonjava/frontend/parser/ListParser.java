@@ -617,8 +617,18 @@ public class ListParser {
                     // `print HANDLE` can omit its list before a block closes;
                     // parsePrint supplies the implicit `$_` in that case.
                     case "[", "\"", "//", "\\", "`", "$", "$#", "@", "%", "&", "!", "~",
-                         "+", "-", "/", "*", ";", "}", "++", "--", "<", "<<":
+                         "+", "-", "/", "*", ";", "}", "<", "<<":
                         isSpace = true;
+                        break;
+                    case "++", "--":
+                        // An increment adjacent to the handle variable is its
+                        // postfix operator (`print $i++ . ...`), not the start
+                        // of the argument list. A separated increment can
+                        // still begin an argument after an indirect handle.
+                        int operatorIndex = parser.tokenIndex;
+                        int previousIndex = operatorIndex - 1;
+                        isSpace = previousIndex >= 0
+                                && parser.tokens.get(previousIndex).type == LexerTokenType.WHITESPACE;
                         break;
                     case ".":
                         // must be followed by NUMBER

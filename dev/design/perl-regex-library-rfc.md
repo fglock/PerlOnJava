@@ -2,8 +2,114 @@
 
 ## Status
 
-Proposal only. This RFC does not authorize implementation and is not part of
-the regex implementation completion criteria.
+Feasibility investigation is active under issue #1592. No standalone public API,
+repository, or artifact has been delivered. The current PerlOnJava engine remains
+the only implementation source; a standalone release requires a separately
+reviewed extraction and packaging gate.
+
+## Feasibility Snapshot — 2026-11-16
+
+The supported runtime currently targets Perl 5.44.1 and Java 24. The production
+adapter, `JoniRegexPattern`, is package-private and directly depends on Perl
+runtime types for warnings, string provenance, scalar conversion, named
+characters, callbacks, dynamic patterns, and captures. The maintained engine
+is under `third_party/joni`; generated Perl Unicode/property tables and their
+resolver live under `src/main/java/org/perlonjava/runtime/regex`. These are
+concrete extraction dependencies, not yet a standalone module boundary.
+
+The initial extraction should use the standalone repository with PerlOnJava as
+a pinned Git submodule, as described by issue #1592. The build must select an
+explicit engine/core source boundary and declare its JCodings, ICU, and data
+provenance dependencies. It must not compile the full Perl runtime or publish
+fork internals as the Java API. Engine fixes remain in PerlOnJava until a later
+review establishes a shared source-of-truth repository and upgrade gates for
+both consumers.
+
+The following Phase 1 decisions are now recorded; the validation items remain
+release blockers for a standalone artifact:
+
+- **Compatibility target:** track the current Perl blead checkout at `perl5/`,
+  with each data refresh pinned to its exact commit. At this RFC snapshot that
+  is Perl 5.45.5, commit
+  `29974cc644cdca03cbdc4d603b6965b0427934bf`, with Unicode 18.0.0. The runtime
+  release version remains 5.44.1; this does not make the whole runtime claim
+  blead compatibility. Each independently sourced data family must retain its
+  own version and provenance.
+- Complete a source-by-source license and generated-data provenance audit for
+  Joni, JCodings, ICU, aliases, named characters, and their generators.
+- **Initial API recommendation:** immutable compiled data-only patterns and
+  stateful matchers, with explicit Unicode `String` and byte-array inputs,
+  offsets in the corresponding input units, and explicit Perl flags. Keep
+  replacement and split, structured diagnostics, and concurrency guarantees
+  outside the initial contract until their semantics and retention behavior
+  are specified. Do not expose Joni classes. Perl code and host callbacks are
+  excluded from the default artifact; any later callout tier needs a separate
+  opt-in contract.
+- Measure the extracted artifact's dependency closure and resource controls;
+  the current runtime's backtracking behavior does not yet prove enforceable
+  standalone matching limits or cancellation.
+- Validate the dependency boundary with a clean external Java consumer and
+  differential, concurrency, cancellation, and packaging tests.
+
+No external consumer validation or market evidence is recorded yet, so the
+audience and use cases remain hypotheses. Success for Phase 1 is a reviewed
+compatibility target, API boundary, dependency/license/provenance inventory,
+and an explicit extraction recommendation. Success for an implementation
+release additionally requires a clean external Java consumer, measured
+dependency closure, differential and concurrency coverage, and enforceable
+resource/cancellation behavior. The existing PerlOnJava unit/core corpus is
+useful engine evidence, but does not satisfy that standalone release gate.
+
+## Extraction Boundary Audit — 2026-11-16
+
+This is an initial source and packaging audit, not release approval:
+
+| Area | Current evidence | Extraction implication |
+| --- | --- | --- |
+| Engine | `third_party/joni` is the PerlOnJava-maintained Joni 2.2.7 fork. The root build relocates `org.joni` and `org.jcodings` into private namespaces in the PerlOnJava uber-JAR and includes the Joni license and fork notice. | Preserve the fork namespace, source history, and notices. The existing uber-JAR is not a standalone regex artifact. |
+| Encoding | The build resolves JCodings 1.0.64 as a separate dependency. The adapter has a Perl-specific wide-scalar codec and byte/Unicode conversion paths. | JCodings is part of the minimal engine closure; Perl byte and scalar conversion behavior needs a runtime-neutral replacement or a justified extracted module. |
+| Property resolution | `UnicodeResolver` and generated data classes use ICU4J 78.3 (`UnicodeSet`, `UCharacter`, and `UProperty`). The root build has ICU4J on the application classpath. | Do not treat generated alias tables as a replacement for ICU. A standalone dependency boundary must decide which ICU-backed resolution behavior remains. |
+| Perl integration | `JoniRegexPattern` directly imports `WarnDie`, `PerlUtfString`, named-character expansion types, and Perl runtime types. `RuntimeRegex` supplies dynamic patterns, callbacks, warning handling, captures, and alarm integration. | The adapter cannot move unchanged into a data-only library. Callback and Perl execution paths must be split from a smaller core boundary. |
+| Unicode provenance | The generator manifest selects the current `perl5/` blead checkout, Perl 5.45.5 at commit `29974cc644cdca03cbdc4d603b6965b0427934bf`, and UCD 18.0.0. Some generated data has distinct provenance, including named sequences at UCD 17.0.0 and Bidi inputs named for UCD 17.0.0. The case-fold table also has an independently pinned Perl-source baseline, whose refresh is gated by an existing exact-provenance regression test. The application version remains 5.44.1. | Track blead for generated aliases and properties while preserving each data family's explicit source pin. “Perl-compatible” still requires family-by-family version/provenance documentation; the application runtime is not itself a blead release. |
+| Licensing | The fork notice records upstream Joni MIT provenance; JCodings carries its own retained license file; PerlOnJava source is dual GPL/Artistic; generated Unicode sources retain Unicode notices. The generated SBOM records ICU4J's Unicode license URL. | These top-level records identify the audit scope but do not replace a file-by-file source, generator, and redistribution review. No relicensing conclusion is made. |
+| Resource limits | Joni exposes interruptible matching and an internal match-stack cap; the Perl runtime wraps alarm matching in a worker executor and cancels its future on timeout. | These mechanisms are evidence for possible controls, not yet proof of a public API's cancellation, per-match limits, or worker termination contract. Standalone limits need adversarial tests at the library boundary. |
+
+The first clean extraction experiment must therefore measure the closure of a
+runtime-neutral adapter, generated property data, ICU4J, and JCodings without
+including `RuntimeRegex` or the Perl compiler. Until that experiment exists,
+artifact size, external-consumer usability, and effective public resource
+controls remain unverified.
+
+## Engine Gate Review — 2026-11-16
+
+The engine prerequisites in the Release Prerequisites section have been
+reviewed against the merged implementation work:
+
+- **Production matcher and backend routing: satisfied.** The regex
+  implementation design identifies Joni as the sole production matcher.
+  Remaining `java.util.regex.Pattern` uses in `RuntimeRegex` parse Perl source
+  metadata and diagnostics; user-pattern matching goes through
+  `JoniRegexPattern` and `RegexMatcher`.
+- **Migration cleanup and parity: satisfied by the recorded merged gates.**
+  [PR #1095](https://github.com/fglock/PerlOnJava/pull/1095) records the full
+  Perl comparison, JVM/interpreter regex corpus and stress results, warmed
+  performance comparison, packaging and provenance checks, and Ubuntu/Windows
+  CI. [PR #1101](https://github.com/fglock/PerlOnJava/pull/1101) records the
+  final release `make`, bundled-module, platform, and bounded regex stress
+  gates. Both PRs are merged.
+- **Standalone packaging and API boundary: still open.** The existing public
+  `RegexMatcher` interface is backend-neutral, but it lives in the runtime
+  package and is created by `RuntimeRegex` with `RuntimeScalar` and Perl
+  callback state. The underlying `JoniRegexPattern` directly imports Perl
+  warning, scalar-conversion, named-character, and runtime types. This is a
+  useful starting seam, not evidence that an external consumer can compile or
+  match without the Perl runtime.
+
+The next extraction experiment should preserve the completed matcher and
+parity gates while separating a runtime-neutral compile/match context from the
+Perl-specific services. The remaining design choices in this RFC and the
+requested single-PR versus separate-repository scope must be settled before
+the standalone artifact can be implemented and validated.
 
 ## Summary
 

@@ -67,6 +67,8 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
  * @see FileChannel
  */
 public class CustomFileChannel implements IOHandle {
+    /** Bound allocations made for a single read, even when Perl requests more. */
+    private static final int MAX_READ_CHUNK = 64 * 1024;
     @Override
     public ThreadInheritancePolicy threadInheritancePolicy() {
         return ThreadInheritancePolicy.SHARED_TRANSPORT;
@@ -349,9 +351,10 @@ public class CustomFileChannel implements IOHandle {
         }
         try {
             if (maxBytes <= 0) return new RuntimeScalar("");
-            byte[] result = new byte[maxBytes];
+            int bytesRequested = Math.min(maxBytes, MAX_READ_CHUNK);
+            byte[] result = new byte[bytesRequested];
             int bytesRead = 0;
-            while (bytesRead < maxBytes) {
+            while (bytesRead < bytesRequested) {
                 if (readAheadPosition >= readAheadLimit) {
                     if (physicalEof) break;
                     ByteBuffer byteBuffer = ByteBuffer.wrap(readAhead);
@@ -364,7 +367,7 @@ public class CustomFileChannel implements IOHandle {
                     readAheadPosition = 0;
                     readAheadLimit = filled;
                 }
-                int count = Math.min(maxBytes - bytesRead, readAheadLimit - readAheadPosition);
+                int count = Math.min(bytesRequested - bytesRead, readAheadLimit - readAheadPosition);
                 System.arraycopy(readAhead, readAheadPosition, result, bytesRead, count);
                 readAheadPosition += count;
                 bytesRead += count;

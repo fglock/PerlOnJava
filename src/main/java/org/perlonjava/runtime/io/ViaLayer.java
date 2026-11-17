@@ -29,6 +29,7 @@ public class ViaLayer implements IOLayer {
     private final RuntimeScalar belowGlob;
     private final RuntimeScalar self;
     private final StringBuilder fillBuffer = new StringBuilder();
+    private boolean fillBufferIsString;
 
     private final RuntimeScalar readMethod;
     private final RuntimeScalar fillMethod;
@@ -149,11 +150,16 @@ public class ViaLayer implements IOLayer {
                     return byteScalar("");
                 }
                 fillBuffer.append(filled);
+                fillBufferIsString = filled.type == RuntimeScalarType.STRING;
             }
             int take = Math.min(maxBytes, fillBuffer.length());
             String data = fillBuffer.substring(0, take);
             fillBuffer.delete(0, take);
-            return byteScalar(data);
+            boolean isString = fillBufferIsString;
+            if (fillBuffer.isEmpty()) {
+                fillBufferIsString = false;
+            }
+            return isString ? new RuntimeScalar(data) : byteScalar(data);
         }
 
         return null;
@@ -223,7 +229,15 @@ public class ViaLayer implements IOLayer {
     @Override
     public RuntimeScalar onSeek(long pos, int whence) {
         if (seekMethod != null) {
-            return callObject(seekMethod, belowGlob, new RuntimeScalar(pos), new RuntimeScalar(whence));
+            RuntimeScalar result = callObject(
+                    seekMethod, new RuntimeScalar(pos), new RuntimeScalar(whence), belowGlob);
+            // PerlIO::via's SEEK callback returns 0 on success and -1 on
+            // failure. The Perl seek operator itself returns a true value on
+            // success, so translate the callback convention at this boundary.
+            if (!result.getDefinedBoolean() || isMinusOne(result)) {
+                return RuntimeScalarCache.scalarFalse;
+            }
+            return RuntimeScalarCache.scalarTrue;
         }
         return belowIO.ioHandle.seek(pos, whence);
     }

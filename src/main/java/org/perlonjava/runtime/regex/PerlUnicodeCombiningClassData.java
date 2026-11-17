@@ -1,6 +1,6 @@
 /*
  * Generated from hash-verified Unicode Character Database sources in the
- * selected current Perl 5.45.3 checkout. Do not edit manually.
+ * selected current Perl 5.45.5 checkout. Do not edit manually.
  *
  * Unicode data source copyright:
  * © 2025 Unicode®, Inc.
@@ -364,6 +364,9 @@ final class PerlUnicodeCombiningClassData {
         rangeChunk0(), rangeChunk1(), rangeChunk2(), rangeChunk3()
     };
 
+    private static final String[] WILDCARD_ALIASES = {
+        "0", "1", "10", "103", "107", "11", "118", "12", "122", "129", "13", "130", "132", "133", "14", "15", "16", "17", "18", "19", "20", "200", "202", "21", "214", "216", "218", "22", "220", "222", "224", "226", "228", "23", "230", "232", "233", "234", "24", "240", "25", "26", "27", "28", "29", "30", "31", "32", "33", "34", "35", "36", "6", "7", "8", "84", "9", "91", "A", "AL", "AR", "ATA", "ATAR", "ATB", "ATBL", "Above", "Above_Left", "Above_Right", "Attached_Above", "Attached_Above_Right", "Attached_Below", "Attached_Below_Left", "B", "BL", "BR", "Below", "Below_Left", "Below_Right", "CCC10", "CCC103", "CCC107", "CCC11", "CCC118", "CCC12", "CCC122", "CCC129", "CCC13", "CCC130", "CCC132", "CCC133", "CCC14", "CCC15", "CCC16", "CCC17", "CCC18", "CCC19", "CCC20", "CCC21", "CCC22", "CCC23", "CCC24", "CCC25", "CCC26", "CCC27", "CCC28", "CCC29", "CCC30", "CCC31", "CCC32", "CCC33", "CCC34", "CCC35", "CCC36", "CCC84", "CCC91", "DA", "DB", "Double_Above", "Double_Below", "HANR", "Han_Reading", "IS", "Iota_Subscript", "KV", "Kana_Voicing", "L", "Left", "NK", "NR", "Not_Reordered", "Nukta", "OV", "Overlay", "R", "Right", "VR", "Virama"
+    };
     private static final String[] ALIASES = {
         "0", "0", "1", "1", "10", "10", "103", "103",
         "107", "107", "11", "11", "118", "118", "12", "12",
@@ -409,6 +412,8 @@ final class PerlUnicodeCombiningClassData {
         Integer index = ALIAS_INDEX.get(normalizeValue(value));
         return index == null ? null : SETS[index];
     }
+
+    static String[] wildcardAliases() { return WILDCARD_ALIASES.clone(); }
 
     private static UnicodeSet[] buildSets() {
         UnicodeSet[] sets = new UnicodeSet[VALUES.length];

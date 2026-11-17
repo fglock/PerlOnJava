@@ -3,6 +3,7 @@ package org.perlonjava.runtime.regex;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -102,6 +103,31 @@ class PerlUnicodeBlockDataTest {
         assertNull(PerlUnicodeBlockData.set("Definitely_Not_A_Block"));
         assertEquals(PerlUnicodeBlockData.INVALID,
                 PerlUnicodeBlockData.value("Definitely_Not_A_Block"));
+    }
+
+    @Test
+    void wildcardCandidatesIncludeEveryPinnedPerlBlockAlias() {
+        assertBlockWildcardAlias("Bengali_Sup", "Bengali_Supplement", 0x11df0);
+        assertBlockWildcardAlias("Misc_Arrows_Ext",
+                "Miscellaneous_Symbols_And_Arrows_Extended", 0x1db00);
+        assertBlockWildcardAlias("Music_Sup", "Musical_Symbols_Supplement", 0x1d250);
+    }
+
+    private static void assertBlockWildcardAlias(
+            String alias, String canonical, int codePoint) {
+        String property = "Block=:\\A" + alias + "\\z:";
+        var result = UnicodeResolver.resolveJoniProperty(property, false);
+        assertNotNull(result, property);
+        assertTrue(contains(result.ranges, codePoint), property);
+        assertSame(set(canonical), PerlUnicodeBlockData.set(alias));
+    }
+
+    private static boolean contains(int[] ranges, int codePoint) {
+        if (ranges == null) return false;
+        for (int index = 1; index + 1 < ranges.length; index += 2) {
+            if (ranges[index] <= codePoint && codePoint <= ranges[index + 1]) return true;
+        }
+        return false;
     }
 
     @Test

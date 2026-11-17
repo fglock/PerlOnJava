@@ -1771,6 +1771,16 @@ public class RuntimeIO extends RuntimeScalar {
             return scalarTrue;
         }
 
+        // PerlIO::via callbacks receive a borrowed view of the layer stack
+        // below them. If a callback changes that view's layers (File::BOM
+        // does this after detecting a BOM), replace the borrowed delegate's
+        // stack in place. Wrapping the BorrowedIOHandle in another
+        // LayeredIOHandle would leave the old decoder underneath the new one.
+        if (ioHandle instanceof BorrowedIOHandle borrowed
+                && borrowed.getDelegate() instanceof LayeredIOHandle borrowedLayers) {
+            return borrowedLayers.binmode(ioLayer);
+        }
+
         // Unwrap all layers to get to the base handle
         IOHandle originalHandle = ioHandle;
         IOHandle baseHandle = ioHandle;
