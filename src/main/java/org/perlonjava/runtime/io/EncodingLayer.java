@@ -68,6 +68,14 @@ public class EncodingLayer implements IOLayer {
     private final List<String> utf8InputWarnings = new ArrayList<>();
     private String deferredMalformedUtf8Warning;
 
+    private boolean validatesUtf8() {
+        return "utf8".equalsIgnoreCase(layerName) || StandardCharsets.UTF_8.equals(charset);
+    }
+
+    private String utf8WarningPrefix() {
+        return "utf8".equalsIgnoreCase(layerName) ? "utf8" : charset.name();
+    }
+
     /**
      * Constructs a new encoding layer with the specified character set.
      *
@@ -300,7 +308,8 @@ public class EncodingLayer implements IOLayer {
     }
 
     private void validateUtf8Input(String input, boolean endOfInput) {
-        if (!"utf8".equalsIgnoreCase(layerName)) return;
+        if (!validatesUtf8()) return;
+        boolean encodingLayer = !"utf8".equalsIgnoreCase(layerName);
         for (int i = 0; i < input.length(); i++) {
             utf8ValidationBuffer.append((char) (input.charAt(i) & 0xff));
         }
@@ -312,7 +321,9 @@ public class EncodingLayer implements IOLayer {
                 continue;
             }
             if (lead >= 0x80 && lead <= 0xbf) {
-                if (deferredMalformedUtf8Warning == null) {
+                if (encodingLayer) {
+                    utf8InputWarnings.add(unicodeMappingWarning(lead, utf8WarningPrefix()));
+                } else if (deferredMalformedUtf8Warning == null) {
                     deferredMalformedUtf8Warning = "Malformed UTF-8 character: " + escapedByte(lead)
                             + " (unexpected continuation byte 0x" + hexByte(lead)
                             + ", with no preceding start byte)";
@@ -325,7 +336,7 @@ public class EncodingLayer implements IOLayer {
                     : lead >= 0xe0 && lead <= 0xef ? 3
                     : lead >= 0xf0 && lead <= 0xf4 ? 4 : 1;
             if (required == 1) {
-                utf8InputWarnings.add(unicodeMappingWarning(lead));
+                utf8InputWarnings.add(unicodeMappingWarning(lead, utf8WarningPrefix()));
                 consumed++;
                 continue;
             }
@@ -343,7 +354,7 @@ public class EncodingLayer implements IOLayer {
                 }
             }
             if (!valid) {
-                utf8InputWarnings.add(unicodeMappingWarning(lead));
+                utf8InputWarnings.add(unicodeMappingWarning(lead, utf8WarningPrefix()));
                 // Consume only the start byte so any following stray
                 // continuation is diagnosed independently, like Perl.
                 consumed++;
@@ -351,7 +362,7 @@ public class EncodingLayer implements IOLayer {
             }
             if (available < required) {
                 if (!endOfInput) break;
-                utf8InputWarnings.add(unicodeMappingWarning(lead));
+                utf8InputWarnings.add(unicodeMappingWarning(lead, utf8WarningPrefix()));
                 consumed = utf8ValidationBuffer.length();
                 break;
             }
@@ -360,8 +371,8 @@ public class EncodingLayer implements IOLayer {
         if (consumed > 0) utf8ValidationBuffer.delete(0, consumed);
     }
 
-    private static String unicodeMappingWarning(int value) {
-        return "utf8 \"" + escapedByte(value) + "\" does not map to Unicode";
+    private static String unicodeMappingWarning(int value, String prefix) {
+        return prefix + " \"" + escapedByte(value) + "\" does not map to Unicode";
     }
 
     private static String escapedByte(int value) {

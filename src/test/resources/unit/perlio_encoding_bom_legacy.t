@@ -46,6 +46,20 @@ close $legacy_in;
 is_deeply [unpack('U*', $legacy_read)], [unpack('U*', $legacy_text)],
     ':encoding(ISO-8859-1) decodes legacy input';
 
+my $invalid_utf8_path = write_bytes("field\n\xE9\n");
+my @encoding_warnings;
+{
+    local $SIG{__WARN__} = sub { push @encoding_warnings, @_ };
+    open my $invalid_utf8_in, '<', $invalid_utf8_path
+        or die "open malformed UTF-8 input: $!";
+    binmode $invalid_utf8_in, ':encoding(UTF-8)'
+        or die "set UTF-8 encoding layer: $!";
+    1 while <$invalid_utf8_in>;
+    close $invalid_utf8_in;
+}
+like join('', @encoding_warnings), qr/UTF-8 "\\xE9" does not map to Unicode/,
+    ':encoding(UTF-8) warns for malformed input so callers can retry legacy encodings';
+
 my $bom_path = write_bytes("\xEF\xBB\xBF" . encode('UTF-8', $utf8_text));
 open my $bom_in, '<', $bom_path or die "open BOM input: $!";
 binmode $bom_in, ':encoding(UTF-8):via(File::BOM)'
