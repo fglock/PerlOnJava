@@ -918,7 +918,8 @@ sub _create_install_makefile {
     # Use INSTALL_BASE for consistency with where we actually install modules
     my $inst_lib = $args->{INST_LIB} || 'blib/lib';
     my $inst_archlib = $args->{INST_ARCHLIB} || 'blib/arch';
-    my $fullext = File::Spec->catdir(split /::/, $name);
+    my $fullext = $name;
+    $fullext =~ s/::/\//g;
     my $installsitelib = $args->{INSTALLSITELIB};
     my $siteprefix = $args->{SITEPREFIX} || $args->{PREFIX};
     my $install_dirs = defined $args->{INSTALLDIRS} ? $args->{INSTALLDIRS} : 'site';
