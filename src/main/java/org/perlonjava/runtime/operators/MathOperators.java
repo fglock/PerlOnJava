@@ -356,6 +356,8 @@ public class MathOperators {
         // Perform addition based on the type of RuntimeScalar
         if (arg1.type == DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() + arg2);
+        } else if (hasWideInteger(arg1)) {
+            return integerResult(arg1.getBigint().add(BigInteger.valueOf(arg2)));
         } else {
             long a = arg1.getLong();
             try {

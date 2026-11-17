@@ -78,6 +78,10 @@ public class NumericPackHandler implements PackFormatHandler {
             } catch (NumberFormatException e) {
                 // Fall through to double handling
             }
+            value = value.getNumber();
+        } else if (value.type != RuntimeScalarType.INTEGER
+                && value.type != RuntimeScalarType.DOUBLE) {
+            value = value.getNumber();
         }
 
         // For doubles, handle values > Long.MAX_VALUE specially
@@ -97,6 +101,25 @@ public class NumericPackHandler implements PackFormatHandler {
 
         // For other types, use getLong()
         return value.getLong();
+    }
+
+    /** Get the signed native quad conversion used by {@code pack j}. */
+    private static long getSigned64BitValue(RuntimeScalar value) {
+        if (value.type != RuntimeScalarType.INTEGER
+                && value.type != RuntimeScalarType.DOUBLE) {
+            value = value.getNumber();
+        }
+        if (value.type == RuntimeScalarType.DOUBLE) {
+            double numericValue = value.getDouble();
+            if (numericValue >= 0x1.0p64) {
+                return -1L;
+            }
+            if (numericValue >= 0x1.0p63) {
+                return new java.math.BigDecimal(numericValue)
+                        .toBigInteger().longValue();
+            }
+        }
+        return value.getBigint().longValue();
     }
 
     @Override
@@ -303,9 +326,16 @@ public class NumericPackHandler implements PackFormatHandler {
                     break;
                 case 'j':
                 case 'J':
-                    long intMaxValue = format == 'J'
-                            ? getUnsigned64BitValue(value)
-                            : value.getBigint().longValue();
+                    long intMaxValue;
+                    if (format == 'J') {
+                        intMaxValue = getUnsigned64BitValue(value);
+                    } else {
+                        // Parse numeric strings first: pack j converts a string
+                        // such as "1e50" through NV, not as its exact decimal
+                        // expansion. Preserve Perl's native quad conversion at
+                        // the signed and unsigned limits.
+                        intMaxValue = getSigned64BitValue(value);
+                    }
                     if (modifiers.bigEndian) {
                         PackWriter.writeLongBigEndian(output, intMaxValue);
                     } else {

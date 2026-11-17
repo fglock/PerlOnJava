@@ -163,6 +163,9 @@ public class NumberParser {
     private static final Pattern WINDOWS_INF_PATTERN = Pattern.compile("1\\.?#INF.*");
     private static final Pattern WINDOWS_NAN_PATTERN = Pattern.compile("\\+?1\\.?#(QNAN|NANQ|NAN|IND|SNAN).*"
     );
+    private static final BigInteger MAX_SIGNED_LONG = BigInteger.valueOf(Long.MAX_VALUE);
+    private static final BigInteger MAX_UNSIGNED_LONG = BigInteger.ONE.shiftLeft(Long.SIZE)
+            .subtract(BigInteger.ONE);
     private static final NumberFormat BINARY_FORMAT = new NumberFormat(
             2,
             str -> str.matches("[01_]*"),
@@ -991,8 +994,20 @@ public class NumberParser {
                             double value = Double.parseDouble(numberStr);
                             result = new RuntimeScalar(isNegative ? -value : value);
                         } else {
-                            long value = Long.parseLong(numberStr);
-                            result = getScalarInt(isNegative ? -value : value);
+                            try {
+                                long value = Long.parseLong(numberStr);
+                                result = getScalarInt(isNegative ? -value : value);
+                            } catch (NumberFormatException overflow) {
+                                BigInteger value = new BigInteger(numberStr);
+                                if (!isNegative
+                                        && value.compareTo(MAX_SIGNED_LONG) > 0
+                                        && value.compareTo(MAX_UNSIGNED_LONG) <= 0) {
+                                    result = new RuntimeScalar(value);
+                                } else {
+                                    double floating = Double.parseDouble(numberStr);
+                                    result = new RuntimeScalar(isNegative ? -floating : floating);
+                                }
+                            }
                         }
                     } catch (NumberFormatException e) {
                         try {

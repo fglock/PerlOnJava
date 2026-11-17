@@ -315,8 +315,9 @@ sub mv   { _move(@_,\&cp);   }
 unless (defined &syscopy) {
     if ($^O eq 'VMS') {
 	*syscopy = \&rmscopy;
-    } elsif ($^O eq 'MSWin32' && defined &DynaLoader::boot_DynaLoader) {
-	# Win32::CopyFile() fill only work if we can load Win32.xs
+    } elsif ($^O eq 'MSWin32' && defined &DynaLoader::boot_DynaLoader
+             && defined &Win32::CopyFile) {
+	# Win32::CopyFile() only works if the Win32 XS implementation is available.
 	*syscopy = sub {
 	    return 0 unless @_ == 2;
 	    return Win32::CopyFile(@_, 1);

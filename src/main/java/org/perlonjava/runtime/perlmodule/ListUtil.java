@@ -4,6 +4,7 @@ import org.perlonjava.runtime.operators.ListOperators;
 import org.perlonjava.runtime.runtimetypes.*;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 
+import java.math.BigDecimal;
 import java.util.*;
 
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
@@ -23,6 +24,12 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
  * Maintained since 2013 by Paul Evans <leonerd@leonerd.org.uk>
  */
 public class ListUtil extends PerlModuleBase {
+
+    private enum UniqnumSpecialValue {
+        NAN,
+        POSITIVE_INFINITY,
+        NEGATIVE_INFINITY
+    }
 
     /**
      * Constructor for ListUtil module.
@@ -625,21 +632,39 @@ public class ListUtil extends PerlModuleBase {
      * Remove duplicate values using numerical comparison. Warns on undef.
      */
     public static RuntimeList uniqnum(RuntimeArray args, int ctx) {
-        Set<Double> seen = new LinkedHashSet<>();
+        Set<Object> seen = new LinkedHashSet<>();
         RuntimeArray result = new RuntimeArray();
 
         for (RuntimeScalar arg : args.elements) {
-            double value;
+            Object key;
+            RuntimeScalar output = arg;
             if (arg == null || arg.type == RuntimeScalarType.UNDEF) {
                 org.perlonjava.runtime.operators.WarnDie.warnWithCategory(
                     new RuntimeScalar("Use of uninitialized value in subroutine entry"),
                     RuntimeScalarCache.scalarEmptyString, "uninitialized");
-                value = 0.0;
+                key = BigDecimal.ZERO;
+                output = new RuntimeScalar(0);
             } else {
-                value = arg.getDouble();
+                RuntimeScalar number = arg.getNumber("uniqnum");
+                if (number.type == RuntimeScalarType.INTEGER) {
+                    key = new BigDecimal(number.getBigint());
+                } else {
+                    double value = number.getDouble();
+                    if (Double.isNaN(value)) {
+                        key = UniqnumSpecialValue.NAN;
+                    } else if (value == Double.POSITIVE_INFINITY) {
+                        key = UniqnumSpecialValue.POSITIVE_INFINITY;
+                    } else if (value == Double.NEGATIVE_INFINITY) {
+                        key = UniqnumSpecialValue.NEGATIVE_INFINITY;
+                    } else {
+                        // BigDecimal normalizes finite NVs against exact IV/UV
+                        // values without collapsing adjacent large integers.
+                        key = new BigDecimal(value).stripTrailingZeros();
+                    }
+                }
             }
-            if (seen.add(value)) {
-                result.push(new RuntimeScalar(value));
+            if (seen.add(key)) {
+                result.push(output);
             }
         }
 

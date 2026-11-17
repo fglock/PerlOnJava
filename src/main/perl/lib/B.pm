@@ -20,7 +20,7 @@ our $VERSION = '1.88';
 
 # Export functionality
 use Exporter 'import';
-our @EXPORT_OK = qw(svref_2object class perlstring CVf_ANON CVf_CONST SVf_IOK SVf_NOK SVf_POK SVp_IOK SVp_NOK SVp_POK);
+our @EXPORT_OK = qw(svref_2object class perlstring CVf_ANON CVf_CONST SVf_IOK SVf_NOK SVf_POK SVf_IVisUV SVp_IOK SVp_NOK SVp_POK);
 our %EXPORT_TAGS = (
     all => \@EXPORT_OK,
 );
@@ -33,6 +33,7 @@ use constant {
     SVf_IOK => 0x00000100,
     SVf_NOK => 0x00000200,
     SVf_POK => 0x00000400,
+    SVf_IVisUV => 0x80000000,
     SVp_IOK => 0x00001000,
     SVp_NOK => 0x00002000,
     SVp_POK => 0x00004000,
@@ -91,7 +92,21 @@ package B::SV {
             my $v = $$r;
             return 0 unless defined $v;
             require Internals;
-            return Internals::jperl_b_scalar_flags($v);
+            my $flags = Internals::jperl_b_scalar_flags($v);
+            if (!ref($v) && $v =~ /\A[0-9]+\z/) {
+                my $digits = $v;
+                $digits =~ s/\A0+(?=\d)//;
+                my $signed_max = '9223372036854775807';
+                my $unsigned_max = '18446744073709551615';
+                my $above_signed = length($digits) > length($signed_max)
+                    || (length($digits) == length($signed_max)
+                        && $digits gt $signed_max);
+                my $within_unsigned = length($digits) < length($unsigned_max)
+                    || (length($digits) == length($unsigned_max)
+                        && $digits le $unsigned_max);
+                $flags |= B::SVf_IVisUV() if $above_signed && $within_unsigned;
+            }
+            return $flags;
         }
 
         return 0;
