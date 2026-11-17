@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More tests => 3;
+use Test::More tests => 4;
 
 our $webhook_caller_proxy;
 BEGIN {
@@ -30,3 +30,10 @@ my $callback_error = eval {
     '';
 } || $@;
 like($callback_error, qr/webhook callback failure/, 'callback exceptions survive caller proxy handling');
+
+sub caller_after_webhook_error {
+    return [caller];
+}
+
+my $after_error_frame = caller_after_webhook_error();
+is($after_error_frame->[0], 'main', 'caller proxy and saved callback restore after webhook errors');

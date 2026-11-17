@@ -367,7 +367,9 @@ public class Internals extends PerlModuleBase {
             if (hasMappedCapture) {
                 // Named JVM subs can keep captured lexicals solely in the
                 // runtime capture map, without a reflectable generated closure
-                // object. Rebinding that live map is the complete operation.
+                // object. Preserve the replacement as a lexical alias too, so
+                // a not-yet-materialized sub installs it when its pad is made.
+                code.setLexicalAlias(variableName, replacement);
                 replaceCaptureTracking(code, mappedCapture, replacement);
                 return;
             }

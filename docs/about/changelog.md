@@ -6,6 +6,7 @@ priorities and future plans.
 
 ## Work in progress
 
+- Resolve PadWalker caller pads through Perl wrappers, keep `CORE::GLOBAL::caller` overrides dynamic across eval callbacks, apply `set_closed_over` replacements when lazy JVM subs materialize, and preserve autodie errors when caller-stack traversal is exhausted (#2069, #2064, #2060, #2032).
 - Fix Perl parser handling of postfix increment in concatenated `print` arguments, commented DATA/END markers, the punctuation hash `%;`, and semicolon-disambiguated hash dereferences (#2066, #2065, #2061, #2054).
 - Preserve explicit wide-scalar character-class membership when compiling repeats, including newline, and use pinned Perl Block aliases for wildcard candidates without ICU fallback (#2070, #1487).
 - Preserve standard MakeMaker `MY::test` prerequisites so generated test data is built before CPAN tests run (#2050).
