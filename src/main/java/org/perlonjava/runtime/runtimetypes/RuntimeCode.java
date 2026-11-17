@@ -8147,7 +8147,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public static RuntimeCode getActiveCodeAtPadWalkerFrame(int level) {
         if (level < 0) return null;
         RuntimeCode previous = null;
-        int plumbingFrames = 2; // Internals::jperl_var_name and PadWalker::var_name
+        int plumbingFrames = 1; // PadWalker's Perl wrapper; Internals is filtered as builtin
         int logicalIndex = 0;
         for (RuntimeCode active : activeCodeStack()) {
             if (isCompilerWrapperPair(active, previous)) {
