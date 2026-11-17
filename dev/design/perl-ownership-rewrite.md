@@ -1,10 +1,12 @@
 # Perl-compatible ownership rewrite
 
-**Status:** The sweep-free candidate fixes the DBIx phantom-chain ownership
-gap, the retained Test2 assertion-event path, and imported CV lifetime through
-namespace cleanup. The full local `make` gate passes on the current source
-commit. The broad CPAN acceptance was stopped after the targeted findings; the
-remaining DBIx storage diagnostics and PR acceptance are still open.
+**Status:** The sweep-free candidate also fixes DBIx Storage retention after a
+failed connect. In the interpreter, `ALIAS` no longer moves a caller lexical's
+cleanup registration into the callee frame; recursive calls of the same CV are
+handled by skipping only the current frame. The failed-connect regression
+passes on system Perl and both PerlOnJava backends, and the full local `make`
+gate passes. The broad CPAN acceptance was stopped at the user's direction.
+PR #1938 remains open; CI and review are pending.
 [Issue #2043](https://github.com/PerlOnJava/issues/2043) is the current
 handoff; [#1649](https://github.com/PerlOnJava/issues/1649) is historical
 origin.
@@ -14,16 +16,17 @@ origin.
 | Replace sweep-based lifecycle decisions with owner slots | Candidate delivered | Reachability walker, scalar registry, root-query state, sweep hooks, END-boundary scans, and suspended-frame root snapshots are removed. |
 | Fix DBIx and Test2 retention | Candidate delivered | DBIx arguments carry an exact call-transfer owner; DBI handles use core `bless`; the Test2 event regression passes on system Perl and both PerlOnJava backends. |
 | Preserve imported CVs through namespace cleanup | Candidate delivered | Live transient argument and return slots count as CV owners until their transfer boundary; defined parse-time targets have one-shot compiler leases, while unresolved placeholders retain late BEGIN aliases. Focused regressions pass on both backends. |
-| Final acceptance | Pending | `nice -n 19 timeout 3600 make` passes on local source commit `549f482ad8`; the broad CPAN run was stopped, targeted DBIx findings remain, and CI, review, and merge are pending. |
+| Release DBI handles after failed `do` | Candidate delivered | `_do_impl` finishes any partial statement, clears its local DBI handle, and rethrows the DBI error. The permanent schema regression fails with the unfixed `do` implementation on JVM and passes 3/3 on system Perl, JVM, and interpreter. |
+| Preserve caller cleanup through interpreter aliases | Candidate delivered | `dev/modules/dbix_failed_connect_releases_storage.t` fails assertion 4 on the unfixed artifact and passes 4/4 on system Perl, JVM, and interpreter. The recursive-frame unit test covers same-CV callers. |
+| Final acceptance | Pending | Source commit `9b69dc12a3` is published to PR #1938. `nice -n 19 timeout 1800 make` passes in 9m22; focused DBIx storage and failed-prepare lifetime regressions pass on both backends. Broad CPAN was stopped at the user's direction; CI and review remain pending. |
 
 ## Current handoff: 2026-11-17
 
-The publication checkout is on `feature/issue2043-cv-dbi-fixes-20261116` at
-source commit `549f482ad8`, based on the live PR #1938 head `1a5c3d37e7`.
-The source batch is `eb73c52f6e`; `549f482ad8` corrects its eval lexical
-capture policy. The branch, including documentation commit `839af59745`, is
-published to PR #1938, now at head `839af59745`. Temporary and asynchronous
-Perl lifetimes continue to use explicit owner slots, with no graph walk
+PR #1938 remains open at source head `9b69dc12a3`, published from local branch
+`fix/issue2043-alias-cleanup-20261117` based on prior head `efaf2f0540`. The
+source contains the DBI failed-`do` cleanup, focused exceptional-unwind fixes,
+and interpreter alias ownership correction. Temporary and asynchronous Perl
+lifetimes continue to use explicit owner slots, with no graph walk
 participating in liveness decisions.
 
 The imported-CV fix counts current transient argument/return slots through
@@ -37,32 +40,60 @@ lexicals. Its permanent lifetime regression and the existing lexical-eval
 regressions pass on system Perl where available, and five focused cases pass on
 both PerlOnJava backends.
 
-`nice -n 19 timeout 3600 make` passes on `549f482ad8` in 7m42; the filtered
-eval unit gate also passes. The broad multi-target CPAN acceptance was stopped
-at the user's direction. The last focused DBIx run was on source commit
-`eb73c52f6e`, before the eval-capture correction: `t/storage/error.t` had the
-`wrap_txn` exception mismatch and six DBH collection assertions at refcount 1;
-`t/storage/txn.t` had only assertion 89's exception line-number mismatch,
-with no leak detected. Their interpreter runs hit timeouts. Whether these
-findings persist after the parser correction is not yet verified. Captured logs
-are in `/private/tmp/issue2043-dbix-storage-error-fixed-jvm.log`,
-`/private/tmp/issue2043-dbix-storage-error-fixed-interpreter.log`,
-`/private/tmp/issue2043-dbix-storage-txn-fixed-jvm.log`, and
-`/private/tmp/issue2043-dbix-storage-txn-fixed-interpreter.log`. The new unit
-gate failures on `eb73c52f6e` were reproduced, traced to ordinary-source named
-sub eval capture, and fixed before the passing full gate.
+`nice -n 19 timeout 3600 make` passes on `4f184ad6fb` in 7m09. The permanent
+`dev/modules/dbix_failed_connect_releases_handle.t` regression passes 3/3 on
+system Perl, JVM, and interpreter; an unfixed `DBD::JDBC::db::do` override
+fails assertion 3 on JVM. The test uses a minimal `DBIx::Class::Schema` setup
+so DBIx's optional leak tracer does not add unrelated interpreter teardown
+checks. Evidence: `/private/tmp/issue2043-do-fix-full-make.log`,
+`/private/tmp/issue2043-dbix-failed-connect-system-final2.log`,
+`/private/tmp/issue2043-dbix-failed-connect-jvm-final2.log`,
+`/private/tmp/issue2043-dbix-failed-connect-interpreter-final2.log`, and
+`/private/tmp/issue2043-dbix-schema-minimal-old-do-jvm.log`.
+
+The two focused DBIx storage files were rerun on the corrected source. On JVM,
+`t/storage/error.t` has one `_server_info` `BlockRunner::wrap_txn` diagnostic
+mismatch and no reference leaks; `t/storage/txn.t` has only assertion 89's
+exception text/line mismatch and no reference leaks. Both mismatches are
+identical in the earlier pre-fix logs, while system Perl passes both tests.
+The interpreter runs each hit their 300-second timeout, as earlier runs did.
+Do not restart the broad multi-target CPAN run. Logs:
+`/private/tmp/issue2043-do-fix-dbix-error-jvm.log`,
+`/private/tmp/issue2043-do-fix-dbix-txn-jvm.log`,
+`/private/tmp/issue2043-do-fix-dbix-error-interpreter.log`,
+`/private/tmp/issue2043-do-fix-dbix-txn-interpreter.log`,
+`/private/tmp/issue2043-dbix-current-error-system.log`, and
+`/private/tmp/issue2043-dbix-current-txn-system.log`.
+
+The full unit/build gate on source commit `9b69dc12a3` passes in 9m22; log:
+`/private/tmp/issue2043-source-commit-make.log`.
+
+The new `dev/modules/dbix_failed_connect_releases_storage.t` test exposed a
+caller-pad ownership bug in interpreter `ALIAS`: replacing a register also
+moved the caller lexical's cleanup-stack entry into the callee. A final owner
+snapshot showed seven still-live scalar cells holding the same
+`DBIx::Class::Storage::DBI` hash after their scopes should have ended. The
+unfixed artifact at checkpoint `34f6c616d0` fails assertion 4. Source commit
+`9b69dc12a3` passes all four assertions on system Perl, JVM, and interpreter.
+The implementation leaves a
+caller-owned registration in its original frame and skips only the current
+logical frame, so recursion through the same CV remains distinguishable. It
+does not decrement the displaced cell at alias time; lexical scope cleanup
+remains responsible for releasing that owner. The recursive caller-frame unit
+test and full `make` pass on the committed candidate. Logs:
+`/private/tmp/issue2043-dbix-unfixed-parent-interpreter.log`,
+`/private/tmp/issue2043-final-dbix-system.log`,
+`/private/tmp/issue2043-final-dbix-jvm.log`,
+`/private/tmp/issue2043-final-dbix-interpreter.log`, and
+`/private/tmp/issue2043-final-recursive-alias-make.log`.
 
 ### Next steps
 
-1. Revalidate only `storage/error.t` and `storage/txn.t` against the corrected
-   source. Address any persistent DBH owner or diagnostic mismatch; do not
-   restart the broad CPAN sweep.
-2. Complete CI and human review of PR #1938 after targeted DBIx findings are
-   resolved or explicitly classified.
-3. After those targeted findings and PR review are resolved, merge PR #1938
-   and close #2043 with the merged commit and acceptance evidence. Resume the
-   separately tracked #2037 archive-lifetime and #2034 localized-STDERR fixes
-   afterward.
+1. Complete CI and human review. Keep the PR open until reviewers accept the
+   remaining classified DBIx findings or request follow-up work.
+2. After review and acceptance, merge PR #1938 and close #2043 with the merged
+   commit and evidence. Resume separately tracked #2037 archive-lifetime and
+   #2034 localized-STDERR fixes afterward.
 
 Completion requires no reachability-based root walk or sweep to affect Perl
 lifetime, required ownership and integration acceptance on one immutable

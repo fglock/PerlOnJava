@@ -6,9 +6,10 @@ priorities and future plans.
 
 ## Work in progress
 
-- Preserve imported CV owners through global destruction, retain only the lexical captures needed by `eval STRING`, and release DBI parent handles after failed prepare (#2043).
+- Preserve imported CV owners through global destruction, retain only the lexical captures needed by `eval STRING`, and release DBI handles after failed `prepare` or `do` (#2043).
 - Remove reachability-based lifetime decisions, root-query state, and sweep-only hooks; use current Perl owner slots for cleanup (#2043).
 - Release DBIx::Class phantom-chain result sources after fresh anonymous hash arguments leave their call frame (#2043).
+- Preserve caller lexical cleanup ownership through interpreter aliases so failed-connect DBIx::Class Storage can be released at scope exit (#2043).
 - Construct DBI handles with core `bless`, matching native DBI and avoiding false leak reports for its cached driver handle (#2043).
 - Release Test2 assertion events after callbacks finish, including events passed through temporary method arguments (#2043).
 - Preserve standard MakeMaker `MY::test` prerequisites so generated test data is built before CPAN tests run (#2050).
