@@ -13,6 +13,7 @@ priorities and future plans.
 - Preserve caller lexical cleanup ownership through interpreter aliases so failed-connect DBIx::Class Storage can be released at scope exit (#2043).
 - Construct DBI handles with core `bless`, matching native DBI and avoiding false leak reports for its cached driver handle (#2043).
 - Release Test2 assertion events after callbacks finish, including events passed through temporary method arguments (#2043).
+- Install MakeMaker `install_share` data with portable Windows file-copy handling and module paths, expose B's unsigned-integer flag, preserve unsigned 64-bit numeric conversion in parsing and packing, and keep integer precision in `List::Util::uniqnum` (#2068, #2000).
 - Resolve PadWalker caller pads through Perl wrappers, keep `CORE::GLOBAL::caller` overrides dynamic across eval callbacks, apply `set_closed_over` replacements when lazy JVM subs materialize, and preserve autodie errors when caller-stack traversal is exhausted (#2069, #2064, #2060, #2032).
 - Preserve `PerlIO::via` layer reconfiguration and seek callbacks for BOM-aware decoding, report malformed UTF-8 through `:encoding` layers, resolve `Cwd::realpath` for a missing final component, and bound memory allocation for large `sysread` requests (#2058, #2055, #2047).
 - Fix Perl parser handling of postfix increment in concatenated `print` arguments, commented DATA/END markers, the punctuation hash `%;`, and semicolon-disambiguated hash dereferences (#2066, #2065, #2061, #2054).
