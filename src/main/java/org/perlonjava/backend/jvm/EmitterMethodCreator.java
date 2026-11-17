@@ -385,6 +385,7 @@ public class EmitterMethodCreator implements Opcodes {
             throw tooLarge;
         } catch (InterpreterFallbackException fallback) {
             discardPendingFormatExpressions(ctx);
+            discardUninstalledDirectCallDescriptors(ctx);
             // Re-throw - caller will handle interpreter fallback
             throw fallback;
         } catch (ArrayIndexOutOfBoundsException frameComputeCrash) {
@@ -431,6 +432,7 @@ public class EmitterMethodCreator implements Opcodes {
             
             // Compile to interpreter as fallback
             InterpretedCode interpretedCode = compileToInterpreter(ast, ctx, useTryCatch);
+            discardUninstalledDirectCallDescriptors(ctx);
             String[] envNames = ctx.capturedEnv != null ? ctx.capturedEnv : ctx.symbolTable.getVariableNames();
             throw new InterpreterFallbackException(interpretedCode, envNames);
         } catch (PerlCompilerException compileError) {
@@ -462,6 +464,18 @@ public class EmitterMethodCreator implements Opcodes {
             RuntimeFormatExpressionRegistry.discardClass(
                     ctx.javaClassInfo.javaClassName);
         }
+    }
+
+    /** Release direct-call owners created by JVM generation that did not install an optree. */
+    public static void discardUninstalledDirectCallDescriptors(EmitterContext ctx) {
+        if (ctx == null || ctx.javaClassInfo == null) return;
+        JavaClassInfo info = ctx.javaClassInfo;
+        if (info.padConstants != null) {
+            RuntimeCode.discardUninstalledCompiledDirectCallDescriptors(
+                    info.padConstants.toArray(new RuntimeBase[0]));
+        }
+        info.embeddedPadConstants.values().forEach(
+                RuntimeCode::discardUninstalledCompiledDirectCallDescriptors);
     }
 
     private static boolean causedByAsmFrameMerge(Throwable error) {
@@ -2261,6 +2275,7 @@ public class EmitterMethodCreator implements Opcodes {
                     System.err.println("Note: Method too large, using interpreter backend.");
                 }
                 RuntimeCode code = compileToInterpreter(ast, ctx, useTryCatch);
+                discardUninstalledDirectCallDescriptors(ctx);
                 preservePristineArgsSnapshotMetadata(code, ctx);
                 code.applySignatureMetadata(ast);
                 return code;
@@ -2272,6 +2287,7 @@ public class EmitterMethodCreator implements Opcodes {
                     System.err.println("Note: JVM " + e.getClass().getSimpleName() + " (" + e.getMessage().split("\n")[0] + "), using interpreter backend.");
                 }
                 RuntimeCode code = compileToInterpreter(ast, ctx, useTryCatch);
+                discardUninstalledDirectCallDescriptors(ctx);
                 preservePristineArgsSnapshotMetadata(code, ctx);
                 code.applySignatureMetadata(ast);
                 return code;
@@ -2283,8 +2299,9 @@ public class EmitterMethodCreator implements Opcodes {
                     System.err.println("Note: JVM compilation needs interpreter fallback (" + e.getMessage().split("\n")[0] + ").");
                     e.printStackTrace(System.err);
                 }
-                return preservePristineArgsSnapshotMetadata(
-                        compileToInterpreter(ast, ctx, useTryCatch), ctx);
+                RuntimeCode code = compileToInterpreter(ast, ctx, useTryCatch);
+                discardUninstalledDirectCallDescriptors(ctx);
+                return preservePristineArgsSnapshotMetadata(code, ctx);
             }
             throw e;
         } catch (InterpreterFallbackException e) {
@@ -2292,6 +2309,7 @@ public class EmitterMethodCreator implements Opcodes {
             if (SHOW_FALLBACK) {
                 System.err.println("Note: Using interpreter fallback (ASM frame compute crash).");
             }
+            discardUninstalledDirectCallDescriptors(ctx);
             return preservePristineArgsSnapshotMetadata(e.interpretedCode, ctx);
         } catch (RuntimeException e) {
             if (USE_INTERPRETER_FALLBACK && needsInterpreterFallback(e)) {
@@ -2299,8 +2317,9 @@ public class EmitterMethodCreator implements Opcodes {
                     System.err.println("Note: JVM compilation needs interpreter fallback (" + getRootMessage(e) + ").");
                     e.printStackTrace(System.err);
                 }
-                return preservePristineArgsSnapshotMetadata(
-                        compileToInterpreter(ast, ctx, useTryCatch), ctx);
+                RuntimeCode code = compileToInterpreter(ast, ctx, useTryCatch);
+                discardUninstalledDirectCallDescriptors(ctx);
+                return preservePristineArgsSnapshotMetadata(code, ctx);
             }
             throw e;
         }

@@ -2804,6 +2804,9 @@ public class Opcodes {
     /** Acquire the subroutine return owner before any lexical cleanup. Format: returnReg. */
     public static final short PREPARE_SCOPE_RETURN = 642;
 
+    /** Flush mortals and advance the Perl statement-lifetime boundary. */
+    public static final short MORTAL_STATEMENT_FLUSH = 645;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

@@ -35,6 +35,27 @@ final class LifecycleRuntimeState {
     final ArrayList<TiedVariableBase> pendingTiedReleases = new ArrayList<>();
     final ArrayList<RuntimeScalar> pendingIoReleases = new ArrayList<>();
     final ArrayList<RuntimeScalar> pendingUntrackedReturnOwnerReleases = new ArrayList<>();
+    // One-shot list-assignment arrays keep their copied cells alive through the
+    // receiving caller's statement boundary when a subroutine returns them.
+    static final class PendingTransientListAssignmentRhs {
+        final RuntimeArray array;
+        final RuntimeCode executionCode;
+        final int executionDepth;
+        final int drainAtExecutionDepth;
+        final long drainAtStatementBoundary;
+
+        PendingTransientListAssignmentRhs(RuntimeArray array, RuntimeCode executionCode,
+                int executionDepth, int drainAtExecutionDepth, long drainAtStatementBoundary) {
+            this.array = array;
+            this.executionCode = executionCode;
+            this.executionDepth = executionDepth;
+            this.drainAtExecutionDepth = drainAtExecutionDepth;
+            this.drainAtStatementBoundary = drainAtStatementBoundary;
+        }
+    }
+    final ArrayList<PendingTransientListAssignmentRhs> pendingTransientListAssignmentRhs =
+            new ArrayList<>();
+    long statementBoundarySequence;
     final ArrayList<RuntimeScalar> deferredCaptures = new ArrayList<>();
     final IdentityHashMap<RuntimeScalar, Integer> deferredCapturesSet = new IdentityHashMap<>();
     // Strong semantic referents retained by explicit Perl owner slots. Counts
@@ -127,6 +148,14 @@ final class LifecycleRuntimeState {
 
     void clear() {
         mortalActive = true;
+        while (!pendingTransientListAssignmentRhs.isEmpty()) {
+            PendingTransientListAssignmentRhs pending =
+                    pendingTransientListAssignmentRhs.remove(
+                            pendingTransientListAssignmentRhs.size() - 1);
+            if (pending != null && pending.array != null) {
+                MortalList.releaseTransientListAssignmentRhs(pending.array);
+            }
+        }
         for (int i = 0; i < pending.size(); i++) {
             RuntimeBase.PendingOwnerRelease release = pendingOwnerReleases.get(i);
             if (release != null) {
@@ -143,6 +172,7 @@ final class LifecycleRuntimeState {
         pendingTransientOwnerKinds.clear();
         pendingTiedReleases.clear();
         pendingIoReleases.clear();
+        statementBoundarySequence = 0;
         for (RuntimeScalar scalar : pendingUntrackedReturnOwnerReleases) {
             if (scalar != null) scalar.releaseMortalReturnValueOwner();
         }

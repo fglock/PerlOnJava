@@ -8,6 +8,7 @@ priorities and future plans.
 
 - Preserve imported CV owners through global destruction, retain only the lexical captures needed by `eval STRING`, and release DBI handles after failed `prepare` or `do` (#2043).
 - Remove reachability-based lifetime decisions, root-query state, and sweep-only hooks; use current Perl owner slots for cleanup (#2043).
+- Release abandoned JVM direct-call owners when code generation falls back to the interpreter, allowing redefined CV optree constants to be reaped (#2043).
 - Release DBIx::Class phantom-chain result sources after fresh anonymous hash arguments leave their call frame (#2043).
 - Preserve caller lexical cleanup ownership through interpreter aliases so failed-connect DBIx::Class Storage can be released at scope exit (#2043).
 - Construct DBI handles with core `bless`, matching native DBI and avoiding false leak reports for its cached driver handle (#2043).
@@ -40,6 +41,7 @@ priorities and future plans.
 - Track IO handle replacement and executable regex callback owners through their current runtime slots (#1649).
 - Remove the tokenless decrement compatibility path and its root-count repair now that releases identify their owner slots (#2043).
 - Keep temporary list-assignment results from becoming owners of their scalar LHS cells (#2043).
+- Release list-assignment temporary cell owners after returned values reach the caller, so weak fields no longer pin optree constants (#2043).
 - Represent untracked, tracked, and weak-tracked referents separately from their nonnegative owner counts (#2043).
 - Drain scoped owner releases at block exit even while statement flushing is suppressed, preserving earlier pending releases (#2043).
 - Clear weak observers from rescued object graphs at the END boundary while preserving independently rooted objects and strong Perl edges (#1649).

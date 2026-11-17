@@ -2436,7 +2436,7 @@ public class BytecodeCompiler implements Visitor {
             }
 
             if (i < lastMeaningfulIndex) {
-                emit(Opcodes.MORTAL_FLUSH);
+                emit(Opcodes.MORTAL_STATEMENT_FLUSH);
             }
 
             // Recycle temporary registers after each statement
