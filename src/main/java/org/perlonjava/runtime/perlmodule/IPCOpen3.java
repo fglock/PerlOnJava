@@ -654,7 +654,7 @@ public class IPCOpen3 extends PerlModuleBase {
      */
     private static void setupWriteHandle(RuntimeScalar handleRef, OutputStream out) {
         RuntimeIO io = new RuntimeIO();
-        io.ioHandle = new ProcessOutputHandle(out);
+        io.replaceIOHandle(new ProcessOutputHandle(out));
 
         // Dereference to get the inner value
         RuntimeScalar inner;
@@ -667,7 +667,9 @@ public class IPCOpen3 extends PerlModuleBase {
         // If the inner value is already a GLOBREFERENCE (e.g., \*FOO typeglob),
         // set the IO slot on the existing glob so the bareword handle works
         if (inner.type == RuntimeScalarType.GLOBREFERENCE && inner.value instanceof RuntimeGlob) {
-            ((RuntimeGlob) inner.value).setIO(io);
+            RuntimeGlob glob = (RuntimeGlob) inner.value;
+            glob.setIO(io);
+            MyVarCleanupStack.retainLiveIoGlobOwners(glob, inner);
         } else {
             // Create a new GLOB reference for the handle
             RuntimeGlob glob = new RuntimeGlob(null);
@@ -687,7 +689,7 @@ public class IPCOpen3 extends PerlModuleBase {
      */
     private static void setupReadHandle(RuntimeScalar handleRef, InputStream in, Process process) {
         RuntimeIO io = new RuntimeIO();
-        io.ioHandle = new ProcessInputHandle(in, process);
+        io.replaceIOHandle(new ProcessInputHandle(in, process));
 
         // Dereference to get the inner value
         RuntimeScalar inner;
@@ -700,7 +702,9 @@ public class IPCOpen3 extends PerlModuleBase {
         // If the inner value is already a GLOBREFERENCE (e.g., \*FOO typeglob),
         // set the IO slot on the existing glob so the bareword handle works
         if (inner.type == RuntimeScalarType.GLOBREFERENCE && inner.value instanceof RuntimeGlob) {
-            ((RuntimeGlob) inner.value).setIO(io);
+            RuntimeGlob glob = (RuntimeGlob) inner.value;
+            glob.setIO(io);
+            MyVarCleanupStack.retainLiveIoGlobOwners(glob, inner);
         } else {
             // Create a new GLOB reference for the handle
             RuntimeGlob glob = new RuntimeGlob(null);

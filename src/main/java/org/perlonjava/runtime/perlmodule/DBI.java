@@ -222,7 +222,6 @@ public class DBI extends PerlModuleBase {
     public static RuntimeList prepare(RuntimeArray args, int ctx) {
         RuntimeHash dbh = args.get(0).hashDeref();
         RuntimeHash sth = new RuntimeHash();
-        sth.put("Database", dbh.createReference());
 
         return executeWithErrorHandling(() -> {
             if (args.size() < 2) {
@@ -305,6 +304,14 @@ public class DBI extends PerlModuleBase {
                 // Some drivers (e.g. sqlite-jdbc) throw on DDL/non-parameterized statements
             }
             sth.put("NUM_OF_PARAMS", new RuntimeScalar(numParams));
+
+            // Do not give a not-yet-returned statement handle a strong edge
+            // back to its database handle. Preparing can throw (for example,
+            // on invalid SQL); an unreachable partial sth has no Perl owner
+            // whose release could retire this edge when graph sweeps are off.
+            // The Perl DBI wrapper installs its weak Database back-reference
+            // after this method returns.
+            sth.put("Database", dbh.createReference());
 
             // Create blessed reference for statement handle
             RuntimeScalar sthRef = ReferenceOperators.bless(

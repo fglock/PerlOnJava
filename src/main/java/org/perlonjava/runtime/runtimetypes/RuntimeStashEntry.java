@@ -80,6 +80,16 @@ public class RuntimeStashEntry extends RuntimeGlob {
      */
     @Override
     public RuntimeScalar createReference() {
+        if (GlobalVariable.isSymbolGensymName(this.globName)) {
+            // A generated Symbol glob is represented by the canonical glob
+            // object that the caller keeps after deleting its stash entry.
+            // Materialize it here so deletion can mark that same object as an
+            // anonymous glob and keep later component accesses off package
+            // slot maps.
+            RuntimeGlob gensymGlob = GlobalVariable.getGlobalIO(this.globName);
+            gensymGlob.symbolGensym = true;
+            return gensymGlob.createReference();
+        }
         RuntimeScalar pseudoConstant =
                 GlobalVariable.getGlobalPseudoConstant(this.globName);
         RuntimeScalar codeSlot = GlobalVariable.globalCodeRefs.get(this.globName);

@@ -11,6 +11,77 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef
  * and interfaces for these entities.
  */
 public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScalar> {
+    /**
+     * Whether the selective owner count is authoritative for this referent.
+     * This state is separate from the numeric count: untracked and weak-tracked
+     * referents still expose an ordinary nonnegative {@link #refCount}.
+     */
+    public enum RefCountTrackingState {
+        UNTRACKED,
+        TRACKED,
+        WEAKLY_TRACKED
+    }
+
+    private volatile RefCountTrackingState refCountTrackingState =
+            RefCountTrackingState.UNTRACKED;
+
+    public RefCountTrackingState refCountTrackingState() {
+        return refCountTrackingState;
+    }
+
+    public boolean isRefCountTracked() {
+        return refCountTrackingState == RefCountTrackingState.TRACKED;
+    }
+
+    public boolean isRefCountUntracked() {
+        return refCountTrackingState == RefCountTrackingState.UNTRACKED;
+    }
+
+    public boolean isWeaklyRefCountTracked() {
+        return refCountTrackingState == RefCountTrackingState.WEAKLY_TRACKED;
+    }
+
+    /** Start selective counting after the caller has reconciled prior owners. */
+    public void startRefCountTracking() {
+        refCount = 0;
+        refCountTrackingState = RefCountTrackingState.TRACKED;
+    }
+
+    /** Leave the selective bridge after its owner identities have been rebuilt. */
+    public void markRefCountUntracked() {
+        refCount = 0;
+        refCountTrackingState = RefCountTrackingState.UNTRACKED;
+    }
+
+    /** Defer weak cleanup while some real strong slots remain outside the count. */
+    public void markRefCountWeaklyTracked() {
+        refCount = 0;
+        refCountTrackingState = RefCountTrackingState.WEAKLY_TRACKED;
+    }
+
+    /** Set a known count and activate the selective count bridge. */
+    public void setTrackedRefCount(int count) {
+        if (count < 0) {
+            throw new IllegalArgumentException("Perl refcount cannot be negative");
+        }
+        refCount = count;
+        refCountTrackingState = RefCountTrackingState.TRACKED;
+    }
+
+    /** Restore a count and its tracking mode together after temporary mutation. */
+    public void restoreRefCountState(int count, RefCountTrackingState state) {
+        if (count < 0) {
+            throw new IllegalArgumentException("Perl refcount cannot be negative");
+        }
+        Objects.requireNonNull(state, "state");
+        if (state != RefCountTrackingState.TRACKED && count != 0) {
+            throw new IllegalArgumentException(
+                    "untracked referents cannot have a selective owner count");
+        }
+        refCount = count;
+        refCountTrackingState = state;
+    }
+
     /** Lifecycle is independent of the selective-count compatibility bridge. */
     public enum PerlLifecycleState {
         LIVE,
@@ -25,6 +96,10 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         return perlLifecycleState;
     }
 
+    public boolean isPerlDestroyed() {
+        return perlLifecycleState == PerlLifecycleState.DESTROYED;
+    }
+
     void beginPerlDestruction() {
         perlLifecycleState = PerlLifecycleState.DESTROYING;
     }
@@ -34,7 +109,15 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     }
 
     void markPerlDestroyed() {
+        // A destroyed referent has no live Perl owner slots. Keep the public
+        // count in its ordinary nonnegative domain; lifecycle is represented
+        // only by perlLifecycleState.
+        refCount = 0;
         perlLifecycleState = PerlLifecycleState.DESTROYED;
+    }
+
+    void restorePerlLifecycleState(PerlLifecycleState state) {
+        perlLifecycleState = Objects.requireNonNull(state, "state");
     }
 
     /** Storage identity retained across ithread graph clones. */
@@ -68,6 +151,12 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                 new java.util.concurrent.atomic.AtomicBoolean();
         volatile boolean active;
         volatile String publishedBlessName;
+    }
+
+    enum SharedDestroyDisposition {
+        CONTINUE,
+        DEFER,
+        CLEAR_LOCAL_VIEW
     }
 
     /**
@@ -116,12 +205,12 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         }
     }
 
-    /**
-     * @return true when ordinary DESTROY dispatch must be suppressed.
-     */
-    boolean deferSharedDestroy() {
+    /** Decide whether this release owns canonical destruction or only a local view. */
+    SharedDestroyDisposition sharedDestroyDisposition() {
         SharedLifecycle lifecycle = threadSharedLifecycle;
-        if (!threadShared || lifecycle == null || !lifecycle.active) return false;
+        if (!threadShared || lifecycle == null || !lifecycle.active) {
+            return SharedDestroyDisposition.CONTINUE;
+        }
 
         if (threadSharedFetchedView || threadSharedRuntimeView) {
             int remaining = lifecycle.liveViews.get();
@@ -133,36 +222,32 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             }
             if (remaining == 0 && lifecycle.destroyPending.get()
                     && lifecycle.destroyFired.compareAndSet(false, true)) {
-                return false;
+                return SharedDestroyDisposition.CONTINUE;
             }
-            return true;
+            // A fetch proxy has a Perl-local identity even though its storage
+            // is shared. Retire only its local weak observers; the canonical
+            // object's DESTROY and element cleanup still belong to the
+            // shared lifecycle. Runtime views retain the existing deferred
+            // destruction behavior until their lifecycle is separated too.
+            return threadSharedFetchedView
+                    ? SharedDestroyDisposition.CLEAR_LOCAL_VIEW
+                    : SharedDestroyDisposition.DEFER;
         }
 
         lifecycle.destroyPending.set(true);
-        if (lifecycle.liveViews.get() > 0) return true;
-        return !lifecycle.destroyFired.compareAndSet(false, true);
+        if (lifecycle.liveViews.get() > 0) return SharedDestroyDisposition.DEFER;
+        return lifecycle.destroyFired.compareAndSet(false, true)
+                ? SharedDestroyDisposition.CONTINUE
+                : SharedDestroyDisposition.DEFER;
     }
     // Index to the class that this reference belongs
     public int blessId;
 
-    // Reference count for blessed objects with DESTROY.
-    // Four-state lifecycle counter:
-    //   -1                = Not tracked (unblessed, or blessed without DESTROY)
-    //    0                = Tracked, zero counted containers (fresh from bless)
-    //   >0                = Being tracked; N named-variable containers exist
-    //   Integer.MIN_VALUE = DESTROY already called (or in progress)
-    // MUST be explicitly initialized to -1 (Java defaults int to 0, which would
-    // mean "tracked, zero containers" — silently breaking all unblessed objects).
-    public int refCount = -1;
+    // Selective legacy count bridge used while owner producers are migrated.
+    // Destruction and tracking mode are represented independently.
+    public int refCount = 0;
 
-    // ─────────────────────────────────────────────────────────────────────
-    // Phase D-W6.10: targeted refCount transition tracing.
-    // Activate at bless time for classes matching `classNeedsWalkerGate`
-    // when env-flag PJ_REFCOUNT_TRACE is set. Writes a stderr line for
-    // every increment/decrement, including a stack snippet, so we can
-    // pinpoint which path causes the metaclass refCount underflow on
-    // Class::MOP bootstrap (see dev/modules/moose_support.md D-W6.7).
-    // ─────────────────────────────────────────────────────────────────────
+    // Targeted refCount transition tracing is enabled by PJ_REFCOUNT_TRACE_CLASS.
     public boolean refCountTrace = false;
 
     // Temporary aliases installed by foreach loop variables such as $_.
@@ -183,13 +268,13 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
      * cleared (the object remains a module-global anchor for the
      * program's lifetime).
      * <p>
-     * Replaces the class-name heuristic in
-     * {@code DestroyDispatch.classNeedsWalkerGate}: instead of
-     * approximating "module-global metadata" by hard-coded class names
-     * (Class::MOP, Moose, Moo), we capture the underlying property
-     * directly at store time.
+     * Captures the package-global owner property directly at store time,
+     * without inferring it from the referent's class name.
      */
     public boolean storedInPackageGlobal = false;
+
+    /** Marks a counted referent kept alive only until its uncounted owner slots leave. */
+    boolean deferredFinalReleaseForUncountedOwners = false;
 
     /**
      * Number of live hash-element slots that directly own this referent.
@@ -201,9 +286,8 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
 
     /**
      * Marks a scalar/container whose contents are reachable from package
-     * globals. Mutating such an object can change cached root-reachability
-     * answers, so mutation paths invalidate MortalList's external-root
-     * snapshot when this flag is set.
+     * globals. Owner and lifecycle operations use this flag to preserve the
+     * package slot's Perl ownership semantics when values are replaced.
      */
     public boolean isPackageGlobalRoot = false;
 
@@ -223,6 +307,8 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
      */
     public int captureCount = 0;
     public boolean scopeExited = false;
+    private int legacyCaptureOwnerCount;
+    private int pendingClosureCaptureReleases;
 
     /**
      * A lexical array whose scope has ended without an escaped {@code \@array}
@@ -231,40 +317,125 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
      */
     public boolean arrayLengthLvalueOrphaned = false;
 
-    public void retainClosureCapture() {
+    public synchronized void retainClosureCapture() {
+        PerlOwnerSlot.Kind ownerKind = this instanceof RuntimeScalar
+                ? PerlOwnerSlot.Kind.SCALAR_CAPTURE : PerlOwnerSlot.Kind.CLOSURE_PAD;
+        verifyClosureCaptureOwnerCount(ownerKind);
+        retainClosureCaptureCount(true);
+        verifyClosureCaptureOwnerCount(ownerKind);
+    }
+
+    public synchronized int legacyCaptureOwnerCount() {
+        return legacyCaptureOwnerCount;
+    }
+
+    final synchronized void beginPendingClosureCaptureRelease() {
+        if (pendingClosureCaptureReleases == Integer.MAX_VALUE) {
+            throw new IllegalStateException("pending closure capture release overflow");
+        }
+        pendingClosureCaptureReleases++;
+    }
+
+    final synchronized void endPendingClosureCaptureRelease() {
+        if (pendingClosureCaptureReleases <= 0) {
+            throw new IllegalStateException("unbalanced pending closure capture release");
+        }
+        pendingClosureCaptureReleases--;
+    }
+
+    protected final synchronized void retainClosureCaptureCount(boolean legacyOwner) {
+        if (captureCount == Integer.MAX_VALUE
+                || (legacyOwner && legacyCaptureOwnerCount == Integer.MAX_VALUE)) {
+            throw new IllegalStateException("closure capture count overflow");
+        }
         captureCount++;
+        if (legacyOwner) legacyCaptureOwnerCount++;
+    }
+
+    protected final synchronized void releaseClosureCaptureCount(boolean legacyOwner) {
+        if (legacyOwner) {
+            if (legacyCaptureOwnerCount <= 0) {
+                throw new IllegalStateException("release has no legacy closure capture owner");
+            }
+            legacyCaptureOwnerCount--;
+        }
+        if (captureCount <= 0) {
+            throw new IllegalStateException("closure capture count underflow");
+        }
+        captureCount--;
+    }
+
+    final synchronized void verifyClosureCaptureOwnerCount(PerlOwnerSlot.Kind ownerKind) {
+        if (pendingClosureCaptureReleases != 0) {
+            throw new IllegalStateException("closure capture release is still pending");
+        }
+        int slotCount = ownerSlotCount(ownerKind);
+        int legacyCount = legacyCaptureOwnerCount();
+        if (captureCount != slotCount + legacyCount) {
+            throw new IllegalStateException("closure capture owner mismatch: count="
+                    + captureCount + ", slots=" + slotCount + ", legacy=" + legacyCount
+                    + ", kind=" + ownerKind);
+        }
+    }
+
+    /** Whether an explicit, compatibility, or in-flight capture owner remains. */
+    public final synchronized boolean hasClosureCaptureOwner() {
+        PerlOwnerSlot.Kind ownerKind = this instanceof RuntimeScalar
+                ? PerlOwnerSlot.Kind.SCALAR_CAPTURE : PerlOwnerSlot.Kind.CLOSURE_PAD;
+        return ownerSlotCount(ownerKind) != 0 || legacyCaptureOwnerCount() != 0
+                || pendingClosureCaptureReleases != 0;
     }
 
     /** Retain one aggregate pad capture through an explicit owner slot. */
-    public PerlOwnerSlot retainClosureCaptureOwner() {
+    public synchronized PerlOwnerSlot retainClosureCaptureOwner() {
+        return retainClosureCaptureOwner(null);
+    }
+
+    /** Retain one aggregate pad capture and identify its owning CODE object. */
+    public synchronized PerlOwnerSlot retainClosureCaptureOwner(RuntimeCode captureOwner) {
+        verifyClosureCaptureOwnerCount(PerlOwnerSlot.Kind.CLOSURE_PAD);
         // A closure-pad slot is a semantic Perl owner even though it does not
-        // contribute to the legacy selective refcount. A targeted weak sweep
-        // can therefore leave an unblessed aggregate's legacy count at the
-        // destroyed sentinel while other native capture slots still own it.
-        // Reconcile that stale bridge state before adding another owner; a
-        // blessed or already-destroyed object must never be revived here.
-        if (refCount == Integer.MIN_VALUE && blessId == 0 && !destroyFired
-                && captureCount > 0 && hasSemanticCaptureOwner()) {
-            refCount = 0;
-        }
+        // contribute to the selective refcount. Reconcile stale bridge state
+        // before adding another owner; a blessed or already-destroyed object
+        // must never be revived here.
         PerlOwnerSlot ownerSlot = new PerlOwnerSlot(PerlOwnerSlot.Kind.CLOSURE_PAD);
-        ownerSlot.acquireCapture(this);
-        retainClosureCapture();
+        ownerSlot.acquireCapture(this, captureOwner);
+        retainClosureCaptureCount(false);
+        if (this instanceof RuntimeArray || this instanceof RuntimeHash) {
+            verifyClosureCaptureOwnerCount(PerlOwnerSlot.Kind.CLOSURE_PAD);
+        }
         return ownerSlot;
     }
 
     /** Release one aggregate pad capture, balancing its bridged count. */
-    public void releaseClosureCaptureOwner(PerlOwnerSlot ownerSlot) {
+    public synchronized void releaseClosureCaptureOwner(PerlOwnerSlot ownerSlot) {
         if (ownerSlot == null) {
             releaseClosureCapture();
             return;
+        }
+        if (ownerSlot.kind() != PerlOwnerSlot.Kind.CLOSURE_PAD) {
+            throw new IllegalStateException("capture release requires a closure-pad slot");
+        }
+        if (!ownerSlot.isActive()) return;
+        if (ownerSlot.referent() != this) {
+            throw new IllegalStateException("closure-pad slot belongs to a different aggregate");
         }
         if (ownerSlot.isNativeCaptureOwner()) {
             // Captured aggregate pads are native owner slots. Remove the slot
             // before releasing the capture so a final release can dispatch
             // from the owner count without manufacturing a legacy decrement.
-            ownerSlot.release();
-            releaseClosureCapture(true);
+            beginPendingClosureCaptureRelease();
+            try {
+                ownerSlot.release();
+            } finally {
+                endPendingClosureCaptureRelease();
+            }
+            releaseClosureCapture(false);
+            // The owner-slot removal above runs while this capture release is
+            // marked pending, so its lifecycle callback correctly waits. Retry
+            // now that the capture count and pending marker have both retired.
+            WeakRefRegistry.onStrongOwnerSlotReleased(this);
+            verifyClosureCaptureOwnerCount(PerlOwnerSlot.Kind.CLOSURE_PAD);
             return;
         }
         ownerSlot.deferLegacyCaptureRelease(this);
@@ -273,59 +444,511 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         } finally {
             ownerSlot.release();
         }
+        verifyClosureCaptureOwnerCount(PerlOwnerSlot.Kind.CLOSURE_PAD);
     }
 
-    public void releaseClosureCapture() {
-        releaseClosureCapture(false);
+    /** Retain one persistent scalar or aggregate state binding owned by a CV. */
+    synchronized PerlOwnerSlot retainCodeStateOwner(RuntimeCode owner) {
+        PerlOwnerSlot ownerSlot = new PerlOwnerSlot(PerlOwnerSlot.Kind.CODE_STATE);
+        ownerSlot.acquireCodeStateIdentity(this, owner);
+        return ownerSlot;
     }
 
-    private void releaseClosureCapture(boolean nativeOwnerSlot) {
-        if (captureCount > 0) {
-            captureCount--;
+    /** Release one persistent CODE state binding identity. */
+    synchronized void releaseCodeStateOwner(PerlOwnerSlot ownerSlot) {
+        if (ownerSlot == null || !ownerSlot.isActive()) return;
+        if (ownerSlot.kind() != PerlOwnerSlot.Kind.CODE_STATE || ownerSlot.referent() != this) {
+            throw new IllegalArgumentException("CODE state release does not match this referent");
         }
-        if (captureCount == 0 && scopeExited) {
+        ownerSlot.release();
+    }
+
+    public synchronized void releaseClosureCapture() {
+        if (!hasClosureCaptureOwner()) {
+            if (captureCount != 0) {
+                throw new IllegalStateException("closure capture has no recorded owner");
+            }
+            return;
+        }
+        releaseClosureCapture(true);
+        verifyClosureCaptureOwnerCount(PerlOwnerSlot.Kind.CLOSURE_PAD);
+    }
+
+    private void releaseClosureCapture(boolean legacyOwner) {
+        releaseClosureCaptureCount(legacyOwner);
+        if (!hasClosureCaptureOwner() && scopeExited) {
             scopeExited = false;
             if (this instanceof RuntimeHash hash) {
                 MortalList.scopeExitCleanupHash(hash);
             } else if (this instanceof RuntimeArray array) {
                 MortalList.scopeExitCleanupArray(array);
             }
-            if (blessId != 0 && refCount <= 0) {
-                refCount = Integer.MIN_VALUE;
-                DestroyDispatch.callDestroy(this);
-            } else if (!nativeOwnerSlot && refCount > 0
-                    && (blessId != 0 || this instanceof RuntimeCode)
-                    && !hasSemanticCaptureOwner()) {
-                MortalList.deferDecrement(this, "closure aggregate release");
-            }
+            // A closure pad capture is not a counted RV edge. Any positive
+            // count belongs to scalar or container slots, which retire their
+            // own count when those slots are released.
+            if (blessId != 0 && refCount <= 0) DestroyDispatch.callDestroy(this);
         }
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // D-W6.13: production-grade ownership tracking.
-    // Active for blessed objects that have at least one weak reference
-    // (the only case where we care about precise refCount semantics).
-    // Stores the set of RuntimeScalars that hold a counted strong ref
-    // to this base (refCountOwned=true && value==this).
-    // At MortalList.flush() refCount→0, this is consulted: if non-empty,
-    // refCount is restored to the owner count and DESTROY is suppressed.
+    // D-W6.13: counted scalar owners are derived from the slot ledger below.
     // ─────────────────────────────────────────────────────────────────────
-    public java.util.Set<RuntimeScalar> activeOwners = null;
-
     /** Identity ledger for migrated slots; selective refCount remains the
      * lifecycle bridge while owner families move to this API. */
     private java.util.Set<PerlOwnerSlot> ownerSlots = null;
+    private int argumentAliasOwnerSlots;
+    private int countedOwnerSlots;
+    /** Active semantic Perl owner identities; excludes temporary roots and IO leases. */
+    private volatile int perlStrongOwnerSlots;
+    private int pendingReturnOwners;
+    private int pendingOwnerReleases;
+    /** Counted Perl edges whose slots retired but whose refCount release is queued. */
+    private int pendingCountedOwnerReleases;
+
+    synchronized boolean hasPendingReturnOwner() {
+        return pendingReturnOwners != 0;
+    }
+
+    /** A queued Perl owner release has retired its live slot but not its count yet. */
+    synchronized boolean hasPendingOwnerRelease() {
+        return pendingOwnerReleases != 0;
+    }
+
+    /** Explicit call-transfer owners remain authoritative during the legacy bridge. */
+    synchronized boolean hasCallTransferOwner() {
+        return pendingReturnOwners != 0
+                || ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_VALUE) != 0
+                || ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_CONTAINER) != 0;
+    }
+
+    /** A referenced scalar cell is owned by its lexical binding or capture slots. */
+    boolean hasScalarCellOwner() {
+        return this instanceof RuntimeScalar scalar && scalar.referencedByScalarReference
+                && (scalar.localBindingExists
+                    || hasOwnerSlots() || hasPendingReturnOwner()
+                    || scalar.hasLiveCurrentAggregateStorageOwner());
+    }
+
+    /** Storage identities that own a scalar cell itself, excluding its value edges. */
+    boolean hasScalarCellStorageOwnerSlotIdentity() {
+        return ownerSlotCount(PerlOwnerSlot.Kind.SCALAR_CELL) != 0
+                || ownerSlotCount(PerlOwnerSlot.Kind.CODE_SLOT) != 0
+                || ownerSlotCount(PerlOwnerSlot.Kind.SCALAR_CAPTURE) != 0
+                || ownerSlotCount(PerlOwnerSlot.Kind.ACTIVE_LEXICAL) != 0
+                || ownerSlotCount(PerlOwnerSlot.Kind.SUSPENDED_FRAME) != 0
+                || ownerSlotCount(PerlOwnerSlot.Kind.SCALAR_REFERENCE_CONTENTS) != 0;
+    }
+
+    synchronized void registerPendingOwnerRelease(
+            PerlOwnerSlot.PendingRelease release) {
+        pendingOwnerReleases++;
+        if (release != null && PerlOwnerSlot.isCountedKind(release.kind())) {
+            pendingCountedOwnerReleases++;
+        }
+        if (release != null && release.kind() == PerlOwnerSlot.Kind.RETURN_VALUE) {
+            pendingReturnOwners++;
+        }
+    }
 
     synchronized void addOwnerSlot(PerlOwnerSlot slot) {
         if (ownerSlots == null) {
             ownerSlots = java.util.Collections.newSetFromMap(
                     new java.util.IdentityHashMap<>());
         }
-        ownerSlots.add(slot);
+        if (ownerSlots.add(slot)) {
+            if (slot.kind() == PerlOwnerSlot.Kind.ARGUMENT_ALIAS) argumentAliasOwnerSlots++;
+            if (PerlOwnerSlot.isCountedKind(slot.kind())) countedOwnerSlots++;
+            if (PerlOwnerSlot.isPerlOwnerKind(slot.kind())) perlStrongOwnerSlots++;
+        }
     }
 
     synchronized void removeOwnerSlot(PerlOwnerSlot slot) {
-        if (ownerSlots != null) ownerSlots.remove(slot);
+        if (ownerSlots != null && ownerSlots.remove(slot)) {
+            if (slot.kind() == PerlOwnerSlot.Kind.ARGUMENT_ALIAS) argumentAliasOwnerSlots--;
+            if (PerlOwnerSlot.isCountedKind(slot.kind())) countedOwnerSlots--;
+            if (PerlOwnerSlot.isPerlOwnerKind(slot.kind())) perlStrongOwnerSlots--;
+        }
+    }
+
+    boolean hasOwnerSlots() {
+        return perlStrongOwnerSlots > 0;
+    }
+
+    /**
+     * Whether the legacy count or a direct Perl owner slot proves this value
+     * is still owned. Runtime temporary roots and IO resource leases are
+     * runtime bookkeeping, not Perl references, and are deliberately excluded.
+     */
+    public boolean hasPerlStrongOwner() {
+        return refCount > 0 || hasPerlStrongOwnerIdentity();
+    }
+
+    /** Count temporary referent slots held only by active Perl argument frames. */
+    public int currentArgumentFrameReferentOwnerCount() {
+        PerlRuntime runtime = PerlRuntime.currentOrNull();
+        if (runtime == null) return 0;
+        java.util.List<RuntimeArray> activeArgs = RuntimeCode.snapshotArgsStack();
+        int count = 0;
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (!slot.isActive()) continue;
+            if (slot.kind() == PerlOwnerSlot.Kind.ARGUMENT_CONTAINER) {
+                count++;
+                continue;
+            }
+            RuntimeScalar owner = slot.countedScalarOwner();
+            if (owner == null || owner.value != this
+                    || !(owner.containerOwner instanceof RuntimeArray array)) continue;
+            for (int depth = 0; depth < activeArgs.size(); depth++) {
+                if (activeArgs.get(depth) != array) continue;
+                RuntimeCode activeCode = RuntimeCode.getActiveCodeAt(depth);
+                boolean destroyInvocant = activeCode != null
+                        && "DESTROY".equals(activeCode.subName)
+                        && !array.elements.isEmpty() && array.elements.get(0) == owner;
+                if (!destroyInvocant) count++;
+                break;
+            }
+        }
+        return count;
+    }
+
+    /**
+     * Whether current Perl owner identities, apart from the legacy count,
+     * prove that this value is still owned. Temporary roots, IO resource leases,
+     * and compatibility count pins are not Perl owners.
+     */
+    boolean hasPerlStrongOwnerIdentity() {
+        if (localBindingExists || hasClosureCaptureOwner() || hasPendingReturnOwner()) {
+            return true;
+        }
+        return perlStrongOwnerSlots > 0;
+    }
+
+    /**
+     * Whether this value has a durable Perl owner independent of temporary
+     * call-frame and result-transfer holds. This is used when deciding whether
+     * an aliased scalar cell is already kept alive by its aggregate container.
+     */
+    boolean hasPersistentPerlStrongOwnerIdentity() {
+        PerlRuntime runtime = PerlRuntime.currentOrNull();
+        if (localBindingExists || isPackageGlobalRoot || hasClosureCaptureOwner()
+                || (runtime != null && MyVarCleanupStack.isRegistered(this))) return true;
+
+        int temporaryCountedOwners = ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_VALUE)
+                + ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_CONTAINER)
+                + ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_TIE_HANDLER)
+                + ownerSlotCount(PerlOwnerSlot.Kind.RETURN_VALUE)
+                + ownerSlotCount(PerlOwnerSlot.Kind.EXPRESSION_VALUE);
+        if (refCount > temporaryCountedOwners) return true;
+
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (!slot.isActive() || !PerlOwnerSlot.isPerlOwnerKind(slot.kind())) continue;
+            switch (slot.kind()) {
+                case ARGUMENT_VALUE, ARGUMENT_CONTAINER, ARGUMENT_ALIAS,
+                        ARGUMENT_TIE_HANDLER, RETURN_VALUE, ACTIVE_CODE,
+                        EXPRESSION_VALUE -> { }
+                case UNTRACKED_REFERENCE, SCALAR_REFERENCE_CONTENTS,
+                        ARRAY_ELEMENT, HASH_ELEMENT -> {
+                    if (DestroyDispatch.isCurrentPerlOwnerSlot(this, slot)) return true;
+                }
+                default -> { return true; }
+            }
+        }
+        return false;
+    }
+
+    /** Whether a current Perl owner identity other than one slot remains. */
+    boolean hasCurrentPerlOwnerIdentityOtherThan(PerlOwnerSlot excluded) {
+        if (localBindingExists || hasClosureCaptureOwner()
+                || hasPendingReturnOwner() || hasPendingOwnerRelease()) {
+            return true;
+        }
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (slot == excluded || !slot.isActive()
+                    || !PerlOwnerSlot.isPerlOwnerKind(slot.kind())) {
+                continue;
+            }
+            if (slot.kind() == PerlOwnerSlot.Kind.ARGUMENT_ALIAS
+                    || slot.isMethodInvocantOwner(this)
+                    || slot.isCountedNativeOwner()) {
+                return true;
+            }
+            RuntimeScalar scalarOwner = slot.countedScalarOwner();
+            if (scalarOwner != null) {
+                PerlOwnerSlot.Kind kind = slot.kind();
+                boolean currentCountedOwner =
+                        (kind == PerlOwnerSlot.Kind.ARRAY_ELEMENT
+                                || kind == PerlOwnerSlot.Kind.HASH_ELEMENT)
+                        ? scalarOwner.isCurrentAggregateElementOwner(this, slot)
+                        : scalarOwner.isCurrentCountedScalarOwner(this, slot);
+                if (currentCountedOwner) return true;
+                continue;
+            }
+            if (DestroyDispatch.isCurrentPerlOwnerSlot(this, slot)) return true;
+        }
+        return false;
+    }
+
+    /** Whether a non-counted owner slot proves Perl ownership of this value. */
+    boolean hasUncountedPerlOwnerSlotIdentity() {
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (slot.isActive()
+                    && !PerlOwnerSlot.isCountedKind(slot.kind())
+                    && !slot.isCountedNativeOwner()
+                    && PerlOwnerSlot.isPerlOwnerKind(slot.kind())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** A snapshot lease delays lifecycle cleanup without becoming a Perl owner. */
+    boolean hasTemporaryRootOwnerSlotIdentity() {
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (slot.isActive() && slot.kind() == PerlOwnerSlot.Kind.TEMPORARY_ROOT) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Whether a current uncounted slot proves Perl ownership of this value. */
+    boolean hasCurrentUncountedPerlOwnerSlotIdentity() {
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (!PerlOwnerSlot.isCountedKind(slot.kind())
+                    && !slot.isCountedNativeOwner()
+                    && PerlOwnerSlot.isPerlOwnerKind(slot.kind())
+                    && DestroyDispatch.isCurrentPerlOwnerSlot(this, slot)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether a live lexical scalar directly owns this referent through the
+     * untracked-reference bridge, without an intervening aggregate slot.
+     */
+    boolean hasCurrentUntrackedLexicalScalarOwnerSlotIdentity() {
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (!slot.isActive()
+                    || slot.kind() != PerlOwnerSlot.Kind.UNTRACKED_REFERENCE) continue;
+            RuntimeScalar owner = slot.untrackedScalarOwner();
+            if (owner == null || owner.getContainerOwner() != null
+                    || owner.scopeExited || !MyVarCleanupStack.isRegistered(owner)) {
+                continue;
+            }
+            if (DestroyDispatch.isCurrentPerlOwnerSlot(this, slot)) return true;
+        }
+        return false;
+    }
+
+    /** Whether any active Perl owner slot still proves a current storage edge. */
+    boolean hasCurrentPerlOwnerSlotIdentity() {
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (DestroyDispatch.isCurrentPerlOwnerSlot(this, slot)) return true;
+        }
+        return false;
+    }
+
+    /** Whether this aggregate has a current Perl storage or call-transfer owner. */
+    boolean hasCurrentPerlStorageOwner() {
+        PerlRuntime runtime = PerlRuntime.currentOrNull();
+        synchronized (this) {
+            if (refCount > pendingCountedOwnerReleases) return true;
+        }
+        if (localBindingExists || hasClosureCaptureOwner()
+                || hasPendingReturnOwner()
+                || ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_VALUE) != 0
+                || ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_CONTAINER) != 0
+                || ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_TIE_HANDLER) != 0
+                || ownerSlotCount(PerlOwnerSlot.Kind.RETURN_VALUE) != 0) {
+            return true;
+        }
+        if ((this instanceof RuntimeArray || this instanceof RuntimeHash)
+                && (GlobalVariable.isPackageRootedAggregate(this)
+                    || (runtime != null && MyVarCleanupStack.isRegistered(this)))) {
+            return true;
+        }
+        if (hasTransientUntrackedContainerTransferOwner()) return true;
+        return hasCurrentPerlOwnerSlotIdentity();
+    }
+
+    private boolean hasTransientUntrackedContainerTransferOwner() {
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (!slot.isActive() || slot.kind() != PerlOwnerSlot.Kind.UNTRACKED_REFERENCE
+                    || slot.referent() != this) continue;
+            RuntimeScalar owner = slot.untrackedScalarOwner();
+            if (owner != null && owner.untrackedReferenceOwnerSlot() == slot
+                    && owner.isTransientArgumentValueOwner()
+                    && !WeakRefRegistry.isweak(owner)
+                    && (owner.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                    && owner.value == this) return true;
+        }
+        return false;
+    }
+
+    boolean hasDirectOwnerSlotProofForReleasedWeakReferent() {
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (!slot.isActive() || !PerlOwnerSlot.isPerlOwnerKind(slot.kind())) continue;
+            if (slot.kind() == PerlOwnerSlot.Kind.ARRAY_ELEMENT
+                    || slot.kind() == PerlOwnerSlot.Kind.HASH_ELEMENT) {
+                RuntimeScalar scalar = slot.countedScalarOwner();
+                if (scalar != null && scalar.getContainerOwner() == null) continue;
+            }
+            if (slot.kind() == PerlOwnerSlot.Kind.UNTRACKED_REFERENCE) {
+                RuntimeScalar scalar = slot.untrackedScalarOwner();
+                if (scalar != null && scalar.hasPackageAggregateUntrackedReferenceOwner()) {
+                    continue;
+                }
+            }
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Whether a durable scalar value owns this referent outside its count.
+     * Refresh each exact owner first so a stale scalar cell cannot pin a
+     * referent after that cell has lost its Perl-visible slot.
+     */
+    boolean hasUntrackedReferenceOwnerSlotIdentity() {
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (slot.kind() != PerlOwnerSlot.Kind.UNTRACKED_REFERENCE || !slot.isActive()) continue;
+            RuntimeScalar owner = slot.untrackedScalarOwner();
+            if (owner != null) {
+                if (owner.hasLiveDurableStrongValueSlot()) {
+                    owner.refreshUntrackedReferenceOwner();
+                } else {
+                    owner.releaseUntrackedReferenceOwner(this);
+                }
+            } else {
+                slot.release();
+                WeakRefRegistry.onStrongOwnerSlotReleased(this);
+            }
+        }
+        return ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE) != 0;
+    }
+
+    /** Promote existing scalar-cell owners when this referent enters counted tracking. */
+    public void promoteUntrackedScalarOwners() {
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (slot.kind() != PerlOwnerSlot.Kind.UNTRACKED_REFERENCE || !slot.isActive()) continue;
+            RuntimeScalar owner = slot.untrackedScalarOwner();
+            if (owner == null || WeakRefRegistry.isweak(owner)
+                    || !owner.hasLiveDurableStrongValueSlot()) continue;
+            RuntimeScalar.incrementRefCountForContainerStore(owner, owner.countedOwnerKind());
+        }
+    }
+
+    boolean hasUntrackedReferenceOwnerSlotIdentity(int scalarType) {
+        if (!hasUntrackedReferenceOwnerSlotIdentity()) return false;
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (slot.kind() != PerlOwnerSlot.Kind.UNTRACKED_REFERENCE || !slot.isActive()) continue;
+            RuntimeScalar owner = slot.untrackedScalarOwner();
+            if (owner != null && owner.type == scalarType
+                    && owner.hasLiveDurableStrongValueSlot()
+                    && !owner.hasPackageAggregateUntrackedReferenceOwner()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Whether another current scalar slot holds this referent strongly. */
+    public boolean hasLiveStrongScalarOwnerSlotOtherThan(RuntimeScalar excluded) {
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (!slot.isActive() || slot.referent() != this) continue;
+            RuntimeScalar owner;
+            boolean ownerSlotMatches;
+            if (slot.kind() == PerlOwnerSlot.Kind.UNTRACKED_REFERENCE) {
+                owner = slot.untrackedScalarOwner();
+                ownerSlotMatches = owner != null
+                        && owner.untrackedReferenceOwnerSlot() == slot;
+            } else {
+                owner = slot.countedScalarOwner();
+                ownerSlotMatches = owner != null
+                        && owner.countedOwnerSlot() == slot
+                        && owner.refCountOwned;
+            }
+            if (ownerSlotMatches && owner != excluded
+                    && MyVarCleanupStack.isRegistered(owner)
+                    && !WeakRefRegistry.isweak(owner)
+                    && !owner.scopeExited
+                    && owner.value == this) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Whether an aggregate has a surviving owner outside the legacy count. */
+    boolean hasUncountedAggregateOwnerSlotIdentity() {
+        return (this instanceof RuntimeArray || this instanceof RuntimeHash)
+                && hasUncountedPerlOwnerSlotIdentity();
+    }
+
+    boolean hasNonPackageAggregateUncountedOwnerSlotIdentity() {
+        if (!(this instanceof RuntimeArray || this instanceof RuntimeHash)) return false;
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (!slot.isActive()
+                    || PerlOwnerSlot.isCountedKind(slot.kind())
+                    || !PerlOwnerSlot.isPerlOwnerKind(slot.kind())) {
+                continue;
+            }
+            if (slot.kind() == PerlOwnerSlot.Kind.UNTRACKED_REFERENCE) {
+                RuntimeScalar scalar = slot.untrackedScalarOwner();
+                if (scalar == null && blessId == 0
+                        && WeakRefRegistry.hasWeakRefsTo(this)) {
+                    slot.release();
+                    WeakRefRegistry.onStrongOwnerSlotReleased(this);
+                    continue;
+                }
+                if (scalar != null && blessId == 0
+                        && WeakRefRegistry.hasWeakRefsTo(this)
+                        && !scalar.hasLiveDurableStrongValueSlot()) {
+                    scalar.releaseUntrackedReferenceOwner(this);
+                    continue;
+                }
+                if (scalar != null && scalar.hasPackageAggregateUntrackedReferenceOwner()) {
+                    continue;
+                }
+            }
+            return true;
+        }
+        return false;
+    }
+
+    void deferFinalReleaseToUncountedOwnerSlots() {
+        if (!hasUncountedPerlOwnerSlotIdentity()) return;
+        markRefCountWeaklyTracked();
+        deferredFinalReleaseForUncountedOwners = true;
+    }
+
+    /** Defer a zero-count lifecycle transition without encoding it as a count. */
+    void deferZeroCountFinalReleaseToUncountedOwnerSlots() {
+        if (!isRefCountTracked() || refCount != 0) {
+            throw new IllegalStateException("zero-count owner release requires refCount=0");
+        }
+        if (!hasUncountedPerlOwnerSlotIdentity()) return;
+        deferredFinalReleaseForUncountedOwners = true;
+    }
+
+    /** Hold weak cleanup until an explicit runtime snapshot lease is released. */
+    void deferFinalReleaseToTemporaryRootSlots() {
+        if (!isRefCountTracked() || refCount != 0) {
+            throw new IllegalStateException("temporary-root release requires refCount=0");
+        }
+        if (!hasTemporaryRootOwnerSlotIdentity()) return;
+        markRefCountWeaklyTracked();
+        deferredFinalReleaseForUncountedOwners = true;
+    }
+
+    /** Check whether a live owner identity besides the slot being replaced remains. */
+    boolean hasOwnerSlotsOtherThan(PerlOwnerSlot excluded) {
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (slot != excluded && slot.isActive()) return true;
+        }
+        return false;
     }
 
     public boolean hasSemanticCaptureOwner() {
@@ -334,12 +957,26 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
 
     /** Number of active slots of the requested kind that own this referent. */
     public synchronized int ownerSlotCount(PerlOwnerSlot.Kind kind) {
+        if (kind == PerlOwnerSlot.Kind.ARGUMENT_ALIAS) return argumentAliasOwnerSlots;
         if (ownerSlots == null) return 0;
         int count = 0;
         for (PerlOwnerSlot slot : ownerSlots) {
             if (slot.kind() == kind) count++;
         }
         return count;
+    }
+
+    /** Number of active slot identities whose releases balance refCount. */
+    synchronized int countedOwnerSlotCount() {
+        return countedOwnerSlots;
+    }
+
+    /** Whether a current Perl storage identity already owns this value. */
+    boolean hasIndependentPerlOwnerSlotForArgument() {
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (DestroyDispatch.isCurrentPerlOwnerSlot(this, slot)) return true;
+        }
+        return false;
     }
 
     /** Number of distinct captured pad slots that own this referent. */
@@ -360,98 +997,67 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         return count;
     }
 
-    // Conservative gate for the tied-handler reachability fallback. Once a
-    // base has appeared in a tie handler's strong object graph it remains
-    // marked; a stale true only permits the exact walker to run, while false
-    // means the expensive tied-root query cannot rescue this object.
-    boolean possiblyStoredInTiedHandler;
-
-    void markPossiblyStoredInTiedHandler() {
-        java.util.Set<RuntimeBase> seen = java.util.Collections.newSetFromMap(
-                new java.util.IdentityHashMap<>());
-        java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
-        todo.add(this);
-        while (!todo.isEmpty()) {
-            RuntimeBase current = todo.removeFirst();
-            if (!seen.add(current)) continue;
-            current.possiblyStoredInTiedHandler = true;
-            if (current instanceof RuntimeHash hash) {
-                if (hash.elements instanceof TieHash tieHash) {
-                    addTiedHandlerReferent(tieHash.getSelf(), todo);
-                }
-                for (RuntimeScalar value : hash.elements.values()) {
-                    addTiedHandlerReferent(value, todo);
-                }
-            } else if (current instanceof RuntimeArray array) {
-                for (RuntimeScalar value : array.elements) {
-                    addTiedHandlerReferent(value, todo);
-                }
-            } else if (current instanceof RuntimeScalar scalar) {
-                addTiedHandlerReferent(scalar, todo);
-            }
-        }
-    }
-
-    private static void addTiedHandlerReferent(
-            RuntimeScalar scalar, java.util.ArrayDeque<RuntimeBase> todo) {
-        if (scalar != null
-                && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                && scalar.value instanceof RuntimeBase base) {
-            todo.addLast(base);
-        }
-    }
-
-    public void activateOwnerTracking() {
-        if (activeOwners == null) {
-            activeOwners = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
-            // Note: backfilling from ScalarRefRegistry.snapshot() was
-            // observed to cause DBIC leak-test regressions due to
-            // WeakHashMap.expungeStaleEntries() side-effects on JVM GC
-            // observability. We rely on incremental population via
-            // recordActiveOwner() from setLargeRefCounted; objects that
-            // had setLarge incs BEFORE activation will be missed, but
-            // that's a known limitation — the activation should fire on
-            // first weaken(), which usually precedes the relevant stores.
-        }
-    }
-
-    public void recordActiveOwner(RuntimeScalar scalar) {
-        if (activeOwners != null) {
-            activeOwners.add(scalar);
-        }
-    }
-
-    public void releaseActiveOwner(RuntimeScalar scalar) {
-        if (activeOwners != null) {
-            activeOwners.remove(scalar);
-        }
-    }
-
-    public int activeOwnerCount() {
-        if (activeOwners == null) return 0;
-        // Filter for actual still-owning scalars: refCountOwned=true and
-        // value==this. Stale entries (overwritten without going through a
-        // tracked release path, or scope-exited via untracked paths) are
-        // pruned and ignored.
+    /** Count all slots whose owners are represented directly by the owner ledger. */
+    public synchronized int nativeOwnerSlotCount() {
+        if (ownerSlots == null) return 0;
         int count = 0;
-        java.util.Iterator<RuntimeScalar> it = activeOwners.iterator();
-        while (it.hasNext()) {
-            RuntimeScalar sc = it.next();
-            if (sc != null && sc.refCountOwned && sc.value == this) {
-                count++;
-            } else {
-                it.remove();
-            }
+        for (PerlOwnerSlot slot : ownerSlots) {
+            if (slot.isNativeOwner()) count++;
         }
         return count;
     }
 
-    /** Snapshot the currently live scalar owner slots by identity. */
+    public void recordActiveOwner(RuntimeScalar scalar) {
+        scalar.recordCountedOwner(this);
+    }
+
+    public void releaseActiveOwner(RuntimeScalar scalar) {
+        retireCountedOwnerIdentity(scalar, "RuntimeBase.releaseActiveOwner");
+    }
+
+    /**
+     * Retire a stale scalar owner identity after a nested-call guard preserved
+     * the referent at selective count zero. The count was already consumed by
+     * the guard, so this transition clears only the scalar's mirrored ownership
+     * flag, trace entry, and exact Perl owner slot.
+     */
+    final void retireZeroCountOwnerIdentity(RuntimeScalar scalar, String releaseSite) {
+        Objects.requireNonNull(scalar, "scalar");
+        Objects.requireNonNull(releaseSite, "releaseSite");
+        if (!isRefCountTracked() || refCount != 0) {
+            throw new IllegalStateException(
+                    "zero-count owner identity retirement requires refCount=0 at " + releaseSite);
+        }
+        retireCountedOwnerIdentity(scalar, releaseSite);
+    }
+
+    private void retireCountedOwnerIdentity(RuntimeScalar scalar, String releaseSite) {
+        if (scalar.releaseCountedOwnerIdentity(this, releaseSite, true) == null) {
+            throw new IllegalStateException(
+                    "counted owner identity retirement requires its active PerlOwnerSlot at "
+                            + releaseSite);
+        }
+    }
+
+    public int activeOwnerCount() {
+        return activeOwnerSnapshot().size();
+    }
+
+    /** Snapshot current counted scalar owners by their authoritative slot identities. */
     public java.util.Set<RuntimeScalar> activeOwnerSnapshot() {
-        if (activeOwnerCount() == 0) return java.util.Collections.emptySet();
         java.util.Set<RuntimeScalar> snapshot = java.util.Collections.newSetFromMap(
                 new java.util.IdentityHashMap<>());
-        snapshot.addAll(activeOwners);
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (!slot.isActive() || slot.referent() != this
+                    || !PerlOwnerSlot.isCountedKind(slot.kind())) {
+                continue;
+            }
+            RuntimeScalar scalar = slot.countedScalarOwner();
+            if (scalar != null && scalar.countedOwnerSlot() == slot
+                    && scalar.refCountOwned && scalar.value == this) {
+                snapshot.add(scalar);
+            }
+        }
         return snapshot;
     }
 
@@ -466,30 +1072,29 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         return snapshot;
     }
 
-    /**
-     * D-W6.14: count owners that are reachable from package globals or
-     * live my-vars. This is the strict version used by the production
-     * rescue at MortalList.flush refCount→0: only objects whose owners
-     * can be reached from real roots are kept alive. Phantom owners
-     * (scalars that should be dead but haven't been released yet) are
-     * excluded. Cycles with no external root → all owners unreachable
-     * → 0 → DESTROY fires (matching real Perl's cycle leak behavior
-     * resolved by user weaken()).
-     */
-    public int reachableOwnerCount() {
-        if (activeOwners == null) return 0;
-        int count = 0;
-        java.util.Iterator<RuntimeScalar> it = activeOwners.iterator();
-        while (it.hasNext()) {
-            RuntimeScalar sc = it.next();
-            if (sc != null && sc.refCountOwned && sc.value == this
-                    && ReachabilityWalker.isScalarReachable(sc)) {
-                count++;
-            } else if (sc == null || !sc.refCountOwned || sc.value != this) {
-                it.remove();
+    private synchronized java.util.List<PerlOwnerSlot> closureCaptureOwnerSnapshot() {
+        if (ownerSlots == null || ownerSlots.isEmpty()) return java.util.List.of();
+        java.util.ArrayList<PerlOwnerSlot> snapshot = new java.util.ArrayList<>();
+        for (PerlOwnerSlot slot : ownerSlots) {
+            PerlOwnerSlot.Kind kind = slot.kind();
+            if (kind == PerlOwnerSlot.Kind.SCALAR_CAPTURE
+                    || kind == PerlOwnerSlot.Kind.CLOSURE_PAD) {
+                snapshot.add(slot);
             }
         }
-        return count;
+        return snapshot.isEmpty() ? java.util.List.of() : snapshot;
+    }
+
+    /** Release closure pads whose CODE owners have no surviving owner identity. */
+    void releaseUnownedClosureCaptures() {
+        for (PerlOwnerSlot ownerSlot : closureCaptureOwnerSnapshot()) {
+            if (!ownerSlot.isActive()) continue;
+            RuntimeCode captureOwner = ownerSlot.captureOwner();
+            if (captureOwner != null
+                    && !captureOwner.hasPerlOwnerForCaptureOtherThan(null)) {
+                captureOwner.releaseCaptures();
+            }
+        }
     }
 
     private static final boolean REFCOUNT_TRACE_ENV =
@@ -519,6 +1124,25 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             sb.append("\n      at ").append(st[i]);
         }
         System.err.println(sb);
+    }
+
+    /** Apply the shared counter half of a tracked Perl-owner acquisition. */
+    final void acquireTrackedOwnerCount(String acquisitionSite) {
+        if (!isRefCountTracked() || refCount == Integer.MAX_VALUE) {
+            throw new IllegalStateException("tracked owner count is unavailable at " + acquisitionSite);
+        }
+        traceRefCount(+1, acquisitionSite);
+        refCount++;
+        hadCountedReference = true;
+    }
+
+    /** Apply one exact tracked-owner decrement; returns true at zero. */
+    final boolean releaseTrackedOwnerCount(String releaseSite) {
+        if (!isRefCountTracked() || refCount <= 0) {
+            throw new IllegalStateException("tracked owner count is not positive at " + releaseSite);
+        }
+        traceRefCount(-1, releaseSite);
+        return --refCount == 0;
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -558,10 +1182,12 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     }
 
     /**
-     * Immutable trace record retained between queueing and draining an owned
-     * decrement.  It deliberately does not retain the scalar itself: source
-     * identity and acquisition site are enough for shutdown diagnosis, and a
-     * trace facility must not change Perl/JVM reachability.
+     * Completion token retained between queueing and draining an owner release
+     * or zero-count lifecycle boundary. It deliberately does not retain the
+     * scalar itself: source identity and acquisition site are enough for
+     * shutdown diagnosis, and a trace facility must not change Perl/JVM
+     * reachability. Completion is idempotent so the pending count and optional
+     * owner-slot token retire exactly once.
      */
     static final class PendingOwnerRelease {
         final int scalarIdentity;
@@ -569,6 +1195,9 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         final String acquireSite;
         final String queueSite;
         final PerlOwnerSlot.PendingRelease ownerSlotRelease;
+        final boolean lifecycleOnlyAtZero;
+        final java.util.concurrent.atomic.AtomicBoolean completed =
+                new java.util.concurrent.atomic.AtomicBoolean();
 
         PendingOwnerRelease(int scalarIdentity, long referentGeneration,
                             String acquireSite, String queueSite) {
@@ -578,15 +1207,32 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         PendingOwnerRelease(int scalarIdentity, long referentGeneration,
                             String acquireSite, String queueSite,
                             PerlOwnerSlot.PendingRelease ownerSlotRelease) {
+            this(scalarIdentity, referentGeneration, acquireSite, queueSite,
+                    ownerSlotRelease, false);
+        }
+
+        PendingOwnerRelease(int scalarIdentity, long referentGeneration,
+                            String acquireSite, String queueSite,
+                            PerlOwnerSlot.PendingRelease ownerSlotRelease,
+                            boolean lifecycleOnlyAtZero) {
             this.scalarIdentity = scalarIdentity;
             this.referentGeneration = referentGeneration;
             this.acquireSite = acquireSite;
             this.queueSite = queueSite;
             this.ownerSlotRelease = ownerSlotRelease;
+            this.lifecycleOnlyAtZero = lifecycleOnlyAtZero;
+        }
+
+        boolean identifiesReleasedOwnerEdge() {
+            return ownerSlotRelease != null;
+        }
+
+        boolean isLifecycleOnlyAtZero() {
+            return lifecycleOnlyAtZero;
         }
     }
 
-    private static long traceReferentGeneration(RuntimeBase base) {
+    static long traceReferentGeneration(RuntimeBase base) {
         return traceReferentGenerations.computeIfAbsent(base,
                 ignored -> nextTraceReferentGeneration.incrementAndGet());
     }
@@ -597,9 +1243,16 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             .computeIfAbsent(this, k -> new java.util.LinkedHashMap<>())
             .put(System.identityHashCode(owner), new OwnerTrace(owner, site));
         StackTraceElement[] st = new Throwable().getStackTrace();
+        PerlOwnerSlot slot = owner.countedOwnerSlot();
+        RuntimeBase aggregateOwner = slot == null ? null : slot.countedAggregateOwner();
         StringBuilder sb = new StringBuilder();
         sb.append("[REFCOUNT-RECORD] base=").append(System.identityHashCode(this))
           .append(" owner=").append(System.identityHashCode(owner))
+          .append(" kind=").append(slot == null ? "<none>" : slot.kind())
+          .append(" slot=").append(slot == null ? 0 : slot.identity())
+          .append(" aggregate=").append(aggregateOwner == null ? 0
+                  : System.identityHashCode(aggregateOwner))
+          .append(" transient=").append(owner.isTransientArgumentValueOwner())
           .append("   ").append(site);
         for (int i = 1; i < Math.min(st.length, 12); i++) {
             sb.append("\n      at ").append(st[i]);
@@ -622,14 +1275,49 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     }
 
     /** Move an active owner trace into the deferred-decrement queue. */
-    public synchronized PendingOwnerRelease queueOwnerRelease(RuntimeScalar owner, String queueSite) {
-        if (!refCountTrace || !REFCOUNT_TRACE_ENV) return null;
+    public PendingOwnerRelease queueOwnerRelease(RuntimeScalar owner, String queueSite) {
+        Objects.requireNonNull(owner, "owner");
+        Objects.requireNonNull(queueSite, "queueSite");
+        PerlOwnerSlot currentSlot = owner.countedOwnerSlot();
+        boolean scalarClaimedCountedOwner = owner.refCountOwned;
+        PerlOwnerSlot.PendingRelease slotRelease = owner.deferCountedOwnerRelease(this);
+        if (slotRelease == null
+                && (currentSlot != null
+                    || (scalarClaimedCountedOwner && hadCountedReference))) {
+            throw new IllegalStateException(
+                    "counted owner release lost its PerlOwnerSlot before queueing: "
+                            + owner.getClass().getSimpleName() + " -> "
+                            + getClass().getSimpleName() + " at " + queueSite);
+        }
+        if (slotRelease == null) {
+            // Compatibility for synthetic or pre-tracking scalars only. The
+            // validation above ensures a real tracked owner cannot use this.
+            owner.refCountOwned = false;
+            registerPendingOwnerRelease(null);
+        }
+        if (!refCountTrace || !REFCOUNT_TRACE_ENV) {
+            return new PendingOwnerRelease(
+                    System.identityHashCode(owner), 0, "counted owner-slot", queueSite, slotRelease);
+        }
+        return queueTracedOwnerRelease(owner, queueSite, slotRelease);
+    }
+
+    /** Queue a zero-count lifecycle boundary without fabricating an owner count. */
+    synchronized PendingOwnerRelease queueLifecycleOnlyAtZero(String queueSite) {
+        registerPendingOwnerRelease(null);
+        return new PendingOwnerRelease(0,
+                REFCOUNT_TRACE_ENV ? traceReferentGeneration(this) : 0,
+                "zero-count lifecycle", queueSite, null, true);
+    }
+
+    private synchronized PendingOwnerRelease queueTracedOwnerRelease(
+            RuntimeScalar owner, String queueSite, PerlOwnerSlot.PendingRelease slotRelease) {
         int scalarIdentity = System.identityHashCode(owner);
         java.util.LinkedHashMap<Integer, OwnerTrace> owners = traceOwners.get(this);
         OwnerTrace ownerTrace = owners == null ? null : owners.remove(scalarIdentity);
         String acquireSite = ownerTrace == null ? "<missing active owner trace>" : ownerTrace.acquireSite;
         PendingOwnerRelease release = new PendingOwnerRelease(
-                scalarIdentity, traceReferentGeneration(this), acquireSite, queueSite);
+                scalarIdentity, traceReferentGeneration(this), acquireSite, queueSite, slotRelease);
         pendingTraceOwnerReleases
                 .computeIfAbsent(this, k -> new java.util.ArrayList<>())
                 .add(release);
@@ -639,6 +1327,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     /** Queue provenance for a deferred owner-slot decrement. */
     synchronized PendingOwnerRelease queueOwnerSlotRelease(
             PerlOwnerSlot.PendingRelease ownerSlotRelease) {
+        registerPendingOwnerRelease(ownerSlotRelease);
         PendingOwnerRelease release = new PendingOwnerRelease(
                 0, REFCOUNT_TRACE_ENV ? traceReferentGeneration(this) : 0,
                 "owner-slot", "MortalList.deferOwnerSlotDecrement", ownerSlotRelease);
@@ -650,10 +1339,23 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     }
 
     /** Mark the exact queued trace record as drained without relying on scalar state. */
-    public synchronized void completeQueuedOwnerRelease(PendingOwnerRelease release, String releaseSite) {
-        if (release == null) return;
-        if (release.ownerSlotRelease != null) release.ownerSlotRelease.complete();
-        if (!REFCOUNT_TRACE_ENV) return;
+    public synchronized boolean completeQueuedOwnerRelease(
+            PendingOwnerRelease release, String releaseSite) {
+        if (release == null || !release.completed.compareAndSet(false, true)) return false;
+        if (release.ownerSlotRelease != null) {
+            if (PerlOwnerSlot.isCountedKind(release.ownerSlotRelease.kind())) {
+                pendingCountedOwnerReleases--;
+                if (pendingCountedOwnerReleases < 0) {
+                    throw new IllegalStateException("pending counted owner release underflow");
+                }
+            }
+            if (release.ownerSlotRelease.kind() == PerlOwnerSlot.Kind.RETURN_VALUE) {
+                pendingReturnOwners--;
+            }
+            release.ownerSlotRelease.complete();
+        }
+        pendingOwnerReleases--;
+        if (!REFCOUNT_TRACE_ENV) return true;
         java.util.ArrayList<PendingOwnerRelease> releases = pendingTraceOwnerReleases.get(this);
         if (releases != null) {
             releases.remove(release);
@@ -665,6 +1367,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                 + " acquire-site=" + release.acquireSite
                 + " queue-site=" + release.queueSite
                 + " release-site=" + releaseSite);
+        return true;
     }
 
     public void cancelQueuedOwnerRelease(PendingOwnerRelease release, String cancelSite) {
@@ -767,9 +1470,181 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                 } else {
                     result.append(pad.value.getClass().getSimpleName());
                 }
+                result.append(" capturedBy=[");
+                boolean firstCaptureOwner = true;
+                for (PerlOwnerSlot padOwner : pad.ownerSlotSnapshot()) {
+                    if (padOwner.kind() != PerlOwnerSlot.Kind.SCALAR_CAPTURE) continue;
+                    if (!firstCaptureOwner) result.append(", ");
+                    firstCaptureOwner = false;
+                    RuntimeCode code = padOwner.captureOwner();
+                    if (code == null) {
+                        result.append("unknown");
+                    } else {
+                        result.append(System.identityHashCode(code)).append(':')
+                                .append(code.packageName == null ? "" : code.packageName)
+                                .append("::").append(code.subName == null ? "" : code.subName)
+                                .append('@').append(code.cvStartFile == null ? "" : code.cvStartFile)
+                                .append(':').append(code.cvStartLine);
+                    }
+                }
+                result.append(']');
+                RuntimeCode captureOwner = slot.captureOwner();
+                if (captureOwner != null) {
+                    result.append(" ownerCode=").append(System.identityHashCode(captureOwner))
+                            .append(" name=")
+                            .append(captureOwner.packageName == null ? "" : captureOwner.packageName)
+                            .append("::")
+                            .append(captureOwner.subName == null ? "" : captureOwner.subName)
+                            .append(" source=")
+                            .append(captureOwner.cvStartFile == null ? "" : captureOwner.cvStartFile)
+                            .append(':').append(captureOwner.cvStartLine);
+                }
             }
             result.append(']');
         }
+        result.append(" ownerSlots=[");
+        boolean firstOwnerSlot = true;
+        for (PerlOwnerSlot ownerSlot : ownerSlotSnapshot()) {
+            if (!ownerSlot.isActive()) continue;
+            if (!firstOwnerSlot) result.append(", ");
+            firstOwnerSlot = false;
+            result.append(ownerSlot.kind()).append('#').append(ownerSlot.identity());
+            int resourceOwnerIdentity = ownerSlot.resourceScalarIdentity();
+            if (resourceOwnerIdentity != 0) {
+                result.append(" resourceScalarId=").append(resourceOwnerIdentity);
+                if (ownerSlot.resourceScalarOwner() == null) result.append(" carrierCollected");
+            }
+            RuntimeScalar owner = ownerSlot.countedScalarOwner();
+            if (owner == null) owner = ownerSlot.untrackedScalarOwner();
+            if (owner == null) owner = ownerSlot.scalarContentsOwner();
+            if (owner == null) owner = ownerSlot.suspendedScalarOwner();
+            if (owner == null) owner = ownerSlot.resourceScalarOwner();
+            if (owner != null) {
+                result.append(" scalar=").append(System.identityHashCode(owner))
+                        .append(" type=").append(owner.type)
+                        .append(" scopeExited=").append(owner.scopeExited)
+                        .append(" owns=").append(owner.refCountOwned);
+                RuntimeBase container = owner.containerOwner;
+                if (container != null) {
+                    result.append(" container=").append(container.getClass().getSimpleName())
+                            .append('#').append(System.identityHashCode(container));
+                    if (container instanceof RuntimeArray array) {
+                        PerlRuntime runtime = PerlRuntime.currentOrNull();
+                        boolean activeArgs = runtime != null
+                                && runtime.executionState().argsStack.contains(array);
+                        result.append(" arraySize=").append(array.elements.size())
+                                .append(" aliased=").append(array.elementsAliased)
+                                .append(" owned=").append(array.elementsOwned)
+                                .append(" activeArgs=").append(activeArgs);
+                        if (activeArgs) {
+                            for (int depth = 0; ; depth++) {
+                                RuntimeArray activeFrame = RuntimeCode.getActiveArgsAt(depth);
+                                if (activeFrame == null) break;
+                                if (activeFrame != array) continue;
+                                RuntimeCode activeCode = RuntimeCode.getActiveCodeAt(depth);
+                                result.append(" argsFrameDepth=").append(depth)
+                                        .append(" activeCode=");
+                                if (activeCode == null) {
+                                    result.append("none");
+                                } else {
+                                    result.append(activeCode.packageName).append("::")
+                                            .append(activeCode.subName)
+                                            .append('@').append(activeCode.cvStartFile)
+                                            .append(':').append(activeCode.cvStartLine);
+                                }
+                                break;
+                            }
+                        }
+                        for (int i = 0; i < array.elements.size(); i++) {
+                            if (array.elements.get(i) == owner) {
+                                result.append(" index=").append(i);
+                                break;
+                            }
+                        }
+                        result.append(" arrayRefCount=").append(array.refCount)
+                                .append(" arrayOwners=[");
+                        boolean firstArrayOwner = true;
+                        for (PerlOwnerSlot arrayOwner : array.ownerSlotSnapshot()) {
+                            if (!arrayOwner.isActive()) continue;
+                            if (!firstArrayOwner) result.append(", ");
+                            firstArrayOwner = false;
+                            result.append(arrayOwner.kind()).append('#').append(arrayOwner.identity());
+                            RuntimeScalar arrayOwnerCell = arrayOwner.countedScalarOwner();
+                            if (arrayOwnerCell == null) {
+                                arrayOwnerCell = arrayOwner.untrackedScalarOwner();
+                            }
+                            if (arrayOwnerCell != null) {
+                                result.append(" scalar=")
+                                        .append(System.identityHashCode(arrayOwnerCell));
+                            }
+                        }
+                        result.append(']');
+                    } else if (container instanceof RuntimeHash hash) {
+                        appendHashOwnerContext(result, hash, owner, " hash");
+                        result.append(" hashOwners=[");
+                        boolean firstHashOwner = true;
+                        for (PerlOwnerSlot hashOwner : hash.ownerSlotSnapshot()) {
+                            if (!hashOwner.isActive()) continue;
+                            if (!firstHashOwner) result.append(", ");
+                            firstHashOwner = false;
+                            result.append(hashOwner.kind()).append('#')
+                                    .append(hashOwner.identity());
+                            RuntimeScalar hashOwnerCell = hashOwner.countedScalarOwner();
+                            if (hashOwnerCell == null) {
+                                hashOwnerCell = hashOwner.untrackedScalarOwner();
+                            }
+                            if (hashOwnerCell != null) {
+                                result.append(" scalar=")
+                                        .append(System.identityHashCode(hashOwnerCell))
+                                        .append(" ownerCellOwnsCount=")
+                                        .append(hashOwnerCell.refCountOwned)
+                                        .append(" ownerCellLocalBinding=")
+                                        .append(hashOwnerCell.localBindingExists)
+                                        .append(" ownerCellScopeExited=")
+                                        .append(hashOwnerCell.scopeExited)
+                                        .append(" ownerCellPackageRoot=")
+                                        .append(hashOwnerCell.isPackageGlobalRoot)
+                                        .append(" ownerCellPackageScalarSlots=")
+                                        .append(hashOwnerCell.ownerSlotCount(
+                                                PerlOwnerSlot.Kind.PACKAGE_SCALAR_SLOT))
+                                        .append(" ownerCellClosure=")
+                                        .append(hashOwnerCell.hasClosureCaptureOwner())
+                                        .append(" ownerCellPackageNames=");
+                                appendPackageScalarNames(result, hashOwnerCell);
+                                result.append(" ownerCellCountedSlot=");
+                                PerlOwnerSlot countedCellOwner = hashOwnerCell.countedOwnerSlot();
+                                if (countedCellOwner == null) result.append("none");
+                                else result.append(countedCellOwner.kind()).append('#')
+                                        .append(countedCellOwner.identity())
+                                        .append(countedCellOwner.isActive() ? ":active" : ":inactive");
+                                result.append(" ownerCellReferent=");
+                                if (hashOwnerCell.value instanceof RuntimeBase cellReferent) {
+                                    result.append(cellReferent.getClass().getSimpleName())
+                                            .append('#').append(System.identityHashCode(cellReferent))
+                                            .append("/refCount=").append(cellReferent.refCount);
+                                } else {
+                                    result.append("none");
+                                }
+                                RuntimeBase ownerContainer = hashOwnerCell.containerOwner;
+                                if (ownerContainer != null) {
+                                    result.append(" ownerContainer=")
+                                            .append(ownerContainer.getClass().getSimpleName())
+                                            .append('#').append(System.identityHashCode(ownerContainer));
+                                    if (ownerContainer instanceof RuntimeHash ownerHash) {
+                                        appendHashOwnerContext(result, ownerHash,
+                                                hashOwnerCell, " ownerHash");
+                                    }
+                                }
+                            }
+                        }
+                        result.append(']');
+                    }
+                }
+                if (owner.isPackageGlobalRoot) result.append(" packageRoot");
+                if (owner.localBindingExists) result.append(" localBinding");
+            }
+        }
+        result.append(']');
         result.append(" pending=");
         java.util.ArrayList<PendingOwnerRelease> pending = pendingTraceOwnerReleases.get(this);
         if (pending == null || pending.isEmpty()) {
@@ -807,7 +1682,145 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             result.append(']');
         }
         result.append(" semanticCaptureOwners=").append(semanticCaptureOwnerCount());
+        result.append(" matchingArgumentFrames=[");
+        boolean firstMatchingArgumentFrame = true;
+        int argumentFrameDepth = 0;
+        for (RuntimeArray argumentFrame : RuntimeCode.snapshotArgsStack()) {
+            boolean matches = false;
+            for (RuntimeScalar argument : argumentFrame.elements) {
+                if (argument != null && argument.value == this) {
+                    matches = true;
+                    break;
+                }
+            }
+            if (matches) {
+                if (!firstMatchingArgumentFrame) result.append(", ");
+                firstMatchingArgumentFrame = false;
+                RuntimeCode activeCode = RuntimeCode.getActiveCodeAt(argumentFrameDepth);
+                result.append(argumentFrameDepth).append(':');
+                if (activeCode == null) {
+                    result.append("none");
+                } else {
+                    result.append(activeCode.packageName).append("::")
+                            .append(activeCode.subName)
+                            .append('@').append(activeCode.cvStartFile)
+                            .append(':').append(activeCode.cvStartLine);
+                }
+            }
+            argumentFrameDepth++;
+        }
+        result.append(']');
         return result.toString();
+    }
+
+    private static void appendHashOwnerContext(StringBuilder result, RuntimeHash hash,
+                                               RuntimeScalar owner, String prefix) {
+        result.append(prefix).append("Size=").append(hash.elements.size())
+                .append(prefix).append("RefCount=").append(hash.refCount)
+                .append(prefix).append("ScopeExited=").append(hash.scopeExited)
+                .append(prefix).append("BlessId=").append(hash.blessId)
+                .append(prefix).append("DestroyFired=").append(hash.destroyFired)
+                .append(prefix).append("NeedsReDestroy=").append(hash.needsReDestroy)
+                .append(prefix).append("LocalBinding=").append(hash.localBindingExists)
+                .append(prefix).append("PerlState=").append(hash.perlLifecycleState())
+                .append(prefix).append("OwnerSlots=[");
+        boolean firstOwner = true;
+        for (PerlOwnerSlot ownerSlot : hash.ownerSlotSnapshot()) {
+            if (!ownerSlot.isActive()) continue;
+            if (!firstOwner) result.append(',');
+            firstOwner = false;
+            result.append(ownerSlot.kind()).append('#').append(ownerSlot.identity());
+            RuntimeScalar ownerCell = ownerSlot.countedScalarOwner();
+            if (ownerCell == null) ownerCell = ownerSlot.untrackedScalarOwner();
+            if (ownerCell != null) {
+                result.append(":scalar=").append(System.identityHashCode(ownerCell))
+                        .append(":ownsCount=").append(ownerCell.refCountOwned)
+                        .append(":localBinding=").append(ownerCell.localBindingExists)
+                        .append(":scopeExited=").append(ownerCell.scopeExited)
+                        .append(":packageRoot=").append(ownerCell.isPackageGlobalRoot)
+                        .append(":packageScalarSlots=").append(ownerCell.ownerSlotCount(
+                                PerlOwnerSlot.Kind.PACKAGE_SCALAR_SLOT))
+                        .append(":closure=").append(ownerCell.hasClosureCaptureOwner())
+                        .append(":packageNames=");
+                appendPackageScalarNames(result, ownerCell);
+                result.append(":value=");
+                if (ownerCell.value instanceof RuntimeBase valueBase) {
+                    result.append(valueBase.getClass().getSimpleName()).append('#')
+                            .append(System.identityHashCode(valueBase));
+                    if (REFCOUNT_TRACE_ENV) {
+                        result.append("/generation=").append(traceReferentGeneration(valueBase));
+                    }
+                    result.append("/refCount=").append(valueBase.refCount);
+                } else {
+                    result.append("none");
+                }
+                RuntimeBase cellContainer = ownerCell.containerOwner;
+                if (cellContainer != null) {
+                    result.append(":container=")
+                            .append(cellContainer.getClass().getSimpleName()).append('#')
+                            .append(System.identityHashCode(cellContainer));
+                    if (REFCOUNT_TRACE_ENV) {
+                        result.append("/generation=").append(traceReferentGeneration(cellContainer));
+                    }
+                    if (cellContainer instanceof RuntimeHash cellHash) {
+                        result.append("/refCount=").append(cellHash.refCount)
+                                .append("/state=").append(cellHash.perlLifecycleState())
+                                .append("/keys=[");
+                        boolean firstKey = true;
+                        for (java.util.Map.Entry<String, RuntimeScalar> entry
+                                : cellHash.elements.entrySet()) {
+                            if (entry.getValue() != ownerCell) continue;
+                            if (!firstKey) result.append(',');
+                            firstKey = false;
+                            result.append(entry.getKey());
+                        }
+                        result.append(']');
+                    } else if (cellContainer instanceof RuntimeArray cellArray) {
+                        result.append("/refCount=").append(cellArray.refCount)
+                                .append("/state=").append(cellArray.perlLifecycleState())
+                                .append("/scopeExited=").append(cellArray.scopeExited)
+                                .append("/localBinding=").append(cellArray.localBindingExists)
+                                .append("/elementsAliased=").append(cellArray.elementsAliased)
+                                .append("/elementsOwned=").append(cellArray.elementsOwned)
+                                .append("/packageRoot=").append(cellArray.isPackageGlobalRoot)
+                                .append("/hasPerlOwner=").append(cellArray.hasPerlStrongOwner())
+                                .append("/size=").append(cellArray.elements.size())
+                                .append("/ownerSlots=[");
+                        boolean firstArraySlot = true;
+                        for (PerlOwnerSlot arraySlot : cellArray.ownerSlotSnapshot()) {
+                            if (!arraySlot.isActive()) continue;
+                            if (!firstArraySlot) result.append(',');
+                            firstArraySlot = false;
+                            result.append(arraySlot.kind()).append('#').append(arraySlot.identity());
+                        }
+                        result.append(']');
+                    }
+                }
+            }
+        }
+        result.append(']')
+                .append(prefix).append("Keys=[");
+        boolean firstKey = true;
+        for (java.util.Map.Entry<String, RuntimeScalar> entry : hash.elements.entrySet()) {
+            if (entry.getValue() != owner) continue;
+            if (!firstKey) result.append(", ");
+            firstKey = false;
+            result.append(entry.getKey());
+        }
+        result.append(']');
+    }
+
+    private static void appendPackageScalarNames(StringBuilder result, RuntimeScalar owner) {
+        result.append('[');
+        boolean first = true;
+        for (java.util.Map.Entry<String, RuntimeScalar> entry
+                : GlobalVariable.globalVariables.entrySet()) {
+            if (entry.getValue() != owner) continue;
+            if (!first) result.append(',');
+            first = false;
+            result.append(entry.getKey());
+        }
+        result.append(']');
     }
 
     public static void dumpTraceOwners() {
@@ -824,6 +1837,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             for (java.util.Map.Entry<Integer, OwnerTrace> own : e.getValue().entrySet()) {
                 System.err.println("    owner=" + own.getKey() + " from " + own.getValue().acquireSite);
             }
+            System.err.println("    " + b.ownerTraceSnapshot());
         }
         for (java.util.Map.Entry<RuntimeBase, java.util.ArrayList<PendingOwnerRelease>> e
                 : pendingTraceOwnerReleases.entrySet()) {
@@ -856,8 +1870,8 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     /**
      * True once a scalar/container slot has taken a counted reference to this
      * base. If later refcount drift leaves the count at zero during scope
-     * cleanup, this tells cleanup that an external owner may have existed and a
-     * bounded reachability check is worthwhile.
+     * cleanup, this lets queueing verify that the scalar still has its exact
+     * counted owner slot.
      */
     public boolean hadCountedReference = false;
 

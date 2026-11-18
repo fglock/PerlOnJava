@@ -219,6 +219,11 @@ public class EmitEval {
         Label tryEnd = new Label();
         Label catchBlock = new Label();
         Label endCatch = new Label();
+        int temporaryRootDepthSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/MortalList",
+                "temporaryRootDepth", "()I", false);
+        mv.visitVarInsn(Opcodes.ISTORE, temporaryRootDepthSlot);
         mv.visitTryCatchBlock(tryStart, tryEnd, catchBlock, "java/lang/Throwable");
         mv.visitLabel(tryStart);
 
@@ -255,6 +260,10 @@ public class EmitEval {
                 "(Ljava/lang/Throwable;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                 false);
         mv.visitInsn(Opcodes.POP);
+        mv.visitVarInsn(Opcodes.ILOAD, temporaryRootDepthSlot);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/MortalList",
+                "restoreTemporaryRootDepth", "(I)V", false);
         if (emitterVisitor.ctx.contextType == RuntimeContextType.LIST) {
             mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeList");
             mv.visitInsn(Opcodes.DUP);

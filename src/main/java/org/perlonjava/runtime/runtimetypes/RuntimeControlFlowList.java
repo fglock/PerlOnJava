@@ -134,7 +134,8 @@ public class RuntimeControlFlowList extends RuntimeList {
 
     private static RuntimeScalar retainTailCallCodeRef(RuntimeScalar codeRef) {
         RuntimeScalar retained = new RuntimeScalar(codeRef);
-        RuntimeScalar.incrementRefCountForContainerStore(retained);
+        RuntimeScalar.incrementRefCountForContainerStore(
+                retained, PerlOwnerSlot.Kind.ARGUMENT_VALUE);
         return retained;
     }
 

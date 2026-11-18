@@ -54,6 +54,7 @@ public class Symbol extends PerlModuleBase {
         // Create a unique anonymous glob
         String globName = "Symbol::GEN" + EmitterMethodCreator.classCounter.getAndIncrement();
         RuntimeGlob glob = new RuntimeGlob(globName);
+        glob.symbolGensym = true;
         
         // Return a reference to the glob (not the glob itself)
         RuntimeScalar globRef = new RuntimeScalar();

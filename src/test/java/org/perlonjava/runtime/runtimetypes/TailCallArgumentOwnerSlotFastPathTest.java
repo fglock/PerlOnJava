@@ -1,0 +1,44 @@
+package org.perlonjava.runtime.runtimetypes;
+
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+@Tag("unit")
+class TailCallArgumentOwnerSlotFastPathTest {
+    @Test
+    void tailCallReleaseBalancesTheSurvivingElementOwner() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeHash target = new RuntimeHash();
+            target.blessId = NameNormalizer.getBlessId("Issue1649::TailCallOwnerSlot");
+            RuntimeArray backing = new RuntimeArray();
+            backing.addClonedElement(target.createAnonymousReference());
+
+            RuntimeScalar tailArgument = new RuntimeScalar();
+            tailArgument.set(target.createAnonymousReference());
+            RuntimeArray tailArguments = new RuntimeArray(1);
+            tailArguments.elements.add(tailArgument);
+            tailArguments.elementsOwned = true;
+
+            RuntimeScalar weak = target.createAnonymousReference();
+            WeakRefRegistry.weaken(weak);
+            try {
+                assertEquals(2, target.countedOwnerSlotCount());
+
+                {
+                    MortalList.releaseTailCallArgs(tailArguments);
+
+                    assertEquals(1, target.refCount);
+                    assertEquals(1, target.countedOwnerSlotCount());
+                    assertTrue(WeakRefRegistry.isweak(weak));
+                }
+            } finally {
+                WeakRefRegistry.unweaken(weak);
+                backing.undefine();
+            }
+        }
+    }
+}

@@ -17,7 +17,7 @@ class PerlReferentDestroyLifecycleTest {
             String className = "Issue1649::ThrowingDestroy";
             RuntimeHash referent = new RuntimeHash();
             referent.blessId = NameNormalizer.getBlessId(className);
-            referent.refCount = Integer.MIN_VALUE;
+            referent.setTrackedRefCount(0);
             installDestroy(className, (args, context) -> {
                 throw new PerlDieException(new RuntimeScalar("destructor failed\n"));
             });
@@ -27,7 +27,8 @@ class PerlReferentDestroyLifecycleTest {
                 assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED,
                         referent.perlLifecycleState());
                 assertFalse(referent.currentlyDestroying);
-                assertEquals(Integer.MIN_VALUE, referent.refCount);
+                assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, referent.perlLifecycleState());
+                assertEquals(0, referent.refCount);
             } finally {
                 GlobalVariable.removeGlobalCodeRefForStashDelete(className + "::DESTROY");
             }
@@ -41,7 +42,7 @@ class PerlReferentDestroyLifecycleTest {
             String className = "Issue1649::ReentrantDestroy";
             RuntimeHash referent = new RuntimeHash();
             referent.blessId = NameNormalizer.getBlessId(className);
-            referent.refCount = Integer.MIN_VALUE;
+            referent.setTrackedRefCount(0);
             AtomicReference<RuntimeBase.PerlLifecycleState> observed = new AtomicReference<>();
             installDestroy(className, (args, context) -> {
                 observed.set(referent.perlLifecycleState());
@@ -66,7 +67,7 @@ class PerlReferentDestroyLifecycleTest {
             String className = "Issue1649::ResurrectedDestroy";
             RuntimeHash referent = new RuntimeHash();
             referent.blessId = NameNormalizer.getBlessId(className);
-            referent.refCount = Integer.MIN_VALUE;
+            referent.setTrackedRefCount(0);
             installDestroy(className, (args, context) -> {
                 referent.refCount++;
                 DestroyDispatch.markDestroyTargetRescued();

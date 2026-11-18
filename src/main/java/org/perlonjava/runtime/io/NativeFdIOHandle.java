@@ -161,7 +161,7 @@ public class NativeFdIOHandle implements IOHandle {
 
         // Create a RuntimeIO wrapping this handle
         RuntimeIO rio = new RuntimeIO();
-        rio.ioHandle = this;
+        rio.replaceIOHandle(this);
         rio.registerExternalFd(nativeFd);
 
         return rio;

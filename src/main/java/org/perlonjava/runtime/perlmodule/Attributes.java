@@ -423,8 +423,12 @@ public class Attributes extends PerlModuleBase {
                 RuntimeCode clone = originalCode.cloneForClosure();
                 clone.__SUB__ = new RuntimeScalar(clone);
                 originalCode.isClosurePrototype = true;
-                codeRef.type = CODE;
-                codeRef.value = clone;
+                RuntimeScalar replacement = new RuntimeScalar(clone);
+                replacement.globalCodeRefFqn = codeRef.globalCodeRefFqn;
+                // A codeRef can already own the prototype through a scalar
+                // cell or a CODE slot. Move that edge to the callable clone
+                // through the normal retain-before-release transition.
+                codeRef.set(replacement);
             }
         } else {
             // No MODIFY_CODE_ATTRIBUTES handler — all non-builtin attrs are invalid

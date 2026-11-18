@@ -517,6 +517,32 @@ public class SlowOpcodeHandler {
         return pc;
     }
 
+    public static int executeDerefScalarStrictTemp(
+            int[] bytecode,
+            int pc,
+            RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int rs = bytecode[pc++];
+        RuntimeBase temp = registers[rs];
+        RuntimeScalar result = null;
+        boolean completed = false;
+        try {
+            result = guardReadOnlyScalarDeref(
+                    registers[rs].scalar().scalarDeref());
+            registers[rd] = result;
+            completed = true;
+        } finally {
+            try {
+                if (temp != result && temp instanceof RuntimeScalar scalar) {
+                    RuntimeScalar.scopeExitCleanup(scalar);
+                }
+            } finally {
+                if (rd != rs || !completed) registers[rs] = null;
+            }
+        }
+        return pc;
+    }
+
     public static int executeRejectLocalizeReference(
             int[] bytecode, int pc, RuntimeBase[] registers) {
         int rs = bytecode[pc++];
@@ -576,6 +602,35 @@ public class SlowOpcodeHandler {
         String pkg = code.stringPool[pkgIdx];
         registers[rd] = guardReadOnlyScalarDeref(
                 registers[rs].scalar().scalarDerefNonStrict(pkg));
+        return pc;
+    }
+
+    public static int executeDerefScalarNonStrictTemp(
+            int[] bytecode,
+            int pc,
+            RuntimeBase[] registers,
+            InterpretedCode code) {
+        int rd = bytecode[pc++];
+        int rs = bytecode[pc++];
+        int pkgIdx = bytecode[pc++];
+        String pkg = code.stringPool[pkgIdx];
+        RuntimeBase temp = registers[rs];
+        RuntimeScalar result = null;
+        boolean completed = false;
+        try {
+            result = guardReadOnlyScalarDeref(
+                    registers[rs].scalar().scalarDerefNonStrict(pkg));
+            registers[rd] = result;
+            completed = true;
+        } finally {
+            try {
+                if (temp != result && temp instanceof RuntimeScalar scalar) {
+                    RuntimeScalar.scopeExitCleanup(scalar);
+                }
+            } finally {
+                if (rd != rs || !completed) registers[rs] = null;
+            }
+        }
         return pc;
     }
 
@@ -1359,10 +1414,8 @@ public class SlowOpcodeHandler {
         if (value != null && value.refCountOwned
                 && RuntimeScalarType.isReference(value)
                 && value.value instanceof RuntimeBase base && base.refCount > 0) {
-            base.releaseOwner(value, "HASH_SLICE_SET temporary owner transfer");
-            base.releaseActiveOwner(value);
-            base.refCount--;
-            value.refCountOwned = false;
+            MortalList.releaseCountedOwnerImmediately(
+                    value, "HASH_SLICE_SET temporary owner transfer");
         }
     }
 
@@ -1618,9 +1671,12 @@ public class SlowOpcodeHandler {
         int cacheIdx = bytecode[pc++];
         int classNameIdx = bytecode[pc++];
         int labelIdx = bytecode[pc++];
-        RuntimeScalar cached = (RuntimeScalar) code.constants[cacheIdx];
+        RuntimeScalar descriptor = (RuntimeScalar) code.constants[cacheIdx];
         String name = code.stringPool[nameIdx];
-        RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRefForDirectCall(name, cached);
+        RuntimeScalar codeRef = descriptor.compiledDirectCallSiteName() == null
+                ? GlobalVariable.getGlobalCodeRefForDirectCall(name, descriptor)
+                : RuntimeCode.resolveCompiledDirectCallForActive(
+                        name, null, descriptor.compiledDirectCallSiteIndex());
         // The normal RuntimeCode.apply path owns ordinary direct-call errors.
         // Preflight only labelled statements, where the diagnostic needs the
         // parser-provided "close to label" hint.  A goto &name also reuses this

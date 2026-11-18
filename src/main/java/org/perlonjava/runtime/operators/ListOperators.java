@@ -11,16 +11,67 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
 
 public class ListOperators {
     /**
-     * Perl evaluates the input list before entering a map/grep-style block.
-     * Keep the scalar objects (and therefore their aliasing) but detach the
-     * iteration order from a source array that the block may mutate.
+     * Perl evaluates map's input list before entering the block. Keep its
+     * scalar cells and detach iteration order from a source array the block
+     * may replace.
      */
-    private static List<RuntimeScalar> snapshotElements(RuntimeList runtimeList) {
+    private static ElementSnapshot snapshotElements(RuntimeList runtimeList) {
+        return new ElementSnapshot(runtimeList);
+    }
+
+    private static List<RuntimeScalar> snapshotValues(RuntimeList runtimeList) {
         List<RuntimeScalar> snapshot = new ArrayList<>();
-        for (RuntimeScalar element : runtimeList) {
-            snapshot.add(element);
-        }
+        for (RuntimeScalar element : runtimeList) snapshot.add(element);
         return snapshot;
+    }
+
+    /**
+     * The evaluated list keeps each source scalar cell alive for the complete
+     * map, even if the block replaces the aggregate that supplied the list.
+     * Each entry aliases the original scalar cell; it is not a copied value.
+     */
+    private static final class ElementSnapshot {
+        private final List<RuntimeScalar> elements = new ArrayList<>();
+        private final List<RuntimeScalar.ArgumentAliasOwner> owners = new ArrayList<>();
+
+        private ElementSnapshot(RuntimeList runtimeList) {
+            try {
+                for (RuntimeScalar element : runtimeList) {
+                    elements.add(element);
+                    owners.add(element.retainArgumentAliasOwner());
+                }
+            } catch (Throwable acquisitionFailure) {
+                try {
+                    releaseOwners(acquisitionFailure);
+                } catch (RuntimeException | Error combinedFailure) {
+                    throw combinedFailure;
+                }
+                throw new IllegalStateException(acquisitionFailure);
+            }
+        }
+
+        private void releaseOwners(Throwable pendingFailure) {
+            RuntimeScalar.ArgumentAliasOwner[] pending =
+                    owners.toArray(new RuntimeScalar.ArgumentAliasOwner[0]);
+            owners.clear();
+            for (RuntimeScalar.ArgumentAliasOwner owner : pending) {
+                try {
+                    owner.release();
+                } catch (Throwable cleanupFailure) {
+                    if (pendingFailure == null) pendingFailure = cleanupFailure;
+                    else if (pendingFailure != cleanupFailure) pendingFailure.addSuppressed(cleanupFailure);
+                }
+            }
+            if (pendingFailure != null && pendingFailure instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            if (pendingFailure instanceof Error error) throw error;
+            if (pendingFailure != null) throw new IllegalStateException(pendingFailure);
+        }
+
+        private void close() {
+            releaseOwners(null);
+        }
     }
 
     /**
@@ -61,6 +112,7 @@ public class ListOperators {
         boolean savedTemporaryAlias = GlobalVariable.isTemporaryGlobalAlias("main::_");
         // Map results are captured by the caller after the operator returns;
         // flushing between iterations can destroy blessed return values early.
+        ElementSnapshot elements = snapshotElements(runtimeList);
         boolean wasFlushing = MortalList.suppressFlush(true);
 
         try {
@@ -69,7 +121,7 @@ public class ListOperators {
             RuntimeArray mapArgs = outerArgs != null ? outerArgs : new RuntimeArray();
 
             // Iterate over the list value captured before the block starts.
-            for (RuntimeScalar element : snapshotElements(runtimeList)) {
+            for (RuntimeScalar element : elements.elements) {
                 // Create $_ argument for the map subroutine
                 GlobalVariable.aliasTemporaryGlobalVariable("main::_", element);
 
@@ -124,9 +176,16 @@ public class ListOperators {
                 return transformedList;
             }
         } finally {
-            MortalList.suppressFlush(wasFlushing);
-            GlobalVariable.restoreTemporaryGlobalVariable("main::_", saveValue, savedTemporaryAlias);
-            releaseEphemeralCaptures(perlMapClosure);
+            try {
+                MortalList.suppressFlush(wasFlushing);
+                GlobalVariable.restoreTemporaryGlobalVariable("main::_", saveValue, savedTemporaryAlias);
+            } finally {
+                try {
+                    elements.close();
+                } finally {
+                    releaseEphemeralCaptures(perlMapClosure);
+                }
+            }
         }
     }
 
@@ -352,7 +411,9 @@ public class ListOperators {
             RuntimeArray filterArgs = outerArgs != null ? outerArgs : new RuntimeArray();
 
             // Iterate over the list value captured before the block starts.
-            for (RuntimeScalar element : snapshotElements(runtimeList)) {
+            for (RuntimeScalar element : snapshotValues(runtimeList)) {
+                RuntimeScalar.ArgumentAliasOwner elementOwner =
+                        element.retainArgumentAliasOwner();
                 try {
                     // Create $_ argument for the filter subroutine
                     GlobalVariable.aliasTemporaryGlobalVariable("main::_", element);
@@ -388,6 +449,8 @@ public class ListOperators {
                 } catch (Exception e) {
                     // Wrap any exceptions thrown by the filter subroutine in a RuntimeException
                     throw new RuntimeException(e);
+                } finally {
+                    elementOwner.release();
                 }
             }
 
@@ -436,7 +499,7 @@ public class ListOperators {
             RuntimeArray filterArgs = outerArgs != null ? outerArgs : new RuntimeArray();
 
             // Iterate over the list value captured before the block starts.
-            for (RuntimeScalar element : snapshotElements(runtimeList)) {
+            for (RuntimeScalar element : snapshotValues(runtimeList)) {
                 try {
                     // Create $_ argument for the filter subroutine
                     GlobalVariable.aliasTemporaryGlobalVariable("main::_", element);
@@ -496,7 +559,7 @@ public class ListOperators {
             RuntimeArray filterArgs = outerArgs != null ? outerArgs : new RuntimeArray();
 
             // Iterate over the list value captured before the block starts.
-            for (RuntimeScalar element : snapshotElements(runtimeList)) {
+            for (RuntimeScalar element : snapshotValues(runtimeList)) {
                 try {
                     // Create $_ argument for the filter subroutine
                     GlobalVariable.aliasTemporaryGlobalVariable("main::_", element);

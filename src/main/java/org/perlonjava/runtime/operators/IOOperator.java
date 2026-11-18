@@ -40,6 +40,10 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
 public class IOOperator {
     private static final int O_NONBLOCK = NativeUtils.IS_MAC ? 4 : 04000;
 
+    private static void retainLiveIoGlobOwners(RuntimeGlob glob, RuntimeScalar handle) {
+        MyVarCleanupStack.retainLiveIoGlobOwners(glob, handle);
+    }
+
     // File descriptor to RuntimeIO mapping for duplication support
     private static Map<Integer, RuntimeIO> fileDescriptorMap() {
         return PerlRuntime.current().ioRegistryState.operatorFileDescriptors;
@@ -836,6 +840,7 @@ public class IOOperator {
                         // registered on the global glob, so callers can find it by name.
                     }
                 }
+                retainLiveIoGlobOwners(targetGlob, fileHandle);
             } else {
                 RuntimeScalar newGlob = new RuntimeScalar();
                 newGlob.type = RuntimeScalarType.GLOBREFERENCE;
@@ -1086,6 +1091,7 @@ public class IOOperator {
                 System.err.flush();
             }
             targetGlob.openIO(fh);
+            retainLiveIoGlobOwners(targetGlob, fileHandle);
         } else {
             // Create a new anonymous GLOB and assign it to the lvalue
             RuntimeScalar newGlob = new RuntimeScalar();
@@ -2024,13 +2030,15 @@ public class IOOperator {
 
         if (targetGlob != null) {
             targetGlob.openIO(fh);
+            retainLiveIoGlobOwners(targetGlob, fileHandle);
         } else {
             RuntimeScalar newGlob = new RuntimeScalar();
             newGlob.type = RuntimeScalarType.GLOBREFERENCE;
             RuntimeGlob anonGlob = new RuntimeGlob(null).setIO(fh);
             newGlob.value = anonGlob;
             RuntimeIO.registerGlobForFdRecycling(anonGlob, fh);
-            fileHandle.set(newGlob);
+            RuntimeScalar assignedHandle = fileHandle.set(newGlob);
+            RuntimeScalar.retainUnstashedIoForDurableSlot(assignedHandle);
         }
         return scalarTrue;
     }
@@ -2557,8 +2565,7 @@ public class IOOperator {
 
             if (targetGlob != null) {
                 targetGlob.setIO(socketIO);
-                MyVarCleanupStack.retainLiveIoGlobOwners(targetGlob);
-                RuntimeScalar.retainUnstashedIoForDurableSlot(socketHandle);
+                retainLiveIoGlobOwners(targetGlob, socketHandle);
             } else {
                 // Create a new anonymous GLOB and assign it to the lvalue
                 RuntimeScalar newGlob = new RuntimeScalar();
@@ -2843,8 +2850,7 @@ public class IOOperator {
             if (targetGlob != null) {
                 targetGlob.setIO(clientRuntimeIO);
                 targetGlob.acceptedSocket = true;
-                MyVarCleanupStack.retainLiveIoGlobOwners(targetGlob);
-                RuntimeScalar.retainUnstashedIoForDurableSlot(newSocketHandle);
+                retainLiveIoGlobOwners(targetGlob, newSocketHandle);
             } else {
                 // Create a new anonymous GLOB and assign it to the lvalue
                 RuntimeScalar newGlob = new RuntimeScalar();
@@ -2919,10 +2925,10 @@ public class IOOperator {
 
             // Create RuntimeIO objects for the handles
             RuntimeIO readerIO = new RuntimeIO();
-            readerIO.ioHandle = readerHandle;
+            readerIO.replaceIOHandle(readerHandle);
 
             RuntimeIO writerIO = new RuntimeIO();
-            writerIO.ioHandle = writerHandle;
+            writerIO.replaceIOHandle(writerHandle);
 
             // Handle autovivification for read handle (like open() does)
             RuntimeGlob readGlob = null;
@@ -2936,6 +2942,7 @@ public class IOOperator {
             }
             if (readGlob != null) {
                 readGlob.setIO(readerIO);
+                retainLiveIoGlobOwners(readGlob, readHandle);
             } else {
                 // Create a new anonymous GLOB and assign it to the lvalue
                 RuntimeScalar newGlob = new RuntimeScalar();
@@ -2958,6 +2965,7 @@ public class IOOperator {
             }
             if (writeGlob != null) {
                 writeGlob.setIO(writerIO);
+                retainLiveIoGlobOwners(writeGlob, writeHandle);
             } else {
                 // Create a new anonymous GLOB and assign it to the lvalue
                 RuntimeScalar newGlob = new RuntimeScalar();
@@ -3778,14 +3786,14 @@ public class IOOperator {
         }
         RuntimeIO borrowed = new RuntimeIO();
         if (source.ioHandle instanceof BorrowedIOHandle existingBorrow) {
-            borrowed.ioHandle = BorrowedIOHandle.addBorrow(existingBorrow);
+            borrowed.replaceIOHandle(BorrowedIOHandle.addBorrow(existingBorrow));
         } else {
             // The lexical source handle may leave scope immediately after this
             // open(). Replace it with the source half of a shared lifecycle so
             // GC cleanup cannot close the delegate while this alias is live.
             BorrowedIOHandle[] pair = BorrowedIOHandle.createPair(source.ioHandle);
-            source.ioHandle = pair[0];
-            borrowed.ioHandle = pair[1];
+            source.replaceIOHandle(pair[0]);
+            borrowed.replaceIOHandle(pair[1]);
         }
         borrowed.currentLineNumber = source.currentLineNumber;
         // Share the source's fileno (parsimonious dup = same fd)
@@ -3813,7 +3821,7 @@ public class IOOperator {
 
         if (original.ioHandle instanceof DupIOHandle existingDup) {
             // Already reference-counted — add another dup sharing the same delegate
-            duplicate.ioHandle = DupIOHandle.addDup(existingDup);
+            duplicate.replaceIOHandle(DupIOHandle.addDup(existingDup));
         } else {
             // First duplication — wrap both original and duplicate in DupIOHandles
             // so they share a refcount and get distinct filenos.
@@ -3846,11 +3854,11 @@ public class IOOperator {
             DupIOHandle[] pair = DupIOHandle.createPair(dupTarget, origFd);
 
             if (layeredWrapper != null) {
-                original.ioHandle = cloneLayeredHandle(layeredWrapper, pair[0]);
-                duplicate.ioHandle = cloneLayeredHandle(layeredWrapper, pair[1]);
+                original.replaceIOHandle(cloneLayeredHandle(layeredWrapper, pair[0]));
+                duplicate.replaceIOHandle(cloneLayeredHandle(layeredWrapper, pair[1]));
             } else {
-                original.ioHandle = pair[0];  // Replace original's handle with refcounted wrapper
-                duplicate.ioHandle = pair[1]; // New handle with unique fd
+                original.replaceIOHandle(pair[0]);  // Replace with refcounted wrapper
+                duplicate.replaceIOHandle(pair[1]); // New handle with unique fd
             }
         }
 
@@ -3996,11 +4004,11 @@ public class IOOperator {
                 socket2.setDatagramPeer(socket1);
 
                 RuntimeIO io1 = new RuntimeIO();
-                io1.ioHandle = socket1;
+                io1.replaceIOHandle(socket1);
                 io1.assignFileno();
 
                 RuntimeIO io2 = new RuntimeIO();
-                io2.ioHandle = socket2;
+                io2.replaceIOHandle(socket2);
                 io2.assignFileno();
 
                 setSocketOnHandle(sock1Handle, io1);
@@ -4057,11 +4065,11 @@ public class IOOperator {
 
             // Create RuntimeIO objects for both sockets using NIO channels
             RuntimeIO io1 = new RuntimeIO();
-            io1.ioHandle = socket1;
+            io1.replaceIOHandle(socket1);
             io1.assignFileno();
 
             RuntimeIO io2 = new RuntimeIO();
-            io2.ioHandle = socket2;
+            io2.replaceIOHandle(socket2);
             io2.assignFileno();
 
             // Set IO slot on each handle, following the same pattern as socket()
@@ -4097,8 +4105,7 @@ public class IOOperator {
             } else {
                 targetGlob.setIO(io);
             }
-            MyVarCleanupStack.retainLiveIoGlobOwners(targetGlob);
-            RuntimeScalar.retainUnstashedIoForDurableSlot(handle);
+            retainLiveIoGlobOwners(targetGlob, handle);
         } else {
             // Create a new anonymous GLOB and assign it to the lvalue
             RuntimeScalar newGlob = new RuntimeScalar();

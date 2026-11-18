@@ -2131,7 +2131,7 @@ public class EmitOperator {
                 }
 
                 if (node.operand instanceof StringNode strNode) {
-                    // Singleton cache scalars + padConstants; see EmitLiteral.emitStringForRefToLiteral.
+                    // Per-optree scalar identities + pad-owner slots; see EmitLiteral.emitStringForRefToLiteral.
                     EmitLiteral.emitStringForRefToLiteral(
                             emitterVisitor.with(contextType).ctx, strNode);
                 } else if (node.operand instanceof NumberNode numberNode) {

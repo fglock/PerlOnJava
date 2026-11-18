@@ -69,15 +69,17 @@ XSLoader::load( 'DBI' );
 # inner handle passed to driver STORE/FETCH methods, while applications hold
 # a DBI::db or DBI::st outer handle.  Keep that distinction for pure-Perl DBDs
 # such as DBD::Mock, which configure behavior through direct hash assignment.
-sub DBI::dr::TIEHASH { bless $_[1], $_[0] }
-sub DBI::db::TIEHASH { bless $_[1], $_[0] }
-sub DBI::st::TIEHASH { bless $_[1], $_[0] }
+# Native DBI creates these handles outside Perl's overridable bless, so keep
+# the pure-Perl implementation equivalent.
+sub DBI::dr::TIEHASH { CORE::bless($_[1], $_[0]) }
+sub DBI::db::TIEHASH { CORE::bless($_[1], $_[0]) }
+sub DBI::st::TIEHASH { CORE::bless($_[1], $_[0]) }
 
 sub _tie_handle_hash {
     my ($handle, $class) = @_;
     my %outer;
     my $inner = tie %outer, $class, $handle;
-    my $outer = bless \%outer, $class;
+    my $outer = CORE::bless(\%outer, $class);
     return wantarray ? ($outer, $inner) : $outer;
 }
 
@@ -512,7 +514,6 @@ sub _cleanup_before_ddl {
     eval {
         require Internals;
         Internals::jperl_freetmps();
-        Internals::jperl_sweep_destroyables_no_jvm_gc();
         1;
     };
     return 1;
@@ -1066,7 +1067,6 @@ sub _fetch_handle_value {
         eval {
             require Internals;
             Internals::jperl_freetmps();
-            Internals::jperl_sweep_destroyables_no_jvm_gc();
             1;
         };
     }

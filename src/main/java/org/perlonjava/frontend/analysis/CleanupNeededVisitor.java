@@ -20,8 +20,8 @@ import org.perlonjava.frontend.astnode.*;
  *   <li><b>bless</b> — creates blessed-with-DESTROY targets that need
  *       refCount decrement on scope exit.</li>
  *   <li><b>weaken</b> / <b>isweak</b> (any Scalar::Util qualified form)
- *       — sets the global {@code weakRefsExist} flag and requires the
- *       reachability walker to see our live lexicals.</li>
+ *       — changes weak-reference lifecycle state and requires full lexical
+ *       scope cleanup.</li>
  *   <li><b>local</b> — dynamic-scope bookkeeping changes.</li>
  *   <li><b>eval STRING</b> — can do anything.</li>
  *   <li>nested <b>SubroutineNode</b> — might capture our lexicals via
@@ -91,6 +91,13 @@ public class CleanupNeededVisitor implements Visitor {
             mark();
             return;
         }
+        // An explicit die skips emitted normal scope-exit cleanup. Lexicals
+        // that receive reference arguments must still be registered so the
+        // call boundary can retire their owners while unwinding the error.
+        if ("die".equals(node.operator)) {
+            mark();
+            return;
+        }
         if (node.operand != null) node.operand.accept(this);
     }
 
@@ -127,21 +134,19 @@ public class CleanupNeededVisitor implements Visitor {
             mark();
             return;
         }
-        // Method call: $obj->method or $obj->method(args).
-        // In AST form, the RHS is either IdentifierNode(method_name) or
-        // BinaryOperatorNode("(", IdentifierNode(method_name), args).
-        // Array/hash derefs ($x->[i], $x->{k}) have ArrayLiteralNode /
-        // HashLiteralNode on the RHS — those are safe (no user code runs).
+        // Method or indirect CODE call. An indirect invocation such as
+        // $callback->() can throw while this sub's lexical argument cells are
+        // live, so it needs the same exceptional cleanup registration as a
+        // named call. Only array/hash dereferences ($x->[i], $x->{k}) are
+        // known not to invoke user code.
         if ("->".equals(node.operator)) {
             Node right = node.right;
-            if (right instanceof IdentifierNode
-                    || right instanceof BinaryOperatorNode binOp && "(".equals(binOp.operator)) {
-                mark();
+            if (right instanceof ArrayLiteralNode || right instanceof HashLiteralNode) {
+                if (node.left != null) node.left.accept(this);
+                if (right != null) right.accept(this);
                 return;
             }
-            // Array/hash deref — recurse into children only.
-            if (node.left != null) node.left.accept(this);
-            if (node.right != null) node.right.accept(this);
+            mark();
             return;
         }
         if (node.left != null) node.left.accept(this);
