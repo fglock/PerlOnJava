@@ -303,8 +303,13 @@ public class BytecodeCompiler implements Visitor {
     Set<String> gotoLabelsInsideConstruct;
     Set<String> gotoLabelsInsideGiven;
     private int givenBlockDepth;
+    // A fixed list assignment preserves split()'s terminal empty fields.
+    private int splitAssignmentLimit = -1;
     /** True while compiling the body of a {@code :lvalue} subroutine. */
     private boolean compilingLvalueSubroutine;
+
+    public int getSplitAssignmentLimit() { return splitAssignmentLimit; }
+    public void setSplitAssignmentLimit(int limit) { splitAssignmentLimit = limit; }
 
     boolean isCompilingLvalueSubroutine() {
         return compilingLvalueSubroutine;

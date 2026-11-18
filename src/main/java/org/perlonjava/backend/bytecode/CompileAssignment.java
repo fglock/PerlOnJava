@@ -2702,8 +2702,8 @@ public class CompileAssignment {
                         // assignment even when it contains just one array or
                         // hash variable.  Its RHS must therefore retain list
                         // context (in particular, for `eval { ... }`).
-                        bytecodeCompiler.compileNode(node.right, -1, RuntimeContextType.LIST);
-                        int listReg = bytecodeCompiler.lastResultReg;
+                        int listReg = compileFixedListAssignmentRhs(
+                                bytecodeCompiler, node.right, listNode.elements.size());
 
                         // Convert to list if needed
                         int rhsListReg = bytecodeCompiler.allocateRegister();
@@ -2902,7 +2902,12 @@ public class CompileAssignment {
                         && globTarget.operator.equals("*")) {
                     compileLocalScalarRhs(bytecodeCompiler, node.right);
                 } else {
-                    bytecodeCompiler.compileNode(node.right, -1, rhsContext);
+                    int listWidth = fixedListAssignmentWidth(node.left);
+                    if (listWidth > 0 && rhsContext == RuntimeContextType.LIST) {
+                        compileFixedListAssignmentRhs(bytecodeCompiler, node.right, listWidth);
+                    } else {
+                        bytecodeCompiler.compileNode(node.right, -1, rhsContext);
+                    }
                 }
             }
             int valueReg = bytecodeCompiler.lastResultReg;
@@ -4715,6 +4720,29 @@ public class CompileAssignment {
         emitReleaseConsumedRhsTemp(bytecodeCompiler, node.right, valueReg, reg);
         bytecodeCompiler.lastResultReg = reg;
         return true;
+    }
+
+    private static int fixedListAssignmentWidth(Node left) {
+        if (left instanceof ListNode list) return list.elements.size();
+        if (left instanceof OperatorNode declaration
+                && (declaration.operator.equals("my") || declaration.operator.equals("state"))
+                && declaration.operand instanceof ListNode list) return list.elements.size();
+        return 0;
+    }
+
+    private static int compileFixedListAssignmentRhs(
+            BytecodeCompiler bc, Node rhs, int width) {
+        int previousLimit = bc.getSplitAssignmentLimit();
+        if (width > 0 && rhs instanceof BinaryOperatorNode split
+                && split.operator.equals("split")) {
+            bc.setSplitAssignmentLimit(width);
+        }
+        try {
+            bc.compileNode(rhs, -1, RuntimeContextType.LIST);
+            return bc.lastResultReg;
+        } finally {
+            bc.setSplitAssignmentLimit(previousLimit);
+        }
     }
 
     private static boolean isKeyValueHashSliceLvalueSub(Node node) {
