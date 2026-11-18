@@ -1793,7 +1793,14 @@ public class EmitVariable {
                     elements.add(right);
                     right = new ListNode(elements, node.tokenIndex);
                 }
-                right.accept(emitterVisitor.with(RuntimeContextType.LIST));   // emit the value
+                int previousSplitLimit = ctx.splitAssignmentLimit;
+                int targetCount = fixedScalarListTargetCount(node.left);
+                if (targetCount > 0) ctx.splitAssignmentLimit = targetCount;
+                try {
+                    right.accept(emitterVisitor.with(RuntimeContextType.LIST));   // emit the value
+                } finally {
+                    ctx.splitAssignmentLimit = previousSplitLimit;
+                }
 
                 if (isLocalAssignment) {
                     // Clone the list before calling local()
@@ -1867,6 +1874,20 @@ public class EmitVariable {
         }
         EmitOperator.handleVoidContext(emitterVisitor);
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("SET end");
+    }
+
+    private static int fixedScalarListTargetCount(Node target) {
+        if (target instanceof OperatorNode op
+                && (op.operator.equals("my") || op.operator.equals("our") || op.operator.equals("state"))) {
+            target = op.operand;
+        }
+        if (!(target instanceof ListNode list) || list.elements.isEmpty()) return 0;
+        for (Node element : list.elements) {
+            if (element instanceof OperatorNode op
+                    && (op.operator.equals("@") || op.operator.equals("%")
+                    || op.operator.equals("array") || op.operator.equals("hash"))) return 0;
+        }
+        return list.elements.size();
     }
 
     /** Normalize parser-local declared-reference slice syntax into the

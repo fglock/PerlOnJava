@@ -692,6 +692,14 @@ public class CompileBinaryOperator {
                     bytecodeCompiler.compileNode(element, -1, RuntimeContextType.SCALAR);
                     argRegs.add(bytecodeCompiler.lastResultReg);
                 }
+                int implicitLimit = bytecodeCompiler.getSplitAssignmentLimit();
+                if (listNode.elements.size() == 1 && implicitLimit > 0) {
+                    int limitReg = bytecodeCompiler.allocateRegister();
+                    bytecodeCompiler.emit(Opcodes.LOAD_INT);
+                    bytecodeCompiler.emitReg(limitReg);
+                    bytecodeCompiler.emitInt(-1);
+                    argRegs.add(limitReg);
+                }
                 rs2 = bytecodeCompiler.allocateRegister();
                 bytecodeCompiler.emit(Opcodes.CREATE_LIST);
                 bytecodeCompiler.emitReg(rs2);
