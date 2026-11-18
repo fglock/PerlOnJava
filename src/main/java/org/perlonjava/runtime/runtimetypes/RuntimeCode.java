@@ -1822,10 +1822,22 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return contexts.peek();
     }
 
+    /** Whether execution is dynamically inside a map block, including nested subs. */
+    public static boolean isMapBlockContextActive() {
+        return !PerlRuntime.current().executionState().mapGrepBlockWantArrayContexts.isEmpty();
+    }
+
     /** Apply the enclosing map/grep context to wantarray() inside its block. */
     public static int resolveWantArrayContext(int context) {
-        Integer mapGrepContext = getMapGrepBlockWantArrayContext();
-        return mapGrepContext == null ? context : mapGrepContext;
+        Deque<Integer> contexts = PerlRuntime.current().executionState().mapGrepBlockWantArrayContexts;
+        if (contexts.isEmpty()) return context;
+        RuntimeCode current = getActiveCodeAtCallerFrame(0);
+        if (current != null && current.isMapGrepBlock) {
+            return contexts.peek();
+        }
+        // A subroutine called from the block receives the block's ordinary
+        // expression context; map evaluates its block expression in list context.
+        return RuntimeContextType.LIST;
     }
 
     private static void pushCallContext(

@@ -41,6 +41,16 @@ subtest 'pairgrep context' => sub {
         [two => 2, three => 3], 'pairgrep list context returns matching pairs');
 };
 
+my $issue_map_sub_context;
+sub issue_record_context_from_map_block {
+    my $context = wantarray;
+    $issue_map_sub_context = !defined($context) ? 'void' : $context ? 'list' : 'scalar';
+}
+subtest 'subroutine called from map block keeps list context' => sub {
+    map { issue_record_context_from_map_block() } 1;
+    is($issue_map_sub_context, 'list', 'map block subroutine call receives list context');
+};
+
 {
     package Issue2062::Unknown;
     use Carp qw(confess);

@@ -327,8 +327,12 @@ public class CoreSubroutineGenerator {
                     WaitpidOperator.waitForChild().getList();
             case "wantarray" -> (args, ctx) -> {
                 Integer callerContext = RuntimeCode.getCallContextAt(1);
-                callerContext = RuntimeCode.resolveWantArrayContext(
-                        callerContext == null ? RuntimeContextType.VOID : callerContext);
+                // A Perl sub called as the map block's final expression is
+                // itself invoked in list context. The direct wantarray op
+                // inside the block separately observes the map result context.
+                if (RuntimeCode.isMapBlockContextActive()) {
+                    callerContext = RuntimeContextType.LIST;
+                }
                 return Operator.wantarray(callerContext == null
                         ? RuntimeContextType.VOID : callerContext).getList();
             };
