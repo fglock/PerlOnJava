@@ -218,7 +218,12 @@ public class EmitOperatorLocal {
         }
 
         // emit the lvalue
-        int lvalueContext = LValueVisitor.getContext(node.operand);
+        boolean hashSliceTarget = node.operand instanceof BinaryOperatorNode slice
+                && slice.operator.equals("{")
+                && slice.left instanceof OperatorNode sigil
+                && sigil.operator.equals("@");
+        int lvalueContext = hashSliceTarget
+                ? RuntimeContextType.LIST : LValueVisitor.getContext(node.operand);
 
         if (node.operand instanceof ListNode listNode) {
             for (Node child : listNode.elements) {
@@ -236,9 +241,15 @@ public class EmitOperatorLocal {
                 // lvalue.  Emitting it as VOID makes LValueVisitor infer the
                 // surrounding list context and can select the list proxy path,
                 // which does not save a bare tied element correctly.
-                int childContext = varToLocalize instanceof BinaryOperatorNode
-                        ? RuntimeContextType.SCALAR
-                        : RuntimeContextType.VOID;
+                boolean hashSlice = varToLocalize instanceof BinaryOperatorNode hashSliceNode
+                        && hashSliceNode.operator.equals("{")
+                        && hashSliceNode.left instanceof OperatorNode sliceSigil
+                        && sliceSigil.operator.equals("@");
+                int childContext = hashSlice
+                        ? RuntimeContextType.LIST
+                        : varToLocalize instanceof BinaryOperatorNode
+                                ? RuntimeContextType.SCALAR
+                                : RuntimeContextType.VOID;
                 handleLocal(emitterVisitor.with(childContext),
                         new OperatorNode("local", varToLocalize, node.tokenIndex));
             }

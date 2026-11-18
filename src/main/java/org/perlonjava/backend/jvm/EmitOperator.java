@@ -1416,6 +1416,9 @@ public class EmitOperator {
     static void handleWantArrayOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
         emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ILOAD,
                 emitterVisitor.ctx.symbolTable.getVariableIndex("wantarray"));
+        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                "resolveWantArrayContext", "(I)I", false);
         emitOperator(node, emitterVisitor);
     }
 
