@@ -1205,6 +1205,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         final String acquireSite;
         final String queueSite;
         final PerlOwnerSlot.PendingRelease ownerSlotRelease;
+        final boolean lifecycleOnlyAtZero;
         final java.util.concurrent.atomic.AtomicBoolean completed =
                 new java.util.concurrent.atomic.AtomicBoolean();
 
@@ -1216,15 +1217,28 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         PendingOwnerRelease(int scalarIdentity, long referentGeneration,
                             String acquireSite, String queueSite,
                             PerlOwnerSlot.PendingRelease ownerSlotRelease) {
+            this(scalarIdentity, referentGeneration, acquireSite, queueSite,
+                    ownerSlotRelease, false);
+        }
+
+        PendingOwnerRelease(int scalarIdentity, long referentGeneration,
+                            String acquireSite, String queueSite,
+                            PerlOwnerSlot.PendingRelease ownerSlotRelease,
+                            boolean lifecycleOnlyAtZero) {
             this.scalarIdentity = scalarIdentity;
             this.referentGeneration = referentGeneration;
             this.acquireSite = acquireSite;
             this.queueSite = queueSite;
             this.ownerSlotRelease = ownerSlotRelease;
+            this.lifecycleOnlyAtZero = lifecycleOnlyAtZero;
         }
 
         boolean identifiesReleasedOwnerEdge() {
             return ownerSlotRelease != null;
+        }
+
+        boolean isLifecycleOnlyAtZero() {
+            return lifecycleOnlyAtZero;
         }
     }
 
@@ -1303,7 +1317,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         registerPendingOwnerRelease(null);
         return new PendingOwnerRelease(0,
                 REFCOUNT_TRACE_ENV ? traceReferentGeneration(this) : 0,
-                "zero-count lifecycle", queueSite);
+                "zero-count lifecycle", queueSite, null, true);
     }
 
     private synchronized PendingOwnerRelease queueTracedOwnerRelease(
