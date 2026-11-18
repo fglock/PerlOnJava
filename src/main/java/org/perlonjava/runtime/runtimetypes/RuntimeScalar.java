@@ -4767,9 +4767,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 OverloadContext ctx = OverloadContext.prepare(blessId);
                 if (ctx != null) {
                     // Try overload method
+                    int originalType = type;
+                    Object originalValue = value;
                     RuntimeScalar result = ctx.tryOverload("(&{}", unaryDerefOverloadArgs());
                     // If the subroutine returns the object itself then it will not be called again
-                    if (overloadReturnedDifferentObject(result)) {
+                    if ((result != null && result.type == CODE)
+                            || overloadReturnedDifferentObject(result)
+                            || (result == this && (type != originalType || value != originalValue))) {
                         return result.codeDerefNonStrict(packageName);
                     }
                 }
@@ -4841,8 +4845,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             if (blessId < 0) {
                 OverloadContext ctx = OverloadContext.prepare(blessId);
                 if (ctx != null) {
+                    int originalType = type;
+                    Object originalValue = value;
                     RuntimeScalar result = ctx.tryOverload("(&{}", unaryDerefOverloadArgs());
-                    if (overloadReturnedDifferentObject(result)) {
+                    if ((result != null && result.type == CODE)
+                            || overloadReturnedDifferentObject(result)
+                            || (result == this && (type != originalType || value != originalValue))) {
                         return result.codeDerefStrict();
                     }
                 }
@@ -5628,7 +5636,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.numericContextSeen = false;
         this.firstClassRegexScalar = false;
         this.formatPictureTainted = false;
-        if (this.type != RuntimeScalarType.TIED_SCALAR
+        if (blessedId(this) == 0
+                && this.type != RuntimeScalarType.TIED_SCALAR
                 && this.type != RuntimeScalarType.STRING
                 && this.type != RuntimeScalarType.BYTE_STRING
                 && this.type != RuntimeScalarType.VSTRING) {
@@ -5744,20 +5753,20 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                             return preAutoIncrementWithoutWatcherNotification();
                         }
 
-                        // With fallback enabled, Perl autogenerates ++ from
-                        // numeric conversion when no ++ or + overload exists.
-                        result = ctx.tryOverloadFallback(this, "(0+");
-                        if (result != null) {
-                            set(result);
-                            return preAutoIncrementWithoutWatcherNotification();
-                        }
-
                         // Try fallback to + operator with undef as third argument (mutator indicator)
                         result = ctx.tryOverload("(+", new RuntimeArray(this, scalarOne, scalarUndef));
                         if (result != null) {
                             // For fallback, + should NOT modify operand, so we handle assignment
                             set(result);
                             return this;
+                        }
+
+                        // With fallback enabled, Perl autogenerates ++ from
+                        // numeric conversion only when neither ++ nor + exists.
+                        result = ctx.tryOverloadFallback(this, "(0+");
+                        if (result != null) {
+                            set(result);
+                            return preAutoIncrementWithoutWatcherNotification();
                         }
 
                     }
@@ -5786,6 +5795,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     /** Postfix ++ in void context for a proven lexical lvalue. */
     public void postAutoIncrementVoid() {
         watcherMutationDepth++;
+        boolean completed = false;
         try {
             if (getClass() == RuntimeScalar.class
                     && type == INTEGER
@@ -5794,14 +5804,19 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 if (integerValue < Long.MAX_VALUE) {
                     warnImprecisionForAutoOperation(1);
                     setIntegerValue(integerValue + 1);
-                    return;
+                    completed = true;
+                } else {
+                    postAutoIncrementWithoutWatcherNotification();
+                    completed = true;
                 }
+            } else {
+                postAutoIncrementWithoutWatcherNotification();
+                completed = true;
             }
-            postAutoIncrementWithoutWatcherNotification();
         } finally {
             watcherMutationDepth--;
-            notifyModifiedWatchers();
         }
+        if (completed) notifyModifiedWatchers();
     }
 
     /** Implements ++ while lexical {@code use integer} is active. */
@@ -5884,7 +5899,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     private RuntimeScalar postAutoIncrementWithoutWatcherNotification() {
         warnImprecisionForAutoOperation(1);
-        if (this.type != RuntimeScalarType.TIED_SCALAR
+        if (blessedId(this) == 0
+                && this.type != RuntimeScalarType.TIED_SCALAR
                 && this.type != RuntimeScalarType.STRING
                 && this.type != RuntimeScalarType.BYTE_STRING
                 && this.type != RuntimeScalarType.VSTRING) {
@@ -6025,20 +6041,20 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                             return old;
                         }
 
-                        // Numeric conversion is the final autogeneration
-                        // route for an overloaded postfix increment.
-                        result = ctx.tryOverloadFallback(this, "(0+");
-                        if (result != null) {
-                            set(result);
-                            preAutoIncrementWithoutWatcherNotification();
-                            return old;
-                        }
-
                         // Try fallback to + operator with undef as third argument (mutator indicator)
                         result = ctx.tryOverload("(+", new RuntimeArray(this, scalarOne, scalarUndef));
                         if (result != null) {
                             // For fallback, + should NOT modify operand, so we handle assignment
                             set(result);
+                            return old;
+                        }
+
+                        // Numeric conversion is the final autogeneration
+                        // route when neither ++ nor + overloads are present.
+                        result = ctx.tryOverloadFallback(this, "(0+");
+                        if (result != null) {
+                            set(result);
+                            preAutoIncrementWithoutWatcherNotification();
                             return old;
                         }
 

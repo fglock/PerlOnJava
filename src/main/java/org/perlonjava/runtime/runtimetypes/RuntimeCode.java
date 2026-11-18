@@ -1802,6 +1802,32 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         pushCallContext(callContext, PerlRuntime.current().executionState());
     }
 
+    public static void pushMapGrepBlockWantArrayContext(int callContext) {
+        PerlRuntime.current().executionState().mapGrepBlockWantArrayContexts.push(callContext);
+    }
+
+    public static void popMapGrepBlockWantArrayContext() {
+        Deque<Integer> contexts = PerlRuntime.current().executionState().mapGrepBlockWantArrayContexts;
+        if (!contexts.isEmpty()) contexts.pop();
+    }
+
+    /** Return the enclosing map/grep context when wantarray() is called from its block. */
+    public static Integer getMapGrepBlockWantArrayContext() {
+        RuntimeCode caller = getActiveCodeAtCallerFrame(0);
+        if (caller == null || !caller.isMapGrepBlock) {
+            caller = getActiveCodeAtCallerFrame(1);
+        }
+        if (caller == null || !caller.isMapGrepBlock) return null;
+        Deque<Integer> contexts = PerlRuntime.current().executionState().mapGrepBlockWantArrayContexts;
+        return contexts.peek();
+    }
+
+    /** Apply the enclosing map/grep context to wantarray() inside its block. */
+    public static int resolveWantArrayContext(int context) {
+        Integer mapGrepContext = getMapGrepBlockWantArrayContext();
+        return mapGrepContext == null ? context : mapGrepContext;
+    }
+
     private static void pushCallContext(
             int callContext, ExecutionRuntimeState executionState) {
         executionState.callContextStack.push(callContext);
@@ -9198,7 +9224,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 RuntimeScalar result = ctx.tryOverload("(&{}", new RuntimeArray(
                         runtimeScalar, RuntimeScalarCache.scalarUndef, RuntimeScalarCache.scalarFalse));
                 // If the subroutine returns the object itself then it will not be called again
-                if (result != null && result != runtimeScalar && result.value != runtimeScalar.value) {
+                if (result != null && (result.type == RuntimeScalarType.CODE
+                        || (result != runtimeScalar && result.value != runtimeScalar.value))) {
                     return result;
                 }
             }
@@ -10106,13 +10133,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 if (ctx != null) {
                     RuntimeScalar result = ctx.tryOverload("(&{}", new RuntimeArray(
                             runtimeScalar, RuntimeScalarCache.scalarUndef, RuntimeScalarCache.scalarFalse));
-                    if (result != null && result != runtimeScalar && result.value != runtimeScalar.value) {
+                    if (result != null && (result.type == RuntimeScalarType.CODE
+                            || (result != runtimeScalar && result.value != runtimeScalar.value))) {
+                        RuntimeScalar replacement = result;
                         // Successfully got a CODE reference via overload, return it
-                        if (result.type == RuntimeScalarType.CODE) {
-                            return result;
+                        if (replacement.type == RuntimeScalarType.CODE) {
+                            return replacement;
                         }
                         // Recursively handle if not CODE yet
-                        return createCodeReference(result, packageName);
+                        return createCodeReference(replacement, packageName);
                     }
                 }
             }

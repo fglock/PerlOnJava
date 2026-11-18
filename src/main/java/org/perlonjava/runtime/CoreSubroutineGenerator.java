@@ -327,6 +327,8 @@ public class CoreSubroutineGenerator {
                     WaitpidOperator.waitForChild().getList();
             case "wantarray" -> (args, ctx) -> {
                 Integer callerContext = RuntimeCode.getCallContextAt(1);
+                callerContext = RuntimeCode.resolveWantArrayContext(
+                        callerContext == null ? RuntimeContextType.VOID : callerContext);
                 return Operator.wantarray(callerContext == null
                         ? RuntimeContextType.VOID : callerContext).getList();
             };
