@@ -49,15 +49,16 @@ sub import {
     Exporter::import($pkg, @list);
 }
 
-# libc-style conversion used by older pure-Perl CPAN modules.  Return the
-# numeric prefix and the unparsed suffix, matching Perl's POSIX::strtod API.
+# libc-style conversion used by older pure-Perl CPAN modules.  The second
+# return value is the number of unparsed characters, matching POSIX::strtod.
 sub strtod {
     my ($input) = @_;
     my $text = defined($input) ? "$input" : '';
+    my $input_length = length($text);
     $text =~ s/^\s+//;
-    return (0, $text)
+    return (0, $input_length)
         unless $text =~ /^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)(.*)$/s;
-    return (0 + $1, $2);
+    return (0 + $1, length($2));
 }
 
 # C99 floating-point helpers exposed by current core POSIX releases.
@@ -798,6 +799,8 @@ for my $const (qw(
     F_OK R_OK W_OK X_OK
 
     F_DUPFD F_GETFD F_SETFD F_GETFL F_SETFL FD_CLOEXEC
+
+    LONG_MAX
 
     SIGHUP SIGINT SIGQUIT SIGILL SIGTRAP SIGABRT SIGBUS SIGFPE SIGKILL
     SIGUSR1 SIGSEGV SIGUSR2 SIGPIPE SIGALRM SIGTERM SIGCHLD SIGCONT

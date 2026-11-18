@@ -1002,6 +1002,15 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 }
                 return value;
             case REFERENCE:
+                // A blessed reference to a glob (for example IO::Scalar's
+                // `bless \do { local *FH }`) assigned to a typeglob supplies
+                // the glob itself, including its tied IO slot.  It is distinct
+                // from `*name = \$scalar`, whose referent is an ordinary
+                // scalar cell and must continue to alias only the SCALAR slot.
+                if (value.value instanceof RuntimeScalar referent
+                        && referent.type == GLOB) {
+                    return set(referent.globDeref());
+                }
                 // `*foo = \$bar` aliases the SCALAR slot to $bar, regardless of what $bar contains.
                 // This must replace the scalar container (alias) rather than storing into
                 // the existing scalar, otherwise tied scalars would invoke STORE.
