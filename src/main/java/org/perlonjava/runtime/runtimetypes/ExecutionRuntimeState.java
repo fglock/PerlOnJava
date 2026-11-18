@@ -108,6 +108,8 @@ public final class ExecutionRuntimeState {
     /** One-shot caller()[4] overrides for methods entered through runtime dispatch. */
     public final Deque<Boolean> methodCallHasArgsOverrides = new ArrayDeque<>();
     public final Deque<Integer> callContextStack = new ArrayDeque<>();
+    /** Enclosing context visible to wantarray() from a map/grep callback. */
+    public final Deque<Integer> mapGrepBlockWantArrayContexts = new ArrayDeque<>();
     /** Call-site packages pending association with the CV entered for each call context. */
     public final Deque<String> pendingCallerPackages = new ArrayDeque<>();
     public int evalDepth;

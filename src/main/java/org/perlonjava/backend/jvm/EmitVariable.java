@@ -1142,7 +1142,8 @@ public class EmitVariable {
         MethodVisitor mv = ctx.mv;
         // Determine the assign type based on the left side.
         // Inspect the AST and get the L-value context: SCALAR or LIST
-        int lvalueContext = LValueVisitor.getContext(node);
+        int lvalueContext = isLocalizedHashSliceAssignment(node.left)
+                ? RuntimeContextType.LIST : LValueVisitor.getContext(node);
         if (isKeyValueHashSliceLvalueSub(node.left)) {
             String assignmentKind = isIndexValueArraySliceLvalueSub(node.left) ? "list"
                     : lvalueContext == RuntimeContextType.SCALAR
@@ -1899,6 +1900,20 @@ public class EmitVariable {
                 && (access.operator.equals("{") || access.operator.equals("["))
                 && access.left instanceof OperatorNode sigil
                 && sigil.operator.equals("%");
+    }
+
+    private static boolean isLocalizedHashSliceAssignment(Node node) {
+        if (!(node instanceof OperatorNode local) || !local.operator.equals("local")) {
+            return false;
+        }
+        Node operand = local.operand;
+        while (operand instanceof ListNode list && list.elements.size() == 1) {
+            operand = list.elements.getFirst();
+        }
+        return operand instanceof BinaryOperatorNode slice
+                && slice.operator.equals("{")
+                && slice.left instanceof OperatorNode sigil
+                && sigil.operator.equals("@");
     }
 
     private static String keyValueSliceDescription(Node node) {

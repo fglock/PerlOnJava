@@ -774,7 +774,7 @@ public class OpcodeHandlerExtended {
         int rd = bytecode[pc++];
         int wantarrayReg = bytecode[pc++];
         int ctx = ((RuntimeScalar) registers[wantarrayReg]).getInt();
-        registers[rd] = Operator.wantarray(ctx);
+        registers[rd] = Operator.wantarray(RuntimeCode.resolveWantArrayContext(ctx));
         return pc;
     }
 

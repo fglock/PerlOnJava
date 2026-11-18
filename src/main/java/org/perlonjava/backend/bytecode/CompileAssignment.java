@@ -1579,7 +1579,8 @@ public class CompileAssignment {
             int elemReg = bc.lastResultReg;
             // Preserve the outer value for self-referential RHS expressions:
             // localization begins after both sides have been evaluated.
-            bc.compileNode(node.right, -1, rhsContext);
+            bc.compileNode(node.right, -1,
+                    hashSlice ? RuntimeContextType.LIST : rhsContext);
             int valueReg = bc.lastResultReg;
             if (!hashSlice) {
                 // Hash fetches return the live element scalar. Saving the local
@@ -1932,6 +1933,36 @@ public class CompileAssignment {
             // emits nothing - a silent no-op assignment. Reproduced by:
             //     local ($h->{x}) = 99;   inside an eval-STRING-compiled sub
             if (element instanceof BinaryOperatorNode binOp) {
+                if (binOp.operator.equals("{")
+                        && binOp.left instanceof OperatorNode sliceSigil
+                        && sliceSigil.operator.equals("@")) {
+                    bc.compileNode(node.right, -1, RuntimeContextType.LIST);
+                    int valueListReg = bc.lastResultReg;
+                    bc.beginLocalHashLvalueCompile();
+                    try {
+                        bc.compileNode(binOp, -1, RuntimeContextType.LIST);
+                    } finally {
+                        bc.endLocalHashLvalueCompile();
+                    }
+                    int targetListReg = bc.lastResultReg;
+                    bc.emit(Opcodes.PUSH_LOCAL_VARIABLE);
+                    bc.emitReg(targetListReg);
+                    int resultReg = bc.allocateRegister();
+                    bc.emit(Opcodes.SET_FROM_LIST);
+                    bc.emitReg(resultReg);
+                    bc.emitReg(targetListReg);
+                    bc.emitReg(valueListReg);
+                    if (rhsContext == RuntimeContextType.SCALAR) {
+                        int countReg = bc.allocateRegister();
+                        bc.emit(Opcodes.LIST_TO_COUNT);
+                        bc.emitReg(countReg);
+                        bc.emitReg(resultReg);
+                        bc.lastResultReg = countReg;
+                    } else {
+                        bc.lastResultReg = resultReg;
+                    }
+                    return true;
+                }
                 if (binOp.operator.equals("[")
                         && binOp.left instanceof OperatorNode arraySliceOp
                         && arraySliceOp.operator.equals("@")

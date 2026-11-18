@@ -38,9 +38,10 @@ public class Readline {
         if (blessId < 0) {
             OverloadContext overloadCtx = OverloadContext.prepare(blessId);
             if (overloadCtx != null) {
-                RuntimeScalar result = overloadCtx.tryOverload("(<>", new RuntimeArray(fileHandle));
+                RuntimeList result = overloadCtx.tryOverloadList(
+                        "(<>", new RuntimeArray(fileHandle), ctx);
                 if (result != null) {
-                    return result;
+                    return ctx == RuntimeContextType.LIST ? result : result.getFirst();
                 }
             }
         }

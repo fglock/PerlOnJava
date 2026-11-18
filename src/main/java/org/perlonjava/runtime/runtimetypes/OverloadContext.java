@@ -602,6 +602,12 @@ public class OverloadContext {
      * @return RuntimeScalar result from method execution, or null if method not found
      */
     public RuntimeScalar tryOverload(String methodName, RuntimeArray perlMethodArgs) {
+        RuntimeList result = tryOverloadList(methodName, perlMethodArgs, SCALAR);
+        return result == null ? null : result.getFirst();
+    }
+
+    /** Execute an overload method in the requested Perl context and retain its list result. */
+    public RuntimeList tryOverloadList(String methodName, RuntimeArray perlMethodArgs, int context) {
         // Look for method in class hierarchy
         RuntimeScalar perlMethod = InheritanceResolver.findMethodInHierarchy(methodName, perlClassName, null, 0);
         if (perlMethod == null) {
@@ -632,9 +638,9 @@ public class OverloadContext {
             // like ordinary subroutine calls. Routing here also lets the debugger's
             // recursion guard suppress overloads invoked from inside DB::sub itself.
             RuntimeList result = DebugHooks.dispatchOverloadedSubroutine(
-                    perlMethod, perlMethodArgs, SCALAR, perlClassName + "::" + methodName);
+                    perlMethod, perlMethodArgs, context, perlClassName + "::" + methodName);
             if (result == null) {
-                result = RuntimeCode.apply(perlMethod, perlMethodArgs, SCALAR);
+                result = RuntimeCode.apply(perlMethod, perlMethodArgs, context);
             }
 
             // Handle TAILCALL markers from `goto $coderef` with trampoline loop
@@ -644,7 +650,7 @@ public class OverloadContext {
                     // Execute the tail call
                     RuntimeScalar codeRef = flow.getTailCallCodeRef();
                     RuntimeArray args = flow.getTailCallArgs();
-                    result = RuntimeCode.apply(codeRef, args, SCALAR);
+                    result = RuntimeCode.apply(codeRef, args, context);
                 } else {
                     // Not a TAILCALL - other control flow types (LAST/NEXT/REDO/GOTO)
                     // should propagate up, but for overload context we just return the first element
@@ -652,7 +658,7 @@ public class OverloadContext {
                 }
             }
 
-            return result.getFirst();
+            return result;
         } finally {
             leaveActiveOverload(receiverIdentity, methodName);
         }
