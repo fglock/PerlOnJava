@@ -1722,13 +1722,16 @@ public class MortalList {
         base.releaseTransientTraceOwner(transientOwnerKind,
                 "MortalList.processDeferredBase");
         boolean hasWeakRefs = WeakRefRegistry.hasWeakRefsTo(base);
-        // Production edge releases carry an exact slot token. A lifecycle-only
-        // boundary carries completion provenance but no released edge; its
-        // cleanup decision follows current owner identities.
+        // A lifecycle-only-at-zero token requests cleanup only if the referent
+        // is still unowned when the queue drains. If a real owner has acquired
+        // it since queueing, completing that token must leave the new count
+        // untouched.
         boolean finalRelease = false;
         if (base.refCount > 0) {
-            finalRelease = base.releaseTrackedOwnerCount(
-                    "MortalList.flush (deferred decrement)");
+            if (ownerRelease == null || !ownerRelease.isLifecycleOnlyAtZero()) {
+                finalRelease = base.releaseTrackedOwnerCount(
+                        "MortalList.flush (deferred decrement)");
+            }
         } else if (base.isRefCountTracked() && base.refCount == 0
                 && ownerRelease != null) {
             // The queue token may represent a real edge released after a
