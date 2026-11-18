@@ -7,6 +7,7 @@ priorities and future plans.
 ## Work in progress
 
 - Preserve imported CV owners through global destruction, retain only the lexical captures needed by `eval STRING`, and release DBI handles after failed `prepare` or `do` (#2043).
+- Preserve reacquired counted referents when deferred zero-count lifecycle cleanup drains (#2043).
 - Remove reachability-based lifetime decisions, root-query state, and sweep-only hooks; use current Perl owner slots for cleanup (#2043).
 - Release abandoned JVM direct-call owners when code generation falls back to the interpreter, allowing redefined CV optree constants to be reaped (#2043).
 - Release DBIx::Class phantom-chain result sources after fresh anonymous hash arguments leave their call frame (#2043).

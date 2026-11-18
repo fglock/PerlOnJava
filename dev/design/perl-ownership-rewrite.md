@@ -1,11 +1,11 @@
 # Perl-compatible ownership rewrite
 
-**Status:** PR #1938 remains open and unmerged. The latest validated source
-merge is `195b4e689b`, incorporating current master `a2098dc5c6`; the full
-`make` gate and documentation link check pass. The user's UAT checkout remains
-unchanged at tested commit `5c011dfa0e`. Current master passes its unit gate
-but has a separate Linux Thread-Queue compatibility failure. Keep the PR open;
-do not merge before human review.
+**Status:** PR #1938 remains open and unmerged. The candidate is rebased onto
+current master `d800eff96c4ea7a6aaab5bb0c586c31e607f1220`. Source commit
+`14e35b66` passes the focused regressions and the full `make` gate (12m19s).
+The clean UAT checkout at `/Users/fglock/projects/PerlOnJava2` has been updated
+to the rebased PR candidate and rebuilt; its launcher and focused regressions
+are verified below. Keep the PR open for human review.
 
 | Work | Status | Evidence or acceptance |
 | --- | --- | --- |
@@ -13,67 +13,46 @@ do not merge before human review.
 | Fix DBIx and Test2 retention | Candidate delivered | DBIx arguments carry an exact call-transfer owner; DBI handles use core `bless`; the Test2 event regression passes on system Perl and both PerlOnJava backends. |
 | Preserve imported CVs through namespace cleanup | Candidate delivered | Live transient argument and return slots count as CV owners until their transfer boundary; defined parse-time targets have one-shot compiler leases, while unresolved placeholders retain late BEGIN aliases. Focused regressions pass on both backends. |
 | Release Moo's weakened optree constant | Verified locally | The permanent 4/4 regression passes on system Perl, JVM, and interpreter; assertion 4 fails on UAT parent `5c011dfa0e`. Both unchanged Moo accessor-weaken files pass 19/19 on all three runtimes. |
+| Preserve a referent reacquired before zero-count cleanup drains | Verified locally | A lifecycle-only queue token used to decrement a later counted owner. A Java regression now verifies that only the actual owner release decrements it. The Template::Stash-style regression passes 4/4 on system Perl and both backends. |
+| Fix Template Toolkit String ownership | Verified locally | `Template-Toolkit-3.106-0/t/string.t` passes 95/95 on system Perl, JVM, and interpreter after reproducing the reported count-underflow failure on the prior candidate. |
 | Release DBI handles after failed `do` | Candidate delivered | `_do_impl` finishes any partial statement, clears its local DBI handle, and rethrows the DBI error. The permanent schema regression fails with the unfixed `do` implementation on JVM and passes 3/3 on system Perl, JVM, and interpreter. |
 | Preserve caller cleanup through interpreter aliases | Candidate delivered | `dev/modules/dbix_failed_connect_releases_storage.t` fails assertion 4 on the unfixed artifact and passes 4/4 on system Perl, JVM, and interpreter. The recursive-frame unit test covers same-CV callers. |
-| Final local gate | Passed | After integrating current master `a2098dc5c6` at `195b4e689b`, `nice -n 19 timeout 3600 make` succeeded in 7m35 and `make check-links` reported 0 errors. Earlier UAT evidence remains valid, including DBIx `t/storage/error.t` 49/49; `t/storage/txn.t` retains one pre-existing exception line-reporting mismatch and no leaks. Hosted checks on the older published PR head exposed a process-test timeout; current master passes that unit gate. |
+| Final local gate | Passed | `nice -n 19 timeout 3600 make` succeeded in 12m19 on immutable source commit `14e35b66`; the shard-0 gate containing the new Java regression also passed. The broad multi-module CPAN sweep remains stopped at the user's direction; targeted Moo and Template Toolkit tests pass on both backends. |
 
 ## Current handoff: 2026-11-18
 
-The UAT failures were in Moo's unchanged `accessor-weaken.t` and
-`accessor-weaken-pre-5_8_3.t`, each failing only `optree reaped, ro static
-value gone`. The focused regression
-[`pad_constant_weak_hash_slot_eval_redefinition.t`](../../src/test/resources/unit/refcount/pad_constant_weak_hash_slot_eval_redefinition.t)
-passes 4/4 on system Perl, JVM, and interpreter, and fails assertion 4 on the
-tested UAT parent. Both upstream files pass 19/19 on each runtime.
+The UAT report identified failures in Moo's unchanged `accessor-weaken.t` and
+`accessor-weaken-pre-5_8_3.t`, each at `optree reaped, ro static value gone`.
+The existing focused optree regression passes 4/4 on system Perl, JVM, and
+interpreter; both Moo files now pass 19/19 on all three runtimes.
 
-Root cause: the main JVM compilation can emit direct-call descriptors for an
-embedded optree, then abandon that generated code and return interpreter code
-after an ASM frame-computation failure. Those descriptors were not transferred
-to a `RuntimeCode` owner and kept the producer CV's CODE slot alive. The
-fallback handoff now releases the uninstalled descriptor owners after the
-interpreter code has acquired its own edges. The existing statement-boundary
-cleanup also retains temporary RHS cell storage through the Perl statement and
-preserves cells still owned by live aggregates.
+The next UAT reported Template Toolkit `t/string.t` failing while assigning a
+method result into `Template::Stash`. Its focused 4/4 Perl regression passed on
+system Perl and failed on the prior JVM candidate. Trace evidence showed a
+zero-count lifecycle-only token queued for a blessed temporary. Before that
+token drained, a scalar cell acquired a real counted owner; the queue then
+mistook the lifecycle marker for an edge release and decremented the new owner.
+`PendingOwnerRelease` now distinguishes lifecycle-only tokens, which finalize
+only if the referent remains at zero, from counted edge releases. The new Java
+regression verifies both preservation of the reacquired owner and cleanup when
+that real owner is later released.
 
-After the PR head was updated, current master added CPAN numeric and MakeMaker
-compatibility changes. The Linux CI run on the prior PR head failed only
-`zz_perlonjava_process.t` because MakeMaker dependency extraction exceeded its
-10-second timeout; the unchanged test passes on system Perl and local JVM.
-Current master CI passes the full unit gate, including that test, but its later
-Linux Thread-Queue compatibility gate fails with a
-`ConcurrentModificationException`. The latest master merge is now locally
-validated; hosted CI must confirm which of those results apply to the PR.
-
-Validation on local source commit `81500f6c8c`: `nice -n 19 make` passed in
-6m49 (672 unit tests and Joni); `make check-links` found 0 errors. After
-master advanced, commit `a92ce0e5` merged its caller-introspection changes;
-the only conflict was the top of the changelog, where both the #2043 and
-#2069 entries were retained. `nice -n 19 timeout 3600 make` passed on that
-immutable merge candidate in 7m26. The newer merge commit `195b4e689b` brings
-in current master `a2098dc5c6`; `make` passed in 7m35 and `make check-links`
-reported 0 errors. Logs:
-`/private/tmp/issue2043-final-owner-cleanup-make.log`,
-`/private/tmp/issue2043-after-master-make.log`,
-`/private/tmp/issue2043-after-master-check-links.log`,
-`/private/tmp/issue2043-after-master-a209-make.log`,
-`/private/tmp/issue2043-after-master-a209-check-links.log`,
-`/private/tmp/issue2043-final-check-links.log`,
-`/private/tmp/issue2043-master-linux-job.log`,
-`/private/tmp/issue2043-linux-job-logs.log`,
-`/private/tmp/issue2043-moo-regression-system-perl-final.log`,
-`/private/tmp/issue2043-moo-regression-interpreter-final.log`,
-`/private/tmp/issue2043-moo-regression-unfixed-5c011-jvm.log`, and
-`/private/tmp/issue2043-final-moo-{system,jvm,interpreter,pre-system,pre-jvm,pre-interpreter}.log`.
-The UAT checkout `~/projects/PerlOnJava2` remains untouched. The broad CPAN
-sweep remains stopped at the user's direction.
+Validation on source commit `14e35b66`: shard 0 passed in 9m52; the full
+`nice -n 19 timeout 3600 make` gate passed in 12m19. The focused Perl
+regression passes 4/4 on system Perl, JVM, and interpreter; Template Toolkit
+`t/string.t` passes 95/95 and both Moo accessor-weaken tests pass 19/19 on both
+PerlOnJava backends. Logs are in `/private/tmp/issue2043-*`. The broad CPAN
+sweep remains stopped at the user's direction. The rebased candidate is
+published and hosted checks need to refresh on its new head. The UAT checkout
+has been rebuilt and the reported failures pass there. The earlier Linux
+Thread-Queue failure should be compared with current master baseline.
 
 ### Next steps
 
-1. Publish validated merge commit `195b4e689b` and refresh hosted checks.
-2. Compare any Linux Thread-Queue failure with the current-master baseline
+1. Compare any Linux Thread-Queue failure with the current-master baseline
    before telling the user the PR is ready for review. Keep it open; do not
    merge before human review.
-3. After PR acceptance, close #2043 with final evidence; resume #2037
+2. After PR acceptance, close #2043 with final evidence; resume #2037
    archive-lifetime and #2034 localized-STDERR separately.
 
 Completion requires no reachability-based root walk or sweep to affect Perl
