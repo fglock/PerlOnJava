@@ -73,7 +73,10 @@ fi
 # Perl recursion reach ecosystem guard limits (Catalyst defaults to 1000 calls)
 # before HotSpot raises StackOverflowError.  A later -Xss in JPERL_OPTS still
 # overrides this default for callers with different constraints.
-JVM_OPTS="-Xss16m --enable-native-access=ALL-UNNAMED"
+# Allow C2 to compile large interpreter dispatch methods. HotSpot otherwise
+# leaves BytecodeInterpreter.execute interpreted/C1-only, which materially
+# slows eval STRING execution (23.8 KB method on the current bytecode build).
+JVM_OPTS="-Xss16m --enable-native-access=ALL-UNNAMED -XX:-DontCompileHugeMethods"
 
 # Note on JVM heap settings: do NOT set -XX:SoftMaxHeapSize below -Xmx.
 # That combination triggers an aggressive G1 GC cadence that interacts
