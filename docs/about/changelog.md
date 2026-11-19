@@ -14,6 +14,7 @@ priorities and future plans.
 - Resolve PadWalker caller pads through Perl wrappers, keep `CORE::GLOBAL::caller` overrides dynamic across eval callbacks, apply `set_closed_over` replacements when lazy JVM subs materialize, and preserve autodie errors when caller-stack traversal is exhausted (#2069, #2064, #2060, #2032).
 - Preserve `PerlIO::via` layer reconfiguration and seek callbacks for BOM-aware decoding, report malformed UTF-8 through `:encoding` layers, resolve `Cwd::realpath` for a missing final component, and bound memory allocation for large `sysread` requests (#2058, #2055, #2047).
 - Fix Perl parser handling of postfix increment in concatenated `print` arguments, commented DATA/END markers, the punctuation hash `%;`, and semicolon-disambiguated hash dereferences (#2066, #2065, #2061, #2054).
+- Parse `do return` statements, preserve hash literals with quoted URL values, autoquote keyword fat-comma call arguments, recognize adjacent quotes after word operators, and bind unary minus before regex matching (#2113, #2106, #2105, #2099, #2090).
 - Preserve explicit wide-scalar character-class membership when compiling repeats, including newline, and use pinned Perl Block aliases for wildcard candidates without ICU fallback (#2070, #1487).
 - Enable HotSpot C2 compilation of large methods; the eval STRING benchmark improved about 1.6x in five paired runs.
 - Preserve standard MakeMaker `MY::test` prerequisites so generated test data is built before CPAN tests run (#2050).
