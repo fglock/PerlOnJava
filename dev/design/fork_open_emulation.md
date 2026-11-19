@@ -18,9 +18,9 @@ Perl's `open FH, "-|"` and `open FH, "|-"` forms are tracked separately: they ar
 
 - Parent and child both resume immediately after the same `fork` operation. The parent receives a nonzero pseudo-process ID; the child receives `0`; failure returns `undef` and sets `$!`.
 - The child gets an isolated Perl-level state snapshot. Writes to Perl globals, lexicals, closures, `%ENV`, and the virtual current directory do not change the parent. File and socket endpoints follow explicit inherited-handle rules; regular-file wrappers may share the underlying seek position as documented by Perl.
-- `$$`, `getpid`, and `getppid` report the pseudo-process identity consistently. `wait`, `waitpid`, status in `$?`, and supported `kill` operations resolve pseudo-process IDs before OS process APIs.
-- `exit` ends only the current pseudo-process, runs its normal Perl cleanup, and waits for its own live pseudo-children according to the selected Perl compatibility behavior. `POSIX::_exit` ends only the pseudo-process without Perl `END`/`DESTROY` cleanup; manager-owned Java resources still require safe release. Neither operation may halt the host JVM.
-- `exec` in a pseudo-child launches an external process, waits for it, then exits the pseudo-child with that process's status, matching Perl pseudofork behavior. It does not replace the JVM thread with an OS process. Existing top-level `exec` behavior is a separate contract and must not be described as standard pseudofork compatibility.
+- `$$`, `getpid`, and `getppid` report the pseudo-process identity consistently. `wait`, `waitpid` (including `WNOHANG`), status in `$?`, `SIGCHLD`, and supported `kill` operations resolve pseudo-process IDs before OS process APIs.
+- `exit` ends only the current pseudo-process, runs its normal Perl cleanup, and waits for its outstanding pseudo-children. Match Perl's exception for children signalled with `TERM` to avoid shutdown deadlocks. `POSIX::_exit` ends only the pseudo-process without Perl `END`/`DESTROY` cleanup; manager-owned Java resources still require safe release. Neither operation may halt the host JVM.
+- `exec` in a pseudo-child launches an external process, waits for it, then runs the pseudo-child's Perl cleanup and exits with that process's status, matching Perl pseudofork behavior. It does not replace the JVM thread with an OS process. Existing top-level `exec` behavior is a separate contract and must not be described as standard pseudofork compatibility.
 - Nested forks are part of the compatibility target. Parent/child ownership, waiting, and shutdown must work recursively before the feature is called generally compatible.
 - `$Config{d_fork}` remains false/undefined. Set `$Config{d_pseudofork}` only when the advertised baseline is enabled. Keep library-specific capability checks separate: `HAVE_POSIX_FORK` must remain false, and any pseudo-fork opt-in must be explicit.
 
@@ -56,7 +56,7 @@ Use `RuntimeGraphCloner` and thread snapshot code as implementation material, no
 
 Create one runtime-local `ProcessIdentity`/`PseudoProcessManager` service and route Perl-visible process operations through it before native or JVM process APIs. Audit at least `$$`, `getpid`, `getppid`, `wait`, `waitpid`, `kill`, `POSIX`, `File::Temp`, syslog, and other code that embeds or queries a host PID. Keep pseudo IDs distinguishable from OS children and respect special `waitpid`/`kill` values such as `-1`, `0`, and negative process-group forms.
 
-Each pseudo-process manager owns its descendants. Completion records must preserve Perl wait-status encoding, be reaped once, and be bounded. `WNOHANG`, `SIGCHLD`, and cooperative cancellation can follow after the core continuation and synchronous wait path, but must be tested before advertising those capabilities. Do not promise hard `SIGKILL`: Java cannot safely terminate arbitrary threads; document cooperative cancellation limits.
+Each pseudo-process manager owns its descendants. Completion records must preserve Perl wait-status encoding, be reaped once, and be bounded. `WNOHANG` and minimal `SIGCHLD` delivery at safe Perl execution boundaries are part of the advertised baseline, not optional post-advertisement features. Additional signal behavior and cooperative cancellation can follow later. Do not promise hard `SIGKILL`: Java cannot safely terminate arbitrary threads; document cooperative cancellation limits.
 
 Normal `exit` and `_exit` need separate pseudo-child paths. `_exit` must bypass Perl global destruction while never calling `Runtime.halt` or otherwise terminating unrelated runtimes. Runtime shutdown must define what happens to unreaped descendants, and avoid indefinite waits for children blocked in I/O.
 
@@ -88,11 +88,11 @@ For pseudo-child `exec`, use `ProcessBuilder` or the existing process launcher, 
 - Implement whole-call-chain resumability and `ForkSnapshotPolicy`.
 - Implement process identity, pseudo-process tree, synthetic IDs, `fork`, `exit`, `_exit`, `exec`, `wait`, `waitpid`, status, and deterministic shutdown.
 - Support nested forks and state isolation. Add typed rejection for unsupported resources and concurrent snapshot attempts.
-- Keep `d_pseudofork` off until all Phase 1 gates pass on both backends or the fork-capable mode is explicitly documented as the execution backend for both.
+- Keep `d_pseudofork` off. Phase 1 establishes core lifecycle and snapshot behavior but does not yet provide the full advertised baseline.
 
 ### Phase 2: signals and resource inheritance
 
-- Add `WNOHANG`, minimal `SIGCHLD`, supported `kill` behavior, and cooperative cancellation.
+- Add `WNOHANG`, minimal `SIGCHLD`, supported `kill` behavior, and cooperative cancellation. Only advertise `d_pseudofork` after these and every other baseline gate pass.
 - Complete pipes, sockets, filehandle ownership, and loopback-listener behavior with close-order, EOF, failure, and leak tests.
 - After the general fork path is proven, replace JVM-replay Strategy B for no-command pipe opens in a separate change; retain Strategy A unless evidence shows it can be safely consolidated.
 
@@ -117,7 +117,7 @@ For pseudo-child `exec`, use `ProcessBuilder` or the existing process launcher, 
 - Parent and child resume after the same fork point and return through their complete caller chains.
 - `$$`, `getpid`, `getppid`, `wait`, `waitpid`, `$?`, `exit`, `_exit`, `exec`, and documented `kill` behavior use the correct pseudo-process record.
 - State isolation, hooks, handles, `%ENV`, virtual current directory, cleanup, and unsupported-resource errors have focused permanent tests.
-- Both execution backends pass. If whole-program interpreter mode is the only safe mode, document and test that mode rather than claiming per-scope JVM lowering.
+- Programs launched through the JVM entry point and the explicit interpreter entry point produce the same results. When pseudofork is enabled, the JVM entry point must route the whole call graph through the fork-capable execution mode; do not claim a JVM-stack continuation.
 - `$Config{d_pseudofork}` is advertised only when the stated baseline is true; `$Config{d_fork}` and OS-level capability checks remain truthful.
 - Existing `open "-|"`/`"|-"` tests remain green; their support is tracked as a project extension with its own gate.
 
