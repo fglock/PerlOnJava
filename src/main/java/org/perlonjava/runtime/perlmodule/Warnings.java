@@ -728,7 +728,10 @@ public class Warnings extends PerlModuleBase {
         
         if (args.size() > 1) {
             // warnif(category, message)
-            category = args.get(0).toString();
+            RuntimeScalar categoryArgument = args.get(0);
+            int blessId = RuntimeScalarType.blessedId(categoryArgument);
+            String blessedPackage = blessId == 0 ? null : NameNormalizer.getBlessStr(blessId);
+            category = blessedPackage != null ? blessedPackage : categoryArgument.toString();
             message = args.get(1);
         } else {
             // warnif(message) - use calling package as category.

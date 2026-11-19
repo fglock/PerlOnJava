@@ -8,6 +8,7 @@ priorities and future plans.
 
 - Preserve explicit empty split fields in fixed-arity assignments, restore parsed XML attribute order and `XML::LibXML` ID indexing, decode HTML href character references, and add a JSON::PP-backed `JSON::SL` compatibility subset (#2088, #1323, #1332, #2097, #1321).
 - Preserve list context for localized hash slices, overloaded readline and `pairgrep`; preserve map block versus nested-subroutine `wantarray` contexts; honor overloaded `&{}` replacements and retain overload exceptions during post-increment (#2081, #2080, #2084, #2046, #2062).
+- Resolve registered warning categories from blessed objects passed to `warnings::warnif` (#2063).
 - Install MakeMaker `install_share` data with portable Windows file-copy handling and module paths, expose B's unsigned-integer flag, preserve unsigned 64-bit numeric conversion in parsing and packing, and keep integer precision in `List::Util::uniqnum` (#2068, #2000).
 - Resolve PadWalker caller pads through Perl wrappers, keep `CORE::GLOBAL::caller` overrides dynamic across eval callbacks, apply `set_closed_over` replacements when lazy JVM subs materialize, and preserve autodie errors when caller-stack traversal is exhausted (#2069, #2064, #2060, #2032).
 - Preserve `PerlIO::via` layer reconfiguration and seek callbacks for BOM-aware decoding, report malformed UTF-8 through `:encoding` layers, resolve `Cwd::realpath` for a missing final component, and bound memory allocation for large `sysread` requests (#2058, #2055, #2047).
