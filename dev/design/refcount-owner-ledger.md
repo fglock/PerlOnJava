@@ -22,8 +22,10 @@ explicit, auditable owner tokens.
 ## Current Status (2026-11-19)
 
 Issue #2043 remains the active delivery for removing memory-sweep lifecycle
-decisions; #1649 is its historical origin. Work is continuing on the local WIP
-branch from source commit `ddd9e7f0b6`; the candidate is uncommitted and is not
+decisions; #1649 is its historical origin. Work is continuing on local WIP
+branch `wip/issue2043-sweep-20261119-231323`, checkpointed at
+`99237d06ef`. The focused DBIx refcount correction is uncommitted; the full
+unit and release-acceptance gates are still pending, so this candidate is not
 ready for UAT.
 
 The current implementation maintains O(1) owner-kind counts for the hot
@@ -61,6 +63,21 @@ initializations by 41%; compared with one queue/set per probe root it uses 74
 worksets instead of 499, an 85% reduction for this focused path. The probe
 also replaces the separate direct weak-slot pass. Owner-slot visits stayed
 near 62,000, so this does not establish a scan reduction.
+
+Focused CPAN reruns exposed a `B::REFCNT` undercount for a nested hash-slot
+value forwarded through a Perl helper during `DESTROY`: the aggregate's one
+counted owner was reported, but the helper's active `@_` value had no owner
+slot. `RuntimeCode.isActiveCallArgumentValue` now recognizes that active Perl
+argument without counting the B/Internals probe frames or a DESTROY invocant.
+The permanent system-Perl-validated regression
+`refcount/b_refcount_destroy_aliased_hash_slot_argument.t` passes on both
+PerlOnJava backends, and the previously failing DBIx::Class
+`t/60core.t` and `t/101populate_rs.t` now pass. Logs:
+`/private/tmp/issue2043-b-refcount-fixed.log`,
+`/private/tmp/issue2043-b-refcount-fixed-interpreter.log`,
+`/private/tmp/issue2043-dbix-60core-after-brefcount.log`, and
+`/private/tmp/issue2043-dbix-101populate-after-brefcount.log`. The unfiltered
+unit gate and full release-acceptance gate remain outstanding.
 
 The focused JFR recording lasted four seconds. Its sampled
 `IdentityHashMap.init` share was 11.47%, versus 8.05% in the preceding short,
@@ -140,6 +157,7 @@ still needs reconciliation after access returns. See the
 | Date | Phase delivered | Evidence | Remaining |
 | --- | --- | --- | --- |
 | 2026-11-19 | Cached hot owner-kind counts, transient-owner count, live identity indexes, pooled append-buffer cleanup, and reusable release/pre-scan worksets for dying aggregates | Unit gate and focused `chart_axis28.t` counters/JFR linked above | Remove repeated nested pre-scans and owner-slot scans; measure allocation and CPU impact on the full target; finish CPAN acceptance |
+| 2026-11-19 | Correct `B::REFCNT` for nested hash-slot arguments in `DESTROY`, restoring DBIx::Class schema/source cleanup | New system-Perl-validated regression and passing direct `t/60core.t` / `t/101populate_rs.t` runs above | Run full unit and CPAN release-acceptance gates; stop at the next actionable failure and fix it |
 
 ## Semantic Ownership Model
 

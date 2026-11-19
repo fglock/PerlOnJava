@@ -47,5 +47,5 @@ sub refcount ($) {
 # scenario minimal, then load the assertion helper after the measurement.
 require Test::More;
 Test::More::plan(tests => 1);
-Test::More::is_deeply(\@observed_refcounts, [2, 1],
-    'DESTROY-time B::SV::REFCNT includes only the pending child DESTROY hold');
+Test::More::is_deeply(\@observed_refcounts, [2, 2],
+    'DESTROY-time B::SV::REFCNT includes the nested aggregate owner');

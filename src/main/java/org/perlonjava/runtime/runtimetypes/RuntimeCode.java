@@ -1668,6 +1668,33 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return new java.util.ArrayList<>(argsStack());
     }
 
+    /**
+     * Whether a referent is directly present in an active Perl argument frame
+     * without an owner slot accounting for that temporary value. B::REFCNT
+     * needs this for nested field expressions forwarded through a Perl helper.
+     */
+    public static boolean isActiveCallArgumentValue(RuntimeBase referent) {
+        if (referent == null || PerlRuntime.currentOrNull() == null) return false;
+        int depth = 0;
+        for (RuntimeArray activeArgs : argsStack()) {
+            RuntimeCode activeCode = getActiveCodeAt(depth++);
+            if (activeCode == null || "B".equals(activeCode.packageName)
+                    || "Internals".equals(activeCode.packageName)) {
+                continue;
+            }
+            for (int index = 0; index < activeArgs.elements.size(); index++) {
+                RuntimeScalar argument = activeArgs.elements.get(index);
+                if (argument == null || argument.value != referent
+                        || (argument.type & RuntimeScalarType.REFERENCE_BIT) == 0) {
+                    continue;
+                }
+                if (index == 0 && "DESTROY".equals(activeCode.subName)) continue;
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** Return the active call's live @_ array at the given stack depth. */
     public static RuntimeArray getActiveArgsAt(int depth) {
         if (depth < 0) return null;
