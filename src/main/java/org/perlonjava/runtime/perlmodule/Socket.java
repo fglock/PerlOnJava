@@ -575,10 +575,11 @@ public class Socket extends PerlModuleBase {
         try {
             String sockaddr = args.get(0).toString();
             int flags = args.size() > 1 ? args.get(1).getInt() : 0;
+            int extensionFlags = args.size() > 2 ? args.get(2).getInt() : 0;
 
             if (sockaddr.length() < 8) {
                 RuntimeList result = new RuntimeList();
-                result.add(new RuntimeScalar("Invalid sockaddr structure"));
+                result.add(socketErrorValue(EAI_FAIL, "Invalid sockaddr structure"));
                 return result;
             }
 
@@ -594,7 +595,7 @@ public class Socket extends PerlModuleBase {
                 addressBytes = Arrays.copyOfRange(sockBytes, 4, 8);
             } else {
                 RuntimeList result = new RuntimeList();
-                result.add(new RuntimeScalar("Unsupported address family"));
+                result.add(socketErrorValue(EAI_FAIL, "Unsupported address family"));
                 return result;
             }
             InetAddress inetAddress = InetAddress.getByAddress(addressBytes);
@@ -604,7 +605,9 @@ public class Socket extends PerlModuleBase {
 
             // Resolve hostname based on NI_NUMERICHOST flag
             String hostname;
-            if ((flags & NI_NUMERICHOST) != 0) {
+            if ((extensionFlags & NIx_NOHOST) != 0) {
+                hostname = null;
+            } else if ((flags & NI_NUMERICHOST) != 0) {
                 hostname = ipAddress;
             } else {
                 try {
@@ -613,22 +616,38 @@ public class Socket extends PerlModuleBase {
                     hostname = ipAddress;  // Fall back to IP if resolution fails
                 }
             }
+            if ((flags & NI_NAMEREQD) != 0 && hostname != null && hostname.equals(ipAddress)) {
+                return new RuntimeList(socketErrorValue(EAI_NONAME, "Name or service not known"));
+            }
 
-            // Resolve service name based on NI_NUMERICSERV flag
-            String service = String.valueOf(port);
+            String service = (extensionFlags & NIx_NOSERV) != 0 ? null
+                    : ((flags & NI_NUMERICSERV) != 0
+                        ? String.valueOf(port) : serviceName(port, (flags & NI_DGRAM) != 0));
+            if (service == null && (extensionFlags & NIx_NOSERV) == 0) {
+                service = String.valueOf(port);
+            }
 
             // Return ($err, $hostname, $service) - $err is empty string on success
             RuntimeList result = new RuntimeList();
-            result.add(new RuntimeScalar(""));
+            result.add(socketErrorValue(0, ""));
             result.add(new RuntimeScalar(hostname));
             result.add(new RuntimeScalar(service));
             return result;
 
         } catch (Exception e) {
             RuntimeList result = new RuntimeList();
-            result.add(new RuntimeScalar(e.getMessage()));
+            result.add(socketErrorValue(EAI_FAIL,
+                    e.getMessage() == null ? "Name or service not known" : e.getMessage()));
             return result;
         }
+    }
+
+    /** Return the error text expected in string context and the EAI code in numeric context. */
+    private static RuntimeScalar socketErrorValue(int code, String message) {
+        RuntimeScalar value = new RuntimeScalar();
+        value.type = RuntimeScalarType.DUALVAR;
+        value.value = new DualVar(new RuntimeScalar(code), new RuntimeScalar(message));
+        return value;
     }
 
     /**
@@ -850,7 +869,7 @@ public class Socket extends PerlModuleBase {
         int hintSocktype = 0;
         int hintProtocol = 0;
         int hintFlags = 0;
-        if (args.size() > 2) {
+        if (args.size() > 2 && args.get(2).getDefinedBoolean()) {
             RuntimeScalar hintsArg = args.get(2);
             if (hintsArg.value instanceof RuntimeHash hintsHash) {
                 RuntimeScalar fam = hintsHash.get("family");
@@ -861,6 +880,8 @@ public class Socket extends PerlModuleBase {
                 if (proto != null && proto.getDefinedBoolean()) hintProtocol = proto.getInt();
                 RuntimeScalar fl = hintsHash.get("flags");
                 if (fl != null && fl.getDefinedBoolean()) hintFlags = fl.getInt();
+            } else {
+                throw new PerlCompilerException("Hints must be a hash reference");
             }
         }
 
@@ -880,6 +901,10 @@ public class Socket extends PerlModuleBase {
                             : new InetAddress[]{InetAddress.getByName("127.0.0.1")};
                 }
             } else {
+                if ((hintFlags & AI_NUMERICHOST) != 0 && !isNumericAddress(host)) {
+                    result.add(socketErrorValue(EAI_NONAME, "Name or service not known"));
+                    return result;
+                }
                 addresses = InetAddress.getAllByName(host);
             }
 
@@ -889,20 +914,21 @@ public class Socket extends PerlModuleBase {
                 try {
                     port = Integer.parseInt(service);
                 } catch (NumberFormatException e) {
-                    // Service name lookup - common services
-                    switch (service.toLowerCase()) {
-                        case "http": port = 80; break;
-                        case "https": port = 443; break;
-                        case "ftp": port = 21; break;
-                        case "ssh": port = 22; break;
-                        case "smtp": port = 25; break;
-                        default: port = 0;
+                    Integer knownPort = servicePort(service);
+                    if (knownPort == null) {
+                        result.add(socketErrorValue(EAI_NONAME, "Name or service not known"));
+                        return result;
                     }
+                    port = knownPort;
+                }
+                if (port < 0 || port > 65535) {
+                    result.add(socketErrorValue(EAI_FAIL, "Servname not supported for ai_socktype"));
+                    return result;
                 }
             }
 
-            // Success - empty error string
-            result.add(new RuntimeScalar(""));
+            // Perl's Socket API uses an empty error string on success.
+            result.add(socketErrorValue(0, ""));
 
             for (InetAddress addr : addresses) {
                 int family;
@@ -962,12 +988,61 @@ public class Socket extends PerlModuleBase {
             return result;
         } catch (UnknownHostException e) {
             // Return error
-            result.add(new RuntimeScalar("Name or service not known"));
+            result.add(socketErrorValue(EAI_NONAME, "Name or service not known"));
             return result;
         } catch (Exception e) {
-            result.add(new RuntimeScalar(e.getMessage()));
+            result.add(socketErrorValue(EAI_FAIL,
+                    e.getMessage() == null ? "Name or service not known" : e.getMessage()));
             return result;
         }
+    }
+
+    private static boolean isNumericAddress(String host) {
+        if (host == null || host.isEmpty()) return false;
+        if (host.indexOf(':') >= 0) return host.matches("[0-9a-fA-F:.%]+") && host.matches(".*[0-9].*");
+        if (!host.matches("[0-9.]+")) return false;
+        String[] octets = host.split("\\.", -1);
+        if (octets.length != 4) return false;
+        for (String octet : octets) {
+            try {
+                if (octet.isEmpty() || Integer.parseInt(octet) > 255) return false;
+            } catch (NumberFormatException e) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static Integer servicePort(String service) {
+        return switch (service.toLowerCase()) {
+            case "http" -> 80;
+            case "https" -> 443;
+            case "ftp" -> 21;
+            case "ssh" -> 22;
+            case "smtp" -> 25;
+            case "telnet" -> 23;
+            case "domain", "dns" -> 53;
+            case "pop3" -> 110;
+            case "imap" -> 143;
+            case "snmp" -> 161;
+            default -> null;
+        };
+    }
+
+    private static String serviceName(int port, boolean datagram) {
+        return switch (port) {
+            case 21 -> "ftp";
+            case 22 -> "ssh";
+            case 23 -> "telnet";
+            case 25 -> "smtp";
+            case 53 -> datagram ? "domain" : "domain";
+            case 80 -> "http";
+            case 110 -> "pop3";
+            case 143 -> "imap";
+            case 443 -> "https";
+            case 161 -> "snmp";
+            default -> null;
+        };
     }
 
     /**

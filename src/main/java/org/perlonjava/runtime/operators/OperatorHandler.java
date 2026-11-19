@@ -228,9 +228,9 @@ public record OperatorHandler(String className, String methodName, int methodTyp
 
         // Network Information Functions
         put("gethostbyname", "gethostbyname", "org/perlonjava/runtime/nativ/ExtendedNativeUtils", "(I[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;");
-        put("gethostbyaddr", "gethostbyaddr", "org/perlonjava/runtime/nativ/ExtendedNativeUtils", "(I[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;");
+        put("gethostbyaddr", "gethostbyaddr", "org/perlonjava/runtime/nativ/ExtendedNativeUtils", "(I[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;");
         put("getservbyname", "getservbyname", "org/perlonjava/runtime/nativ/ExtendedNativeUtils", "(I[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;");
-        put("getservbyport", "getservbyport", "org/perlonjava/runtime/nativ/ExtendedNativeUtils", "(I[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;");
+        put("getservbyport", "getservbyport", "org/perlonjava/runtime/nativ/ExtendedNativeUtils", "(I[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;");
         put("getprotobyname", "getprotobyname", "org/perlonjava/runtime/nativ/ExtendedNativeUtils", "(I[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;");
         put("getprotobynumber", "getprotobynumber", "org/perlonjava/runtime/nativ/ExtendedNativeUtils", "(I[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;");
 
