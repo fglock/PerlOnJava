@@ -2,14 +2,6 @@ package attributes;
 
 our $VERSION = 0.36;
 
-# Preserve the Perl `attributes` caller frame when PerlOnJava materializes a
-# lexical subroutine with a CODE attribute. This keeps caller()-based
-# diagnostics inside attribute handlers aligned with core Perl.
-sub __perlonjava_dispatch_modify_code_attributes {
-    my ($handler, @args) = @_;
-    return $handler->(@args);
-}
-
 @EXPORT_OK = qw(get reftype);
 @EXPORT = ();
 %EXPORT_TAGS = (ALL => [@EXPORT, @EXPORT_OK]);
