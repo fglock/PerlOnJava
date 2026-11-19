@@ -917,6 +917,13 @@ public class Encode extends PerlModuleBase {
         }
 
         String octets = args.get(0).toString();
+        // decode_utf8 operates on octets. A Perl STRING already contains
+        // decoded characters; converting it through Latin-1 would replace
+        // every character above U+00FF with '?'. Perl leaves such input
+        // unchanged when the default, non-throwing mode is used.
+        if (args.get(0).type == STRING && octets.codePoints().anyMatch(cp -> cp > 0xFF)) {
+            throw new PerlCompilerException("Wide character in Encode::decode_utf8");
+        }
         int check = parseCheck(args, 1);
 
         // Convert the string to bytes assuming it contains raw octets
