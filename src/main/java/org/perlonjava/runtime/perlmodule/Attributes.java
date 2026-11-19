@@ -399,7 +399,21 @@ public class Attributes extends PerlModuleBase {
                 RuntimeArray.push(callArgs, new RuntimeScalar(attr));
             }
 
-            RuntimeList result = RuntimeCode.apply(method, callArgs, RuntimeContextType.LIST);
+            RuntimeScalar dispatcher = GlobalVariable.getGlobalCodeRef(
+                    "attributes::__perlonjava_dispatch_modify_code_attributes");
+            RuntimeArray dispatchArgs = new RuntimeArray();
+            RuntimeArray.push(dispatchArgs, method);
+            for (RuntimeScalar arg : callArgs.elements) {
+                RuntimeArray.push(dispatchArgs, arg);
+            }
+            RuntimeList result = RuntimeCode.applyAtLocation(
+                    dispatcher,
+                    "attributes::__perlonjava_dispatch_modify_code_attributes",
+                    dispatchArgs.elements.toArray(RuntimeBase[]::new),
+                    RuntimeContextType.LIST,
+                    "attributes",
+                    code.cvStartFile,
+                    code.cvStartLine);
 
             // If MODIFY_CODE_ATTRIBUTES returns any values, they are unrecognized
             RuntimeArray resultArray = result.getArrayOfAlias();
