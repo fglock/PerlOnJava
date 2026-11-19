@@ -669,14 +669,48 @@ public class Internals extends PerlModuleBase {
                 }
                 int argumentFrameOwners = base.currentArgumentFrameReferentOwnerCount();
                 adjust -= argumentFrameOwners;
-                if (fieldOwnedMethodResult && argumentFrameOwners == 0
-                        && RuntimeCode.isActiveCallArgumentValue(base)) {
+                boolean activeCallArgument = fieldOwnedMethodResult
+                        && argumentFrameOwners == 0
+                        && RuntimeCode.isActiveCallArgumentValue(base);
+                if (activeCallArgument) {
                     // A nested hash-slot expression passed through a Perl
                     // helper can be live in that helper's @_ without having
                     // a selective owner slot. B::SV::REFCNT sees that value
                     // owner; the B and Internals frames themselves are only
                     // the raw-object probe and must not be counted.
                     adjust++;
+                }
+                if (System.getenv("PJ_BREFCNT_TRACE") != null) {
+                    System.err.println("[BREFCNT-ADJUST] base="
+                            + System.identityHashCode(base) + " java="
+                            + base.getClass().getSimpleName() + " bless="
+                            + NameNormalizer.getBlessStr(base.blessId) + " rc=" + rc
+                            + " hashSlots=" + base.hashSlotOwnerCount + " local="
+                            + base.localBindingExists + " field=" + fieldOwnedMethodResult
+                            + " frameOwners=" + argumentFrameOwners + " activeArg="
+                            + activeCallArgument + " adjust=" + adjust + " reported="
+                            + (rc + extra + adjust));
+                    if (activeCallArgument) {
+                        java.util.List<RuntimeArray> activeArgs = RuntimeCode.snapshotArgsStack();
+                        for (int depth = 0; depth < activeArgs.size(); depth++) {
+                            RuntimeCode activeCode = RuntimeCode.getActiveCodeAt(depth);
+                            RuntimeArray activeFrame = activeArgs.get(depth);
+                            for (int index = 0; index < activeFrame.elements.size(); index++) {
+                                RuntimeScalar value = activeFrame.elements.get(index);
+                                if (value == null || value.value != base) continue;
+                                RuntimeBase container = value.getContainerOwner();
+                                System.err.println("[BREFCNT-ARG] depth=" + depth + " index="
+                                        + index + " code=" + (activeCode == null ? "?"
+                                            : activeCode.packageName + "::" + activeCode.subName)
+                                        + " scalar=" + System.identityHashCode(value)
+                                        + " local=" + value.localBindingExists + " exited="
+                                        + value.scopeExited + " owns=" + value.refCountOwned
+                                        + " container=" + (container == null ? "null"
+                                            : container.getClass().getSimpleName() + "#"
+                                                + System.identityHashCode(container)));
+                            }
+                        }
+                    }
                 }
             }
             int reported = rc + extra + adjust;

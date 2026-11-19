@@ -1688,6 +1688,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         || (argument.type & RuntimeScalarType.REFERENCE_BIT) == 0) {
                     continue;
                 }
+                // The missing owner is specifically the temporary scalar
+                // yielded by a nested hash-slot expression. A plain lexical
+                // or scalar-reference argument already has its own owner
+                // semantics and must not be counted again here.
+                if (!(argument.getContainerOwner() instanceof RuntimeHash)) continue;
                 if (index == 0 && "DESTROY".equals(activeCode.subName)) continue;
                 return true;
             }
