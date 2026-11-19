@@ -6,6 +6,7 @@ priorities and future plans.
 
 ## Work in progress
 
+- Bundle a Java-backed `Text::Levenshtein::XS` 0.503 implementation with Unicode code-point and maximum-distance compatibility (#1648).
 - Honor tied `*ARGV` for diamond reads, including after a previous traversal reaches EOF (#2110, #2111).
 - Preserve explicit empty split fields in fixed-arity assignments, restore parsed XML attribute order and `XML::LibXML` ID indexing, decode HTML href character references, and add a JSON::PP-backed `JSON::SL` compatibility subset (#2088, #1323, #1332, #2097, #1321).
 - Preserve list context for localized hash slices, overloaded readline and `pairgrep`; preserve map block versus nested-subroutine `wantarray` contexts; honor overloaded `&{}` replacements and retain overload exceptions during post-increment (#2081, #2080, #2084, #2046, #2062).

@@ -29,6 +29,7 @@ These modules have optimized Java implementations built into PerlOnJava:
 | Crypt::Twofish2 | CryptTwofish2.java | 1.03 | Uses BouncyCastle Twofish; ECB, stateful zero-IV CBC, and CFB1 |
 | Math::Cephes | MathCephes.java | 0.5308 | Implements the normal and chi-square distribution functions used by CPAN statistics modules |
 | Text::QRCode | TextQRCode.java | 0.05 | Uses ZXing in forced byte mode with libqrencode-compatible mask selection |
+| Text::Levenshtein::XS | TextLevenshteinXS.java | 0.503 | Unicode code-point edit distance with optional maximum-distance threshold |
 
 ## Modules with PP Fallbacks or Shims
 
