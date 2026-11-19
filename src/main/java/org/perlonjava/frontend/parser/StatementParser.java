@@ -660,30 +660,33 @@ public class StatementParser {
 
         // Parse the catch block
         TokenUtils.consume(parser, LexerTokenType.IDENTIFIER); // "catch"
+        Node catchParameter = null;
         if (TokenUtils.peek(parser).text.equals("{")) {
-            var location = parser.ctx.errorUtil.getSourceLocationAccurate(parser.tokenIndex);
-            throw new PerlParserException("catch block requires a (VAR) at "
-                    + location.fileName() + " line " + location.lineNumber() + ".\n");
+            if (!parser.syntaxKeywordTryAllowsUnboundCatch) {
+                var location = parser.ctx.errorUtil.getSourceLocationAccurate(parser.tokenIndex);
+                throw new PerlParserException("catch block requires a (VAR) at "
+                        + location.fileName() + " line " + location.lineNumber() + ".\n");
+            }
+        } else {
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "(");
+            LexerToken catchToken = TokenUtils.peek(parser);
+            if (catchToken.type == LexerTokenType.IDENTIFIER
+                    && (catchToken.text.equals("my") || catchToken.text.equals("our")
+                    || catchToken.text.equals("state"))) {
+                var location = parser.ctx.errorUtil.getSourceLocationAccurate(parser.tokenIndex);
+                String near = "(" + catchToken.text;
+                String at = " at " + location.fileName() + " line " + location.lineNumber();
+                throw new PerlParserException("Can't redeclare catch variable as \""
+                        + catchToken.text + "\"" + at + ", near \"" + near + "\"\n"
+                        + "syntax error" + at + ", near \"" + near + " \"\n");
+            }
+            // Suppress strict vars check — catch ($e) implicitly declares $e.
+            boolean savedParsingDeclaration = parser.parsingDeclaration;
+            parser.parsingDeclaration = true;
+            catchParameter = parser.parseExpression(0);
+            parser.parsingDeclaration = savedParsingDeclaration;
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
         }
-        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "(");
-        LexerToken catchToken = TokenUtils.peek(parser);
-        if (catchToken.type == LexerTokenType.IDENTIFIER
-                && (catchToken.text.equals("my") || catchToken.text.equals("our")
-                || catchToken.text.equals("state"))) {
-            var location = parser.ctx.errorUtil.getSourceLocationAccurate(parser.tokenIndex);
-            String near = "(" + catchToken.text;
-            String at = " at " + location.fileName() + " line " + location.lineNumber();
-            throw new PerlParserException("Can't redeclare catch variable as \""
-                    + catchToken.text + "\"" + at + ", near \"" + near + "\"\n"
-                    + "syntax error" + at + ", near \"" + near + " \"\n");
-        }
-        // Suppress strict vars check for the catch variable — catch ($e) implicitly
-        // declares $e as a lexical variable, similar to my $e.
-        boolean savedParsingDeclaration = parser.parsingDeclaration;
-        parser.parsingDeclaration = true;
-        Node catchParameter = parser.parseExpression(0); // Parse the exception variable
-        parser.parsingDeclaration = savedParsingDeclaration;
-        TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
 
         // Register the catch variable in a scope so the parse-time strict vars
         // check can find it inside the catch block body.

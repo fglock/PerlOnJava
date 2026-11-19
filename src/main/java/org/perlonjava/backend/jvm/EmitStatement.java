@@ -1040,18 +1040,21 @@ public class EmitStatement {
                 "org/perlonjava/runtime/runtimetypes/ErrorMessageUtil",
                 "exceptionValue",
                 "(Ljava/lang/Throwable;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
-        // Transform catch parameter to 'my'
-        OperatorNode catchParameter = new OperatorNode("my", node.catchParameter, node.tokenIndex);
-        // Create the lexical variable for the catch parameter, push it to the stack
-        catchParameter.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-        mv.visitInsn(Opcodes.SWAP);
-        mv.visitMethodInsn(
-                Opcodes.INVOKEVIRTUAL,
-                "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
-                "set",
-                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
-                false);
-        mv.visitInsn(Opcodes.POP);
+        if (node.catchParameter != null) {
+            // Transform catch parameter to 'my' and bind the exception value.
+            OperatorNode catchParameter = new OperatorNode("my", node.catchParameter, node.tokenIndex);
+            catchParameter.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+            mv.visitInsn(Opcodes.SWAP);
+            mv.visitMethodInsn(
+                    Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                    "set",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+            mv.visitInsn(Opcodes.POP);
+        } else {
+            mv.visitInsn(Opcodes.POP);
+        }
         // --------- end of store the catch parameter ---------
 
         // The catch variable now owns the exception.  Clear only the local

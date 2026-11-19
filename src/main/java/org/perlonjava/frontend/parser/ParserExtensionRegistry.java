@@ -33,6 +33,12 @@ public final class ParserExtensionRegistry {
         // parser, so mirror the resulting default lexical keyword registration.
         registerModuleProvider("GraphQL::MaybeTypeCheck",
                 (parser, enabled, arguments) -> applyFunctionParameters(parser, enabled, null));
+        registerModuleProvider("Syntax::Keyword::Try",
+                ParserExtensionRegistry::applySyntaxKeywordTry);
+        registerModuleProvider("Syntax::Feature::Method",
+                ParserExtensionRegistry::applySyntaxFeatureMethod);
+        registerModuleProvider("syntax",
+                ParserExtensionRegistry::applySyntaxDispatcher);
     }
 
     private ParserExtensionRegistry() { }
@@ -94,6 +100,56 @@ public final class ParserExtensionRegistry {
                 else parser.removeKeywordPlugin(name);
             } else if (!enabled && !name.isEmpty()) {
                 parser.removeKeywordPlugin(name);
+            }
+        }
+    }
+
+    private static void applySyntaxKeywordTry(
+            Parser parser, boolean enabled, RuntimeList arguments) {
+        if (arguments != null) {
+            for (RuntimeBase argument : arguments.elements) {
+                String option = unwrap(argument).toString();
+                if (!option.isEmpty() && !"try".equals(option)
+                        && !":experimental".equals(option)) {
+                    throw new IllegalArgumentException(
+                            "Syntax::Keyword::Try: unsupported import option " + option);
+                }
+                if (":experimental".equals(option)) {
+                    parser.ctx.symbolTable.disableWarningCategory("experimental::try");
+                }
+            }
+        }
+        parser.syntaxKeywordTryAllowsUnboundCatch = enabled;
+        if (enabled) parser.ctx.symbolTable.enableFeatureCategory("try");
+        else parser.ctx.symbolTable.disableFeatureCategory("try");
+    }
+
+    private static void applySyntaxFeatureMethod(
+            Parser parser, boolean enabled, RuntimeList arguments) {
+        if (enabled) {
+            parser.registerKeywordPlugin("method", FunctionParametersKeywordPlugin.METHOD);
+        } else {
+            parser.removeKeywordPlugin("method");
+        }
+    }
+
+    private static void applySyntaxDispatcher(
+            Parser parser, boolean enabled, RuntimeList arguments) {
+        if (arguments == null || arguments.isEmpty()) {
+            if (enabled) return;
+            parser.removeKeywordPlugin("method");
+            return;
+        }
+        for (RuntimeBase argument : arguments.elements) {
+            String feature = unwrap(argument).toString();
+            if (!"method".equals(feature)) {
+                throw new IllegalArgumentException(
+                        "syntax: unsupported feature " + feature);
+            }
+            if (enabled) {
+                parser.registerKeywordPlugin("method", FunctionParametersKeywordPlugin.METHOD);
+            } else {
+                parser.removeKeywordPlugin("method");
             }
         }
     }

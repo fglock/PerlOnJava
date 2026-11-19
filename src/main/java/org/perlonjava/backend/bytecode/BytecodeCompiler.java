@@ -9261,18 +9261,20 @@ public class BytecodeCompiler implements Visitor {
         emitReg(ignoredEvalResult);
         emit(RuntimeContextType.SCALAR);
 
-        OperatorNode catchDeclaration = new OperatorNode(
-                "my", node.catchParameter, node.getIndex());
-        compileNode(catchDeclaration, -1, RuntimeContextType.SCALAR);
-        int catchReg = lastResultReg;
+        if (node.catchParameter != null) {
+            OperatorNode catchDeclaration = new OperatorNode(
+                    "my", node.catchParameter, node.getIndex());
+            compileNode(catchDeclaration, -1, RuntimeContextType.SCALAR);
+            int catchReg = lastResultReg;
 
-        int errorReg = allocateRegister();
-        emit(Opcodes.LOAD_GLOBAL_SCALAR);
-        emitReg(errorReg);
-        emit(addToStringPool("main::@"));
-        emit(Opcodes.ASSIGN_LEXICAL_SCALAR);
-        emitReg(catchReg);
-        emitReg(errorReg);
+            int errorReg = allocateRegister();
+            emit(Opcodes.LOAD_GLOBAL_SCALAR);
+            emitReg(errorReg);
+            emit(addToStringPool("main::@"));
+            emit(Opcodes.ASSIGN_LEXICAL_SCALAR);
+            emitReg(catchReg);
+            emitReg(errorReg);
+        }
 
         // The exception has been transferred to $e.  Keep the dynamically
         // localized error slot empty for the catch body, as Perl does.

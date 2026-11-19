@@ -248,6 +248,8 @@ public class Parser {
     // Are we currently parsing a my/our/state declaration's variable list?
     // Used to suppress strict vars checking for the variable being declared.
     public boolean parsingDeclaration = false;
+    /** Syntax::Keyword::Try permits an unbound catch block; core feature 'try' does not. */
+    public boolean syntaxKeywordTryAllowsUnboundCatch = false;
     // True only while parsing the body of an async subroutine. Nested ordinary
     // subs reset this flag so await placement checks remain lexical.
     public boolean parsingFutureAsyncAwaitSub = false;

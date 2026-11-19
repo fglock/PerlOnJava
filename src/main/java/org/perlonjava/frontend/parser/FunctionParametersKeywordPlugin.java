@@ -108,6 +108,7 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
         LexerToken keywordToken = parser.tokens.get(declarationIndex);
         String originalText = keywordToken.text;
         int implicitInvocantInsertIndex = -1;
+        int implicitMethodSignatureInsertIndex = -1;
         boolean previousFunctionParametersDeclaration = parser.parsingFunctionParametersDeclaration;
         boolean previousFunctionParametersMethod = parser.parsingFunctionParametersMethod;
         boolean previousOptionalInvocant = parser.parsingFunctionParametersOptionalInvocant;
@@ -124,7 +125,7 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
         boolean previousDefaultArguments = parser.functionParametersDefaultArguments;
         parser.tokenIndex++;
         boolean startsWithApostrophe = "'".equals(TokenUtils.peek(parser).text);
-        if ("{".equals(TokenUtils.peek(parser).text)) {
+        if ("{".equals(TokenUtils.peek(parser).text) && !method) {
             parser.throwError("In " + keyword
                     + " (anon): I was expecting a parameter list, not \"{\"");
         }
@@ -135,9 +136,11 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
         }
         boolean validCandidateName = isValidCandidateName(candidateName);
         parser.tokenIndex = declarationIndex;
-        if (startsWithApostrophe || (!"(".equals(parser.tokens.get(
-                Whitespace.skipWhitespace(parser, declarationNameIndex, parser.tokens)).text)
-                && !validCandidateName)) {
+        String afterName = parser.tokens.get(
+                Whitespace.skipWhitespace(parser, declarationNameIndex, parser.tokens)).text;
+        boolean anonymousMethodBlock = method && "{".equals(afterName);
+        if (startsWithApostrophe || (!"(".equals(afterName)
+                && !validCandidateName && !anonymousMethodBlock)) {
             parser.throwError(originalText + " expects a parameter list");
         }
         parser.tokens.set(declarationIndex, LexerToken.of(keywordToken.type, "sub"));
@@ -176,6 +179,20 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
                     openParen++;
                 }
                 if (openParen < parser.tokens.size()
+                        && "{".equals(parser.tokens.get(openParen).text)) {
+                    // Syntax::Feature::Method permits both `method name {}`
+                    // and anonymous `method {}` forms. Normalize them to the
+                    // same explicit implicit-invocant signature used by the
+                    // Function::Parameters method provider.
+                    implicitMethodSignatureInsertIndex = openParen;
+                    String[] signature = {"(", "$", invocants.getFirst().substring(1), ":", ")"};
+                    for (int i = 0; i < signature.length; i++) {
+                        LexerTokenType type = i == 2
+                                ? LexerTokenType.IDENTIFIER : LexerTokenType.OPERATOR;
+                        parser.tokens.add(openParen + i,
+                                new LexerToken(type, signature[i]));
+                    }
+                } else if (openParen < parser.tokens.size()
                         && "(".equals(parser.tokens.get(openParen).text)
                         && !hasExplicitInvocant(parser, openParen)) {
                     implicitInvocantInsertIndex = openParen + 1;
@@ -203,6 +220,12 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
             }
             return declaration;
         } finally {
+            if (implicitMethodSignatureInsertIndex >= 0) {
+                for (int i = 0; i < 5; i++) {
+                    parser.tokens.remove(implicitMethodSignatureInsertIndex);
+                }
+                parser.tokenIndex -= 5;
+            }
             if (implicitInvocantInsertIndex >= 0) {
                 int inserted = invocants.size() * 2 + (invocants.size() - 1) + 1;
                 for (int i = 0; i < inserted; i++) parser.tokens.remove(implicitInvocantInsertIndex);
@@ -269,7 +292,8 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
         LexerToken declarationStart = TokenUtils.peek(parser);
         parser.tokenIndex = keywordIndex;
         if (declarationStart.type == LexerTokenType.IDENTIFIER
-                || Set.of("(", "::", "'").contains(declarationStart.text)) {
+                || Set.of("(", "::", "'").contains(declarationStart.text)
+                || (method && "{".equals(declarationStart.text))) {
             return parse(parser, keyword);
         }
         return null;
