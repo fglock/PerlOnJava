@@ -32,7 +32,7 @@ Match Windows Perl's behavior for `CLONE`/`CLONE_SKIP` and other thread-related 
 
 Java cannot clone a running Java stack. The existing `SuspendedInterpreterFrame` for `await` captures one interpreter frame; that alone cannot implement `fork` when nested Perl calls use synchronous Java recursion. The child must be able to return through every Perl caller after the fork point.
 
-The first implementation must put the **entire Perl call graph** on a fork-capable execution path whenever pseudofork is enabled. This includes main code, subs, callbacks, modules, evals, and code compiled lazily at runtime. Lowering just the scope containing `fork` is insufficient: a JVM-compiled caller can still own an unclonable Java stack. Prefer a whole-program fork-capable interpreter mode for the first implementation. If that mode cannot cover a call path, reject `fork` there with a clear error and keep `d_pseudofork` disabled; do not silently fall back to an unsafe local lowering.
+Every Perl program may reach `fork` through a loaded module, callback, or runtime-generated code, so there is no sound way to select a non-resumable execution path based on whether a program is expected to fork. All Perl calls must use the explicit heap-resident continuation protocol from the root entry, including main code, subs, callbacks, modules, evals, and lazily compiled code. The interpreter and JVM backend must both implement that protocol; neither may leave a Java caller frame holding Perl continuation state. If an unconverted runtime callback/resource boundary is reached, reject `fork` there with a precise error and keep `d_pseudofork` disabled; do not silently fall back to an unsafe local lowering.
 
 Use the explicit heap-resident Perl call chain described in the continuation subplan. Prototype it before integrating runtime cloning. Preserve instruction positions, operands, lexical pads, call/eval frames, dynamic localization, exception/unwind state, context, regex state, and cleanup scopes. Parent continuation receives the pseudo PID and child continuation receives `0`. Class boundaries can change as evidence accumulates, but the implementation must not depend on cloning a Java stack.
 
@@ -119,7 +119,7 @@ For pseudo-child `exec`, use `ProcessBuilder` or the existing process launcher, 
 - Parent and child resume after the same fork point and return through their complete caller chains.
 - `$$`, `getpid`, `getppid`, `wait`, `waitpid`, `$?`, `exit`, `_exit`, `exec`, and documented `kill` behavior use the correct pseudo-process record.
 - State isolation, hooks, handles, `%ENV`, virtual current directory, cleanup, and unsupported-resource errors have focused permanent tests.
-- Programs launched through the JVM entry point and the explicit interpreter entry point produce the same results. When pseudofork is enabled, the JVM entry point must route the whole call graph through the fork-capable execution mode; do not claim a JVM-stack continuation.
+- Programs launched through the JVM entry point and the explicit interpreter entry point produce the same results. Both entry points always use the resumable call protocol, whether or not the program actually forks; do not claim a JVM-stack continuation.
 - `$Config{d_pseudofork}` is advertised only when the stated baseline is true; `$Config{d_fork}` and OS-level capability checks remain truthful.
 - Existing `open "-|"`/`"|-"` tests remain green; their support is tracked as a project extension with its own gate.
 
