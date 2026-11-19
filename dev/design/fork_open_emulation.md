@@ -1,215 +1,291 @@
-# Fork-Open Emulation for PerlOnJava
+# Pseudo-Fork via Threads (issue #1144)
 
-## Problem Statement
+## Context
 
-Perl's `open FH, "-|"` (2-arg piped open) uses fork() to create a child process:
+Threads (ithreads) are fully implemented in PerlOnJava3. The `snapshotClone()`
+/ `snapshotCloneForThread()` infrastructure can clone an entire interpreter
+state and run it on a JVM thread (virtual threads are the default carrier via
+Java 24) — exactly the machinery needed for pseudo-fork.
 
-```perl
-my $pid = open *FH, "-|";
-if ($pid) {
-    # Parent: read from FH (child's stdout)
-    my $output = <FH>;
-    close FH;
-} else {
-    # Child: exec the command
-    exec @cmd;
-}
-```
+The existing fork surface:
 
-The JVM cannot support `fork()` - there's no way to split the JVM into two identical processes.
-However, the 3-arg form `open FH, "-|", @cmd` works fine because it just spawns a process and
-pipes its output - no fork needed.
+- `fork()` — returns `undef`/EAGAIN; test-aware skip only. No runtime isolation.
+- `open FH, "-|"` / `open FH, "|-"` without command — two strategies in
+  `IOOperator.java` + `ForkOpenState.java`:
+  - **Strategy A (exec-intercept):** sets pending state; when `exec @cmd` is
+    called, runs the command and throws `ForkOpenCompleteException` to unwind
+    the "child" branch. Works for the common `open → if/else → exec` idiom.
+    **Keep this.** It is fast and covers the most common pattern.
+  - **Strategy B (JVM-replay):** spawns a child JVM with
+    `PERLONJAVA_FORK_OPEN_REPLAY=N:PPID`; the child replays the script with
+    muted stdout until it reaches the N-th no-command pipe-open.
+    **Replace this** with the thread-based fork in Phase 2.
 
-## Solution: Runtime Fork-Open Emulation
+The goal is to implement bare `fork()` and replace Strategy B using the thread
+snapshot engine: cleaner, faster, works for `-e` programs, and handles
+arbitrary child-side Perl code.
 
-Instead of complex AST transformations, we detect the fork-open pattern at runtime and
-emulate it by deferring the pipe creation until `exec` is called.
+---
 
-### How It Works
+## Semantic Contract (from issue #1144)
 
-1. **When `open FH, "-|"` is called without a command:**
-   - Don't fail immediately
-   - Store a "pending fork-open" state with the filehandle reference
-   - Return 0 (child PID) to make the code take the "child" branch
+- `fork()` returns a positive synthetic PID in the parent and `0` in the child.
+- Failure returns `undef` and sets `$!`.
+- Parent and child **resume immediately after the same `fork` expression**.
+- Mutable Perl state is isolated from the snapshot point (fork semantics, not
+  ithread `CLONE` semantics — do not invoke `CLONE` hooks for pseudofork).
+- `exit` and uncaught termination end only the pseudo-child, record status,
+  notify the parent, and **never terminate the host JVM**.
+- `wait`, `waitpid`, `WNOHANG`, `$?`, and minimal `SIGCHLD` work for
+  pseudo-children.
+- `$Config{d_fork}` remains false/undefined; `$Config{d_pseudofork}` is
+  defined only when the implementation is enabled.
+- Unsupported operations fail explicitly instead of silently sharing unsafe
+  process-global state.
+- Both JVM and interpreter backends behave identically.
 
-2. **When `exec @cmd` is called:**
-   - Check for pending fork-open state
-   - If pending: create the pipe using 3-arg semantics with @cmd
-   - Return to the "parent" code path (after the if/else) with pipe ready
-   - The "parent" branch code will then read from FH normally
+---
 
-3. **Reset the pending state on:**
-   - Any successful `open` call (new filehandle operation)
-   - Any `close` call
-   - End of the current statement/block (safety)
+## Architecture
 
-### State Machine
+### 1. Resumable Fork Continuation
 
-```
-                    open FH, "-|"
-    [NORMAL] ─────────────────────────> [PENDING_FORK_OPEN]
-       │                                        │
-       │ open/close                             │ exec @cmd
-       │ (reset)                                │
-       ▼                                        ▼
-    [NORMAL] <────────────────────────── [PIPE_READY]
-                   continue execution      (return to parent path)
-```
+Java cannot clone a running Java stack, so `fork()` must be a
+**compiler/runtime control-flow boundary**, not an ordinary function call.
 
-### Execution Flow Example
+**JVM backend (Phase 1):** Lower scopes containing `fork` to the
+**bytecode/interpreter execution path** at compile time. The interpreter can
+snapshot its bytecode frame and resume both parent and child at the instruction
+following `fork`. This is the pragmatic Phase 1 approach specified in issue
+#1144 §1 — no native JVM continuation cloning is needed yet.
 
-```perl
-# Original code:
-my $pid = open *FH, "-|";      # Returns 0, sets PENDING state
-if ($pid) {                     # False, skip parent branch
-    return <FH>;
-} else {
-    exec "ls", "-la";           # Detects PENDING, creates pipe, 
-                                # throws special "return to parent" signal
-}
-# After exec's special return, $pid is now truthy, FH is ready
-# Code continues after the if/else with the pipe working
-```
+**Interpreter backend:** Snapshot the bytecode frame directly; resume parent
+with the synthetic PID and child with `0` on a virtual thread.
 
-### Implementation Details
+A later optimization phase may add native JVM continuation lowering without
+changing semantics.
 
-#### 1. Pending State Storage (thread-local)
+### 2. Runtime State Cloning
+
+Build on the existing snapshot infrastructure but use a **fork-specific
+clone policy** distinct from the ithread clone policy:
+
+- Use `PerlRuntime.snapshotClone()` / `snapshotCloneWithRoots()` — these
+  create the child with its own **fresh `PerlThreadRegistry`** (process
+  isolation), unlike `snapshotCloneForThread()` which enrolls the child in
+  the parent's thread family.
+- Copy: mutable globals, pads, symbol tables, module state, `%ENV`, signal
+  handlers, `$!`, `$?`, random state, process metadata.
+- Share (read-only): compiled code and safe immutable resources.
+- **Do not invoke ithread `CLONE` hooks** unless Perl pseudofork compatibility
+  requires it.
+- Give the child: synthetic PID, parent PID, lifecycle state, exit status,
+  and cancellation token managed by `PseudoProcessManager`.
+
+### 3. External Resource Inheritance
+
+| Resource type | Policy |
+|---|---|
+| Pipes and loopback sockets | Inherit duplicate Perl handle wrappers over shared, reference-counted endpoints; closing one side must not prematurely close the sibling |
+| Listening sockets | Allow controlled parent/child accept patterns (required by live server tests); document shared-accept behavior |
+| Regular files | Duplicate logical handle state where safe; document shared file-position behavior |
+| DB handles, Java objects, native handles | Reject, detach, or mark unsupported via typed snapshot policies — no accidental shallow copy |
+| Event-loop watchers, timers, selectors | Rebuild in child against inherited handles; never share a mutable reactor instance |
+
+Integrates with the existing `RuntimeIO` / scope-exit ownership work.
+
+### 4. Process Operations and Signals
+
+Implement pseudo-process-aware paths that check `PseudoProcessManager` before
+delegating to OS process APIs:
+
+- `getpid` / `$$` and `getppid`
+- `exit`, child exception termination, status encoding
+- `wait` and `waitpid` including `WNOHANG`; `$?` updates
+- `kill 0`, cooperative `TERM`/`INT`, pseudoprocess lookup
+- `SIGCHLD` delivery at safe Perl execution boundaries
+
+Java cannot force-kill arbitrary threads. `SIGKILL` is cooperative cancellation
+unless the child is at a runtime safepoint — document this.
+
+---
+
+## What to Reuse
+
+| Existing asset | Location | Role |
+|---|---|---|
+| `PerlRuntime.snapshotClone()` / `snapshotCloneWithRoots()` | `PerlRuntime.java:483,488` | Clone with fresh registry (process isolation) |
+| `PerlThreadControlBlock` | `runtimetypes/PerlThreadControlBlock.java` | Thread lifecycle carrier; use the `EntryPoint` constructor |
+| `PerlThreadRegistry` | `runtimetypes/PerlThreadRegistry.java` | ID allocation pattern, process-exit signaling |
+| `ThreadInheritancePolicy` | `runtimetypes/ThreadInheritancePolicy.java` | File-handle fork semantics already defined |
+| `PerlThreadExitException` | `runtimetypes/PerlThreadExitException.java` | Terminate child thread cleanly on `exit()` |
+| `PerlRuntime.close()` | `runtimetypes/PerlRuntime.java` | Child-exit teardown: alarms, signals, I/O, global destruction |
+| `ForkOpenCompleteException` | `runtime/ForkOpenCompleteException.java` | Keep for Strategy A pipe-open control flow |
+| `ForkOpenState.PendingForkOpen` machinery | `runtime/ForkOpenState.java` | Keep the pending-state helpers for Strategy A |
+
+---
+
+## Changes Required
+
+### New file: `PseudoProcessManager.java`
+
+Owned by the parent `PerlRuntime`. Responsibilities:
+
+- Allocate synthetic PIDs that do not collide with real OS PIDs.
+- Map synthetic PID → `PerlThreadControlBlock`.
+- Track parent/child relationships.
+- Deliver wait status and `$?` updates.
+- Cancel/reap abandoned children on parent runtime shutdown.
+- `isForkedChild()` — returns true when `$$` ≠ parent's PID.
+
+Pattern: reuse `PerlThreadRegistry.allocateId()` for the PID counter.
+
+### `SystemOperator.fork()` — `operators/SystemOperator.java:1611`
+
+Replace the EAGAIN/undef stub. For Phase 1 JVM backend, detect that the
+calling scope has been lowered to the interpreter path (see Architecture §1)
+and delegate to the interpreter fork implementation. For the interpreter
+backend:
+
+1. Snapshot the runtime with `snapshotClone()`.
+2. Register the child in `PseudoProcessManager`.
+3. Set `$$` in child to synthetic PID.
+4. Launch child on a virtual thread via `PerlThreadControlBlock` (`EntryPoint`
+   constructor).
+5. Return synthetic PID to parent; child continues with `0`.
+
+### `SystemOperator.exec()` — `operators/SystemOperator.java:1366`
+
+Add a check at entry:
 
 ```java
-// In a new class or IOOperator
-public class ForkOpenState {
-    private static final ThreadLocal<PendingForkOpen> pendingState = new ThreadLocal<>();
-    
-    public static class PendingForkOpen {
-        public RuntimeScalar fileHandle;
-        public int tokenIndex;  // For error messages
-    }
-    
-    public static void setPending(RuntimeScalar fh, int tokenIndex) { ... }
-    public static PendingForkOpen getPending() { ... }
-    public static void clear() { ... }
-    public static boolean hasPending() { ... }
+if (PseudoProcessManager.isForkedChild()) {
+    int exitCode = runExternalCommand(flattenedArgs);
+    throw new PerlThreadExitException(exitCode);  // terminate child thread only
 }
 ```
 
-#### 2. Modified `open` (IOOperator.java)
+### `SystemOperator.wait()` / `waitpid()` — `operators/SystemOperator.java`
 
-```java
-// In openPipe or open method:
-if (mode.equals("-|") && commandList.isEmpty()) {
-    // Fork-open mode without command
-    ForkOpenState.setPending(fileHandle, tokenIndex);
-    return new RuntimeScalar(0);  // Return 0 = "child" branch
-}
-```
+- Look up synthetic PID in `PseudoProcessManager`; if found, join the thread,
+  collect completion, populate `$?`.
+- If not found, fall through to `ProcessHandle.of(pid)` for real OS children.
 
-#### 3. Modified `exec` (SystemOperator.java)
+### `IOOperator.open()` — `operators/IOOperator.java:879`
 
-```java
-public static RuntimeScalar exec(RuntimeList args, ...) {
-    if (ForkOpenState.hasPending()) {
-        PendingForkOpen pending = ForkOpenState.getPending();
-        ForkOpenState.clear();
-        
-        // Create the pipe using 3-arg semantics
-        RuntimeList openArgs = new RuntimeList();
-        openArgs.add(pending.fileHandle);
-        openArgs.add(new RuntimeScalar("-|"));
-        openArgs.addAll(args);  // The command from exec
-        
-        RuntimeIO fh = RuntimeIO.openPipe(openArgs);
-        // ... set up the filehandle ...
-        
-        // Throw special exception to return to "parent" path
-        throw new ForkOpenCompleteException(processId);
-    }
-    
-    // Normal exec behavior
-    ...
-}
-```
+Phase 2: replace `RuntimeIO.openForkPipe()` (JVM-replay, Strategy B) with
+thread-based pseudo-fork:
 
-#### 4. Exception Handling
+- `-|`: fork child thread, redirect child STDOUT to `PipedOutputStream`; give
+  parent a `PipedInputStream`-backed filehandle.
+- `|-`: fork child thread, redirect child STDIN from `PipedInputStream` fed
+  by parent's `PipedOutputStream`-backed filehandle.
 
-```java
-public class ForkOpenCompleteException extends RuntimeException {
-    public final int pid;
-    public ForkOpenCompleteException(int pid) { this.pid = pid; }
-}
-```
+Strategy A (exec-intercept via `ForkOpenCompleteException`) remains in place
+as the fast path for the `open → exec` idiom.
 
-The calling code needs to catch this and return the PID to make the "parent" branch execute.
+### `RuntimeIO.openForkPipe()` — `runtimetypes/RuntimeIO.java:1347`
 
-#### 5. Reset Points
+Phase 2: replace JVM-replay body with thread-based piped fork.
 
-Add `ForkOpenState.clear()` calls to:
-- `IOOperator.open()` - at the start, before any operation
-- `IOOperator.close()` - when closing any filehandle
-- Potentially in error handlers
+### `ForkOpenState.java` — `runtime/ForkOpenState.java`
 
-### Supported Patterns
+Phase 2 (after thread path proven): remove `currentInvocation()`,
+`currentJavaCommand()`, `embeddedRuntimeClasspath()`,
+`REPLAY_ENV`/`isReplayProcess()`/`isReplayChildOccurrence()`, and
+`activateForkOpenChildStdout()` plumbing. Keep `PendingForkOpen` and
+`setPending/getPending/clear/hasPending` for Strategy A.
 
-This approach handles various fork-open idioms:
+### `Config.pm` / `d_pseudofork`
 
-```perl
-# Classic if/else pattern
-my $pid = open FH, "-|";
-if ($pid) { ... } else { exec @cmd }
+Set `$Config{d_pseudofork} = 'define'` when pseudofork is enabled;
+`$Config{d_fork}` stays false.
 
-# unless pattern  
-my $pid = open FH, "-|";
-unless ($pid) { exec @cmd }
-...parent code...
+### `AGENTS.md`
 
-# or-exec pattern (common idiom)
-open FH, "-|" or exec @cmd;
+Remove `fork` from the Unimplemented Features table once Phase 1 is complete.
 
-# Defined-or pattern
-my $pid = open FH, "-|";
-exec @cmd unless defined $pid;
-```
+---
 
-### Limitations
+## Implementation Phases
 
-1. **Code between open and exec**: If there's significant code between `open` and `exec`
-   in the "child" branch, it will execute. This matches Perl behavior where the child
-   does run that code before exec.
+### Phase 1: Compiler contract and lifecycle (issue §Phase 1)
 
-2. **Multiple fork-opens**: Only one pending fork-open at a time per thread. Nested
-   fork-opens would need stack-based state (future enhancement if needed).
+- Add permanent system-Perl-validated fork regression tests **before** implementation.
+- Add the resumable `fork` operation on the interpreter backend; lower
+  fork-containing scopes to the interpreter path on the JVM backend.
+- Clone pure Perl state via `snapshotClone()`.
+- Implement `PseudoProcessManager`, synthetic PID, `exit`, `waitpid`, `$?`,
+  and cleanup.
+- Support simple no-I/O parent/child programs.
+- Advertise `d_pseudofork`.
 
-3. **Non-exec child code**: If the child branch does something other than exec (like
-   `exit` or complex processing), it won't work. This is a limitation of not having
-   real fork.
+### Phase 2: Pipes, handles, and signals (issue §Phase 2)
 
-### Testing
+- Replace Strategy B (JVM-replay) with thread-based piped fork.
+- Add inherited pipe and loopback-socket ownership.
+- Rebuild event-loop watchers in the child.
+- Implement `WNOHANG`, minimal `SIGCHLD`, and cooperative `kill`.
+- Stress tests: close order, parent-first/child-first exit, failures, orphan cleanup.
 
-```perl
-# Test 1: Basic fork-open pattern
-my $pid = open my $fh, "-|";
-if ($pid) {
-    my $line = <$fh>;
-    print "Got: $line";
-    close $fh;
-} else {
-    exec "echo", "hello";
-}
+### Phase 3: Ecosystem acceptance (issue §Phase 3)
 
-# Test 2: or-exec pattern
-open my $fh, "-|" or exec "echo", "hello";
-my $line = <$fh>;
-print "Got: $line";
-close $fh;
-```
+- Pass unchanged Mojolicious `t/mojo/subprocess.t` and related tests.
+- Pass Catalyst::Runtime `t/live_fork.t` unchanged.
+- Run Mojolicious, Catalyst::Runtime, DBIx::Class acceptance suites.
 
-### Related Files
+### Phase 4: Hardening (issue §Phase 4)
 
-- `src/main/java/org/perlonjava/runtime/operators/IOOperator.java` - open implementation
-- `src/main/java/org/perlonjava/runtime/operators/SystemOperator.java` - exec implementation
-- `src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeIO.java` - pipe handling
+- Nested pseudofork policy.
+- Additional signal/status parity.
+- Performance and leak testing.
+- Windows CI coverage.
 
-### References
+---
 
-- Perl open documentation: https://perldoc.perl.org/functions/open
-- Module::Build `_backticks` method uses this pattern
-- IPC::Open2/Open3 also use fork-open patterns
+## Limitations (document, do not hide)
+
+1. **No OS-level process isolation**: no privilege, namespace, UID/GID, or
+   memory-isolation guarantee. Document clearly.
+2. **`SIGKILL` is cooperative**: Java cannot force-kill threads; `kill 9, $pid`
+   cancels at the next runtime safepoint.
+3. **`exec()` without prior fork terminates the JVM** (unchanged).
+4. **JVM backend Phase 1** lowers fork-containing scopes to interpreter path —
+   may affect performance of fork-heavy code until Phase 4 optimization.
+5. **Working directory and `%ENV` changes** are runtime-local or explicitly
+   unsupported (no OS process isolation).
+
+---
+
+## Verification
+
+**Existing tests to keep passing** (`src/test/resources/unit/`):
+- `fork_open_no_command.t`, `fork_open_bareword_write.t`,
+  `fork_open_wait.t`, `fork_open_output_pump.t`
+- `fork_operator_skip.t`, `fork_capability_truthful.t`,
+  `fork_fixed_plan_skip.t`
+
+**New project-owned regression tests** (validate on system `perl` first):
+- `fork_basic.t` — parent receives PID, child receives `0`, both continue
+  after the fork point; `waitpid` / `$?`
+- `fork_child_code.t` — child runs arbitrary Perl code including global writes;
+  parent sees isolation
+- `fork_nested.t` — nested fork with correct ownership rules
+- `fork_open_child_perl_code.t` — `open FH, "-|"` where child runs Perl code
+  (no exec), replacing the JVM-replay-only scenario
+
+**Ecosystem gate (Phase 3)**:
+- Mojolicious `t/mojo/subprocess.t` passes unchanged
+- Catalyst::Runtime `t/live_fork.t` passes unchanged
+
+**Build gate**: `nice -n 19 make` passes after each phase.
+
+---
+
+## Related
+
+- Issue: #1144
+- Roadmap: `docs/about/roadmap.md` Objective 6 / Fork Emulation
+- Related compatibility work: #1115
+- Design: `dev/design/concurrency.md` (threads architecture)
+- Reference: `docs/reference/threads.md` (update to cover pseudo-fork surface)
