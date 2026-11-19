@@ -36,6 +36,8 @@ The first implementation must put the **entire Perl call graph** on a fork-capab
 
 Before integrating runtime cloning, prototype and prove an explicit continuation mechanism: either make active Perl call frames resumable through a trampoline/state machine, or implement an equivalent mechanism that captures and resumes the complete frame chain. It must preserve instruction positions, operands, lexical pads, call/eval frames, dynamic localization, exception/unwind state, context, regex state, and cleanup scopes. Parent continuation receives the pseudo PID and child continuation receives `0`. Do not assume a runtime clone preserves a Java stack.
 
+See [Full-Call-Chain Continuations for Pseudofork](fork_continuation.md) for the separate implementation plan, including interpreter/runtime callback boundaries and memory/performance goals.
+
 No fork may occur while another Perl execution is mutating the same runtime unless the implementation can establish a consistent snapshot. Initially, reject such calls deterministically rather than risk deadlock or a torn snapshot.
 
 ### 2. Fork-specific runtime snapshot
@@ -135,4 +137,5 @@ For pseudo-child `exec`, use `ProcessBuilder` or the existing process launcher, 
 - [Perl `perlfork` reference](https://perldoc.perl.org/perlfork)
 - [Roadmap: Objective 6 / Fork Emulation](../../docs/about/roadmap.md)
 - [Concurrency design](concurrency.md)
+- [Full-call-chain continuation subplan](fork_continuation.md)
 - [Perl threads reference](../../docs/reference/threads.md)
