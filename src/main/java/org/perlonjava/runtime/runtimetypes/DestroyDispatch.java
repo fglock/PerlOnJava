@@ -625,7 +625,7 @@ public class DestroyDispatch {
     }
 
     static boolean hasCurrentPerlOwnerSlot(RuntimeBase referent) {
-        return hasCurrentPerlOwnerSlot(referent, referent.ownerSlotSnapshot());
+        return referent != null && referent.hasCurrentPerlOwnerSlotIdentity();
     }
 
     /**

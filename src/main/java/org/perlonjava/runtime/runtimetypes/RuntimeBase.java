@@ -508,6 +508,18 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     private java.util.Set<PerlOwnerSlot> ownerSlots = null;
     private int argumentAliasOwnerSlots;
     private int countedOwnerSlots;
+    private int closurePadOwnerSlots;
+    private int scalarCaptureOwnerSlots;
+    private int argumentValueOwnerSlots;
+    private int argumentContainerOwnerSlots;
+    private int argumentTieHandlerOwnerSlots;
+    private int returnValueOwnerSlots;
+    private int activeCodeOwnerSlots;
+    private int packageAggregateOwnerSlots;
+    private int codeSlotOwnerSlotsCount;
+    private int transientUntrackedReferenceOwnerSlots;
+    private java.util.Set<PerlOwnerSlot> untrackedReferenceOwnerSlots = null;
+    private java.util.Set<PerlOwnerSlot> codeSlotOwnerSlots = null;
     /** Active semantic Perl owner identities; excludes temporary roots and IO leases. */
     private volatile int perlStrongOwnerSlots;
     private int pendingReturnOwners;
@@ -566,22 +578,147 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                     new java.util.IdentityHashMap<>());
         }
         if (ownerSlots.add(slot)) {
-            if (slot.kind() == PerlOwnerSlot.Kind.ARGUMENT_ALIAS) argumentAliasOwnerSlots++;
-            if (PerlOwnerSlot.isCountedKind(slot.kind())) countedOwnerSlots++;
-            if (PerlOwnerSlot.isPerlOwnerKind(slot.kind())) perlStrongOwnerSlots++;
+            PerlOwnerSlot.Kind kind = slot.kind();
+            adjustIndexedOwnerSlotCount(kind, 1);
+            if (kind == PerlOwnerSlot.Kind.ARGUMENT_ALIAS) argumentAliasOwnerSlots++;
+            if (PerlOwnerSlot.isCountedKind(kind)) countedOwnerSlots++;
+            if (PerlOwnerSlot.isPerlOwnerKind(kind)) perlStrongOwnerSlots++;
+            if (kind == PerlOwnerSlot.Kind.CODE_SLOT) {
+                codeSlotOwnerSlotsCount++;
+                if (codeSlotOwnerSlots == null) {
+                    codeSlotOwnerSlots = java.util.concurrent.ConcurrentHashMap.newKeySet();
+                }
+                codeSlotOwnerSlots.add(slot);
+            }
+            if (kind == PerlOwnerSlot.Kind.UNTRACKED_REFERENCE) {
+                if (untrackedReferenceOwnerSlots == null) {
+                    // PerlOwnerSlot has identity equality. The concurrent set
+                    // lets hot read paths iterate this narrow index without
+                    // copying it or holding the referent lock while examining
+                    // slot state.
+                    untrackedReferenceOwnerSlots = java.util.concurrent.ConcurrentHashMap
+                            .newKeySet();
+                }
+                untrackedReferenceOwnerSlots.add(slot);
+            }
         }
     }
 
     synchronized void removeOwnerSlot(PerlOwnerSlot slot) {
         if (ownerSlots != null && ownerSlots.remove(slot)) {
-            if (slot.kind() == PerlOwnerSlot.Kind.ARGUMENT_ALIAS) argumentAliasOwnerSlots--;
-            if (PerlOwnerSlot.isCountedKind(slot.kind())) countedOwnerSlots--;
-            if (PerlOwnerSlot.isPerlOwnerKind(slot.kind())) perlStrongOwnerSlots--;
+            PerlOwnerSlot.Kind kind = slot.kind();
+            adjustIndexedOwnerSlotCount(kind, -1);
+            if (kind == PerlOwnerSlot.Kind.ARGUMENT_ALIAS) argumentAliasOwnerSlots--;
+            if (PerlOwnerSlot.isCountedKind(kind)) countedOwnerSlots--;
+            if (PerlOwnerSlot.isPerlOwnerKind(kind)) perlStrongOwnerSlots--;
+            if (kind == PerlOwnerSlot.Kind.CODE_SLOT) {
+                codeSlotOwnerSlotsCount--;
+                if (codeSlotOwnerSlots != null) {
+                    codeSlotOwnerSlots.remove(slot);
+                    if (codeSlotOwnerSlots.isEmpty()) codeSlotOwnerSlots = null;
+                }
+            }
+            if (kind == PerlOwnerSlot.Kind.UNTRACKED_REFERENCE
+                    && untrackedReferenceOwnerSlots != null) {
+                untrackedReferenceOwnerSlots.remove(slot);
+                if (untrackedReferenceOwnerSlots.isEmpty()) {
+                    untrackedReferenceOwnerSlots = null;
+                }
+            }
         }
+    }
+
+    /** Update hot per-kind counts and the narrow untracked-reference index. */
+    synchronized void reclassifyOwnerSlotKind(
+            PerlOwnerSlot slot, PerlOwnerSlot.Kind oldKind, PerlOwnerSlot.Kind newKind) {
+        if (ownerSlots != null && ownerSlots.contains(slot)) {
+            adjustIndexedOwnerSlotCount(oldKind, -1);
+            adjustIndexedOwnerSlotCount(newKind, 1);
+            if (oldKind == PerlOwnerSlot.Kind.ARGUMENT_ALIAS) argumentAliasOwnerSlots--;
+            if (newKind == PerlOwnerSlot.Kind.ARGUMENT_ALIAS) argumentAliasOwnerSlots++;
+            if (PerlOwnerSlot.isCountedKind(oldKind) != PerlOwnerSlot.isCountedKind(newKind)) {
+                countedOwnerSlots += PerlOwnerSlot.isCountedKind(newKind) ? 1 : -1;
+            }
+            if (PerlOwnerSlot.isPerlOwnerKind(oldKind)
+                    != PerlOwnerSlot.isPerlOwnerKind(newKind)) {
+                perlStrongOwnerSlots += PerlOwnerSlot.isPerlOwnerKind(newKind) ? 1 : -1;
+            }
+            if (oldKind == PerlOwnerSlot.Kind.CODE_SLOT) {
+                codeSlotOwnerSlotsCount--;
+                if (codeSlotOwnerSlots != null) {
+                    codeSlotOwnerSlots.remove(slot);
+                    if (codeSlotOwnerSlots.isEmpty()) codeSlotOwnerSlots = null;
+                }
+            }
+            if (newKind == PerlOwnerSlot.Kind.CODE_SLOT) {
+                codeSlotOwnerSlotsCount++;
+                if (codeSlotOwnerSlots == null) {
+                    codeSlotOwnerSlots = java.util.concurrent.ConcurrentHashMap.newKeySet();
+                }
+                codeSlotOwnerSlots.add(slot);
+            }
+            if (oldKind == PerlOwnerSlot.Kind.UNTRACKED_REFERENCE) {
+                if (untrackedReferenceOwnerSlots != null) {
+                    untrackedReferenceOwnerSlots.remove(slot);
+                    if (untrackedReferenceOwnerSlots.isEmpty()) {
+                        untrackedReferenceOwnerSlots = null;
+                    }
+                }
+            }
+            if (newKind == PerlOwnerSlot.Kind.UNTRACKED_REFERENCE) {
+                if (untrackedReferenceOwnerSlots == null) {
+                    untrackedReferenceOwnerSlots = java.util.concurrent.ConcurrentHashMap
+                            .newKeySet();
+                }
+                untrackedReferenceOwnerSlots.add(slot);
+            }
+        }
+        slot.setKindFromOwnerLedger(newKind);
+    }
+
+    private void adjustIndexedOwnerSlotCount(PerlOwnerSlot.Kind kind, int delta) {
+        switch (kind) {
+            case CLOSURE_PAD -> closurePadOwnerSlots += delta;
+            case SCALAR_CAPTURE -> scalarCaptureOwnerSlots += delta;
+            case ARGUMENT_VALUE -> argumentValueOwnerSlots += delta;
+            case ARGUMENT_CONTAINER -> argumentContainerOwnerSlots += delta;
+            case ARGUMENT_TIE_HANDLER -> argumentTieHandlerOwnerSlots += delta;
+            case RETURN_VALUE -> returnValueOwnerSlots += delta;
+            case ACTIVE_CODE -> activeCodeOwnerSlots += delta;
+            case PACKAGE_AGGREGATE_SLOT -> packageAggregateOwnerSlots += delta;
+            default -> { }
+        }
+    }
+
+    private int indexedOwnerSlotCount(PerlOwnerSlot.Kind kind) {
+        return switch (kind) {
+            case CLOSURE_PAD -> closurePadOwnerSlots;
+            case SCALAR_CAPTURE -> scalarCaptureOwnerSlots;
+            case ARGUMENT_VALUE -> argumentValueOwnerSlots;
+            case ARGUMENT_CONTAINER -> argumentContainerOwnerSlots;
+            case ARGUMENT_TIE_HANDLER -> argumentTieHandlerOwnerSlots;
+            case RETURN_VALUE -> returnValueOwnerSlots;
+            case ACTIVE_CODE -> activeCodeOwnerSlots;
+            case PACKAGE_AGGREGATE_SLOT -> packageAggregateOwnerSlots;
+            case CODE_SLOT -> codeSlotOwnerSlotsCount;
+            default -> -1;
+        };
     }
 
     boolean hasOwnerSlots() {
         return perlStrongOwnerSlots > 0;
+    }
+
+    /** O(1) candidate bound for queries that validate exact owner identities. */
+    private synchronized int currentPerlOwnerSlotCandidatesOtherThan(
+            PerlOwnerSlot excluded) {
+        int candidates = perlStrongOwnerSlots;
+        if (candidates == 0) return 0;
+        if (excluded != null && ownerSlots != null && ownerSlots.contains(excluded)
+                && PerlOwnerSlot.isPerlOwnerKind(excluded.kind())) {
+            candidates--;
+        }
+        return candidates;
     }
 
     /**
@@ -672,6 +809,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                 || hasPendingReturnOwner() || hasPendingOwnerRelease()) {
             return true;
         }
+        if (currentPerlOwnerSlotCandidatesOtherThan(excluded) == 0) return false;
         for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
             if (slot == excluded || !slot.isActive()
                     || !PerlOwnerSlot.isPerlOwnerKind(slot.kind())) {
@@ -754,6 +892,10 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
 
     /** Whether any active Perl owner slot still proves a current storage edge. */
     boolean hasCurrentPerlOwnerSlotIdentity() {
+        if (perlStrongOwnerSlots == 0) {
+            LifecycleHotPathDiagnostics.ownerSlotIdentityFastPath();
+            return false;
+        }
         for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
             if (DestroyDispatch.isCurrentPerlOwnerSlot(this, slot)) return true;
         }
@@ -784,20 +926,14 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     }
 
     private boolean hasTransientUntrackedContainerTransferOwner() {
-        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
-            if (!slot.isActive() || slot.kind() != PerlOwnerSlot.Kind.UNTRACKED_REFERENCE
-                    || slot.referent() != this) continue;
-            RuntimeScalar owner = slot.untrackedScalarOwner();
-            if (owner != null && owner.untrackedReferenceOwnerSlot() == slot
-                    && owner.isTransientArgumentValueOwner()
-                    && !WeakRefRegistry.isweak(owner)
-                    && (owner.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                    && owner.value == this) return true;
-        }
-        return false;
+        return transientUntrackedReferenceOwnerCount() != 0;
     }
 
     boolean hasDirectOwnerSlotProofForReleasedWeakReferent() {
+        if (perlStrongOwnerSlots == 0) {
+            LifecycleHotPathDiagnostics.ownerSlotIdentityFastPath();
+            return false;
+        }
         for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
             if (!slot.isActive() || !PerlOwnerSlot.isPerlOwnerKind(slot.kind())) continue;
             if (slot.kind() == PerlOwnerSlot.Kind.ARRAY_ELEMENT
@@ -967,18 +1103,47 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
 
     /** Number of active slots of the requested kind that own this referent. */
     public synchronized int ownerSlotCount(PerlOwnerSlot.Kind kind) {
+        int indexedCount = indexedOwnerSlotCount(kind);
+        if (indexedCount >= 0) return indexedCount;
         if (kind == PerlOwnerSlot.Kind.ARGUMENT_ALIAS) return argumentAliasOwnerSlots;
         if (ownerSlots == null) return 0;
         int count = 0;
         for (PerlOwnerSlot slot : ownerSlots) {
+            LifecycleHotPathDiagnostics.ownerSlotsVisited(1);
             if (slot.kind() == kind) count++;
         }
         return count;
     }
 
+    /** Live concurrent view of untracked edges; callers never allocate a copied set. */
+    private synchronized java.util.Set<PerlOwnerSlot> untrackedReferenceOwnerSlotsView() {
+        return untrackedReferenceOwnerSlots == null
+                ? java.util.Collections.emptySet() : untrackedReferenceOwnerSlots;
+    }
+
+    /** Live narrow index for CODE slots; callers that need identities avoid a full snapshot. */
+    synchronized java.util.Set<PerlOwnerSlot> codeSlotOwnerSlotsView() {
+        return codeSlotOwnerSlots == null
+                ? java.util.Collections.emptySet() : codeSlotOwnerSlots;
+    }
+
     /** Number of active slot identities whose releases balance refCount. */
     synchronized int countedOwnerSlotCount() {
         return countedOwnerSlots;
+    }
+
+    /** Maintain the transient untracked-owner fast-path proof without rescanning slots. */
+    synchronized void adjustTransientUntrackedReferenceOwnerCount(int delta) {
+        int next = transientUntrackedReferenceOwnerSlots + delta;
+        if (next < 0) {
+            throw new IllegalStateException(
+                    "transient untracked owner count would become negative");
+        }
+        transientUntrackedReferenceOwnerSlots = next;
+    }
+
+    synchronized int transientUntrackedReferenceOwnerCount() {
+        return transientUntrackedReferenceOwnerSlots;
     }
 
     /** Whether a current Perl storage identity already owns this value. */
@@ -1076,6 +1241,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         if (ownerSlots == null || ownerSlots.isEmpty()) {
             return java.util.Collections.emptySet();
         }
+        LifecycleHotPathDiagnostics.ownerSlotsVisited(ownerSlots.size());
         java.util.Set<PerlOwnerSlot> snapshot = java.util.Collections.newSetFromMap(
                 new java.util.IdentityHashMap<>());
         snapshot.addAll(ownerSlots);
@@ -1084,6 +1250,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
 
     private synchronized java.util.List<PerlOwnerSlot> closureCaptureOwnerSnapshot() {
         if (ownerSlots == null || ownerSlots.isEmpty()) return java.util.List.of();
+        LifecycleHotPathDiagnostics.ownerSlotsVisited(ownerSlots.size());
         java.util.ArrayList<PerlOwnerSlot> snapshot = new java.util.ArrayList<>();
         for (PerlOwnerSlot slot : ownerSlots) {
             PerlOwnerSlot.Kind kind = slot.kind();

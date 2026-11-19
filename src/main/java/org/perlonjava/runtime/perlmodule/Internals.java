@@ -668,7 +668,45 @@ public class Internals extends PerlModuleBase {
                     adjust++;
                 }
                 int argumentFrameOwners = base.currentArgumentFrameReferentOwnerCount();
-                adjust -= argumentFrameOwners;
+                // Preserve the call-site argument owner that B's probe
+                // observes as a Perl reference. The extra nested frames are
+                // runtime call plumbing and must not make a surviving
+                // aggregate value appear to have no independent owner.
+                adjust -= Math.max(0, argumentFrameOwners - 1);
+                if (System.getenv("PJ_BREFCNT_TRACE") != null) {
+                    System.err.println("[BREFCNT] base=" + System.identityHashCode(base)
+                            + " rc=" + rc + " extra=" + extra + " field="
+                            + fieldOwnedMethodResult + " frameOwners=" + argumentFrameOwners
+                            + " adjust=" + adjust + " destroy="
+                            + DestroyDispatch.isInsideDestroy());
+                    java.util.List<RuntimeArray> activeFrames = RuntimeCode.snapshotArgsStack();
+                    for (int depth = 0; depth < activeFrames.size(); depth++) {
+                        RuntimeCode activeCode = RuntimeCode.getActiveCodeAt(depth);
+                        RuntimeArray activeArgs = activeFrames.get(depth);
+                        System.err.println("[BREFCNT-FRAME] depth=" + depth + " code="
+                                + (activeCode == null ? "?" : activeCode.packageName + "::"
+                                    + activeCode.subName) + " args="
+                                + System.identityHashCode(activeArgs));
+                        for (int index = 0; index < activeArgs.elements.size(); index++) {
+                            RuntimeScalar value = activeArgs.elements.get(index);
+                            if (value != null && value.value == base) {
+                                RuntimeBase container = value.getContainerOwner();
+                                System.err.println("[BREFCNT-ARG] depth=" + depth + " index="
+                                        + index + " scalar=" + System.identityHashCode(value)
+                                        + " type=" + value.type + " container="
+                                + (container == null ? 0 : System.identityHashCode(container)));
+                            }
+                        }
+                    }
+                    for (PerlOwnerSlot slot : base.ownerSlotSnapshot()) {
+                        RuntimeScalar owner = slot.countedScalarOwner();
+                        if (owner == null || owner.value != base) continue;
+                        RuntimeBase container = owner.getContainerOwner();
+                        System.err.println("[BREFCNT-SLOT] kind=" + slot.kind() + " scalar="
+                                + System.identityHashCode(owner) + " container="
+                                + (container == null ? 0 : System.identityHashCode(container)));
+                    }
+                }
             }
             int reported = rc + extra + adjust;
             return new RuntimeScalar(reported).getList();

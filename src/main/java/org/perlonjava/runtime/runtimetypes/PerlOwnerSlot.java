@@ -85,6 +85,8 @@ public final class PerlOwnerSlot {
     private RuntimeBase referent;
     /** Scalar cell that owns an untracked value edge; weak to avoid retaining its source. */
     private WeakReference<RuntimeScalar> untrackedScalarOwner;
+    /** Whether this slot contributes to its referent's transient-owner fast-path count. */
+    private boolean transientUntrackedOwnerCounted;
     /** Weak back-reference to the scalar implementing a counted cell owner. */
     private WeakReference<RuntimeScalar> countedScalarOwner;
     /** Aggregate storage that owns an ARRAY_ELEMENT or HASH_ELEMENT edge. */
@@ -217,6 +219,25 @@ public final class PerlOwnerSlot {
             throw new IllegalStateException("scalar owner association requires an untracked-reference slot");
         }
         untrackedScalarOwner = scalar == null ? null : new WeakReference<>(scalar);
+        refreshTransientUntrackedOwnerClassification();
+    }
+
+    /** Reclassify the live edge when its scalar changes transient ownership state. */
+    synchronized void refreshTransientUntrackedOwnerClassification() {
+        RuntimeBase current = referent;
+        RuntimeScalar scalar = untrackedScalarOwner == null ? null : untrackedScalarOwner.get();
+        PerlRuntime runtime = PerlRuntime.currentOrNull();
+        boolean weak = runtime != null && scalar != null && WeakRefRegistry.isweak(scalar);
+        boolean shouldCount = kind == Kind.UNTRACKED_REFERENCE
+                && registeredInOwnerLedger && current != null && scalar != null
+                && scalar.untrackedReferenceOwnerSlot() == this
+                && scalar.isTransientArgumentValueOwner()
+                && !weak
+                && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                && scalar.value == current;
+        if (shouldCount == transientUntrackedOwnerCounted) return;
+        transientUntrackedOwnerCounted = shouldCount;
+        current.adjustTransientUntrackedReferenceOwnerCount(shouldCount ? 1 : -1);
     }
 
     synchronized RuntimeScalar untrackedScalarOwner() {
@@ -862,12 +883,17 @@ public final class PerlOwnerSlot {
         RuntimeBase previous = referent;
         LifecycleRuntimeState previousState = ownerRuntimeState;
         boolean previousRegistered = registeredInOwnerLedger;
+        if (transientUntrackedOwnerCounted) {
+            transientUntrackedOwnerCounted = false;
+            previous.adjustTransientUntrackedReferenceOwnerCount(-1);
+        }
         referent = target;
         ownerRuntime = null;
         ownerRuntimeState = null;
         nativeOwner = nextNativeOwner;
         registeredInOwnerLedger = target != null;
         if (registeredInOwnerLedger) target.addOwnerSlot(this);
+        refreshTransientUntrackedOwnerClassification();
         if (previous != null && previousRegistered) previous.removeOwnerSlot(this);
         if (previous != null && previousRegistered) {
             PerlRuntime.releaseOwnerSlotReferent(previousState, previous);
@@ -1023,6 +1049,29 @@ public final class PerlOwnerSlot {
         target.recordOwner(scalar, acquisitionSite);
     }
 
+    /**
+     * Acquire a replacement edge while a scalar's stale aggregate slot is
+     * still active until the new value is published. The caller installs this
+     * fresh slot as the scalar's current identity after publication, then
+     * retires the stale slot without decrementing its already-zero referent.
+     */
+    synchronized void acquireCountedScalarReplacementOwner(
+            RuntimeScalar scalar, RuntimeBase target, String acquisitionSite) {
+        Objects.requireNonNull(scalar, "scalar");
+        Objects.requireNonNull(target, "target");
+        Objects.requireNonNull(acquisitionSite, "acquisitionSite");
+        if (!isCountedKind(kind) || !scalar.refCountOwned || referent != null
+                || nativeOwner || legacyCaptureCount != 0
+                || !target.isRefCountTracked() || target.refCount == Integer.MAX_VALUE
+                || target.isPerlDestroyed()) {
+            throw new IllegalStateException("invalid counted scalar replacement owner acquisition");
+        }
+        acquireCountedIdentity(target);
+        associateCountedScalarOwner(scalar);
+        target.acquireTrackedOwnerCount(acquisitionSite);
+        target.recordOwner(scalar, acquisitionSite);
+    }
+
     /** Replace one scalar edge while acquiring the replacement count and release token. */
     synchronized PendingRelease replaceCountedScalarOwnerAndAcquire(
             RuntimeBase previous, RuntimeBase next, RuntimeScalar scalar,
@@ -1096,18 +1145,28 @@ public final class PerlOwnerSlot {
         if (nativeOwner || !isCountedKind(kind) || !isCountedKind(nextKind)) {
             throw new IllegalStateException("only counted scalar and element slots can move storage");
         }
-        if (kind != nextKind) countedAggregateOwner = null;
-        if (kind != nextKind && referent != null) {
+        Kind previousKind = kind;
+        if (previousKind != nextKind) countedAggregateOwner = null;
+        if (previousKind != nextKind && referent != null) {
             if (nextKind == Kind.ARGUMENT_VALUE) {
                 ownerRuntime = PerlRuntime.currentOrNull();
                 ownerRuntimeState = ownerRuntime == null
                         ? null : ownerRuntime.retainOwnerSlotReferent(referent);
-            } else if (kind == Kind.ARGUMENT_VALUE) {
+            } else if (previousKind == Kind.ARGUMENT_VALUE) {
                 PerlRuntime.releaseOwnerSlotReferent(ownerRuntimeState, referent);
                 ownerRuntime = null;
                 ownerRuntimeState = null;
             }
         }
+        if (referent != null) {
+            referent.reclassifyOwnerSlotKind(this, previousKind, nextKind);
+        } else {
+            kind = nextKind;
+        }
+    }
+
+    /** Called under the referent ledger lock to keep its per-kind indexes aligned. */
+    void setKindFromOwnerLedger(Kind nextKind) {
         kind = nextKind;
     }
 
@@ -1276,6 +1335,10 @@ public final class PerlOwnerSlot {
         }
         RuntimeBase previous = referent;
         LifecycleRuntimeState previousState = ownerRuntimeState;
+        if (transientUntrackedOwnerCounted) {
+            transientUntrackedOwnerCounted = false;
+            previous.adjustTransientUntrackedReferenceOwnerCount(-1);
+        }
         referent = null;
         methodInvocantOwner = false;
         countedNativeOwner = false;

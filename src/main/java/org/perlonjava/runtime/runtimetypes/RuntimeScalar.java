@@ -1503,6 +1503,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         } else if (untrackedReferenceOwnerSlot != null) {
             releaseUntrackedReferenceOwner(untrackedReferenceOwnerSlot.referent());
         }
+        refreshTransientUntrackedOwnerClassification();
+    }
+
+    private void refreshTransientUntrackedOwnerClassification() {
+        if (untrackedReferenceOwnerSlot != null) {
+            untrackedReferenceOwnerSlot.refreshTransientUntrackedOwnerClassification();
+        }
     }
 
     private boolean hasLocalAggregateContainerOwner() {
@@ -2071,6 +2078,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     void finishMortalReturnHandoff() {
         mortalReturnSnapshot = false;
+        refreshTransientUntrackedOwnerClassification();
         mortalReturnSourceOwnerIdentity = 0;
         mortalReturnSourceReleaseSequence = 0;
         mortalReturnSourceReferent = null;
@@ -4649,6 +4657,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         boolean oldArgumentAliasReleaseQueued = false;
         boolean retireOldCountedOwnerAfterPublish = false;
         boolean oldOwnerTraceReleasedDuringReplacement = false;
+        PerlOwnerSlot displacedCountedOwnerSlot = countedOwnerSlot;
+        PerlOwnerSlot replacementCountedOwnerSlot = null;
         PerlOwnerSlot.PendingRelease oldCountedOwnerRelease = null;
         boolean newOwned = false;
         RuntimeBase newReferent = null;
@@ -4694,6 +4704,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 // paths; retire that token without decrementing a count that
                 // has already reached zero or the referent is destroyed.
                 retireOldCountedOwnerAfterPublish = true;
+                if (newOwned) {
+                    // Keep the stale slot intact until the replacement value
+                    // is published, but acquire the new edge on a fresh slot.
+                    // Reusing the stale identity here would make its deferred
+                    // retirement detach the replacement's owner slot too.
+                    replacementCountedOwnerSlot = new PerlOwnerSlot(countedOwnerKind());
+                    replacementCountedOwnerSlot.acquireCountedScalarReplacementOwner(
+                            this, newReferent,
+                            "RuntimeScalar.setLargeRefCounted stale aggregate replacement");
+                }
             } else if (oldBase.refCount <= 0) {
                 throw new IllegalStateException(
                         "counted scalar replacement requires a positive old reference count");
@@ -4737,11 +4757,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.value = copyScalarPayload(value.type, value.value);
         long referenceSlotMutationVersion = noteReferenceSlotMutation();
         this.refCountOwned = newOwned;
+        if (replacementCountedOwnerSlot != null) {
+            countedOwnerSlot = replacementCountedOwnerSlot;
+        }
         this.scalarReferenceContentsOwner = null;
         if (retireOldCountedOwnerAfterPublish) {
             // The replacement is now visible. Retire the old slot only after
             // publication, while carrying its exact count obligation forward.
-            oldCountedOwnerRelease = countedOwnerSlot.releaseCountedIdentity();
+            oldCountedOwnerRelease = displacedCountedOwnerSlot.releaseCountedIdentity();
             if (oldCountedOwnerRelease == null) {
                 throw new IllegalStateException(
                         "published scalar replacement lost its old release token");

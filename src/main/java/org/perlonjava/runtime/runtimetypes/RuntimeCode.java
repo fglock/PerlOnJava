@@ -1786,11 +1786,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     public static void popActiveCode(RuntimeCode code) {
-        popActiveCode(code, PerlRuntime.current().executionState());
+        PerlRuntime runtime = PerlRuntime.current();
+        popActiveCode(code, runtime.executionState(), runtime.lifecycleState);
     }
 
     private static void popActiveCode(
-            RuntimeCode code, ExecutionRuntimeState executionState) {
+            RuntimeCode code, ExecutionRuntimeState executionState,
+            LifecycleRuntimeState lifecycleState) {
+        Deque<RuntimeCode> stack = activeCodeStack(executionState);
         Deque<ActiveLexicalFrame> frames = activeLexicalFrames(executionState);
         ActiveLexicalFrame retiredFrame = null;
         if (!frames.isEmpty() && frames.peek().code() == code) {
@@ -1808,9 +1811,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
             }
         }
-        Deque<RuntimeCode> stack = activeCodeStack(executionState);
         boolean removedStackEntry = false;
         if (!stack.isEmpty() && stack.peek() == code) {
+            RuntimeCode callerCode = null;
+            if (stack.size() > 1) {
+                Iterator<RuntimeCode> callerIterator = stack.iterator();
+                callerIterator.next();
+                callerCode = callerIterator.next();
+            }
+            MortalList.handoffTransientListAssignmentRhs(
+                    lifecycleState, code, stack.size(), callerCode, stack.size() - 1);
             stack.pop();
             if (!executionState.activeCodeCallSites.isEmpty()) {
                 executionState.activeCodeCallSites.pop();
@@ -1818,8 +1828,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             removedStackEntry = true;
         } else {
             int index = 0;
+            java.util.List<RuntimeCode> stackSnapshot = new java.util.ArrayList<>(stack);
             for (Iterator<RuntimeCode> iterator = stack.iterator(); iterator.hasNext();) {
                 if (iterator.next() == code) {
+                    int executionDepth = stack.size() - index;
+                    RuntimeCode callerCode = index + 1 < stackSnapshot.size()
+                            ? stackSnapshot.get(index + 1) : null;
+                    MortalList.handoffTransientListAssignmentRhs(
+                            lifecycleState, code, executionDepth, callerCode,
+                            executionDepth - 1);
                     iterator.remove();
                     removeActiveCodeCallSiteAt(executionState, index);
                     removedStackEntry = true;
@@ -1874,7 +1891,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     /** Whether a current named package CODE slot still installs this CV. */
     public boolean hasStashCodeSlotOwner() {
-        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+        if (ownerSlotCount(PerlOwnerSlot.Kind.CODE_SLOT) == 0) return false;
+        for (PerlOwnerSlot slot : codeSlotOwnerSlotsView()) {
+            LifecycleHotPathDiagnostics.ownerSlotsVisited(1);
             if (!slot.isActive() || slot.kind() != PerlOwnerSlot.Kind.CODE_SLOT
                     || slot.referent() != this) continue;
             RuntimeScalar scalar = slot.countedScalarOwner();
@@ -12979,7 +12998,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 if (closureFrame != null) {
                     popJvmClosureFrame(closureFrame);
                 }
-                popActiveCode(this, executionState);
+                popActiveCode(this, executionState, runtime.lifecycleState);
                 popArgs(executionState); // also pops hasArgsStack — see popArgs() implementation
                 finishActiveCodeOwnerRelease();
                 if (DebugState.isDebugMode()) {
