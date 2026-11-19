@@ -1573,6 +1573,31 @@ public class StatementResolver {
                 }
                 LexerToken prevToken = prevIndex >= currentIndex ? parser.tokens.get(prevIndex) : null;
 
+                // The closing delimiter of a quoted hash key can be reached
+                // while this raw-token scan is outside string mode. Do not
+                // mistake that closing quote for a new string opener; the
+                // value's quote after => starts the quoted region to track.
+                int beforePrevIndex = prevIndex - 1;
+                while (beforePrevIndex >= currentIndex
+                        && parser.tokens.get(beforePrevIndex).type == LexerTokenType.WHITESPACE) {
+                    beforePrevIndex--;
+                }
+                int afterQuoteIndex = parser.tokenIndex;
+                while (afterQuoteIndex < parser.tokens.size()
+                        && parser.tokens.get(afterQuoteIndex).type == LexerTokenType.WHITESPACE) {
+                    afterQuoteIndex++;
+                }
+                boolean closesQuotedKey = prevToken != null
+                        && prevToken.type == LexerTokenType.IDENTIFIER
+                        && beforePrevIndex >= currentIndex
+                        && parser.tokens.get(beforePrevIndex).type == LexerTokenType.OPERATOR
+                        && parser.tokens.get(beforePrevIndex).text.equals(token.text)
+                        && afterQuoteIndex < parser.tokens.size()
+                        && parser.tokens.get(afterQuoteIndex).text.equals("=>");
+                if (closesQuotedKey) {
+                    continue;
+                }
+
                 // Only treat quote as opening when context suggests a string start.
                 // This avoids latching onto trailing quote tokens emitted after
                 // already-parsed quoted keys/values.

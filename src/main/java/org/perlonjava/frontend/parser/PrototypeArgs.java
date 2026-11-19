@@ -178,7 +178,7 @@ public class PrototypeArgs {
         var next = TokenUtils.peek(parser);
         return next.type == LexerTokenType.EOF ||
                 ListParser.isListTerminator(parser, next) ||
-                Parser.isExpressionTerminator(next) ||
+                (Parser.isExpressionTerminator(next) && !ListParser.isAutoquotableFatCommaKey(parser, next)) ||
                 // Defined-or operator should terminate argument parsing
                 // (not be confused with empty regex //)
                 next.text.equals("//") ||

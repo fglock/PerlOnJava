@@ -59,6 +59,15 @@ public class OperatorParser {
             }
             return block;
         }
+        // `do return EXPR` is a statement form of do, not a do-file operand.
+        // It is especially important in expression chains such as
+        // `MATCH and do return PAIR`, where the return statement supplies the
+        // expression's result.
+        if (token.type == IDENTIFIER && token.text.equals("return")) {
+            TokenUtils.consume(parser);
+            return CoreOperatorResolver.parseCoreOperator(
+                    parser, token, parser.tokenIndex - 1);
+        }
         // A raw NUL immediately after `do` terminates the file-name operand
         // in Perl's lexer.  It must not leave the bytes after that sentinel to
         // be parsed as a second expression (perl5_t/op/lex.t's `do\0...`

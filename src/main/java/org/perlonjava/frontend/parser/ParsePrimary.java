@@ -76,6 +76,13 @@ public class ParsePrimary {
             }
         }
 
+        // Control keyword plugins must yield to fat-comma autoquoting.
+        if (token.type == LexerTokenType.IDENTIFIER
+                && parser.getKeywordPlugin(token.text) != null
+                && peek(parser).text.equals("=>")) {
+            return new StringNode(token.text, parser.tokenIndex);
+        }
+
         switch (token.type) {
             case IDENTIFIER:
                 // Handle identifiers: variables, subroutines, keywords, etc.
@@ -282,6 +289,19 @@ public class ParsePrimary {
                 // but it no longer overrides the builtin.  In particular,
                 // glob must then resume its File::Glob::csh_glob fallback.
                 boolean coreGlobalOverride = isCompileTimeCoreGlobalOverride(coreGlobalName);
+                // `caller` remains a nullary term when it is overridden via
+                // CORE::GLOBAL. If followed by a word operator, build the
+                // no-argument override call directly.
+                if (operator.equals("caller") && coreGlobalOverride
+                        && ParserTables.INFIX_OP.contains(peekTokenText)) {
+                    OperatorNode codeRef = new OperatorNode("&",
+                            new IdentifierNode(coreGlobalName, startIndex), startIndex);
+                    codeRef.setAnnotation("directNamedCall", true);
+                    codeRef.setAnnotation("parseTimeCodeRef",
+                            GlobalVariable.getGlobalCodeRef(coreGlobalName));
+                    return new BinaryOperatorNode("(", codeRef,
+                            new ListNode(startIndex), startIndex);
+                }
                 if (!operator.equals("readpipe")
                         && coreGlobalOverride) {
                     // Example: 'BEGIN { *CORE::GLOBAL::hex = sub { 456 } } print hex("123"), "\n"'
@@ -679,7 +699,9 @@ public class ParsePrimary {
                     }
                 }
                 // Regular unary minus
-                operand = parser.parseExpression(parser.getPrecedence(token.text) + 1);
+                // Unary minus binds more tightly than =~/!~ but still admits
+                // exponentiation on its operand (`-2**2` is `-(2**2)`).
+                operand = parser.parseExpression(parser.getPrecedence("=~"));
 
                 // Check for missing operand - this is a syntax error
                 if (operand == null) {
