@@ -456,9 +456,10 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
             RuntimeList result = BytecodeInterpreter.execute(
                     this, args, effectiveContext, this.subName);
             if (result instanceof RuntimeControlFlowList flow
-                    && flow.getControlFlowType() == ControlFlowType.RETURN) {
-                // A non-local return leaves this interpreted frame without
-                // reaching its normal block teardown opcodes.
+                    && flow.getControlFlowType() != ControlFlowType.TAILCALL) {
+                // A non-local control marker leaves this interpreted frame
+                // without reaching its normal block teardown opcodes. The
+                // tailcall trampoline owns the separate argument transfer.
                 MyVarCleanupStack.unwindTo(cleanupMark);
             }
             result = RuntimeCode.handleEscapingLoopControl(

@@ -2885,9 +2885,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         RuntimeCode caller = getActiveCodeAtCallerFrame(1);
         if (caller != null && caller.isMapGrepBlock) {
-            // A sub called directly by the block's expression receives list
-            // context. Deeper calls must keep their own call-site context.
-            return RuntimeContextType.LIST;
+            // Map evaluates its block in list context, but an expression inside
+            // that block can still call a sub in scalar or void context. Keep
+            // the direct call's context when available; only use list context
+            // when the generated call frame reports void for the block result.
+            Integer directCallContext = getCallContextAtCallerFrame(0);
+            if (directCallContext == null || directCallContext == RuntimeContextType.VOID) {
+                return RuntimeContextType.LIST;
+            }
+            return directCallContext;
         }
         return context;
     }
@@ -13054,6 +13060,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 } else {
                     result = (RuntimeList) this.methodHandle.invoke(this.codeObject, a, effectiveContext);
                 }
+                if (result instanceof RuntimeControlFlowList flow
+                        && flow.getControlFlowType() != ControlFlowType.TAILCALL) {
+                    // A non-local loop transfer can leave this generated CV
+                    // through a returned marker instead of an exception. Retire
+                    // its locals before finally discards the cleanup-stack mark.
+                    MyVarCleanupStack.unwindTo(cleanupMark, executionState);
+                }
                 RuntimeList returned = detachTryExpressionLvalueResult(
                         coerceScalarCallResult(result, effectiveContext, callContext, !isLvalueCode(this)),
                         callContext);
@@ -13242,6 +13255,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     result = (RuntimeList) this.methodHandle.invoke(a, effectiveContext);
                 } else {
                     result = (RuntimeList) this.methodHandle.invoke(this.codeObject, a, effectiveContext);
+                }
+                if (result instanceof RuntimeControlFlowList flow
+                        && flow.getControlFlowType() != ControlFlowType.TAILCALL) {
+                    // This named-call overload is used by generated direct calls.
+                    // A non-local loop transfer can return a marker through the
+                    // generated CV, bypassing its ordinary scope teardown.
+                    MyVarCleanupStack.unwindTo(cleanupMark);
                 }
                 RuntimeList returned = detachTryExpressionLvalueResult(
                         coerceScalarCallResult(result, effectiveContext, callContext, !isLvalueCode(this)),
