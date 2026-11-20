@@ -32,23 +32,25 @@ the Perl API.
 - All 19 bundled URI-Fast test files pass on JVM and interpreter.
 - Encode-DoubleEncodedUTF8 0.05 passes 7 tests on JVM and interpreter.
 - TV-ARIB-ProgramGenre 0.01 passes 21 tests on JVM and interpreter.
-- Text-Unicode-Equivalents 0.05 passes on system Perl. Under PerlOnJava its
-  `t/tests.t` reaches all 26 assertions but 15 fail because the distribution
-  reads Perl's private `unicore/Decomposition.pl` file with `do`; PerlOnJava
-  does not currently bundle that internal file. Adding the host Perl 5.34 UCD
-  directory to `@INC` makes the same suite pass. This dependency is separate
-  from `getComposite`'s documented behavior and remains to be triaged.
+- Text-Unicode-Equivalents 0.05 passes all 26 tests under system Perl, JVM, and
+  interpreter. Its use of `do "unicore/Decomposition.pl"` required bundling the
+  generated Unicode 18.0 decomposition table at
+  `src/main/perl/lib/unicore/Decomposition.pl`; the unchanged upstream test is
+  now a bundled-module regression.
 
 ## Decisions and next step
 
 `getComposite` follows the system Perl oracle: non-starter pairs such as
-U+0308/U+0301 return undef. Do not special-case these pairs to accommodate a
-consumer that separately reads Perl's private decomposition table.
+U+0308/U+0301 return undef. The separate decomposition table supplies those
+legacy core records for consumers that read the private file directly. The
+table is generated from Perl core Unicode 18.0 and matches the bundled
+`unicore/Name.pl`; `unicore/UCD.pl` currently identifies Unicode 15.0, so avoid
+claiming a uniform UCD version across all bundled Perl data until that broader
+version alignment is reviewed.
 
-Keep the remaining Unicode private-data limitation visible in issue #2104 and
-track it separately if support for CPAN modules that `do` private core files is
-wanted. The current work should close the direct API gap and the other four
-reported behaviors.
+The five reported compatibility gaps are implemented. PR #2133 is the active
+review and validation vehicle; remaining next step is to resolve its CI and
+review feedback.
 
 ## Related material
 
