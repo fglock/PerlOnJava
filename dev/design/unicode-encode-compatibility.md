@@ -2,6 +2,8 @@
 
 ## Current state — 2026-11-20
 
+Source commit: `6a9fb373b` on `feature/unicode-encode-compatibility`; PR #2133 is open.
+
 This change groups five CPAN compatibility reports: custom `Encode::Encoding`
 registration (#2124), `decode_utf8` on Unicode strings (#2121),
 `Unicode::Normalize::getComposite` (#2104), `Encode::Byte` loading (#2079), and
