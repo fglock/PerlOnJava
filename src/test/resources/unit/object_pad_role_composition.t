@@ -31,6 +31,18 @@ class Test::ObjectPad::Struct :Struct(readonly) {
     field $direction;
 }
 
+BEGIN {
+    package Future;
+    our $VERSION = '0.52';
+    $INC{'Future.pm'} = __FILE__;
+
+    sub AWAIT_NEW_DONE {
+        my ($class, $value) = @_;
+        return bless { value => $value }, $class;
+    }
+    sub get { return $_[0]{value} }
+}
+
 use Future::AsyncAwait;
 no strict 'vars';
 class Test::ObjectPad::UnitClass :repr(HASH);
