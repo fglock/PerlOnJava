@@ -147,6 +147,13 @@ the upstream XS parser plugin.
   A focused test verifies that `no warnings 'Function::Parameters'` compiles on
   JVM, interpreter, and system Perl with the upstream XS module. The malformed
   `$^H` config warning in upstream `stringy_h.t` remains unresolved.
+- Typed method invocants with an explicit type prefix and `:` are now recognized
+  as explicit, so the method provider does not inject a second `$self`. Runtime
+  type failures identify the invocant separately from positional parameters.
+  The focused regression passes on JVM, interpreter, and system Perl with the
+  upstream XS module. `types_msg.t` now parses but still has six runtime and
+  diagnostic assertion failures; `types_auto.t` still fails in composite type
+  expression parsing.
 - Required named-argument validation now reports Function::Parameters' arity
   error before an unknown key when the supplied key/value count is below the
   required minimum. The focused regression passes on the JVM and interpreter.
@@ -157,7 +164,8 @@ the upstream XS parser plugin.
 
 1. Add auto type grammar support for bracket parameterization and composite
    operators, then rerun `types_auto.t`.
-2. Classify and fix the remaining upstream errors and incomplete files listed
+2. Fix the remaining runtime and diagnostic gaps in `types_msg.t`, then classify
+   and fix the other upstream errors and incomplete files listed
    above, preserving focused project regression coverage for each confirmed
    PerlOnJava defect.
 3. Continue method-modifier coverage and verify GraphQL WebSocket ordering on

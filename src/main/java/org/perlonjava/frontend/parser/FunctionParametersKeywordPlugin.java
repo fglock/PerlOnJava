@@ -256,8 +256,7 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
                 || parser.tokens.get(first).type == LexerTokenType.NEWLINE)) {
             first++;
         }
-        if (first >= parser.tokens.size()
-                || !Set.of("$", "@", "%").contains(parser.tokens.get(first).text)) return false;
+        if (first >= parser.tokens.size()) return false;
         for (int i = first + 1; i < parser.tokens.size(); i++) {
             String text = parser.tokens.get(i).text;
             if (":".equals(text)) return true;

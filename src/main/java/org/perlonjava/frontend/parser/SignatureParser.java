@@ -505,14 +505,22 @@ public class SignatureParser {
                         typeConstraintVariable, "get_message", paramVariable, paramStartIndex);
             }
             if (parser.parsingFunctionParametersDeclaration) {
-                int parameterIndex = isNamed
-                        ? positionalParameterCount + namedParameterNames.size()
-                        : positionalParameterCount;
                 String keyword = parser.functionParametersKeyword == null
                         ? "fun" : parser.functionParametersKeyword;
                 String name = subroutineName == null ? "(anon)" : subroutineName;
-                String prefix = "In " + keyword + " " + name + ": parameter "
-                        + parameterIndex + " (" + sigil + paramName + "): ";
+                String position;
+                if (parsingFunctionParametersInvocant) {
+                    position = parser.functionParametersInvocantCount > 1
+                            ? "invocant " + invocantNames.size()
+                            : "invocant";
+                } else {
+                    int parameterIndex = isNamed
+                            ? positionalParameterCount - invocantNames.size() + namedParameterNames.size()
+                            : positionalParameterCount - invocantNames.size();
+                    position = "parameter " + parameterIndex;
+                }
+                String prefix = "In " + keyword + " " + name + ": " + position
+                        + " (" + sigil + paramName + "): ";
                 message = new BinaryOperatorNode(".", new StringNode(prefix, paramStartIndex),
                         message, paramStartIndex);
             }
