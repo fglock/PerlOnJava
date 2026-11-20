@@ -43,14 +43,14 @@ make
 ./jperl -MJSON -E 'say encode_json({hello => "world"})'
 ```
 
-**[Full Quick Start Guide](QUICKSTART.md)** — Installation options, database setup, Docker
+**[Full Quick Start Guide](docs/getting-started/quickstart.md)** — Installation options, database setup, Docker
 
 ## Documentation
 
 | Getting Started | Guides | Reference |
 |-----------------|--------|-----------|
 | [Installation](docs/getting-started/installation.md) | [Database Access](docs/guides/database-access.md) | [Feature Matrix](docs/reference/feature-matrix.md) |
-| [Quick Start](QUICKSTART.md) | [Web Server (PSGI)](examples/http_server_plack/README.md) | [CLI Options](docs/reference/cli-options.md) |
+| [Quick Start](docs/getting-started/quickstart.md) | [Web Server (PSGI)](examples/http_server_plack/README.md) | [CLI Options](docs/reference/cli-options.md) |
 | [Docker](docs/getting-started/docker.md) | [Java Integration](docs/guides/java-integration.md) | [Architecture](docs/reference/architecture.md) |
 | [One-liners](docs/getting-started/oneliners.md) | [Using CPAN Modules](docs/guides/using-cpan-modules.md) | [Testing](docs/reference/testing.md) |
 | | [Module Porting](docs/guides/module-porting.md) | [Bundled Modules](docs/reference/bundled-modules.md) |

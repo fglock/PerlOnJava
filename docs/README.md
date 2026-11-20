@@ -6,7 +6,7 @@ User-facing documentation for PerlOnJava.
 
 New to PerlOnJava? Start here:
 
-- **[Quick Start Guide](../QUICKSTART.md)** - Get running in 5 minutes
+- **[Quick Start Guide](getting-started/quickstart.md)** - Get running in 5 minutes
 - **[Installation](getting-started/installation.md)** - Build and setup instructions
 - **[Docker](getting-started/docker.md)** - Run PerlOnJava in containers
 - **[One-liners](getting-started/oneliners.md)** - Practical Perl examples

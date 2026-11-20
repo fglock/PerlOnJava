@@ -1,110 +1,39 @@
-# PerlOnJava Development Workspace
+# PerlOnJava development workspace
 
-This directory contains development resources, tools and experimental code for PerlOnJava that are not part of the production distribution.
+Developer resources that are not part of the shipped distribution. User
+documentation lives in [`docs/`](../docs/README.md); contributor rules live in
+[`CONTRIBUTING.md`](../CONTRIBUTING.md) and [`AGENTS.md`](../AGENTS.md).
 
-## Directory Structure
+## Where things go
 
-- **architecture/** - Stable "how the system is built" reference docs
-    - Explains how major subsystems work: dynamic scoping, control flow, weaken/DESTROY, lexical pragmas, large-code handling
-    - See [architecture/README.md](architecture/README.md)
+| Directory | Holds | Status of contents |
+|---|---|---|
+| [architecture/](architecture/README.md) | How the system works today: subsystem references and per-feature implementation notes, including the [bytecode interpreter](architecture/custom_bytecode/README.md) | Maintained; update with the code |
+| [design/](design/README.md) | Proposals and active plans. Finished, superseded, and incident documents move to [archive/](archive/README.md) | Each document states its status |
+| [archive/](archive/README.md) | Finished and superseded design documents, and pre-skill prompt files | Historical; not maintained |
+| [modules/](modules/README.md) | CPAN module porting notes, XS replacements, `jcpan` and MakeMaker behavior, [framework testing](modules/framework-testing/README.md) | Maintained per module |
+| [regex/](regex/) | Regex engine workspace: oracle data, parity tooling, and plans | Maintained |
+| [tools/](tools/README.md) | Developer scripts and their tests, [maintenance scripts](tools/maintenance/README.md), [JVM profiling guide](tools/jvm_profiler/README.md) | Maintained; tools used by `make` have tests in `tools/tests/` |
+| [bench/](bench/README.md) | Benchmarks and the benchmark runner | Maintained |
+| [import-perl5/](import-perl5/README.md) | Tooling and configuration for importing files from the upstream perl5 tree | Maintained |
+| [unicode/](unicode/) | Unicode Character Database inputs for the table generators | Generated input; do not edit by hand |
+| [patches/](patches/README.md) | Reference patches for third-party CPAN distributions | Maintained |
+| [test-corpora/](test-corpora/) | Pinned third-party test files and checksum manifests used by `make` gates | Do not edit; replace only with a new pinned version |
+| [cpan-reports/](cpan-reports/README.md) | Generated CPAN compatibility data | Generated; publish with the `publish-cpan-reports` skill |
+| [presentations/](presentations/README.md) | Talks, workshop material, and blog drafts | Historical |
+| [sandbox/](sandbox/README.md) | Experiments, examples, reproducers, known-bug scripts, and raw diagnostic traces | Unsupported; may be outdated or broken |
 
-- **bench/** - Performance benchmarks and comparison tests
-    - Perl benchmark scripts for various operations (regex, strings, typing, closures, eval)
-    - See [bench/README.md](bench/README.md)
+## Rules
 
-- **cpan-reports/** - CPAN module compatibility tracking
-    - Pass/fail/skip lists from automated CPAN testing
-    - Per-module notes (Memoize, Scalar::Util, etc.)
-    - See [cpan-reports/README.md](cpan-reports/README.md)
-
-- **custom_bytecode/** - Custom bytecode / interpreter subsystem
-    - Architecture, opcodes, closure implementation, eval-string spec
-    - Tests and optimization results for the interpreter backend
-    - See [custom_bytecode/README.md](custom_bytecode/README.md)
-
-- **design/** - Technical documentation, specifications, and analysis
-    - Implementation guides, feature specs, optimization plans, root-cause analyses
-    - See [design/README.md](design/README.md)
-
-- **design_spark/** - Exploratory / brainstorming material
-    - Early-stage ideas, conceptual discussions, proof-of-concept sketches
-    - See [design_spark/README.md](design_spark/README.md)
-
-- **diagnostic-traces/** - Raw diagnostic output from debugging sessions
-    - Log traces captured with instrumented builds (e.g. refcount tracing)
-    - See [diagnostic-traces/README.md](diagnostic-traces/README.md)
-
-- **examples/** - Sample code and usage demonstrations
-    - Mix of working examples and feature concepts for design exploration
-    - GUI, networking, threading, type system, core-global overrides
-    - See [examples/README.md](examples/README.md)
-
-- **implementation/** - Implementation notes for specific features
-    - Focused notes on alarm, overload, pack/unpack, regex, signal handling, tie
-    - See [implementation/README.md](implementation/README.md)
-
-- **import-perl5/** - Upstream perl5 test import tooling
-    - Scripts and config for importing and syncing perl5 test files
-    - See [import-perl5/README.md](import-perl5/README.md)
-
-- **jvm_profiler/** - JVM profiling skill and tooling
-    - Skill definitions for profiling PerlOnJava with JFR/async-profiler
-    - See [jvm_profiler/README.md](jvm_profiler/README.md)
-
-- **known-bugs/** - Known bugs with reproduction cases
-    - Minimal Perl scripts that reproduce confirmed bugs
-    - See [known-bugs/README.md](known-bugs/README.md)
-
-- **maintenance/** - Ongoing maintenance tracking
-    - Dependency update plans, version bump notes
-    - See [maintenance/README.md](maintenance/README.md)
-
-- **modules/** - CPAN module porting documentation
-    - Module compatibility guides (Moose, Moo, DateTime, DBIx::Class, DBI, Storable)
-    - XS fallback mechanisms and Java XS implementations
-    - jcpan client and MakeMaker documentation
-    - See [modules/README.md](modules/README.md)
-
-- **patches/** - Patches applied to third-party CPAN modules
-    - Minimal diffs that make specific CPAN modules work under PerlOnJava
-    - See [patches/README.md](patches/README.md)
-
-- **presentations/** - Conference talks and blog posts
-    - Slide decks, workshop materials, blog-post drafts
-    - See [presentations/README.md](presentations/README.md)
-
-- **prompts/** - LLM prompts for development assistance
-    - Code generation and conversion, debugging, documentation, refactoring
-    - See [prompts/README.md](prompts/README.md)
-
-- **sandbox/** - Quick tests and proof of concepts
-    - IO operations testing, command line handling, regex experiments
-    - Compile-time optimizations, lambda handling, stack management prototypes
-    - See [sandbox/README.md](sandbox/README.md)
-
-- **scripts/** - One-off development scripts
-    - Shell scripts for ad-hoc tasks (fast DBIx::Class checks, etc.)
-    - See [scripts/README.md](scripts/README.md)
-
-- **tools/** - Development utilities and helpers
-    - Java implementation utilities, Vim configuration, parser/lexer generation tools
-    - See [tools/README.md](tools/README.md)
-
-## Contributing
-
-When adding new code or tools:
-
-1. Place it in the appropriate category directory
-2. Include clear documentation and usage examples
-3. Add relevant tests where applicable
-4. Reference related design documents from `design/` or `modules/`
-
-## Development Guidelines
-
-- Keep experimental code separate from production code
-- Document design decisions in the `design/` directory
-- Document module porting work in the `modules/` directory
-- Use the `bench/` directory for performance testing
-- Check `examples/` for implementation patterns
-- Store reusable LLM prompts in `prompts/` directory
-- Raw debugging traces belong in `diagnostic-traces/`; analysed write-ups belong in `design/`
+1. Put a file in the directory whose description matches it. Do not create a
+   new top-level directory under `dev/` for a single topic; use a subdirectory
+   of the closest match.
+2. A document that describes current behavior belongs in `architecture/`. A
+   document that proposes or tracks a change belongs in `design/` and moves to
+   `dev/archive/` when the work is finished or abandoned.
+3. A reproducer that should keep passing is a unit test under
+   `src/test/resources/unit/`, not a sandbox file.
+4. Reusable agent procedures are skills under `.agents/skills/`, not prompt
+   files.
+5. Nothing in `sandbox/` or `dev/archive/` may be a dependency of the
+   build or of a test gate.

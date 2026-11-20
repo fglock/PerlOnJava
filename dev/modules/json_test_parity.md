@@ -431,7 +431,7 @@ roadmap; not needed for this task.
   `dev/modules/README.md`,
   `dev/modules/dynamic_loading.md`,
   `dev/design/sbom.md`,
-  `dev/custom_bytecode/TESTING.md`,
+  `dev/architecture/custom_bytecode/TESTING.md`,
   `dev/presentations/blogs_perl_org_jcpan_2026/blog-post{,-long}.md`,
   `build.gradle`, `gradle/libs.versions.toml`, `pom.xml`,
   `jperl`, `jperl.bat`)
