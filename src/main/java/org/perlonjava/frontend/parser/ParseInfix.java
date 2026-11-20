@@ -415,22 +415,11 @@ public class ParseInfix {
                             directCall.setAnnotation("subroutineKnownAtParseTime", false);
                             return new BinaryOperatorNode("(", directCall, right, parser.tokenIndex);
                         }
-                        // A sub name that was unresolved when this code was
-                        // compiled is a late-bound direct call in Perl's
-                        // Foo::bar->(LIST) syntax. If it was already defined,
-                        // preserve the ordinary coderef-returning call.
-                        if (left instanceof BinaryOperatorNode namedCall
-                                && "(".equals(namedCall.operator)
-                                && namedCall.right instanceof ListNode namedArgs
-                                && namedArgs.elements.isEmpty()
-                                && namedCall.left instanceof OperatorNode subRef
-                                && "&".equals(subRef.operator)
-                                && subRef.operand instanceof IdentifierNode
-                                && subRef.getBooleanAnnotation("directNamedCall")
-                                && Boolean.FALSE.equals(
-                                        subRef.getAnnotation("subroutineKnownAtParseTime"))) {
-                            return new BinaryOperatorNode("(", subRef, right, parser.tokenIndex);
-                        }
+                        // If the left side is already an explicit call such
+                        // as `fact3()`, invoke its returned coderef. Bareword
+                        // late-bound calls such as `Foo::bar->(LIST)` are
+                        // handled above while the left side is still an
+                        // IdentifierNode.
                         if (left instanceof OperatorNode op && isArrowReassociatingUnaryOperator(op.operator)) {
                             Node arrowLeft = coderefArrowLeft(op.operand);
                             BinaryOperatorNode arrowCall = new BinaryOperatorNode(token.text,
@@ -638,7 +627,7 @@ public class ParseInfix {
                         // A package/bareword invocant is a class name (for
                         // example Foo->new), even when it happens to look like
                         // an autoboxed native string.
-                        if (!autoboxBindings.isEmpty() && !(left instanceof IdentifierNode)) {
+                        if (!autoboxBindings.isEmpty() && !isPackageMethodInvocant(left)) {
                             methodCall.setAnnotation("autoboxBindings", autoboxBindings);
                         }
                         return methodCall;
@@ -796,6 +785,14 @@ public class ParseInfix {
             return new OperatorNode("\\", aggregate, tokenIndex);
         }
         return invocant;
+    }
+
+    /** Keep bare package names on ordinary method lookup, while allowing lexical
+     * variable names that parse directly as identifiers to use autobox bindings. */
+    private static boolean isPackageMethodInvocant(Node invocant) {
+        if (!(invocant instanceof IdentifierNode identifier)) return false;
+        String name = identifier.name;
+        return name.contains("::") || (!name.isEmpty() && Character.isUpperCase(name.charAt(0)));
     }
 
     private static boolean isAssignmentOperator(String operator) {

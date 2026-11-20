@@ -101,6 +101,7 @@ Proposals and plans for work that is being considered or is in progress.
 | [optimization_codegen.md](optimization_codegen.md) | — | — |
 | [pack_unpack_architecture.md](pack_unpack_architecture.md) | Pack/Unpack Architecture Overview | Living document - updated based on deep dive bug fixing |
 | [package-variable-binding.md](package-variable-binding.md) | Package variable binding: compile-time glob references | design (no implementation yet) |
+| [parser-cpan-compatibility-providers.md](parser-cpan-compatibility-providers.md) | Parser CPAN compatibility providers | — |
 | [parser-high-impact-completion-plan.md](parser-high-impact-completion-plan.md) | Completion plan for the five high impact parser issues | — |
 | [parser_scalar_slice_precedence.md](parser_scalar_slice_precedence.md) | Parser Bug: scalar @array[indices] Precedence | — |
 | [patch-and-cpan-prefs-layout.md](patch-and-cpan-prefs-layout.md) | Patch and CPAN distropref layout | Adopted (2026-05-12). Canonical locations for Perl 5 import… |

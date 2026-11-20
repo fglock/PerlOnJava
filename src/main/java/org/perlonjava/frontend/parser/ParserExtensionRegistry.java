@@ -343,11 +343,15 @@ public final class ParserExtensionRegistry {
 
     private static void expandAutoboxVirtualType(
             Map<String, List<String>> requested, String virtualType, List<String> concreteTypes) {
-        List<String> classes = requested.remove(virtualType);
+        List<String> classes = requested.get(virtualType);
         if (classes == null || classes.isEmpty()) return;
         List<String> expanded = classes.stream()
                 .filter(name -> !name.isEmpty())
                 .map(name -> expandAutoboxNamespace(name, virtualType)).toList();
+        // Keep the virtual mapping for native references to the scalar value
+        // itself (for example \$value->method), while also expanding it to
+        // Perl's concrete string and numeric scalar categories.
+        requested.put(virtualType, expanded);
         for (String concreteType : concreteTypes) {
             List<String> combined = new ArrayList<>(requested.getOrDefault(concreteType, List.of()));
             combined.addAll(expanded);

@@ -2,17 +2,17 @@
 
 ## Current state (2026-11-20)
 
-Source commit: `bb93d3984`. The full project gate passed on that source tree;
-the autobox 3.0.2 upstream suite passed all 675 assertions, and Function::Parameters
-2.002006 passed all 56 upstream files and 1,619 assertions. The Object::Pad
-0.825 suite currently passes 15 of 68 files; failures identify substantial
-unsupported syntax, roles, and MOP surface. Next, extend that compatibility
-subset. Issue #1264's claim names `autobox::Core` and consumer coverage as
-remaining acceptance. Current local work adds the `autobox::Core` 1.33 module,
-parser providers for its delegated import and `Moose::Autobox`, and focused
-system-Perl-passing tests. The full project gate has not yet run on these new
-changes because Gradle cannot complete TLS connections from its Java client to
-the plugin portal; verification is pending.
+Source commit: `f9bc8e763` plus the current uncommitted parser/runtime follow-up;
+rebased onto `origin/master` at `94cc21a9c`. The full `nice -n 19 make` gate
+passes on the current candidate. The autobox 3.0.2 upstream suite previously
+passed all 23 files and 675 assertions; `Function::Parameters` 2.002006 passes
+all 56 files and 1,619 assertions. `Moose::Autobox` 0.16 now passes all 15
+upstream files and 208 tests, including CODE fixed-point calls and scalar-ref
+flattening. `autobox::Core` 1.33 is bundled and its focused tests pass on both
+backends; its upstream JPerl run still has unrelated `crypt.t` and two `Want`
+BOOL-context failures. `Object::Pad` 0.825 remains a partial compatibility
+layer: 15 of 68 upstream files pass, with custom syntax, fields, and MOP APIs
+still outside the implemented surface.
 
 This change adds parser providers for three compile-time module imports that
 otherwise require XS/declaration hooks: `Syntax::Keyword::Try`,
@@ -33,12 +33,14 @@ compatibility path covers its roles, hash-backed fields, `:Struct(readonly)`,
 MOP method registration, signatures, async methods, and unit-class `ADJUST`
 initialization across later field declarations.
 
-The autobox work now adds parser-time `use autobox` and `no autobox` bindings,
+The autobox work adds parser-time `use autobox` and `no autobox` bindings,
 captures immutable mappings on method-call sites, and routes them through both
 the JVM emitter and bytecode interpreter. The runtime supports scalar and
-reference type mappings, virtual `SCALAR`/`NUMBER` expansion, merged class
-lookup, `autobox_class`, and an `autobox::universal::type` helper that reads
-integer and floating-point flags through `B`.
+reference type mappings, virtual `SCALAR`/`NUMBER` expansion that retains the
+`SCALAR` mapping for scalar references, merged class lookup, `autobox_class`,
+and an `autobox::universal::type` helper that reads integer and floating-point
+flags through `B`. Parser providers model the delegated imports from
+`autobox::Core` and `Moose::Autobox`; `autobox::Core` 1.33 is bundled.
 Direct `@array->method` and `%hash->method` invocants become references only
 while a lexical mapping is active; ordinary lookup resumes under `no autobox`
 and outside that scope. These lexical call-site bindings do not mutate or bless
@@ -56,7 +58,8 @@ shared objects remain owned by the parent.
   11 tests), including unbound `catch` blocks.
 - The new focused provider tests pass on JVM and interpreter backends, and
   system Perl skips syntax unavailable in its core try implementation.
-- The full `nice -n 19 make` gate passes on the candidate source.
+- The full `nice -n 19 make` gate passes on the candidate source after rebasing
+  onto `origin/master`.
 - The Object::Pad role/MOP/Struct regression passes 10 assertions on JVM and
   interpreter. The system-Perl test skips because Object::Pad is not installed.
 - The unchanged `Device::Chip::ADT7470` upstream suite passes all four test
@@ -65,6 +68,11 @@ shared objects remain owned by the parent.
   interpreter backends. A six-assertion system-Perl oracle built against
   autobox 3.0.2's XS implementation passes the focused test. The system-Perl
   upstream suite passes all 23 test programs (675 tests).
+- `autobox::Core` focused dispatch (8 assertions), scalar-reference dispatch
+  (1 assertion), and Moose::Autobox consumer dispatch (9 assertions) pass on
+  both the JVM and interpreter. The system-Perl oracles pass with official
+  autobox XS; the full system-Perl `autobox::Core` 1.33 suite passes 63 files
+  and 301 assertions.
 - The unchanged autobox 3.0.2 system-Perl and PerlOnJava upstream suites pass
   all 23 test programs (675 assertions). `rt_71777.t` verifies destructor-time
   dispatch while a method call on `undef` throws during global teardown; it
@@ -76,19 +84,13 @@ shared objects remain owned by the parent.
   system Perl, JVM, and interpreter.
 - The Object::Pad compatibility layer remains a documented subset; custom
   field attributes and upstream XS APIs are unsupported. Function::Parameters'
-  upstream suite is covered by the full passing run above. The separate
-  `autobox::Core` distribution, which depends on `Want`, is not bundled or
-  covered by this provider change.
+  upstream suite is covered by the full passing run above. The `autobox::Core`
+  upstream JPerl failures remain in `crypt.t` and two `Want` BOOL-context
+  assertions; its system-Perl suite passes.
 
-The preceding implementation delivered the two reported syntax-provider cases,
-passed the tested Object::Pad consumer path, and passed the full autobox 3.0.2
-distribution suite.
-The documented Object::Pad subset remains unresolved. Function::Parameters
-passes its complete 2.002006 upstream suite. The separate `autobox::Core`
-distribution remains outside this scope;
-assess it independently before claiming compatibility beyond the autobox
-3.0.2 API and tests. The latest autobox delegated-import change is not yet
-validated on PerlOnJava; its required full build and tests remain pending.
+The two method-syntax providers and `Syntax::Keyword::Try` provider are covered
+by focused consumer tests. Broader Object::Pad 0.825 compatibility remains the
+next parser-provider phase; do not claim complete Object::Pad compatibility.
 
 ## Related references
 
