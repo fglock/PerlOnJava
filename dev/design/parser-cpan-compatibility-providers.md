@@ -11,8 +11,11 @@ upstream files and 208 tests, including CODE fixed-point calls and scalar-ref
 flattening. `autobox::Core` 1.33 is bundled and its focused tests pass on both
 backends; its upstream JPerl run still has unrelated `crypt.t` and two `Want`
 BOOL-context failures. `Object::Pad` 0.825 remains a partial compatibility
-layer: 15 of 68 upstream files pass, with custom syntax, fields, and MOP APIs
-still outside the implemented surface.
+  layer: 15 of 68 upstream files pass, with custom syntax, fields, and MOP APIs
+  still outside the implemented surface. The `:experimental(init_expr)` field
+  block syntax now evaluates in scalar, array, and hash initializer contexts;
+  upstream `t/02fields.t` reaches 14 of 18 assertions, with serialization,
+  eval visibility, and `:common` behavior still failing.
 
 This change adds parser providers for three compile-time module imports that
 otherwise require XS/declaration hooks: `Syntax::Keyword::Try`,
@@ -26,9 +29,10 @@ signature for the no-parentheses forms used by `Data::Page::Pagination`.
 The bundled `Object::Pad` shim reports syntax compatibility level 0.800 for
 the implemented class, role, field, initializer, method, signature,
 ADJUST/BUILD, inheritance, `:repr(HASH)`, `:does`, and `:Struct(readonly)`
-subset. It also provides a small `Object::Pad::MOP::Class` method-registration
-API and package metadata helpers. This does not implement custom field
-attributes or Object::Pad's XS APIs. The `Device::Chip` 0.27 syntax and
+subset, including experimental field initializer blocks. It also provides a
+small `Object::Pad::MOP::Class` method-registration API and package metadata
+helpers. This does not implement custom field attributes or Object::Pad's XS
+APIs. The `Device::Chip` 0.27 syntax and
 compatibility path covers its roles, hash-backed fields, `:Struct(readonly)`,
 MOP method registration, signatures, async methods, and unit-class `ADJUST`
 initialization across later field declarations.
@@ -62,6 +66,8 @@ shared objects remain owned by the parent.
   onto `origin/master`.
 - The Object::Pad role/MOP/Struct regression passes 10 assertions on JVM and
   interpreter. The system-Perl test skips because Object::Pad is not installed.
+- The Object::Pad `:experimental(init_expr)` regression passes four assertions
+  on JVM and interpreter, and against the official Object::Pad 0.825 XS oracle.
 - The unchanged `Device::Chip::ADT7470` upstream suite passes all four test
   programs (27 tests) using its fake adapter.
 - The focused autobox regression passes 44 assertions on the JVM and
