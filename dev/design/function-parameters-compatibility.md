@@ -24,13 +24,15 @@ the upstream XS parser plugin.
 
 ### Current status: Core subset implemented; upstream compatibility work remains (2026-11-20)
 
-Latest phase (2026-11-20, source `f0cb5c9a0`): added automatic Type::Tiny
-bracket applications and composite type operators, with a focused overloaded
-type regression. `nice -n 19 make` passed; `nice -n 19 make check-links`
-passed (584 links). The upstream `types_auto.t` now passes quoted unknown-type
-diagnostics but retains failures for bare unknown-type diagnostics and deeply
-composed type metadata. Next: resolve those two failures; broader consumer gaps
-and the missing system Perl XS oracle remain blockers to full compatibility.
+Latest phase (2026-11-20, source `2bef1aef6`): automatic Type::Tiny
+parameterized and quoted composite expressions now reify through overloaded
+code references; unknown bare types use the module diagnostic. Recursive
+Function::Parameters declarations retain their block-argument prototype, and
+the prototype consumes trailing arguments. `nice -n 19 make` passed in 6m29.
+The upstream `types_auto.t` (12/12) and `bonus.t` (13/13) pass. Focused auto
+type tests pass on JVM, interpreter, and system Perl; the prototype test passes
+on system Perl and in the full repository gate. Remaining upstream gaps include
+`elsewhere.t`, `eval.t`, `lineno*.t`, `lifetime.t`, and `stringy_h.t`.
 
 ### Completed
 
@@ -174,11 +176,10 @@ and the missing system Perl XS oracle remain blockers to full compatibility.
 
 ### Next steps
 
-1. Resolve the remaining `types_auto.t` diagnostic and deeply composed type
-   metadata failures.
-2. Classify and fix the other upstream errors and incomplete files listed
-   above, preserving focused project regression coverage for each confirmed
-   PerlOnJava defect.
+1. Fix the anonymous immediate-call parsing and source locations in
+   `elsewhere.t` and `lineno*.t`.
+2. Support configured `shift` invocants used by `eval.t`, then investigate the
+   compile-time CV lifetime and `$^H` warning behavior.
 3. Continue method-modifier coverage and verify GraphQL WebSocket ordering on
    an uncongested runner before assigning that timing difference to runtime
    behavior.
