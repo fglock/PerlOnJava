@@ -850,6 +850,7 @@ public class EmitterMethodCreator implements Opcodes {
             int evalMethodInvocantDepthSlot = -1;
             int evalMortalMarkDepthSlot = -1;
             int evalTemporaryRootDepthSlot = -1;
+            int evalForeachSourceOwnerDepthSlot = -1;
             int evalThrowableSlot = -1;
 
             if (useTryCatch) {
@@ -892,6 +893,11 @@ public class EmitterMethodCreator implements Opcodes {
                         "org/perlonjava/runtime/runtimetypes/MortalList",
                         "temporaryRootDepth", "()I", false);
                 mv.visitVarInsn(Opcodes.ISTORE, evalTemporaryRootDepthSlot);
+                evalForeachSourceOwnerDepthSlot = ctx.symbolTable.allocateLocalVariable();
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/MortalList",
+                        "foreachSourceOwnerDepth", "()I", false);
+                mv.visitVarInsn(Opcodes.ISTORE, evalForeachSourceOwnerDepthSlot);
                 evalThrowableSlot = ctx.symbolTable.allocateLocalVariable();
 
                 tryStart = new Label();
@@ -1216,6 +1222,10 @@ public class EmitterMethodCreator implements Opcodes {
                 mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                         "org/perlonjava/runtime/runtimetypes/MortalList",
                         "restoreTemporaryRootDepth", "(I)V", false);
+                mv.visitVarInsn(Opcodes.ILOAD, evalForeachSourceOwnerDepthSlot);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/MortalList",
+                        "restoreForeachSourceOwnerDepth", "(I)V", false);
                 emitEvalMethodInvocantCleanup(mv, ctx.javaClassInfo.jvmFrameStateSlot,
                         evalArgumentDepthSlot, evalMethodInvocantDepthSlot);
                 emitEvalDepthDecrement(mv);
@@ -1252,6 +1262,10 @@ public class EmitterMethodCreator implements Opcodes {
                 mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                         "org/perlonjava/runtime/runtimetypes/MortalList",
                         "restoreTemporaryRootDepth", "(I)V", false);
+                mv.visitVarInsn(Opcodes.ILOAD, evalForeachSourceOwnerDepthSlot);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/MortalList",
+                        "restoreForeachSourceOwnerDepth", "(I)V", false);
 
                 // Scope marks opened inside eval were bypassed by the thrown
                 // exception. Restore the eval-entry boundary before the

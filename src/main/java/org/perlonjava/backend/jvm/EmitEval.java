@@ -220,10 +220,15 @@ public class EmitEval {
         Label catchBlock = new Label();
         Label endCatch = new Label();
         int temporaryRootDepthSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        int foreachSourceOwnerDepthSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
         mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/runtimetypes/MortalList",
                 "temporaryRootDepth", "()I", false);
         mv.visitVarInsn(Opcodes.ISTORE, temporaryRootDepthSlot);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/MortalList",
+                "foreachSourceOwnerDepth", "()I", false);
+        mv.visitVarInsn(Opcodes.ISTORE, foreachSourceOwnerDepthSlot);
         mv.visitTryCatchBlock(tryStart, tryEnd, catchBlock, "java/lang/Throwable");
         mv.visitLabel(tryStart);
 
@@ -264,6 +269,10 @@ public class EmitEval {
         mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/runtimetypes/MortalList",
                 "restoreTemporaryRootDepth", "(I)V", false);
+        mv.visitVarInsn(Opcodes.ILOAD, foreachSourceOwnerDepthSlot);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/MortalList",
+                "restoreForeachSourceOwnerDepth", "(I)V", false);
         if (emitterVisitor.ctx.contextType == RuntimeContextType.LIST) {
             mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeList");
             mv.visitInsn(Opcodes.DUP);

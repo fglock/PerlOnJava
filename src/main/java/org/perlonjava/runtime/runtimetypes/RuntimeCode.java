@@ -10763,6 +10763,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // temporaries like Foo->new()->method()).
             MortalList.pushMark();
             int temporaryRootDepth = MortalList.temporaryRootDepth();
+            int foreachSourceOwnerDepth = MortalList.foreachSourceOwnerDepth();
             // Holds the tailcall target if the body returns one. Populated
             // inside the try block; after the finally runs we loop back
             // to the top of apply() instead of recursing, preventing
@@ -10992,6 +10993,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     MortalList.popMark();
                     MyVarCleanupStack.popMark(cleanupMark);
                 }
+                MortalList.restoreForeachSourceOwnerDepth(foreachSourceOwnerDepth);
                 WarningBitsRegistry.setCallSiteHints(compilationState, callerCallSiteHints);
                 WarningBitsRegistry.setCallSiteBits(callerCallSiteWarningBits);
                 HintHashRegistry.popCallerHintHash(compilationState);
@@ -11972,20 +11974,24 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     // Method to apply (execute) a subroutine reference (legacy method for compatibility)
     public static RuntimeList apply(RuntimeScalar runtimeScalar, String subroutineName, RuntimeBase list, int callContext) {
-
-        // If this is a tail-call trampoline re-entry (emitted by the JVM bytecode
-        // trampoline for `goto &sub`), mark it so enterCall/exitCall skip depth
-        // tracking. See enterCall() / inTailCallTrampoline for the rationale.
-        boolean isTailCall = "tailcall".equals(subroutineName);
-        if (isTailCall) {
-            PerlRuntime.current().executionState().tailCallTrampolineDepth++;
-            try {
-                return applyImpl(runtimeScalar, subroutineName, list, callContext);
-            } finally {
-                PerlRuntime.current().executionState().tailCallTrampolineDepth--;
+        int foreachSourceOwnerDepth = MortalList.foreachSourceOwnerDepth();
+        try {
+            // If this is a tail-call trampoline re-entry (emitted by the JVM bytecode
+            // trampoline for `goto &sub`), mark it so enterCall/exitCall skip depth
+            // tracking. See enterCall() / inTailCallTrampoline for the rationale.
+            boolean isTailCall = "tailcall".equals(subroutineName);
+            if (isTailCall) {
+                PerlRuntime.current().executionState().tailCallTrampolineDepth++;
+                try {
+                    return applyImpl(runtimeScalar, subroutineName, list, callContext);
+                } finally {
+                    PerlRuntime.current().executionState().tailCallTrampolineDepth--;
+                }
             }
+            return applyImpl(runtimeScalar, subroutineName, list, callContext);
+        } finally {
+            MortalList.restoreForeachSourceOwnerDepth(foreachSourceOwnerDepth);
         }
-        return applyImpl(runtimeScalar, subroutineName, list, callContext);
     }
 
     private static RuntimeList applyImpl(RuntimeScalar runtimeScalar, String subroutineName, RuntimeBase list, int callContext) {

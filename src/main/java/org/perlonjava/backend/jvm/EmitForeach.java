@@ -162,6 +162,7 @@ public class EmitForeach {
         // in the enclosing scope, not trapped inside the for loop's inner scope.
         // In Perl, the list in a foreach is always evaluated once in the enclosing scope.
         int preEvalListLocal = -1;
+        int foreachSourceOwnerDepth = -1;
         if (node.preEvaluatedArrayIndex < 0) {
             // A key/value hash slice used as a foreach source supplies its
             // values only.  Keep this marker narrowly scoped to emission so
@@ -169,6 +170,23 @@ public class EmitForeach {
             emitForeachSource(emitterVisitor, node.list);
             preEvalListLocal = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
             mv.visitVarInsn(Opcodes.ASTORE, preEvalListLocal);
+            foreachSourceOwnerDepth = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            mv.visitVarInsn(Opcodes.ALOAD, preEvalListLocal);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/MortalList",
+                    "pushForeachSourceOwners",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)I",
+                    false);
+            mv.visitVarInsn(Opcodes.ISTORE, foreachSourceOwnerDepth);
+        } else {
+            foreachSourceOwnerDepth = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            mv.visitVarInsn(Opcodes.ALOAD, node.preEvaluatedArrayIndex);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/MortalList",
+                    "pushForeachSourceOwners",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)I",
+                    false);
+            mv.visitVarInsn(Opcodes.ISTORE, foreachSourceOwnerDepth);
         }
 
         int scopeIndex = emitterVisitor.ctx.symbolTable.enterScope();
@@ -1050,6 +1068,14 @@ public class EmitForeach {
                 emitterVisitor.ctx.javaClassInfo.jvmFrameStateSlot);
 
         EmitStatement.emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex, true);
+        if (foreachSourceOwnerDepth >= 0) {
+            mv.visitVarInsn(Opcodes.ILOAD, foreachSourceOwnerDepth);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/MortalList",
+                    "restoreForeachSourceOwnerDepth",
+                    "(I)V",
+                    false);
+        }
         emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
 
         if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {

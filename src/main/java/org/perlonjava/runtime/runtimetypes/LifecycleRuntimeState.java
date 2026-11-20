@@ -369,6 +369,7 @@ final class LifecycleRuntimeState {
     final IdentityHashMap<RuntimeBase, Integer> positiveOwnerReferents = new IdentityHashMap<>();
     boolean deferredCapturesMayBeReady;
     final ArrayDeque<TemporaryRootLease> temporaryRoots = new ArrayDeque<>();
+    final ArrayDeque<ForeachSourceOwnerLease> foreachSourceOwners = new ArrayDeque<>();
     private static final int INITIAL_MARK_CAPACITY = 16;
     int[] marks = new int[INITIAL_MARK_CAPACITY];
     int[] tiedReleaseMarks = new int[INITIAL_MARK_CAPACITY];
@@ -471,6 +472,63 @@ final class LifecycleRuntimeState {
         }
     }
 
+    /** Explicit temporary owners for references in one evaluated foreach list. */
+    static final class ForeachSourceOwnerLease {
+        private final List<PerlOwnerSlot> owners = new ArrayList<>();
+
+        void retain(RuntimeScalar scalar) {
+            if (System.getenv("PJ_FOREACH_TRACE") != null && scalar != null
+                    && scalar.value instanceof RuntimeBase candidate
+                    && candidate.blessId != 0
+                    && NameNormalizer.getBlessStr(candidate.blessId)
+                            .equals("Issue2043::LoopRow")) {
+                System.err.println("[FOREACH-SOURCE-REF] scalarType=" + scalar.type
+                        + " weak=" + WeakRefRegistry.isweak(scalar)
+                        + " destroyed=" + candidate.isPerlDestroyed()
+                        + " count=" + candidate.refCount + " owners="
+                        + candidate.ownerSlotSnapshot().size());
+            }
+            if (scalar == null || scalar.nonOwningBObjectReference
+                    || (scalar.type & RuntimeScalarType.REFERENCE_BIT) == 0
+                    || WeakRefRegistry.isweak(scalar)
+                    || !(scalar.value instanceof RuntimeBase referent)) {
+                return;
+            }
+            retainReferent(referent);
+        }
+
+        void retainReferent(RuntimeBase referent) {
+            if (referent == null || referent.isPerlDestroyed()) return;
+            PerlOwnerSlot owner = new PerlOwnerSlot(PerlOwnerSlot.Kind.EXPRESSION_VALUE);
+            boolean counted = owner.acquireCountedNativeOwner(referent, "foreach source list value");
+            owners.add(owner);
+            if (System.getenv("PJ_FOREACH_TRACE") != null && referent.blessId != 0
+                    && NameNormalizer.getBlessStr(referent.blessId)
+                            .equals("Issue2043::LoopRow")) {
+                System.err.println("[FOREACH-SOURCE-OWNER] referent="
+                        + System.identityHashCode(referent) + " count=" + referent.refCount
+                        + " tracked=" + referent.isRefCountTracked() + " acquiredCount=" + counted
+                        + " ownerSlots=" + referent.ownerSlotSnapshot().size()
+                        + " state=" + referent.perlLifecycleState());
+            }
+        }
+
+        void release() {
+            Throwable failure = null;
+            for (int i = owners.size() - 1; i >= 0; i--) {
+                try {
+                    owners.get(i).releaseNativeOwner();
+                } catch (RuntimeException | Error cleanupFailure) {
+                    if (failure == null) failure = cleanupFailure;
+                    else failure.addSuppressed(cleanupFailure);
+                }
+            }
+            owners.clear();
+            if (failure instanceof RuntimeException runtimeFailure) throw runtimeFailure;
+            if (failure instanceof Error errorFailure) throw errorFailure;
+        }
+    }
+
     void clear() {
         mortalActive = true;
         while (!pendingTransientListAssignmentRhsByFrame.isEmpty()) {
@@ -518,6 +576,7 @@ final class LifecycleRuntimeState {
         }
         deferredCapturesMayBeReady = false;
         while (!temporaryRoots.isEmpty()) temporaryRoots.pop().release();
+        while (!foreachSourceOwners.isEmpty()) foreachSourceOwners.pop().release();
         markDepth = 0;
         flushing = false;
         deferredReleaseDrainDepth = 0;
