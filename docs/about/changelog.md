@@ -8,7 +8,7 @@ priorities and future plans.
 
 - Preserve file contents on `sysopen` without `O_TRUNC`, fail `open` on undefined paths, avoid duplicate `closedir` warnings, and match Socket lookup flags and return values (#2128, #2125, #2095).
 - Register pure-Perl Encode codecs, preserve Unicode input in `decode_utf8`, implement `Unicode::Normalize::getComposite`, and provide Java-backed URI::Fast support (#2124, #2121, #2104, #2079, #2117).
-- Add parser compatibility providers for `Syntax::Keyword::Try` and method syntax; support the Object::Pad 0.800 class, role, `:experimental(init_expr)` field blocks, hash representation, `:Struct(readonly)`, MOP method subset, lexical parameters shadowing fields, and strict `ADJUST`/`BUILD` `$self` binding (#2112, #2089, #2056).
+- Add parser compatibility providers for `Syntax::Keyword::Try` and method syntax; support the Object::Pad 0.800 class, role, `:experimental(init_expr)` field blocks, hash representation, `:Struct(readonly)`, MOP method subset, imported functions in methods, lexical parameters shadowing fields, and strict `ADJUST`/`BUILD` `$self` binding (#2112, #2089, #2056).
 - Preserve Function::Parameters' required named-argument arity diagnostic when unknown keys are also supplied (#1361).
 - Register dynamically delegated Function::Parameters imports made in `BEGIN` blocks so configured keywords are available to the parser (#1361).
 - Release temporary compile-time Function::Parameters installer CVs at the `BEGIN` boundary, and warn on malformed lexical config using its warning category (#1361).

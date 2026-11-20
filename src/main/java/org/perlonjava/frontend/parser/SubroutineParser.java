@@ -871,7 +871,17 @@ public class SubroutineParser {
                 int separator = fullName.lastIndexOf("::");
                 if (separator >= 0 && !"new".equals(subName)) {
                     String packageName = fullName.substring(0, separator);
-                    if (ClassRegistry.isClass(packageName)) {
+                    RuntimeCode resolvedCode = parseTimeCodeRef != null
+                            && parseTimeCodeRef.value instanceof RuntimeCode code
+                                    ? code : null;
+                    // Imported CVs keep their defining package. An imported
+                    // function in a class body is still a function call; do
+                    // not attach the current class as method-call metadata to
+                    // its call site merely because its alias is in that class.
+                    boolean belongsToCurrentPackage = resolvedCode == null
+                            || resolvedCode.packageName == null
+                            || packageName.equals(resolvedCode.packageName);
+                    if (ClassRegistry.isClass(packageName) && belongsToCurrentPackage) {
                         codeRefNode.setAnnotation("directClassMethod", packageName);
                     }
                 }

@@ -3,9 +3,9 @@
 ## Current state (2026-11-20)
 
 Source base: `origin/master` at `94cc21a9c`; current candidate:
-`caf5dedf8` on PR #2132, with strict `ADJUST`/`BUILD` binding changes in the
-working tree. Follow-up commits include `a35e57b4e`, `767526362`,
-`b952ac77b` and `caf5dedf8`. The full
+`caf5dedf8` on PR #2132, with strict `ADJUST`/`BUILD` binding and imported
+function call-site fixes in the working tree. Follow-up commits include
+`a35e57b4e`, `767526362`, `b952ac77b`, `caf5dedf8` and `c672dd5c7`. The full
 `nice -n 19 make` gate passes on this source candidate. The autobox 3.0.2 upstream suite previously
 passed all 23 files and 675 assertions; `Function::Parameters` 2.002006 passes
 all 56 files and 1,619 assertions. `Moose::Autobox` 0.16 now passes all 15
@@ -19,7 +19,10 @@ programs and 39 of 106 subtests. The system-Perl oracle passed 68 files and
 464 tests, with optional dependency tests skipped. Custom syntax, fields, and
 MOP APIs remain outside the PerlOnJava subset. The focused
 `t/23fields-signatures.t` now passes after fixing lexical parameters that share
-a name with a field. Strict `ADJUST` blocks now bind `$self` inside the
+a name with a field. Imported function calls in class methods retain their
+defining package instead of receiving method metadata from the aliasing class;
+this fixes interpreter dispatch of `List::Util::any` in the Device::Chip
+consumer. Strict `ADJUST` blocks now bind `$self` inside the
 generated deferred subroutine, including when class code is compiled through
 string eval. The `:experimental(init_expr)` field block syntax now
 evaluates in scalar, array, and hash initializer contexts;
@@ -82,11 +85,10 @@ shared objects remain owned by the parent.
 - The strict Object::Pad `ADJUST` regression passes on JVM and interpreter;
   its system-Perl run skips because Object::Pad is not installed in the system
   Perl environment. The official Object::Pad 0.825 oracle passed when the
-  regression was authored. The unchanged Device::Chip system-Perl and JVM
-  suites pass all 27 tests; interpreter `t/01config` still fails when a
-  dynamically MOP-installed method calls imported, unqualified
-  `List::Util::any`. Fully qualifying that call passes both backends. This
-  unresolved parser/interpreter issue is not attributed to ownership #2043.
+  regression was authored. The imported `List::Util::any` MOP-method regression
+  passes two assertions on system Perl with official Object::Pad 0.825, JVM,
+  and interpreter. The unchanged Device::Chip::ADT7470 suite passes all four
+  files and 27 tests on system Perl, JVM, and forced-interpreter mode.
 - The Object::Pad `:experimental(init_expr)` regression passes four assertions
   on JVM and interpreter, and against the official Object::Pad 0.825 XS oracle.
 - The unchanged `Device::Chip::ADT7470` upstream suite passes all four test

@@ -1630,9 +1630,19 @@ public class SlowOpcodeHandler {
             RuntimeCode.throwIfDirectCallUndefined(codeRef, name, code.stringPool[labelIdx]);
         }
         if (classNameIdx >= 0 && codeRef.value instanceof RuntimeCode runtimeCode) {
-            runtimeCode.isClassMethod = true;
-            runtimeCode.declaringClass = code.stringPool[classNameIdx];
-            runtimeCode.referenceOriginFqn = name;
+            // Class-method identity belongs to this compiled call site. Mutating
+            // the CV found in the stash leaks the class marker into unrelated
+            // later calls through that same CV (for example imported
+            // List::Util::any called from a method body).
+            RuntimeCode callSiteCode = runtimeCode.cloneForClosure();
+            callSiteCode.isClassMethod = true;
+            callSiteCode.declaringClass = code.stringPool[classNameIdx];
+            callSiteCode.referenceOriginFqn = name;
+            RuntimeScalar callSiteCodeRef = new RuntimeScalar();
+            callSiteCodeRef.type = codeRef.type;
+            callSiteCodeRef.value = callSiteCode;
+            registers[rd] = callSiteCodeRef;
+            return pc;
         }
         registers[rd] = codeRef;
         return pc;
