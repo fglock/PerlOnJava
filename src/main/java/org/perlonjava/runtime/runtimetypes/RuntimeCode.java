@@ -1669,30 +1669,35 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     /**
-     * Whether a referent is directly present in an active Perl argument frame
-     * without an owner slot accounting for that temporary value. B::REFCNT
-     * needs this for nested field expressions forwarded through a Perl helper.
+     * Whether a hash-slot reference is also held by an active user call frame
+     * outside the B::SV::REFCNT probe that is asking about it.
      */
-    public static boolean isActiveCallArgumentValue(RuntimeBase referent) {
+    public static boolean hasUncountedActiveHashArgumentOwner(RuntimeBase referent) {
         if (referent == null || PerlRuntime.currentOrNull() == null) return false;
         int depth = 0;
         for (RuntimeArray activeArgs : argsStack()) {
             RuntimeCode activeCode = getActiveCodeAt(depth++);
-            if (activeCode == null || "B".equals(activeCode.packageName)
+            if (activeCode == null || activeCode.packageName == null
+                    || "B".equals(activeCode.packageName)
+                    || activeCode.packageName.startsWith("B::")
                     || "Internals".equals(activeCode.packageName)) {
+                continue;
+            }
+            RuntimeCode innerCode = getActiveCodeAt(depth - 2);
+            if (innerCode != null && "B::SV".equals(innerCode.packageName)
+                    && "REFCNT".equals(innerCode.subName)) {
+                // The helper's own @_ is the value being queried. It is not a
+                // second Perl owner; only an outer user frame can add one.
                 continue;
             }
             for (int index = 0; index < activeArgs.elements.size(); index++) {
                 RuntimeScalar argument = activeArgs.elements.get(index);
                 if (argument == null || argument.value != referent
-                        || (argument.type & RuntimeScalarType.REFERENCE_BIT) == 0) {
+                        || (argument.type & RuntimeScalarType.REFERENCE_BIT) == 0
+                        || WeakRefRegistry.isweak(argument)
+                        || !(argument.getContainerOwner() instanceof RuntimeHash)) {
                     continue;
                 }
-                // The missing owner is specifically the temporary scalar
-                // yielded by a nested hash-slot expression. A plain lexical
-                // or scalar-reference argument already has its own owner
-                // semantics and must not be counted again here.
-                if (!(argument.getContainerOwner() instanceof RuntimeHash)) continue;
                 if (index == 0 && "DESTROY".equals(activeCode.subName)) continue;
                 return true;
             }

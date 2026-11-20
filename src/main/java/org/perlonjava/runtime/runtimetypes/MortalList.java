@@ -159,6 +159,20 @@ public class MortalList {
         return false;
     }
 
+    /** Whether this referent still has its first-bless mortal owner queued. */
+    public static boolean hasPendingBlessTemporaryFor(RuntimeBase referent) {
+        if (referent == null) return false;
+        LifecycleRuntimeState state = state();
+        for (int i = 0; i < state.pending.size(); i++) {
+            if (state.pending.get(i) == referent
+                    && "bless mortal temporary".equals(
+                            state.pendingTransientOwnerKinds.get(i))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** Find the pending release for this exact scalar slot and referent. */
     static PerlOwnerSlot.PendingRelease pendingCountedReleaseFor(
             RuntimeScalar owner, RuntimeBase referent) {

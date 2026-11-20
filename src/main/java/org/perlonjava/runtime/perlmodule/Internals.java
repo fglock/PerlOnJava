@@ -669,48 +669,48 @@ public class Internals extends PerlModuleBase {
                 }
                 int argumentFrameOwners = base.currentArgumentFrameReferentOwnerCount();
                 adjust -= argumentFrameOwners;
-                boolean activeCallArgument = fieldOwnedMethodResult
+                boolean pendingBlessTemporary = fieldOwnedMethodResult
                         && argumentFrameOwners == 0
-                        && RuntimeCode.isActiveCallArgumentValue(base);
-                if (activeCallArgument) {
-                    // A nested hash-slot expression passed through a Perl
-                    // helper can be live in that helper's @_ without having
-                    // a selective owner slot. B::SV::REFCNT sees that value
-                    // owner; the B and Internals frames themselves are only
-                    // the raw-object probe and must not be counted.
-                    adjust++;
-                }
-                if (System.getenv("PJ_BREFCNT_TRACE") != null) {
-                    System.err.println("[BREFCNT-ADJUST] base="
-                            + System.identityHashCode(base) + " java="
-                            + base.getClass().getSimpleName() + " bless="
-                            + NameNormalizer.getBlessStr(base.blessId) + " rc=" + rc
-                            + " hashSlots=" + base.hashSlotOwnerCount + " local="
-                            + base.localBindingExists + " field=" + fieldOwnedMethodResult
-                            + " frameOwners=" + argumentFrameOwners + " activeArg="
-                            + activeCallArgument + " adjust=" + adjust + " reported="
-                            + (rc + extra + adjust));
-                    if (activeCallArgument) {
-                        java.util.List<RuntimeArray> activeArgs = RuntimeCode.snapshotArgsStack();
-                        for (int depth = 0; depth < activeArgs.size(); depth++) {
-                            RuntimeCode activeCode = RuntimeCode.getActiveCodeAt(depth);
-                            RuntimeArray activeFrame = activeArgs.get(depth);
-                            for (int index = 0; index < activeFrame.elements.size(); index++) {
-                                RuntimeScalar value = activeFrame.elements.get(index);
-                                if (value == null || value.value != base) continue;
-                                RuntimeBase container = value.getContainerOwner();
-                                System.err.println("[BREFCNT-ARG] depth=" + depth + " index="
-                                        + index + " code=" + (activeCode == null ? "?"
-                                            : activeCode.packageName + "::" + activeCode.subName)
-                                        + " scalar=" + System.identityHashCode(value)
-                                        + " local=" + value.localBindingExists + " exited="
-                                        + value.scopeExited + " owns=" + value.refCountOwned
-                                        + " container=" + (container == null ? "null"
-                                            : container.getClass().getSimpleName() + "#"
-                                                + System.identityHashCode(container)));
-                            }
+                        && MortalList.hasPendingBlessTemporaryFor(base);
+                boolean activeArgumentOwner = fieldOwnedMethodResult
+                        && argumentFrameOwners == 0
+                        && RuntimeCode.hasUncountedActiveHashArgumentOwner(base);
+                String traceClassName = NameNormalizer.getBlessStr(base.blessId);
+                if (System.getenv("PJ_BREFCNT_TRACE") != null
+                        && (traceClassName.startsWith("DBIx::Class::ResultSource")
+                            || traceClassName.startsWith("Issue2043::Source"))) {
+                    System.err.println("[BREFCNT-OWNER-TRACE] class="
+                            + traceClassName + " rc=" + rc
+                            + " hashSlots=" + base.hashSlotOwnerCount + " field="
+                            + fieldOwnedMethodResult + " pendingBless=" + pendingBlessTemporary
+                            + " activeOwner=" + activeArgumentOwner + " frameOwners="
+                            + argumentFrameOwners + " hashOwners="
+                            + base.ownerSlotCount(PerlOwnerSlot.Kind.HASH_ELEMENT));
+                    System.err.println(base.ownerTraceSnapshot());
+                    java.util.List<RuntimeArray> activeArgs = RuntimeCode.snapshotArgsStack();
+                    for (int depth = 0; depth < activeArgs.size(); depth++) {
+                        RuntimeCode activeCode = RuntimeCode.getActiveCodeAt(depth);
+                        RuntimeArray activeFrame = activeArgs.get(depth);
+                        for (int index = 0; index < activeFrame.elements.size(); index++) {
+                            RuntimeScalar value = activeFrame.elements.get(index);
+                            if (value == null || value.value != base) continue;
+                            System.err.println("[DBIX-BREFCNT-ARG] depth=" + depth + " index="
+                                    + index + " code=" + (activeCode == null ? "?"
+                                        : activeCode.packageName + "::" + activeCode.subName)
+                                    + " container=" + (value.getContainerOwner() == null ? "null"
+                                        : value.getContainerOwner().getClass().getSimpleName())
+                                    + " weak=" + WeakRefRegistry.isweak(value));
                         }
                     }
+                }
+                if (pendingBlessTemporary) {
+                    // The first bless result remains a mortal Perl owner until
+                    // its deferred temp boundary drains. The hash slot is a
+                    // second owner but is not in the selective refCount bridge.
+                    adjust++;
+                }
+                if (activeArgumentOwner) {
+                    adjust++;
                 }
             }
             int reported = rc + extra + adjust;
