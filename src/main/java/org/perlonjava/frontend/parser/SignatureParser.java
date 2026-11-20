@@ -1256,6 +1256,11 @@ public class SignatureParser {
         // Check if there's actually a default expression
         LexerToken next = peekToken();
         if (next.type == LexerTokenType.EOF || next.text.equals(",") || next.text.equals(")")) {
+            if (parser.parsingFunctionParametersDeclaration) {
+                Node undefDefault = new OperatorNode("undef", null, parser.tokenIndex);
+                defaultValueNodes.add(undefDefault);
+                return undefDefault;
+            }
             boolean isUndef = paramVariable instanceof OperatorNode && ((OperatorNode) paramVariable).operator.equals("undef");
             if (paramVariable != null && !isUndef) {
                 parser.throwError(previousDefaultOperatorIndex(), "Optional parameter lacks default expression");

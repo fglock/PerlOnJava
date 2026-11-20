@@ -785,12 +785,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         int start = Math.min(signaturePositionalCount, args.size());
         int namedCount = args.size() - start;
         if ("%".equals(signatureSlurpySigil) && (namedCount & 1) != 0) {
-            dieTooFewForMissingRequiredNamed(args, start);
-            WarnDie.die(new RuntimeScalar(signatureKeyword != null
-                    ? "Odd number of elements in anonymous hash"
+            if (hasTooFewFunctionParametersNamedArguments(namedCount)) {
+                dieFunctionParametersValidation("Too few arguments for " + signatureKeyword
+                        + " " + signatureDiagnosticName());
+                return;
+            }
+            String message = signatureKeyword != null
+                    ? "Odd number of paired arguments for " + signatureKeyword + " "
+                            + signatureDiagnosticName()
                     : "Odd name/value argument for subroutine '"
-                            + (signatureSubName == null ? "" : signatureSubName) + "'"),
-                    new RuntimeScalar(""));
+                            + (signatureSubName == null ? "" : signatureSubName) + "'";
+            if (signatureKeyword != null) {
+                dieFunctionParametersValidation(message);
+                return;
+            }
+            WarnDie.die(new RuntimeScalar(message), new RuntimeScalar(""));
         }
         if (signatureNamedParams.isEmpty()) return;
         // A native signature with a trailing @ slurpy accepts an odd final
@@ -802,26 +811,42 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         if ((signatureKeyword != null || !"@".equals(signatureSlurpySigil))
                 && (namedCount & 1) != 0) {
-            dieTooFewForMissingRequiredNamed(args, start);
-            WarnDie.die(new RuntimeScalar(signatureKeyword != null
-                    ? "Odd number of elements in anonymous hash"
+            if (hasTooFewFunctionParametersNamedArguments(namedCount)) {
+                dieFunctionParametersValidation("Too few arguments for " + signatureKeyword
+                        + " " + signatureDiagnosticName());
+                return;
+            }
+            String message = signatureKeyword != null
+                    ? "Odd number of paired arguments for " + signatureKeyword + " "
+                            + signatureDiagnosticName()
                     : "Odd name/value argument for subroutine '"
-                            + (signatureSubName == null ? "" : signatureSubName) + "'"),
-                    new RuntimeScalar(""));
+                            + (signatureSubName == null ? "" : signatureSubName) + "'";
+            if (signatureKeyword != null) {
+                dieFunctionParametersValidation(message);
+                return;
+            }
+            WarnDie.die(new RuntimeScalar(message), new RuntimeScalar(""));
         }
 
         Map<String, RuntimeScalar> values = new LinkedHashMap<>();
         for (int i = start; i + 1 < args.size(); i += 2) {
             values.put(args.elements.get(i).toString(), args.elements.get(i + 1));
         }
-        if (signatureKeyword != null && !signatureRequiredNamedParams.isEmpty()) {
-            int minimumNamedArgumentCount = signatureRequiredNamedParams.size() * 2;
-            boolean missingRequired = signatureRequiredNamedParams.stream()
-                    .anyMatch(required -> !values.containsKey(required));
-            if (missingRequired && namedCount < minimumNamedArgumentCount) {
-                WarnDie.die(new RuntimeScalar("Too few arguments for " + signatureKeyword
-                        + " " + signatureSubName), new RuntimeScalar(""));
+        List<String> missing = new ArrayList<>();
+        for (String required : signatureRequiredNamedParams) {
+            if (!values.containsKey(required)) missing.add(required);
+        }
+        if (signatureKeyword != null && !missing.isEmpty()) {
+            String functionName = signatureDiagnosticName();
+            if (hasTooFewFunctionParametersNamedArguments(namedCount)) {
+                dieFunctionParametersValidation("Too few arguments for " + signatureKeyword
+                        + " " + functionName);
+                return;
             }
+            String label = missing.size() == 1 ? "parameter" : "parameters";
+            dieFunctionParametersValidation("In " + signatureKeyword + " " + functionName
+                    + ": missing named " + label + ": " + String.join(", ", missing));
+            return;
         }
         if (signatureSlurpySigil == null) {
             List<String> unrecognized = new ArrayList<>();
@@ -831,6 +856,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
             }
             if (!unrecognized.isEmpty()) {
+                if (signatureKeyword != null) {
+                    String label = unrecognized.size() == 1 ? "parameter" : "parameters";
+                    dieFunctionParametersValidation("In " + signatureKeyword + " "
+                            + signatureDiagnosticName() + ": no such named " + label + ": "
+                            + String.join(", ", unrecognized));
+                    return;
+                }
                 boolean truncated = unrecognized.size() > 5;
                 String listed = truncated
                         ? String.join("', '", unrecognized.subList(0, 5)) + "', ..."
@@ -841,10 +873,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         + signatureSubName + "'";
                 WarnDie.die(new RuntimeScalar(message), new RuntimeScalar(""));
             }
-        }
-        List<String> missing = new ArrayList<>();
-        for (String required : signatureRequiredNamedParams) {
-            if (!values.containsKey(required)) missing.add(required);
         }
         if (!missing.isEmpty()) {
             int minimumNamedArgumentCount = signatureRequiredNamedParams.size() * 2;
@@ -865,21 +893,27 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
     }
 
-    private void dieTooFewForMissingRequiredNamed(RuntimeArray args, int start) {
-        if (signatureKeyword == null || signatureRequiredNamedParams.isEmpty()) return;
-        for (String required : signatureRequiredNamedParams) {
-            boolean present = false;
-            for (int i = start; i + 1 < args.size(); i += 2) {
-                if (required.equals(args.elements.get(i).toString())) {
-                    present = true;
-                    break;
-                }
-            }
-            if (!present) {
-                WarnDie.die(new RuntimeScalar("Too few arguments for " + signatureKeyword
-                        + " " + signatureSubName), new RuntimeScalar(""));
-            }
+    private String signatureDiagnosticName() {
+        if (signatureSubName == null) return "(anon)";
+        int namespaceSeparator = signatureSubName.lastIndexOf("::");
+        return namespaceSeparator < 0
+                ? signatureSubName
+                : signatureSubName.substring(namespaceSeparator + 2);
+    }
+
+    private boolean hasTooFewFunctionParametersNamedArguments(int namedCount) {
+        return signatureKeyword != null
+                && !signatureRequiredNamedParams.isEmpty()
+                && namedCount < signatureRequiredNamedParams.size() * 2;
+    }
+
+    private void dieFunctionParametersValidation(String message) {
+        CallerStack.CallerInfo callSite = activeCallerSiteAt(0);
+        if (callSite != null && callSite.filename() != null && callSite.line() > 0) {
+            WarnDie.dieAtCallSite(new RuntimeScalar(message), callSite.filename(), callSite.line());
+            return;
         }
+        WarnDie.die(new RuntimeScalar(message), new RuntimeScalar(""));
     }
 
     /** Bind Java callbacks that may be invoked by an arbitrary worker thread. */

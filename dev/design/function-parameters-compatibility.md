@@ -137,6 +137,12 @@ the upstream XS parser plugin.
   system Perl passes all nine top-level subtests. The timing failures need
   verification on a less-contended runner before attributing them to a runtime
   defect.
+- Function::Parameters calls now report module-compatible arity, odd-pair,
+  missing-name, unknown-name, and typed-parameter diagnostics at the captured
+  call site. Empty positional defaults lower to `undef`. The focused diagnostic
+  and empty-default tests pass on JVM and interpreter, and system Perl with the
+  upstream XS module. The current full upstream suite passes 47/56 programs;
+  remaining parser and warning/lifetime gaps are still open.
 - Required named-argument validation now reports Function::Parameters' arity
   error before an unknown key when the supplied key/value count is below the
   required minimum. The focused regression passes on the JVM and interpreter.
