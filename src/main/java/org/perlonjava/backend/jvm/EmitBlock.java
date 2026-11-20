@@ -742,6 +742,7 @@ public class EmitBlock {
         // In this case, we need to evaluate the For1Node's list before emitting the local operator
         For1Node preEvalForNode = null;
         int savedPreEvaluatedArrayIndex = -1;
+        int savedPreEvaluatedForeachSourceOwnerDepthIndex = -1;
 
         if (list.size() >= 2 &&
                 list.get(0) instanceof OperatorNode localOp && localOp.operator.equals("local") &&
@@ -754,10 +755,22 @@ public class EmitBlock {
             EmitForeach.emitForeachSource(emitterVisitor, forNode.list);
             mv.visitVarInsn(Opcodes.ASTORE, tempArrayIndex);
 
+            int ownerDepthIndex = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            mv.visitVarInsn(Opcodes.ALOAD, tempArrayIndex);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/MortalList",
+                    "pushForeachSourceOwners",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)I",
+                    false);
+            mv.visitVarInsn(Opcodes.ISTORE, ownerDepthIndex);
+
             // Mark the For1Node to use the pre-evaluated array
             preEvalForNode = forNode;
             savedPreEvaluatedArrayIndex = forNode.preEvaluatedArrayIndex;
+            savedPreEvaluatedForeachSourceOwnerDepthIndex =
+                    forNode.preEvaluatedForeachSourceOwnerDepthIndex;
             forNode.preEvaluatedArrayIndex = tempArrayIndex;
+            forNode.preEvaluatedForeachSourceOwnerDepthIndex = ownerDepthIndex;
         }
 
         int savedStatementTokenIndex = emitterVisitor.ctx.javaClassInfo.statementTokenIndex;
@@ -875,6 +888,8 @@ public class EmitBlock {
             emitterVisitor.ctx.javaClassInfo.statementTokenIndex = savedStatementTokenIndex;
             if (preEvalForNode != null) {
                 preEvalForNode.preEvaluatedArrayIndex = savedPreEvaluatedArrayIndex;
+                preEvalForNode.preEvaluatedForeachSourceOwnerDepthIndex =
+                        savedPreEvaluatedForeachSourceOwnerDepthIndex;
             }
         }
 

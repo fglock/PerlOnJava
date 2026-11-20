@@ -477,17 +477,6 @@ final class LifecycleRuntimeState {
         private final List<PerlOwnerSlot> owners = new ArrayList<>();
 
         void retain(RuntimeScalar scalar) {
-            if (System.getenv("PJ_FOREACH_TRACE") != null && scalar != null
-                    && scalar.value instanceof RuntimeBase candidate
-                    && candidate.blessId != 0
-                    && NameNormalizer.getBlessStr(candidate.blessId)
-                            .equals("Issue2043::LoopRow")) {
-                System.err.println("[FOREACH-SOURCE-REF] scalarType=" + scalar.type
-                        + " weak=" + WeakRefRegistry.isweak(scalar)
-                        + " destroyed=" + candidate.isPerlDestroyed()
-                        + " count=" + candidate.refCount + " owners="
-                        + candidate.ownerSlotSnapshot().size());
-            }
             if (scalar == null || scalar.nonOwningBObjectReference
                     || (scalar.type & RuntimeScalarType.REFERENCE_BIT) == 0
                     || WeakRefRegistry.isweak(scalar)
@@ -500,17 +489,8 @@ final class LifecycleRuntimeState {
         void retainReferent(RuntimeBase referent) {
             if (referent == null || referent.isPerlDestroyed()) return;
             PerlOwnerSlot owner = new PerlOwnerSlot(PerlOwnerSlot.Kind.EXPRESSION_VALUE);
-            boolean counted = owner.acquireCountedNativeOwner(referent, "foreach source list value");
+            owner.acquireCountedNativeOwner(referent, "foreach source list value");
             owners.add(owner);
-            if (System.getenv("PJ_FOREACH_TRACE") != null && referent.blessId != 0
-                    && NameNormalizer.getBlessStr(referent.blessId)
-                            .equals("Issue2043::LoopRow")) {
-                System.err.println("[FOREACH-SOURCE-OWNER] referent="
-                        + System.identityHashCode(referent) + " count=" + referent.refCount
-                        + " tracked=" + referent.isRefCountTracked() + " acquiredCount=" + counted
-                        + " ownerSlots=" + referent.ownerSlotSnapshot().size()
-                        + " state=" + referent.perlLifecycleState());
-            }
         }
 
         void release() {

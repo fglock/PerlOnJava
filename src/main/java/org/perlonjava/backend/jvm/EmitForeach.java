@@ -178,6 +178,8 @@ public class EmitForeach {
                     "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)I",
                     false);
             mv.visitVarInsn(Opcodes.ISTORE, foreachSourceOwnerDepth);
+        } else if (node.preEvaluatedForeachSourceOwnerDepthIndex >= 0) {
+            foreachSourceOwnerDepth = node.preEvaluatedForeachSourceOwnerDepthIndex;
         } else {
             foreachSourceOwnerDepth = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
             mv.visitVarInsn(Opcodes.ALOAD, node.preEvaluatedArrayIndex);

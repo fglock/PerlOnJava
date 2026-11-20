@@ -148,48 +148,6 @@ public class MortalList {
     public static int pushForeachSourceOwners(RuntimeBase source) {
         LifecycleRuntimeState state = state();
         int depth = state.foreachSourceOwners.size();
-        if (System.getenv("PJ_FOREACH_TRACE") != null) {
-            System.err.println("[FOREACH-SOURCE-BEGIN] source="
-                    + (source == null ? "null" : source.getClass().getSimpleName())
-                    + " depth=" + depth + " size="
-                    + (source instanceof RuntimeList list ? list.size()
-                        : source instanceof RuntimeArray array ? array.size() : -1)
-                    + " persistent=" + (source instanceof RuntimeBase base
-                            && base.hasPersistentPerlStrongOwnerIdentity()));
-            if (source instanceof RuntimeArray array && array.size() <= 4) {
-                for (int i = 0; i < array.elements.size(); i++) {
-                    RuntimeScalar scalar = array.elements.get(i);
-                    Object value = scalar == null ? null : scalar.value;
-                    System.err.println("[FOREACH-SOURCE-ELEMENT] index=" + i
-                            + " scalarType=" + (scalar == null ? "null" : scalar.type)
-                            + " scalarOwner=" + (scalar == null || scalar.countedOwnerSlot() == null
-                                    ? "none" : scalar.countedOwnerSlot().kind()
-                                        + "/" + scalar.countedOwnerSlot().isActive())
-                            + " value=" + (value == null ? "null" : value.getClass().getSimpleName())
-                            + " blessed=" + (value instanceof RuntimeBase base && base.blessId != 0
-                                    ? NameNormalizer.getBlessStr(base.blessId) : ""));
-                    if (value instanceof RuntimeArray nested && nested.size() <= 8) {
-                        System.err.println("[FOREACH-SOURCE-NESTED-ARRAY] size=" + nested.size()
-                                + " tracked=" + nested.isRefCountTracked() + " count=" + nested.refCount
-                                + " local=" + nested.localBindingExists + " persistent="
-                                + nested.hasPersistentPerlStrongOwnerIdentity());
-                        for (int j = 0; j < nested.elements.size(); j++) {
-                            RuntimeScalar child = nested.elements.get(j);
-                            RuntimeBase referent = child != null && child.value instanceof RuntimeBase rb
-                                    ? rb : null;
-                            System.err.println("[FOREACH-SOURCE-NESTED-ELEMENT] index=" + j
-                                    + " type=" + (child == null ? "null" : child.type)
-                                    + " value=" + (referent == null ? "none"
-                                            : referent.getClass().getSimpleName() + "#"
-                                                + System.identityHashCode(referent) + "/"
-                                                + (referent.blessId == 0 ? "" : NameNormalizer.getBlessStr(referent.blessId))
-                                                + "/rc=" + referent.refCount + "/owners="
-                                                + referent.ownerSlotSnapshot().size()));
-                        }
-                    }
-                }
-            }
-        }
         if (!(source instanceof RuntimeList) && !(source instanceof RuntimeArray)) return depth;
 
         LifecycleRuntimeState.ForeachSourceOwnerLease lease =
