@@ -3,6 +3,7 @@ package org.perlonjava.backend.bytecode;
 
 import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.frontend.analysis.ConstantFoldingVisitor;
+import org.perlonjava.frontend.analysis.BooleanCallContext;
 import org.perlonjava.frontend.analysis.DoBlockResultAnalysis;
 import org.perlonjava.frontend.analysis.FindDeclarationVisitor;
 import org.perlonjava.frontend.analysis.LValueVisitor;
@@ -9086,6 +9087,7 @@ public class BytecodeCompiler implements Visitor {
             emit(Opcodes.GET_LOCAL_LEVEL);
             emitReg(conditionLocalLevelReg);
         }
+        BooleanCallContext.markDirectCall(node.condition);
         compileNode(node.condition, -1, RuntimeContextType.SCALAR);
         statementTokenIndex = savedConditionStatementToken;
         int condReg = lastResultReg;

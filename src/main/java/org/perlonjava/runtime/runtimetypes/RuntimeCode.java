@@ -2152,6 +2152,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     public static Integer getCallContextAt(int depth) {
+        Integer context = getRawCallContextAt(depth);
+        if (context != null && context == RuntimeContextType.BOOLEAN) {
+            return RuntimeContextType.SCALAR;
+        }
+        return context;
+    }
+
+    /** Return the unnormalized call context for runtime features that inspect parent ops. */
+    public static Integer getRawCallContextAt(int depth) {
         Deque<Integer> stack = callContextStack();
         int i = 0;
         for (Integer callContext : stack) {
@@ -2167,6 +2176,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * effective scalar context; parent-op consumers need the outer raw frame.
      */
     public static Integer getCallContextAtCallerFrame(int logicalFrame) {
+        Integer context = getRawCallContextAtCallerFrame(logicalFrame);
+        if (context != null && context == RuntimeContextType.BOOLEAN) {
+            return RuntimeContextType.SCALAR;
+        }
+        return context;
+    }
+
+    /** Return the unnormalized context for a logical call frame. */
+    public static Integer getRawCallContextAtCallerFrame(int logicalFrame) {
         if (logicalFrame < 0) return null;
         if (logicalFrame == 0) {
             Iterator<RuntimeCode> codeIterator = activeCodeStack().iterator();
@@ -2289,7 +2307,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     public static int effectiveCallContext(int callContext) {
-        return callContext == RuntimeContextType.LVALUE || callContext == RuntimeContextType.OBJECT
+        return callContext == RuntimeContextType.LVALUE
+                || callContext == RuntimeContextType.OBJECT
+                || callContext == RuntimeContextType.BOOLEAN
                 ? RuntimeContextType.SCALAR
                 : callContext;
     }

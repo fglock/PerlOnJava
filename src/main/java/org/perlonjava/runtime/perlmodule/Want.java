@@ -5,6 +5,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
+import org.perlonjava.runtime.runtimetypes.PerlNonLocalReturnException;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarCache;
 
@@ -20,13 +21,14 @@ public class Want extends PerlModuleBase {
         GlobalVariable.getGlobalVariable("Want::VERSION").set(new RuntimeScalar("0.29"));
         try {
             want.registerMethod("want", "@");
+            want.registerMethod("rreturn", null);
         } catch (NoSuchMethodException e) {
-            throw new IllegalStateException("Missing Want::want implementation", e);
+            throw new IllegalStateException("Missing Want implementation", e);
         }
     }
 
     public static RuntimeList want(RuntimeArray args, int ctx) {
-        Integer callerContext = RuntimeCode.getCallContextAtCallerFrame(1);
+        Integer callerContext = RuntimeCode.getRawCallContextAtCallerFrame(1);
         for (RuntimeScalar arg : args) {
             for (String requested : arg.toString().trim().split("\\s+")) {
                 if (requested.isEmpty()) continue;
@@ -49,7 +51,9 @@ public class Want extends PerlModuleBase {
                             && callerContext != RuntimeContextType.LVALUE_LIST);
                     case "INFINITY" -> callerContext != null
                             && RuntimeContextType.isListLike(callerContext);
-                    case "BOOL", "BOOLEAN", "ARRAY", "HASH", "CODE", "GLOB",
+                    case "BOOL", "BOOLEAN" -> callerContext != null
+                            && callerContext == RuntimeContextType.BOOLEAN;
+                    case "ARRAY", "HASH", "CODE", "GLOB",
                             "REF", "REFSCALAR" -> false;
                     default -> {
                         if (kind.matches("[0-9]+")) {
@@ -69,5 +73,21 @@ public class Want extends PerlModuleBase {
             }
         }
         return RuntimeScalarCache.scalarTrue.getList();
+    }
+
+    /** Return from Want's Perl caller, preserving the context of that caller's caller. */
+    public static RuntimeList rreturn(RuntimeArray args, int ctx) {
+        Integer callerContext = RuntimeCode.getRawCallContextAtCallerFrame(1);
+        RuntimeList value = new RuntimeList();
+        if (callerContext != null && RuntimeContextType.isListLike(callerContext)) {
+            value.elements.addAll(args.elements);
+        } else if (callerContext != null && callerContext != RuntimeContextType.VOID
+                && !args.isEmpty()) {
+            value.elements.add(args.get(args.size() - 1));
+        }
+
+        RuntimeCode caller = RuntimeCode.getOutermostActiveCodeAtCallerFrame(1);
+        if (caller == null) return value;
+        throw new PerlNonLocalReturnException(value, caller);
     }
 }

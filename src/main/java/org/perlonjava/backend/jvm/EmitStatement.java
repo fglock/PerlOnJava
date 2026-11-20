@@ -6,6 +6,7 @@ import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.analysis.ConstantFoldingVisitor;
+import org.perlonjava.frontend.analysis.BooleanCallContext;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.analysis.FindDeclarationVisitor;
 import org.perlonjava.frontend.analysis.RegexUsageDetector;
@@ -510,6 +511,7 @@ public class EmitStatement {
                     "(Lorg/perlonjava/runtime/runtimetypes/ExecutionRuntimeState;)I", false);
             emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ISTORE, conditionLocalLevel);
         }
+        BooleanCallContext.markDirectCall(node.condition);
         node.condition.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
         emitterVisitor.ctx.javaClassInfo.statementTokenIndex = savedConditionStatementToken;
 

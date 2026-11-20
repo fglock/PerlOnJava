@@ -6,6 +6,7 @@ import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
+import org.perlonjava.frontend.analysis.BooleanCallContext;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
@@ -20,6 +21,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class Dereference {
     // Callsite ID counter for inline method caching (unique across all compilations)
     private static final AtomicInteger nextMethodCallsiteId = new AtomicInteger(0);
+
+    private static void pushArrowCallContext(
+            EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
+        emitterVisitor.pushCallContext(BooleanCallContext.callContext(
+                node, emitterVisitor.ctx.contextType));
+    }
     
     /**
      * Handles the postfix `[]` operator.
@@ -1152,7 +1159,7 @@ public class Dereference {
                         "()I",
                         false);
             } else {
-                emitterVisitor.pushCallContext();
+                pushArrowCallContext(emitterVisitor, node);
             }
             String argsDescriptor = directRuntimeArray
                     ? "Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;"
@@ -1189,7 +1196,7 @@ public class Dereference {
                 // handoff as the bytecode interpreter. In particular this
                 // drains only deferred owners from the abandoned @_ frame.
                 mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
-                emitterVisitor.pushCallContext();
+                pushArrowCallContext(emitterVisitor, node);
                 mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                         "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                         "resolveTailCalls",
@@ -1261,7 +1268,7 @@ public class Dereference {
                             "()I",
                             false);
                 } else {
-                    emitterVisitor.pushCallContext();
+                    pushArrowCallContext(emitterVisitor, node);
                 }
                 mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                         "org/perlonjava/runtime/runtimetypes/RuntimeCode",

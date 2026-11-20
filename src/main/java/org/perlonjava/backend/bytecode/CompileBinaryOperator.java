@@ -1,6 +1,7 @@
 package org.perlonjava.backend.bytecode;
 
 import org.perlonjava.frontend.analysis.ConstantFoldingVisitor;
+import org.perlonjava.frontend.analysis.BooleanCallContext;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.backend.jvm.ByteCodeSourceMapper;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
@@ -164,7 +165,8 @@ public class CompileBinaryOperator {
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(coderefReg);
                 bytecodeCompiler.emitReg(argsReg);
-                int callContext = bytecodeCompiler.currentCallContext;
+                int callContext = BooleanCallContext.callContext(
+                        node, bytecodeCompiler.currentCallContext);
                 if (callContext == RuntimeContextType.LIST
                         && bytecodeCompiler.isCompilingForeachList()
                         && directCallIsLvalue(bytecodeCompiler, node)) {
@@ -277,7 +279,7 @@ public class CompileBinaryOperator {
                             ? RuntimeContextType.METHOD_CODEREF
                             : node.getBooleanAnnotation("inheritRawCallContext")
                             ? RuntimeContextType.INHERITED
-                            : bytecodeCompiler.currentCallContext);
+                            : BooleanCallContext.callContext(node, bytecodeCompiler.currentCallContext));
                     bytecodeCompiler.emit(bytecodeCompiler.addToStringPool(
                             encodeAutoboxBindings(node.getAnnotation("autoboxBindings"))));
                     if (holdInvocantDuringArguments) {
@@ -475,6 +477,10 @@ public class CompileBinaryOperator {
                     && bytecodeCompiler.isCompilingForeachList()
                     && directCallIsLvalue(bytecodeCompiler, node)) {
                 bytecodeCompiler.currentCallContext = RuntimeContextType.LVALUE_LIST;
+            }
+            if (node.operator.equals("(") || node.operator.equals("()")) {
+                bytecodeCompiler.currentCallContext = BooleanCallContext.callContext(
+                        node, bytecodeCompiler.currentCallContext);
             }
             int rd;
             try {

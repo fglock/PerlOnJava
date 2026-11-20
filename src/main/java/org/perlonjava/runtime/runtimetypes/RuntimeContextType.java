@@ -70,6 +70,9 @@ public class RuntimeContextType {
     /** Method result is being immediately invoked as a coderef; retain its invocant. */
     public static final int METHOD_CODEREF = 8;
 
+    /** Scalar result is consumed by a boolean parent operator; introspectable by Want. */
+    public static final int BOOLEAN = 9;
+
     public static boolean isListLike(int context) {
         return context == LIST || context == LVALUE_LIST;
     }
