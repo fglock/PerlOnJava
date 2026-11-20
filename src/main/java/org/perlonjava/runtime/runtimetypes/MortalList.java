@@ -1141,10 +1141,12 @@ public class MortalList {
             }
         }
         if (!needsWalk) return;
-        List<RuntimeScalar> valuesInDestructionOrder = new ArrayList<>(hash.elements.values());
-        Collections.reverse(valuesInDestructionOrder);
         RecursiveAggregateReleaseWalker releaseWalker = new RecursiveAggregateReleaseWalker();
-        for (RuntimeScalar val : valuesInDestructionOrder) {
+        // The boundary drains owner releases in LIFO order. Queue the hash's
+        // normal iteration order so its direct children retain the same
+        // destruction order, while releases appended by a child are drained
+        // before the next sibling.
+        for (RuntimeScalar val : hash.elements.values()) {
             if (preserveEscapedScalarCellValueOwner(val)) continue;
             releaseWalker.defer(val);
         }
@@ -1281,7 +1283,12 @@ public class MortalList {
         }
         if (!needsWalk) return;
         RecursiveAggregateReleaseWalker releaseWalker = new RecursiveAggregateReleaseWalker();
-        for (RuntimeScalar elem : arr.elements) {
+        // Array element values are released from the end of the Perl array
+        // toward the beginning. Queue each direct owner in that order; the
+        // recursive walker processes a nested aggregate's children before
+        // returning to the next sibling.
+        for (int index = arr.elements.size() - 1; index >= 0; index--) {
+            RuntimeScalar elem = arr.elements.get(index);
             if (preserveEscapedScalarCellValueOwner(elem)) continue;
             releaseWalker.defer(elem);
         }
@@ -1445,11 +1452,11 @@ public class MortalList {
                 LifecycleHotPathDiagnostics.aggregateReleaseWorksetAllocated();
             }
             LifecycleHotPathDiagnostics.aggregateReleaseRootProcessed();
-            work.add(scalar);
+            work.push(scalar);
 
             try {
             while (!work.isEmpty()) {
-                RuntimeScalar s = work.poll();
+                RuntimeScalar s = work.pop();
                 if (s == null || (s.type & RuntimeScalarType.REFERENCE_BIT) == 0) continue;
                 if (WeakRefRegistry.isweak(s)) continue;
                 if (!(s.value instanceof RuntimeBase base)) continue;
@@ -1537,11 +1544,11 @@ public class MortalList {
                     // Walk into unblessed containers to find nested blessed refs
                     if (base instanceof RuntimeArray arr) {
                         for (RuntimeScalar elem : arr.elements) {
-                            if (elem != null) work.add(elem);
+                            if (elem != null) work.push(elem);
                         }
                     } else if (base instanceof RuntimeHash hash) {
                         for (RuntimeScalar val : hash.elements.values()) {
-                            if (val != null) work.add(val);
+                            if (val != null) work.push(val);
                         }
                     }
                 }
@@ -1715,6 +1722,76 @@ public class MortalList {
             state.deferredReleaseDrainDepth--;
         }
         drainDeferredArgumentOwnerReleases();
+    }
+
+    /** Drain the selected pending range depth-first, preserving frame LIFO order. */
+    private static void processDeferredOwnerEntriesLifoFrom(
+            int startIdx, boolean clearWeakRefsForLocalBinding) {
+        LifecycleRuntimeState state = state();
+        int resumeDepth = state.pendingReleaseResumeDepth;
+        int floor = startIdx;
+        int cursor = state.pending.size() - 1;
+        int observedSize = state.pending.size();
+        try {
+            while (true) {
+                int liveSize = state.pending.size();
+                if (cursor >= liveSize) cursor = liveSize - 1;
+                if (floor > liveSize) floor = liveSize;
+                if (observedSize > liveSize) observedSize = liveSize;
+                if (cursor < floor) {
+                    if (state.pendingReleaseResumeDepth > resumeDepth) {
+                        int resumeIndex = --state.pendingReleaseResumeDepth;
+                        int offset = resumeIndex * 2;
+                        cursor = state.pendingReleaseResumeStack[offset];
+                        floor = state.pendingReleaseResumeStack[offset + 1];
+                        continue;
+                    }
+                    int currentSize = state.pending.size();
+                    if (currentSize > observedSize) {
+                        floor = observedSize;
+                        cursor = currentSize - 1;
+                        observedSize = currentSize;
+                        continue;
+                    }
+                    observedSize = currentSize;
+                    break;
+                }
+
+                int currentIndex = cursor--;
+                int previousSize = state.pending.size();
+                RuntimeBase.PendingOwnerRelease ownerRelease =
+                        state.pendingOwnerReleases.get(currentIndex);
+                if (ownerRelease != null && ownerRelease.completed.get()) continue;
+                String transientOwnerKind =
+                        state.pendingTransientOwnerKinds.get(currentIndex);
+                RuntimeBase base = state.pending.get(currentIndex);
+                boolean argumentAliasOwnsBase =
+                        base.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_ALIAS) != 0
+                            && base.countedOwnerSlotCount() == 0;
+                if (argumentAliasOwnsBase) {
+                    state.deferredArgumentOwnerReleases.add(
+                            new DeferredArgumentOwnerRelease(base, ownerRelease,
+                                    transientOwnerKind));
+                } else {
+                    processDeferredBase(base, clearWeakRefsForLocalBinding,
+                            ownerRelease, transientOwnerKind);
+                }
+
+                int currentSize = state.pending.size();
+                if (currentSize > previousSize) {
+                    state.pushPendingReleaseResume(cursor, floor);
+                    floor = previousSize;
+                    cursor = currentSize - 1;
+                    observedSize = currentSize;
+                } else if (currentSize < observedSize) {
+                    // A nested exact drain may have truncated its own tail.
+                    // Allow later appends to reuse those queue positions.
+                    observedSize = currentSize;
+                }
+            }
+        } finally {
+            state.pendingReleaseResumeDepth = resumeDepth;
+        }
     }
 
     static void drainDeferredArgumentOwnerReleases() {
@@ -2073,14 +2150,17 @@ public class MortalList {
         LifecycleRuntimeState state = state();
         if (startIdx >= state.pending.size()) return;
         state.deferredReleaseDrainDepth++;
-        // Loop because DESTROY may add further entries
-        int i = startIdx;
+        int pendingIdx = startIdx;
         try {
-            while (i < state.pending.size()) {
-                processDeferredBase(state.pending.get(i), clearWeakRefsForLocalBinding,
-                        state.pendingOwnerReleases.get(i),
-                        state.pendingTransientOwnerKinds.get(i));
-                i++;
+            // Exact operation-boundary releases keep queue order. Frame marks
+            // use depth-first LIFO draining; this path can be nested inside a
+            // destructor's count probe and must preserve its established order.
+            while (pendingIdx < state.pending.size()) {
+                int currentIndex = pendingIdx++;
+                processDeferredBase(state.pending.get(currentIndex),
+                        clearWeakRefsForLocalBinding,
+                        state.pendingOwnerReleases.get(currentIndex),
+                        state.pendingTransientOwnerKinds.get(currentIndex));
             }
         } finally {
             state.deferredReleaseDrainDepth--;

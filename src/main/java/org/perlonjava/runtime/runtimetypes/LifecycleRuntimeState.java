@@ -377,6 +377,25 @@ final class LifecycleRuntimeState {
     int markDepth;
     boolean flushing;
     int deferredReleaseDrainDepth;
+    // Reusable primitive stack for nested releases appended while a boundary
+    // drains its owner queue. This keeps destruction depth-first without
+    // allocating a boxed cursor for each aggregate edge.
+    int[] pendingReleaseResumeStack;
+    int pendingReleaseResumeDepth;
+
+    void pushPendingReleaseResume(int cursor, int floor) {
+        int required = (pendingReleaseResumeDepth + 1) * 2;
+        if (pendingReleaseResumeStack == null) {
+            pendingReleaseResumeStack = new int[16];
+        } else if (required > pendingReleaseResumeStack.length) {
+            pendingReleaseResumeStack = Arrays.copyOf(
+                    pendingReleaseResumeStack, pendingReleaseResumeStack.length * 2);
+        }
+        int offset = pendingReleaseResumeDepth * 2;
+        pendingReleaseResumeStack[offset] = cursor;
+        pendingReleaseResumeStack[offset + 1] = floor;
+        pendingReleaseResumeDepth++;
+    }
 
     void pushMortalMark(int pendingSize, int tiedReleaseSize, int ioReleaseSize,
                         int untrackedReturnOwnerReleaseSize) {
@@ -502,6 +521,7 @@ final class LifecycleRuntimeState {
         markDepth = 0;
         flushing = false;
         deferredReleaseDrainDepth = 0;
+        pendingReleaseResumeDepth = 0;
         weakScalars.clear();
         referentToWeakRefs.clear();
         weakRefsExist = false;

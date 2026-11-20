@@ -284,14 +284,23 @@ public class DestroyDispatch {
             referent.beginPerlDestruction();
             WeakRefRegistry.clearWeakRefsTo(referent, finalCountedOwner);
             releaseTiedContainerOwner(referent);
-            if (referent instanceof RuntimeHash hash) {
-                MortalList.scopeExitCleanupDestroyedHash(hash);
-            } else if (referent instanceof RuntimeArray arr) {
-                MortalList.scopeExitCleanupDestroyedArray(arr);
-            } else if (referent instanceof RuntimeScalar scalar) {
-                RuntimeScalar.scopeExitCleanupDestroyed(scalar);
-            } else if (referent instanceof RuntimeCode code) {
-                code.releaseStateStorage();
+            // This path can run inside another object's DESTROY callback.
+            // Drain only the outgoing releases added by this dying referent
+            // before returning to that Perl code; otherwise its B::REFCNT
+            // checks observe child edges from a hash already marked destroyed.
+            MortalList.pushMark();
+            try {
+                if (referent instanceof RuntimeHash hash) {
+                    MortalList.scopeExitCleanupDestroyedHash(hash);
+                } else if (referent instanceof RuntimeArray arr) {
+                    MortalList.scopeExitCleanupDestroyedArray(arr);
+                } else if (referent instanceof RuntimeScalar scalar) {
+                    RuntimeScalar.scopeExitCleanupDestroyed(scalar);
+                } else if (referent instanceof RuntimeCode code) {
+                    code.releaseStateStorage();
+                }
+            } finally {
+                MortalList.popAndFlush();
             }
             referent.markPerlDestroyed();
             return;
