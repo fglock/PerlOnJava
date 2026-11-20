@@ -25,6 +25,7 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
     private final boolean checkArgumentTypes;
     private final boolean runtime;
     private final String installSub;
+    private final RuntimeScalar installSubCallback;
     private final boolean requiresName;
     private final boolean prohibitsName;
     private final boolean defaultArguments;
@@ -42,7 +43,7 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
             RuntimeScalar typeReifierCallback, boolean types) {
         this(method, optionalInvocantCount, strict, checkArgumentTypes, runtime,
                 installSub, requiresName, false, true, invocants, List.of(), typeReifier,
-                typeReifierCallback, types, Map.of());
+                typeReifierCallback, types, Map.of(), null);
     }
 
     private FunctionParametersKeywordPlugin(
@@ -54,13 +55,15 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
             String typeReifier,
             RuntimeScalar typeReifierCallback,
             boolean types,
-            Map<String, RuntimeScalar> invocantTypes) {
+            Map<String, RuntimeScalar> invocantTypes,
+            RuntimeScalar installSubCallback) {
         this.method = method;
         this.optionalInvocantCount = optionalInvocantCount;
         this.strict = strict;
         this.checkArgumentTypes = checkArgumentTypes;
         this.runtime = runtime;
         this.installSub = installSub;
+        this.installSubCallback = installSubCallback;
         this.requiresName = requiresName;
         this.prohibitsName = prohibitsName;
         this.defaultArguments = defaultArguments;
@@ -77,7 +80,7 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
             boolean strict, boolean checkArgumentTypes, boolean runtime, String installSub,
             List<String> defaultAttributes, String namePolicy, boolean defaultArguments,
             String typeReifier, RuntimeScalar typeReifierCallback, boolean types,
-            Map<String, RuntimeScalar> invocantTypes) {
+            Map<String, RuntimeScalar> invocantTypes, RuntimeScalar installSubCallback) {
         boolean method = Set.of("method", "classmethod", "before", "after", "around",
                 "augment", "override").contains(defaults);
         boolean requiresName = Set.of("before", "after", "around", "augment", "override")
@@ -93,7 +96,7 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
                     true, 0, strict, checkArgumentTypes, runtime, installSub,
                     "required".equals(namePolicy) || requiresName,
                     "prohibited".equals(namePolicy), defaultArguments, invocants, defaultAttributes,
-                    typeReifier, typeReifierCallback, types, invocantTypes);
+                    typeReifier, typeReifierCallback, types, invocantTypes, installSubCallback);
         }
         if (optionalInvocantCount == 0 && strict && checkArgumentTypes && !runtime && installSub == null
                 && defaultAttributes.isEmpty() && "optional".equals(namePolicy) && defaultArguments
@@ -105,7 +108,7 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
                 "required".equals(namePolicy) || requiresName,
                 "prohibited".equals(namePolicy), defaultArguments,
                 shift == null ? List.of() : shift, defaultAttributes,
-                typeReifier, typeReifierCallback, types, invocantTypes);
+                typeReifier, typeReifierCallback, types, invocantTypes, installSubCallback);
     }
 
     @Override
@@ -125,6 +128,7 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
         boolean previousTypes = parser.functionParametersTypes;
         String previousKeyword = parser.functionParametersKeyword;
         String previousInstallSub = parser.functionParametersInstallSub;
+        RuntimeScalar previousInstallSubCallback = parser.functionParametersInstallSubCallback;
         String previousTypeReifier = parser.functionParametersTypeReifier;
         RuntimeScalar previousTypeReifierCallback = parser.functionParametersTypeReifierCallback;
         List<String> previousAttributes = parser.functionParametersAttributes;
@@ -165,6 +169,7 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
         parser.functionParametersRuntime = runtime;
         parser.functionParametersDefaultArguments = defaultArguments;
         parser.functionParametersInstallSub = installSub;
+        parser.functionParametersInstallSubCallback = installSubCallback;
         parser.functionParametersTypeReifier = typeReifier;
         parser.functionParametersTypeReifierCallback = typeReifierCallback;
         try {
@@ -254,6 +259,7 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
             parser.functionParametersTypes = previousTypes;
             parser.functionParametersKeyword = previousKeyword;
             parser.functionParametersInstallSub = previousInstallSub;
+            parser.functionParametersInstallSubCallback = previousInstallSubCallback;
             parser.functionParametersTypeReifier = previousTypeReifier;
             parser.functionParametersTypeReifierCallback = previousTypeReifierCallback;
             parser.functionParametersAttributes = previousAttributes;

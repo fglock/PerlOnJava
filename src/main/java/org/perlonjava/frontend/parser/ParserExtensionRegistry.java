@@ -322,10 +322,10 @@ public final class ParserExtensionRegistry {
     private static void registerStrictnessDefaults(Parser parser, boolean strict) {
         parser.registerKeywordPlugin("fun", FunctionParametersKeywordPlugin.configured(
                 "function", null, 0, strict, true, false, null, List.of(), "optional", true,
-                null, null, true, Map.of()));
+                null, null, true, Map.of(), null));
         parser.registerKeywordPlugin("method", FunctionParametersKeywordPlugin.configured(
                 "method", null, 0, strict, true, false, null, List.of(), "optional", true,
-                null, null, true, Map.of()));
+                null, null, true, Map.of(), null));
     }
 
     private static void removeDefaults(Parser parser) {
@@ -359,6 +359,7 @@ public final class ParserExtensionRegistry {
         boolean types = true;
         String namePolicy = "optional";
         String installSub = null;
+        RuntimeScalar installSubCallback = null;
         String reifyType = null;
         RuntimeScalar reifyTypeCallback = null;
         List<String> defaultAttributes = List.of();
@@ -436,7 +437,11 @@ public final class ParserExtensionRegistry {
             }
             RuntimeScalar installSubValue = configuration.elements.get("install_sub");
             if (installSubValue != null && installSubValue.getDefinedBoolean()) {
-                installSub = installSubValue.toString();
+                if (installSubValue.type == RuntimeScalarType.CODE) {
+                    installSubCallback = installSubValue;
+                } else {
+                    installSub = installSubValue.toString();
+                }
             }
             RuntimeScalar attributesValue = configuration.elements.get("attributes");
             if (attributesValue != null) {
@@ -480,7 +485,7 @@ public final class ParserExtensionRegistry {
         return FunctionParametersKeywordPlugin.configured(
                 defaults, shift, optionalInvocantCount, strict, checkArgumentTypes,
                 runtime, installSub, defaultAttributes, namePolicy, defaultArguments,
-                reifyType, reifyTypeCallback, types, shiftTypes);
+                reifyType, reifyTypeCallback, types, shiftTypes, installSubCallback);
     }
 
     private static List<String> parseConfiguredAttributes(String source) {

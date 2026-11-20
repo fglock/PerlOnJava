@@ -307,6 +307,8 @@ public class Parser {
     /** Whether Function::Parameters signatures accept default arguments. */
     public boolean functionParametersDefaultArguments = true;
     public String functionParametersInstallSub;
+    /** Runtime code reference used to install configured Function::Parameters subs. */
+    public RuntimeScalar functionParametersInstallSubCallback;
     public String functionParametersTypeReifier;
     /** Optional compile-time callback used by Function::Parameters reify_type. */
     public org.perlonjava.runtime.runtimetypes.RuntimeScalar functionParametersTypeReifierCallback;

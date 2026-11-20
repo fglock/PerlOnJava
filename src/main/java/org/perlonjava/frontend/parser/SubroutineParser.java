@@ -28,6 +28,7 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.util.*;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 
 import static org.perlonjava.frontend.parser.ParserTables.CORE_PROTOTYPES;
@@ -37,6 +38,7 @@ import static org.perlonjava.frontend.parser.SignatureParser.parseSignature;
 import static org.perlonjava.frontend.parser.TokenUtils.peek;
 
 public class SubroutineParser {
+    private static final AtomicLong FUNCTION_PARAMETERS_INSTALLER_SEQUENCE = new AtomicLong();
 
     // Create a static semaphore with 1 permit
     private static final Semaphore semaphore = new Semaphore(1);
@@ -1607,7 +1609,8 @@ public class SubroutineParser {
                 return result;
             } else if (parser.parsingFunctionParametersDeclaration
                     && (parser.functionParametersRuntime
-                    || parser.functionParametersInstallSub != null)) {
+                    || parser.functionParametersInstallSub != null
+                    || parser.functionParametersInstallSubCallback != null)) {
                 String fullName = NameNormalizer.normalizeVariableName(
                         subName, parser.ctx.symbolTable.getCurrentPackage());
                 SubroutineNode runtimeCode = handleAnonSub(
@@ -1617,6 +1620,17 @@ public class SubroutineParser {
                     Node installer = new OperatorNode("&",
                             new IdentifierNode(parser.functionParametersInstallSub, currentIndex),
                             currentIndex);
+                    ListNode installerArguments = new ListNode(List.of(
+                            new StringNode(subName, currentIndex), runtimeCode), currentIndex);
+                    return new BinaryOperatorNode("(", installer, installerArguments, currentIndex);
+                }
+                if (parser.functionParametersInstallSubCallback != null) {
+                    long callbackId = FUNCTION_PARAMETERS_INSTALLER_SEQUENCE.incrementAndGet();
+                    String callbackName = "Function::Parameters::Internal::__install_callback_" + callbackId;
+                    GlobalVariable.globalVariables.put(callbackName,
+                            parser.functionParametersInstallSubCallback);
+                    Node installer = new OperatorNode("$",
+                            new IdentifierNode(callbackName, currentIndex), currentIndex);
                     ListNode installerArguments = new ListNode(List.of(
                             new StringNode(subName, currentIndex), runtimeCode), currentIndex);
                     return new BinaryOperatorNode("(", installer, installerArguments, currentIndex);
