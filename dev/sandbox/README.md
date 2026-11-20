@@ -37,8 +37,17 @@ commitment** — they may be outdated or broken.
 | `add_subtract_unbox_optimization.diff` | Bytecode unboxing optimization experiment |
 | `walker_gate_dbic_minimal.t` | DBIx::Class minimal reproduction |
 
+## Subdirectories
+
+| Directory | Contents |
+|---|---|
+| `examples/` | Larger example scripts and feature concepts |
+| `repros/` | Issue reproducers kept while the fix is in progress |
+| `known-bugs/` | Minimal reproductions of confirmed unfixed bugs |
+| `design_spark/` | Early-stage ideas and proof-of-concept sketches |
+| `diagnostic-traces/` | Raw output captured from instrumented builds |
+
 ## See Also
 
-- `dev/examples/` — More polished, documented example scripts
 - `dev/design/` — Design documents that sometimes originate from sandbox experiments
-- `dev/known-bugs/` — Minimal reproductions for *confirmed* unfixed bugs
+- `src/test/resources/unit/` — Where a reproducer goes once it must keep passing

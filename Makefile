@@ -1,4 +1,4 @@
-.PHONY: all clean test test-unit test-bench test-perl-optional test-cpan-tester test-interpreter check-thread-test-sources check-thread-core-test-sources check-thread-ecosystem-test-sources check-thread-regex-test-sources test-thread-tooling test-threads test-threads-core test-threads-core-platform test-threads-core-mode test-threads-windows test-threads-regex test-threads-release test-threads-ecosystem test-bundled-modules test-cpan-distroprefs test-cpan-release-acceptance test-exiftool test-all test-gradle test-gradle-unit test-gradle-all test-gradle-parallel test-maven-parallel build run wrapper check-java-gradle dev ci sbom sbom-java sbom-perl sbom-clean check-links perl5-update perl5-sync perl5-sync-check
+.PHONY: all help clean test test-unit test-bench test-perl-optional test-cpan-tester test-interpreter check-thread-test-sources check-thread-core-test-sources check-thread-ecosystem-test-sources check-thread-regex-test-sources test-thread-tooling test-threads test-threads-core test-threads-core-platform test-threads-core-mode test-threads-windows test-threads-regex test-threads-release test-threads-ecosystem test-bundled-modules test-cpan-distroprefs test-cpan-release-acceptance test-exiftool test-all test-gradle test-gradle-unit test-gradle-all test-gradle-parallel test-maven-parallel build run wrapper check-java-gradle dev ci sbom sbom-java sbom-perl sbom-clean check-links perl5-update perl5-sync perl5-sync-check
 
 PERL ?= perl
 GRADLE_ARGS ?=
@@ -112,6 +112,35 @@ THREAD_ECOSYSTEM_UPSTREAM_TESTS := \
 	dev/test-corpora/Moose-2.4000/t/todo_tests/moose_and_threads.t
 
 all: build
+
+# List the targets most contributors need. Keep this in sync when adding a
+# top-level gate; specialised targets are documented beside their rules.
+help:
+	@echo "PerlOnJava make targets"
+	@echo ""
+	@echo "Build and everyday gates"
+	@echo "  make                        Build and run all unit tests (default)"
+	@echo "  make clean                  Remove build output"
+	@echo "  make ci                     Build and test as GitHub CI does"
+	@echo ""
+	@echo "Additional test gates"
+	@echo "  make test-bundled-modules   Bundled CPAN module tests"
+	@echo "  make test-interpreter       Unit tests on the bytecode interpreter backend"
+	@echo "  make test-threads           ithreads compatibility gate"
+	@echo "  make test-cpan-distroprefs  Bundled CPAN distroprefs checks"
+	@echo "  make test-all               Imported Perl core and module suites"
+	@echo "  make test-bench             Benchmark-runner contract tests"
+	@echo ""
+	@echo "Documentation and release"
+	@echo "  make check-links            Offline Markdown link check (requires lychee)"
+	@echo "  make sbom                   Generate the software bill of materials"
+	@echo "  make deb                    Build the Debian package"
+	@echo ""
+	@echo "Upstream Perl sources"
+	@echo "  make perl5-update           Refresh the local perl5 checkout and import tests"
+	@echo "  make perl5-sync             Re-import files listed in dev/import-perl5/config.yaml"
+	@echo ""
+	@echo "Run builds with low priority on shared hosts: nice -n 19 make"
 
 perl5-update:
 	$(PERL) dev/import-perl5/update_perl5.pl
@@ -261,7 +290,7 @@ check-thread-core-test-sources:
 			exit 1; \
 		fi; \
 	done
-	@perl dev/tools/check_test_manifest.pl dev/test-manifests/threads-core.sha256
+	@perl dev/tools/check_test_manifest.pl dev/test-corpora/threads-core.sha256
 
 check-thread-ecosystem-test-sources:
 	@for file in $(THREAD_ECOSYSTEM_UPSTREAM_TESTS); do \
@@ -534,4 +563,5 @@ sbom-clean:
 check-links:
 	@command -v lychee >/dev/null 2>&1 || { echo "Error: lychee not found. Install with: brew install lychee"; exit 1; }
 	@echo "Checking documentation links..."
-	lychee --offline *.md docs/ dev/design/ dev/architecture/
+	lychee --offline *.md docs/ dev/ .agents/ .github/
+	$(PERL) dev/tools/gen_design_index.pl --check

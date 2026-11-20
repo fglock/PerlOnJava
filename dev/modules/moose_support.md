@@ -2161,7 +2161,7 @@ paired increment, or one increment lost without queueing a paired
 decrement).
 
 The full trace for the failing metaclass is preserved at
-`dev/diagnostic-traces/cmop-metaclass-refcount-underflow.txt` (102
+`dev/sandbox/diagnostic-traces/cmop-metaclass-refcount-underflow.txt` (102
 lines, every transition with stack).
 
 **Best fix candidates given this data:**
@@ -2225,7 +2225,7 @@ Total increments: 51 (50 setLargeRefCounted + 1 silent bless)
 (metaclass held by `our %METAS`). Discrepancy: **4 extra decrements
 unpaired with increments**.
 
-Trace artifact: `dev/diagnostic-traces/cmop-metaclass-refcount-with-queue-sites.txt`
+Trace artifact: `dev/sandbox/diagnostic-traces/cmop-metaclass-refcount-with-queue-sites.txt`
 (150 lines, full call-stack snippets).
 
 #### Fix plan
@@ -2347,7 +2347,7 @@ After plumbing all known inc/dec paths: zero `*** UNPAIRED RELEASE ***`
 events, but one CMOP metaclass (`RuntimeHash` id `408069119`) ends
 the run with **`refCount = Integer.MIN_VALUE` (destroyed) and 2
 surviving owner scalars holding strong references**. Trace at
-`dev/diagnostic-traces/cmop-metaclass-with-owner-tracking.txt`.
+`dev/sandbox/diagnostic-traces/cmop-metaclass-with-owner-tracking.txt`.
 
 The two surviving owners both came from `setLargeRefCounted store`:
 - One via `RuntimeScalar.set ← addToScalar:902` (normal store path)
@@ -2407,11 +2407,11 @@ self-consistent and the walker-gate heuristic can be removed.
 
 #### Files committed on this branch
 
-- `dev/diagnostic-traces/cmop-metaclass-refcount-underflow.txt` —
+- `dev/sandbox/diagnostic-traces/cmop-metaclass-refcount-underflow.txt` —
   D-W6.10 trace (4 inc/dec sites instrumented).
-- `dev/diagnostic-traces/cmop-metaclass-refcount-with-queue-sites.txt` —
+- `dev/sandbox/diagnostic-traces/cmop-metaclass-refcount-with-queue-sites.txt` —
   D-W6.10 with queue-site tracing.
-- `dev/diagnostic-traces/cmop-metaclass-with-owner-tracking.txt` —
+- `dev/sandbox/diagnostic-traces/cmop-metaclass-with-owner-tracking.txt` —
   D-W6.12 trace (full owner pairing, surfaces the 2 unpaired
   increments).
 

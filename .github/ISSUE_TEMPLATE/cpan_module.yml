@@ -1,0 +1,37 @@
+name: CPAN module failure
+description: A CPAN distribution fails to install or test with jcpan
+labels: ["cpan"]
+body:
+  - type: input
+    id: distribution
+    attributes:
+      label: Distribution and version
+      placeholder: Some-Module-1.23
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command and failing output
+      description: The `jcpan` command you ran and the first failing test or error. Attach the full log as a file if it is long.
+      render: text
+    validations:
+      required: true
+  - type: dropdown
+    id: perl-result
+    attributes:
+      label: Result with standard Perl
+      options:
+        - Passes with standard Perl
+        - Also fails with standard Perl
+        - Not checked
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Output of `jperl -v` and `java -version`, plus the operating system.
+      render: text
+    validations:
+      required: true

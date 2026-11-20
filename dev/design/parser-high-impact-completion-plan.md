@@ -240,7 +240,7 @@ batch now does.
 | [#1166](https://github.com/fglock/PerlOnJava/issues/1166): qualified indirect constructors | Both reported forms pass unchanged tests (five assertions total) on standard Perl, JVM, and interpreter. | Recheck both forms on the PR commit |
 | [#1470](https://github.com/fglock/PerlOnJava/issues/1470): AnyEvent compilation and dispatch | Earlier compiler compatibility landed in PR #1598; oversized closure source constant and dispatch changes are implemented locally. On the final batched source, unchanged mutex passes 8/8 and the full AnyEvent::Tools suite passes 103/103 on standard Perl, JVM, and interpreter. | Recheck on the final PR commit; then include in the five-issue closure audit |
 
-The [issue batch](parser-high-impact-issues-20261002.md) retains experiment
+The [issue batch](../archive/design/parser-high-impact-issues-20261002.md) retains experiment
 history and distribution evidence, including Argv, Weasel::Driver::Selenium2,
 and LWPx::TimedHTTP results. Match each result to the actual issue acceptance
 criteria when preparing the final matrix; skips and TODOs are not proof that
@@ -959,7 +959,7 @@ files, so its aggregate counts are not directly comparable.
 
 ## Related documents and skills
 
-- [Issue batch evidence](parser-high-impact-issues-20261002.md)
+- [Issue batch evidence](../archive/design/parser-high-impact-issues-20261002.md)
 - [Reference owner ledger](refcount-owner-ledger.md)
 - [Runtime profiling skill](../../.agents/skills/profile-perlonjava/SKILL.md)
 - [Debugging skill](../../.agents/skills/debug-perlonjava/SKILL.md)
