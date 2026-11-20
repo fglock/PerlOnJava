@@ -24,6 +24,14 @@ the upstream XS parser plugin.
 
 ### Current status: Core subset implemented; upstream compatibility work remains (2026-11-20)
 
+Latest phase (2026-11-20, source `f0cb5c9a0`): added automatic Type::Tiny
+bracket applications and composite type operators, with a focused overloaded
+type regression. `nice -n 19 make` passed; `nice -n 19 make check-links`
+passed (584 links). The upstream `types_auto.t` now passes quoted unknown-type
+diagnostics but retains failures for bare unknown-type diagnostics and deeply
+composed type metadata. Next: resolve those two failures; broader consumer gaps
+and the missing system Perl XS oracle remain blockers to full compatibility.
+
 ### Completed
 
 - [x] Add a lexical parser keyword plugin interface and module-provider
