@@ -26,6 +26,7 @@ import java.util.Deque;
 import java.util.IdentityHashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -334,6 +335,8 @@ public class Parser {
     public final Map<String, List<Node>> unitClassAdjustBlocks = new LinkedHashMap<>();
     /** Prototypes published by declaration headers while this source is parsed. */
     public final Map<String, String> declaredSubPrototypes = new LinkedHashMap<>();
+    /** Function::Parameters prototype declarations apply inside their own recursive body. */
+    public final Set<String> functionParametersDeclaredPrototypes = new LinkedHashSet<>();
     /** Named subroutines whose bodies are currently being parsed, including closure ancestors. */
     public final Deque<String> compilingSubroutineBodies = new ArrayDeque<>();
     // List to store heredoc nodes encountered during parsing.

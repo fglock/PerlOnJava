@@ -30,4 +30,13 @@ like($@, qr/Can't redefine prototype/, 'duplicate prototype diagnostic is clear'
 ok(eval 'fun () :prototype(_@) {}', 'accept underscore array prototype');
 ok(eval 'fun () :prototype(_%) {}', 'accept underscore hash prototype');
 
+fun factorial($continuation, $n) :prototype(&$) {
+    $n < 2
+        ? $continuation->(1)
+        : factorial { $continuation->($n * $_[0]) } $n - 1
+}
+my $factorial_result = factorial { $_[0] } 5;
+is($factorial_result, 120,
+    'block argument consumes its prototype slot before trailing arguments');
+
 done_testing;

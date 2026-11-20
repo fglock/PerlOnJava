@@ -315,11 +315,12 @@ public class SubroutineParser {
         }
         if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("SubroutineCall exists " + subExists + " prototype `" + prototype + "` attributes " + attributes);
 
-        // A recursive call is parsed while the declaration's own body is
-        // still being compiled.  Perl does not apply the just-declared
-        // prototype to that initial recursive call.
+        // Function::Parameters makes its declaration-header prototype visible
+        // while compiling the same body. Ordinary Perl recursive declarations
+        // retain the existing no-prototype behavior.
         if (!isMethod && !prototypeWasPredeclared
-                && parser.compilingSubroutineBodies.contains(fullName)) {
+                && parser.compilingSubroutineBodies.contains(fullName)
+                && !parser.functionParametersDeclaredPrototypes.contains(fullName)) {
             prototype = null;
         }
         boolean prototypeHasGlob = prototype != null && prototype.contains("*");
@@ -722,7 +723,18 @@ public class SubroutineParser {
                         }
                         Node callback = new SubroutineNode(null, null, null,
                                 callbackBody, false, currentIndex);
-                        ListNode arguments = new ListNode(List.of(callback), currentIndex);
+                        List<Node> callbackArguments = new ArrayList<>();
+                        callbackArguments.add(callback);
+                        String blockPrototype = prototype;
+                        if (blockPrototype != null && blockPrototype.startsWith("(")
+                                && blockPrototype.endsWith(")")) {
+                            blockPrototype = blockPrototype.substring(1, blockPrototype.length() - 1);
+                        }
+                        if (blockPrototype != null && blockPrototype.startsWith("&")) {
+                            callbackArguments.addAll(consumeArgsWithPrototype(
+                                    parser, blockPrototype.substring(1)).elements);
+                        }
+                        ListNode arguments = new ListNode(callbackArguments, currentIndex);
                         return new BinaryOperatorNode("(",
                                 new OperatorNode("&", nameNode, currentIndex),
                                 arguments,
@@ -1445,6 +1457,11 @@ public class SubroutineParser {
             String headerName = NameNormalizer.normalizeVariableName(
                     subName, parser.ctx.symbolTable.getCurrentPackage());
             parser.declaredSubPrototypes.put(headerName, prototype);
+            if (parser.parsingFunctionParametersDeclaration) {
+                parser.functionParametersDeclaredPrototypes.add(headerName);
+            } else {
+                parser.functionParametersDeclaredPrototypes.remove(headerName);
+            }
         }
 
         // Save the current subroutine context and set the new one

@@ -245,6 +245,10 @@ public class SignatureParser {
                     customReifiedTypeValue = callCustomTypeReifier(
                             typeSource(typeSourceStart, typeSourceEnd), paramStartIndex);
                     typeConstraint = customTypeConstraintReference(customReifiedTypeValue, paramStartIndex);
+                } else if (typeConstraint instanceof StringNode string
+                        && !"moose".equals(parser.functionParametersTypeReifier)
+                        && hasAutomaticTypeSyntax(string.value)) {
+                    typeConstraint = parseAutomaticTypeSource(string.value, paramStartIndex);
                 }
             } else if (peekToken().type == LexerTokenType.IDENTIFIER) {
                 typeConstraint = parseUnparenthesizedTypeConstraint();
@@ -272,16 +276,18 @@ public class SignatureParser {
                         && string.value.matches("[A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_][A-Za-z0-9_]*)*")
                         ? string.value : null;
                 typeConstraint = reifyQuotedTypeName(typeConstraint, paramStartIndex);
+                String undefinedTypeName = quotedTypeName != null
+                        ? quotedTypeName : simpleReifiedTypeName(typeConstraint);
                 if (typeConstraint != null && customReifiedTypeValue == null) {
                     RuntimeScalar evaluatedType;
                     try {
                         evaluatedType = SpecialBlockParser.runSpecialBlock(
                                 parser, "BEGIN", typeConstraint, RuntimeContextType.SCALAR).scalar();
                     } catch (PerlCompilerException exception) {
-                        if (quotedTypeName != null && exception.getMessage() != null
+                        if (undefinedTypeName != null && exception.getMessage() != null
                                 && exception.getMessage().contains("Undefined subroutine &")) {
-                            String fullName = quotedTypeName.startsWith("::")
-                                    ? quotedTypeName.substring(2) : quotedTypeName;
+                            String fullName = undefinedTypeName.startsWith("::")
+                                    ? undefinedTypeName.substring(2) : undefinedTypeName;
                             if (!fullName.contains("::")) {
                                 fullName = parser.ctx.symbolTable.getCurrentPackage() + "::" + fullName;
                             }
@@ -774,6 +780,41 @@ public class SignatureParser {
         return new BinaryOperatorNode("(", typeFunction, new ListNode(List.of(), index), index);
     }
 
+    private static String simpleReifiedTypeName(Node typeConstraint) {
+        if (typeConstraint instanceof BinaryOperatorNode call && "(".equals(call.operator)
+                && call.left instanceof OperatorNode reference && "&".equals(reference.operator)
+                && reference.operand instanceof IdentifierNode name
+                && call.right instanceof ListNode arguments && arguments.elements.isEmpty()) {
+            return name.name;
+        }
+        return null;
+    }
+
+    private static boolean hasAutomaticTypeSyntax(String source) {
+        return source.matches("(?s).*(?:\\||&|/|~|\\[|\\]).*");
+    }
+
+    private Node parseAutomaticTypeSource(String source, int sourceIndex) {
+        List<LexerToken> inlineTokens = new Lexer(source).tokenize();
+        int end = 0;
+        while (end < inlineTokens.size() && inlineTokens.get(end).type != LexerTokenType.EOF) end++;
+        ErrorMessageUtil previousErrorUtil = parser.ctx.errorUtil;
+        ErrorMessageUtil.SourceLocation declarationLocation =
+                previousErrorUtil.getSourceLocationAccurate(sourceIndex);
+        String inlineFile = "(inline_type:" + declarationLocation.fileName()
+                + ":" + declarationLocation.lineNumber() + ")";
+        parser.ctx.errorUtil = new ErrorMessageUtil(inlineFile, inlineTokens);
+        try {
+            Parser inlineParser = new Parser(parser.ctx, inlineTokens);
+            inlineParser.functionParametersTypes = parser.functionParametersTypes;
+            inlineParser.functionParametersTypeReifier = parser.functionParametersTypeReifier;
+            SignatureParser inlineSignatureParser = new SignatureParser(inlineParser);
+            return inlineSignatureParser.new AutomaticTypeExpressionParser(0, end).parse();
+        } finally {
+            parser.ctx.errorUtil = previousErrorUtil;
+        }
+    }
+
     private Node parseUnparenthesizedTypeConstraint() {
         int start = parser.tokenIndex;
         int parameterSigil = findTypeConstraintParameterSigil(start);
@@ -967,7 +1008,8 @@ public class SignatureParser {
                     parser.throwError(nextSignificant(cursor), "Malformed Function::Parameters type constraint");
                 }
                 ArrayLiteralNode argumentArray = new ArrayLiteralNode(arguments, index);
-                value = new BinaryOperatorNode("->", value,
+                Node overloadedCodeRef = new OperatorNode("&", value, index);
+                value = new BinaryOperatorNode("(", overloadedCodeRef,
                         new ListNode(List.of(argumentArray), index), index);
             }
             return value;
