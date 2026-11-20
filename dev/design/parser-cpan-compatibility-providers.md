@@ -2,7 +2,7 @@
 
 ## Current state (2026-11-20)
 
-Source commit: `f9bc8e763` plus the current uncommitted parser/runtime follow-up;
+Source base commit: `f9bc8e763`; parser/runtime follow-up: `a35e57b4e`,
 rebased onto `origin/master` at `94cc21a9c`. The full `nice -n 19 make` gate
 passes on the current candidate. The autobox 3.0.2 upstream suite previously
 passed all 23 files and 675 assertions; `Function::Parameters` 2.002006 passes
