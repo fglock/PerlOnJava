@@ -12,11 +12,13 @@ the Function::Parameters method parser and synthesize the implicit `$self`
 signature for the no-parentheses forms used by `Data::Page::Pagination`.
 
 The bundled `Object::Pad` shim reports syntax compatibility level 0.800 for
-the implemented class, field, initializer, method, signature, ADJUST/BUILD,
-inheritance, and field-attribute subset. This does not implement Object::Pad's
-MOP, roles, custom field attributes, or XS APIs. In particular, `Device::Chip`
-0.27 also uses `:repr(HASH)` and `:does`, so passing its version check does not
-make that distribution compatible yet.
+the implemented class, role, field, initializer, method, signature,
+ADJUST/BUILD, inheritance, `:repr(HASH)`, `:does`, and `:Struct(readonly)`
+subset. It also provides a small `Object::Pad::MOP::Class` method-registration
+API and package metadata helpers. This does not implement custom field
+attributes or Object::Pad's XS APIs. `Device::Chip` 0.27 now loads its modules;
+its adapter tests still fail when `method configure (%)` rejects the forwarded
+name/value list.
 
 The autobox work now adds parser-time `use autobox` and `no autobox` bindings,
 captures immutable mappings on method-call sites, and routes them through both
@@ -33,6 +35,11 @@ These lexical call-site bindings do not mutate or bless the original invocant.
 - The new focused provider tests pass on JVM and interpreter backends, and
   system Perl skips syntax unavailable in its core try implementation.
 - The full `nice -n 19 make` gate passes on the candidate source.
+- The Object::Pad role/MOP/Struct regression passes 8 assertions on JVM and
+  interpreter. The system-Perl test skips because Object::Pad is not installed.
+- The `Device::Chip::ADT7470` consumer now passes `t/00use.t` and `t/99pod.t`;
+  `t/01config.t` and `t/02interact.t` reach `Device::Chip::mount` but fail on
+  anonymous hash-slurpy validation for the adapter's `configure (%)` method.
 - The focused autobox regression passes 21 assertions on the JVM and
   interpreter backends and passes under system Perl.
 - A forced clean-home autobox 3.0.2 run passes 586 of 592 executed assertions;
@@ -46,10 +53,10 @@ These lexical call-site bindings do not mutate or bless the original invocant.
   upstream autobox suite has these gaps.
 
 These results deliver the two reported syntax-provider cases and an autobox
-dispatch foundation while leaving Object::Pad's wider distribution
-compatibility, Function::Parameters residual parity, and autobox's remaining
-upstream behaviors unresolved. Follow those independent API contracts before
-treating issues #2112, #1361, or #1264 as complete.
+dispatch foundation while leaving full Object::Pad consumer compatibility,
+Function::Parameters residual parity, and autobox's remaining upstream
+behaviors unresolved. Follow those independent API contracts before treating
+issues #2112, #1361, or #1264 as complete.
 
 ## Related references
 

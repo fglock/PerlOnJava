@@ -121,20 +121,43 @@ public class ClassTransformer {
         // Add the package declaration back (it's always first)
         OperatorNode packageDecl = null;
         if (!otherStatements.isEmpty() && otherStatements.get(0) instanceof OperatorNode opNode
-                && ("class".equals(opNode.operator) || "package".equals(opNode.operator))) {
+                && ("class".equals(opNode.operator) || "role".equals(opNode.operator)
+                    || "package".equals(opNode.operator))) {
             packageDecl = opNode;
             block.elements.add(otherStatements.remove(0));
         }
 
         // Set up inheritance if :isa() attribute was specified
         if (packageDecl != null) {
+            boolean structClass = packageDecl.getBooleanAnnotation("struct");
+            boolean structReadonly = packageDecl.getBooleanAnnotation("structReadonly");
+            if (structClass) {
+                for (OperatorNode field : fields) {
+                    if (!"$".equals(field.getAnnotation("sigil"))) {
+                        throw PerlCompilerException.withSourceLocation(field.getIndex(),
+                                ":Struct only supports scalar fields", parser.ctx.errorUtil);
+                    }
+                    field.setAnnotation("attr:param", "");
+                    if (structReadonly) {
+                        field.setAnnotation("attr:reader", "");
+                    }
+                }
+            }
             String parentClass = (String) packageDecl.getAnnotation("parentClass");
+            @SuppressWarnings("unchecked")
+            List<String> doesRoles = (List<String>) packageDecl.getAnnotation("doesRoles");
+            List<String> isaClasses = new ArrayList<>();
             if (parentClass != null) {
+                isaClasses.add(parentClass);
                 // Register parent-child relationship in FieldRegistry
                 FieldRegistry.registerParentClass(className, parentClass);
-
-                // Generate: @ClassName::ISA = ('ParentClass');
-                Node isaAssignment = generateIsaAssignment(className, parentClass);
+            }
+            if (doesRoles != null) {
+                isaClasses.addAll(doesRoles);
+            }
+            if (!isaClasses.isEmpty()) {
+                // Roles participate in method lookup through the class ISA list.
+                Node isaAssignment = generateIsaAssignment(className, isaClasses);
                 block.elements.add(isaAssignment);
             }
             // Perl classes expose @ISA for introspection but do not permit it
@@ -170,6 +193,12 @@ public class ClassTransformer {
             block.setAnnotation("deferredConstructor", constructor);
         } else {
             FieldRegistry.unregisterGeneratedConstructor(className);
+        }
+
+        if (packageDecl != null && packageDecl.getBooleanAnnotation("struct")) {
+            SubroutineNode newValues = generateStructValuesConstructor(fields, className, parser);
+            block.elements.add(newValues);
+            block.setAnnotation("deferredStructValuesConstructor", newValues);
         }
 
         // Generate reader and writer methods
@@ -973,6 +1002,29 @@ public class ClassTransformer {
         return new SubroutineNode(accessorName, null, null, body, false, 0);
     }
 
+    private static SubroutineNode generateStructValuesConstructor(
+            List<OperatorNode> fields, String className, Parser parser) {
+        BlockNode body = new BlockNode(new ArrayList<>(), 0);
+        List<Node> args = new ArrayList<>();
+        for (int i = 0; i < fields.size(); i++) {
+            String fieldName = (String) fields.get(i).getAnnotation("name");
+            args.add(new StringNode(fieldName, 0));
+            Node allArgs = new OperatorNode("@", new IdentifierNode("_", 0), 0);
+            Node valueIndex = new BinaryOperatorNode("[", allArgs,
+                    new ArrayLiteralNode(List.of(new NumberNode(Integer.toString(i + 1), 0)), 0), 0);
+            args.add(valueIndex);
+        }
+        Node classInvocant = new BinaryOperatorNode("[",
+                new OperatorNode("@", new IdentifierNode("_", 0), 0),
+                new ArrayLiteralNode(List.of(new NumberNode("0", 0)), 0), 0);
+        Node newCall = new BinaryOperatorNode("(",
+                new OperatorNode("&", new IdentifierNode("new", 0), 0),
+                new ListNode(args, 0), 0);
+        Node methodCall = new BinaryOperatorNode("->", classInvocant, newCall, 0);
+        body.elements.add(new OperatorNode("return", methodCall, 0));
+        return new SubroutineNode("new_values", null, null, body, false, 0);
+    }
+
     private static Node accessorArityCheck(Parser parser, String name, int expected) {
         Node count = new OperatorNode("scalar", ParserNodeUtils.atUnderscore(parser), 0);
         Node tooFew = new BinaryOperatorNode(">=", count,
@@ -1011,14 +1063,16 @@ public class ClassTransformer {
      * Generate @ISA array assignment for inheritance.
      * Creates: @ClassName::ISA = ('ParentClass');
      */
-    private static Node generateIsaAssignment(String className, String parentClass) {
+    private static Node generateIsaAssignment(String className, List<String> parentClasses) {
         // Create @ClassName::ISA
         OperatorNode isaArray = new OperatorNode("@",
                 new IdentifierNode(className + "::ISA", 0), 0);
 
-        // Create list with parent class
+        // Create a list with the base class followed by composed roles.
         List<Node> parentList = new ArrayList<>();
-        parentList.add(new StringNode(parentClass, 0));
+        for (String parentClass : parentClasses) {
+            parentList.add(new StringNode(parentClass, 0));
+        }
         ListNode parentListNode = new ListNode(parentList, 0);
 
         // Create assignment: @ISA = ('ParentClass')

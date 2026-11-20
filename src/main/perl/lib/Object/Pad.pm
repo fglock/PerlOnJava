@@ -15,6 +15,7 @@ our $VERSION = '0.800';
 # provide the Object::Pad MOP, roles, custom field attributes, or XS APIs.
 sub import {
     feature->import('class');
+    feature->import('signatures');
     warnings->unimport('experimental::class');
     return;
 }
@@ -23,6 +24,27 @@ sub unimport {
     feature->unimport('class');
     return;
 }
+
+package Object::Pad::MOP::Class;
+
+sub for_caller {
+    my $package = caller;
+    return bless { package => $package }, __PACKAGE__;
+}
+
+sub for_class {
+    my ($class, $package) = @_;
+    return bless { package => $package }, $class;
+}
+
+sub add_method {
+    my ($self, $name, $code) = @_;
+    no strict 'refs';
+    *{$self->{package} . '::' . $name} = $code;
+    return $code;
+}
+
+package Object::Pad;
 
 1;
 

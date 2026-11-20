@@ -207,6 +207,11 @@ public class StatementResolver {
                         ? StatementParser.parsePackageDeclaration(parser, token)
                         : null;
 
+                // Object::Pad provides roles alongside its class feature.
+                // `role` is not part of core feature 'class', so recognize it
+                // independently when parsing a declaration.
+                case "role" -> StatementParser.parsePackageDeclaration(parser, token);
+
                 case "use", "no" -> StatementParser.parseUseDeclaration(parser, token);
 
                 case "async" -> {
@@ -409,6 +414,15 @@ public class StatementResolver {
                             );
                             method.setAnnotation("isMethod", true);
 
+                            // transformUnitClassMethod injects the implicit
+                            // receiver and then places signature declarations
+                            // after its shift.  The signature must be attached
+                            // before that transformation, just as it is for a
+                            // braced class transformed after parsing.
+                            if (signatureAST != null && !signatureAST.elements.isEmpty()) {
+                                method.setAnnotation("signatureAST", signatureAST);
+                            }
+
                             // A braced class receives this transformation when its
                             // complete block is processed.  A unit class (`class
                             // Name;`) has no such closing block, so transform each
@@ -420,11 +434,6 @@ public class StatementResolver {
                                         method.attributes, (BlockNode) method.block, false, null);
                             }
 
-                            // If we have a signature, store it in the method for ClassTransformer to handle
-                            // The signature AST needs to go AFTER $self = shift (added by ClassTransformer)
-                            if (signatureAST != null && !signatureAST.elements.isEmpty()) {
-                                method.setAnnotation("signatureAST", signatureAST);
-                            }
                             yield method;
                         }
                         } finally {
