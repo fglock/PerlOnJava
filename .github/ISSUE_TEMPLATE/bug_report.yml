@@ -1,0 +1,36 @@
+name: Bug report
+description: Perl code that behaves differently under PerlOnJava than under standard Perl
+labels: ["bug"]
+body:
+  - type: textarea
+    id: reproducer
+    attributes:
+      label: Minimal reproducer
+      description: The smallest Perl script or one-liner that shows the problem.
+      render: perl
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Output with standard Perl
+      description: Output of the reproducer under `perl`, including the Perl version.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Output with PerlOnJava
+      description: Output under `jperl`. If you can, also run with `jperl --interpreter` and say whether the result differs.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Output of `jperl -v` and `java -version`, plus the operating system.
+      render: text
+    validations:
+      required: true

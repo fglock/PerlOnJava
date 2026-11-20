@@ -203,7 +203,7 @@ working example using Image::ExifTool.
 - `examples/ExifToolExample.java` - Java integration example
 
 See also:
-- [Quick Start](../../QUICKSTART.md) - Basic examples
+- [Quick Start](../getting-started/quickstart.md) - Basic examples
 - [Architecture](../reference/architecture.md) - How it works internally
 
 ## Troubleshooting

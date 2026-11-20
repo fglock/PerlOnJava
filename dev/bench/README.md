@@ -70,7 +70,7 @@ makes the pair ineligible for its summary.
 
 The exact `origin/master` directional baseline, initial inactive fast-path
 experiment, corrected fast-path comparisons, and pooled-argument measurements
-are retained under [`reports/`](reports/).
+are retained under `reports/` (generated, not tracked).
 The macOS runs are diagnostic because this host denied the requested process
 priority; see `dev/design/performance-over-perl.md` for the measured values and
 limitations.
@@ -150,4 +150,4 @@ throughput claims.
 - `dev/bench/perl-reference-builds.md` — pinned blead and stable Perl builds
 - `dev/design/optimization.md` — optimization design decisions
 - `dev/design/interpreter_benchmarks.md` — interpreter-mode benchmarks
-- `dev/jvm_profiler/` — JFR / async-profiler skill for deeper analysis
+- `dev/tools/jvm_profiler/` — JFR / async-profiler skill for deeper analysis

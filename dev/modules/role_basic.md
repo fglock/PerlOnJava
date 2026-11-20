@@ -53,7 +53,7 @@ The passing implementation also tracks the BEGIN-package aliases installed for e
 1. Implement the `evalRuntimeContext` stack in `RuntimeCode.java` (and any comment updates, e.g. `BytecodeCompiler`, `dev/design/concurrency.md` if desired).  
 2. Revert any experimental stash-key-only runtime diffs unless justified.  
 3. Run `timeout 600 ./jcpan -t Role::Basic` and `make`.  
-4. Branch from `master`, commit with [AI_POLICY.md](../AI_POLICY.md) attribution (`git commit -F file`).  
+4. Branch from `master`, commit with [AI_POLICY.md](../../AI_POLICY.md) attribution (`git commit -F file`).  
 5. Push and `gh pr create --body-file /tmp/pr_body.md` (never `--body` with inline backticks).
 
 ## Progress Tracking
