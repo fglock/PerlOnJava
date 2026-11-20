@@ -117,7 +117,7 @@ Proposals and plans for work that is being considered or is in progress.
 | [posix.md](posix.md) | — | — |
 | [ppr-compatibility.md](ppr-compatibility.md) | PPR 0.001010 Compatibility | — |
 | [pr328-startup-performance.md](pr328-startup-performance.md) | PR #328 Startup Performance Investigation | — |
-| [project-organization.md](project-organization.md) | Project organization review and cleanup plan | Proposal — 2026-11-20. Nothing here is implemented yet |
+| [project-organization.md](project-organization.md) | Project organization review and cleanup plan | Active — 2026-11-20. Phases 1–3 implemented. AGENTS.md… |
 | [reachability-walk-cache-plan.md](reachability-walk-cache-plan.md) | Reachability Walk Cache for DBIC Scope Cleanup | Phase 3 complete; CPAN verification passed for DateTime… |
 | [reduce-apply-bytecode.md](reduce-apply-bytecode.md) | Design: Reduce Generated apply() Method Bytecode Size | — |
 | [refcount-owner-ledger.md](refcount-owner-ledger.md) | Perl-Exact Reference Ownership and Closure-Pad Lifetime | Design in progress |
