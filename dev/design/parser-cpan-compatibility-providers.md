@@ -3,10 +3,10 @@
 ## Current state (2026-11-20)
 
 Source commit: `6bb243fd5`. The full project gate passed on this source tree;
-the autobox 3.0.2 upstream suite passed all 675 assertions. Next, resolve the
-documented Object::Pad and Function::Parameters gaps and confirm whether
-`autobox::Core` is required by issue #1264 before treating the combined issue
-scope as complete.
+the autobox 3.0.2 upstream suite passed all 675 assertions. Function::Parameters
+2.002006 now passes its complete upstream suite. Next, extend the documented
+Object::Pad subset and confirm whether `autobox::Core` is required by issue
+#1264 before treating the combined issue scope as complete.
 
 This change adds parser providers for three compile-time module imports that
 otherwise require XS/declaration hooks: `Syntax::Keyword::Try`,
@@ -64,18 +64,23 @@ shared objects remain owned by the parent.
   dispatch while a method call on `undef` throws during global teardown; it
   passes on both PerlOnJava backends. The project-owned cycle regression also
   passes with system Perl, JVM, and interpreter.
+- Function::Parameters 2.002006 upstream tests now pass all 56 files and 1,619
+  assertions, with two optional MooseX::Types files skipped and upstream TODOs
+  preserved. The added multiline empty method/classmethod regressions pass on
+  system Perl, JVM, and interpreter.
 - The Object::Pad compatibility layer remains a documented subset; custom
   field attributes and upstream XS APIs are unsupported. Function::Parameters'
-  opt-in upstream suite still has 12/56 failing files. The separate
+  upstream suite is covered by the full passing run above. The separate
   `autobox::Core` distribution, which depends on `Want`, is not bundled or
   covered by this provider change.
 
 These results deliver the two reported syntax-provider cases, pass the tested
 Object::Pad consumer path, and pass the full autobox 3.0.2 distribution suite.
-The documented Object::Pad subset and Function::Parameters residual parity
-remain unresolved. The separate `autobox::Core` distribution remains outside
-this scope; assess it independently before claiming compatibility beyond the
-autobox 3.0.2 API and tests.
+The documented Object::Pad subset remains unresolved. Function::Parameters
+passes its complete 2.002006 upstream suite. The separate `autobox::Core`
+distribution remains outside this scope;
+assess it independently before claiming compatibility beyond the autobox
+3.0.2 API and tests.
 
 ## Related references
 

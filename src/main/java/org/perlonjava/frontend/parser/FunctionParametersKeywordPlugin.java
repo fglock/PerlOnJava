@@ -283,6 +283,10 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
             first++;
         }
         if (first >= parser.tokens.size()) return false;
+        // An empty signature has no explicit invocant separator. Do not scan
+        // past its closing parenthesis into following attributes, where a
+        // colon could otherwise suppress insertion of the implicit invocant.
+        if (")".equals(parser.tokens.get(first).text)) return false;
         for (int i = first + 1; i < parser.tokens.size(); i++) {
             String text = parser.tokens.get(i).text;
             if (":".equals(text)) return true;
