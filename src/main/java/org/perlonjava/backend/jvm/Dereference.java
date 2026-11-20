@@ -1598,6 +1598,10 @@ public class Dereference {
 
     public static void handleArrowHashDeref(EmitterVisitor emitterVisitor, BinaryOperatorNode node, String hashOperation) {
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) ->{} " + node);
+        if (node.left instanceof OperatorNode sigil && "%".equals(sigil.operator)) {
+            throw new PerlCompilerException(
+                    node.tokenIndex, "Can't use a hash as a reference", emitterVisitor.ctx.errorUtil);
+        }
         EmitterVisitor scalarVisitor =
                 emitterVisitor.with(RuntimeContextType.SCALAR); // execute operands in scalar context
 
