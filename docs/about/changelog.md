@@ -8,6 +8,7 @@ priorities and future plans.
 
 - Honor overloaded logical negation, parse Set::Scalar indirect method chains, warn on equal-value constant sub redefinitions, and preserve glob aliases and callback results in List::Util::PP (#2122, #2074, #2075, #2000, #1939).
 - Preserve imported CV owners through global destruction, retain only the lexical captures needed by `eval STRING`, and release DBI handles after failed `prepare` or `do` (#2043).
+- Run destructors for blessed package scalar cells during global teardown (#2134).
 - Remove reachability-based lifetime decisions, root-query state, and sweep-only hooks; use current Perl owner slots for cleanup (#2043).
 - Release abandoned JVM direct-call owners when code generation falls back to the interpreter, allowing redefined CV optree constants to be reaped (#2043).
 - Release DBIx::Class phantom-chain result sources after fresh anonymous hash arguments leave their call frame (#2043).
