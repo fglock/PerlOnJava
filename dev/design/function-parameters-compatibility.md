@@ -24,15 +24,22 @@ the upstream XS parser plugin.
 
 ### Current status: Core subset implemented; upstream compatibility work remains (2026-11-20)
 
-Latest phase (2026-11-20, source `2bef1aef6`): automatic Type::Tiny
-parameterized and quoted composite expressions now reify through overloaded
-code references; unknown bare types use the module diagnostic. Recursive
-Function::Parameters declarations retain their block-argument prototype, and
-the prototype consumes trailing arguments. `nice -n 19 make` passed in 6m29.
-The upstream `types_auto.t` (12/12) and `bonus.t` (13/13) pass. Focused auto
-type tests pass on JVM, interpreter, and system Perl; the prototype test passes
-on system Perl and in the full repository gate. Remaining upstream gaps include
-`elsewhere.t`, `eval.t`, `lineno*.t`, `lifetime.t`, and `stringy_h.t`.
+Current checkpoint (2026-11-20, branch `feature/cpan-parser-compat-1264-2112`,
+PR #2132, source `ec4e5a35a`): automatic Type::Tiny parameterized and quoted
+composite expressions reify through overloaded code references; recursive
+Function::Parameters declarations preserve block prototypes and trailing
+arguments. Anonymous `fun` expression statements retain immediate postfix
+calls. Configured `shift` entries for ordinary function keywords now become
+leading invocants, preserve their type objects, and validate them at call time.
+The focused immediate-call and configured-shift tests pass on system Perl,
+JVM, and interpreter; `nice -n 19 make` and `nice -n 19 make check-links` pass
+on this source. Upstream `types_auto.t` (12/12), `bonus.t` (13/13), and
+`lineno*.t` pass. The upstream `eval.t` now gets past the `$self` signature
+issue but still fails when the runtime installer invokes its generated body
+at line 53. `elsewhere.t` dynamic import, `lifetime.t`, and `stringy_h.t` remain
+open. Immediate next action: correct runtime `install_sub` body handling, then
+re-run the focused upstream cases and refresh the aggregate five-issue PR
+checkpoint. Do not close the linked issues based on this partial coverage.
 
 ### Completed
 
@@ -176,21 +183,19 @@ on system Perl and in the full repository gate. Remaining upstream gaps include
 
 ### Next steps
 
-1. Fix the anonymous immediate-call parsing and source locations in
-   `elsewhere.t` and `lineno*.t`.
-2. Support configured `shift` invocants used by `eval.t`, then investigate the
-   compile-time CV lifetime and `$^H` warning behavior.
+1. Fix dynamic import visibility in `elsewhere.t`, then finish the runtime
+   `install_sub` body handling used by `eval.t`.
+2. Investigate the compile-time CV lifetime and malformed `$^H` warning in
+   `lifetime.t` and `stringy_h.t`.
 3. Continue method-modifier coverage and verify GraphQL WebSocket ordering on
    an uncongested runner before assigning that timing difference to runtime
    behavior.
 
 ### Open questions
 
-- Which configured keyword aliases should be part of the first public subset?
 - How should provider-specific metadata map onto the existing signature
   annotations without creating a second backend representation? The current
   `Function::Parameters::Info` implementation reuses these annotations.
-- Which configured keyword aliases should be part of the first public subset?
 
 ## Related references
 
