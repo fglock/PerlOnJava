@@ -10,5 +10,5 @@ The talk covers Perl features that are hard to map onto the JVM and how Perl mod
 
 All 575 selected imported core test files from blead now pass. Continuous testing covers a rolling sample of 10,000 randomly selected CPAN modules; of those whose tests pass under standard Perl, more than two-thirds also pass under PerlOnJava.
 
-The main gaps remaining are fork emulation without OS processes and coroutine support for async/await.
+The main gap remaining is fork emulation without OS processes.
 
