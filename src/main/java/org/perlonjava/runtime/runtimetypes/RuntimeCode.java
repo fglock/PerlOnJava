@@ -226,6 +226,30 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     /**
+     * Seed an eval parser snapshot with the lexical package aliases captured at
+     * the eval site. A package statement in the eval source must not rebind an
+     * outer `our` declaration to the eval's current package.
+     */
+    private static void seedEvalOurAliases(
+            ScopedSymbolTable target, ScopedSymbolTable capturedSymbolTable) {
+        Map<String, String> aliases = new LinkedHashMap<>(
+                capturedSymbolTable.getVisibleOurRegistry());
+        RuntimeCode evalCaller = getActiveCodeAtCallerFrame(0);
+        if (evalCaller != null && evalCaller.ourVariableRegistry != null) {
+            aliases.putAll(evalCaller.ourVariableRegistry);
+        }
+        for (Map.Entry<String, String> alias : aliases.entrySet()) {
+            if (alias.getKey() == null || alias.getValue() == null) continue;
+            SymbolTable.SymbolEntry existing = target.getSymbolEntry(alias.getKey());
+            if (existing == null
+                    || ("our".equals(existing.decl())
+                    && !alias.getValue().equals(existing.perlPackage()))) {
+                target.addVariable(alias.getKey(), "our", alias.getValue(), null);
+            }
+        }
+    }
+
+    /**
      * Guard for the generated read-only parameter-unpack fast path. The
      * runtime validates the argument/hash shape and overload state; stable
      * field-cell candidates validate each field before enabling cached reads.
@@ -4908,6 +4932,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // IMPORTANT: The parseSymbolTable starts with the captured flags so that
             // the eval code is parsed with the correct feature/strict/warning context
             ScopedSymbolTable parseSymbolTable = capturedSymbolTable.snapShot();
+            seedEvalOurAliases(parseSymbolTable, capturedSymbolTable);
             parseSymbolTable.setCurrentPackage(currentPackage, ClassRegistry.isClass(currentPackage));
             // BEGIN blocks execute while eval STRING is parsed. Point the
             // special-variable pragma facade at this eval's private scope so
@@ -5588,6 +5613,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         ctx.evalCachedParseSymbolTable != null
                                 ? ctx.evalCachedParseSymbolTable
                                 : capturedSymbolTable.snapShot();
+                seedEvalOurAliases(parseSymbolTable, capturedSymbolTable);
                 parseSymbolTable.setCurrentPackage(
                         evalCurrentPackage, ClassRegistry.isClass(evalCurrentPackage));
                 String lexicalEvalWarningBits = parseSymbolTable.getWarningBitsString();

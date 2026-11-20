@@ -6290,7 +6290,13 @@ public class BytecodeCompiler implements Visitor {
                 } else if (hasVariable(varName) && isDynamicOurVariable(varName)) {
                     // 'our' array - must load from global table to see local() changes
                     arrayReg = allocateRegister();
-                    String globalArrayName = NameNormalizer.normalizeVariableName(((IdentifierNode) node.operand).name, getCurrentPackage());
+                    SymbolTable.SymbolEntry ourEntry = symbolTable.getSymbolEntry(varName);
+                    String ourPackage = node.getAnnotation("ourPackage") instanceof String packageName
+                            ? packageName
+                            : ourEntry != null ? ourEntry.perlPackage() : null;
+                    String globalArrayName = NameNormalizer.normalizeVariableName(
+                            ((IdentifierNode) node.operand).name,
+                            ourPackage == null ? getCurrentPackage() : ourPackage);
                     int nameIdx = addToStringPool(globalArrayName);
                     emit(Opcodes.LOAD_GLOBAL_ARRAY);
                     emitReg(arrayReg);
@@ -6399,8 +6405,13 @@ public class BytecodeCompiler implements Visitor {
                     // 'our' hash - must load from global table to see local() changes
                     hashReg = allocateRegister();
                     String rawHashName = ((IdentifierNode) node.operand).name;
+                    SymbolTable.SymbolEntry ourEntry = symbolTable.getSymbolEntry(varName);
+                    String ourPackage = node.getAnnotation("ourPackage") instanceof String packageName
+                            ? packageName
+                            : ourEntry != null ? ourEntry.perlPackage() : null;
                     String globalHashName = rawHashName.equals("::") ? "main::"
-                            : NameNormalizer.normalizeVariableName(rawHashName, getCurrentPackage());
+                            : NameNormalizer.normalizeVariableName(rawHashName,
+                                    ourPackage == null ? getCurrentPackage() : ourPackage);
                     int nameIdx = addToStringPool(globalHashName);
                     emit(Opcodes.LOAD_GLOBAL_HASH);
                     emitReg(hashReg);
