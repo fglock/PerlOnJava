@@ -8694,6 +8694,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     private static RuntimeList applyCachedMethod(
             RuntimeCode code, RuntimeArray args, int callContext,
             PerlRuntime cachedRuntime) {
+        int foreachSourceOwnerDepth = MortalList.foreachSourceOwnerDepth();
         try {
             RuntimeList result = withMethodHasArgs(code, () -> {
                 // Preserve LVALUE here: generated code performs the callable check
@@ -8720,6 +8721,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     result, effectiveCallContext(code, callContext),
                     callContext, !isLvalueCode(code));
             return finishCachedMethodResult(code, callContext, returned);
+        } finally {
+            MortalList.restoreForeachSourceOwnerDepth(foreachSourceOwnerDepth);
         }
     }
 

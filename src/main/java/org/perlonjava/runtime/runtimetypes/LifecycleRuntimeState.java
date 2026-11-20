@@ -498,7 +498,8 @@ final class LifecycleRuntimeState {
             Throwable failure = null;
             for (int i = owners.size() - 1; i >= 0; i--) {
                 try {
-                    owners.get(i).releaseNativeOwner();
+                    PerlOwnerSlot owner = owners.get(i);
+                    owner.releaseNativeOwner();
                 } catch (RuntimeException | Error cleanupFailure) {
                     if (failure == null) failure = cleanupFailure;
                     else failure.addSuppressed(cleanupFailure);
