@@ -113,6 +113,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 new java.util.ArrayList<>();
         private final java.util.ArrayList<ArgumentContainerOwner> argumentContainerOwners =
                 new java.util.ArrayList<>();
+        private final Set<RuntimeBase> argumentContainerIdentities =
+                Collections.newSetFromMap(new IdentityHashMap<>());
         private int size;
         private final ExecutionRuntimeState ownerState;
         private final int argumentDepth;
@@ -130,7 +132,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 throw new IllegalStateException("too many call arguments");
             }
             values[size++] = value;
-            retainArgumentContainerOwners(value, argumentContainerOwners);
+            retainArgumentContainerOwners(
+                    value, argumentContainerOwners, argumentContainerIdentities);
             // The staging frame retains this scalar cell through argument
             // evaluation and the call. Record that cell alias even when it has
             // no lexical or container marker yet; the alias does not add a
@@ -324,19 +327,35 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
 
         void release() {
+            release(true);
+        }
+
+        private void releaseWithoutContainerRefresh() {
+            release(false);
+        }
+
+        private void release(boolean refreshContainer) {
             if (!active) return;
-            if (ownerValue.value != container) {
+            if (ownerValue != null && ownerValue.value != container) {
                 throw new IllegalStateException(
                         "argument-container owner changed its referent before release");
             }
             active = false;
             Throwable failure = attemptCleanup(null,
                     () -> RuntimeScalar.releaseTiedHandlerValue(handlerOwner));
-            failure = attemptCleanup(failure,
-                    () -> RuntimeScalar.releaseArgumentContainerValue(ownerValue));
-            failure = attemptCleanup(failure,
-                    () -> refreshUntrackedCellsAfterContainerTransfer(container));
+            if (ownerValue != null) {
+                failure = attemptCleanup(failure,
+                        () -> RuntimeScalar.releaseArgumentContainerValue(ownerValue));
+            }
+            if (refreshContainer && ownerValue != null) {
+                failure = attemptCleanup(failure,
+                        () -> refreshUntrackedCellsAfterContainerTransfer(container));
+            }
             rethrowCleanupFailure(failure);
+        }
+
+        private RuntimeBase container() {
+            return container;
         }
     }
 
@@ -464,8 +483,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         ArgumentContainerOwner[] pendingOwners =
                 owners.toArray(new ArgumentContainerOwner[0]);
         owners.clear();
+        Set<RuntimeBase> transferredContainers =
+                Collections.newSetFromMap(new IdentityHashMap<>());
         for (ArgumentContainerOwner owner : pendingOwners) {
-            failure = attemptCleanup(failure, owner::release);
+            transferredContainers.add(owner.container());
+            failure = attemptCleanup(failure, owner::releaseWithoutContainerRefresh);
+        }
+        for (RuntimeBase container : transferredContainers) {
+            failure = attemptCleanup(failure,
+                    () -> refreshUntrackedCellsAfterContainerTransfer(container));
         }
         return failure;
     }
@@ -494,12 +520,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return null;
     }
 
-    private static ArgumentContainerOwner retainArgumentContainerOwner(RuntimeBase value) {
+    private static ArgumentContainerOwner retainArgumentContainerOwner(
+            RuntimeBase value, Set<RuntimeBase> retainedContainers) {
         RuntimeBase container = argumentAliasContainer(value);
         if (container == null) return null;
-        RuntimeScalar ownerValue = RuntimeScalar.retainArgumentContainerValue(container);
-        if (ownerValue == null) return null;
         RuntimeBaseProxy magicProxy = argumentAliasMagicProxy(value);
+        boolean retainContainer = retainedContainers.add(container);
+        if (!retainContainer && magicProxy == null) return null;
+        RuntimeScalar ownerValue = retainContainer
+                ? RuntimeScalar.retainArgumentContainerValue(container) : null;
+        if (retainContainer && ownerValue == null) {
+            retainedContainers.remove(container);
+            return null;
+        }
         RuntimeScalar handlerOwner = null;
         try {
             handlerOwner = magicProxy == null ? null
@@ -509,8 +542,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             RuntimeScalar handlerOwnerToRelease = handlerOwner;
             Throwable failure = attemptCleanup(acquisitionFailure,
                     () -> RuntimeScalar.releaseTiedHandlerValue(handlerOwnerToRelease));
-            failure = attemptCleanup(failure,
-                    () -> RuntimeScalar.releaseArgumentContainerValue(ownerValue));
+            if (ownerValue != null) {
+                failure = attemptCleanup(failure,
+                        () -> RuntimeScalar.releaseArgumentContainerValue(ownerValue));
+                retainedContainers.remove(container);
+            }
             rethrowCleanupFailure(failure);
             return null;
         }
@@ -527,19 +563,22 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     private static void retainArgumentContainerOwners(
-            RuntimeBase value, List<ArgumentContainerOwner> owners) {
+            RuntimeBase value, List<ArgumentContainerOwner> owners,
+            Set<RuntimeBase> retainedContainers) {
         if (value instanceof RuntimeScalar) {
-            ArgumentContainerOwner owner = retainArgumentContainerOwner(value);
+            ArgumentContainerOwner owner = retainArgumentContainerOwner(value, retainedContainers);
             if (owner != null) owners.add(owner);
         } else if (value instanceof RuntimeList list) {
             for (RuntimeBase element : list.elements) {
-                if (element != null) retainArgumentContainerOwners(element, owners);
+                if (element != null) {
+                    retainArgumentContainerOwners(element, owners, retainedContainers);
+                }
             }
         } else if (value instanceof RuntimeArray array) {
             for (RuntimeScalar element : array.elements) {
                 if (element != null) {
-                    retainArgumentContainerOwners(element, owners);
-                } else {
+                    retainArgumentContainerOwners(element, owners, retainedContainers);
+                } else if (retainedContainers.add(array)) {
                     RuntimeScalar ownerValue = RuntimeScalar.retainArgumentContainerValue(array);
                     if (ownerValue != null) {
                         owners.add(new ArgumentContainerOwner(array, ownerValue, null, null));
@@ -1590,6 +1629,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     private static final List<RuntimeScalar> EMPTY_ARGUMENT_SNAPSHOT = List.of();
+    private static final Set<RuntimeScalar> NO_ARGUMENT_ALIAS_INDEX = Collections.emptySet();
 
     // Unknown and externally-created code must preserve the caller's original
     // argument slots. Generated CVs may clear this only after static analysis.
@@ -2567,6 +2607,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         boolean aliasOwnersPushed = false;
         boolean containerOwnersPushed = false;
         boolean pristineArgsPushed = false;
+        boolean pristineArgumentIdentityIndexPushed = false;
         if (!executionState.pendingTailCallArgumentOwners.isEmpty()) {
             TailCallArgumentOwners pending =
                     executionState.pendingTailCallArgumentOwners.peek();
@@ -2586,7 +2627,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             if (stagedContainerOwners != null) {
                 containerOwners = stagedContainerOwners;
             } else {
-                retainArgumentContainerOwners(args, containerOwners);
+                retainArgumentContainerOwners(
+                        args, containerOwners, Collections.newSetFromMap(new IdentityHashMap<>()));
             }
             // Snapshot the args list so @DB::args stays pristine even if the
             // sub later shifts/pops from @_.
@@ -2595,6 +2637,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     : snapshotRequired
                             ? new java.util.ArrayList<>(args.elements)
                             : args.elements;
+            Set<RuntimeScalar> argumentIdentityIndex = NO_ARGUMENT_ALIAS_INDEX;
+            if (snapshotRequired && !pristineArguments.isEmpty()) {
+                argumentIdentityIndex = Collections.newSetFromMap(new IdentityHashMap<>());
+                argumentIdentityIndex.addAll(pristineArguments);
+            }
             if (tailCallOwners != null) tailCallOwners.releaseRemaining();
 
             executionState.argsStack.push(args);
@@ -2605,8 +2652,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             containerOwnersPushed = true;
             executionState.pristineArgsStack.push(pristineArguments);
             pristineArgsPushed = true;
+            executionState.pristineArgumentIdentitySets.push(argumentIdentityIndex);
+            pristineArgumentIdentityIndexPushed = true;
         } catch (Throwable setupFailure) {
             Throwable failure = setupFailure;
+            if (pristineArgumentIdentityIndexPushed) {
+                executionState.pristineArgumentIdentitySets.pop();
+            }
             if (pristineArgsPushed) executionState.pristineArgsStack.pop();
             if (containerOwnersPushed) executionState.argumentContainerOwnerFrames.pop();
             if (aliasOwnersPushed) executionState.argumentAliasOwnerFrames.pop();
@@ -2722,10 +2774,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     private static void retainArgumentContainerOwners(
-            RuntimeArray args, List<ArgumentContainerOwner> owners) {
+            RuntimeArray args, List<ArgumentContainerOwner> owners,
+            Set<RuntimeBase> retainedContainers) {
         for (RuntimeScalar scalar : args.elements) {
             if (scalar == null) continue;
-            ArgumentContainerOwner owner = retainArgumentContainerOwner(scalar);
+            ArgumentContainerOwner owner = retainArgumentContainerOwner(scalar, retainedContainers);
             if (owner != null) owners.add(owner);
         }
     }
@@ -2776,6 +2829,40 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return context != null ? context : RuntimeContextType.SCALAR;
     }
 
+    public static void pushMapGrepBlockWantArrayContext(int callContext) {
+        PerlRuntime.current().executionState().mapGrepBlockWantArrayContexts.push(callContext);
+    }
+
+    public static void popMapGrepBlockWantArrayContext() {
+        Deque<Integer> contexts = PerlRuntime.current().executionState().mapGrepBlockWantArrayContexts;
+        if (!contexts.isEmpty()) contexts.pop();
+    }
+
+    /** Return the enclosing map/grep context when wantarray() is called from its block. */
+    public static Integer getMapGrepBlockWantArrayContext() {
+        RuntimeCode caller = getActiveCodeAtCallerFrame(0);
+        if (caller == null || !caller.isMapGrepBlock) {
+            caller = getActiveCodeAtCallerFrame(1);
+        }
+        if (caller == null || !caller.isMapGrepBlock) return null;
+        Deque<Integer> contexts = PerlRuntime.current().executionState().mapGrepBlockWantArrayContexts;
+        return contexts.peek();
+    }
+
+    /** Whether execution is dynamically inside a map block, including nested subs. */
+    public static boolean isMapBlockContextActive() {
+        return !PerlRuntime.current().executionState().mapGrepBlockWantArrayContexts.isEmpty();
+    }
+
+    /** Apply the enclosing map/grep context to wantarray() inside its block. */
+    public static int resolveWantArrayContext(int context) {
+        Deque<Integer> contexts = PerlRuntime.current().executionState().mapGrepBlockWantArrayContexts;
+        if (contexts.isEmpty()) return context;
+        RuntimeCode current = getActiveCodeAtCallerFrame(0);
+        if (current != null && current.isMapGrepBlock) return contexts.peek();
+        return RuntimeContextType.LIST;
+    }
+
     /**
      * Pop @_ and hasargs flag from their respective stacks when exiting a subroutine.
      * Both stacks are pushed in the instance apply() methods and must be popped together.
@@ -2814,6 +2901,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         Deque<java.util.List<RuntimeScalar>> pStack = executionState.pristineArgsStack;
         if (!pStack.isEmpty()) {
             failure = attemptCleanup(failure, pStack::pop);
+            if (!executionState.pristineArgumentIdentitySets.isEmpty()) {
+                failure = attemptCleanup(
+                        failure, executionState.pristineArgumentIdentitySets::pop);
+            }
         }
         failure = attemptCleanup(failure, MortalList::drainDeferredArgumentOwnerReleases);
         failure = attemptCleanup(
@@ -2881,6 +2972,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (PerlRuntime.currentOrNull() == null) return false;
         Deque<java.util.List<RuntimeScalar>> stack = pristineArgsStack();
         if (stack.isEmpty()) return false;
+        Set<RuntimeScalar> identityIndex =
+                PerlRuntime.current().executionState().pristineArgumentIdentitySets.peek();
+        if (identityIndex != NO_ARGUMENT_ALIAS_INDEX) return identityIndex.contains(scalar);
         for (RuntimeScalar argument : stack.peek()) {
             if (argument == scalar) return true;
         }
@@ -2893,6 +2987,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         Deque<java.util.List<RuntimeScalar>> stack = pristineArgsStack();
         if (stack.isEmpty()) return null;
         java.util.List<RuntimeScalar> frame = stack.peek();
+        Set<RuntimeScalar> identityIndex =
+                PerlRuntime.current().executionState().pristineArgumentIdentitySets.peek();
+        if (identityIndex != NO_ARGUMENT_ALIAS_INDEX) {
+            return identityIndex.contains(scalar) ? frame : null;
+        }
         for (RuntimeScalar argument : frame) {
             if (argument == scalar) return frame;
         }

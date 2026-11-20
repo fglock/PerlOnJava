@@ -2092,6 +2092,43 @@ public class CompileAssignment {
                 bc.emitReg(elemReg);
                 refreshOurRegister(bc, varName, nameIdx, Opcodes.LOAD_GLOBAL_SCALAR);
                 if (i == 0) bc.lastResultReg = localReg;
+            } else if (element instanceof OperatorNode globOp && globOp.operator.equals("*")) {
+                int elemReg;
+                if (aggregateConsumedRhs) {
+                    elemReg = bc.allocateRegister();
+                    bc.emit(Opcodes.LOAD_UNDEF);
+                    bc.emitReg(elemReg);
+                } else {
+                    int idxReg = bc.allocateRegister();
+                    bc.emit(Opcodes.LOAD_INT);
+                    bc.emitReg(idxReg);
+                    bc.emit(i);
+                    elemReg = bc.allocateRegister();
+                    bc.emit(Opcodes.ARRAY_GET);
+                    bc.emitReg(elemReg);
+                    bc.emitReg(valueReg);
+                    bc.emitReg(idxReg);
+                }
+
+                int globReg;
+                if (globOp.operand instanceof IdentifierNode globId) {
+                    String globalGlobName = NameNormalizer.normalizeVariableName(
+                            globId.name, bc.getCurrentPackage());
+                    int nameIdx = bc.addToStringPool(globalGlobName);
+                    globReg = bc.allocateRegister();
+                    bc.emitWithToken(Opcodes.LOCAL_GLOB, node.getIndex());
+                    bc.emitReg(globReg);
+                    bc.emit(nameIdx);
+                } else {
+                    bc.compileNode(globOp.operand, -1, RuntimeContextType.SCALAR);
+                    globReg = emitGlobDeref(bc, bc.lastResultReg, node.getIndex());
+                    bc.emit(Opcodes.PUSH_LOCAL_VARIABLE);
+                    bc.emitReg(globReg);
+                }
+                bc.emit(Opcodes.STORE_GLOB);
+                bc.emitReg(globReg);
+                bc.emitReg(elemReg);
+                if (i == 0) bc.lastResultReg = globReg;
             } else if (element instanceof BinaryOperatorNode binOp) {
                 // Element is an lvalue expression (e.g. $h->{k}, $a[i], $obj->attr).
                 // Compile to get the element reference, localize it, and assign RHS[i].
