@@ -299,13 +299,15 @@ public class Variable {
                 }
             }
 
-            // Check if this is a field (in current or parent class) and not a locally declared variable
-            // Note: We check if the variable is NOT defined locally (only in current scope)
-            // but we DO check for fields in all scopes (fields are in parent scope)
+            // Check if this is an unshadowed field in the current class or a
+            // parent class. Lexical declarations in enclosing method scopes
+            // (including signature parameters) shadow fields just like
+            // declarations in the current block. Field declarations remain
+            // visible from the class scope and do not shadow themselves.
 
             if (parser.isInMethod
                     && isFieldInClassHierarchy(parser, varName)
-                    && parser.ctx.symbolTable.getVariableIndexInCurrentScope(localVar) == -1) {
+                    && isUnshadowedField) {
                 // This is a field and not shadowed by a local variable
                 // Transform field access based on sigil type
 
