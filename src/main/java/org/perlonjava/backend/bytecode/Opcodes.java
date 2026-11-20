@@ -388,7 +388,7 @@ public class Opcodes {
     public static final short CALL_SUB = 57;
 
     /**
-     * Call method: rd = RuntimeCode.call(obj_reg, method_name, args_reg, context)
+     * Call method: rd = RuntimeCode.call(obj_reg, method_name, args_reg, context, autobox_bindings)
      */
     public static final short CALL_METHOD = 58;
 

@@ -6322,6 +6322,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                    RuntimeScalar currentSub,
                                    RuntimeBase[] args,
                                    int callContext) {
+        return call(runtimeScalar, method, currentSub, args, callContext, null);
+    }
+
+    public static RuntimeList call(RuntimeScalar runtimeScalar,
+                                   RuntimeScalar method,
+                                   RuntimeScalar currentSub,
+                                   RuntimeBase[] args,
+                                   int callContext,
+                                   String autoboxBindings) {
         // Handle tied scalars: in Perl 5, $tied->method() evaluates $tied
         // (triggering FETCH) before method dispatch
         if (runtimeScalar.type == RuntimeScalarType.TIED_SCALAR
@@ -6334,7 +6343,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         for (RuntimeBase arg : args) {
             arg.setArrayOfAlias(a);
         }
-        return call(runtimeScalar, method, currentSub, a, callContext);
+        return call(runtimeScalar, method, currentSub, a, callContext, autoboxBindings);
     }
 
     /**
@@ -6363,13 +6372,59 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 methodArgs, callContext);
     }
 
+    public static RuntimeList callCached(int callsiteId, RuntimeScalar runtimeScalar,
+                                         RuntimeScalar method, RuntimeScalar currentSub,
+                                         RuntimeBase[] args, String autoboxBindings,
+                                         int callContext) {
+        RuntimeArray methodArgs = new RuntimeArray(args.length + 1);
+        for (RuntimeBase arg : args) {
+            arg.setArrayOfAlias(methodArgs);
+        }
+        return callCached(callsiteId, runtimeScalar, method, currentSub,
+                methodArgs, autoboxBindings, callContext);
+    }
+
+    public static RuntimeList callCached(int callsiteId, RuntimeScalar runtimeScalar,
+                                         RuntimeScalar method, RuntimeScalar currentSub,
+                                         CallArguments args, String autoboxBindings,
+                                         int callContext) {
+        try {
+            return callCached(callsiteId, runtimeScalar, method, currentSub,
+                    args.argumentValues(), autoboxBindings, callContext);
+        } finally {
+            args.finish();
+        }
+    }
+
+    public static RuntimeList callCached(int callsiteId, RuntimeScalar runtimeScalar,
+                                         RuntimeScalar method, RuntimeScalar currentSub,
+                                         RuntimeArray methodArgs, String autoboxBindings,
+                                         int callContext) {
+        String mappedClass = AutoboxRuntime.mappedClass(runtimeScalar, autoboxBindings);
+        if (mappedClass != null && isNamedMethod(method, "autobox_class")) {
+            return new RuntimeScalar(mappedClass).getList();
+        }
+        return callCachedWithAutoboxBindings(callsiteId, runtimeScalar, method,
+                currentSub, methodArgs, autoboxBindings, callContext);
+    }
+
     public static RuntimeList call(RuntimeScalar runtimeScalar,
                                    RuntimeScalar method,
                                    RuntimeScalar currentSub,
                                    CallArguments args,
                                    int callContext) {
+        return call(runtimeScalar, method, currentSub, args, callContext, null);
+    }
+
+    public static RuntimeList call(RuntimeScalar runtimeScalar,
+                                   RuntimeScalar method,
+                                   RuntimeScalar currentSub,
+                                   CallArguments args,
+                                   int callContext,
+                                   String autoboxBindings) {
         try {
-            return call(runtimeScalar, method, currentSub, args.argumentValues(), callContext);
+            return call(runtimeScalar, method, currentSub, args.argumentValues(),
+                    callContext, autoboxBindings);
         } finally {
             args.finish();
         }
@@ -6400,6 +6455,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                          RuntimeScalar currentSub,
                                          RuntimeArray methodArgs,
                                          int callContext) {
+        return callCachedWithAutoboxBindings(callsiteId, runtimeScalar, method,
+                currentSub, methodArgs, null, callContext);
+    }
+
+    private static RuntimeList callCachedWithAutoboxBindings(int callsiteId,
+                                         RuntimeScalar runtimeScalar,
+                                         RuntimeScalar method,
+                                         RuntimeScalar currentSub,
+                                         RuntimeArray methodArgs,
+                                         String autoboxBindings,
+                                         int callContext) {
         if ((method.type == RuntimeScalarType.STRING || method.type == RuntimeScalarType.BYTE_STRING)
                 && method.toString().startsWith(FIRST_ARGUMENT_METHOD_PREFIX)) {
             String actualMethod = method.toString().substring(FIRST_ARGUMENT_METHOD_PREFIX.length());
@@ -6421,7 +6487,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 ? RuntimeContextType.SCALAR : callContext;
         RuntimeList result = callCachedInner(
                 callsiteId, runtimeScalar, method, currentSub, methodArgs, calleeContext,
-                methodRuntime);
+                methodRuntime, autoboxBindings);
         return bindReturnedMethodCoderef(result, runtimeScalar, callContext);
         } catch (RuntimeException e) {
             if (!(e instanceof PerlExitException)) {
@@ -6445,7 +6511,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                          RuntimeScalar currentSub,
                                          RuntimeArray methodArgs,
                                          int callContext,
-                                         PerlRuntime methodRuntime) {
+                                         PerlRuntime methodRuntime,
+                                         String autoboxBindings) {
         // Handle tied scalars: the invocant may be a TIED_SCALAR returned
         // from a tied hash / array FETCH (e.g. $tied_hash{obj}->method).
         // Dispatch sees only the TIED_SCALAR shell, so unwrap to the
@@ -6454,7 +6521,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (runtimeScalar.type == RuntimeScalarType.TIED_SCALAR
                 && method.type != RuntimeScalarType.CODE) {
             return callCached(callsiteId, runtimeScalar.tiedFetch(), method,
-                    currentSub, methodArgs, callContext);
+                    currentSub, methodArgs, autoboxBindings, callContext);
         }
         RuntimeBase pjMethodInvHold = acquireMethodInvocantHold(runtimeScalar);
         try {
@@ -6474,7 +6541,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
             return callCachedMethodMiss(callsiteId, runtimeScalar, method, currentSub,
                     methodArgs, callContext, blessId, methodHash,
-                    runtimeCodeState, methodRuntime);
+                    runtimeCodeState, methodRuntime, autoboxBindings);
         } finally {
             releaseMethodInvocantHold(pjMethodInvHold);
         }
@@ -6616,11 +6683,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             int callsiteId, RuntimeScalar runtimeScalar, RuntimeScalar method,
             RuntimeScalar currentSub, RuntimeArray methodArgs, int callContext,
             int blessId, int methodHash, RuntimeCodeRuntimeState runtimeCodeState,
-            PerlRuntime methodRuntime) {
-        if (blessId != 0) {
+            PerlRuntime methodRuntime, String autoboxBindings) {
+        String autoboxClass = method.type == RuntimeScalarType.CODE
+                ? null : AutoboxRuntime.mappedClass(runtimeScalar, autoboxBindings);
+        if (blessId != 0 || autoboxClass != null) {
             String methodName = method.toString();
             if (!methodName.contains("::")) {
-                String perlClassName = NameNormalizer.getBlessStr(blessId);
+                String perlClassName = autoboxClass != null
+                        ? autoboxClass : NameNormalizer.getBlessStr(blessId);
                 RuntimeScalar resolvedMethod = InheritanceResolver.findMethodInHierarchy(
                         methodName, perlClassName, null, 0);
                 if (resolvedMethod != null && resolvedMethod.type == RuntimeScalarType.CODE) {
@@ -6656,7 +6726,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         RuntimeArray fallbackArgs = methodArgs;
         fallbackArgs.prependMethodCallInvocant(methodInvocantArgument(runtimeScalar));
         return dispatchPerlMethodAfterSelfInjected(
-                runtimeScalar, method, currentSub, fallbackArgs, callContext);
+                runtimeScalar, method, currentSub, fallbackArgs, callContext, autoboxClass);
     }
 
     /**
@@ -6747,6 +6817,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             RuntimeScalar currentSub,
             RuntimeArray args,
             int callContext) {
+        return dispatchPerlMethodAfterSelfInjected(
+                runtimeScalar, method, currentSub, args, callContext, null);
+    }
+
+    private static RuntimeList dispatchPerlMethodAfterSelfInjected(
+            RuntimeScalar runtimeScalar,
+            RuntimeScalar method,
+            RuntimeScalar currentSub,
+            RuntimeArray args,
+            int callContext,
+            String autoboxClass) {
 
         // System.out.println("call ->" + method + " " + currentPackage + " " + args + " " + callContext);
 
@@ -6775,7 +6856,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // Retrieve Perl class name
         String perlClassName;
 
-        if (RuntimeScalarType.isReference(invocant)) {
+        if (autoboxClass != null) {
+            perlClassName = autoboxClass;
+        } else if (RuntimeScalarType.isReference(invocant)) {
             // Handle all reference types (REFERENCE, ARRAYREFERENCE, HASHREFERENCE, etc.)
             int blessId = ((RuntimeBase) invocant.value).blessId;
             if (blessId == 0) {
@@ -7009,19 +7092,35 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                    RuntimeScalar currentSub,
                                    RuntimeArray args,
                                    int callContext) {
+        return call(runtimeScalar, method, currentSub, args, callContext, null);
+    }
+
+    public static RuntimeList call(RuntimeScalar runtimeScalar,
+                                   RuntimeScalar method,
+                                   RuntimeScalar currentSub,
+                                   RuntimeArray args,
+                                   int callContext,
+                                   String autoboxBindings) {
+        String mappedClass = method.type == RuntimeScalarType.CODE
+                ? null : AutoboxRuntime.mappedClass(runtimeScalar, autoboxBindings);
+        if (mappedClass != null && isNamedMethod(method, "autobox_class")) {
+            return new RuntimeScalar(mappedClass).getList();
+        }
         if ((method.type == RuntimeScalarType.STRING || method.type == RuntimeScalarType.BYTE_STRING)
                 && method.toString().startsWith(FIRST_ARGUMENT_METHOD_PREFIX)) {
             String actualMethod = method.toString().substring(FIRST_ARGUMENT_METHOD_PREFIX.length());
             RuntimeScalar firstArgument = args.elements.isEmpty()
                     ? new RuntimeScalar() : args.elements.removeFirst();
-            return call(firstArgument, new RuntimeScalar(actualMethod), currentSub, args, callContext);
+            return call(firstArgument, new RuntimeScalar(actualMethod), currentSub, args,
+                    callContext, autoboxBindings);
         }
         // Handle tied scalars: the invocant may be a TIED_SCALAR returned
         // from a tied hash / array FETCH. Unwrap before dispatch so
         // isReference / blessId checks see the real underlying value.
         if (runtimeScalar.type == RuntimeScalarType.TIED_SCALAR
                 && method.type != RuntimeScalarType.CODE) {
-            return call(runtimeScalar.tiedFetch(), method, currentSub, args, callContext);
+            return call(runtimeScalar.tiedFetch(), method, currentSub, args,
+                    callContext, autoboxBindings);
         }
 
         RuntimeBase invHold = acquireMethodInvocantHold(runtimeScalar);
@@ -7031,11 +7130,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             int calleeContext = callContext == RuntimeContextType.METHOD_CODEREF
                     ? RuntimeContextType.SCALAR : callContext;
             RuntimeList result = dispatchPerlMethodAfterSelfInjected(
-                    runtimeScalar, method, currentSub, args, calleeContext);
+                    runtimeScalar, method, currentSub, args, calleeContext, mappedClass);
             return bindReturnedMethodCoderef(result, runtimeScalar, callContext);
         } finally {
             releaseMethodInvocantHold(invHold);
         }
+    }
+
+    private static boolean isNamedMethod(RuntimeScalar method, String name) {
+        return (method.type == RuntimeScalarType.STRING
+                || method.type == RuntimeScalarType.BYTE_STRING)
+                && name.equals(method.toString());
     }
 
     private static RuntimeList bindReturnedMethodCoderef(

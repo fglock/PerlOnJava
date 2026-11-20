@@ -24,6 +24,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 import static org.perlonjava.frontend.parser.OperatorParser.ensureOneOperand;
@@ -623,7 +624,17 @@ public class ParseInfix {
                             right = new BinaryOperatorNode("(", right, new ListNode(parser.tokenIndex), parser.tokenIndex);
                         }
 
-                        return new BinaryOperatorNode(token.text, left, right, parser.tokenIndex);
+                        BinaryOperatorNode methodCall = new BinaryOperatorNode(
+                                token.text, left, right, parser.tokenIndex);
+                        Map<String, List<String>> autoboxBindings =
+                                parser.ctx.symbolTable.getAutoboxBindings();
+                        // A package/bareword invocant is a class name (for
+                        // example Foo->new), even when it happens to look like
+                        // an autoboxed native string.
+                        if (!autoboxBindings.isEmpty() && !(left instanceof IdentifierNode)) {
+                            methodCall.setAnnotation("autoboxBindings", autoboxBindings);
+                        }
+                        return methodCall;
                 }
             case "(":
                 // Handle function calls

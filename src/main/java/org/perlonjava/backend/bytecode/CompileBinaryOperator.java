@@ -13,6 +13,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 public class CompileBinaryOperator {
     static void visitBinaryOperator(BytecodeCompiler bytecodeCompiler, BinaryOperatorNode node) {
@@ -281,6 +282,8 @@ public class CompileBinaryOperator {
                             : node.getBooleanAnnotation("inheritRawCallContext")
                             ? RuntimeContextType.INHERITED
                             : bytecodeCompiler.currentCallContext);
+                    bytecodeCompiler.emit(bytecodeCompiler.addToStringPool(
+                            encodeAutoboxBindings(node.getAnnotation("autoboxBindings"))));
                     if (holdInvocantDuringArguments) {
                         bytecodeCompiler.emit(Opcodes.RELEASE_METHOD_INVOCANT);
                     }
@@ -804,6 +807,25 @@ public class CompileBinaryOperator {
 
 
         bytecodeCompiler.lastResultReg = rd;
+    }
+
+    private static String encodeAutoboxBindings(Object annotation) {
+        if (!(annotation instanceof Map<?, ?> bindings) || bindings.isEmpty()) return "";
+        StringBuilder encoded = new StringBuilder();
+        for (var entry : bindings.entrySet()) {
+            if (!(entry.getKey() instanceof String type)
+                    || !(entry.getValue() instanceof List<?> classes)) continue;
+            if (!encoded.isEmpty()) encoded.append(';');
+            encoded.append(type).append('=');
+            boolean first = true;
+            for (Object value : classes) {
+                if (!(value instanceof String className)) continue;
+                if (!first) encoded.append('|');
+                encoded.append(className);
+                first = false;
+            }
+        }
+        return encoded.toString();
     }
 
 

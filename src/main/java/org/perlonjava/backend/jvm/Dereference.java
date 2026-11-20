@@ -1134,6 +1134,12 @@ public class Dereference {
             mv.visitVarInsn(Opcodes.ALOAD, methodSlot);
             mv.visitVarInsn(Opcodes.ALOAD, subSlot);
             mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
+            Object autoboxBindings = node.getAnnotation("autoboxBindings");
+            if (autoboxBindings instanceof java.util.Map<?, ?> bindings) {
+                mv.visitLdcInsn(encodeAutoboxBindings(bindings));
+            } else {
+                mv.visitInsn(Opcodes.ACONST_NULL);
+            }
             if (node.getBooleanAnnotation("wantedObjectContext")) {
                 mv.visitLdcInsn(RuntimeContextType.OBJECT);
             } else if (node.getBooleanAnnotation("bindMethodCoderef")) {
@@ -1155,7 +1161,7 @@ public class Dereference {
                     Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                     "callCached",
-                    "(ILorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;" + argsDescriptor + "I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
+                    "(ILorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;" + argsDescriptor + "Ljava/lang/String;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
                     false); // generate a cached .call()
 
             // Tagged returns control-flow handling for method calls:
@@ -1339,6 +1345,21 @@ public class Dereference {
                 emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
             }
         }
+    }
+
+    private static String encodeAutoboxBindings(java.util.Map<?, ?> bindings) {
+        StringBuilder encoded = new StringBuilder();
+        for (var entry : bindings.entrySet()) {
+            if (!encoded.isEmpty()) encoded.append(';');
+            encoded.append(entry.getKey()).append('=');
+            if (entry.getValue() instanceof java.util.List<?> classes) {
+                for (int i = 0; i < classes.size(); i++) {
+                    if (i > 0) encoded.append('|');
+                    encoded.append(classes.get(i));
+                }
+            }
+        }
+        return encoded.toString();
     }
 
 

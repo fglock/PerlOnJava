@@ -6,9 +6,12 @@ import org.perlonjava.runtime.runtimetypes.RuntimeHash;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
+import org.perlonjava.runtime.runtimetypes.RuntimeCode;
+import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 
 import java.util.Map;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -39,6 +42,7 @@ public final class ParserExtensionRegistry {
                 ParserExtensionRegistry::applySyntaxFeatureMethod);
         registerModuleProvider("syntax",
                 ParserExtensionRegistry::applySyntaxDispatcher);
+        registerModuleProvider("autobox", ParserExtensionRegistry::applyAutobox);
     }
 
     private ParserExtensionRegistry() { }
@@ -152,6 +156,152 @@ public final class ParserExtensionRegistry {
                 parser.removeKeywordPlugin("method");
             }
         }
+    }
+
+    private static final Map<String, List<String>> AUTOBOX_DEFAULTS = Map.of(
+            "SCALAR", List.of("SCALAR"),
+            "ARRAY", List.of("ARRAY"),
+            "HASH", List.of("HASH"),
+            "CODE", List.of("CODE"));
+    private static final Set<String> AUTOBOX_TYPES = Set.of(
+            "UNDEF", "INTEGER", "FLOAT", "NUMBER", "STRING", "SCALAR",
+            "ARRAY", "HASH", "CODE", "UNIVERSAL");
+
+    private static void applyAutobox(
+            Parser parser, boolean enabled, RuntimeList arguments) {
+        Map<String, List<String>> bindings = new LinkedHashMap<>(
+                parser.ctx.symbolTable.getAutoboxBindings());
+        List<RuntimeBase> values = arguments == null
+                ? List.of() : arguments.elements;
+
+        if (!enabled) {
+            if (values.isEmpty()) {
+                bindings.clear();
+            } else {
+                for (RuntimeBase value : values) {
+                    for (String type : autoboxTypes(unwrap(value).toString())) {
+                        bindings.remove(type);
+                    }
+                }
+            }
+            parser.ctx.symbolTable.setAutoboxBindings(bindings);
+            return;
+        }
+
+        Map<String, List<String>> requested = new LinkedHashMap<>();
+        RuntimeBase debugOption = null;
+        if (values.isEmpty()) {
+            requested.putAll(AUTOBOX_DEFAULTS);
+        } else if (values.size() == 1 && unwrap(values.getFirst()) instanceof RuntimeHash hash) {
+            for (var entry : hash.elements.entrySet()) {
+                if ("DEBUG".equals(entry.getKey())) debugOption = entry.getValue();
+                requested.put(entry.getKey(), autoboxClassList(entry.getValue()));
+            }
+        } else {
+            if ((values.size() & 1) != 0) {
+                throw new IllegalArgumentException("autobox: expected type/class pairs");
+            }
+            for (int i = 0; i < values.size(); i += 2) {
+                String type = unwrap(values.get(i)).toString();
+                if ("DEBUG".equals(type)) debugOption = values.get(i + 1);
+                requested.put(type, autoboxClassList(values.get(i + 1)));
+            }
+        }
+        requested.remove("DEBUG");
+        if (requested.isEmpty()) requested.putAll(AUTOBOX_DEFAULTS);
+
+        List<String> defaults = requested.get("DEFAULT");
+        if (defaults != null) {
+            for (String type : List.of("SCALAR", "ARRAY", "HASH", "CODE")) {
+                if (!requested.containsKey(type)) {
+                    requested.put(type, defaults.stream()
+                            .map(name -> expandAutoboxNamespace(name, type)).toList());
+                }
+            }
+            requested.remove("DEFAULT");
+        }
+
+        expandAutoboxVirtualType(requested, "SCALAR", List.of("STRING", "NUMBER"));
+        expandAutoboxVirtualType(requested, "NUMBER", List.of("INTEGER", "FLOAT"));
+
+        for (var entry : requested.entrySet()) {
+            String type = entry.getKey();
+            if (!AUTOBOX_TYPES.contains(type)) {
+                throw new IllegalArgumentException("autobox: unrecognized type " + type);
+            }
+            List<String> classes = entry.getValue().stream()
+                    .filter(name -> !name.isEmpty())
+                    .map(name -> expandAutoboxNamespace(name, type)).toList();
+            if (!classes.isEmpty()) {
+                List<String> merged = new ArrayList<>(bindings.getOrDefault(type, List.of()));
+                merged.addAll(classes);
+                bindings.put(type, List.copyOf(new LinkedHashSet<>(merged)));
+            } else {
+                bindings.remove(type);
+            }
+        }
+        parser.ctx.symbolTable.setAutoboxBindings(bindings);
+        invokeAutoboxDebug(debugOption, bindings);
+    }
+
+    private static void invokeAutoboxDebug(
+            RuntimeBase debugOption, Map<String, List<String>> bindings) {
+        if (!(debugOption instanceof RuntimeScalar callback)
+                || callback.type != RuntimeScalarType.CODE) return;
+
+        RuntimeHash prettyBindings = new RuntimeHash();
+        List<String> concreteTypes = List.of(
+                "UNDEF", "INTEGER", "FLOAT", "STRING", "ARRAY", "HASH", "CODE");
+        List<String> universalClasses = bindings.getOrDefault("UNIVERSAL", List.of());
+        for (String type : concreteTypes) {
+            List<String> effectiveClasses = new ArrayList<>(bindings.getOrDefault(type, List.of()));
+            if (!"UNDEF".equals(type)) effectiveClasses.addAll(universalClasses);
+            if (effectiveClasses.isEmpty()) continue;
+            RuntimeArray classes = new RuntimeArray();
+            for (String className : new LinkedHashSet<>(effectiveClasses)) {
+                classes.elements.add(new RuntimeScalar(className));
+            }
+            prettyBindings.put(type, classes.createAnonymousReference());
+        }
+        RuntimeArray callbackArgs = new RuntimeArray();
+        callbackArgs.elements.add(prettyBindings.createAnonymousReference());
+        RuntimeCode.apply(callback, callbackArgs, RuntimeContextType.VOID);
+    }
+
+    private static List<String> autoboxTypes(String type) {
+        if ("SCALAR".equals(type)) return List.of("SCALAR", "STRING", "NUMBER", "INTEGER", "FLOAT");
+        if ("NUMBER".equals(type)) return List.of("NUMBER", "INTEGER", "FLOAT");
+        return List.of(type);
+    }
+
+    private static void expandAutoboxVirtualType(
+            Map<String, List<String>> requested, String virtualType, List<String> concreteTypes) {
+        List<String> classes = requested.remove(virtualType);
+        if (classes == null || classes.isEmpty()) return;
+        List<String> expanded = classes.stream()
+                .filter(name -> !name.isEmpty())
+                .map(name -> expandAutoboxNamespace(name, virtualType)).toList();
+        for (String concreteType : concreteTypes) {
+            List<String> combined = new ArrayList<>(requested.getOrDefault(concreteType, List.of()));
+            combined.addAll(expanded);
+            requested.put(concreteType, List.copyOf(new LinkedHashSet<>(combined)));
+        }
+    }
+
+    private static List<String> autoboxClassList(RuntimeBase value) {
+        RuntimeBase unwrapped = unwrap(value);
+        if (unwrapped instanceof RuntimeArray array) {
+            List<String> classes = new ArrayList<>();
+            for (RuntimeBase element : array.elements) classes.add(unwrap(element).toString());
+            return classes;
+        }
+        if (unwrapped instanceof RuntimeScalar scalar
+                && scalar.type == RuntimeScalarType.UNDEF) return List.of();
+        return List.of(unwrapped.toString());
+    }
+
+    private static String expandAutoboxNamespace(String name, String type) {
+        return name.endsWith("::") ? name + type : name;
     }
 
     private static void registerDefaults(Parser parser) {

@@ -2245,6 +2245,8 @@ public class BytecodeInterpreter {
                                 int currentSubReg = bytecode[pc++];
                                 int argsReg = bytecode[pc++];
                                 int context = bytecode[pc++];
+                                int autoboxBindingsIndex = bytecode[pc++];
+                                String autoboxBindings = code.stringPool[autoboxBindingsIndex];
 
                                 // Resolve RUNTIME context from register 2 (wantarray)
                                 if (context == RuntimeContextType.RUNTIME) {
@@ -2294,8 +2296,10 @@ public class BytecodeInterpreter {
                                 RuntimeList result;
                                 try {
                                     result = stagedArgs == null
-                                            ? RuntimeCode.call(invocant, method, currentSub, callArgs, context)
-                                            : RuntimeCode.call(invocant, method, currentSub, stagedArgs, context);
+                                            ? RuntimeCode.call(invocant, method, currentSub, callArgs,
+                                                    context, autoboxBindings)
+                                            : RuntimeCode.call(invocant, method, currentSub, stagedArgs,
+                                                    context, autoboxBindings);
 
                                     // Keep method calls on the shared tail-call handoff as well.
                                     result = RuntimeCode.resolveTailCalls(result, context);
