@@ -950,7 +950,8 @@ public class WarnDie {
                 || message.contains(": missing named parameter:")
                 || message.contains(": missing named parameters:")
                 || message.contains(": no such named parameter:")
-                || message.contains(": no such named parameters:");
+                || message.contains(": no such named parameters:")
+                || message.contains(": invocant");
     }
 
     private static RuntimeScalar snapshotWarningHandler() {
