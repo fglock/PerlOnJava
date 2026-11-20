@@ -18,6 +18,8 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.ArrayDeque;
+import java.util.Deque;
 
 /** Connects compile-time module imports to lexical parser keyword plugins. */
 public final class ParserExtensionRegistry {
@@ -27,6 +29,8 @@ public final class ParserExtensionRegistry {
     }
 
     private static final Map<String, ModuleProvider> PROVIDERS = new ConcurrentHashMap<>();
+    private static final ThreadLocal<Deque<Parser>> ACTIVE_PARSERS =
+            ThreadLocal.withInitial(ArrayDeque::new);
 
     static {
         ModuleProvider functionParameters = ParserExtensionRegistry::applyFunctionParameters;
@@ -55,6 +59,27 @@ public final class ParserExtensionRegistry {
             Parser parser, String moduleName, boolean enabled, RuntimeList arguments) {
         ModuleProvider provider = PROVIDERS.get(moduleName);
         if (provider != null) provider.apply(parser, enabled, arguments);
+    }
+
+    public static void pushActiveParser(Parser parser) {
+        ACTIVE_PARSERS.get().push(parser);
+    }
+
+    public static void popActiveParser(Parser parser) {
+        Deque<Parser> parsers = ACTIVE_PARSERS.get();
+        if (parsers.isEmpty() || parsers.pop() != parser) {
+            throw new IllegalStateException("Parser extension context stack is unbalanced");
+        }
+        if (parsers.isEmpty()) ACTIVE_PARSERS.remove();
+    }
+
+    /** Apply a runtime import callback to the parser currently compiling BEGIN/use. */
+    public static void applyDynamicFunctionParametersImport(
+            boolean enabled, RuntimeList arguments) {
+        Deque<Parser> parsers = ACTIVE_PARSERS.get();
+        if (!parsers.isEmpty()) {
+            applyFunctionParameters(parsers.peek(), enabled, arguments);
+        }
     }
 
     private static void applyFunctionParameters(

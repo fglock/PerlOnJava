@@ -575,11 +575,16 @@ public class SpecialBlockParser {
                     DynamicVariableManager.pushLocalVariable(InterpreterState.currentPackage.get());
                 }
                 try {
+                    ParserExtensionRegistry.pushActiveParser(parser);
+                    try {
                     result = PerlLanguageProvider.executePerlAST(
                             new BlockNode(nodes, tokenIndex),
                             parser.tokens,
                             parsedArgs,
                             executionContext);
+                    } finally {
+                        ParserExtensionRegistry.popActiveParser(parser);
+                    }
                 } finally {
                     if (blockPhase.equals("BEGIN")) {
                         DynamicVariableManager.popToLocalLevel(beginPackageLocalLevel);

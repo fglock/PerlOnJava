@@ -29,6 +29,7 @@ sub import {
             die "Function::Parameters: import argument must be a tag, keyword, or hash\n";
         }
     }
+    Function::Parameters::register_parser_keywords(@_);
     return;
 }
 

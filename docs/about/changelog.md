@@ -11,6 +11,7 @@ priorities and future plans.
 - Add parser compatibility providers for `Syntax::Keyword::Try`, `Syntax::Feature::Method`, and `syntax qw(method)`; raise Object::Pad's advertised syntax level to 0.800 (#2112, #2089, #2056).
 - Add parser compatibility providers for `Syntax::Keyword::Try` and method syntax; support Object::Pad 0.800 roles, hash representation, `:Struct(readonly)`, and MOP method registration (#2112, #2089, #2056).
 - Preserve Function::Parameters' required named-argument arity diagnostic when unknown keys are also supplied (#1361).
+- Register dynamically delegated Function::Parameters imports made in `BEGIN` blocks so configured keywords are available to the parser (#1361).
 - Match Function::Parameters signature diagnostics and call-site locations, typed method invocants and slurpy element validation; treat empty positional defaults as `undef` and register its warning category (#1361).
 - Bind and type-check configured Function::Parameters `shift` invocants for ordinary function aliases (#1361).
 - Preserve configured Function::Parameters `install_sub` code references when installing runtime aliases (#1361).
