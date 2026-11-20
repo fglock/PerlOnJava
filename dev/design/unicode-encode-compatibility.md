@@ -31,6 +31,8 @@ the Perl API.
 - The four new project unit files pass under system Perl, JVM, and interpreter.
 - `nice -n 19 make` passes.
 - `nice -n 19 make check-links` passes.
+- `perl dev/import-perl5/verify_sync.pl` passes for all configured imports; both
+  Unicode table rows pass filtered sync idempotence checks.
 - All 19 bundled URI-Fast test files pass on JVM and interpreter.
 - Encode-DoubleEncodedUTF8 0.05 passes 7 tests on JVM and interpreter.
 - TV-ARIB-ProgramGenre 0.01 passes 21 tests on JVM and interpreter.
@@ -45,14 +47,14 @@ the Perl API.
 `getComposite` follows the system Perl oracle: non-starter pairs such as
 U+0308/U+0301 return undef. The separate decomposition table supplies those
 legacy core records for consumers that read the private file directly. The
-table is generated from Perl core Unicode 18.0 and matches the bundled
-`unicore/Name.pl`; `unicore/UCD.pl` currently identifies Unicode 15.0, so avoid
-claiming a uniform UCD version across all bundled Perl data until that broader
-version alignment is reviewed.
+`unicore/UCD.pl` and `unicore/Decomposition.pl` are committed Unicode 18.0
+tables from the adjacent `perl5` checkout, matching generated `unicore/Name.pl`.
+The import manifest copies these source artifacts, and filtered `sync.pl`
+idempotence checks confirm reproducible imports.
 
-The five reported compatibility gaps are implemented. PR #2133 is the active
-review and validation vehicle; remaining next step is to resolve its CI and
-review feedback.
+The five reported compatibility gaps and their regression suites are
+implemented. PR #2133 is the active review and validation vehicle; the remaining
+next step is to resolve CI and review feedback.
 
 ## Related material
 
