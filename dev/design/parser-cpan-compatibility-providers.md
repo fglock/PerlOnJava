@@ -2,16 +2,18 @@
 
 ## Current state (2026-11-20)
 
-Source base commit: `f9bc8e763`; follow-up commits: `a35e57b4e` and
-`767526362`, rebased onto `origin/master` at `94cc21a9c`. The full
+Source base commit: `f9bc8e763`; follow-up commits: `a35e57b4e`,
+`767526362` and `b952ac77b`, rebased onto `origin/master` at `94cc21a9c`.
+The full
 `nice -n 19 make` gate
 passes on the current candidate. The autobox 3.0.2 upstream suite previously
 passed all 23 files and 675 assertions; `Function::Parameters` 2.002006 passes
 all 56 files and 1,619 assertions. `Moose::Autobox` 0.16 now passes all 15
 upstream files and 208 tests, including CODE fixed-point calls and scalar-ref
 flattening. `autobox::Core` 1.33 is bundled and its focused tests pass on both
-backends; its upstream JPerl run still has unrelated `crypt.t` and two `Want`
-BOOL-context failures. `Object::Pad` 0.825 remains a partial compatibility
+backends. Its upstream suite passes 62 of 63 files (301 of 302 assertions);
+`t/s.t` now passes on both backends, leaving only the unrelated `crypt.t`
+hash mismatch. `Object::Pad` 0.825 remains a partial compatibility
   layer: 15 of 68 upstream files pass, with custom syntax, fields, and MOP APIs
   still outside the implemented surface. The `:experimental(init_expr)` field
   block syntax now evaluates in scalar, array, and hash initializer contexts;
@@ -75,11 +77,14 @@ shared objects remain owned by the parent.
   interpreter backends. A six-assertion system-Perl oracle built against
   autobox 3.0.2's XS implementation passes the focused test. The system-Perl
   upstream suite passes all 23 test programs (675 tests).
-- `autobox::Core` focused dispatch (8 assertions), scalar-reference dispatch
+- `Want` scalar/boolean context and nonlocal-return regression passes all eight
+  assertions on system Perl, JVM, and interpreter. `autobox::Core` focused
+  dispatch (8 assertions), scalar-reference dispatch
   (1 assertion), and Moose::Autobox consumer dispatch (9 assertions) pass on
   both the JVM and interpreter. The system-Perl oracles pass with official
   autobox XS; the full system-Perl `autobox::Core` 1.33 suite passes 63 files
-  and 301 assertions.
+  and 301 assertions. The PerlOnJava upstream suite passes 62 files and 301
+  assertions, with only the environment-dependent `crypt.t` mismatch remaining.
 - The unchanged autobox 3.0.2 system-Perl and PerlOnJava upstream suites pass
   all 23 test programs (675 assertions). `rt_71777.t` verifies destructor-time
   dispatch while a method call on `undef` throws during global teardown; it
@@ -92,8 +97,8 @@ shared objects remain owned by the parent.
 - The Object::Pad compatibility layer remains a documented subset; custom
   field attributes and upstream XS APIs are unsupported. Function::Parameters'
   upstream suite is covered by the full passing run above. The `autobox::Core`
-  upstream JPerl failures remain in `crypt.t` and two `Want` BOOL-context
-  assertions; its system-Perl suite passes.
+  system-Perl suite passes; its PerlOnJava run has one unrelated `crypt.t`
+  hash mismatch remaining.
 
 The two method-syntax providers and `Syntax::Keyword::Try` provider are covered
 by focused consumer tests. Broader Object::Pad 0.825 compatibility remains the
