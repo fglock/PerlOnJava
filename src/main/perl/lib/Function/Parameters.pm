@@ -2,6 +2,7 @@ package Function::Parameters;
 
 use strict;
 use warnings;
+use warnings::register;
 
 our $VERSION = '0.01';
 

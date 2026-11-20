@@ -143,6 +143,10 @@ the upstream XS parser plugin.
   and empty-default tests pass on JVM and interpreter, and system Perl with the
   upstream XS module. The current full upstream suite passes 47/56 programs;
   remaining parser and warning/lifetime gaps are still open.
+- Register the `Function::Parameters` warnings category in the bundled module.
+  A focused test verifies that `no warnings 'Function::Parameters'` compiles on
+  JVM, interpreter, and system Perl with the upstream XS module. The malformed
+  `$^H` config warning in upstream `stringy_h.t` remains unresolved.
 - Required named-argument validation now reports Function::Parameters' arity
   error before an unknown key when the supplied key/value count is below the
   required minimum. The focused regression passes on the JVM and interpreter.
