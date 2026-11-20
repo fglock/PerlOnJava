@@ -44,10 +44,11 @@ public final class AutoboxRuntime {
         return syntheticClass(classes);
     }
 
-    private static String autoboxType(RuntimeScalar scalar) {
+    public static String autoboxType(RuntimeScalar scalar) {
+        if (scalar == null) return "UNDEF";
         int type = RuntimeScalarType.effectiveType(scalar);
         return switch (type) {
-            case RuntimeScalarType.INTEGER -> "INTEGER";
+            case RuntimeScalarType.INTEGER, RuntimeScalarType.BOOLEAN -> "INTEGER";
             case RuntimeScalarType.DOUBLE -> "FLOAT";
             case RuntimeScalarType.STRING, RuntimeScalarType.BYTE_STRING,
                     RuntimeScalarType.VSTRING -> "STRING";

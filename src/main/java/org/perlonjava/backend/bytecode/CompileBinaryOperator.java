@@ -80,10 +80,6 @@ public class CompileBinaryOperator {
 
         // Handle -> operator specially for hashref/arrayref dereference
         if (node.operator.equals("->")) {
-            if (node.left instanceof OperatorNode sigil && sigil.operator.equals("%")) {
-                bytecodeCompiler.throwCompilerException("Can't use a hash as a reference");
-                return;
-            }
             bytecodeCompiler.currentTokenIndex = node.getIndex();  // Track token for error reporting
 
             if (node.right instanceof HashLiteralNode keyNode) {

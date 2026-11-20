@@ -8,7 +8,9 @@ sub capture_autobox_debug { push @AUTOBOX_DEBUG, $_[0] }
 
 is(type(undef), 'UNDEF', 'type() identifies undefined values');
 is(type(42), 'INTEGER', 'type() identifies integer values');
+is(type(0 == 1), 'INTEGER', 'type() identifies numeric boolean values');
 is(type(3.5), 'FLOAT', 'type() identifies floating point values');
+is(type(42 / 3), 'FLOAT', 'type() preserves floating point numeric flags');
 is(type('text'), 'STRING', 'type() identifies strings');
 is(type([]), 'ARRAY', 'type() identifies array references');
 is(type({}), 'HASH', 'type() identifies hash references');
@@ -51,6 +53,12 @@ BEGIN {
     package Test::Autobox::Array;
     sub size { scalar @{$_[0]} }
 
+    package Test::Autobox::DirectArray;
+    sub size { scalar @{$_[0]} }
+
+    package Test::Autobox::DirectHash;
+    sub size { scalar keys %{$_[0]} }
+
     package Test::Autobox::Universal;
     sub universal { 'universal' }
 
@@ -83,6 +91,21 @@ BEGIN {
     is([1, 2, 3]->size, 3, 'ARRAY references receive their configured binding');
     is('x'->universal, 'universal', 'UNIVERSAL applies after concrete scalar types');
     is([1]->universal, 'universal', 'UNIVERSAL applies to reference types');
+}
+
+{
+    use autobox ARRAY => 'Test::Autobox::DirectArray',
+        HASH => 'Test::Autobox::DirectHash';
+    my @array = qw(a b c);
+    my %hash = (a => 1, b => 2);
+    my $array_ref = \@array;
+    my $hash_ref = \%hash;
+    is(@array->size, 3, 'a direct array variable is passed to its method by reference');
+    is(%hash->size, 2, 'a direct hash variable is passed to its method by reference');
+    is((@array)->size, 3, 'a parenthesized array invocant is passed by reference');
+    is(((%hash))->size, 2, 'a nested parenthesized hash invocant is passed by reference');
+    is(@$array_ref->size, 3, 'an array reference dereferenced as an invocant is preserved');
+    is(%$hash_ref->size, 2, 'a hash reference dereferenced as an invocant is preserved');
 }
 
 {

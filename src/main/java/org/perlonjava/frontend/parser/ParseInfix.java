@@ -624,6 +624,10 @@ public class ParseInfix {
                             right = new BinaryOperatorNode("(", right, new ListNode(parser.tokenIndex), parser.tokenIndex);
                         }
 
+                        // Autobox treats direct aggregate variables as references
+                        // when they appear as method invocants: @a->method and
+                        // %h->method pass \@a and \%h respectively.
+                        left = referenceAggregateMethodInvocant(left, parser.tokenIndex);
                         BinaryOperatorNode methodCall = new BinaryOperatorNode(
                                 token.text, left, right, parser.tokenIndex);
                         Map<String, List<String>> autoboxBindings =
@@ -776,6 +780,19 @@ public class ParseInfix {
                 }
                 throw new PerlCompilerException(Math.max(0, errorIndex), "syntax error", parser.ctx.errorUtil);
         }
+    }
+
+    private static Node referenceAggregateMethodInvocant(Node invocant, int tokenIndex) {
+        Node unwrapped = invocant;
+        while (unwrapped instanceof ListNode list
+                && list.parenthesized && list.elements.size() == 1) {
+            unwrapped = list.elements.getFirst();
+        }
+        if (unwrapped instanceof OperatorNode aggregate
+                && (aggregate.operator.equals("@") || aggregate.operator.equals("%"))) {
+            return new OperatorNode("\\", aggregate, tokenIndex);
+        }
+        return invocant;
     }
 
     private static boolean isAssignmentOperator(String operator) {
