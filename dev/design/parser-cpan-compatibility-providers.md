@@ -40,7 +40,7 @@ These lexical call-site bindings do not mutate or bless the original invocant.
 - The `Device::Chip::ADT7470` consumer now passes `t/00use.t` and `t/99pod.t`;
   `t/01config.t` and `t/02interact.t` reach `Device::Chip::mount` but fail on
   anonymous hash-slurpy validation for the adapter's `configure (%)` method.
-- The focused autobox regression passes 21 assertions on the JVM and
+- The focused autobox regression passes 34 assertions on the JVM and
   interpreter backends and passes under system Perl.
 - A forced clean-home autobox 3.0.2 run passes 586 of 592 executed assertions;
   16 of 23 test programs pass. The remaining failures include aggregate
