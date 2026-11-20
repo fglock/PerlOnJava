@@ -136,18 +136,12 @@ public class ReferenceOperators {
             // "perhaps you forgot to load" hint.
             GlobalVariable.ensurePackageStash(str);
 
-            // Phase D-W6.10: arm targeted refCount tracing for classes
-            // matching the walker-gate heuristic (Class::MOP/Moose/Moo)
-            // when env-flag PJ_REFCOUNT_TRACE is set. Lets us pinpoint
-            // which specific increment/decrement site causes the
-            // metaclass refCount underflow during CMOP bootstrap.
+            // Optionally arm targeted refCount tracing for one selected class.
             String traceClass = System.getenv("PJ_REFCOUNT_TRACE_CLASS");
             boolean traceClassMatch = traceClass != null
                     && !traceClass.isEmpty()
                     && str.contains(traceClass);
-            if (RuntimeBase.refCountTraceEnabled()
-                    && (traceClassMatch || org.perlonjava.runtime.runtimetypes.DestroyDispatch
-                            .classNeedsWalkerGate(newBlessId))) {
+            if (RuntimeBase.refCountTraceEnabled() && traceClassMatch) {
                 referent.refCountTrace = true;
                 System.err.println("[REFCOUNT] *** ARMED *** base="
                     + System.identityHashCode(referent)
