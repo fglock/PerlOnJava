@@ -25,7 +25,7 @@ the upstream XS parser plugin.
 ### Current status: Core subset implemented; upstream compatibility work remains (2026-11-20)
 
 Current checkpoint (2026-11-20, branch `feature/cpan-parser-compat-1264-2112`,
-PR #2132, source candidate based on `85741173a`): automatic Type::Tiny parameterized and quoted
+PR #2132, source candidate based on `68f2b8e34`): automatic Type::Tiny parameterized and quoted
 composite expressions reify through overloaded code references; recursive
 Function::Parameters declarations preserve block prototypes and trailing
 arguments. Anonymous `fun` expression statements retain immediate postfix
@@ -42,12 +42,15 @@ on system Perl, JVM, and interpreter. `nice -n 19 make` passed in 9m03 and
 The compile-time `Function::Parameters->import(...)` bridge now registers
 configured parser keywords when called from a `BEGIN` block, including through
 a wrapper. The `elsewhere.t` regression passes on system Perl, JVM, and
-interpreter, and `nice -n 19 make` passes on this candidate. Remaining
-confirmed upstream gaps include one lifetime assertion and two malformed
-`$^H` warning assertions in `stringy_h.t`; the complete upstream suite has not
-been rerun after the latest fixes. Next: refresh PR #2132 with this change and
-continue closing the remaining reported compatibility gaps. Keep all linked
-issues open while gaps remain.
+interpreter. Compile-time `install_sub` CVs are released at the synthetic
+`BEGIN` boundary, and malformed `$^H` configuration values warn once using
+the lexical warning category; the project regressions and upstream
+`lifetime.t` non-TODO assertions and `stringy_h.t` pass on both backends.
+`nice -n 19 make` passes on this candidate. Upstream `lifetime.t` retains its
+existing TODO for runtime-installed CV retention. Next: continue closing the
+remaining #2112 and #1264 compatibility gaps and rerun the complete upstream
+Function::Parameters suite after that work. Keep linked issues open while
+gaps remain.
 
 ### Completed
 

@@ -83,6 +83,7 @@ public class StatementResolver {
         parser.validateRemainingByteSourceUtf8();
         int currentIndex = parser.tokenIndex;
         LexerToken token = peek(parser);
+        validateFunctionParametersHint(parser, currentIndex);
         boolean coreQualifiedControl = false;
 
         // Perl permits control-flow keywords to be explicitly qualified, e.g.
@@ -1875,6 +1876,23 @@ public class StatementResolver {
             return myNode;
         }
         return null;
+    }
+
+    private static void validateFunctionParametersHint(Parser parser, int tokenIndex) {
+        if (parser.getKeywordPlugin("fun") == null) return;
+        RuntimeScalar hint = HintHashRegistry.getCompileTimeHintCell(
+                "Function::Parameters/config");
+        if (hint == null
+                || org.perlonjava.runtime.runtimetypes.RuntimeScalarType.isReference(hint)) {
+            parser.markMalformedFunctionParametersConfigWarning(null);
+            return;
+        }
+        if (!parser.markMalformedFunctionParametersConfigWarning(hint)) return;
+        String message = "Function::Parameters: $^H{'Function::Parameters/config'} is not a reference; skipping: "
+                + hint;
+        WarnDie.warnWithCategoryFromCode(new RuntimeScalar(message),
+                new RuntimeScalar(parser.ctx.errorUtil.warningLocation(tokenIndex)),
+                "Function::Parameters", parser.ctx.symbolTable.getWarningBitsString());
     }
 
     /**

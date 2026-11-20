@@ -309,6 +309,7 @@ public class Parser {
     public String functionParametersInstallSub;
     /** Runtime code reference used to install configured Function::Parameters subs. */
     public RuntimeScalar functionParametersInstallSubCallback;
+    private RuntimeScalar warnedMalformedFunctionParametersConfig;
     public String functionParametersTypeReifier;
     /** Optional compile-time callback used by Function::Parameters reify_type. */
     public org.perlonjava.runtime.runtimetypes.RuntimeScalar functionParametersTypeReifierCallback;
@@ -388,6 +389,17 @@ public class Parser {
         if (ctx != null && ctx.symbolTable != null) {
             setCurrentScope(ctx.symbolTable);
         }
+    }
+
+    /** Suppress repeat warnings for the same malformed lexical config value. */
+    public boolean markMalformedFunctionParametersConfigWarning(RuntimeScalar value) {
+        if (value == null || org.perlonjava.runtime.runtimetypes.RuntimeScalarType.isReference(value)) {
+            warnedMalformedFunctionParametersConfig = null;
+            return false;
+        }
+        if (value == warnedMalformedFunctionParametersConfig) return false;
+        warnedMalformedFunctionParametersConfig = value;
+        return true;
     }
 
     // Add this constructor to the Parser class

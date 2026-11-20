@@ -5,6 +5,7 @@ import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.frontend.parser.SubroutineParser;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.MortalList;
 
 import java.util.List;
 import java.util.Map;
@@ -233,6 +234,11 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
             Node declaration = SubroutineParser.parseSubroutineDefinition(parser, named, "our");
             if (installSub != null && !runtime) {
                 SpecialBlockParser.runSpecialBlock(parser, "BEGIN", declaration);
+                // The generated CV is only a temporary argument to the
+                // compile-time installer. Complete its lifetime cleanup at
+                // the end of the synthetic BEGIN, before parsing the next
+                // source statement can observe stale weak references.
+                MortalList.flushAboveMark();
                 return new org.perlonjava.frontend.astnode.ListNode(parser.tokenIndex);
             }
             return declaration;
