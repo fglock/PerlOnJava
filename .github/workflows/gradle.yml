@@ -22,7 +22,7 @@ jobs:
       - name: Checkout source
         id: checkout-source
         timeout-minutes: 10
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up JDK 24
         id: setup-java
@@ -73,7 +73,7 @@ jobs:
         id: checkout-perl5
         if: runner.os == 'Linux'
         timeout-minutes: 10
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: Perl/perl5
           path: perl5
