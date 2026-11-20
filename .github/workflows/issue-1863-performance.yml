@@ -254,7 +254,7 @@ jobs:
 
       - name: Upload raw benchmark reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: issue-1863-performance-${{ github.sha }}
           path: |
