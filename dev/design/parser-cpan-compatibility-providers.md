@@ -1,11 +1,10 @@
 # Parser CPAN compatibility providers
 
-## Current state (2026-11-20)
+## Current state (2026-11-21)
 
 Source base: `origin/master` at `94cc21a9c`; current candidate:
-`caf5dedf8` on PR #2132, with strict `ADJUST`/`BUILD` binding and imported
-function call-site fixes in the working tree. Follow-up commits include
-`a35e57b4e`, `767526362`, `b952ac77b`, `caf5dedf8` and `c672dd5c7`. The full
+`98275af81` on PR #2132. Follow-up commits include `a35e57b4e`,
+`767526362`, `b952ac77b`, `caf5dedf8`, `c672dd5c7` and `98275af81`. The full
 `nice -n 19 make` gate passes on this source candidate. The autobox 3.0.2 upstream suite previously
 passed all 23 files and 675 assertions; `Function::Parameters` 2.002006 passes
 all 56 files and 1,619 assertions. `Moose::Autobox` 0.16 now passes all 15
@@ -14,10 +13,10 @@ flattening. `autobox::Core` 1.33 is bundled and its focused tests pass on both
 backends. Its upstream suite passes 62 of 63 files (301 of 302 assertions);
 `t/s.t` now passes on both backends, leaving only the unrelated `crypt.t`
 hash mismatch. `Object::Pad` 0.825 remains a partial compatibility layer: its
-latest full upstream run before the field-shadow fix failed 55 of 68 test
-programs and 39 of 106 subtests. The system-Perl oracle passed 68 files and
+latest full upstream run failed 54 of 68 test programs and 38 of 106 subtests.
+The system-Perl oracle passed 68 files and
 464 tests, with optional dependency tests skipped. Custom syntax, fields, and
-MOP APIs remain outside the PerlOnJava subset. The focused
+most MOP APIs remain outside the PerlOnJava subset. The focused
 `t/23fields-signatures.t` now passes after fixing lexical parameters that share
 a name with a field. Imported function calls in class methods retain their
 defining package instead of receiving method metadata from the aliasing class;
@@ -91,8 +90,6 @@ shared objects remain owned by the parent.
   files and 27 tests on system Perl, JVM, and forced-interpreter mode.
 - The Object::Pad `:experimental(init_expr)` regression passes four assertions
   on JVM and interpreter, and against the official Object::Pad 0.825 XS oracle.
-- The unchanged `Device::Chip::ADT7470` upstream suite passes all four test
-  programs (27 tests) using its fake adapter.
 - The focused autobox regression passes 44 assertions on the JVM and
   interpreter backends. A six-assertion system-Perl oracle built against
   autobox 3.0.2's XS implementation passes the focused test. The system-Perl
