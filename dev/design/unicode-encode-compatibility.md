@@ -2,7 +2,7 @@
 
 ## Current state — 2026-11-20
 
-Source commit: `6a9fb373b` on `feature/unicode-encode-compatibility`; PR #2133 is open.
+Feature source commit: `6a9fb373b`; Unicode table sync commit: `3b04b7bed`; PR #2133 is open.
 
 This change groups five CPAN compatibility reports: custom `Encode::Encoding`
 registration (#2124), `decode_utf8` on Unicode strings (#2121),
@@ -29,7 +29,7 @@ the Perl API.
 ## Validation
 
 - The four new project unit files pass under system Perl, JVM, and interpreter.
-- `nice -n 19 make` passes.
+- `nice -n 19 make` passes on the Unicode table sync commit.
 - `nice -n 19 make check-links` passes.
 - `perl dev/import-perl5/verify_sync.pl` passes for all configured imports; both
   Unicode table rows pass filtered sync idempotence checks.
