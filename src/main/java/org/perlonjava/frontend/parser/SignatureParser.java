@@ -268,16 +268,33 @@ public class SignatureParser {
                             customReifiedTypeValue, paramStartIndex);
                 }
             } else if (customReifiedTypeValue == null) {
+                String quotedTypeName = typeConstraint instanceof StringNode string
+                        && string.value.matches("[A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_][A-Za-z0-9_]*)*")
+                        ? string.value : null;
                 typeConstraint = reifyQuotedTypeName(typeConstraint, paramStartIndex);
-            }
-            if (typeConstraint != null && customReifiedTypeValue == null) {
-                RuntimeScalar evaluatedType = SpecialBlockParser.runSpecialBlock(
-                        parser, "BEGIN", typeConstraint, RuntimeContextType.SCALAR).scalar();
+                if (typeConstraint != null && customReifiedTypeValue == null) {
+                    RuntimeScalar evaluatedType;
+                    try {
+                        evaluatedType = SpecialBlockParser.runSpecialBlock(
+                                parser, "BEGIN", typeConstraint, RuntimeContextType.SCALAR).scalar();
+                    } catch (PerlCompilerException exception) {
+                        if (quotedTypeName != null && exception.getMessage() != null
+                                && exception.getMessage().contains("Undefined subroutine &")) {
+                            String fullName = quotedTypeName.startsWith("::")
+                                    ? quotedTypeName.substring(2) : quotedTypeName;
+                            if (!fullName.contains("::")) {
+                                fullName = parser.ctx.symbolTable.getCurrentPackage() + "::" + fullName;
+                            }
+                            parser.throwError(paramStartIndex, "Undefined type name " + fullName);
+                        }
+                        throw exception;
+                    }
                 if (RuntimeScalarType.blessedId(evaluatedType) != 0) {
                     customReifiedTypeValue = evaluatedType;
                     typeConstraint = customTypeConstraintReference(
                             customReifiedTypeValue, paramStartIndex);
                 }
+            }
             }
             if (typeConstraint != null && peekToken().text.equals(":")) {
                 consumeToken();
@@ -796,6 +813,12 @@ public class SignatureParser {
             return requireMooseTypeConstraints(reifiedType, start);
         }
 
+        if (hasAutomaticTypeOperator(start, parameterSigil)) {
+            Node automaticType = new AutomaticTypeExpressionParser(start, parameterSigil).parse();
+            parser.tokenIndex = parameterSigil;
+            return automaticType;
+        }
+
         int first = nextSignificantToken(start);
         int afterFirst = nextSignificantToken(first + 1);
         if (first == start && afterFirst == parameterSigil
@@ -827,6 +850,147 @@ public class SignatureParser {
             } else {
                 parser.tokens.remove(boundary);
             }
+        }
+    }
+
+    private boolean hasAutomaticTypeOperator(int start, int end) {
+        for (int index = start; index < end; index++) {
+            String text = parser.tokens.get(index).text;
+            if (Set.of("|", "&", "/", "~").contains(text)) return true;
+        }
+        return false;
+    }
+
+    /** Parse auto-reified Type::Tiny-style operators without treating bare type names as strings. */
+    private final class AutomaticTypeExpressionParser {
+        private final int end;
+        private int cursor;
+
+        private AutomaticTypeExpressionParser(int start, int end) {
+            this.cursor = start;
+            this.end = end;
+        }
+
+        private Node parse() {
+            Node expression = parseUnion();
+            if (nextSignificant(cursor) != end) {
+                parser.throwError(nextSignificant(cursor), "Malformed Function::Parameters type constraint");
+            }
+            return expression;
+        }
+
+        private Node parseUnion() {
+            Node left = parseIntersection();
+            while (take("|")) {
+                int index = previousSignificantToken(cursor);
+                left = new BinaryOperatorNode("|", left, parseIntersection(), index);
+            }
+            return left;
+        }
+
+        private Node parseIntersection() {
+            Node left = parseAlternative();
+            while (take("&")) {
+                int index = previousSignificantToken(cursor);
+                left = new BinaryOperatorNode("&", left, parseAlternative(), index);
+            }
+            return left;
+        }
+
+        private Node parseAlternative() {
+            Node left = parseUnary();
+            while (take("/")) {
+                int index = previousSignificantToken(cursor);
+                left = new BinaryOperatorNode("/", left, parseUnary(), index);
+            }
+            return left;
+        }
+
+        private Node parseUnary() {
+            int index = nextSignificant(cursor);
+            if (index < end && parser.tokens.get(index).text.matches("~+")) {
+                String complements = parser.tokens.get(index).text;
+                cursor = index + 1;
+                Node value = parseUnary();
+                for (int count = 0; count < complements.length(); count++) {
+                    value = new OperatorNode("~", value, index);
+                }
+                return value;
+            }
+            return parsePrimary();
+        }
+
+        private Node parsePrimary() {
+            int index = nextSignificant(cursor);
+            if (index >= end) {
+                parser.throwError(index, "Malformed Function::Parameters type constraint");
+            }
+            LexerToken token = parser.tokens.get(index);
+            Node value;
+            if ("(".equals(token.text)) {
+                cursor = index + 1;
+                value = parseUnion();
+                if (!take(")")) {
+                    parser.throwError(nextSignificant(cursor), "Malformed Function::Parameters type constraint");
+                }
+            } else if (token.type == LexerTokenType.IDENTIFIER) {
+                StringBuilder name = new StringBuilder(token.text);
+                cursor = index + 1;
+                while (true) {
+                    int separator = nextSignificant(cursor);
+                    int component = nextSignificant(separator + 1);
+                    if (separator < end && "::".equals(parser.tokens.get(separator).text)
+                            && component < end
+                            && parser.tokens.get(component).type == LexerTokenType.IDENTIFIER) {
+                        name.append("::").append(parser.tokens.get(component).text);
+                        cursor = component + 1;
+                    } else {
+                        break;
+                    }
+                }
+                Node typeFunction = new OperatorNode("&", new IdentifierNode(name.toString(), index), index);
+                value = new BinaryOperatorNode("(", typeFunction,
+                        new ListNode(List.of(), index), index);
+            } else {
+                parser.throwError(index, "Malformed Function::Parameters type constraint");
+                return null;
+            }
+
+            while (take("[")) {
+                List<Node> arguments = new ArrayList<>();
+                if (!peek("]")) {
+                    do {
+                        arguments.add(parseUnion());
+                    } while (take(","));
+                }
+                if (!take("]")) {
+                    parser.throwError(nextSignificant(cursor), "Malformed Function::Parameters type constraint");
+                }
+                ArrayLiteralNode argumentArray = new ArrayLiteralNode(arguments, index);
+                value = new BinaryOperatorNode("->", value,
+                        new ListNode(List.of(argumentArray), index), index);
+            }
+            return value;
+        }
+
+        private boolean peek(String text) {
+            int index = nextSignificant(cursor);
+            return index < end && text.equals(parser.tokens.get(index).text);
+        }
+
+        private boolean take(String text) {
+            int index = nextSignificant(cursor);
+            if (index >= end || !text.equals(parser.tokens.get(index).text)) return false;
+            cursor = index + 1;
+            return true;
+        }
+
+        private int nextSignificant(int index) {
+            while (index < end && (parser.tokens.get(index).type == LexerTokenType.WHITESPACE
+                    || parser.tokens.get(index).type == LexerTokenType.NEWLINE)) {
+                index++;
+            }
+            return index;
         }
     }
 

@@ -155,7 +155,9 @@ the upstream XS parser plugin.
   upstream XS module. Typed slurpy parameters now validate and coerce each
   element, with a focused ordinal regression passing on JVM, interpreter, and
   system Perl. The upstream `types_msg.t` passes all 13 assertions. `types_auto.t`
-  still fails in composite type expression parsing.
+  now parses bracket applications and composite operators in project unit
+  coverage. Its full upstream expression still has two failures: a bare
+  unknown type diagnostic and metadata for a deeply composed type.
 - Required named-argument validation now reports Function::Parameters' arity
   error before an unknown key when the supplied key/value count is below the
   required minimum. The focused regression passes on the JVM and interpreter.
@@ -164,8 +166,8 @@ the upstream XS parser plugin.
 
 ### Next steps
 
-1. Add auto type grammar support for bracket parameterization and composite
-   operators, then rerun `types_auto.t`.
+1. Resolve the remaining `types_auto.t` diagnostic and deeply composed type
+   metadata failures.
 2. Classify and fix the other upstream errors and incomplete files listed
    above, preserving focused project regression coverage for each confirmed
    PerlOnJava defect.
