@@ -12,6 +12,7 @@ priorities and future plans.
 - Add parser compatibility providers for `Syntax::Keyword::Try` and method syntax; support Object::Pad 0.800 roles, hash representation, `:Struct(readonly)`, and MOP method registration (#2112, #2089, #2056).
 - Preserve Function::Parameters' required named-argument arity diagnostic when unknown keys are also supplied (#1361).
 - Match Function::Parameters signature diagnostics and call-site locations, typed method invocants and slurpy element validation; treat empty positional defaults as `undef` and register its warning category (#1361).
+- Bind and type-check configured Function::Parameters `shift` invocants for ordinary function aliases (#1361).
 - Parse automatic and quoted Type::Tiny parameterized/composite expressions in Function::Parameters signatures; preserve recursive block-prototype trailing arguments (#1361).
 - Add lexical autobox dispatch for native scalar and reference values, including merged class lookup, `autobox_class`, `autobox::universal::type` scalar flags, direct aggregate invocants, and `$^H` scope bits that respect `no autobox` (#1264).
 - Honor tied `*ARGV` for diamond reads, including after a previous traversal reaches EOF (#2110, #2111).

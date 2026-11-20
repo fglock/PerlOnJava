@@ -7,6 +7,7 @@ import org.perlonjava.frontend.parser.SubroutineParser;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /** Parses Function::Parameters declarations using core signature lowering. */
@@ -31,6 +32,7 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
     private final String typeReifier;
     private final RuntimeScalar typeReifierCallback;
     private final List<String> invocants;
+    private final Map<String, RuntimeScalar> invocantTypes;
     private final List<String> defaultAttributes;
 
     private FunctionParametersKeywordPlugin(
@@ -40,7 +42,7 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
             RuntimeScalar typeReifierCallback, boolean types) {
         this(method, optionalInvocantCount, strict, checkArgumentTypes, runtime,
                 installSub, requiresName, false, true, invocants, List.of(), typeReifier,
-                typeReifierCallback, types);
+                typeReifierCallback, types, Map.of());
     }
 
     private FunctionParametersKeywordPlugin(
@@ -51,7 +53,8 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
             List<String> defaultAttributes,
             String typeReifier,
             RuntimeScalar typeReifierCallback,
-            boolean types) {
+            boolean types,
+            Map<String, RuntimeScalar> invocantTypes) {
         this.method = method;
         this.optionalInvocantCount = optionalInvocantCount;
         this.strict = strict;
@@ -65,6 +68,7 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
         this.typeReifier = typeReifier;
         this.typeReifierCallback = typeReifierCallback;
         this.invocants = List.copyOf(invocants);
+        this.invocantTypes = Map.copyOf(invocantTypes);
         this.defaultAttributes = List.copyOf(defaultAttributes);
     }
 
@@ -72,7 +76,8 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
             String defaults, List<String> shift, int optionalInvocantCount,
             boolean strict, boolean checkArgumentTypes, boolean runtime, String installSub,
             List<String> defaultAttributes, String namePolicy, boolean defaultArguments,
-            String typeReifier, RuntimeScalar typeReifierCallback, boolean types) {
+            String typeReifier, RuntimeScalar typeReifierCallback, boolean types,
+            Map<String, RuntimeScalar> invocantTypes) {
         boolean method = Set.of("method", "classmethod", "before", "after", "around",
                 "augment", "override").contains(defaults);
         boolean requiresName = Set.of("before", "after", "around", "augment", "override")
@@ -88,7 +93,7 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
                     true, 0, strict, checkArgumentTypes, runtime, installSub,
                     "required".equals(namePolicy) || requiresName,
                     "prohibited".equals(namePolicy), defaultArguments, invocants, defaultAttributes,
-                    typeReifier, typeReifierCallback, types);
+                    typeReifier, typeReifierCallback, types, invocantTypes);
         }
         if (optionalInvocantCount == 0 && strict && checkArgumentTypes && !runtime && installSub == null
                 && defaultAttributes.isEmpty() && "optional".equals(namePolicy) && defaultArguments
@@ -98,8 +103,9 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
         return new FunctionParametersKeywordPlugin(
                 false, optionalInvocantCount, strict, checkArgumentTypes, runtime, installSub,
                 "required".equals(namePolicy) || requiresName,
-                "prohibited".equals(namePolicy), defaultArguments, List.of(), defaultAttributes,
-                typeReifier, typeReifierCallback, types);
+                "prohibited".equals(namePolicy), defaultArguments,
+                shift == null ? List.of() : shift, defaultAttributes,
+                typeReifier, typeReifierCallback, types, invocantTypes);
     }
 
     @Override
@@ -113,6 +119,7 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
         boolean previousFunctionParametersMethod = parser.parsingFunctionParametersMethod;
         boolean previousOptionalInvocant = parser.parsingFunctionParametersOptionalInvocant;
         int previousInvocantCount = parser.functionParametersInvocantCount;
+        Map<String, RuntimeScalar> previousInvocantTypes = parser.functionParametersInvocantTypeObjects;
         boolean previousStrict = parser.functionParametersStrict;
         boolean previousCheckArgumentTypes = parser.functionParametersCheckArgumentTypes;
         boolean previousTypes = parser.functionParametersTypes;
@@ -149,6 +156,7 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
         parser.parsingFunctionParametersMethod = method;
         parser.parsingFunctionParametersOptionalInvocant = optionalInvocantCount > 0;
         parser.functionParametersInvocantCount = method ? invocants.size() : optionalInvocantCount;
+        parser.functionParametersInvocantTypeObjects = invocantTypes;
         parser.functionParametersStrict = strict;
         parser.functionParametersCheckArgumentTypes = checkArgumentTypes;
         parser.functionParametersTypes = types;
@@ -171,7 +179,7 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
                 parser.throwError("expecting a function name");
             }
             if (prohibitsName && named) parser.throwError("expecting a parameter list");
-            if (method) {
+            if (method || !this.invocants.isEmpty()) {
                 int openParen = parser.tokenIndex;
                 while (openParen < parser.tokens.size()
                         && !"(".equals(parser.tokens.get(openParen).text)
@@ -185,7 +193,9 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
                     // same explicit implicit-invocant signature used by the
                     // Function::Parameters method provider.
                     implicitMethodSignatureInsertIndex = openParen;
-                    String[] signature = {"(", "$", invocants.getFirst().substring(1), ":", ")"};
+                    List<String> configuredInvocants = method
+                            ? invocants : this.invocants;
+                    String[] signature = {"(", "$", configuredInvocants.getFirst().substring(1), ":", ")"};
                     for (int i = 0; i < signature.length; i++) {
                         LexerTokenType type = i == 2
                                 ? LexerTokenType.IDENTIFIER : LexerTokenType.OPERATOR;
@@ -197,8 +207,10 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
                         && !hasExplicitInvocant(parser, openParen)) {
                     implicitInvocantInsertIndex = openParen + 1;
                     int insertAt = implicitInvocantInsertIndex;
-                    for (int i = 0; i < invocants.size(); i++) {
-                        String invocant = invocants.get(i);
+                    List<String> configuredInvocants = method
+                            ? invocants : this.invocants;
+                    for (int i = 0; i < configuredInvocants.size(); i++) {
+                        String invocant = configuredInvocants.get(i);
                         if (i > 0) {
                             parser.tokens.add(insertAt++,
                                     new LexerToken(LexerTokenType.OPERATOR, ","));
@@ -227,7 +239,8 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
                 parser.tokenIndex -= 5;
             }
             if (implicitInvocantInsertIndex >= 0) {
-                int inserted = invocants.size() * 2 + (invocants.size() - 1) + 1;
+                List<String> configuredInvocants = method ? invocants : this.invocants;
+                int inserted = configuredInvocants.size() * 2 + (configuredInvocants.size() - 1) + 1;
                 for (int i = 0; i < inserted; i++) parser.tokens.remove(implicitInvocantInsertIndex);
                 parser.tokenIndex -= inserted;
             }
@@ -235,6 +248,7 @@ final class FunctionParametersKeywordPlugin implements ParserKeywordPlugin {
             parser.parsingFunctionParametersMethod = previousFunctionParametersMethod;
             parser.parsingFunctionParametersOptionalInvocant = previousOptionalInvocant;
             parser.functionParametersInvocantCount = previousInvocantCount;
+            parser.functionParametersInvocantTypeObjects = previousInvocantTypes;
             parser.functionParametersStrict = previousStrict;
             parser.functionParametersCheckArgumentTypes = previousCheckArgumentTypes;
             parser.functionParametersTypes = previousTypes;

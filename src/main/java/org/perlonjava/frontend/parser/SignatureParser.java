@@ -365,6 +365,16 @@ public class SignatureParser {
         }
 
         String metadataName = paramName == null ? sigil : sigil + paramName;
+        if (parsingFunctionParametersInvocant && paramName != null
+                && typeConstraint == null) {
+            RuntimeScalar configuredInvocantType =
+                    parser.functionParametersInvocantTypeObjects.get(paramName);
+            if (configuredInvocantType != null) {
+                customReifiedTypeValue = configuredInvocantType;
+                typeConstraint = customTypeConstraintReference(
+                        configuredInvocantType, paramStartIndex);
+            }
+        }
         if (parenthesizedTypeValue != null
                 && RuntimeScalarType.blessedId(parenthesizedTypeValue) != 0) {
             parameterTypeObjects.put(metadataName, parenthesizedTypeValue);

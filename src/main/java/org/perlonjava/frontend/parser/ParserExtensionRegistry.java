@@ -322,10 +322,10 @@ public final class ParserExtensionRegistry {
     private static void registerStrictnessDefaults(Parser parser, boolean strict) {
         parser.registerKeywordPlugin("fun", FunctionParametersKeywordPlugin.configured(
                 "function", null, 0, strict, true, false, null, List.of(), "optional", true,
-                null, null, true));
+                null, null, true, Map.of()));
         parser.registerKeywordPlugin("method", FunctionParametersKeywordPlugin.configured(
                 "method", null, 0, strict, true, false, null, List.of(), "optional", true,
-                null, null, true));
+                null, null, true, Map.of()));
     }
 
     private static void removeDefaults(Parser parser) {
@@ -349,6 +349,7 @@ public final class ParserExtensionRegistry {
         RuntimeBase value = unwrap(definition);
         String defaults;
         List<String> shift = null;
+        Map<String, RuntimeScalar> shiftTypes = new LinkedHashMap<>();
         int optionalInvocantCount = 0;
         boolean strict = true;
         boolean strictSpecified = false;
@@ -393,7 +394,22 @@ public final class ParserExtensionRegistry {
             RuntimeBase shiftBase = shiftValue == null ? null : unwrap(shiftValue);
             if (shiftBase instanceof RuntimeArray names) {
                 shift = new ArrayList<>();
-                for (RuntimeScalar name : names.elements) shift.add(name.toString());
+                for (RuntimeScalar name : names.elements) {
+                    RuntimeBase entry = unwrap(name);
+                    if (entry instanceof RuntimeArray pair && !pair.elements.isEmpty()) {
+                        String shiftName = pair.elements.getFirst().toString();
+                        shift.add(shiftName);
+                        if (pair.elements.size() > 1) {
+                            RuntimeScalar typeObject = pair.elements.get(1);
+                            if (RuntimeScalarType.blessedId(typeObject) != 0) {
+                                shiftTypes.put(shiftName.startsWith("$")
+                                        ? shiftName.substring(1) : shiftName, typeObject);
+                            }
+                        }
+                    } else {
+                        shift.add(name.toString());
+                    }
+                }
             } else if (shiftValue != null) {
                 shift = List.of(shiftValue.toString());
             }
@@ -457,10 +473,14 @@ public final class ParserExtensionRegistry {
             throw new IllegalArgumentException(
                     "Unsupported Function::Parameters keyword defaults: " + defaults);
         }
+        if (!Set.of("method", "classmethod", "before", "after", "around", "augment", "override")
+                .contains(defaults) && shift != null) {
+            optionalInvocantCount = shift.size();
+        }
         return FunctionParametersKeywordPlugin.configured(
                 defaults, shift, optionalInvocantCount, strict, checkArgumentTypes,
                 runtime, installSub, defaultAttributes, namePolicy, defaultArguments,
-                reifyType, reifyTypeCallback, types);
+                reifyType, reifyTypeCallback, types, shiftTypes);
     }
 
     private static List<String> parseConfiguredAttributes(String source) {

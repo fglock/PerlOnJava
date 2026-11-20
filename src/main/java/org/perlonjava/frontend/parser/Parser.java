@@ -17,6 +17,7 @@ import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.PerlParserException;
 import org.perlonjava.runtime.runtimetypes.PerlRuntime;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.CompilationRuntimeState;
 import org.perlonjava.runtime.perlmodule.Strict;
 
@@ -290,6 +291,8 @@ public class Parser {
     public boolean parsingFunctionParametersOptionalInvocant = false;
     /** Number of leading positional parameters used as Function::Parameters invocants. */
     public int functionParametersInvocantCount = 1;
+    /** Configured type objects for implicit Function::Parameters invocants. */
+    public Map<String, RuntimeScalar> functionParametersInvocantTypeObjects = Map.of();
     /** Whether configured Function::Parameters signatures enforce exact arity. */
     public boolean functionParametersStrict = true;
     /** Whether configured Function::Parameters signatures run type constraints. */
