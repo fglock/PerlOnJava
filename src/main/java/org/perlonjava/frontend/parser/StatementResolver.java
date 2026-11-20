@@ -110,6 +110,16 @@ public class StatementResolver {
         if (token.type == LexerTokenType.IDENTIFIER) {
             ParserKeywordPlugin plugin = parser.getKeywordPlugin(token.text);
             if (plugin != null) {
+                if (plugin instanceof FunctionParametersKeywordPlugin
+                        && "fun".equals(token.text)
+                        && "(".equals(parser.tokens.get(
+                                Whitespace.skipWhitespace(parser, parser.tokenIndex + 1, parser.tokens)).text)) {
+                    // An anonymous Function::Parameters declaration can also
+                    // be an expression statement, especially when immediately
+                    // invoked with `->()`. Parse it through the expression path
+                    // so postfix operators remain attached to the CV.
+                    return parser.parseExpression(0);
+                }
                 return plugin.parse(parser, token.text);
             }
         }
