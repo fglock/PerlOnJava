@@ -142,6 +142,13 @@ imports:
   - source: perl5/lib/unicore/Name.pl
     target: src/main/perl/lib/unicore/Name.pl
 
+  # These committed Unicode core tables back Unicode::UCD and legacy callers.
+  - source: perl5/lib/unicore/UCD.pl
+    target: src/main/perl/lib/unicore/UCD.pl
+
+  - source: perl5/lib/unicore/Decomposition.pl
+    target: src/main/perl/lib/unicore/Decomposition.pl
+
   # Bulk import compatibility tests from perl5/t/ to perl5_t/t/.
   # Porting tests validate a complete upstream release source tree (including
   # generated C headers, miniperl, and every MANIFEST entry), while perl5_t is

@@ -193,6 +193,16 @@ uses `builtin`. The generator writes only the current checkout's missing source
 artifact and publishes it atomically; the normal sync copy remains responsible
 for the bundled `src/main/perl/lib/unicore/Name.pl` resource.
 
+`Unicode::UCD` and legacy callers also use the `unicore/UCD.pl` and
+`unicore/Decomposition.pl` tables. Unlike `Name.pl`, upstream commits these
+files, so the manifest copies them directly from `perl5/lib/unicore/`. Refresh
+either independently with:
+
+```bash
+perl dev/import-perl5/sync.pl --only UCD.pl
+perl dev/import-perl5/sync.pl --only Decomposition.pl
+```
+
 ### add_module.pl
 
 Interactive tool to add new modules to the sync configuration.

@@ -3,12 +3,15 @@ use strict;
 use warnings;
 our $VERSION = '2.08';
 
-# Minimal stub for Encode::Encoding base class.
-# PerlOnJava handles encoding/decoding natively in Java,
-# so this only provides the class hierarchy that Encode::Guess expects.
+# Base class for encoding implementations.  Java encodings are handled by
+# Encode.java, while pure-Perl codecs register their own objects here.
 
 sub Define {
-    # no-op: encoding registration handled by Java-side Encode
+    my ($class, $canonical, @aliases) = @_;
+    require Encode;
+    my $encoding = ref($class) ? $class : bless { Name => $canonical }, $class;
+    Encode::define_encoding($encoding, $canonical, @aliases);
+    return $encoding;
 }
 
 sub new {

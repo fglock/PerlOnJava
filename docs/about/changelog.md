@@ -7,6 +7,7 @@ priorities and future plans.
 ## Work in progress
 
 - Preserve file contents on `sysopen` without `O_TRUNC`, fail `open` on undefined paths, avoid duplicate `closedir` warnings, and match Socket lookup flags and return values (#2128, #2125, #2095).
+- Register pure-Perl Encode codecs, preserve Unicode input in `decode_utf8`, implement `Unicode::Normalize::getComposite`, and provide Java-backed URI::Fast support (#2124, #2121, #2104, #2079, #2117).
 - Honor tied `*ARGV` for diamond reads, including after a previous traversal reaches EOF (#2110, #2111).
 - Preserve explicit empty split fields in fixed-arity assignments, restore parsed XML attribute order and `XML::LibXML` ID indexing, decode HTML href character references, and add a JSON::PP-backed `JSON::SL` compatibility subset (#2088, #1323, #1332, #2097, #1321).
 - Preserve list context for localized hash slices, overloaded readline and `pairgrep`; preserve map block versus nested-subroutine `wantarray` contexts; honor overloaded `&{}` replacements and retain overload exceptions during post-increment (#2081, #2080, #2084, #2046, #2062).
