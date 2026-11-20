@@ -102,8 +102,12 @@ public class GlobalDestruction {
         // Use the same visited set so objects reached through both package
         // roots and the cycle registry are dispatched only once.
         if (scanUnrootedCycles) {
+            ReachabilityWalker.RootReachabilitySnapshot perlRoots =
+                    ReachabilityWalker.reachableFromRootsSnapshotWithStatus();
             for (RuntimeBase object : DestroyDispatch.snapshotGlobalDestroyables()) {
-                destroyBaseIfTracked(object, visited);
+                if (!perlRoots.isReachable(object)) {
+                    destroyBaseIfTracked(object, visited);
+                }
             }
         }
 

@@ -31,6 +31,11 @@ Direct `@array->method` and `%hash->method` invocants become references only
 while a lexical mapping is active; ordinary lookup resumes under `no autobox`
 and outside that scope. These lexical call-site bindings do not mutate or bless
 the original invocant. `use/no autobox` also sets or clears its Perl `$^H` bits.
+Process-level global destruction tracks objects with `DESTROY` through weak
+identity references and invokes destructors for reference cycles that the
+ordinary global-root walk cannot find. The cycle scan is restricted to objects
+that the reachability walker proves unrooted; child-thread shutdown skips it so
+shared objects remain owned by the parent.
 
 ## Evidence and remaining scope
 
@@ -48,21 +53,23 @@ the original invocant. `use/no autobox` also sets or clears its Perl `$^H` bits.
   interpreter backends. A six-assertion system-Perl oracle built against
   autobox 3.0.2's XS implementation passes the focused test. The system-Perl
   upstream suite passes all 23 test programs (675 tests).
-- The autobox 3.0.2 PerlOnJava upstream suite passes 22 of 23 test programs
-  (674 assertions executed); `autoref.t`, `hints.t`, `name.t`, and
-  `rt_46814.t` all pass. `rt_71777.t` still emits no TAP result during
-  destructor-time global teardown.
+- The unchanged autobox 3.0.2 system-Perl and PerlOnJava upstream suites pass
+  all 23 test programs (675 assertions). `rt_71777.t` verifies destructor-time
+  dispatch while a method call on `undef` throws during global teardown; it
+  passes on both PerlOnJava backends. The project-owned cycle regression also
+  passes with system Perl, JVM, and interpreter.
 - The Object::Pad compatibility layer remains a documented subset; custom
   field attributes and upstream XS APIs are unsupported. Function::Parameters'
-  opt-in upstream suite has 12/56 failing files. `autobox::Core` compatibility
-  remains incomplete while the upstream autobox suite has these gaps.
+  opt-in upstream suite still has 12/56 failing files. The separate
+  `autobox::Core` distribution, which depends on `Want`, is not bundled or
+  covered by this provider change.
 
 These results deliver the two reported syntax-provider cases, pass the tested
-Object::Pad consumer path, and add broader autobox dispatch coverage while
-leaving the documented Object::Pad subset, Function::Parameters residual
-parity, and autobox's remaining upstream behaviors unresolved. Follow those
-independent API contracts before treating issues #2112, #1361, or #1264 as
-complete.
+Object::Pad consumer path, and pass the full autobox 3.0.2 distribution suite.
+The documented Object::Pad subset and Function::Parameters residual parity
+remain unresolved. The separate `autobox::Core` distribution remains outside
+this scope; assess it independently before claiming compatibility beyond the
+autobox 3.0.2 API and tests.
 
 ## Related references
 

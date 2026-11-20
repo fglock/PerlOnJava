@@ -10,7 +10,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -113,8 +112,7 @@ final class LifecycleRuntimeState {
     // Perl invokes DESTROY for blessed objects in refcount cycles during
     // global destruction. Keep a weak registry so those
     // cycles remain discoverable without extending object lifetime.
-    final Set<RuntimeBase> globalDestroyables =
-            Collections.synchronizedSet(Collections.newSetFromMap(new WeakHashMap<>()));
+    final WeakIdentitySet<RuntimeBase> globalDestroyables = new WeakIdentitySet<>();
     final Set<RuntimeBase> statementBoundaryDestroyableObjects =
             Collections.synchronizedSet(Collections.newSetFromMap(new IdentityHashMap<>()));
     RuntimeBase currentDestroyTarget;

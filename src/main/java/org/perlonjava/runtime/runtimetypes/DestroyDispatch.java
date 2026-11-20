@@ -75,10 +75,7 @@ public class DestroyDispatch {
     }
 
     public static ArrayList<RuntimeBase> snapshotGlobalDestroyables() {
-        Set<RuntimeBase> objects = state().globalDestroyables;
-        synchronized (objects) {
-            return new ArrayList<>(objects);
-        }
+        return state().globalDestroyables.snapshot();
     }
 
     public static ArrayList<RuntimeBase> snapshotDestroyableObjects() {

@@ -18,7 +18,7 @@ priorities and future plans.
 - Preserve configured Function::Parameters `install_sub` code references when installing runtime aliases (#1361).
 - Preserve caller `our` array and hash aliases across package changes in eval STRING bodies (#1361).
 - Parse automatic and quoted Type::Tiny parameterized/composite expressions in Function::Parameters signatures; preserve recursive block-prototype trailing arguments (#1361).
-- Add lexical autobox dispatch for native scalar and reference values, including merged class lookup, `autobox_class`, `autobox::universal::type` scalar flags, direct aggregate invocants, and `$^H` scope bits that respect `no autobox` (#1264).
+- Add lexical autobox dispatch for native scalar and reference values, including merged class lookup, `autobox_class`, `autobox::universal::type` scalar flags, direct aggregate invocants, `$^H` scope bits that respect `no autobox`, and `DESTROY` dispatch for unreachable cycles during process teardown (#1264).
 - Honor tied `*ARGV` for diamond reads, including after a previous traversal reaches EOF (#2110, #2111).
 - Preserve explicit empty split fields in fixed-arity assignments, restore parsed XML attribute order and `XML::LibXML` ID indexing, decode HTML href character references, and add a JSON::PP-backed `JSON::SL` compatibility subset (#2088, #1323, #1332, #2097, #1321).
 - Preserve list context for localized hash slices, overloaded readline and `pairgrep`; preserve map block versus nested-subroutine `wantarray` contexts; honor overloaded `&{}` replacements and retain overload exceptions during post-increment (#2081, #2080, #2084, #2046, #2062).
