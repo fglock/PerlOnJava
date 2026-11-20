@@ -21,6 +21,9 @@ my @negative = (
     ['missing Ubuntu matrix entry', sub {
         $_[0]{jobs}{build}{strategy}{matrix}{os} = '[windows-latest]';
     }, qr/matrix platforms/],
+    ['checkout action replaced', sub {
+        step($_[0], 'checkout-source')->{uses} = 'other/checkout@v4';
+    }, qr/checkout-source action changed/],
     ['missing step timeout', sub {
         delete step($_[0], 'checkout-source')->{'timeout-minutes'};
     }, qr/checkout-source timeout/],
@@ -159,18 +162,21 @@ sub validate_contract {
             unless $job_timeout > $maximum_platform_budget;
     }
 
+    # Action versions are not pinned: dependabot bumps the @vN tag and the
+    # contract must still pass.  We verify the action *name* (before the @)
+    # and accept any version tag that starts with @v followed by a number.
     my %expected = (
-        'checkout-source' => ['Checkout source', '', 'actions/checkout@v4', ''],
-        'setup-java' => ['Set up JDK 24', '', 'actions/setup-java@v4', ''],
-        'setup-gradle' => ['Setup Gradle', '', 'gradle/actions/setup-gradle@v4', ''],
+        'checkout-source' => ['Checkout source', '', 'actions/checkout', ''],
+        'setup-java' => ['Set up JDK 24', '', 'actions/setup-java', ''],
+        'setup-gradle' => ['Setup Gradle', '', 'gradle/actions/setup-gradle', ''],
         'build-windows' => ['Build with Make (Windows)', q{runner.os == 'Windows'}, '', 'make ci'],
         'threads-windows' => ['Run focused Perl thread gate (Windows)', q{runner.os == 'Windows'}, '', 'make test-threads-windows'],
         'build-linux' => ['Build with Make (Linux)', q{runner.os == 'Linux'}, '', 'make ci'],
-        'checkout-perl5' => ['Checkout latest Perl thread compatibility corpus', q{runner.os == 'Linux'}, 'actions/checkout@v4', ''],
+        'checkout-perl5' => ['Checkout latest Perl thread compatibility corpus', q{runner.os == 'Linux'}, 'actions/checkout', ''],
         'threads-linux' => ['Run Perl thread compatibility gate', q{runner.os == 'Linux'}, '', 'make test-threads'],
         'sbom-linux' => ['Generate SBOM (Linux only)', q{runner.os == 'Linux'}, '', 'make sbom'],
-        'upload-sbom' => ['Upload SBOM artifacts', q{runner.os == 'Linux'}, 'actions/upload-artifact@v4', ''],
-        'upload-failure' => ['Upload test results', 'failure()', 'actions/upload-artifact@v4', ''],
+        'upload-sbom' => ['Upload SBOM artifacts', q{runner.os == 'Linux'}, 'actions/upload-artifact', ''],
+        'upload-failure' => ['Upload test results', 'failure()', 'actions/upload-artifact', ''],
     );
     for my $id (@expected_order) {
         my $step = first_step($steps, $id);
@@ -181,7 +187,8 @@ sub validate_contract {
         my ($name, $condition, $uses, $run) = @{$expected{$id}};
         push @error, "$id name changed" unless ($step->{name} // '') eq $name;
         push @error, "$id condition changed" unless ($step->{if} // '') eq $condition;
-        push @error, "$id action changed" unless ($step->{uses} // '') eq $uses;
+        push @error, "$id action changed"
+            unless action_matches($step->{uses} // '', $uses);
         push @error, "$id run changed" unless ($step->{run} // '') eq $run;
     }
 
@@ -290,6 +297,15 @@ sub block_lines {
 sub same_set {
     my ($left, $right) = @_;
     return join("\0", sort @$left) eq join("\0", sort @$right);
+}
+
+sub action_matches {
+    my ($actual, $expected) = @_;
+    return 1 if $actual eq $expected;    # both empty, or exact match
+    return 0 unless length $expected;    # expected is empty but actual is not
+    # Strip the @version tag from the actual uses value and compare the name.
+    (my $actual_name = $actual) =~ s/\@.*\z//;
+    return $actual_name eq $expected;
 }
 
 sub scalar_false {

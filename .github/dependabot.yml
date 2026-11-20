@@ -8,8 +8,20 @@ updates:
     groups:
       gradle-dependencies:
         patterns: ["*"]
+    ignore:
+      # CycloneDX 3.x has an incompatible API (see build.gradle pin comment).
+      # Remove after migrating the cyclonedxBom block to the 3.x API.
+      - dependency-name: "org.cyclonedx.bom"
+        versions: [">=3.0.0"]
+      # Shadow 9.4+ triggers a classpath conflict with CycloneDX 2.x.
+      # Remove after CycloneDX is upgraded to 3.x.
+      - dependency-name: "com.gradleup.shadow"
+        versions: [">=9.4.0"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      github-actions:
+        patterns: ["*"]
