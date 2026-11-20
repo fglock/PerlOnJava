@@ -1637,7 +1637,9 @@ public class SignatureParser {
     }
 
     private Node generateOddNamedArgsValidation() {
-        int fixedArgs = positionalParameterCount + (isMethod ? 1 : 0);
+        // Method bodies have already shifted their implicit receiver before
+        // signature AST runs, so @_ here contains user arguments only.
+        int fixedArgs = positionalParameterCount;
         Node remaining = new BinaryOperatorNode("-",
                 new OperatorNode("scalar", atUnderscore(parser), parser.tokenIndex),
                 new NumberNode(Integer.toString(fixedArgs), parser.tokenIndex),

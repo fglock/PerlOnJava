@@ -16,9 +16,10 @@ the implemented class, role, field, initializer, method, signature,
 ADJUST/BUILD, inheritance, `:repr(HASH)`, `:does`, and `:Struct(readonly)`
 subset. It also provides a small `Object::Pad::MOP::Class` method-registration
 API and package metadata helpers. This does not implement custom field
-attributes or Object::Pad's XS APIs. `Device::Chip` 0.27 now loads its modules;
-its adapter tests still fail when `method configure (%)` rejects the forwarded
-name/value list.
+attributes or Object::Pad's XS APIs. The `Device::Chip` 0.27 syntax and
+compatibility path covers its roles, hash-backed fields, `:Struct(readonly)`,
+MOP method registration, signatures, async methods, and unit-class `ADJUST`
+initialization across later field declarations.
 
 The autobox work now adds parser-time `use autobox` and `no autobox` bindings,
 captures immutable mappings on method-call sites, and routes them through both
@@ -35,11 +36,10 @@ These lexical call-site bindings do not mutate or bless the original invocant.
 - The new focused provider tests pass on JVM and interpreter backends, and
   system Perl skips syntax unavailable in its core try implementation.
 - The full `nice -n 19 make` gate passes on the candidate source.
-- The Object::Pad role/MOP/Struct regression passes 8 assertions on JVM and
+- The Object::Pad role/MOP/Struct regression passes 10 assertions on JVM and
   interpreter. The system-Perl test skips because Object::Pad is not installed.
-- The `Device::Chip::ADT7470` consumer now passes `t/00use.t` and `t/99pod.t`;
-  `t/01config.t` and `t/02interact.t` reach `Device::Chip::mount` but fail on
-  anonymous hash-slurpy validation for the adapter's `configure (%)` method.
+- The unchanged `Device::Chip::ADT7470` upstream suite passes all four test
+  programs (27 tests) using its fake adapter.
 - The focused autobox regression passes 34 assertions on the JVM and
   interpreter backends and passes under system Perl.
 - A forced clean-home autobox 3.0.2 run passes 586 of 592 executed assertions;
@@ -47,10 +47,10 @@ These lexical call-site bindings do not mutate or bless the original invocant.
   `@array`/`%hash` invocants that do not parse, the upstream hints-bit check,
   three method-error wording assertions, and two numeric type assertions where
   the Perl helper cannot see PerlOnJava's internal scalar flags.
-- `Device::Chip::ADT7470` still fails on unsupported Object::Pad `:repr` and
-  `:does` attributes. Function::Parameters' opt-in upstream suite has 12/56
-  failing files. `autobox::Core` compatibility remains incomplete while the
-  upstream autobox suite has these gaps.
+- The Object::Pad compatibility layer remains a documented subset; custom
+  field attributes and upstream XS APIs are unsupported. Function::Parameters'
+  opt-in upstream suite has 12/56 failing files. `autobox::Core` compatibility
+  remains incomplete while the upstream autobox suite has these gaps.
 
 These results deliver the two reported syntax-provider cases and an autobox
 dispatch foundation while leaving full Object::Pad consumer compatibility,
