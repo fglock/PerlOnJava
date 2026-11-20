@@ -345,10 +345,8 @@ public class Directory {
         if (!name.startsWith("$")) {
             name = "$" + name;
         }
-        if (Warnings.shouldWarn("io")) {
-            WarnDie.warn(new RuntimeScalar(operation + "() attempted on handle " + name
-                    + " opened with open"), new RuntimeScalar(""));
-        }
+        WarnDie.warn(new RuntimeScalar(operation + "() attempted on handle " + name
+                + " opened with open"), new RuntimeScalar(""));
         return true;
     }
 
