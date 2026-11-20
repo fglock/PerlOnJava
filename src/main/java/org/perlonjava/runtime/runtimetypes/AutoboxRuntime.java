@@ -53,6 +53,7 @@ public final class AutoboxRuntime {
             case RuntimeScalarType.STRING, RuntimeScalarType.BYTE_STRING,
                     RuntimeScalarType.VSTRING -> "STRING";
             case RuntimeScalarType.UNDEF -> "UNDEF";
+            case RuntimeScalarType.REFERENCE -> "SCALAR";
             case RuntimeScalarType.ARRAYREFERENCE -> "ARRAY";
             case RuntimeScalarType.HASHREFERENCE -> "HASH";
             case RuntimeScalarType.CODE -> "CODE";

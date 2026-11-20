@@ -47,6 +47,8 @@ public final class ParserExtensionRegistry {
         registerModuleProvider("syntax",
                 ParserExtensionRegistry::applySyntaxDispatcher);
         registerModuleProvider("autobox", ParserExtensionRegistry::applyAutobox);
+        registerModuleProvider("autobox::Core", ParserExtensionRegistry::applyAutoboxCore);
+        registerModuleProvider("Moose::Autobox", ParserExtensionRegistry::applyMooseAutobox);
     }
 
     private ParserExtensionRegistry() { }
@@ -270,6 +272,36 @@ public final class ParserExtensionRegistry {
         parser.ctx.symbolTable.setAutoboxBindings(bindings);
         updateAutoboxHintBits(parser, bindings);
         invokeAutoboxDebug(debugOption, bindings);
+    }
+
+    /**
+     * autobox::Core delegates its import to autobox with a DEFAULT namespace.
+     * That dynamic import is invisible to the parser, so mirror the lexical
+     * bindings here while preserving any caller overrides.
+     */
+    private static void applyAutoboxCore(
+            Parser parser, boolean enabled, RuntimeList arguments) {
+        RuntimeList forwarded = new RuntimeList();
+        if (enabled) {
+            forwarded.elements.add(new RuntimeScalar("DEFAULT"));
+            forwarded.elements.add(new RuntimeScalar("autobox::Core::"));
+        }
+        if (arguments != null) forwarded.elements.addAll(arguments.elements);
+        applyAutobox(parser, enabled, forwarded);
+    }
+
+    /** Moose::Autobox likewise delegates its lexical setup through import(). */
+    private static void applyMooseAutobox(
+            Parser parser, boolean enabled, RuntimeList arguments) {
+        RuntimeList forwarded = new RuntimeList();
+        if (enabled) {
+            forwarded.elements.add(new RuntimeScalar("DEFAULT"));
+            forwarded.elements.add(new RuntimeScalar("Moose::Autobox::"));
+            forwarded.elements.add(new RuntimeScalar("UNDEF"));
+            forwarded.elements.add(new RuntimeScalar("Moose::Autobox::Undef"));
+        }
+        if (arguments != null) forwarded.elements.addAll(arguments.elements);
+        applyAutobox(parser, enabled, forwarded);
     }
 
     private static void updateAutoboxHintBits(Parser parser, Map<String, List<String>> bindings) {

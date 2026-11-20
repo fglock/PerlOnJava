@@ -2,13 +2,17 @@
 
 ## Current state (2026-11-20)
 
-Source commit: `bb93d3984`. The full project gate passed on this source tree;
+Source commit: `bb93d3984`. The full project gate passed on that source tree;
 the autobox 3.0.2 upstream suite passed all 675 assertions, and Function::Parameters
 2.002006 passed all 56 upstream files and 1,619 assertions. The Object::Pad
 0.825 suite currently passes 15 of 68 files; failures identify substantial
 unsupported syntax, roles, and MOP surface. Next, extend that compatibility
-subset and confirm whether `autobox::Core` is required by issue #1264 before
-treating the combined issue scope as complete.
+subset. Issue #1264's claim names `autobox::Core` and consumer coverage as
+remaining acceptance. Current local work adds the `autobox::Core` 1.33 module,
+parser providers for its delegated import and `Moose::Autobox`, and focused
+system-Perl-passing tests. The full project gate has not yet run on these new
+changes because Gradle cannot complete TLS connections from its Java client to
+the plugin portal; verification is pending.
 
 This change adds parser providers for three compile-time module imports that
 otherwise require XS/declaration hooks: `Syntax::Keyword::Try`,
@@ -76,13 +80,15 @@ shared objects remain owned by the parent.
   `autobox::Core` distribution, which depends on `Want`, is not bundled or
   covered by this provider change.
 
-These results deliver the two reported syntax-provider cases, pass the tested
-Object::Pad consumer path, and pass the full autobox 3.0.2 distribution suite.
+The preceding implementation delivered the two reported syntax-provider cases,
+passed the tested Object::Pad consumer path, and passed the full autobox 3.0.2
+distribution suite.
 The documented Object::Pad subset remains unresolved. Function::Parameters
 passes its complete 2.002006 upstream suite. The separate `autobox::Core`
 distribution remains outside this scope;
 assess it independently before claiming compatibility beyond the autobox
-3.0.2 API and tests.
+3.0.2 API and tests. The latest autobox delegated-import change is not yet
+validated on PerlOnJava; its required full build and tests remain pending.
 
 ## Related references
 
