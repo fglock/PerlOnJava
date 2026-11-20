@@ -2,21 +2,24 @@
 
 ## Current state (2026-11-20)
 
-Source base commit: `f9bc8e763`; follow-up commits: `a35e57b4e`,
-`767526362` and `b952ac77b`, rebased onto `origin/master` at `94cc21a9c`.
-The full
-`nice -n 19 make` gate
-passes on the current candidate. The autobox 3.0.2 upstream suite previously
+Source base: `origin/master` at `94cc21a9c`; current candidate:
+`caf5dedf8` on PR #2132. Follow-up commits include `a35e57b4e`,
+`767526362`, `b952ac77b` and `caf5dedf8`. The full
+`nice -n 19 make` gate passes on this source candidate. The autobox 3.0.2 upstream suite previously
 passed all 23 files and 675 assertions; `Function::Parameters` 2.002006 passes
 all 56 files and 1,619 assertions. `Moose::Autobox` 0.16 now passes all 15
 upstream files and 208 tests, including CODE fixed-point calls and scalar-ref
 flattening. `autobox::Core` 1.33 is bundled and its focused tests pass on both
 backends. Its upstream suite passes 62 of 63 files (301 of 302 assertions);
 `t/s.t` now passes on both backends, leaving only the unrelated `crypt.t`
-hash mismatch. `Object::Pad` 0.825 remains a partial compatibility
-  layer: 15 of 68 upstream files pass, with custom syntax, fields, and MOP APIs
-  still outside the implemented surface. The `:experimental(init_expr)` field
-  block syntax now evaluates in scalar, array, and hash initializer contexts;
+hash mismatch. `Object::Pad` 0.825 remains a partial compatibility layer: its
+latest full upstream run before the field-shadow fix failed 55 of 68 test
+programs and 39 of 106 subtests. The system-Perl oracle passed 68 files and
+464 tests, with optional dependency tests skipped. Custom syntax, fields, and
+MOP APIs remain outside the PerlOnJava subset. The focused
+`t/23fields-signatures.t` now passes after fixing lexical parameters that share
+a name with a field. The `:experimental(init_expr)` field block syntax now
+evaluates in scalar, array, and hash initializer contexts;
   upstream `t/02fields.t` reaches 14 of 18 assertions, with serialization,
   eval visibility, and `:common` behavior still failing.
 
@@ -69,6 +72,10 @@ shared objects remain owned by the parent.
   onto `origin/master`.
 - The Object::Pad role/MOP/Struct regression passes 10 assertions on JVM and
   interpreter. The system-Perl test skips because Object::Pad is not installed.
+- The Object::Pad field-parameter shadowing regression passes three
+  assertions on system Perl with Object::Pad 0.825, JVM, and interpreter. It
+  failed on the unfixed PerlOnJava parent, and upstream
+  `t/23fields-signatures.t` now passes both assertions on PerlOnJava.
 - The Object::Pad `:experimental(init_expr)` regression passes four assertions
   on JVM and interpreter, and against the official Object::Pad 0.825 XS oracle.
 - The unchanged `Device::Chip::ADT7470` upstream suite passes all four test
