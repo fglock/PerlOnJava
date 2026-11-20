@@ -1927,6 +1927,11 @@ public class MortalList {
         return prev;
     }
 
+    /** Return whether deferred-owner flushing is currently suppressed. */
+    public static boolean isFlushSuppressed() {
+        return state().flushSuppressed;
+    }
+
     public static String traceFlushState() {
         LifecycleRuntimeState state = state();
         return "flushing=" + state.flushing + " suppressed=" + state.flushSuppressed

@@ -796,6 +796,12 @@ public class EmitterMethodCreator implements Opcodes {
                     "(Lorg/perlonjava/runtime/runtimetypes/ExecutionRuntimeState;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Z)V",
                     false);
 
+            int jvmFrameThrowableSlot = ctx.symbolTable.allocateLocalVariable();
+            Label jvmFrameTryStart = new Label();
+            Label jvmFrameTryEnd = new Label();
+            Label jvmFrameCatch = new Label();
+            mv.visitLabel(jvmFrameTryStart);
+
             // Create a label for the return point
             ctx.javaClassInfo.returnLabel = new Label();
 
@@ -1545,6 +1551,7 @@ public class EmitterMethodCreator implements Opcodes {
                 Local.localTeardown(dynamicIndex, mv, jvmFrameStateSlot);
             }
 
+            mv.visitLabel(jvmFrameTryEnd);
             mv.visitVarInsn(Opcodes.ALOAD, jvmFrameStateSlot);
             mv.visitVarInsn(Opcodes.ALOAD, 0);
             mv.visitFieldInsn(Opcodes.GETFIELD, ctx.javaClassInfo.javaClassName,
@@ -1555,6 +1562,28 @@ public class EmitterMethodCreator implements Opcodes {
                     "(Lorg/perlonjava/runtime/runtimetypes/ExecutionRuntimeState;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V",
                     false);
             mv.visitInsn(Opcodes.ARETURN); // Returns an Object
+
+            // Generated Perl methods also need to unwind their runtime frame
+            // metadata when an exception leaves the method. In particular,
+            // an array literal may suppress owner flushing while it is being
+            // assembled; an exception skips the emitted normal-path restore.
+            // Register this handler after the method's narrower eval and
+            // teardown handlers so they get first chance to handle exceptions.
+            mv.visitTryCatchBlock(jvmFrameTryStart, jvmFrameTryEnd,
+                    jvmFrameCatch, "java/lang/Throwable");
+            mv.visitLabel(jvmFrameCatch);
+            mv.visitVarInsn(Opcodes.ASTORE, jvmFrameThrowableSlot);
+            mv.visitVarInsn(Opcodes.ALOAD, jvmFrameStateSlot);
+            mv.visitVarInsn(Opcodes.ALOAD, 0);
+            mv.visitFieldInsn(Opcodes.GETFIELD, ctx.javaClassInfo.javaClassName,
+                    "__SUB__", "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "popJvmFrame",
+                    "(Lorg/perlonjava/runtime/runtimetypes/ExecutionRuntimeState;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V",
+                    false);
+            mv.visitVarInsn(Opcodes.ALOAD, jvmFrameThrowableSlot);
+            mv.visitInsn(Opcodes.ATHROW);
             mv.visitMaxs(0, 0); // Automatically computed
             mv.visitEnd();
 

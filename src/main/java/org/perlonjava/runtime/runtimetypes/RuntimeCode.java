@@ -2215,6 +2215,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             state.activeJvmSelfReferences.push(selfReference);
         }
         state.activeJvmSortComparators.push(comparator);
+        state.activeJvmFlushSuppressionStates.push(MortalList.isFlushSuppressed());
     }
 
     /** Remove the matching JVM-generated method self reference on return. */
@@ -2246,6 +2247,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         Deque<Boolean> comparatorStack = state.activeJvmSortComparators;
         if (!comparatorStack.isEmpty()) comparatorStack.pop();
+        Deque<Boolean> flushSuppressionStack = state.activeJvmFlushSuppressionStates;
+        if (!flushSuppressionStack.isEmpty()) {
+            MortalList.suppressFlush(flushSuppressionStack.pop());
+        }
     }
 
     /** Track whether a JVM-generated frame is a sort BLOCK pseudo-block. */

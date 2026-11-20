@@ -714,6 +714,13 @@ public class Internals extends PerlModuleBase {
                 }
             }
             int reported = rc + extra + adjust;
+            if (System.getenv("PJ_BREFCNT_TRACE") != null
+                    && NameNormalizer.getBlessStr(base.blessId).startsWith("ForeachRefNode")) {
+                System.err.println("[FOREACH-BREFCNT] rc=" + rc + " native=" + nativeOwners
+                        + " local=" + base.localBindingExists + " aliases=" + base.foreachAliasCount
+                        + " extra=" + extra + " adjust=" + adjust + " reported=" + reported);
+                System.err.println(base.ownerTraceSnapshot());
+            }
             return new RuntimeScalar(reported).getList();
         }
         return new RuntimeScalar(1).getList();
