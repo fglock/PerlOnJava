@@ -232,7 +232,10 @@ public final class PerlThreadControlBlock {
                     MortalList.flushDeferredCaptures();
                     RuntimeRegex.emitCurrentRuntimeDebugFreeTraces();
                 }
-                GlobalDestruction.runGlobalDestruction();
+                // A child interpreter must not finalize objects whose shared
+                // references remain owned by the parent thread. The process
+                // level pass handles otherwise unreachable reference cycles.
+                GlobalDestruction.runGlobalDestruction(false);
                 return new Outcome(value, failure);
             });
             result = outcome.value();
@@ -355,7 +358,7 @@ public final class PerlThreadControlBlock {
                 }
                 MortalList.flush();
                 MortalList.flushDeferredCaptures();
-                GlobalDestruction.runGlobalDestruction();
+                GlobalDestruction.runGlobalDestruction(false);
             });
             runtime.close();
         }
