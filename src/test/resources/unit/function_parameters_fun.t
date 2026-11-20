@@ -30,6 +30,7 @@ fun factorial($value) { $value < 2 ? 1 : $value * factorial($value - 1) }
 fun named_options(:$required, :$optional //= 9, %extra) {
     "$required:$optional:" . ($extra{other} // '')
 }
+fun named_pair(:$n1, :$n2) { "$n1:$n2" }
     our $anonymous_add = fun ($left, $right = 3) { $left + $right };
     our $anonymous_method = method (@) { $self->{base} };
     package AnonymousMethodOverload;
@@ -82,6 +83,9 @@ is(default_operators(undef, 0), '7:8', 'fun declarations support defined-or and 
 is(factorial(5), 120, 'named fun declarations can recurse');
 is(named_options(required => 'r', other => 'x'), 'r:9:x',
     'named parameters support defaults and a trailing slurpy hash');
+my $named_pair_result = eval { named_pair(huh => 1); 1 };
+ok(!$named_pair_result, 'missing named parameters are checked before unknown names');
+like($@, qr/Too few arguments/, 'too few named arguments report the arity error');
 my $named_info = Function::Parameters::info(\&named_options);
 is_deeply([map { "$_" } $named_info->named_required], ['$required'],
     'signature info reports required named parameters');

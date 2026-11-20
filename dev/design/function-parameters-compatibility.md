@@ -22,7 +22,7 @@ the upstream XS parser plugin.
 
 ## Progress tracking
 
-### Current status: Core subset implemented; upstream compatibility work remains (2026-10-26)
+### Current status: Core subset implemented; upstream compatibility work remains (2026-11-20)
 
 ### Completed
 
@@ -137,6 +137,11 @@ the upstream XS parser plugin.
   system Perl passes all nine top-level subtests. The timing failures need
   verification on a less-contended runner before attributing them to a runtime
   defect.
+- Required named-argument validation now reports Function::Parameters' arity
+  error before an unknown key when the supplied key/value count is below the
+  required minimum. The focused regression passes on the JVM and interpreter.
+  The upstream suite improved from 12 failing programs / 16 failed assertions
+  to 11 / 15; the remaining failures are still under investigation.
 
 ### Next steps
 

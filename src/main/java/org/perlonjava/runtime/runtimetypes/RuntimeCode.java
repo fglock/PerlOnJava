@@ -814,6 +814,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         for (int i = start; i + 1 < args.size(); i += 2) {
             values.put(args.elements.get(i).toString(), args.elements.get(i + 1));
         }
+        if (signatureKeyword != null && !signatureRequiredNamedParams.isEmpty()) {
+            int minimumNamedArgumentCount = signatureRequiredNamedParams.size() * 2;
+            boolean missingRequired = signatureRequiredNamedParams.stream()
+                    .anyMatch(required -> !values.containsKey(required));
+            if (missingRequired && namedCount < minimumNamedArgumentCount) {
+                WarnDie.die(new RuntimeScalar("Too few arguments for " + signatureKeyword
+                        + " " + signatureSubName), new RuntimeScalar(""));
+            }
+        }
         if (signatureSlurpySigil == null) {
             List<String> unrecognized = new ArrayList<>();
             for (String name : values.keySet()) {
