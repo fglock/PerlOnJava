@@ -25,25 +25,26 @@ the upstream XS parser plugin.
 ### Current status: Core subset implemented; upstream compatibility work remains (2026-11-20)
 
 Current checkpoint (2026-11-20, branch `feature/cpan-parser-compat-1264-2112`,
-PR #2132, source `291b5c57a`): automatic Type::Tiny parameterized and quoted
+PR #2132, source `a5b6ad9fa`): automatic Type::Tiny parameterized and quoted
 composite expressions reify through overloaded code references; recursive
 Function::Parameters declarations preserve block prototypes and trailing
 arguments. Anonymous `fun` expression statements retain immediate postfix
 calls. Configured `shift` entries for ordinary function keywords now become
 leading invocants, preserve their type objects, and validate them at call time.
 Configured `install_sub` code references are now called directly instead of
-being stringified into `CODE(...)` package names. The immediate-call,
-configured-shift, and runtime-installer tests pass on system Perl, JVM, and
-interpreter. `nice -n 19 make` and `nice -n 19 make check-links` passed after
-these changes. Upstream `types_auto.t` (12/12), `bonus.t` (13/13), and
-`lineno*.t` pass. Upstream `eval.t` now runs four of five assertions; the last
-trace lacks the body event for the `bar` installed inside string eval. The JVM
-and interpreter also differ in the configured invocant type-check trace for
-that file. `elsewhere.t` dynamic import, `lifetime.t`, and `stringy_h.t` remain
-open. Immediate next action: use the interpreter-parity workflow to isolate
-eval-installed body capture and invocant metadata, then re-run `eval.t` on
-system Perl, JVM, and interpreter. Keep all linked issues open while these
-upstream gaps remain.
+being stringified into `CODE(...)` package names. The interpreter now uses an
+`our` array or hash declaration's package when lowering global reads, and both
+eval parser paths seed aliases captured at the eval site. The immediate-call,
+configured-shift, runtime-installer, and eval package-alias regressions pass
+on system Perl, JVM, and interpreter. `nice -n 19 make` passed in 9m03 and
+`nice -n 19 make check-links` passed. Upstream `types_auto.t` (12/12),
+`bonus.t` (13/13), `lineno.t`, `lineno-torture.t`, and `eval.t` (5/5) pass.
+Remaining confirmed gaps include dynamic import visibility in `elsewhere.t`,
+one lifetime assertion, and two malformed `$^H` warning assertions in
+`stringy_h.t`; the complete upstream suite has not been rerun after these
+fixes. Immediate next action: reproduce and correct `elsewhere.t` dynamic
+import visibility, then refresh the aggregate five-issue PR checkpoint. Keep
+all linked issues open while compatibility gaps remain.
 
 ### Completed
 
@@ -187,9 +188,7 @@ upstream gaps remain.
 
 ### Next steps
 
-1. Diagnose the remaining `eval.t` body capture and backend-specific configured
-   invocant type-check behavior, then fix dynamic import visibility in
-   `elsewhere.t`.
+1. Fix dynamic import visibility in `elsewhere.t`.
 2. Investigate the compile-time CV lifetime and malformed `$^H` warning in
    `lifetime.t` and `stringy_h.t`.
 3. Continue method-modifier coverage and verify GraphQL WebSocket ordering on
