@@ -58,6 +58,16 @@ sub profile_for_test {
         };
     }
 
+    # Each generated Unicode property chunk executes over 40,000 regex
+    # assertions and takes close to ten minutes in isolation. Run one at a
+    # time so four adjacent chunks cannot all miss their per-file timeout.
+    if ($normalized_file =~ m{(?:^|/)(?:perl5_t/t/)?re/uniprops0[1-4]\.t$}) {
+        return {
+            class => 'heavy',
+            weight => 10,
+        };
+    }
+
     # These fixtures create sustained CPU, memory, or subprocess pressure.
     # Weight three permits three such files within a --jobs 10 budget while
     # leaving one unit available for an ordinary test.
@@ -110,6 +120,7 @@ sub duration_priority {
     return 0 if $normalized_file =~ m{(?:^|/)(?:perl5_t/t/)?re/anyof(?:_thr)?\.t$};
     return 1 if $normalized_file =~ m{(?:^|/)(?:perl5_t/t/)?re/pat_thr\.t$};
     return 2 if $normalized_file =~ m{(?:^|/)(?:perl5_t/t/)?re/pat\.t$};
+    return 3 if $normalized_file =~ m{(?:^|/)(?:perl5_t/t/)?re/uniprops0[1-4]\.t$};
     return 3 if $normalized_file =~ m{
           (?:^|/)perl5/dist/threads/t/join\.t$
         | (?:^|/)(?:perl5_t/t/)?op/gv\.t$

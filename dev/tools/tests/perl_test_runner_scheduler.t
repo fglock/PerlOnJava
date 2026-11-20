@@ -32,6 +32,10 @@ profile_is('perl5_t/t/re/pat_psycho.t', 'heavy', 3,
     'regex stress test consumes three units');
 profile_is('perl5_t/t/re/anyof.t', 'heavy', 4,
     'anyof leaves one unit available in the standard five-unit UAT budget');
+profile_is('perl5_t/t/re/uniprops01.t', 'heavy', 10,
+    'large Unicode property chunks run alone in production budgets');
+profile_is('perl5_t/t/re/uniprops04.t', 'heavy', 10,
+    'all four large Unicode property chunks use exclusive scheduling');
 profile_is('perl5_t/t/re/pat_psycho_thr.t', 'heavy', 3,
     'threaded regex stress wrapper consumes three units');
 profile_is('/checkout/perl5_t/t/op/gv.t', 'heavy', 3,
@@ -80,8 +84,11 @@ is(next_runnable_index(\@weighted_queue, 10, 9, 3, 0), 2,
     'light work may bypass a heavy test that does not fit remaining capacity');
 
 my $anyof = profile_for_test('perl5_t/t/re/anyof.t');
+my $uniprops = profile_for_test('perl5_t/t/re/uniprops02.t');
 ok(test_can_start($normal, 5, effective_weight($anyof, 5), 1, 0),
     'an ordinary test can overlap anyof in the standard five-unit UAT budget');
+ok(!test_can_start($normal, 5, effective_weight($uniprops, 5), 1, 0),
+    'ordinary tests wait while an exclusive Unicode property chunk runs');
 
 my @initial_queue = map { +{ profile => $_ } }
     ($heavy, $heavy, $heavy, $heavy, $normal, $normal);

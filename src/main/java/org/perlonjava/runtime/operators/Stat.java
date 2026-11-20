@@ -198,11 +198,13 @@ public class Stat {
     }
 
     public static RuntimeList stat(RuntimeScalar arg) {
+        boolean ioReferenceArgument = isIOReferenceArgument(arg);
         arg = dereferenceAndFetch(arg);
         state().lastFileHandle.set(snapshotStatArgument(arg));
         RuntimeList res = new RuntimeList();
 
-        if (arg.type == RuntimeScalarType.GLOB || arg.type == RuntimeScalarType.GLOBREFERENCE) {
+        if (arg.type == RuntimeScalarType.GLOB || arg.type == RuntimeScalarType.GLOBREFERENCE
+                || arg.value instanceof RuntimeIO || ioReferenceArgument) {
             RuntimeIO fh = arg.getRuntimeIO();
             if (fh == null) {
                 getGlobalVariable("main::!").set(9);
@@ -241,7 +243,10 @@ public class Stat {
                             // Windows mode, and the channel's current length.
                             statInternalBasic(res, cfc.getFilePath(), openedBasic, cfc.size());
                             getGlobalVariable("main::!").set(0);
-                            updateLastStat(arg, true, 0, false);
+                            RuntimeScalar cacheTarget = statCacheTarget(
+                                    arg, cfc.getFilePath(), ioReferenceArgument);
+                            state().lastFileHandle.set(snapshotStatArgument(cacheTarget));
+                            updateLastStat(cacheTarget, true, 0, false);
                             FileTestOperator.State state = state();
                             state.lastBasicAttr = openedBasic;
                             state.lastPosixAttr = null;
@@ -281,7 +286,10 @@ public class Stat {
                                 openedFields.blksize(), openedFields.blocks());
                         statInternalNative(res, nf);
                         getGlobalVariable("main::!").set(0);
-                        updateLastStat(arg, true, 0, false);
+                        RuntimeScalar cacheTarget = statCacheTarget(
+                                arg, cfc.getFilePath(), ioReferenceArgument);
+                        state().lastFileHandle.set(snapshotStatArgument(cacheTarget));
+                        updateLastStat(cacheTarget, true, 0, false);
                         state().lastNativeStatFields = nf;
                         return res;
                     } catch (IOException e) {
@@ -349,6 +357,17 @@ public class Stat {
             updateLastStat(arg, false, 5, false);
         }
         return res;
+    }
+
+    private static RuntimeScalar statCacheTarget(RuntimeScalar original, Path path, boolean ioReferenceArgument) {
+        return !ioReferenceArgument || path == null ? original : new RuntimeScalar(path.toString());
+    }
+
+    private static boolean isIOReferenceArgument(RuntimeScalar value) {
+        if (value.value instanceof RuntimeIO) return true;
+        return value.type == RuntimeScalarType.REFERENCE
+                && value.value instanceof RuntimeScalar inner
+                && isIOReferenceArgument(inner);
     }
 
     public static RuntimeList lstat(RuntimeScalar arg) {

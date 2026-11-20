@@ -621,6 +621,7 @@ public class ModuleOperators {
                     incArray.push(new RuntimeScalar(GlobalContext.JAR_PERLLIB));
                     syntheticBundledInc = true;
                 }
+                boolean searchedIncHook = false;
 
                 // Re-fetch the global array on every iteration. An @INC hook
                 // may replace @INC entirely; Perl continues with the entry at
@@ -640,18 +641,24 @@ public class ModuleOperators {
                             dirScalar = dirScalar.tiedFetch();
                         }
                     }
-                    if (!(syntheticBundledInc
-                            && GlobalContext.JAR_PERLLIB.equals(dirScalar.toString()))) {
+                    // Core Perl includes every live @INC directory in a plain
+                    // missing-module diagnostic. Keep the synthetic fallback
+                    // visible for directory-only searches, while preserving
+                    // hook diagnostics that report the entries actually
+                    // traversed when a hook replaces @INC.
+                    boolean isSyntheticBundledFallback = syntheticBundledInc
+                            && GlobalContext.JAR_PERLLIB.equals(dirScalar.toString());
+                    boolean isHook = dirScalar.type == RuntimeScalarType.CODE
+                            || dirScalar.type == RuntimeScalarType.REFERENCE
+                            || dirScalar.type == RuntimeScalarType.ARRAYREFERENCE
+                            || dirScalar.type == RuntimeScalarType.HASHREFERENCE;
+                    if (!isSyntheticBundledFallback || !searchedIncHook) {
                         incEntriesChecked.add(dirScalar.toString());
                     }
+                    searchedIncHook |= isHook;
 
                     // For absolute/relative paths (starting with /, ./, ../), only try hooks
                     // Regular directory entries should be skipped for such paths
-                    boolean isHook = dirScalar.type == RuntimeScalarType.CODE ||
-                            dirScalar.type == RuntimeScalarType.REFERENCE ||
-                            dirScalar.type == RuntimeScalarType.ARRAYREFERENCE ||
-                            dirScalar.type == RuntimeScalarType.HASHREFERENCE;
-
                     if (tryDirectPath && !isHook) {
                         // Skip regular directory entries for absolute/relative paths
                         continue;

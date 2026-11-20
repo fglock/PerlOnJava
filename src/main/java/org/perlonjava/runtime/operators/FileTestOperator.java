@@ -79,12 +79,12 @@ public class FileTestOperator {
     }
 
     static RuntimeScalar snapshotStatArgument(RuntimeScalar arg) {
-        if (arg.type == RuntimeScalarType.GLOB || arg.type == RuntimeScalarType.GLOBREFERENCE) {
+        if (isFileHandleReference(arg)) {
             // Perl's cached stat buffer retains the result and the displayed
             // subject, not a new strong reference to the caller's glob. Keep
-            // an immutable scalar snapshot so file-test bookkeeping cannot
-            // extend a lexical handle's lifetime past its last Perl owner.
-            return new RuntimeScalar(arg.toString());
+            // an immutable, non-overloaded snapshot so file-test bookkeeping
+            // neither stringifies a blessed handle nor extends its lifetime.
+            return new RuntimeScalar(arg.toStringNoOverload());
         }
         return new RuntimeScalar(arg.toString());
     }
@@ -135,6 +135,15 @@ public class FileTestOperator {
                 || fileHandle.value instanceof RuntimeIO
                 || (fileHandle.type == RuntimeScalarType.REFERENCE
                 && fileHandle.value instanceof RuntimeScalar inner && isIORef(inner));
+    }
+
+    private static boolean isFileHandleReference(RuntimeScalar value) {
+        return value.type == RuntimeScalarType.GLOB
+                || value.type == RuntimeScalarType.GLOBREFERENCE
+                || value.value instanceof RuntimeGlob
+                || value.value instanceof RuntimeIO
+                || (value.type == RuntimeScalarType.REFERENCE
+                && value.value instanceof RuntimeScalar inner && isFileHandleReference(inner));
     }
 
     private static boolean statForFileTest(RuntimeScalar arg, Path path, boolean lstat) {
@@ -293,10 +302,11 @@ public class FileTestOperator {
         int blessId = RuntimeScalarType.blessedId(fileHandle);
         boolean fileHandleGlob = fileHandle.type == RuntimeScalarType.GLOB
                 || fileHandle.type == RuntimeScalarType.GLOBREFERENCE;
-        boolean allowGlobOverload = operator.equals("-l")
+        boolean fileHandleReference = isFileHandleReference(fileHandle);
+        boolean allowFileHandleOverload = operator.equals("-l")
                 || (isIORef(fileHandle) && (operator.equals("-t")
                 || operator.equals("-T") || operator.equals("-B")));
-        if (blessId != 0 && (!fileHandleGlob || allowGlobOverload)) {
+        if (blessId != 0 && (!fileHandleReference || allowFileHandleOverload)) {
             OverloadContext overloadContext = OverloadContext.prepare(blessId);
             if (overloadContext != null) {
                 // Perl has one file-test overload key, (-X.  The test
@@ -332,13 +342,12 @@ public class FileTestOperator {
         // Filehandles are references too, but their tests must continue below
         // through the descriptor-backed path (including anonymous and unlinked
         // temporary files). Stringify only ordinary object references.
-        if (RuntimeScalarType.isReference(fileHandle) && !fileHandleGlob && !isIORef(fileHandle)) {
+        if (RuntimeScalarType.isReference(fileHandle) && !fileHandleReference) {
             return fileTest(operator, new RuntimeScalar(fileHandle.toString()));
         }
 
         // Check if the argument is a file handle (GLOB or GLOBREFERENCE)
-        if (fileHandle.type == RuntimeScalarType.GLOB || fileHandle.type == RuntimeScalarType.GLOBREFERENCE
-                || isIORef(fileHandle)) {
+        if (fileHandleReference || isIORef(fileHandle)) {
             RuntimeIO fh = fileHandle.getRuntimeIO();
 
             // Perl warns on -l applied to a filehandle (including unopened filehandles and IO refs),
