@@ -2883,9 +2883,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (current != null && current.isMapGrepBlock) {
             return contexts.peek();
         }
-        // A subroutine called from the block receives the block's ordinary
-        // expression context; map evaluates its block expression in list context.
-        return RuntimeContextType.LIST;
+        RuntimeCode caller = getActiveCodeAtCallerFrame(1);
+        if (caller != null && caller.isMapGrepBlock) {
+            // A sub called directly by the block's expression receives list
+            // context. Deeper calls must keep their own call-site context.
+            return RuntimeContextType.LIST;
+        }
+        return context;
     }
 
     private static void pushCallContext(
