@@ -35,7 +35,7 @@ jobs:
       - name: Setup Gradle
         id: setup-gradle
         timeout-minutes: 10
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
 
       # Use Makefile's 'ci' target which handles platform differences
       # Both platforms build and run tests; Windows uses the non-daemon wrapper.
