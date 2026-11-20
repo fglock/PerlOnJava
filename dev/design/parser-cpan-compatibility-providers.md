@@ -26,7 +26,10 @@ captures immutable mappings on method-call sites, and routes them through both
 the JVM emitter and bytecode interpreter. The runtime supports scalar and
 reference type mappings, virtual `SCALAR`/`NUMBER` expansion, merged class
 lookup, `autobox_class`, and a pure-Perl `autobox::universal::type` helper.
-These lexical call-site bindings do not mutate or bless the original invocant.
+Direct `@array->method` and `%hash->method` invocants become references only
+while a lexical mapping is active; ordinary lookup resumes under `no autobox`
+and outside that scope. These lexical call-site bindings do not mutate or bless
+the original invocant.
 
 ## Evidence and remaining scope
 
@@ -40,23 +43,26 @@ These lexical call-site bindings do not mutate or bless the original invocant.
   interpreter. The system-Perl test skips because Object::Pad is not installed.
 - The unchanged `Device::Chip::ADT7470` upstream suite passes all four test
   programs (27 tests) using its fake adapter.
-- The focused autobox regression passes 34 assertions on the JVM and
-  interpreter backends and passes under system Perl.
-- A forced clean-home autobox 3.0.2 run passes 586 of 592 executed assertions;
-  16 of 23 test programs pass. The remaining failures include aggregate
-  `@array`/`%hash` invocants that do not parse, the upstream hints-bit check,
-  three method-error wording assertions, and two numeric type assertions where
-  the Perl helper cannot see PerlOnJava's internal scalar flags.
+- The focused autobox regression passes 39 assertions on the JVM and
+  interpreter backends. A six-assertion system-Perl oracle built against
+  autobox 3.0.2's XS implementation passes the aggregate-invocant scope cases.
+- The autobox 3.0.2 upstream suite now passes 19 of 23 test programs (674
+  assertions executed). `autoref.t` passes, including direct aggregate
+  invocants and lexical disabling. Four programs remain: the upstream hints-bit
+  check, three method-error wording assertions, a destructor-time undefined
+  method case with no TAP result, and two numeric type assertions where the Perl
+  helper cannot see PerlOnJava's internal scalar flags.
 - The Object::Pad compatibility layer remains a documented subset; custom
   field attributes and upstream XS APIs are unsupported. Function::Parameters'
   opt-in upstream suite has 12/56 failing files. `autobox::Core` compatibility
   remains incomplete while the upstream autobox suite has these gaps.
 
-These results deliver the two reported syntax-provider cases and an autobox
-dispatch foundation while leaving full Object::Pad consumer compatibility,
-Function::Parameters residual parity, and autobox's remaining upstream
-behaviors unresolved. Follow those independent API contracts before treating
-issues #2112, #1361, or #1264 as complete.
+These results deliver the two reported syntax-provider cases, pass the tested
+Object::Pad consumer path, and add broader autobox dispatch coverage while
+leaving the documented Object::Pad subset, Function::Parameters residual
+parity, and autobox's remaining upstream behaviors unresolved. Follow those
+independent API contracts before treating issues #2112, #1361, or #1264 as
+complete.
 
 ## Related references
 

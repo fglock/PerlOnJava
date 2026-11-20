@@ -10,7 +10,7 @@ priorities and future plans.
 - Register pure-Perl Encode codecs, preserve Unicode input in `decode_utf8`, implement `Unicode::Normalize::getComposite`, and provide Java-backed URI::Fast support (#2124, #2121, #2104, #2079, #2117).
 - Add parser compatibility providers for `Syntax::Keyword::Try`, `Syntax::Feature::Method`, and `syntax qw(method)`; raise Object::Pad's advertised syntax level to 0.800 (#2112, #2089, #2056).
 - Add parser compatibility providers for `Syntax::Keyword::Try` and method syntax; support Object::Pad 0.800 roles, hash representation, `:Struct(readonly)`, and MOP method registration (#2112, #2089, #2056).
-- Add lexical autobox dispatch for native scalar and reference values, including merged class lookup, `autobox_class`, and the `autobox::universal::type` helper (#1264).
+- Add lexical autobox dispatch for native scalar and reference values, including merged class lookup, `autobox_class`, the `autobox::universal::type` helper, and direct aggregate invocants that respect `no autobox` scopes (#1264).
 - Honor tied `*ARGV` for diamond reads, including after a previous traversal reaches EOF (#2110, #2111).
 - Preserve explicit empty split fields in fixed-arity assignments, restore parsed XML attribute order and `XML::LibXML` ID indexing, decode HTML href character references, and add a JSON::PP-backed `JSON::SL` compatibility subset (#2088, #1323, #1332, #2097, #1321).
 - Preserve list context for localized hash slices, overloaded readline and `pairgrep`; preserve map block versus nested-subroutine `wantarray` contexts; honor overloaded `&{}` replacements and retain overload exceptions during post-increment (#2081, #2080, #2084, #2046, #2062).

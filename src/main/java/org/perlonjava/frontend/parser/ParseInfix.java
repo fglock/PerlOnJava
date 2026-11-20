@@ -624,14 +624,17 @@ public class ParseInfix {
                             right = new BinaryOperatorNode("(", right, new ListNode(parser.tokenIndex), parser.tokenIndex);
                         }
 
-                        // Autobox treats direct aggregate variables as references
-                        // when they appear as method invocants: @a->method and
-                        // %h->method pass \@a and \%h respectively.
-                        left = referenceAggregateMethodInvocant(left, parser.tokenIndex);
-                        BinaryOperatorNode methodCall = new BinaryOperatorNode(
-                                token.text, left, right, parser.tokenIndex);
                         Map<String, List<String>> autoboxBindings =
                                 parser.ctx.symbolTable.getAutoboxBindings();
+                        // Autobox treats direct aggregate variables as references
+                        // when it is lexically enabled: @a->method and %h->method
+                        // pass \@a and \%h respectively. Keep ordinary Perl
+                        // method parsing unchanged outside an active autobox scope.
+                        if (!autoboxBindings.isEmpty()) {
+                            left = referenceAggregateMethodInvocant(left, parser.tokenIndex);
+                        }
+                        BinaryOperatorNode methodCall = new BinaryOperatorNode(
+                                token.text, left, right, parser.tokenIndex);
                         // A package/bareword invocant is a class name (for
                         // example Foo->new), even when it happens to look like
                         // an autoboxed native string.

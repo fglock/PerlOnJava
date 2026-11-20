@@ -84,6 +84,15 @@ BEGIN {
 }
 
 {
+    my @unboxed = qw(a b);
+    my $unboxed_result = eval { @unboxed->size };
+    like($@, qr/Can't (?:call method|locate object method)/,
+        'direct aggregate invocants do not dispatch before autobox is enabled');
+    unlike($@, qr/unblessed reference/,
+        'inactive autobox does not rewrite an aggregate into a reference invocant');
+}
+
+{
     use autobox INTEGER => 'Test::Autobox::Integer',
         ARRAY => 'Test::Autobox::Array',
         UNIVERSAL => 'Test::Autobox::Universal';
@@ -106,6 +115,20 @@ BEGIN {
     is(((%hash))->size, 2, 'a nested parenthesized hash invocant is passed by reference');
     is(@$array_ref->size, 3, 'an array reference dereferenced as an invocant is preserved');
     is(%$hash_ref->size, 2, 'a hash reference dereferenced as an invocant is preserved');
+}
+
+{
+    use autobox ARRAY => 'Test::Autobox::DirectArray';
+    my @array = qw(a b);
+    {
+        no autobox;
+        my $disabled = eval { @array->size };
+        like($@, qr/Can't (?:call method|locate object method)/,
+            'direct aggregate dispatch is disabled by no autobox');
+        unlike($@, qr/unblessed reference/,
+            'no autobox restores ordinary aggregate method lookup');
+    }
+    is(@array->size, 2, 'direct aggregate dispatch returns after no autobox scope');
 }
 
 {
