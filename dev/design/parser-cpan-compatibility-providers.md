@@ -2,11 +2,13 @@
 
 ## Current state (2026-11-20)
 
-Source commit: `6bb243fd5`. The full project gate passed on this source tree;
-the autobox 3.0.2 upstream suite passed all 675 assertions. Function::Parameters
-2.002006 now passes its complete upstream suite. Next, extend the documented
-Object::Pad subset and confirm whether `autobox::Core` is required by issue
-#1264 before treating the combined issue scope as complete.
+Source commit: `bb93d3984`. The full project gate passed on this source tree;
+the autobox 3.0.2 upstream suite passed all 675 assertions, and Function::Parameters
+2.002006 passed all 56 upstream files and 1,619 assertions. The Object::Pad
+0.825 suite currently passes 15 of 68 files; failures identify substantial
+unsupported syntax, roles, and MOP surface. Next, extend that compatibility
+subset and confirm whether `autobox::Core` is required by issue #1264 before
+treating the combined issue scope as complete.
 
 This change adds parser providers for three compile-time module imports that
 otherwise require XS/declaration hooks: `Syntax::Keyword::Try`,
