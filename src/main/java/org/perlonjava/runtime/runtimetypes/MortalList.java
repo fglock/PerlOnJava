@@ -20,6 +20,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  * trigger DESTROY at statement end, not immediately during delete.
  */
 public class MortalList {
+    private static final ThreadLocal<ArrayDeque<String>> flushSuppressionTrace =
+            ThreadLocal.withInitial(ArrayDeque::new);
     private static final AtomicInteger runtimesWithBoundaryWork = new AtomicInteger();
 
     static final class DeferredArgumentOwnerRelease {
@@ -263,7 +265,7 @@ public class MortalList {
             return;
         }
         LifecycleRuntimeState state = state();
-        if (state.flushing) return;
+        if (state.flushing || state.flushSuppressed) return;
 
         int returnIndex = -1;
         int sourceIndex = -1;
@@ -948,7 +950,7 @@ public class MortalList {
             return;
         }
         LifecycleRuntimeState state = state();
-        if (state.flushing || state.deferredReleaseDrainDepth != 0) {
+        if (state.flushing || state.flushSuppressed || state.deferredReleaseDrainDepth != 0) {
             deferDecrementIfTracked(scalar);
             return;
         }
@@ -1900,9 +1902,38 @@ public class MortalList {
      */
     public static boolean suppressFlush(boolean suppress) {
         LifecycleRuntimeState state = state();
-        boolean prev = state.flushing;
-        state.flushing = suppress;
+        boolean prev = state.flushSuppressed;
+        state.flushSuppressed = suppress;
+        if (System.getenv("PJ_BREFCNT_TRACE") != null) {
+            StackTraceElement[] trace = new Throwable().getStackTrace();
+            state.traceLastFlushSuppression = suppress + " previous=" + prev
+                    + (trace.length > 1 ? " at " + trace[1] : "");
+            String callsite = trace.length > 1 ? trace[1].toString() : "unknown";
+            ArrayDeque<String> history = flushSuppressionTrace.get();
+            history.addLast("state=" + System.identityHashCode(state) + " "
+                    + suppress + " prev=" + prev + " at " + callsite);
+            while (history.size() > 80) history.removeFirst();
+            if (suppress && !prev && trace.length > 1) {
+                StringBuilder origin = new StringBuilder();
+                for (int i = 1; i < Math.min(trace.length, 7); i++) {
+                    if (origin.length() != 0) origin.append(" <- ");
+                    origin.append(trace[i]);
+                }
+                state.traceFlushSuppressionOrigins.add(origin.toString());
+            } else if (!suppress && prev && !state.traceFlushSuppressionOrigins.isEmpty()) {
+                state.traceFlushSuppressionOrigins.removeLast();
+            }
+        }
         return prev;
+    }
+
+    public static String traceFlushState() {
+        LifecycleRuntimeState state = state();
+        return "flushing=" + state.flushing + " suppressed=" + state.flushSuppressed
+                + " pending=" + state.pending.size()
+                + " lastSuppression=" + state.traceLastFlushSuppression
+                + " suppressionOrigins=" + state.traceFlushSuppressionOrigins
+                + " suppressionEvents=" + flushSuppressionTrace.get();
     }
 
     static void finalizeClearedAggregateOwnerAfterScopeExit(RuntimeBase base) {
@@ -2147,7 +2178,7 @@ public class MortalList {
     public static void flush() {
         LifecycleRuntimeState state = state();
         if (!state.mortalActive) return;
-        if (state.flushing) return;
+        if (state.flushing || state.flushSuppressed) return;
         if (state.pending.isEmpty() && state.pendingTiedReleases.isEmpty()
                 && state.pendingIoReleases.isEmpty()
                 && state.pendingUntrackedReturnOwnerReleases.isEmpty()
@@ -2250,7 +2281,7 @@ public class MortalList {
         owners.addAll(args.elements);
 
         LifecycleRuntimeState state = state();
-        if (state.flushing) return;
+        if (state.flushing || state.flushSuppressed) return;
         state.flushing = true;
         try {
             for (int i = state.pending.size() - 1; i >= 0; i--) {
@@ -2374,7 +2405,7 @@ public class MortalList {
         if (runtimesWithBoundaryWork.get() == 0) return;
         LifecycleRuntimeState state = state();
         if (!state.mortalActive) return;
-        if (state.flushing) return;
+        if (state.flushing || state.flushSuppressed) return;
         if (state.pending.isEmpty() && state.pendingTiedReleases.isEmpty()
                 && state.pendingIoReleases.isEmpty()
                 && state.pendingUntrackedReturnOwnerReleases.isEmpty()
