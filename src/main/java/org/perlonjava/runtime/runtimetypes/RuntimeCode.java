@@ -7067,6 +7067,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Perl renders embedded NULs in a method name as the two visible
             // characters "\\0" in method lookup diagnostics.
             errorMethodName = errorMethodName.replace("\0", "\\0");
+            if (isDefaultAutoboxReference(invocant, autoboxClass)) {
+                throw new PerlCompilerException("Can't call method \"" + errorMethodName
+                        + "\" on unblessed reference");
+            }
             if (GlobalVariable.isPackageLoaded(perlClassName)) {
                 throw new PerlCompilerException("Can't locate object method \"" + errorMethodName
                         + "\" via package \"" + perlClassName + "\"");
@@ -7075,6 +7079,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     + "\" via package \"" + perlClassName + "\" (perhaps you forgot to load \""
                     + perlClassName + "\"?)");
         }
+    }
+
+    private static boolean isDefaultAutoboxReference(RuntimeScalar invocant, String autoboxClass) {
+        if (autoboxClass == null || RuntimeScalarType.blessedId(invocant) != 0) return false;
+        String type = AutoboxRuntime.autoboxType(invocant);
+        return ("ARRAY".equals(type) || "HASH".equals(type) || "CODE".equals(type))
+                && type.equals(autoboxClass);
     }
 
     /**

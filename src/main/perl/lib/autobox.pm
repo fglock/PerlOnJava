@@ -22,11 +22,12 @@ sub autobox::universal::type {
         return $reference_type;
     }
 
-    return 'STRING' unless Scalar::Util::looks_like_number($value);
-    return $value =~ /[.eE]/ ? 'FLOAT' : 'INTEGER';
+    require B;
+    my $flags = B::svref_2object(\$value)->FLAGS;
+    return 'FLOAT' if $flags & (B::SVf_NOK() | B::SVp_NOK());
+    return 'INTEGER' if $flags & (B::SVf_IOK() | B::SVp_IOK());
+    return 'STRING';
 }
-
-require Scalar::Util;
 
 1;
 

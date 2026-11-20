@@ -163,6 +163,7 @@ public final class ParserExtensionRegistry {
             "ARRAY", List.of("ARRAY"),
             "HASH", List.of("HASH"),
             "CODE", List.of("CODE"));
+    private static final int AUTOBOX_HINT_BITS = 0x80020000;
     private static final Set<String> AUTOBOX_TYPES = Set.of(
             "UNDEF", "INTEGER", "FLOAT", "NUMBER", "STRING", "SCALAR",
             "ARRAY", "HASH", "CODE", "UNIVERSAL");
@@ -185,6 +186,7 @@ public final class ParserExtensionRegistry {
                 }
             }
             parser.ctx.symbolTable.setAutoboxBindings(bindings);
+            updateAutoboxHintBits(parser, bindings);
             return;
         }
 
@@ -241,7 +243,15 @@ public final class ParserExtensionRegistry {
             }
         }
         parser.ctx.symbolTable.setAutoboxBindings(bindings);
+        updateAutoboxHintBits(parser, bindings);
         invokeAutoboxDebug(debugOption, bindings);
+    }
+
+    private static void updateAutoboxHintBits(Parser parser, Map<String, List<String>> bindings) {
+        int strictOptions = parser.ctx.symbolTable.getStrictOptions();
+        parser.ctx.symbolTable.setStrictOptions(bindings.isEmpty()
+                ? strictOptions & ~AUTOBOX_HINT_BITS
+                : strictOptions | AUTOBOX_HINT_BITS);
     }
 
     private static void invokeAutoboxDebug(

@@ -9,8 +9,12 @@ sub capture_autobox_debug { push @AUTOBOX_DEBUG, $_[0] }
 is(type(undef), 'UNDEF', 'type() identifies undefined values');
 is(type(42), 'INTEGER', 'type() identifies integer values');
 is(type(0 == 1), 'INTEGER', 'type() identifies numeric boolean values');
+is(type(2 < 1), 'INTEGER', 'type() preserves the numeric flag on false comparison results');
 is(type(3.5), 'FLOAT', 'type() identifies floating point values');
 is(type(42 / 3), 'FLOAT', 'type() preserves floating point numeric flags');
+my $integer_for_division = 42;
+is(type($integer_for_division / 3), 'FLOAT',
+    'type() preserves floating point flags for variable division results');
 is(type('text'), 'STRING', 'type() identifies strings');
 is(type([]), 'ARRAY', 'type() identifies array references');
 is(type({}), 'HASH', 'type() identifies hash references');
@@ -81,6 +85,16 @@ BEGIN {
         'autobox_class reports the class selected for a native value');
     is(ref(Test::Autobox::Scalar->new), 'Test::Autobox::Scalar',
         'a package name used as a bareword invocant is not autoboxed');
+}
+
+{
+    use autobox;
+    BEGIN { is($^H & 0x80020000, 0x80020000, 'autobox exposes its lexical hint bits') }
+    my $missing = eval { []->missing_default_method };
+    like($@, qr/^Can't call method "missing_default_method" on unblessed reference/,
+        'default reference mappings preserve unblessed-reference diagnostics');
+    no autobox;
+    BEGIN { is($^H & 0x80000000, 0, 'no autobox clears its lexical hint bit') }
 }
 
 {
