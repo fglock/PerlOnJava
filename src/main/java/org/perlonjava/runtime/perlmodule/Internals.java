@@ -576,7 +576,15 @@ public class Internals extends PerlModuleBase {
             int rc = base.refCount;
             boolean compileHintsHash = base == GlobalVariable.getGlobalHash(
                     GlobalContext.encodeSpecialVar("H"));
-            int nativeOwners = base.nativeOwnerSlotCount();
+            // Expression leases keep runtime temporaries alive while values
+            // cross statement and foreach boundaries. They are not Perl SV
+            // owners, so hide both their native identities and any paired
+            // selective counts from SvREFCNT.
+            int expressionOwners = base.ownerSlotCount(PerlOwnerSlot.Kind.EXPRESSION_VALUE);
+            int countedExpressionOwners = base.countedNativeOwnerSlotCount(
+                    PerlOwnerSlot.Kind.EXPRESSION_VALUE);
+            int nativeOwners = base.nativeOwnerSlotCount() - expressionOwners;
+            if (base.isRefCountTracked()) rc -= countedExpressionOwners;
             if (compileHintsHash) {
                 // The package-root identity records the strong table edge for
                 // lifecycle cleanup, but Perl's SvREFCNT helper deliberately
@@ -675,34 +683,6 @@ public class Internals extends PerlModuleBase {
                 boolean activeArgumentOwner = fieldOwnedMethodResult
                         && argumentFrameOwners == 0
                         && RuntimeCode.hasUncountedActiveHashArgumentOwner(base);
-                String traceClassName = NameNormalizer.getBlessStr(base.blessId);
-                if (System.getenv("PJ_BREFCNT_TRACE") != null
-                        && (traceClassName.startsWith("DBIx::Class::ResultSource")
-                            || traceClassName.startsWith("Issue2043::Source"))) {
-                    System.err.println("[BREFCNT-OWNER-TRACE] class="
-                            + traceClassName + " rc=" + rc
-                            + " hashSlots=" + base.hashSlotOwnerCount + " field="
-                            + fieldOwnedMethodResult + " pendingBless=" + pendingBlessTemporary
-                            + " activeOwner=" + activeArgumentOwner + " frameOwners="
-                            + argumentFrameOwners + " hashOwners="
-                            + base.ownerSlotCount(PerlOwnerSlot.Kind.HASH_ELEMENT));
-                    System.err.println(base.ownerTraceSnapshot());
-                    java.util.List<RuntimeArray> activeArgs = RuntimeCode.snapshotArgsStack();
-                    for (int depth = 0; depth < activeArgs.size(); depth++) {
-                        RuntimeCode activeCode = RuntimeCode.getActiveCodeAt(depth);
-                        RuntimeArray activeFrame = activeArgs.get(depth);
-                        for (int index = 0; index < activeFrame.elements.size(); index++) {
-                            RuntimeScalar value = activeFrame.elements.get(index);
-                            if (value == null || value.value != base) continue;
-                            System.err.println("[DBIX-BREFCNT-ARG] depth=" + depth + " index="
-                                    + index + " code=" + (activeCode == null ? "?"
-                                        : activeCode.packageName + "::" + activeCode.subName)
-                                    + " container=" + (value.getContainerOwner() == null ? "null"
-                                        : value.getContainerOwner().getClass().getSimpleName())
-                                    + " weak=" + WeakRefRegistry.isweak(value));
-                        }
-                    }
-                }
                 if (pendingBlessTemporary) {
                     // The first bless result remains a mortal Perl owner until
                     // its deferred temp boundary drains. The hash slot is a
@@ -714,13 +694,6 @@ public class Internals extends PerlModuleBase {
                 }
             }
             int reported = rc + extra + adjust;
-            if (System.getenv("PJ_BREFCNT_TRACE") != null
-                    && NameNormalizer.getBlessStr(base.blessId).startsWith("ForeachRefNode")) {
-                System.err.println("[FOREACH-BREFCNT] rc=" + rc + " native=" + nativeOwners
-                        + " local=" + base.localBindingExists + " aliases=" + base.foreachAliasCount
-                        + " extra=" + extra + " adjust=" + adjust + " reported=" + reported);
-                System.err.println(base.ownerTraceSnapshot());
-            }
             return new RuntimeScalar(reported).getList();
         }
         return new RuntimeScalar(1).getList();

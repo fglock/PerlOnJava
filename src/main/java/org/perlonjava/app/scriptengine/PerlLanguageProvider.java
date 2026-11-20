@@ -818,9 +818,6 @@ public class PerlLanguageProvider {
                     // those decrements now so objects reach refCount=0 and DESTROY fires
                     // BEFORE END blocks run — matching Perl 5's destruct sequence where
                     // file-scoped lexicals are destroyed before END block dispatch.
-                    if (System.getenv("PJ_BREFCNT_TRACE") != null) {
-                        System.err.println("[BREFCNT-MAIN-FLUSH] " + MortalList.traceFlushState());
-                    }
                     MortalList.flush();
 
                     // Destroy unrelated file lexicals before END while retaining

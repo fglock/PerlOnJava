@@ -6,8 +6,25 @@ priorities and future plans.
 
 ## Work in progress
 
-- Preserve imported CV owners through global destruction, retain only the lexical captures needed by `eval STRING`, and release DBI parent handles after failed prepare (#2043).
+
+- Preserve imported CV owners through global destruction, retain only the lexical captures needed by `eval STRING`, and release DBI handles after failed `prepare` or `do` (#2043).
+- Preserve reacquired counted referents when deferred zero-count lifecycle cleanup drains (#2043).
+- Report the active Perl helper argument in `B::REFCNT` for nested hash-slot values during `DESTROY` (#2043).
 - Remove reachability-based lifetime decisions, root-query state, and sweep-only hooks; use current Perl owner slots for cleanup (#2043).
+- Reuse cycle-detection worksets while releasing outgoing values from dying arrays and hashes, reducing per-element queue and visited-set initialization (#2043).
+- Restore array-literal flush state on early exits, unwind generated JVM frames at eval/try boundaries, and exclude expression-only owner leases from `B::REFCNT` (#2043).
+- Reuse cleanup-target pre-scan worksets across candidate roots, skip probes for zero-count or currently owned aggregates, and fold direct weak-reference checks into that traversal (#2043).
+- Release abandoned JVM direct-call owners when code generation falls back to the interpreter, allowing redefined CV optree constants to be reaped (#2043).
+- Release DBIx::Class phantom-chain result sources after fresh anonymous hash arguments leave their call frame (#2043).
+- Preserve caller lexical cleanup ownership through interpreter aliases so failed-connect DBIx::Class Storage can be released at scope exit (#2043).
+- Construct DBI handles with core `bless`, matching native DBI and avoiding false leak reports for its cached driver handle (#2043).
+- Release Test2 assertion events after callbacks finish, including events passed through temporary method arguments (#2043).
+- Load nested `do` and `require` files in the active runtime package, preserving Mojolicious Lite sandbox namespaces through eval strings (#2043).
+- Remove the tokenless decrement compatibility path and its root-count repair now that releases identify their owner slots (#2043).
+- Keep temporary list-assignment results from becoming owners of their scalar LHS cells (#2043).
+- Release list-assignment temporary cell owners after returned values reach the caller, so weak fields no longer pin optree constants (#2043).
+- Represent untracked, tracked, and weak-tracked referents separately from their nonnegative owner counts (#2043).
+- Drain scoped owner releases at block exit even while statement flushing is suppressed, preserving earlier pending releases (#2043).
 
 - Preserve file contents on `sysopen` without `O_TRUNC`, fail `open` on undefined paths, avoid duplicate `closedir` warnings, and match Socket lookup flags and return values (#2128, #2125, #2095).
 - Register pure-Perl Encode codecs, preserve Unicode input in `decode_utf8`, implement `Unicode::Normalize::getComposite`, and provide Java-backed URI::Fast support (#2124, #2121, #2104, #2079, #2117).
@@ -46,13 +63,8 @@ priorities and future plans.
 - Preserve control-flow return payloads and pending suspended-frame owners during END-boundary root checks; trim temporary roots skipped by exceptional call and eval unwinds (#1649).
 - Root current package CODE slots by stash identity, including anonymous and eval-defined closures, and ignore detached glob slots after their aliases move (#1649).
 - Track IO handle replacement and executable regex callback owners through their current runtime slots (#1649).
-- Remove the tokenless decrement compatibility path and its root-count repair now that releases identify their owner slots (#2043).
-- Keep temporary list-assignment results from becoming owners of their scalar LHS cells (#2043).
-- Represent untracked, tracked, and weak-tracked referents separately from their nonnegative owner counts (#2043).
-- Drain scoped owner releases at block exit even while statement flushing is suppressed, preserving earlier pending releases (#2043).
 - Clear weak observers from rescued object graphs at the END boundary while preserving independently rooted objects and strong Perl edges (#1649).
 - Short-circuit temporary-root reachability checks when direct strong edges prove the referent is reachable (#1649).
-- Prove temporary-root reachability through current aggregate, scalar-cell, CODE-slot, argument-container, tied-handler, untracked-scalar, scalar-reference, closure-capture, CODE-state, array-refalias, hash-refalias, and compiled CODE pad-constant owner slots, including deep current-owner chains, before falling back to a graph traversal (#2043).
 - Skip rescued-graph END traversal when the runtime has no registered weak observers (#1649).
 - Load `Exporter::Heavy` before compile-time imports so `export_to_level` targets the importing package (#1649).
 - Preserve aggregate element ownership when a foreach lexical aliases a stored scalar during scope cleanup (#1649).

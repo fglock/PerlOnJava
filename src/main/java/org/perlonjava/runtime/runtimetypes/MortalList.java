@@ -20,8 +20,6 @@ import java.util.concurrent.atomic.AtomicInteger;
  * trigger DESTROY at statement end, not immediately during delete.
  */
 public class MortalList {
-    private static final ThreadLocal<ArrayDeque<String>> flushSuppressionTrace =
-            ThreadLocal.withInitial(ArrayDeque::new);
     private static final AtomicInteger runtimesWithBoundaryWork = new AtomicInteger();
 
     static final class DeferredArgumentOwnerRelease {
@@ -1114,28 +1112,6 @@ public class MortalList {
 
     private static void scopeExitCleanupHashBody(
             RuntimeHash hash, RuntimeBase returned, boolean finalRelease) {
-        if (finalRelease && RuntimeBase.refCountTraceEnabled()) {
-            System.err.println("[DESTROY-HASH-CLEANUP] begin hash="
-                    + System.identityHashCode(hash) + " generation="
-                    + RuntimeBase.traceReferentGeneration(hash) + " refCount=" + hash.refCount
-                    + " blessId=" + hash.blessId + " keys=" + hash.elements.size());
-            for (java.util.Map.Entry<String, RuntimeScalar> entry : hash.elements.entrySet()) {
-                RuntimeScalar value = entry.getValue();
-                RuntimeBase referent = value != null && value.value instanceof RuntimeBase base
-                        ? base : null;
-                System.err.println("[DESTROY-HASH-CELL] hash=" + System.identityHashCode(hash)
-                        + " generation=" + RuntimeBase.traceReferentGeneration(hash)
-                        + " key=" + entry.getKey() + " scalar="
-                        + (value == null ? 0 : System.identityHashCode(value))
-                        + " owns=" + (value != null && value.refCountOwned)
-                        + " weak=" + (value != null && WeakRefRegistry.isweak(value))
-                        + " referent=" + (referent == null ? 0 : System.identityHashCode(referent))
-                        + " referentGeneration=" + (referent == null ? 0
-                                : RuntimeBase.traceReferentGeneration(referent))
-                        + " referentRefCount=" + (referent == null ? 0 : referent.refCount)
-                        + " referentBlessId=" + (referent == null ? 0 : referent.blessId));
-            }
-        }
         // Clear localBindingExists: the named variable's scope is ending.
         // This allows subsequent refCount==0 events (from setLargeRefCounted
         // or flush) to correctly trigger callDestroy, since the local
@@ -1904,41 +1880,12 @@ public class MortalList {
         LifecycleRuntimeState state = state();
         boolean prev = state.flushSuppressed;
         state.flushSuppressed = suppress;
-        if (System.getenv("PJ_BREFCNT_TRACE") != null) {
-            StackTraceElement[] trace = new Throwable().getStackTrace();
-            state.traceLastFlushSuppression = suppress + " previous=" + prev
-                    + (trace.length > 1 ? " at " + trace[1] : "");
-            String callsite = trace.length > 1 ? trace[1].toString() : "unknown";
-            ArrayDeque<String> history = flushSuppressionTrace.get();
-            history.addLast("state=" + System.identityHashCode(state) + " "
-                    + suppress + " prev=" + prev + " at " + callsite);
-            while (history.size() > 80) history.removeFirst();
-            if (suppress && !prev && trace.length > 1) {
-                StringBuilder origin = new StringBuilder();
-                for (int i = 1; i < Math.min(trace.length, 7); i++) {
-                    if (origin.length() != 0) origin.append(" <- ");
-                    origin.append(trace[i]);
-                }
-                state.traceFlushSuppressionOrigins.add(origin.toString());
-            } else if (!suppress && prev && !state.traceFlushSuppressionOrigins.isEmpty()) {
-                state.traceFlushSuppressionOrigins.removeLast();
-            }
-        }
         return prev;
     }
 
     /** Return whether deferred-owner flushing is currently suppressed. */
     public static boolean isFlushSuppressed() {
         return state().flushSuppressed;
-    }
-
-    public static String traceFlushState() {
-        LifecycleRuntimeState state = state();
-        return "flushing=" + state.flushing + " suppressed=" + state.flushSuppressed
-                + " pending=" + state.pending.size()
-                + " lastSuppression=" + state.traceLastFlushSuppression
-                + " suppressionOrigins=" + state.traceFlushSuppressionOrigins
-                + " suppressionEvents=" + flushSuppressionTrace.get();
     }
 
     static void finalizeClearedAggregateOwnerAfterScopeExit(RuntimeBase base) {

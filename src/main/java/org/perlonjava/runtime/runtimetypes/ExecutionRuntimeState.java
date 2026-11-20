@@ -112,8 +112,8 @@ public final class ExecutionRuntimeState {
     public final Deque<RuntimeScalar> activeJvmSelfReferences = new ArrayDeque<>();
     /** Sort pseudo-block state for active JVM-generated Perl methods. */
     public final Deque<Boolean> activeJvmSortComparators = new ArrayDeque<>();
-    /** Flush-suppression state to restore when each JVM-generated method returns. */
-    public final Deque<Boolean> activeJvmFlushSuppressionStates = new ArrayDeque<>();
+    /** Dynamic state captured at entry to JVM-generated Perl method frames. */
+    public final Deque<RuntimeCode.JvmFrameSnapshot> activeJvmFrameSnapshots = new ArrayDeque<>();
     /** Dynamic extent of a sort comparator invocation, including called subs. */
     public int activeSortComparatorInvocations;
     /** Combined Perl frame depth immediately before each sort comparator call. */

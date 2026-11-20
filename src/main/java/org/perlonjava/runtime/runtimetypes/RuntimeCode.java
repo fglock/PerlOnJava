@@ -2208,14 +2208,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         pushJvmFrame(PerlRuntime.current().executionState(), selfReference, comparator);
     }
 
+    /** Runtime state that must be restored when one generated method frame exits. */
+    public record JvmFrameSnapshot(int selfDepth, int sortComparatorDepth,
+                                   boolean flushSuppressed) {}
+
     /** Push generated-frame metadata through the state captured by its caller. */
     public static void pushJvmFrame(
             ExecutionRuntimeState state, RuntimeScalar selfReference, boolean comparator) {
+        state.activeJvmFrameSnapshots.push(new JvmFrameSnapshot(
+                state.activeJvmSelfReferences.size(),
+                state.activeJvmSortComparators.size(),
+                MortalList.isFlushSuppressed()));
         if (selfReference != null) {
             state.activeJvmSelfReferences.push(selfReference);
         }
         state.activeJvmSortComparators.push(comparator);
-        state.activeJvmFlushSuppressionStates.push(MortalList.isFlushSuppressed());
     }
 
     /** Remove the matching JVM-generated method self reference on return. */
@@ -2237,6 +2244,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     /** Pop generated-frame metadata through the state captured by its caller. */
     public static void popJvmFrame(
             ExecutionRuntimeState state, RuntimeScalar selfReference) {
+        JvmFrameSnapshot snapshot = state.activeJvmFrameSnapshots.pollFirst();
+        if (snapshot != null) {
+            restoreJvmFrameSnapshot(state, snapshot);
+            return;
+        }
         if (selfReference != null) {
             Deque<RuntimeScalar> stack = state.activeJvmSelfReferences;
             if (!stack.isEmpty() && stack.peek() == selfReference) {
@@ -2247,10 +2259,30 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         Deque<Boolean> comparatorStack = state.activeJvmSortComparators;
         if (!comparatorStack.isEmpty()) comparatorStack.pop();
-        Deque<Boolean> flushSuppressionStack = state.activeJvmFlushSuppressionStates;
-        if (!flushSuppressionStack.isEmpty()) {
-            MortalList.suppressFlush(flushSuppressionStack.pop());
+    }
+
+    /** Number of live generated frames at a Perl exception boundary. */
+    public static int jvmFrameDepth(ExecutionRuntimeState state) {
+        return state.activeJvmFrameSnapshots.size();
+    }
+
+    /** Remove generated frames that escaped through a Perl eval/try catch. */
+    public static void unwindJvmFramesToDepth(ExecutionRuntimeState state, int depth) {
+        while (state.activeJvmFrameSnapshots.size() > depth) {
+            JvmFrameSnapshot snapshot = state.activeJvmFrameSnapshots.pollFirst();
+            restoreJvmFrameSnapshot(state, snapshot);
         }
+    }
+
+    private static void restoreJvmFrameSnapshot(
+            ExecutionRuntimeState state, JvmFrameSnapshot snapshot) {
+        while (state.activeJvmSelfReferences.size() > snapshot.selfDepth()) {
+            state.activeJvmSelfReferences.pop();
+        }
+        while (state.activeJvmSortComparators.size() > snapshot.sortComparatorDepth()) {
+            state.activeJvmSortComparators.pop();
+        }
+        MortalList.suppressFlush(snapshot.flushSuppressed());
     }
 
     /** Track whether a JVM-generated frame is a sort BLOCK pseudo-block. */

@@ -1182,6 +1182,17 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         return count;
     }
 
+    /** Number of active counted native owner slots of the requested kind. */
+    public synchronized int countedNativeOwnerSlotCount(PerlOwnerSlot.Kind kind) {
+        if (ownerSlots == null) return 0;
+        int count = 0;
+        for (PerlOwnerSlot slot : ownerSlots) {
+            LifecycleHotPathDiagnostics.ownerSlotsVisited(1);
+            if (slot.kind() == kind && slot.isCountedNativeOwner()) count++;
+        }
+        return count;
+    }
+
     public void recordActiveOwner(RuntimeScalar scalar) {
         scalar.recordCountedOwner(this);
     }

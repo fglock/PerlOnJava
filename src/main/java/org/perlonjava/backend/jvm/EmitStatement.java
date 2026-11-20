@@ -1081,6 +1081,14 @@ public class EmitStatement {
             emitterVisitor.ctx.javaClassInfo.activeTryFinallyContext = tryFinallyContext;
         }
 
+        int jvmFrameDepthSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.jvmFrameStateSlot);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                "jvmFrameDepth",
+                "(Lorg/perlonjava/runtime/runtimetypes/ExecutionRuntimeState;)I", false);
+        mv.visitVarInsn(Opcodes.ISTORE, jvmFrameDepthSlot);
+
         // Define the try-catch block before visiting labels for maximum ASM compatibility
         mv.visitTryCatchBlock(tryStart, tryEnd, catchBlock, "java/lang/Throwable");
 
@@ -1097,6 +1105,13 @@ public class EmitStatement {
 
         // Exception handler
         mv.visitLabel(catchBlock);
+
+        mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.jvmFrameStateSlot);
+        mv.visitVarInsn(Opcodes.ILOAD, jvmFrameDepthSlot);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                "unwindJvmFramesToDepth",
+                "(Lorg/perlonjava/runtime/runtimetypes/ExecutionRuntimeState;I)V", false);
 
         // --------- Store the exception in the catch parameter ---------
         // Preserve a reference passed to die; non-Perl exceptions become strings.

@@ -378,9 +378,6 @@ final class LifecycleRuntimeState {
     int markDepth;
     boolean flushing;
     boolean flushSuppressed;
-    String traceLastFlushSuppression;
-    final ArrayList<String> traceFlushSuppressionOrigins = new ArrayList<>();
-    final ArrayList<String> traceFlushSuppressionEvents = new ArrayList<>();
     int deferredReleaseDrainDepth;
     // Reusable primitive stack for nested releases appended while a boundary
     // drains its owner queue. This keeps destruction depth-first without
@@ -564,9 +561,6 @@ final class LifecycleRuntimeState {
         markDepth = 0;
         flushing = false;
         flushSuppressed = false;
-        traceLastFlushSuppression = null;
-        traceFlushSuppressionOrigins.clear();
-        traceFlushSuppressionEvents.clear();
         deferredReleaseDrainDepth = 0;
         pendingReleaseResumeDepth = 0;
         weakScalars.clear();
