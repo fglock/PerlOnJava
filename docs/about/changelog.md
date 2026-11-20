@@ -11,7 +11,7 @@ priorities and future plans.
 - Add parser compatibility providers for `Syntax::Keyword::Try`, `Syntax::Feature::Method`, and `syntax qw(method)`; raise Object::Pad's advertised syntax level to 0.800 (#2112, #2089, #2056).
 - Add parser compatibility providers for `Syntax::Keyword::Try` and method syntax; support Object::Pad 0.800 roles, hash representation, `:Struct(readonly)`, and MOP method registration (#2112, #2089, #2056).
 - Preserve Function::Parameters' required named-argument arity diagnostic when unknown keys are also supplied (#1361).
-- Match Function::Parameters signature diagnostics and typed method invocants, treat empty positional defaults as `undef`, and register its warning category (#1361).
+- Match Function::Parameters signature diagnostics, typed method invocants and slurpy element validation; treat empty positional defaults as `undef` and register its warning category (#1361).
 - Add lexical autobox dispatch for native scalar and reference values, including merged class lookup, `autobox_class`, `autobox::universal::type` scalar flags, direct aggregate invocants, and `$^H` scope bits that respect `no autobox` (#1264).
 - Honor tied `*ARGV` for diamond reads, including after a previous traversal reaches EOF (#2110, #2111).
 - Preserve explicit empty split fields in fixed-arity assignments, restore parsed XML attribute order and `XML::LibXML` ID indexing, decode HTML href character references, and add a JSON::PP-backed `JSON::SL` compatibility subset (#2088, #1323, #1332, #2097, #1321).

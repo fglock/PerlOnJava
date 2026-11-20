@@ -477,17 +477,25 @@ public class SignatureParser {
                     typeConstraint, sigil + paramName, paramStartIndex);
         }
         if (typeConstraintVariable != null && parser.functionParametersCheckArgumentTypes) {
+            String slurpyItemName = null;
+            Node checkedValue = paramVariable;
+            if (isSlurpy && "@".equals(sigil)) {
+                slurpyItemName = "__function_parameters_item_" + (++typedParameterCount);
+                checkedValue = new OperatorNode("$",
+                        new IdentifierNode(slurpyItemName, paramStartIndex), paramStartIndex);
+            }
+            List<Node> typeValidation = new ArrayList<>();
             Node hasCanMethod = typeConstraintMethodCall(typeConstraintVariable,
                     "can", new StringNode("has_coercion", paramStartIndex), paramStartIndex);
             Node hasCoercion = new BinaryOperatorNode("&&", hasCanMethod,
                     typeConstraintNoArgumentMethodCall(
                             typeConstraintVariable, "has_coercion", paramStartIndex),
                     paramStartIndex);
-            Node coercedValue = new BinaryOperatorNode("=", paramVariable,
+            Node coercedValue = new BinaryOperatorNode("=", checkedValue,
                     typeConstraintMethodCall(
-                            typeConstraintVariable, "coerce", paramVariable, paramStartIndex),
+                            typeConstraintVariable, "coerce", checkedValue, paramStartIndex),
                     paramStartIndex);
-            astNodes.add(new IfNode("if", hasCoercion,
+            typeValidation.add(new IfNode("if", hasCoercion,
                     new BlockNode(new ArrayList<>(List.of(coercedValue)), paramStartIndex),
                     null, paramStartIndex));
 
@@ -496,13 +504,13 @@ public class SignatureParser {
             if (inlineTypeCheck != null) {
                 failure = new OperatorNode("!", inlineTypeCheck, paramStartIndex);
                 message = typeConstraintMethodCall(
-                        typeConstraintVariable, "get_message", paramVariable, paramStartIndex);
+                        typeConstraintVariable, "get_message", checkedValue, paramStartIndex);
             } else {
                 Node check = typeConstraintMethodCall(
-                        typeConstraintVariable, "check", paramVariable, paramStartIndex);
+                        typeConstraintVariable, "check", checkedValue, paramStartIndex);
                 failure = new OperatorNode("!", check, paramStartIndex);
                 message = typeConstraintMethodCall(
-                        typeConstraintVariable, "get_message", paramVariable, paramStartIndex);
+                        typeConstraintVariable, "get_message", checkedValue, paramStartIndex);
             }
             if (parser.parsingFunctionParametersDeclaration) {
                 String keyword = parser.functionParametersKeyword == null
@@ -517,6 +525,7 @@ public class SignatureParser {
                     int parameterIndex = isNamed
                             ? positionalParameterCount - invocantNames.size() + namedParameterNames.size()
                             : positionalParameterCount - invocantNames.size();
+                    if (isSlurpy) parameterIndex++;
                     position = "parameter " + parameterIndex;
                 }
                 String prefix = "In " + keyword + " " + name + ": " + position
@@ -525,8 +534,18 @@ public class SignatureParser {
                         message, paramStartIndex);
             }
             Node die = new OperatorNode("die", new ListNode(List.of(message), paramStartIndex), paramStartIndex);
-            astNodes.add(new IfNode("if", failure,
-                    new BlockNode(new ArrayList<>(List.of(die)), paramStartIndex), null, paramStartIndex));
+            IfNode reject = new IfNode("if", failure,
+                    new BlockNode(new ArrayList<>(List.of(die)), paramStartIndex), null, paramStartIndex);
+            typeValidation.add(reject);
+            if (slurpyItemName != null) {
+                OperatorNode item = new OperatorNode("$",
+                        new IdentifierNode(slurpyItemName, paramStartIndex), paramStartIndex);
+                OperatorNode lexicalItem = new OperatorNode("my", item, paramStartIndex);
+                astNodes.add(new For1Node(null, true, lexicalItem, paramVariable,
+                        new BlockNode(typeValidation, paramStartIndex), null, paramStartIndex));
+            } else {
+                astNodes.addAll(typeValidation);
+            }
         }
     }
 
