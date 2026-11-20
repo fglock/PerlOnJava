@@ -2,6 +2,12 @@
 
 ## Current state (2026-11-20)
 
+Source commit: `6bb243fd5`. The full project gate passed on this source tree;
+the autobox 3.0.2 upstream suite passed all 675 assertions. Next, resolve the
+documented Object::Pad and Function::Parameters gaps and confirm whether
+`autobox::Core` is required by issue #1264 before treating the combined issue
+scope as complete.
+
 This change adds parser providers for three compile-time module imports that
 otherwise require XS/declaration hooks: `Syntax::Keyword::Try`,
 `Syntax::Feature::Method`, and the `syntax qw(method)` dispatcher. The try
