@@ -29,19 +29,19 @@ jobs:
 
     steps:
       - name: Check out the exact PR head
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
 
       - name: Set up JDK 24
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           java-version: '24'
           distribution: temurin
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Build and test the candidate
         timeout-minutes: 90
@@ -98,7 +98,7 @@ jobs:
             >> dev/bench/reports/ci-issue1863-source-commits.txt
 
       - name: Check out pinned Perl blead
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: Perl/perl5
           ref: 83a6c8b26a8823eb966652414864eb07a3d2c6d4
@@ -117,7 +117,7 @@ jobs:
           nice -n 19 timeout 3600 make install
 
       - name: Check out pinned stable Perl
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: Perl/perl5
           ref: b62845c7186b0b6a8e4e83419e6b5ef64ceef3ed
@@ -254,7 +254,7 @@ jobs:
 
       - name: Upload raw benchmark reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: issue-1863-performance-${{ github.sha }}
           path: |
