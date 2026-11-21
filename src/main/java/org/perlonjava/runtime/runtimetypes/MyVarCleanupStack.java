@@ -135,6 +135,7 @@ public class MyVarCleanupStack {
                 } else if (var instanceof RuntimeBase base
                         && !MyVarCleanupStack.isRegistered(base)) {
                     RuntimeCode.releaseAllActiveLexicalOwners(base);
+                    recheckProxyValueOwnersAfterLexicalRelease(base);
                 }
                 noteVarLeftScope(var);
                 return;
@@ -241,6 +242,17 @@ public class MyVarCleanupStack {
         // retires all pad bindings left by normal or exceptional scope exit.
         if (!MyVarCleanupStack.isRegistered(base)) {
             RuntimeCode.releaseAllActiveLexicalOwners(base);
+            recheckProxyValueOwnersAfterLexicalRelease(base);
+        }
+    }
+
+    private static void recheckProxyValueOwnersAfterLexicalRelease(RuntimeBase base) {
+        if (base instanceof RuntimeArray || base instanceof RuntimeHash) {
+            // Scope cleanup runs before the stack entry is removed, so a
+            // proxy-backed scalar can still see this aggregate as live during
+            // that first pass. Recheck after registration and active lexical
+            // owners have both been retired.
+            base.recheckProxyValueOwnersIfUnowned();
         }
     }
 

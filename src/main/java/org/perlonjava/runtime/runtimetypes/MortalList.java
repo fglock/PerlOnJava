@@ -21,6 +21,42 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class MortalList {
     private static final AtomicInteger runtimesWithBoundaryWork = new AtomicInteger();
+    private static final ThreadLocal<ReachabilityQueryStats> activeReachabilityQueryStats =
+            new ThreadLocal<>();
+
+    static final class ReachabilityQueryMeasurement implements AutoCloseable {
+        private final ReachabilityQueryStats stats;
+        private final ReachabilityQueryStats previous;
+
+        private ReachabilityQueryMeasurement(
+                ReachabilityQueryStats stats, ReachabilityQueryStats previous) {
+            this.stats = stats;
+            this.previous = previous;
+        }
+
+        ReachabilityQueryStats stats() {
+            return stats;
+        }
+
+        @Override
+        public void close() {
+            if (activeReachabilityQueryStats.get() == stats) {
+                if (previous == null) activeReachabilityQueryStats.remove();
+                else activeReachabilityQueryStats.set(previous);
+            }
+        }
+    }
+
+    static ReachabilityQueryMeasurement measureReachabilityQueries() {
+        ReachabilityQueryStats previous = activeReachabilityQueryStats.get();
+        ReachabilityQueryStats stats = new ReachabilityQueryStats();
+        activeReachabilityQueryStats.set(stats);
+        return new ReachabilityQueryMeasurement(stats, previous);
+    }
+
+    static ReachabilityQueryStats activeReachabilityQueryStats() {
+        return activeReachabilityQueryStats.get();
+    }
 
     static final class DeferredArgumentOwnerRelease {
         final RuntimeBase base;
@@ -133,6 +169,58 @@ public class MortalList {
         }
         ArrayDeque<LifecycleRuntimeState.TemporaryRootLease> roots = state().temporaryRoots;
         while (roots.size() > depth) roots.pop().release();
+    }
+
+    /** Diagnostic direct-edge query; lifecycle decisions do not call this method. */
+    static boolean temporaryRootDirectlyReferences(RuntimeBase target) {
+        if (target == null) return false;
+        if (target.hasTemporaryRootOwnerSlotIdentity()) return true;
+        for (LifecycleRuntimeState.TemporaryRootLease lease : state().temporaryRoots) {
+            if (directlyReferencesTemporaryRootValue(lease.root(), target)) return true;
+        }
+        return false;
+    }
+
+    private static boolean directlyReferencesTemporaryRootValue(
+            RuntimeBase value, RuntimeBase target) {
+        if (value == target) return true;
+        if (value instanceof RuntimeScalar scalar) {
+            return !WeakRefRegistry.isweak(scalar)
+                    && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                    && scalar.value == target;
+        }
+        if (value instanceof RuntimeArray array) {
+            if (array.elements == null) return false;
+            for (RuntimeScalar element : array.elements) {
+                if (element == target || element != null
+                        && !WeakRefRegistry.isweak(element)
+                        && (element.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                        && element.value == target) return true;
+            }
+            return false;
+        }
+        if (value instanceof RuntimeHash hash) {
+            if (hash.elements == null) return false;
+            for (java.util.Map.Entry<String, RuntimeScalar> entry : hash.elements.entrySet()) {
+                RuntimeScalar element = entry.getValue();
+                if (element == target || element != null
+                        && !WeakRefRegistry.isweak(element)
+                        && (element.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                        && element.value == target) return true;
+            }
+            return false;
+        }
+        if (value instanceof RuntimeList list) {
+            if (list instanceof RuntimeControlFlowList flow
+                    && directlyReferencesTemporaryRootValue(flow.getReturnValue(), target)) {
+                return true;
+            }
+            for (RuntimeBase element : list.elements) {
+                if (element == target || element instanceof RuntimeScalar scalar
+                        && directlyReferencesTemporaryRootValue(scalar, target)) return true;
+            }
+        }
+        return false;
     }
 
     public static void clearTemporaryRoots() {
@@ -1119,6 +1207,7 @@ public class MortalList {
         hash.localBindingExists = false;
         if (!finalRelease) RuntimeCode.releaseActiveLexicalOwner(hash);
         hash.releaseUnownedClosureCaptures();
+        hash.recheckProxyValueOwnersIfUnowned();
         if (!finalRelease && hash.hasClosureCaptureOwner()) {
             hash.scopeExited = true;
             return;
@@ -1228,6 +1317,7 @@ public class MortalList {
         arr.localBindingExists = false;
         if (!finalRelease) RuntimeCode.releaseActiveLexicalOwner(arr);
         arr.releaseUnownedClosureCaptures();
+        arr.recheckProxyValueOwnersIfUnowned();
         if (!finalRelease && arr.hasClosureCaptureOwner()) {
             arr.scopeExited = true;
             return;
@@ -1920,6 +2010,8 @@ public class MortalList {
                             transientOwnerKind));
             return;
         }
+        ReachabilityQueryStats queryStats = activeReachabilityQueryStats();
+        if (queryStats != null) queryStats.deferredBasesProcessed++;
         if (ownerRelease != null
                 && !base.completeQueuedOwnerRelease(
                         ownerRelease, "MortalList.processDeferredBase")) {
@@ -1949,6 +2041,13 @@ public class MortalList {
             // finalization request. Process that lifecycle boundary directly;
             // do not manufacture a positive refCount just to enter this path.
             finalRelease = true;
+        }
+        // Counted slots are detached before their queued decrement runs. Their
+        // slot-release callback therefore still sees the old count as a live
+        // parent owner. Recheck proxy-backed scalar values after the count
+        // transition, when the parent may have lost its final Perl owner.
+        if (base instanceof RuntimeArray || base instanceof RuntimeHash) {
+            base.recheckProxyValueOwnersIfUnowned();
         }
         if (finalRelease) {
             boolean aggregateReferent = base instanceof RuntimeArray || base instanceof RuntimeHash;

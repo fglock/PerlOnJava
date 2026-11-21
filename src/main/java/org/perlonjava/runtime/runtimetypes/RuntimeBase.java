@@ -520,6 +520,8 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     private int transientUntrackedReferenceOwnerSlots;
     private java.util.Set<PerlOwnerSlot> untrackedReferenceOwnerSlots = null;
     private java.util.Set<PerlOwnerSlot> codeSlotOwnerSlots = null;
+    /** Untracked proxy value edges whose lvalue parent is this aggregate. */
+    private java.util.Set<PerlOwnerSlot> proxyValueOwnerSlots = null;
     /** Active semantic Perl owner identities; excludes temporary roots and IO leases. */
     private volatile int perlStrongOwnerSlots;
     private int pendingReturnOwners;
@@ -624,6 +626,55 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                 if (untrackedReferenceOwnerSlots.isEmpty()) {
                     untrackedReferenceOwnerSlots = null;
                 }
+            }
+        }
+    }
+
+    /**
+     * Register an untracked scalar-proxy owner whose value slot is backed by
+     * this aggregate. The index lets aggregate owner release recheck proxy
+     * values after this parent loses its final Perl storage owner.
+     */
+    synchronized boolean addProxyValueOwnerSlot(PerlOwnerSlot slot) {
+        if (threadShared || !(this instanceof RuntimeArray || this instanceof RuntimeHash)) {
+            return false;
+        }
+        if (proxyValueOwnerSlots == null) {
+            proxyValueOwnerSlots = java.util.Collections.newSetFromMap(
+                    new java.util.IdentityHashMap<>());
+        }
+        proxyValueOwnerSlots.add(slot);
+        return true;
+    }
+
+    synchronized void removeProxyValueOwnerSlot(PerlOwnerSlot slot) {
+        if (proxyValueOwnerSlots != null && proxyValueOwnerSlots.remove(slot)
+                && proxyValueOwnerSlots.isEmpty()) {
+            proxyValueOwnerSlots = null;
+        }
+    }
+
+    /** Revalidate proxy value owners when an aggregate no longer has Perl storage. */
+    void recheckProxyValueOwnersIfUnowned() {
+        if (threadShared || !(this instanceof RuntimeArray || this instanceof RuntimeHash)) {
+            return;
+        }
+        java.util.List<PerlOwnerSlot> snapshot;
+        synchronized (this) {
+            if (proxyValueOwnerSlots == null || proxyValueOwnerSlots.isEmpty()) return;
+            snapshot = new java.util.ArrayList<>(proxyValueOwnerSlots);
+        }
+        if (PerlRuntime.currentOrNull() == null || hasCurrentPerlStorageOwner()) return;
+        for (PerlOwnerSlot slot : snapshot) {
+            if (!slot.isActive() || slot.kind() != PerlOwnerSlot.Kind.UNTRACKED_REFERENCE) {
+                removeProxyValueOwnerSlot(slot);
+                continue;
+            }
+            RuntimeScalar owner = slot.untrackedScalarOwner();
+            if (owner == null || owner.untrackedReferenceOwnerSlot() != slot) {
+                slot.release();
+            } else {
+                owner.refreshUntrackedReferenceOwner();
             }
         }
     }
@@ -1194,6 +1245,10 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
 
     public void recordActiveOwner(RuntimeScalar scalar) {
         scalar.recordCountedOwner(this);
+    }
+
+    /** Compatibility no-op: counted owner identities are recorded eagerly. */
+    public void activateOwnerTracking() {
     }
 
     public void releaseActiveOwner(RuntimeScalar scalar) {

@@ -1442,6 +1442,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     PerlOwnerSlot.Kind.UNTRACKED_REFERENCE);
             untrackedReferenceOwnerSlot.associateUntrackedScalarOwner(this);
         }
+        if (this instanceof RuntimeBaseProxy proxy) {
+            untrackedReferenceOwnerSlot.associateUntrackedProxyValueParent(
+                    proxy.argumentAliasContainer());
+        }
         // Transfer the existing identity in place. PerlOwnerSlot installs its
         // new referent before releasing the previous one, so cleanup callbacks
         // cannot observe a gap where this scalar's current value has no owner.
@@ -2294,6 +2298,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         untrackedReferenceOwnerSlot = null;
         if (destination.untrackedReferenceOwnerSlot != null) {
             destination.untrackedReferenceOwnerSlot.associateUntrackedScalarOwner(destination);
+            RuntimeBase proxyParent = destination instanceof RuntimeBaseProxy proxy
+                    ? proxy.argumentAliasContainer() : null;
+            destination.untrackedReferenceOwnerSlot.associateUntrackedProxyValueParent(
+                    proxyParent);
         }
     }
 

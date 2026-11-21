@@ -65,6 +65,7 @@ cpan_smoke_*
 *.dat
 logs/
 .perlonjava_env_ready
+log.txt
 *.diff
 *.patch
 # But allow patch files in import-perl5/patches/

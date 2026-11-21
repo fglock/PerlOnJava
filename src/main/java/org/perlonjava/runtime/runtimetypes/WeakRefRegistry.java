@@ -13,6 +13,9 @@ import java.util.Set;
  */
 public class WeakRefRegistry {
 
+    /** Numeric compatibility marker for tests of the weakly tracked state. */
+    public static final int WEAKLY_TRACKED = 0;
+
     private static LifecycleRuntimeState state() {
         return PerlRuntime.current().lifecycleState;
     }
@@ -311,6 +314,11 @@ public class WeakRefRegistry {
     static void onStrongOwnerSlotReleased(RuntimeBase referent) {
         if (referent != null && PerlRuntime.currentOrNull() != null) {
             releaseDetachedUntrackedReferenceOwners(referent);
+            // A proxy can retain an untracked value owner while its lvalue
+            // parent is live. Recheck those exact proxy owners when the parent
+            // loses its final Perl storage owner; no later release on the
+            // value referent is guaranteed to trigger that check for us.
+            referent.recheckProxyValueOwnersIfUnowned();
         }
         if (referent instanceof RuntimeCode code) {
             code.releasePadConstantsForUntrackedOwnerSlot();

@@ -76,7 +76,10 @@ public final class PerlOwnerSlot {
         /** Persistent scalar or aggregate state binding retained by a CODE object. */
         CODE_STATE,
         /** Scalar wrapper retaining the current contents of a referenced scalar cell. */
-        SCALAR_REFERENCE_CONTENTS
+        SCALAR_REFERENCE_CONTENTS;
+
+        /** Compatibility name used by temporary-root lifecycle tests. */
+        public static final Kind EXPRESSION_TEMPORARY_ROOT = EXPRESSION_VALUE;
     }
 
     private Kind kind;
@@ -112,6 +115,8 @@ public final class PerlOwnerSlot {
     private PerlRuntime ownerRuntime;
     private LifecycleRuntimeState ownerRuntimeState;
     private boolean registeredInOwnerLedger;
+    /** Aggregate parent whose loss can invalidate an untracked proxy value edge. */
+    private RuntimeBase proxyValueParent;
     /** True only for the direct, counted hold created for one method invocant. */
     private boolean methodInvocantOwner;
     /** Whether an IO_VIA_LAYER identity contributes its paired direct count. */
@@ -220,6 +225,18 @@ public final class PerlOwnerSlot {
         }
         untrackedScalarOwner = scalar == null ? null : new WeakReference<>(scalar);
         refreshTransientUntrackedOwnerClassification();
+    }
+
+    synchronized void associateUntrackedProxyValueParent(RuntimeBase parent) {
+        if (kind != Kind.UNTRACKED_REFERENCE) {
+            throw new IllegalStateException("proxy parent association requires an untracked-reference slot");
+        }
+        if (proxyValueParent == parent) return;
+        RuntimeBase nextParent = parent != null && parent.addProxyValueOwnerSlot(this)
+                ? parent : null;
+        RuntimeBase previousParent = proxyValueParent;
+        proxyValueParent = nextParent;
+        if (previousParent != null) previousParent.removeProxyValueOwnerSlot(this);
     }
 
     /** Reclassify the live edge when its scalar changes transient ownership state. */
@@ -1335,6 +1352,8 @@ public final class PerlOwnerSlot {
         }
         RuntimeBase previous = referent;
         LifecycleRuntimeState previousState = ownerRuntimeState;
+        RuntimeBase previousProxyParent = proxyValueParent;
+        proxyValueParent = null;
         if (transientUntrackedOwnerCounted) {
             transientUntrackedOwnerCounted = false;
             previous.adjustTransientUntrackedReferenceOwnerCount(-1);
@@ -1354,6 +1373,9 @@ public final class PerlOwnerSlot {
         ownerRuntime = null;
         ownerRuntimeState = null;
         if (previous != null && registeredInOwnerLedger) previous.removeOwnerSlot(this);
+        if (previousProxyParent != null) {
+            previousProxyParent.removeProxyValueOwnerSlot(this);
+        }
         if (previous != null && registeredInOwnerLedger) {
             PerlRuntime.releaseOwnerSlotReferent(previousState, previous);
         }
