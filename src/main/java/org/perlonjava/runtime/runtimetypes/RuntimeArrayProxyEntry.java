@@ -82,6 +82,14 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
     }
 
     @Override
+    boolean hasLivePerlValueOwner(boolean requirePersistentParent) {
+        return hasLivePerlValueOwner()
+                && (requirePersistentParent
+                    ? parent.hasPersistentPerlStrongOwnerIdentity()
+                    : parent.hasCurrentPerlStorageOwner());
+    }
+
+    @Override
     public RuntimeScalar set(RuntimeScalar value) {
         if (parent.threadShared) SharedPerlStorage.validateStoredValue(value);
         vivify();

@@ -30,6 +30,11 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
         return true;
     }
 
+    /** Whether the value slot is backed by a parent with the requested lifetime. */
+    boolean hasLivePerlValueOwner(boolean requirePersistentParent) {
+        return hasLivePerlValueOwner();
+    }
+
     /**
      * Resolves the backing slot without applying its scalar dereference magic.
      * Callers such as tied()/untie() need the slot itself, not a FETCH result.

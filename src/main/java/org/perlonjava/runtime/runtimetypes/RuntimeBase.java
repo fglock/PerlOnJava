@@ -1729,7 +1729,42 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                         .append(" scalarCellOwner=").append(owner.hasScalarCellOwner())
                         .append(" ioOwner=").append(owner.hasIoOwner())
                         .append(" pendingReturn=").append(owner.hasPendingReturnOwner())
-                        .append(" containerHistory=").append(owner.debugContainerOwners());
+                        .append(" packageScalarSlots=")
+                        .append(owner.ownerSlotCount(PerlOwnerSlot.Kind.PACKAGE_SCALAR_SLOT))
+                        .append(" globComponentSlots=")
+                        .append(owner.ownerSlotCount(PerlOwnerSlot.Kind.GLOB_COMPONENT_SLOT))
+                        .append(" argumentValueSlots=")
+                        .append(owner.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_VALUE))
+                        .append(" argumentContainerSlots=")
+                        .append(owner.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_CONTAINER))
+                        .append(" returnValueSlots=")
+                        .append(owner.ownerSlotCount(PerlOwnerSlot.Kind.RETURN_VALUE))
+                        .append(" tieHandlerSlots=")
+                        .append(owner.ownerSlotCount(PerlOwnerSlot.Kind.TIE_HANDLER))
+                        .append(" argumentTieHandlerSlots=")
+                        .append(owner.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_TIE_HANDLER))
+                        .append(" packageNames=");
+                appendPackageScalarNames(result, owner);
+                result.append(" ownerClass=").append(owner.getClass().getSimpleName());
+                if (owner instanceof RuntimeBaseProxy proxy) {
+                    result.append(" proxyHasLvalue=").append(proxy.hasLvalue())
+                            .append(" proxyLiveOwner=").append(proxy.hasLivePerlValueOwner(true))
+                            .append(" proxyLvalue=");
+                    if (proxy.lvalue == null) {
+                        result.append("null");
+                    } else {
+                        result.append(System.identityHashCode(proxy.lvalue));
+                    }
+                    if (proxy instanceof RuntimeHashProxyEntry hashProxy) {
+                        RuntimeHash parent = hashProxy.getParent();
+                        result.append(" proxyParent=")
+                                .append(System.identityHashCode(parent))
+                                .append("/").append(parent.perlLifecycleState())
+                                .append("/refCount=").append(parent.refCount)
+                                .append("/owner=").append(parent.hasPerlStrongOwnerIdentity());
+                    }
+                }
+                result.append(" containerHistory=").append(owner.debugContainerOwners());
                 RuntimeBase container = owner.containerOwner;
                 if (container != null) {
                     result.append(" container=").append(container.getClass().getSimpleName())

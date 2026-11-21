@@ -1270,7 +1270,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 || stagedValueOwner
                 || (referencedByScalarReference
                     && (hasScalarCellOwner() || (!requireLiveContainer && refCount > 0)))
-                || (this instanceof RuntimeBaseProxy proxy && proxy.hasLivePerlValueOwner());
+                || (this instanceof RuntimeBaseProxy proxy
+                    && proxy.hasLivePerlValueOwner(requirePersistentContainer));
     }
 
     /** Scan container identities in place so repeated stores do not allocate a full history copy. */
