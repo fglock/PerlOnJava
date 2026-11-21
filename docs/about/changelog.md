@@ -19,7 +19,7 @@ priorities and future plans.
 - Release DBIx::Class phantom-chain result sources after fresh anonymous hash arguments leave their call frame (#2043).
 - Preserve caller lexical cleanup ownership through interpreter aliases so failed-connect DBIx::Class Storage can be released at scope exit (#2043).
 - Construct DBI handles with core `bless`, matching native DBI and avoiding false leak reports for its cached driver handle (#2043).
-- Release Test2 assertion events after callbacks finish, including events passed through temporary method arguments (#2043).
+- Retire overwritten temporary call arguments after callbacks, releasing Test2 Amnesty facets while preserving returned values (#2043).
 - Load nested `do` and `require` files in the active runtime package, preserving Mojolicious Lite sandbox namespaces through eval strings (#2043).
 - Remove the tokenless decrement compatibility path and its root-count repair now that releases identify their owner slots (#2043).
 - Keep temporary list-assignment results from becoming owners of their scalar LHS cells (#2043).

@@ -105,8 +105,46 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     /** Values staged while a JVM call site's argument expressions are evaluated. */
     public static final class CallArguments extends RuntimeScalar {
+        /**
+         * A non-persistent scalar argument is itself temporary call storage.
+         * Perl allows the callee to assign through @_, so remember its initial
+         * contents and retire a replacement value when that temporary leaves
+         * the call. The separate staged-value owner only protects the value
+         * that was present before the call.
+         */
+        private static final class TemporaryArgumentCell {
+            private final RuntimeScalar scalar;
+            private final int initialType;
+            private final Object initialValue;
+            private final PerlOwnerSlot initialOwner;
+            private final boolean initialOwnerActive;
+            private final RuntimeBase initialOwnerReferent;
+
+            private TemporaryArgumentCell(RuntimeScalar scalar) {
+                this.scalar = scalar;
+                initialType = scalar.type;
+                initialValue = scalar.value;
+                initialOwner = scalar.countedOwnerSlot();
+                initialOwnerActive = initialOwner != null && initialOwner.isActive();
+                initialOwnerReferent = initialOwner == null ? null : initialOwner.referent();
+            }
+
+            private boolean wasChanged() {
+                PerlOwnerSlot owner = scalar.countedOwnerSlot();
+                boolean ownerActive = owner != null && owner.isActive();
+                RuntimeBase ownerReferent = owner == null ? null : owner.referent();
+                return scalar.type != initialType
+                        || scalar.value != initialValue
+                        || owner != initialOwner
+                        || ownerActive != initialOwnerActive
+                        || ownerReferent != initialOwnerReferent;
+            }
+        }
+
         private final RuntimeBase[] values;
         private final java.util.ArrayList<RuntimeScalar> listResultOwners = new java.util.ArrayList<>();
+        private final IdentityHashMap<RuntimeScalar, TemporaryArgumentCell>
+                temporaryArgumentCells = new IdentityHashMap<>();
         private final java.util.ArrayList<PerlOwnerSlot> temporaryCodeArgumentOwners =
                 new java.util.ArrayList<>();
         private final java.util.ArrayList<RuntimeScalar.ArgumentAliasOwner> argumentAliasOwners =
@@ -137,6 +175,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // referent count. A mortal return keeps its exact RETURN_VALUE
             // release queued until this alias frame leaves.
             if (value instanceof RuntimeScalar scalar) {
+                if (!hasPersistentArgumentCell(scalar)) {
+                    temporaryArgumentCells.computeIfAbsent(
+                            scalar, TemporaryArgumentCell::new);
+                }
                 // A temporary CODE value can own compiled pad constants or
                 // closure captures without belonging to a lexical or aggregate.
                 // A captured CV needs an independent call-frame owner because
@@ -257,6 +299,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         public void finish() {
             ownerState.callArgumentFrames.remove(this);
             Throwable failure = null;
+            Set<RuntimeScalar> cleanedArgumentCells =
+                    Collections.newSetFromMap(new IdentityHashMap<>());
             if (materializedArguments != null) {
                 RuntimeArray arguments = materializedArguments;
                 materializedArguments = null;
@@ -268,10 +312,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                 && owner.kind() == PerlOwnerSlot.Kind.ARGUMENT_VALUE) {
                             failure = attemptCleanup(
                                     failure, () -> RuntimeScalar.scopeExitCleanup(scalar));
+                            cleanedArgumentCells.add(scalar);
                         }
                         failure = attemptCleanup(
                                 failure, () -> arguments.forgetOwnedAliasElement(scalar));
                     }
+                }
+            }
+            TemporaryArgumentCell[] temporaryCells =
+                    temporaryArgumentCells.values().toArray(new TemporaryArgumentCell[0]);
+            temporaryArgumentCells.clear();
+            for (TemporaryArgumentCell temporaryCell : temporaryCells) {
+                RuntimeScalar scalar = temporaryCell.scalar;
+                if (!cleanedArgumentCells.contains(scalar) && temporaryCell.wasChanged()) {
+                    failure = attemptCleanup(
+                            failure, () -> RuntimeScalar.scopeExitCleanup(scalar));
                 }
             }
             failure = releaseStagedArgumentOwners(listResultOwners, failure);

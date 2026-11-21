@@ -24,8 +24,8 @@ explicit, auditable owner tokens.
 Issue #2043 remains active. PR #1938 is open at remote head
 `75dd7d542f1f86bff930beb1c5779be74fa27955`; this local continuation is on
 `wip/issue2043-diagnostics-20261121-042222`, with the interpreter foreach fix
-committed as `4edc5faa51`. The local candidate is not on the PR and is not ready
-for UAT.
+committed as `4edc5faa51` and the checkpoint update as `9f2e5c9836`. The local
+candidate is not on the PR and is not ready for UAT.
 
 The DBIx diamond lifetime regression exposed a bytecode-interpreter gap:
 `ITERATOR_CREATE` did not retain values from a temporary `RuntimeList` source,
@@ -41,6 +41,18 @@ Logs: `/private/tmp/issue2043-foreach-unit-system-clean.log`,
 `/private/tmp/issue2043-foreach-unit-jvm-clean.log`,
 `/private/tmp/issue2043-full-diamond-interpreter-after.log`, and
 `/private/tmp/issue2043-full-diamond-jvm-after.log`.
+
+The first DBIx rerun exposed a second owner gap: assigning through a temporary
+call argument (`$_[0]` or a `foreach` alias over `@_`) could leave the
+replacement reference owned after the call. `CallArguments` now snapshots
+non-persistent scalar argument cells and scope-cleans a changed cell after the
+callee returns. This releases the Test2 Amnesty facet without dropping a value
+returned to the caller. New temporary-argument tests pass 5/5 and the Test2
+Amnesty regression passes 3/3 under system Perl, the JVM backend, and the
+interpreter; both Jperl backends failed the relevant assertions before this
+change. The source build succeeds. The full DBIx corpus has not yet been rerun
+on this candidate; the prior isolated `t/52leaks.t` run did not reproduce its
+suite failure.
 
 The cleaned candidate builds with
 `nice -n 19 timeout 1800 make build GRADLE_ARGS='-x testUnitParallel'`. The
@@ -64,6 +76,7 @@ acceptance steps remain those in the live issue handoff.
 | 2026-11-19 | Cached hot owner-kind counts, transient-owner count, narrow identity indexes, and reusable LIFO cleanup/probe worksets | Unit gate and focused `chart_axis28.t` counters/JFR recorded above; no broad performance claim | Process dying aggregate outgoing slots directly; measure allocation and scan costs on paired workloads |
 | 2026-11-19 | Correct nested hash-slot `B::REFCNT` reporting during `DESTROY` | System-Perl-validated regression and passing DBIx `t/60core.t` / `t/101populate_rs.t` | Complete remaining regression and CPAN acceptance gates |
 | 2026-11-21 | Retain temporary foreach source owners in the bytecode interpreter through normal and `last` exits (`4edc5faa51`) | New system-Perl/JVM/interpreter regression and DBIx diamond regression pass 7/7; pre-fix interpreter failure captured | Resolve Java test-source compile failures, then rerun `make`, focused CPAN failures, and full release acceptance |
+| 2026-11-21 | Release changed temporary scalar arguments after calls, including Test2 Amnesty facets | New system-Perl/JVM/interpreter tests pass 5/5 and 3/3; pre-fix Jperl failures captured; source build succeeds | Rerun DBIx from the first observed failure, then resolve Java test-source compile failures and complete repository/CPAN acceptance |
 
 ## Semantic Ownership Model
 
