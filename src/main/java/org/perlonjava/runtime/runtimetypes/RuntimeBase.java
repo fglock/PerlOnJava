@@ -1043,16 +1043,15 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             }
             if (slot.kind() == PerlOwnerSlot.Kind.UNTRACKED_REFERENCE) {
                 RuntimeScalar scalar = slot.untrackedScalarOwner();
-                if (scalar == null && blessId == 0
-                        && WeakRefRegistry.hasWeakRefsTo(this)) {
-                    slot.release();
-                    WeakRefRegistry.onStrongOwnerSlotReleased(this);
-                    continue;
-                }
-                if (scalar != null && blessId == 0
-                        && WeakRefRegistry.hasWeakRefsTo(this)
-                        && !scalar.hasLiveDurableStrongValueSlot()) {
-                    scalar.releaseUntrackedReferenceOwner(this);
+                boolean currentScalarSlot = scalar != null
+                        && scalar.untrackedReferenceOwnerSlot() == slot
+                        && DestroyDispatch.isCurrentPerlOwnerSlot(this, slot);
+                if (!currentScalarSlot) {
+                    if (scalar != null && scalar.untrackedReferenceOwnerSlot() == slot) {
+                        scalar.releaseUntrackedReferenceOwner(this);
+                    } else {
+                        slot.release();
+                    }
                     continue;
                 }
                 if (scalar != null && scalar.hasPackageAggregateUntrackedReferenceOwner()) {
@@ -1746,24 +1745,6 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                         .append(" packageNames=");
                 appendPackageScalarNames(result, owner);
                 result.append(" ownerClass=").append(owner.getClass().getSimpleName());
-                if (owner instanceof RuntimeBaseProxy proxy) {
-                    result.append(" proxyHasLvalue=").append(proxy.hasLvalue())
-                            .append(" proxyLiveOwner=").append(proxy.hasLivePerlValueOwner(true))
-                            .append(" proxyLvalue=");
-                    if (proxy.lvalue == null) {
-                        result.append("null");
-                    } else {
-                        result.append(System.identityHashCode(proxy.lvalue));
-                    }
-                    if (proxy instanceof RuntimeHashProxyEntry hashProxy) {
-                        RuntimeHash parent = hashProxy.getParent();
-                        result.append(" proxyParent=")
-                                .append(System.identityHashCode(parent))
-                                .append("/").append(parent.perlLifecycleState())
-                                .append("/refCount=").append(parent.refCount)
-                                .append("/owner=").append(parent.hasPerlStrongOwnerIdentity());
-                    }
-                }
                 result.append(" containerHistory=").append(owner.debugContainerOwners());
                 RuntimeBase container = owner.containerOwner;
                 if (container != null) {
@@ -1996,11 +1977,37 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                 } else {
                     result.append("none");
                 }
+                if (ownerCell instanceof RuntimeBaseProxy proxy) {
+                    result.append(":proxyClass=").append(ownerCell.getClass().getSimpleName())
+                            .append(":proxyHasLvalue=").append(proxy.hasLvalue())
+                            .append(":proxyLiveValue=").append(proxy.hasLivePerlValueOwner())
+                            .append(":proxyLivePersistentValue=")
+                            .append(proxy.hasLivePerlValueOwner(true));
+                    RuntimeBase proxyParent = proxy instanceof RuntimeHashProxyEntry hashProxy
+                            ? hashProxy.getParent()
+                            : proxy instanceof RuntimeArrayProxyEntry arrayProxy
+                                    ? arrayProxy.getParent() : null;
+                    if (proxyParent != null) {
+                        result.append(":proxyParent=")
+                                .append(proxyParent.getClass().getSimpleName()).append('#')
+                                .append(System.identityHashCode(proxyParent))
+                                .append("/refCount=").append(proxyParent.refCount)
+                                .append("/state=").append(proxyParent.perlLifecycleState())
+                                .append("/perOwner=").append(proxyParent.hasPerlStrongOwnerIdentity())
+                                .append("/persistentOwner=")
+                                .append(proxyParent.hasPersistentPerlStrongOwnerIdentity())
+                                .append("/registered=").append(MyVarCleanupStack.isRegistered(proxyParent))
+                                .append("/global=")
+                                .append(GlobalVariable.findGlobalAggregateName(proxyParent));
+                    }
+                }
                 RuntimeBase cellContainer = ownerCell.containerOwner;
                 if (cellContainer != null) {
                     result.append(":container=")
                             .append(cellContainer.getClass().getSimpleName()).append('#')
                             .append(System.identityHashCode(cellContainer));
+                    result.append(":globalContainer=")
+                            .append(GlobalVariable.findGlobalAggregateName(cellContainer));
                     if (REFCOUNT_TRACE_ENV) {
                         result.append("/generation=").append(traceReferentGeneration(cellContainer));
                     }

@@ -36,41 +36,6 @@ public class WeakRefRegistry {
         return !state().referentToWeakRefs.isEmpty();
     }
 
-    private static boolean isIssue2043TraceClass(String className) {
-        return className != null
-                && (className.contains("ResultSet")
-                    || "DBICTest::Schema".equals(className)
-                    || className.startsWith("DBIx::Class::Storage::DBI"));
-    }
-
-    private static String issue2043SchemaOwnerSlots(RuntimeBase referent) {
-        return referent.ownerSlotSnapshot().stream()
-                .filter(slot -> slot.isActive() && slot.kind() == PerlOwnerSlot.Kind.HASH_ELEMENT
-                        && slot.referent() == referent)
-                .map(slot -> {
-                    RuntimeScalar countedCell = slot.countedScalarOwner();
-                    RuntimeScalar cell = countedCell == null
-                            ? slot.untrackedScalarOwner() : countedCell;
-                    RuntimeBase container = cell == null ? null : cell.getContainerOwner();
-                    if (!(container instanceof RuntimeHash hash)) {
-                        return "slot#" + slot.identity() + ":cell="
-                                + (cell == null ? "null" : System.identityHashCode(cell))
-                                + ":container=" + (container == null ? "null"
-                                        : container.getClass().getSimpleName() + "#"
-                                            + System.identityHashCode(container));
-                    }
-                    return "slot#" + slot.identity() + ":cell=" + System.identityHashCode(cell)
-                            + ":weak=" + isweak(cell)
-                            + ":owns=" + cell.refCountOwned
-                            + ":hash=" + NameNormalizer.getBlessStr(hash.blessId) + "#"
-                            + System.identityHashCode(hash) + ":keys=" + hash.elements.entrySet().stream()
-                                    .filter(entry -> entry.getValue() == cell)
-                                    .map(java.util.Map.Entry::getKey).toList()
-                            + ":size=" + hash.elements.size()
-                            + ":current=" + hash.hasCurrentPerlStorageOwner();
-                }).toList().toString();
-    }
-
     /** Drop references belonging to the previous top-level script. */
     public static void resetState() {
         state().weakScalars.clear();
@@ -136,17 +101,6 @@ public class WeakRefRegistry {
         state.referentToWeakRefs
                 .computeIfAbsent(base, k -> Collections.newSetFromMap(new IdentityHashMap<>()))
                 .add(ref);
-        String weakTraceClass = NameNormalizer.getBlessStr(base.blessId);
-        if (System.getenv("PJ_WEAK_OWNER_RELEASE_TRACE") != null
-                && isIssue2043TraceClass(weakTraceClass)
-                && MyVarCleanupStack.isRegistered(ref)) {
-            System.err.println("[WEAK-REGISTER] id=" + System.identityHashCode(base)
-                    + " class=" + weakTraceClass + " rc=" + base.refCount
-                    + " tracked=" + base.isRefCountTracked()
-                    + " liveLexical=" + MyVarCleanupStack.isRegistered(ref)
-                    + " owners=" + base.ownerSlotSnapshot().stream()
-                            .map(slot -> slot.kind().name()).toList());
-        }
         ref.releaseUntrackedReferenceOwner(base);
         // Releasing the final strong slot can synchronously run DESTROY and
         // clear this newly registered weak observer, as Perl does when the
@@ -357,71 +311,6 @@ public class WeakRefRegistry {
     static void onStrongOwnerSlotReleased(RuntimeBase referent) {
         if (referent != null && PerlRuntime.currentOrNull() != null) {
             releaseDetachedUntrackedReferenceOwners(referent);
-        }
-        String releaseTraceClass = referent == null ? null
-                : NameNormalizer.getBlessStr(referent.blessId);
-        if (referent != null && System.getenv("PJ_WEAK_OWNER_RELEASE_TRACE") != null
-                && isIssue2043TraceClass(releaseTraceClass)
-                && referent.refCount <= 1
-                && hasWeakRefsTo(referent)) {
-            System.err.println("[WEAK-OWNER-RELEASE] id=" + System.identityHashCode(referent)
-                    + " rc=" + referent.refCount
-                    + " tracked=" + referent.isRefCountTracked()
-                    + " weaklyTracked=" + referent.isWeaklyRefCountTracked()
-                    + " weakRefs=" + hasWeakRefsTo(referent)
-                    + " owners=" + referent.ownerSlotSnapshot().stream()
-                            .map(slot -> {
-                                if (slot.kind() != PerlOwnerSlot.Kind.UNTRACKED_REFERENCE) {
-                                    return slot.kind().name();
-                                }
-                                RuntimeScalar owner = slot.untrackedScalarOwner();
-                                RuntimeBase ownerContainer = owner == null ? null : owner.getContainerOwner();
-                                String proxyState = "";
-                                if (owner instanceof RuntimeHashProxyEntry proxy) {
-                                    RuntimeHash parent = proxy.getParent();
-                                    proxyState = ":proxyParent=" + NameNormalizer.getBlessStr(parent.blessId)
-                                            + "#" + System.identityHashCode(parent)
-                                            + ":size=" + parent.elements.size()
-                                            + ":lvalueStored=" + (proxy.lvalue != null
-                                                    && parent.containsElementCellIdentity(proxy.lvalue))
-                                            + ":lvalueKeys=" + parent.elements.entrySet().stream()
-                                                    .filter(entry -> entry.getValue() == proxy.lvalue)
-                                                    .map(java.util.Map.Entry::getKey).toList();
-                                }
-                                return slot.kind().name() + "@"
-                                        + (owner == null ? "null" : System.identityHashCode(owner))
-                                        + ":class=" + (owner == null ? "null" : owner.getClass().getSimpleName())
-                                        + ":weak=" + (owner != null && isweak(owner))
-                                        + ":valueMatches=" + (owner != null && owner.value == referent)
-                                        + ":liveLexical=" + (owner != null && MyVarCleanupStack.isRegistered(owner))
-                                        + ":ownsCount=" + (owner != null && owner.refCountOwned)
-                                        + ":scopeExited=" + (owner != null && owner.scopeExited)
-                                        + ":transient=" + (owner != null && owner.isTransientArgumentValueOwner())
-                                        + ":current=" + (owner != null && owner.hasLiveCurrentStrongValueSlot())
-                                        + ":scalarRef=" + (owner != null && owner.referencedByScalarReference)
-                                        + ":scalarCell=" + (owner != null && owner.hasScalarCellOwner())
-                                        + ":codeSlot=" + (owner != null && owner.hasCodeSlotBinding())
-                                        + ":proxy=" + (owner instanceof RuntimeBaseProxy)
-                                        + ":scalarTrace=" + (owner == null ? "null" : owner.ownerTraceSnapshot())
-                                        + ":containerOwners=" + (owner == null ? "null" : owner.debugContainerOwners())
-                                        + ":container=" + (ownerContainer == null ? "null"
-                                                : ownerContainer.getClass().getSimpleName() + "#"
-                                                    + System.identityHashCode(ownerContainer))
-                                        + ":scalarOwners=" + (owner == null ? "[]"
-                                                : owner.ownerSlotSnapshot().stream()
-                                                    .map(ownerSlot -> ownerSlot.kind().name()).toList())
-                                        + proxyState;
-                            }).toList()
-                    + " local=" + referent.localBindingExists
-                    + " capture=" + referent.hasClosureCaptureOwner()
-                    + " pendingReturn=" + referent.hasPendingReturnOwner()
-                    + " pendingRelease=" + referent.hasPendingOwnerRelease()
-                    + " counted=" + referent.countedOwnerSlotCount()
-                    + " canTrust=" + MortalList.canTrustFinalCountedRelease(referent)
-                    + " runtime=" + (PerlRuntime.currentOrNull() != null)
-                    + ("DBICTest::Schema".equals(releaseTraceClass) && referent.refCount <= 1
-                            ? " trace=" + referent.ownerTraceSnapshot()
-                                + " sourceSlots=" + issue2043SchemaOwnerSlots(referent) : ""));
         }
         if (referent instanceof RuntimeCode code) {
             code.releasePadConstantsForUntrackedOwnerSlot();
