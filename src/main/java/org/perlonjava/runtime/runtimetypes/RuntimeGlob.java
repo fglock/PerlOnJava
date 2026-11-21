@@ -346,30 +346,33 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     }
 
     /**
-     * Perl treats assigning another wrapper for the same cached constant as a
-     * re-export, not a subroutine redefinition.  The wrappers can be distinct
-     * RuntimeCode instances while still sharing the frozen constant payload.
+     * Perl permits re-exporting the same constant CV without a redefinition
+     * warning. Distinct constant subs with equal values are still redefinitions.
      */
     private static boolean isSameCachedConstant(RuntimeCode oldCode, RuntimeCode newCode) {
-        if (oldCode.constantValue == null || newCode.constantValue == null
+        boolean sameUnderlyingCode = oldCode == newCode
+                || oldCode.codeObject != null && oldCode.codeObject == newCode.codeObject
+                || oldCode.subroutine != null && oldCode.subroutine == newCode.subroutine
+                || oldCode.__SUB__ != null && oldCode.__SUB__ == newCode.__SUB__;
+        if (sameUnderlyingCode) return true;
+        boolean constantSub = oldCode.isConstantCv || newCode.isConstantCv
+                || oldCode.attributes != null && oldCode.attributes.contains("const")
+                || newCode.attributes != null && newCode.attributes.contains("const");
+        if (constantSub || oldCode.constantValue == null || newCode.constantValue == null
                 || oldCode.constantValue.size() != newCode.constantValue.size()) {
             return false;
         }
         for (int i = 0; i < oldCode.constantValue.size(); i++) {
             RuntimeBase oldValue = oldCode.constantValue.elements.get(i);
             RuntimeBase newValue = newCode.constantValue.elements.get(i);
-            if (oldValue == newValue) {
-                continue;
-            }
+            if (oldValue == newValue) continue;
             if (!(oldValue instanceof RuntimeScalar oldScalar)
                     || !(newValue instanceof RuntimeScalar newScalar)
                     || oldScalar.type != newScalar.type) {
                 return false;
             }
             if (RuntimeScalarType.isReference(oldScalar)) {
-                if (oldScalar.value != newScalar.value) {
-                    return false;
-                }
+                if (oldScalar.value != newScalar.value) return false;
             } else if (!oldScalar.toString().equals(newScalar.toString())) {
                 return false;
             }
@@ -2298,6 +2301,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         RuntimeScalar displacedScalar = GlobalVariable.scalarSlots().get(snap.globName);
         if (displacedScalar != null
                 && displacedScalar != snap.scalar
+                // `*SYM = \\$lexical` makes this slot share the source
+                // scalar container. Clearing the displaced slot in place
+                // would also undefine that lexical; its own scope/owner
+                // cleanup is responsible for DESTROY when it leaves.
+                && !displacedScalar.referencedByScalarReference
                 && displacedScalar.value instanceof RuntimeBase displacedBase
                 && hasDestroyMethod(displacedBase)) {
             // Whole-glob localization installs a fresh scalar container.
