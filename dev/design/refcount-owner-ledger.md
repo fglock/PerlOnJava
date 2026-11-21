@@ -19,81 +19,60 @@ delivery for removing lifecycle decisions based on memory sweeps; #1649 is its
 historical origin. The design replaces selective-refcount heuristics with
 explicit, auditable owner tokens.
 
-## Current Status (2026-11-21)
+## Current Status (2026-11-21 — handoff)
 
-Issue #2043 remains active. PR #1938 is open at remote head
-`75dd7d542f1f86bff930beb1c5779be74fa27955`; the local continuation is on
-`wip/issue2043-resume-20261121-085022` at `8d6468d348`, with the latest owner
-trace changes being checkpointed. This candidate is not on the PR and is not
-ready for UAT. New project regressions are kept under
-`src/test/resources/unit/refcount`; the temporary DBIx test under
-`dev/modules` has been removed.
+**Delivery issue:** [#2043](https://github.com/fglock/PerlOnJava/issues/2043)
 
-Two ownership fixes are already in the local history. The interpreter now
-retains temporary foreach sources through normal and `last` exits. Call
-arguments also release a replacement reference when a temporary scalar
-argument is overwritten. The related system-Perl, JVM, and interpreter tests
-pass, and the pre-fix interpreter/argument failures were recorded in the logs
-listed in the completed-phase table below.
+**Target PR:** [#1938](https://github.com/fglock/PerlOnJava/pull/1938)
+**Goal:** deliver Perl-exact owner counts, weak-reference lifetime, and deterministic `DESTROY` behavior without memory-sweep lifecycle decisions. The immediate open work is the DBIx::Class diamond-prefetch shutdown leak and the repository failures listed below.
 
-The latest full DBIx `t/prefetch/diamond.t` run passes 768/768 with system Perl.
-JVM and interpreter each fail four shutdown leak assertions. A reduced
-reproduction shows the resultset cache is released, but a selected
-`DBICTest::BaseResultSet` remains `LIVE` at runtime refcount zero with a durable
-untracked scalar owner. Its `cursor` field owns a
-`DBIx::Class::Storage::DBI::Cursor`, which shares the nested query-attrs hash.
-The source of that durable scalar owner is still unresolved.
+### Checkpoint and diagnosis
 
-A project-owned regression test now reproduces the leak:
-`src/test/resources/unit/refcount/diamond_prefetch_cursor_leak.t`. It requires
-`DBIC_CLASS_TEST_ROOT` pointing to a DBIx::Class checkout and skips otherwise.
-The test creates 64 search permutations with different join/prefetch attribute
-structures, iterates each ResultSet, and traverses the `cd -> artist` and
-`artwork_to_artist -> artist` relationship chains on every returned row. After
-the block exits, weak witnesses to Schema, Storage, and DBH must all be cleared.
+The handoff branch is `wip/issue2043-handoff-20261121-154515` with a clean tree after this document update. Runtime source is checkpointed at `5bde29378c` (`wip: snapshot proxy owner recheck candidate`), preceded by `4d99626026`, which removes the local session log from version control. `log.txt` is now ignored. These are WIP preservation commits, not a passing acceptance result. The source candidate adds an identity index of untracked proxy value-owner slots on their aggregate lvalue parent. It rechecks those exact slots after cleanup-stack unregistration, active lexical-owner release, and deferred aggregate count transitions. This follows actual Perl owner release boundaries and does not trigger a broad reachability scan.
 
-Bisection findings for the leak trigger:
-- The leak requires volume: 64+ different searches with relationship traversal.
-  A single search or a few identical searches do not leak.
-- The leak requires different attribute structures across searches (different
-  join/prefetch hash shapes). Identical searches at any volume do not leak.
-- The leak requires relationship traversal on returned rows. Calling `.all`
-  without traversal does not leak even at volume.
-- Pure-Perl models of the same reference graph (Schema/Source/ResultSet/Cursor
-  with DESTROY rescue, weak backrefs, and `||=` caching) do not reproduce the
-  leak. The bug requires something specific to DBIx's runtime behavior: likely
-  the `Try::Tiny` try/catch closures in `_resolve_condition`, the complex
-  attribute merging in `ResultSet::search`, or the `related_resultset` hash
-  caching through `return $self->{hash}{key} = do { ... }`.
-- `use Test::More` (default import) masks the leak at low volume (9 searches)
-  but not at high volume (64+). `PJ_REFCOUNT_TRACE=1` also masks the leak by
-  adding extra owner tracking that helps the runtime release correctly.
-- Both JVM and interpreter backends fail identically.
+The original DBIx symptom was a ResultSet proxy whose lvalue cell survived while its parent hash had runtime `refCount=0`, no Perl owner, and no registration or persistence. The proxy owner had been accepted while the parent was live and was never revalidated after the parent died. Cleanup-stack unregistration was the boundary that made the focused DBIx reproduction pass.
 
-`t/60core.t` passed after the recent frame-release ordering changes, but that
-does not clear the diamond failure.
+### Permanent regression evidence
 
-The source build succeeds. Full `make` remains blocked at Java test-source
-compilation by 93 references to retired reachability-diagnostic APIs, including
-`ReachabilityWalker`, `measureReachabilityQueries`, and
-`temporaryRootDirectlyReferences`. Full unit and CPAN acceptance remain
-outstanding, along with focused Moo and Template Toolkit retests. Temporary
-owner tracing in `RuntimeBase.java` is diagnostic only and must be removed after
-the retained owner is identified.
+The DBIx tests are permanent project-owned Perl tests under `src/test/resources/unit/refcount`: `diamond_prefetch_cursor_leak.t`, `diamond_prefetch_cursor_leak_permutations.t`, and `diamond_prefetch_shutdown_leak.t`. They require `DBIC_CLASS_TEST_ROOT` and skip cleanly otherwise. Before the proxy fix, JVM and interpreter each failed four weak-witness checks (Schema, Storage, DBH, combined), while system Perl collected the witnesses. With the candidate, the shutdown case passes 768 functional checks and the permutation case passes 772 assertions on both backends; DBICTest LeakTracer reports no retained references. The duplicate-aggregate-owner and nested-aggregate-destruction regressions also pass on both backends. Focused build and DBIx `t/60core.t` passed after the frame-drain order adjustment. Logs are `/private/tmp/issue2043-proxy-owner-final-build.log`, `/private/tmp/issue2043-final-interpreter-shutdown.log`, `/private/tmp/issue2043-final-interpreter-permutations.log`, `/private/tmp/issue2043-final-jvm-shutdown.log`, `/private/tmp/issue2043-final-jvm-permutations.log`, and `/private/tmp/issue2043-dfs-array-reverse-dbix-60core.log`.
 
-The sweep-removal design still requires direct cleanup from a dying
-aggregate's outgoing owner slots, without nested target pre-scans or repeated
-incoming-owner scans. After the DBIx owner is reproduced and fixed, measure
-owner-slot visits, workset/queue allocations, sampled allocations, and elapsed
-time on the same `Excel-Writer-XLSX/t/regression/chart_axis28.t` workload. The
-earlier short JFR sample was noisy and did not establish a broad speedup.
 
-| Date | Phase delivered | Evidence | Remaining |
-| --- | --- | --- | --- |
-| 2026-11-19 | Cached hot owner-kind counts, transient-owner count, narrow identity indexes, and reusable LIFO cleanup/probe worksets | Unit gate and focused `chart_axis28.t` counters/JFR recorded above; no broad performance claim | Process dying aggregate outgoing slots directly; measure allocation and scan costs on paired workloads |
-| 2026-11-19 | Correct nested hash-slot `B::REFCNT` reporting during `DESTROY` | System-Perl-validated regression and passing DBIx `t/60core.t` / `t/101populate_rs.t` | Complete remaining regression and CPAN acceptance gates |
-| 2026-11-21 | Retain temporary foreach source owners in the bytecode interpreter through normal and `last` exits (`4edc5faa51`) | New system-Perl/JVM/interpreter regression and DBIx diamond regression pass 7/7; pre-fix interpreter failure captured | Resolve Java test-source compile failures, then rerun `make`, focused CPAN failures, and full release acceptance |
-| 2026-11-21 | Release changed temporary scalar arguments after calls, including Test2 Amnesty facets | New system-Perl/JVM/interpreter tests pass 5/5 and 3/3; pre-fix Jperl failures captured; source build succeeds | Rerun DBIx from the first observed failure, then resolve Java test-source compile failures and complete repository/CPAN acceptance |
+### Completed milestones
+
+| Date | Delivered scope | Evidence |
+|---|---|---|
+| 2026-11-19 | Cached hot owner-kind counts, narrow identity indexes, and reusable cleanup/probe worksets | Owner-ledger unit gate passed; earlier performance measurements remain inconclusive and are not a broad speedup claim. |
+| 2026-11-19 | Correct nested hash-slot `B::REFCNT` reporting during `DESTROY` | System-Perl-validated regression; DBIx `t/60core.t` and `t/101populate_rs.t` passed. |
+| 2026-11-21 | Retain interpreter foreach source owners through normal and `last` exits (`4edc5faa51`) | System Perl, JVM, interpreter, and focused DBIx diamond regression passed. |
+| 2026-11-21 | Release overwritten temporary call-argument owners, including Test2 Amnesty facets (`eb8907f362`) | System Perl, JVM, and interpreter regressions passed; source build succeeded. |
+
+The last full gate was `nice -n 19 timeout 3600 make`, log `/private/tmp/issue2043-proxy-owner-restored-diagnostics-make.log`. Java production and test sources compiled, Joni tests ran, and unit shard 3 reported 684 tests with three failures. The overall make did not complete; the one-hour timeout killed it (`EXIT 124`, make reported signal 143). No PerlOnJava2 Gradle workers remained after exit. The user expects `make` to finish in about ten minutes and suspects the failures caused the stall; treat that as an investigation lead, not a proven cause. Do not repeat a one-hour wait. After fixing the actionable failures, use `nice -n 19 timeout 900 make`; if it still stalls, inspect Gradle task/worker progress and cancellation instead of extending the timeout blindly.
+
+### Current full-gate failures
+
+| Test | Evidence | Next action |
+|---|---|---|
+| `unit/refcount/destroy_eval_die.t` | System Perl passes all 10 checks. Current JVM and interpreter fail only the LIFO assertion: got `first, second`, expected `second, first`. Logs: `/private/tmp/issue2043-systemperl-destroy_eval_die.log`, `/private/tmp/issue2043-jvm-destroy_eval_die.log`, `/private/tmp/issue2043-interpreter-destroy_eval_die.log`. | Trace exception-scope owner releases and restore Perl's LIFO destruction order without regressing DBIx `t/60core.t` or the nested-aggregate LIFO regression. The existing tracked test is already a red test; do not alter it. Add another permanent test first only if diagnosis reveals a distinct behavior it does not isolate. |
+| `unit/refcount/owner_trace_snapshot.t` | System Perl skips because the diagnostic is PerlOnJava-only. Current JVM and interpreter fail assertion 1: the snapshot inserts `state=LIVE`, `destroyFired`, `needsReDestroy`, and `hasWeakRefs` between `refCount=...` and `active=...`, violating the expected stable prefix. Assertions 2–3 pass. Logs: `/private/tmp/issue2043-systemperl-owner_trace_snapshot.log`, `/private/tmp/issue2043-jvm-owner_trace_snapshot.log`, `/private/tmp/issue2043-interpreter-owner_trace_snapshot.log`. | Preserve the diagnostic format consumed by the tracked test, likely by moving the extra state fields after the `active` owner list. Keep the test unchanged and run it on both backends. |
+| `unit/thread_shared_queue_clone.t` | Full parallel make reported `ConcurrentModificationException`. System Perl passes; focused one-shot JVM and interpreter runs both pass. Logs: `/private/tmp/issue2043-systemperl-thread_shared_queue_clone.log`, `/private/tmp/issue2043-jvm-thread_shared_queue_clone.log`, `/private/tmp/issue2043-interpreter-thread_shared_queue_clone.log`. | Treat as unreproduced/flaky so far. Repeat the focused test under bounded, controlled repetitions and inspect the exception stack before changing code. The tracked test already covers the behavior; add coverage only if a distinct race is found. |
+
+### Complete step-by-step delivery plan
+
+1. **Resume from this checkpoint.** Recheck branch/status and the live state, comments, and linked work for issue #2043 and PR #1938 before editing. Keep the current WIP branch as recovery; do not push it.
+2. **Use TDD for every distinct failure.** Keep existing tests unchanged. Where coverage is missing, add a focused permanent test under `src/test/resources/unit` or the owning Java unit-test tree before production changes. For Perl tests, run system Perl first and save complete output. Prove the regression on the unfixed parent and preserve the failure log.
+3. **Fix the DESTROY ordering failure.** Trace the exception-unwind path from `MyVarCleanupStack.unwindTo` through deferred release draining. Make the smallest change that produces LIFO `DESTROY` order on JVM and interpreter. Re-run `destroy_eval_die.t`, `issue_2043_nested_aggregate_destroy_lifo.t`, the diamond tests, and DBIx `t/60core.t` after each change.
+4. **Fix the owner-trace format failure.** Keep the tracked assertion/API stable without changing the test. Verify `owner_trace_snapshot.t` on JVM and interpreter and preserve any diagnostic fields needed by other consumers.
+5. **Resolve the thread-clone report.** Reproduce the `ConcurrentModificationException` with a bounded focused run and capture the stack. If it is reproducible, add a narrower permanent test first, validate with system Perl, then fix and verify both backends. If it does not reproduce, record the repeated evidence and investigate why the parallel gate reported it.
+6. **Reconfirm the proxy-owner fix.** Run the three diamond regressions and supporting refcount tests on both backends, with system-Perl validation. Preserve the pre-fix/fixed logs. Confirm the optional DBIx dependency skip behavior remains clean.
+7. **Complete DBIx acceptance.** Run `t/prefetch/diamond.t` and `t/60core.t`, then resume the broader DBIx::Class gate from its first actionable failure. A previous broad DBIx run ended with 52 failing subtests; focused success is not full-module acceptance. For each #2043 behavior, add permanent test coverage first and check system Perl before the fix.
+8. **Complete remaining compatibility gates.** Run the outstanding focused Moo and Template Toolkit retests and remaining CPAN acceptance checks. Stop at actionable failures, add tests first, then fix; capture full outputs, exit status, command, and source commit.
+9. **Review and document the final source.** Run `git diff --check`, review all runtime/support code, verify tests are in `src/`, and remove temporary diagnostics that are not needed. Evaluate whether the existing #2043 changelog bullets cover the proxy-owner behavior; add a concise Work in progress bullet if needed. This document links directly to #2043. Run `make check-links` and offline link checking for changed Markdown.
+10. **Commit and run immutable gates.** Commit the reviewed candidate before the final repository gate. Run `nice -n 19 timeout 900 make` on that exact source commit and focused acceptance gates. If any source changes follow, commit them and rerun affected tests plus `make`.
+11. **Integrate with the existing PR safely.** PR #1938 was last confirmed open at remote head `75dd7d542f1f86bff930beb1c5779be74fa27955`; recheck before acting. This WIP branch diverges substantially from the PR head, so never push it directly or force-update the PR from it. Create an isolated branch/worktree from the latest PR head, transplant only intended #2043 code, regression tests, design update, and changelog changes, preserve existing PR work, resolve conflicts by inspecting both sides, and validate the exact PR candidate.
+12. **Publish and cross-link.** Only after required gates pass, push to the existing PR #1938 branch and verify it remains open with the expected files. Add a reciprocal link from issue #2043 to a stable GitHub permalink for this design document at the tested PR commit; append it without replacing unrelated issue content. Verify the document-to-issue and issue-to-document links.
+13. **Close delivery.** Record the final PR commit and evidence here, wait for review, and complete merge through PR #1938. After merge, verify issue #2043 is resolved and replace this handoff with the next current state or mark the phase complete.
+
+Preflight backups of the dirty source state are `/tmp/wip-unstaged-20261121-144256.patch`, `/tmp/wip-staged-20261121-144256.patch`, `/tmp/wip-status-20261121-144256.txt`, and the later post-timeout snapshot `/tmp/wip-unstaged-20261121-154419.patch`, `/tmp/wip-staged-20261121-154419.patch`, `/tmp/wip-status-20261121-154419.txt`.
 
 ## Semantic Ownership Model
 
