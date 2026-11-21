@@ -9,6 +9,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 import org.perlonjava.runtime.operators.ModuleOperators;
 import org.perlonjava.runtime.operators.ReferenceOperators;
+import org.perlonjava.frontend.parser.ParserExtensionRegistry;
 
 import java.util.List;
 import java.util.ArrayList;
@@ -23,9 +24,15 @@ public final class FunctionParameters extends PerlModuleBase {
         FunctionParameters module = new FunctionParameters();
         try {
             module.registerMethod("info", "info", "$");
+            module.registerMethod("register_parser_keywords", "registerParserKeywords", "@");
         } catch (NoSuchMethodException e) {
-            throw new IllegalStateException("Missing Function::Parameters.info implementation", e);
+            throw new IllegalStateException("Missing Function::Parameters runtime implementation", e);
         }
+    }
+
+    public static RuntimeList registerParserKeywords(RuntimeArray args, int context) {
+        ParserExtensionRegistry.applyDynamicFunctionParametersImport(true, args.getList());
+        return new RuntimeScalar().getList();
     }
 
     public static RuntimeList info(RuntimeArray args, int context) {

@@ -2,7 +2,7 @@
 
 > Perl 5 on the JVM — single jar, batteries included
 
-[![Build Status](https://github.com/fglock/PerlOnJava/workflows/Java%20CI%20with%20Gradle/badge.svg)](https://github.com/fglock/PerlOnJava/actions)
+[![Build Status](https://github.com/fglock/PerlOnJava/actions/workflows/gradle.yml/badge.svg?branch=master)](https://github.com/fglock/PerlOnJava/actions)
 [![Latest release](https://img.shields.io/github/v/tag/fglock/PerlOnJava?label=release&sort=semver)](https://github.com/fglock/PerlOnJava/releases)
 [![License](https://img.shields.io/badge/license-Artistic_1.0_|_GPL_1+-blue.svg)](LICENSE.md)
 

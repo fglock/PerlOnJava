@@ -5,6 +5,7 @@ import org.perlonjava.app.cli.CompilerOptions;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
+import org.perlonjava.frontend.analysis.BooleanCallContext;
 import org.perlonjava.frontend.analysis.ReturnTypeVisitor;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
@@ -1756,8 +1757,12 @@ public class EmitOperator {
             case "preAutoIncrement", "postAutoIncrement", "postAutoIncrementVoid",
                     "preAutoDecrement", "postAutoDecrement" ->
                     RuntimeContextType.LVALUE;
+            case "not", "!" -> RuntimeContextType.SCALAR;
             default -> RuntimeContextType.SCALAR;
         };
+        if (operator.equals("not") || operator.equals("!")) {
+            BooleanCallContext.markDirectCall(node.operand);
+        }
         node.operand.accept(emitterVisitor.with(operandContext));
         OperatorHandler operatorHandler = OperatorHandler.get(operator);
         if (operatorHandler != null) {

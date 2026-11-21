@@ -49,6 +49,8 @@ public class DestroyDispatch {
         if (referent == null || blessId == 0) return;
         String className = NameNormalizer.getBlessStr(blessId);
         boolean hasDestroy = className != null && classHasDestroy(blessId, className);
+        if (hasDestroy) state().globalDestroyables.add(referent);
+        else state().globalDestroyables.remove(referent);
         boolean statementBoundaryCleanup = isStatementBoundaryCleanupClassName(className);
         if ((hasDestroy && className != null && className.endsWith("::Cursor"))
                 || statementBoundaryCleanup) {
@@ -68,7 +70,12 @@ public class DestroyDispatch {
         if (referent != null) {
             state().destroyableObjects.remove(referent);
             state().statementBoundaryDestroyableObjects.remove(referent);
+            state().globalDestroyables.remove(referent);
         }
+    }
+
+    public static ArrayList<RuntimeBase> snapshotGlobalDestroyables() {
+        return state().globalDestroyables.snapshot();
     }
 
     public static ArrayList<RuntimeBase> snapshotDestroyableObjects() {
