@@ -2806,6 +2806,8 @@ public class Opcodes {
 
     /** Flush mortals and advance the Perl statement-lifetime boundary. */
     public static final short MORTAL_STATEMENT_FLUSH = 645;
+    /** Release the foreach source-value lease acquired with ITERATOR_CREATE. Format: iteratorReg. */
+    public static final short FOREACH_SOURCE_RELEASE = 646;
 
     private Opcodes() {
     } // Utility class - no instantiation

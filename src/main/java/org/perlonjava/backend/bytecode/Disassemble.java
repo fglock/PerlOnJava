@@ -1629,6 +1629,10 @@ public class Disassemble {
                         rs = interpretedCode.bytecode[pc++];
                         sb.append("ITERATOR_NEXT r").append(rd).append(" = r").append(rs).append(".next()\n");
                         break;
+                    case Opcodes.FOREACH_SOURCE_RELEASE:
+                        rs = interpretedCode.bytecode[pc++];
+                        sb.append("FOREACH_SOURCE_RELEASE r").append(rs).append("\n");
+                        break;
                     case Opcodes.FOREACH_NEXT_OR_EXIT: {
                         rd = interpretedCode.bytecode[pc++];
                         int iterReg = interpretedCode.bytecode[pc++];

@@ -8686,6 +8686,12 @@ public class BytecodeCompiler implements Visitor {
             patchJump(explicitLoopExitPatch, loopEndPc);
         }
 
+        // The JVM emitter restores temporary foreach source owners at this
+        // boundary. The bytecode interpreter retains the same source values
+        // from ITERATOR_CREATE until every normal or `last` exit reaches here.
+        emit(Opcodes.FOREACH_SOURCE_RELEASE);
+        emitReg(iterReg);
+
         if (!multiVarRegs.isEmpty()) {
             for (int heldReg : multiVarAliasHeldRegs) {
                 if (heldReg >= 0) {

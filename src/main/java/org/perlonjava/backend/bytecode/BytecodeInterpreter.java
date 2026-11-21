@@ -1785,6 +1785,13 @@ public class BytecodeInterpreter {
                                 pc = OpcodeHandlerExtended.executeIteratorNext(bytecode, pc, registers);
                             }
 
+                            case Opcodes.FOREACH_SOURCE_RELEASE -> {
+                                // Release the temporary source-value lease acquired with the iterator.
+                                int iterReg = bytecode[pc++];
+                                OpcodeHandlerExtended.releaseForeachSourceOwners(
+                                        (RuntimeScalar) registers[iterReg]);
+                            }
+
                             case Opcodes.FOREACH_NEXT_OR_EXIT -> {
                                 // Superinstruction for foreach loops (do-while layout).
                                 // Combines: hasNext check, next() call, and conditional jump to body.

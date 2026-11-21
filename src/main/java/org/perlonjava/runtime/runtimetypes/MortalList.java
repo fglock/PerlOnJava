@@ -22,17 +22,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class MortalList {
     private static final AtomicInteger runtimesWithBoundaryWork = new AtomicInteger();
 
-    private static boolean traceIssue2043RelationshipHash(RuntimeBase base) {
-        if (!"1".equals(System.getenv("PJ_ISSUE2043_HASH_TRACE"))
-                || !(base instanceof RuntimeHash hash)) return false;
-        return hash.elements.size() == 1 && hash.elements.containsKey("cd");
-    }
-
-    private static boolean traceIssue2043Cd(RuntimeBase base) {
-        return "1".equals(System.getenv("PJ_ISSUE2043_HASH_TRACE"))
-                && "DBICTest::CD".equals(NameNormalizer.getBlessStr(base.blessId));
-    }
-
     static final class DeferredArgumentOwnerRelease {
         final RuntimeBase base;
         final RuntimeBase.PendingOwnerRelease ownerRelease;
@@ -1123,17 +1112,6 @@ public class MortalList {
 
     private static void scopeExitCleanupHashBody(
             RuntimeHash hash, RuntimeBase returned, boolean finalRelease) {
-        boolean issue2043Trace = finalRelease
-                && "1".equals(System.getenv("PJ_ISSUE2043_HASH_TRACE"))
-                && hash.elements.containsKey("_relationship_data");
-        if (issue2043Trace) {
-            System.err.println("[ISSUE2043-HASH] enter id=" + System.identityHashCode(hash)
-                    + " class=" + NameNormalizer.getBlessStr(hash.blessId)
-                    + " final=" + finalRelease + " lifecycle=" + hash.perlLifecycleState()
-                    + " rc=" + hash.refCount + " local=" + hash.localBindingExists
-                    + " currentOwner=" + hash.hasCurrentPerlOwnerSlotIdentity()
-                    + " keys=" + hash.elements.keySet());
-        }
         // Clear localBindingExists: the named variable's scope is ending.
         // This allows subsequent refCount==0 events (from setLargeRefCounted
         // or flush) to correctly trigger callDestroy, since the local
@@ -1199,57 +1177,6 @@ public class MortalList {
             }
         }
         if (!needsWalk) return;
-        if (issue2043Trace) {
-            RuntimeScalar rel = hash.elements.get("_relationship_data");
-            Object relValue = rel == null ? null : rel.value;
-            RuntimeHash relHash = relValue instanceof RuntimeHash rh ? rh : null;
-            RuntimeScalar cdCell = relHash == null ? null : relHash.elements.get("cd");
-            Object cdValue = cdCell == null ? null : cdCell.value;
-            RuntimeBase cdBase = cdValue instanceof RuntimeBase rb ? rb : null;
-            RuntimeScalar proxyValue = cdValue instanceof RuntimeBaseProxy proxy
-                    ? proxy.lvalue : null;
-            RuntimeBase proxyBase = proxyValue != null && proxyValue.value instanceof RuntimeBase rb
-                    ? rb : null;
-            System.err.println("[ISSUE2043-HASH] walk id=" + System.identityHashCode(hash)
-                    + " relationshipCell=" + (rel == null ? "null" : System.identityHashCode(rel))
-                    + (rel == null ? "" : ":type=" + rel.type + ":owns=" + rel.refCountOwned
-                            + ":slot=" + (rel.countedOwnerSlot() == null ? "null"
-                                    : rel.countedOwnerSlot().kind() + ":"
-                                        + rel.countedOwnerSlot().isActive())
-                            + ":scalarRef=" + rel.referencedByScalarReference
-                            + ":local=" + rel.localBindingExists
-                            + ":scopeExited=" + rel.scopeExited
-                            + ":container=" + (rel.getContainerOwner() == null ? "null"
-                                    : rel.getContainerOwner().getClass().getSimpleName() + "#"
-                                        + System.identityHashCode(rel.getContainerOwner())))
-                    + " relationship=" + (relHash == null ? String.valueOf(relValue)
-                            : System.identityHashCode(relHash) + ":rc=" + relHash.refCount
-                                + ":state=" + relHash.perlLifecycleState()
-                                + ":local=" + relHash.localBindingExists
-                                + ":owner=" + relHash.hasCurrentPerlOwnerSlotIdentity()
-                                + ":slots=" + relHash.ownerSlotSnapshot().stream()
-                                        .map(slot -> slot.kind() + ":" + slot.isActive()
-                                                + ":current=" + DestroyDispatch.isCurrentPerlOwnerSlot(relHash, slot))
-                                        .toList()
-                                + ":keys=" + relHash.elements.keySet()
-                                + ":recursive=" + needsRecursiveReleaseWalk(rel)
-                                + ":cdCell=" + (cdCell == null ? "null"
-                                        : System.identityHashCode(cdCell) + ":type=" + cdCell.type
-                                            + ":owns=" + cdCell.refCountOwned)
-                                + ":cdValue=" + (cdBase == null ? String.valueOf(cdValue)
-                                        : cdBase.getClass().getSimpleName() + "#"
-                                            + System.identityHashCode(cdBase) + ":class="
-                                            + NameNormalizer.getBlessStr(cdBase.blessId) + ":rc="
-                                            + cdBase.refCount + ":tracked="
-                                            + cdBase.isRefCountTracked())
-                                + ":cdProxyValue=" + (proxyBase == null ? "none"
-                                        : proxyBase.getClass().getSimpleName() + "#"
-                                            + System.identityHashCode(proxyBase) + ":class="
-                                            + NameNormalizer.getBlessStr(proxyBase.blessId) + ":rc="
-                                            + proxyBase.refCount + ":tracked="
-                                            + proxyBase.isRefCountTracked()))
-                    + " keyCount=" + hash.elements.size());
-        }
         RecursiveAggregateReleaseWalker releaseWalker = new RecursiveAggregateReleaseWalker();
         // The boundary drains owner releases in LIFO order. Queue the hash's
         // normal iteration order so its direct children retain the same
@@ -1258,15 +1185,6 @@ public class MortalList {
         for (RuntimeScalar val : hash.elements.values()) {
             if (preserveEscapedScalarCellValueOwner(val)) continue;
             releaseWalker.defer(val);
-        }
-        if (issue2043Trace) {
-            RuntimeScalar rel = hash.elements.get("_relationship_data");
-            Object relValue = rel == null ? null : rel.value;
-            RuntimeHash relHash = relValue instanceof RuntimeHash rh ? rh : null;
-            System.err.println("[ISSUE2043-HASH] queued id=" + System.identityHashCode(hash)
-                    + " relationship=" + (relHash == null ? String.valueOf(relValue)
-                            : System.identityHashCode(relHash) + ":rc=" + relHash.refCount
-                                + ":keys=" + relHash.elements.keySet()));
         }
     }
 
@@ -1582,17 +1500,6 @@ public class MortalList {
 
                 if (base.blessId != 0) {
                     if (s.refCountOwned) {
-                        if (traceIssue2043Cd(base)) {
-                            System.err.println("[ISSUE2043-CD] walk id=" + System.identityHashCode(base)
-                                    + " rc=" + base.refCount + " owner=" + System.identityHashCode(s)
-                                    + " weak=" + WeakRefRegistry.isweak(s)
-                                    + " slot=" + (s.countedOwnerSlot() == null ? "null"
-                                            : s.countedOwnerSlot().kind() + ":"
-                                                + s.countedOwnerSlot().isActive())
-                                    + " container=" + (s.getContainerOwner() == null ? "null"
-                                            : s.getContainerOwner().getClass().getSimpleName() + "#"
-                                                + System.identityHashCode(s.getContainerOwner())));
-                        }
                         if (base.refCountTrace) {
                             base.traceRefCount(0, "MortalList.deferDecrementRecursive (blessed, queued)");
                         }
@@ -1642,42 +1549,7 @@ public class MortalList {
                         // A current owner proves this aggregate and its outgoing
                         // slots remain live. Avoid scanning its descendants; only
                         // probe the exceptional positive-count/no-owner case.
-                        boolean hasPerlOwner = base.hasPerlStrongOwnerIdentity();
-                        if (traceIssue2043RelationshipHash(base)) {
-                            System.err.println("[ISSUE2043-REL] walker id="
-                                    + System.identityHashCode(base) + " rc=" + base.refCount
-                                    + " class=" + NameNormalizer.getBlessStr(base.blessId)
-                                    + " keys=" + (base instanceof RuntimeHash relationHash
-                                            ? relationHash.elements.keySet() : "[]")
-                                    + " state=" + base.perlLifecycleState()
-                                    + " local=" + base.localBindingExists
-                                    + " perlOwner=" + hasPerlOwner
-                                    + " currentOwner=" + base.hasCurrentPerlOwnerSlotIdentity()
-                                    + " slots=" + base.ownerSlotSnapshot().stream()
-                                            .map(slot -> {
-                                                RuntimeScalar cell = slot.countedScalarOwner();
-                                                RuntimeBase container = cell == null
-                                                        ? null : cell.getContainerOwner();
-                                                String containerInfo = container instanceof RuntimeHash hash
-                                                        ? NameNormalizer.getBlessStr(hash.blessId) + "#"
-                                                            + System.identityHashCode(hash) + ":"
-                                                            + hash.perlLifecycleState() + ":"
-                                                            + hash.elements.keySet()
-                                                        : container == null ? "null"
-                                                            : container.getClass().getSimpleName() + "#"
-                                                                + System.identityHashCode(container) + ":"
-                                                                + container.perlLifecycleState();
-                                                return slot.kind() + ":" + slot.isActive()
-                                                        + ":current=" + DestroyDispatch.isCurrentPerlOwnerSlot(base, slot)
-                                                        + ":cell=" + (cell == null ? "null"
-                                                            : System.identityHashCode(cell) + ":owns="
-                                                                + cell.refCountOwned + ":weak="
-                                                                + WeakRefRegistry.isweak(cell))
-                                                        + ":container=" + containerInfo;
-                                            })
-                                            .toList());
-                        }
-                        if (hasPerlOwner) {
+                        if (base.hasPerlStrongOwnerIdentity()) {
                             continue;
                         }
                         if (!cleanupTargetProbe().mayContainCleanupTargets(base)) {
@@ -2041,17 +1913,6 @@ public class MortalList {
     private static void processDeferredBase(RuntimeBase base, boolean clearWeakRefsForLocalBinding,
                                             RuntimeBase.PendingOwnerRelease ownerRelease,
                                             String transientOwnerKind) {
-        boolean traceCdRelease = traceIssue2043Cd(base);
-        if (traceCdRelease) {
-            System.err.println("[ISSUE2043-CD] release-enter id=" + System.identityHashCode(base)
-                    + " rc=" + base.refCount + " ownerRelease="
-                    + (ownerRelease == null ? "null" : ownerRelease.ownerSlotRelease == null
-                            ? "slot-null" : ownerRelease.ownerSlotRelease.kind())
-                    + " slots=" + base.ownerSlotSnapshot().stream()
-                            .map(slot -> slot.kind() + ":" + slot.isActive() + ":current="
-                                    + DestroyDispatch.isCurrentPerlOwnerSlot(base, slot))
-                            .toList());
-        }
         if (base.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_ALIAS) != 0
                 && base.countedOwnerSlotCount() == 0) {
             state().deferredArgumentOwnerReleases.add(
@@ -2088,14 +1949,6 @@ public class MortalList {
             // finalization request. Process that lifecycle boundary directly;
             // do not manufacture a positive refCount just to enter this path.
             finalRelease = true;
-        }
-        if (traceCdRelease) {
-            System.err.println("[ISSUE2043-CD] release-count id=" + System.identityHashCode(base)
-                    + " rc=" + base.refCount + " final=" + finalRelease
-                    + " slots=" + base.ownerSlotSnapshot().stream()
-                            .map(slot -> slot.kind() + ":" + slot.isActive() + ":current="
-                                    + DestroyDispatch.isCurrentPerlOwnerSlot(base, slot))
-                            .toList());
         }
         if (finalRelease) {
             boolean aggregateReferent = base instanceof RuntimeArray || base instanceof RuntimeHash;
@@ -2246,14 +2099,6 @@ public class MortalList {
         if (base instanceof RuntimeCode code) code.finishActiveCodeOwnerRelease();
         if (base instanceof RuntimeScalar scalar) {
             PerlOwnerSlot.finishDeferredScalarCellRelease(scalar);
-        }
-        if (traceCdRelease) {
-            System.err.println("[ISSUE2043-CD] release-exit id=" + System.identityHashCode(base)
-                    + " rc=" + base.refCount + " state=" + base.perlLifecycleState()
-                    + " slots=" + base.ownerSlotSnapshot().stream()
-                            .map(slot -> slot.kind() + ":" + slot.isActive() + ":current="
-                                    + DestroyDispatch.isCurrentPerlOwnerSlot(base, slot))
-                            .toList());
         }
     }
 
