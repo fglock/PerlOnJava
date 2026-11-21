@@ -140,6 +140,14 @@ public class GlobalDestruction {
             RuntimeScalar val,
             Set<RuntimeBase> visited,
             Set<RuntimeCode> deferredCodeCleanup) {
+        // `bless \$Pkg::scalar` blesses the scalar cell itself. Such a cell
+        // is a direct global root, not a reference-valued scalar slot, so it
+        // does not satisfy the reference-bit test below. Still dispatch its
+        // destructor during process teardown.
+        if (val != null && val.blessId != 0) {
+            destroyBaseIfTracked(val, visited, deferredCodeCleanup);
+            return;
+        }
         if (val != null
                 && (val.type & RuntimeScalarType.REFERENCE_BIT) != 0
                 && val.value instanceof RuntimeBase base

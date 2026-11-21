@@ -32,6 +32,12 @@ sub timeout_for_test {
         if $normalized_file =~ m{(?:^|/)(?:perl5_t/t/)?re/anyof(?:_thr)?\.t$}
         && $base_timeout < 2400;
 
+    # The generated Unicode property chunks 01-04 each run more than 42,000
+    # assertions and can take nearly ten minutes even when isolated.
+    return 1200
+        if $normalized_file =~ m{(?:^|/)(?:perl5_t/t/)?re/uniprops0[1-4]\.t$}
+        && $base_timeout < 1200;
+
     # A ten-worker production-load acceptance can push pat beyond the default
     # deadline. Resource-aware scheduling isolates pat_thr separately.
     return 900

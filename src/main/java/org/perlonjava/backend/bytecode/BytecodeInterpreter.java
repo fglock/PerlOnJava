@@ -10,6 +10,7 @@ import org.perlonjava.runtime.NamedCharacterExpansionMap;
 import org.perlonjava.runtime.WarningBitsRegistry;
 import org.perlonjava.runtime.debugger.DebugHooks;
 import org.perlonjava.runtime.operators.CompareOperators;
+import org.perlonjava.runtime.operators.MathOperators;
 import org.perlonjava.runtime.operators.ModuleOperators;
 import org.perlonjava.runtime.operators.ReferenceOperators;
 import org.perlonjava.runtime.operators.WarnDie;
@@ -4402,8 +4403,7 @@ public class BytecodeInterpreter {
                 RuntimeScalar val = (registers[rs] instanceof RuntimeScalar)
                         ? (RuntimeScalar) registers[rs]
                         : registers[rs].scalar();
-                registers[rd] = val.getBoolean() ?
-                        RuntimeScalarCache.scalarFalse : RuntimeScalarCache.scalarTrue;
+                registers[rd] = MathOperators.not(val);
                 return pc;
             }
             case Opcodes.NOT_NO_OVERLOAD -> {

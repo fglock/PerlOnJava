@@ -18,6 +18,12 @@ is(timeout_for_test('perl5_t/t/re/pat.t', 300), 900,
     'direct pat retains its production-load floor');
 is(timeout_for_test('perl5_t/t/re/pat_thr.t', 1200), 1200,
     'threaded pat preserves a larger caller timeout');
+for my $chunk (1 .. 4) {
+    is(timeout_for_test("perl5_t/t/re/uniprops0$chunk.t", 600), 1200,
+        "Unicode property chunk $chunk receives enough isolated runtime");
+}
+is(timeout_for_test('perl5_t/t/re/uniprops01.t', 1500), 1500,
+    'Unicode property chunks preserve a larger caller timeout');
 is(timeout_for_test('perl5_t/t/re/pat_psycho.t', 300), 600,
     'stress fixtures retain their existing floor');
 is(timeout_for_test('perl5_t/t/io/through.t', 450), 900,
