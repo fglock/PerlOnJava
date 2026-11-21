@@ -108,7 +108,7 @@ Proposals and plans for work that is being considered or is in progress.
 | [perf-dbic-safe-port.md](perf-dbic-safe-port.md) | DBIC-Safe Perf Port Plan | — |
 | [performance-delivery-selection.md](performance-delivery-selection.md) | Curated performance delivery selection | — |
 | [performance-over-perl.md](performance-over-perl.md) | Performance over Perl benchmark authority | — |
-| [perl-ownership-rewrite.md](perl-ownership-rewrite.md) | Perl-compatible ownership rewrite | Phase 1 closure-pad path is implemented and validated on… |
+| [perl-ownership-rewrite.md](perl-ownership-rewrite.md) | Perl-compatible ownership rewrite | Phase 1 is complete; Phase 2 is in progress. HTML-Tree 5.07… |
 | [perl-regex-library-rfc.md](perl-regex-library-rfc.md) | RFC: Embeddable Perl-Compatible Regex Library for the JVM | — |
 | [perl-summit.md](perl-summit.md) | — | — |
 | [perl_debugger.md](perl_debugger.md) | Perl Debugger Implementation for PerlOnJava | — |

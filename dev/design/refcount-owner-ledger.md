@@ -19,145 +19,51 @@ delivery for removing lifecycle decisions based on memory sweeps; #1649 is its
 historical origin. The design replaces selective-refcount heuristics with
 explicit, auditable owner tokens.
 
-## Current Status (2026-11-19)
+## Current Status (2026-11-21)
 
-Issue #2043 remains the active delivery for removing memory-sweep lifecycle
-decisions; #1649 is its historical origin. Work is continuing on local WIP
-branch `wip/issue2043-sweep-20261119-231323`, checkpointed at
-`99237d06ef`. The focused DBIx refcount correction is uncommitted; the full
-unit and release-acceptance gates are still pending, so this candidate is not
-ready for UAT.
+Issue #2043 remains active. PR #1938 is open at remote head
+`75dd7d542f1f86bff930beb1c5779be74fa27955`; this local continuation is on
+`wip/issue2043-diagnostics-20261121-042222`, with the interpreter foreach fix
+committed as `4edc5faa51`. The local candidate is not on the PR and is not ready
+for UAT.
 
-The current implementation maintains O(1) owner-kind counts for the hot
-`PACKAGE_AGGREGATE_SLOT`, `ACTIVE_CODE`, and `CODE_SLOT` checks. Transient
-untracked argument ownership now has a maintained count, and identity checks
-iterate a live narrow index without copying the entire ledger. A focused CPAN
-test, `Excel-Writer-XLSX/t/regression/chart_axis28.t`, passed with JFR enabled.
-For that same test invocation, after the transient count and append buffer,
-owner-slot visits were 94,206. After adding the CODE-slot index, they were
-62,353. The earlier recording sampled 10 allocations through
-`ownerSlotSnapshot()` (about 14.6 MB weighted); the latest recording sampled
-none through that path. These are focused, unpaired samples, not a
-whole-distribution throughput claim. Artifacts:
-`/private/tmp/issue2043-append-buffer-chart-axis28.jfr`,
-`/private/tmp/issue2043-code-slot-index-chart-axis28.jfr`, and the matching
-`*-metrics-*.json` files.
+The DBIx diamond lifetime regression exposed a bytecode-interpreter gap:
+`ITERATOR_CREATE` did not retain values from a temporary `RuntimeList` source,
+while the JVM emitter already held those source owners until loop exit. The
+interpreter now acquires the same `MortalList` lease and releases it at a shared
+loop-exit opcode, including `last`. A permanent regression checks list-returned
+blessed rows, weak observers, relationship-cache access during iteration, and
+release after normal and `last` exits. It passes 7/7 with system Perl, the JVM
+backend, and the interpreter; the unfixed interpreter failed this test. The
+DBIx diamond schema-release regression also passes 7/7 on all three runtimes.
+Logs: `/private/tmp/issue2043-foreach-unit-system-clean.log`,
+`/private/tmp/issue2043-foreach-unit-interpreter-clean.log`,
+`/private/tmp/issue2043-foreach-unit-jvm-clean.log`,
+`/private/tmp/issue2043-full-diamond-interpreter-after.log`, and
+`/private/tmp/issue2043-full-diamond-jvm-after.log`.
 
-The same test recorded 541 deferred-release appends and drains, 356 handoffs,
-six frame-queue allocations, 318 frame-queue reuses, zero per-boundary queue
-allocations, and zero boundary-order regressions. The buffer uses primitive
-boundary marks and retains the existing newest-boundary-first, LIFO-within-
-boundary order; an ordered fallback preserves behavior if a boundary regresses.
-JFR on the focused test still shows substantial non-lifecycle startup and
-compiler allocation. Full-workload allocation impact remains unproven.
+The cleaned candidate builds with
+`nice -n 19 timeout 1800 make build GRADLE_ARGS='-x testUnitParallel'`. The
+required full `make` currently stops in Java test-source compilation with 93
+unresolved references to retired reachability-diagnostic APIs, including
+`ReachabilityWalker`, `measureReachabilityQueries`, and
+`temporaryRootDirectlyReferences`. The focused source change does not touch
+those tests or APIs. The full unit and CPAN release-acceptance gates therefore
+remain outstanding, along with the earlier Moo and Template Toolkit retests.
 
-The latest unfiltered unit gate passed after moving cleanup-target probes behind
-the positive-count/no-current-owner guards: `nice -n 19 timeout 3600 make
-test-unit`, 7m03s; log `/private/tmp/issue2043-lazy-prescan-unit.log`. The
-focused `Excel-Writer-XLSX/t/regression/chart_axis28.t` test also passed. It
-recorded 61,916 owner-slot visits, 541 deferred-release appends/drains, 356
-handoffs, 1,467 recursive-release roots across 360 worksets, and 405
-cleanup-target probe roots across 74 reusable worksets. Compared with the
-preceding candidate this avoids 94 probe traversals and cuts probe workset
-initializations by 41%; compared with one queue/set per probe root it uses 74
-worksets instead of 499, an 85% reduction for this focused path. The probe
-also replaces the separate direct weak-slot pass. Owner-slot visits stayed
-near 62,000, so this does not establish a scan reduction.
-
-Focused CPAN reruns exposed a `B::REFCNT` undercount for a nested hash-slot
-value forwarded through a Perl helper during `DESTROY`: the aggregate's one
-counted owner was reported, but the helper's active `@_` value had no owner
-slot. `RuntimeCode.isActiveCallArgumentValue` now recognizes that active Perl
-argument without counting the B/Internals probe frames or a DESTROY invocant.
-The permanent system-Perl-validated regression
-`refcount/b_refcount_destroy_aliased_hash_slot_argument.t` passes on both
-PerlOnJava backends, and the previously failing DBIx::Class
-`t/60core.t` and `t/101populate_rs.t` now pass. Logs:
-`/private/tmp/issue2043-b-refcount-fixed.log`,
-`/private/tmp/issue2043-b-refcount-fixed-interpreter.log`,
-`/private/tmp/issue2043-dbix-60core-after-brefcount.log`, and
-`/private/tmp/issue2043-dbix-101populate-after-brefcount.log`. The unfiltered
-unit gate and full release-acceptance gate remain outstanding.
-
-The focused JFR recording lasted four seconds. Its sampled
-`IdentityHashMap.init` share was 11.47%, versus 8.05% in the preceding short,
-unpaired recording; the samples are too variable to claim an overall JFR
-allocation or throughput reduction. The deterministic pre-scan counters show
-the workset reuse directly, while the broader allocation impact remains to be
-measured on longer matched workloads. Artifacts:
-`/private/tmp/issue2043-cleanup-probe-chart-axis28.jfr`,
-`/private/tmp/issue2043-cleanup-probe-chart-axis28-metrics-29217.json`,
-`/private/tmp/issue2043-cleanup-probe-chart-axis28-allocation-view.txt`, and
-`/private/tmp/issue2043-cleanup-probe-unit-extended.log`. The latest guarded
-probe run is at `/private/tmp/issue2043-lazy-probe-chart-axis28.jfr`,
-`/private/tmp/issue2043-lazy-probe-chart-axis28-metrics-42134.json`, and
-`/private/tmp/issue2043-lazy-prescan-unit.log`.
-
-Earlier `Excel::Writer::XLSX` JFR slices attributed weighted estimates of
-95.1 GB through full owner snapshots and 46.2 GB through the filtered untracked
-snapshot. These are sampled estimates from separate slices, not literal heap
-sizes. The profile-only CPAN run on the earlier candidate was stopped after
-about 70 minutes when diagnostics had accumulated 73.5 million owner-slot
-visits and 1.26 million frame/boundary queue allocations. It had no observed
-test failures, stopped at `t/regression/hyperlink52.t`, and is not acceptance
-evidence. Historical profiles remain at
-`/private/tmp/issue2043-excel-writer-xlsx-{early,followup,indexed}.jfr`; their
-sample and allocation summaries use the matching `*-samples.txt` and
-`*-alloc.txt` suffixes.
-
-The direction is to finish sweep removal while tightening these hot paths,
-without a wholesale reference-count rewrite:
-
-- Keep per-frame LIFO deferred cleanup. Measure whether release boundaries
-  are monotonic as frames hand off. The current append-only buffer uses
-  primitive boundary marks and a pooled frame queue; an ordered fallback
-  handles unexpected regressions.
-- Maintain O(1) counts for owner kinds used by common yes/no queries, updating
-  them on slot add, removal, and reclassification. Cached counts now cover the
-  hot `PACKAGE_AGGREGATE_SLOT`, `ACTIVE_CODE`, and `CODE_SLOT` queries. The
-  transient untracked-owner yes/no check is also O(1). Traverse a live narrow
-  identity index only when the exact slots are required.
-- Let a dying array or hash release its own outgoing element edges directly,
-  instead of repeatedly searching the referent's full incoming-owner ledger.
-- Minimize allocations as a required part of sweep removal: keep queues and
-  identity worksets reusable within a cleanup frame, allocate scratch lazily,
-  and avoid allocating one collection per candidate element. Track exact
-  workset initializations and owner-slot visits separately; use paired JFR and
-  workload measurements before claiming a total allocation or speedup result.
-- Measure each change separately with opt-in counters for deferred-release
-  appends/drains, queue reuse/allocations, and owner slots visited, keeping
-  counters off by default.
-  Compare CPU samples, sampled allocations, and workload time on the same
-  `Excel::Writer::XLSX` run. Remove per-boundary queue allocations; use an
-  append-only buffer with integer marks only if the observed release order is
-  strictly nested, otherwise use one ordered queue per frame. Treat allocation
-  reduction as a required result alongside lower scan cost. Keep an optimization
-  only when those costs fall and the hash, array, scalar-reference, and
-  nested-frame regressions pass.
-
-The current work has completed the transient-owner count, per-frame append
-buffer, narrow CODE-slot index, reuse of recursive release and cleanup-target
-probe worksets across roots from dying arrays and hashes, and a guard that
-skips the probe when the aggregate is already at zero or has a current Perl
-owner. The new
-`AggregateOutgoingEdgeCleanupTest` covers hash-to-array and array-to-hash
-cleanup, plus a nested aggregate that remains live through another Perl owner.
-The exceptional positive-count/no-current-owner case still traverses nested
-values, and cleanup still performs owner checks; the next phase is to use the
-dying aggregate's outgoing owner slots to avoid those repeated traversals while
-preserving weak-reference, shared-owner, and destructor-rescue semantics. Then
-profile the full `Excel::Writer::XLSX`
-target and run the CPAN release-acceptance gate on one immutable candidate,
-stopping at an actionable failure and fixing it before continuing. The GitHub
-API was unreachable during this update, so live issue #2043 and PR #1938 state
-still needs reconciliation after access returns. See the
-[ownership handoff](perl-ownership-rewrite.md) and
-[issue #2043](https://github.com/PerlOnJava/issues/2043).
+Sweep-removal work continues to use explicit Perl owner slots, LIFO deferred
+release, maintained hot owner-kind counts, and reusable cleanup worksets. The
+focused `Excel-Writer-XLSX/t/regression/chart_axis28.t` counters showed reuse of
+125 cleanup-probe worksets across 499 roots and 360 recursive-release worksets
+across 1,467 roots. The four-second JFR sample was noisy and did not establish a
+whole-workload allocation or speedup result. The next implementation and
+acceptance steps remain those in the live issue handoff.
 
 | Date | Phase delivered | Evidence | Remaining |
 | --- | --- | --- | --- |
-| 2026-11-19 | Cached hot owner-kind counts, transient-owner count, live identity indexes, pooled append-buffer cleanup, and reusable release/pre-scan worksets for dying aggregates | Unit gate and focused `chart_axis28.t` counters/JFR linked above | Remove repeated nested pre-scans and owner-slot scans; measure allocation and CPU impact on the full target; finish CPAN acceptance |
-| 2026-11-19 | Correct `B::REFCNT` for nested hash-slot arguments in `DESTROY`, restoring DBIx::Class schema/source cleanup | New system-Perl-validated regression and passing direct `t/60core.t` / `t/101populate_rs.t` runs above | Run full unit and CPAN release-acceptance gates; stop at the next actionable failure and fix it |
+| 2026-11-19 | Cached hot owner-kind counts, transient-owner count, narrow identity indexes, and reusable LIFO cleanup/probe worksets | Unit gate and focused `chart_axis28.t` counters/JFR recorded above; no broad performance claim | Process dying aggregate outgoing slots directly; measure allocation and scan costs on paired workloads |
+| 2026-11-19 | Correct nested hash-slot `B::REFCNT` reporting during `DESTROY` | System-Perl-validated regression and passing DBIx `t/60core.t` / `t/101populate_rs.t` | Complete remaining regression and CPAN acceptance gates |
+| 2026-11-21 | Retain temporary foreach source owners in the bytecode interpreter through normal and `last` exits (`4edc5faa51`) | New system-Perl/JVM/interpreter regression and DBIx diamond regression pass 7/7; pre-fix interpreter failure captured | Resolve Java test-source compile failures, then rerun `make`, focused CPAN failures, and full release acceptance |
 
 ## Semantic Ownership Model
 
