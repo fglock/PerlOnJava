@@ -22,54 +22,46 @@ explicit, auditable owner tokens.
 ## Current Status (2026-11-21)
 
 Issue #2043 remains active. PR #1938 is open at remote head
-`75dd7d542f1f86bff930beb1c5779be74fa27955`; this local continuation is on
-`wip/issue2043-diagnostics-20261121-042222`, with the interpreter foreach fix
-committed as `4edc5faa51` and the checkpoint update as `9f2e5c9836`. The local
-candidate is not on the PR and is not ready for UAT.
+`75dd7d542f1f86bff930beb1c5779be74fa27955`; the local continuation is on
+`wip/issue2043-resume-20261121-085022` at `8d6468d348`, with the latest owner
+trace changes being checkpointed. This candidate is not on the PR and is not
+ready for UAT. New project regressions are kept under
+`src/test/resources/unit/refcount`; the temporary DBIx test under
+`dev/modules` has been removed.
 
-The DBIx diamond lifetime regression exposed a bytecode-interpreter gap:
-`ITERATOR_CREATE` did not retain values from a temporary `RuntimeList` source,
-while the JVM emitter already held those source owners until loop exit. The
-interpreter now acquires the same `MortalList` lease and releases it at a shared
-loop-exit opcode, including `last`. A permanent regression checks list-returned
-blessed rows, weak observers, relationship-cache access during iteration, and
-release after normal and `last` exits. It passes 7/7 with system Perl, the JVM
-backend, and the interpreter; the unfixed interpreter failed this test. The
-DBIx diamond schema-release regression also passes 7/7 on all three runtimes.
-Logs: `/private/tmp/issue2043-foreach-unit-system-clean.log`,
-`/private/tmp/issue2043-foreach-unit-interpreter-clean.log`,
-`/private/tmp/issue2043-foreach-unit-jvm-clean.log`,
-`/private/tmp/issue2043-full-diamond-interpreter-after.log`, and
-`/private/tmp/issue2043-full-diamond-jvm-after.log`.
+Two ownership fixes are already in the local history. The interpreter now
+retains temporary foreach sources through normal and `last` exits. Call
+arguments also release a replacement reference when a temporary scalar
+argument is overwritten. The related system-Perl, JVM, and interpreter tests
+pass, and the pre-fix interpreter/argument failures were recorded in the logs
+listed in the completed-phase table below.
 
-The first DBIx rerun exposed a second owner gap: assigning through a temporary
-call argument (`$_[0]` or a `foreach` alias over `@_`) could leave the
-replacement reference owned after the call. `CallArguments` now snapshots
-non-persistent scalar argument cells and scope-cleans a changed cell after the
-callee returns. This releases the Test2 Amnesty facet without dropping a value
-returned to the caller. New temporary-argument tests pass 5/5 and the Test2
-Amnesty regression passes 3/3 under system Perl, the JVM backend, and the
-interpreter; both Jperl backends failed the relevant assertions before this
-change. The source build succeeds. The full DBIx corpus has not yet been rerun
-on this candidate; the prior isolated `t/52leaks.t` run did not reproduce its
-suite failure.
+The latest full DBIx `t/prefetch/diamond.t` run passes 768/768 with system Perl.
+JVM and interpreter each fail four shutdown leak assertions. A reduced
+reproduction shows the resultset cache is released, but a selected
+`DBICTest::BaseResultSet` remains `LIVE` at runtime refcount zero with a durable
+untracked scalar owner. Its `cursor` field owns a
+`DBIx::Class::Storage::DBI::Cursor`, which shares the nested query-attrs hash.
+The source of that durable scalar owner is still unresolved. The current
+duplicate-aggregate test passes before a fix and does not reproduce this leak;
+the next regression must capture the retained resultset/cursor lifetime in the
+project-owned test tree. `t/60core.t` passed after the recent frame-release
+ordering changes, but that does not clear the diamond failure.
 
-The cleaned candidate builds with
-`nice -n 19 timeout 1800 make build GRADLE_ARGS='-x testUnitParallel'`. The
-required full `make` currently stops in Java test-source compilation with 93
-unresolved references to retired reachability-diagnostic APIs, including
+The source build succeeds. Full `make` remains blocked at Java test-source
+compilation by 93 references to retired reachability-diagnostic APIs, including
 `ReachabilityWalker`, `measureReachabilityQueries`, and
-`temporaryRootDirectlyReferences`. The focused source change does not touch
-those tests or APIs. The full unit and CPAN release-acceptance gates therefore
-remain outstanding, along with the earlier Moo and Template Toolkit retests.
+`temporaryRootDirectlyReferences`. Full unit and CPAN acceptance remain
+outstanding, along with focused Moo and Template Toolkit retests. Temporary
+owner tracing in `RuntimeBase.java` is diagnostic only and must be removed after
+the retained owner is identified.
 
-Sweep-removal work continues to use explicit Perl owner slots, LIFO deferred
-release, maintained hot owner-kind counts, and reusable cleanup worksets. The
-focused `Excel-Writer-XLSX/t/regression/chart_axis28.t` counters showed reuse of
-125 cleanup-probe worksets across 499 roots and 360 recursive-release worksets
-across 1,467 roots. The four-second JFR sample was noisy and did not establish a
-whole-workload allocation or speedup result. The next implementation and
-acceptance steps remain those in the live issue handoff.
+The sweep-removal design still requires direct cleanup from a dying
+aggregate's outgoing owner slots, without nested target pre-scans or repeated
+incoming-owner scans. After the DBIx owner is reproduced and fixed, measure
+owner-slot visits, workset/queue allocations, sampled allocations, and elapsed
+time on the same `Excel-Writer-XLSX/t/regression/chart_axis28.t` workload. The
+earlier short JFR sample was noisy and did not establish a broad speedup.
 
 | Date | Phase delivered | Evidence | Remaining |
 | --- | --- | --- | --- |

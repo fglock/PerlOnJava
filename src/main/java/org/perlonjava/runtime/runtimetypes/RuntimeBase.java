@@ -1617,6 +1617,10 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                 .append(" generation=").append(REFCOUNT_TRACE_ENV
                         ? traceReferentGeneration(this) : 0)
                 .append(" refCount=").append(refCount)
+                .append(" state=").append(perlLifecycleState())
+                .append(" destroyFired=").append(destroyFired)
+                .append(" needsReDestroy=").append(needsReDestroy)
+                .append(" hasWeakRefs=").append(WeakRefRegistry.hasWeakRefsTo(this))
                 .append(" active=");
         java.util.LinkedHashMap<Integer, OwnerTrace> owners = traceOwners.get(this);
         if (owners == null || owners.isEmpty()) {
@@ -1711,7 +1715,21 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                 result.append(" scalar=").append(System.identityHashCode(owner))
                         .append(" type=").append(owner.type)
                         .append(" scopeExited=").append(owner.scopeExited)
-                        .append(" owns=").append(owner.refCountOwned);
+                        .append(" owns=").append(owner.refCountOwned)
+                        .append(" weak=").append(WeakRefRegistry.isweak(owner))
+                        .append(" durable=").append(owner.hasLiveDurableStrongValueSlot())
+                        .append(" transientArg=").append(owner.isTransientArgumentValueOwner())
+                        .append(" localBinding=").append(owner.localBindingExists)
+                        .append(" registeredLexical=").append(MyVarCleanupStack.isRegistered(owner))
+                        .append(" packageRoot=").append(owner.isPackageGlobalRoot)
+                        .append(" closureOwner=").append(owner.hasClosureCaptureOwner())
+                        .append(" scalarRef=").append(owner.referencedByScalarReference)
+                        .append(" codeSlot=").append(owner.hasCodeSlotBinding())
+                        .append(" scalarContents=").append(owner.hasScalarReferenceContentsOwner())
+                        .append(" scalarCellOwner=").append(owner.hasScalarCellOwner())
+                        .append(" ioOwner=").append(owner.hasIoOwner())
+                        .append(" pendingReturn=").append(owner.hasPendingReturnOwner())
+                        .append(" containerHistory=").append(owner.debugContainerOwners());
                 RuntimeBase container = owner.containerOwner;
                 if (container != null) {
                     result.append(" container=").append(container.getClass().getSimpleName())
@@ -1907,6 +1925,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                 .append(prefix).append("RefCount=").append(hash.refCount)
                 .append(prefix).append("ScopeExited=").append(hash.scopeExited)
                 .append(prefix).append("BlessId=").append(hash.blessId)
+                .append(prefix).append("Class=").append(NameNormalizer.getBlessStr(hash.blessId))
                 .append(prefix).append("DestroyFired=").append(hash.destroyFired)
                 .append(prefix).append("NeedsReDestroy=").append(hash.needsReDestroy)
                 .append(prefix).append("LocalBinding=").append(hash.localBindingExists)
@@ -2015,6 +2034,8 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                                             }
                                         }
                                         result.append("/blessId=").append(parentArray.blessId)
+                                                .append("/class=")
+                                                .append(NameNormalizer.getBlessStr(parentArray.blessId))
                                                 .append("/ownerPaths=[");
                                         boolean firstParentOwner = true;
                                         for (PerlOwnerSlot parentSlot : parentArray.ownerSlotSnapshot()) {
@@ -2056,6 +2077,8 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                                                     }
                                                 } else if (rootContainer instanceof RuntimeHash rootHash) {
                                                     result.append("/blessId=").append(rootHash.blessId)
+                                                            .append("/class=")
+                                                            .append(NameNormalizer.getBlessStr(rootHash.blessId))
                                                             .append("/size=").append(rootHash.elements.size())
                                                             .append("/refCount=").append(rootHash.refCount)
                                                             .append("/keys=[");
@@ -2102,6 +2125,72 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                                                                                 && runtime.executionState().argsStack
                                                                                         .contains(rootParentArray));
                                                             } else if (rootParent instanceof RuntimeHash rootParentHash) {
+                                                                result.append("/blessId=")
+                                                                        .append(rootParentHash.blessId)
+                                                                        .append("/class=")
+                                                                        .append(NameNormalizer.getBlessStr(
+                                                                                rootParentHash.blessId));
+                                                                result.append("/ownerSlots=[");
+                                                                boolean firstCursorOwner = true;
+                                                                for (PerlOwnerSlot cursorSlot
+                                                                        : rootParentHash.ownerSlotSnapshot()) {
+                                                                    if (!cursorSlot.isActive()) continue;
+                                                                    if (!firstCursorOwner) result.append(',');
+                                                                    firstCursorOwner = false;
+                                                                    result.append(cursorSlot.kind()).append('#')
+                                                                            .append(cursorSlot.identity());
+                                                                    RuntimeScalar cursorOwnerCell =
+                                                                            cursorSlot.countedScalarOwner();
+                                                                    if (cursorOwnerCell == null) {
+                                                                        cursorOwnerCell = cursorSlot.untrackedScalarOwner();
+                                                                    }
+                                                                    if (cursorOwnerCell != null) {
+                                                                        result.append(":cell=")
+                                                                                .append(System.identityHashCode(cursorOwnerCell))
+                                                                                .append(":owns=")
+                                                                                .append(cursorOwnerCell.refCountOwned)
+                                                                                .append(":value=");
+                                                                        if (cursorOwnerCell.value instanceof RuntimeBase cursorValue) {
+                                                                            result.append(cursorValue.getClass().getSimpleName())
+                                                                                    .append('#')
+                                                                                    .append(System.identityHashCode(cursorValue));
+                                                                        } else {
+                                                                            result.append(cursorOwnerCell.value == null
+                                                                                    ? "null"
+                                                                                    : cursorOwnerCell.value.getClass()
+                                                                                            .getSimpleName());
+                                                                        }
+                                                                        RuntimeBase cursorOwnerContainer =
+                                                                                cursorOwnerCell.containerOwner;
+                                                                        if (cursorOwnerContainer != null) {
+                                                                            result.append(":container=")
+                                                                                    .append(cursorOwnerContainer.getClass()
+                                                                                            .getSimpleName())
+                                                                                    .append('#')
+                                                                                    .append(System.identityHashCode(
+                                                                                            cursorOwnerContainer));
+                                                                            if (cursorOwnerContainer instanceof RuntimeHash
+                                                                                    cursorOwnerHash) {
+                                                                                result.append(":keys=[");
+                                                                                boolean firstCursorKey = true;
+                                                                                for (java.util.Map.Entry<String,
+                                                                                        RuntimeScalar> cursorEntry
+                                                                                        : cursorOwnerHash.elements
+                                                                                                .entrySet()) {
+                                                                                    if (cursorEntry.getValue()
+                                                                                            != cursorOwnerCell) continue;
+                                                                                    if (!firstCursorKey) {
+                                                                                        result.append(',');
+                                                                                    }
+                                                                                    firstCursorKey = false;
+                                                                                    result.append(cursorEntry.getKey());
+                                                                                }
+                                                                                result.append(']');
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                                result.append(']');
                                                                 result.append("/keys=[");
                                                                 boolean firstKey = true;
                                                                 for (java.util.Map.Entry<String, RuntimeScalar> entry
@@ -2121,6 +2210,54 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                                         }
                                         result.append(']');
                                     } else if (parentContainer instanceof RuntimeHash parentHash) {
+                                        result.append("/blessId=").append(parentHash.blessId)
+                                                .append("/class=")
+                                                .append(NameNormalizer.getBlessStr(parentHash.blessId));
+                                        result.append("/refCount=").append(parentHash.refCount)
+                                                .append("/state=").append(parentHash.perlLifecycleState())
+                                                .append("/ownerSlots=[");
+                                        boolean firstContainerOwner = true;
+                                        for (PerlOwnerSlot containerSlot : parentHash.ownerSlotSnapshot()) {
+                                            if (!containerSlot.isActive()) continue;
+                                            if (!firstContainerOwner) result.append(',');
+                                            firstContainerOwner = false;
+                                            result.append(containerSlot.kind()).append('#')
+                                                    .append(containerSlot.identity());
+                                            RuntimeScalar containerCell = containerSlot.countedScalarOwner();
+                                            if (containerCell == null) {
+                                                containerCell = containerSlot.untrackedScalarOwner();
+                                            }
+                                            if (containerCell != null) {
+                                                result.append(":cell=")
+                                                        .append(System.identityHashCode(containerCell))
+                                                        .append(":owns=").append(containerCell.refCountOwned)
+                                                        .append(":value=");
+                                                if (containerCell.value instanceof RuntimeBase containerValue) {
+                                                    result.append(containerValue.getClass().getSimpleName())
+                                                            .append('#').append(System.identityHashCode(containerValue));
+                                                } else {
+                                                    result.append(containerCell.value == null ? "null"
+                                                            : containerCell.value.getClass().getSimpleName());
+                                                }
+                                                RuntimeBase ownerContainer = containerCell.containerOwner;
+                                                if (ownerContainer != null) {
+                                                    result.append(":container=")
+                                                            .append(ownerContainer.getClass().getSimpleName())
+                                                            .append('#').append(System.identityHashCode(ownerContainer));
+                                                    if (ownerContainer instanceof RuntimeHash ownerHash) {
+                                                        result.append(":keys=");
+                                                        for (java.util.Map.Entry<String, RuntimeScalar> ownerEntry
+                                                                : ownerHash.elements.entrySet()) {
+                                                            if (ownerEntry.getValue() == containerCell) {
+                                                                result.append(ownerEntry.getKey());
+                                                                break;
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        result.append("]");
                                         result.append("/keys=[");
                                         boolean firstParentKey = true;
                                         for (java.util.Map.Entry<String, RuntimeScalar> parentEntry
