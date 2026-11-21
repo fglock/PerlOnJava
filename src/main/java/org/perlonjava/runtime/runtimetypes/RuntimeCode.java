@@ -2829,40 +2829,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return context != null ? context : RuntimeContextType.SCALAR;
     }
 
-    public static void pushMapGrepBlockWantArrayContext(int callContext) {
-        PerlRuntime.current().executionState().mapGrepBlockWantArrayContexts.push(callContext);
-    }
-
-    public static void popMapGrepBlockWantArrayContext() {
-        Deque<Integer> contexts = PerlRuntime.current().executionState().mapGrepBlockWantArrayContexts;
-        if (!contexts.isEmpty()) contexts.pop();
-    }
-
-    /** Return the enclosing map/grep context when wantarray() is called from its block. */
-    public static Integer getMapGrepBlockWantArrayContext() {
-        RuntimeCode caller = getActiveCodeAtCallerFrame(0);
-        if (caller == null || !caller.isMapGrepBlock) {
-            caller = getActiveCodeAtCallerFrame(1);
-        }
-        if (caller == null || !caller.isMapGrepBlock) return null;
-        Deque<Integer> contexts = PerlRuntime.current().executionState().mapGrepBlockWantArrayContexts;
-        return contexts.peek();
-    }
-
-    /** Whether execution is dynamically inside a map block, including nested subs. */
-    public static boolean isMapBlockContextActive() {
-        return !PerlRuntime.current().executionState().mapGrepBlockWantArrayContexts.isEmpty();
-    }
-
-    /** Apply the enclosing map/grep context to wantarray() inside its block. */
-    public static int resolveWantArrayContext(int context) {
-        Deque<Integer> contexts = PerlRuntime.current().executionState().mapGrepBlockWantArrayContexts;
-        if (contexts.isEmpty()) return context;
-        RuntimeCode current = getActiveCodeAtCallerFrame(0);
-        if (current != null && current.isMapGrepBlock) return contexts.peek();
-        return RuntimeContextType.LIST;
-    }
-
     /**
      * Pop @_ and hasargs flag from their respective stacks when exiting a subroutine.
      * Both stacks are pushed in the instance apply() methods and must be popped together.

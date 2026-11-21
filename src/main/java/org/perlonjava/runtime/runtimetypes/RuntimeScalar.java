@@ -4603,24 +4603,31 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             oldBase = (RuntimeBase) this.value;
         }
         boolean oldRefCountOwned = this.refCountOwned;
-        // Scope unwind can clear a cell's payload after scheduling its array
-        // edge release while leaving the stable storage token on the cell.
-        // Retire that exact displaced edge from its token instead of treating
-        // the missing payload as a lost owner and aborting the replacement.
+        // Scope unwind can clear a cell's payload after scheduling its edge
+        // release while leaving the stable storage token on the cell. Retire
+        // that exact displaced edge from its token instead of treating the
+        // missing payload as a lost owner and aborting the replacement.
         if (oldBase == null && oldRefCountOwned && countedOwnerSlot != null
                 && countedOwnerSlot.isActive()
-                && countedOwnerSlot.countedScalarOwner() == this
-                && (countedOwnerSlot.kind() == PerlOwnerSlot.Kind.ARRAY_ELEMENT
-                    || countedOwnerSlot.kind() == PerlOwnerSlot.Kind.HASH_ELEMENT)) {
+                && countedOwnerSlot.countedScalarOwner() == this) {
             oldBase = countedOwnerSlot.referent();
         }
-        boolean oldIdentifiedOwner = oldBase != null && oldRefCountOwned
+        RuntimeBase oldCountedBase = oldBase;
+        boolean oldIdentifiedOwner = oldRefCountOwned
                 && countedOwnerSlot != null && countedOwnerSlot.isActive()
-                && countedOwnerSlot.referent() == oldBase;
+                && countedOwnerSlot.countedScalarOwner() == this
+                && countedOwnerSlot.referent() != null;
+        if (oldIdentifiedOwner) {
+            // The scalar payload can be changed during scope teardown before
+            // its deferred owner-slot release is drained. Replacement must
+            // retire the referent recorded by that exact slot; the payload
+            // remains available separately for DESTROY and container metadata.
+            oldCountedBase = countedOwnerSlot.referent();
+        }
         boolean staleAggregateOwner = oldIdentifiedOwner
                 && (countedOwnerSlot.kind() == PerlOwnerSlot.Kind.ARRAY_ELEMENT
                     || countedOwnerSlot.kind() == PerlOwnerSlot.Kind.HASH_ELEMENT)
-                && !isCurrentAggregateElementOwner(oldBase, countedOwnerSlot);
+                && !isCurrentAggregateElementOwner(oldCountedBase, countedOwnerSlot);
         // A live scalar-reference contents slot is the ownership proof for an
         // uncounted scalar cell's current referent. Assigning through $$ref
         // retargets those exact slots below; the historical referencedByScalarReference
@@ -4668,7 +4675,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
 
         if (oldRefCountOwned && !thisWasWeak) {
-            if (oldBase == null || !oldIdentifiedOwner) {
+            if (oldCountedBase == null || !oldIdentifiedOwner) {
                 throw new IllegalStateException(
                         "counted scalar lost its current owner slot during replacement"
                                 + " (scalar=" + System.identityHashCode(this)
@@ -4688,17 +4695,17 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                                     : System.identityHashCode(
                                         countedOwnerSlot.countedScalarOwner())) + ")");
             }
-            if (staleAggregateOwner && oldBase.refCount <= 0) {
+            if (staleAggregateOwner && oldCountedBase.refCount <= 0) {
                 // A detached aggregate slot is no longer a Perl edge. Its
                 // identity can outlive the storage mutation in compatibility
                 // paths; retire that token without decrementing a count that
                 // has already reached zero or the referent is destroyed.
                 retireOldCountedOwnerAfterPublish = true;
-            } else if (oldBase.refCount <= 0) {
+            } else if (oldCountedBase.refCount <= 0) {
                 throw new IllegalStateException(
                         "counted scalar replacement requires a positive old reference count");
-            } else if (oldBase.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_ALIAS) != 0) {
-                MortalList.deferDecrementFromArraySlot(oldBase, this,
+            } else if (oldCountedBase.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_ALIAS) != 0) {
+                MortalList.deferDecrementFromArraySlot(oldCountedBase, this,
                         "RuntimeScalar.setLargeRefCounted overwrite");
                 oldArgumentAliasReleaseQueued = true;
                 if (newOwned) {
@@ -4709,9 +4716,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             } else if (newOwned) {
                 oldCountedOwnerRelease = countedOwnerSlot
                         .replaceCountedScalarOwnerAndAcquire(
-                                oldBase, newReferent, this,
+                        oldCountedBase, newReferent, this,
                                 "RuntimeScalar.setLargeRefCounted store");
-                oldOwnerTraceReleasedDuringReplacement = oldBase != newReferent;
+                oldOwnerTraceReleasedDuringReplacement = oldCountedBase != newReferent;
             } else {
                 retireOldCountedOwnerAfterPublish = true;
             }
@@ -4923,19 +4930,19 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
         // Decrement old value's refCount AFTER assignment (skip for weak refs
         // and for scalars that didn't own a refCount increment).
-        if (oldBase != null && !thisWasWeak && oldRefCountOwned) {
+        if (oldCountedBase != null && !thisWasWeak && oldRefCountOwned) {
             if (oldCountedOwnerRelease != null) {
                 // The slot now describes the replacement edge. Drain the exact
                 // displaced edge token so this release cannot retire or infer
                 // ownership from the scalar's newer value.
                 if (!oldOwnerTraceReleasedDuringReplacement
-                        && (!newOwned || oldBase != newReferent)) {
-                    oldBase.releaseOwner(this, "setLargeRefCounted overwrite");
+                        && (!newOwned || oldCountedBase != newReferent)) {
+                    oldCountedBase.releaseOwner(this, "setLargeRefCounted overwrite");
                 }
-                if (staleAggregateOwner && oldBase.refCount <= 0) {
+                if (staleAggregateOwner && oldCountedBase.refCount <= 0) {
                     oldCountedOwnerRelease.complete();
                 } else {
-                    MortalList.releaseCountedOwnerSlotImmediately(oldBase,
+                    MortalList.releaseCountedOwnerSlotImmediately(oldCountedBase,
                             oldCountedOwnerRelease,
                             "RuntimeScalar.setLargeRefCounted overwrite");
                 }
