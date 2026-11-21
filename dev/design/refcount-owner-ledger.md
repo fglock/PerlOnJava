@@ -42,11 +42,36 @@ reproduction shows the resultset cache is released, but a selected
 `DBICTest::BaseResultSet` remains `LIVE` at runtime refcount zero with a durable
 untracked scalar owner. Its `cursor` field owns a
 `DBIx::Class::Storage::DBI::Cursor`, which shares the nested query-attrs hash.
-The source of that durable scalar owner is still unresolved. The current
-duplicate-aggregate test passes before a fix and does not reproduce this leak;
-the next regression must capture the retained resultset/cursor lifetime in the
-project-owned test tree. `t/60core.t` passed after the recent frame-release
-ordering changes, but that does not clear the diamond failure.
+The source of that durable scalar owner is still unresolved.
+
+A project-owned regression test now reproduces the leak:
+`src/test/resources/unit/refcount/diamond_prefetch_cursor_leak.t`. It requires
+`DBIC_CLASS_TEST_ROOT` pointing to a DBIx::Class checkout and skips otherwise.
+The test creates 64 search permutations with different join/prefetch attribute
+structures, iterates each ResultSet, and traverses the `cd -> artist` and
+`artwork_to_artist -> artist` relationship chains on every returned row. After
+the block exits, weak witnesses to Schema, Storage, and DBH must all be cleared.
+
+Bisection findings for the leak trigger:
+- The leak requires volume: 64+ different searches with relationship traversal.
+  A single search or a few identical searches do not leak.
+- The leak requires different attribute structures across searches (different
+  join/prefetch hash shapes). Identical searches at any volume do not leak.
+- The leak requires relationship traversal on returned rows. Calling `.all`
+  without traversal does not leak even at volume.
+- Pure-Perl models of the same reference graph (Schema/Source/ResultSet/Cursor
+  with DESTROY rescue, weak backrefs, and `||=` caching) do not reproduce the
+  leak. The bug requires something specific to DBIx's runtime behavior: likely
+  the `Try::Tiny` try/catch closures in `_resolve_condition`, the complex
+  attribute merging in `ResultSet::search`, or the `related_resultset` hash
+  caching through `return $self->{hash}{key} = do { ... }`.
+- `use Test::More` (default import) masks the leak at low volume (9 searches)
+  but not at high volume (64+). `PJ_REFCOUNT_TRACE=1` also masks the leak by
+  adding extra owner tracking that helps the runtime release correctly.
+- Both JVM and interpreter backends fail identically.
+
+`t/60core.t` passed after the recent frame-release ordering changes, but that
+does not clear the diamond failure.
 
 The source build succeeds. Full `make` remains blocked at Java test-source
 compilation by 93 references to retired reachability-diagnostic APIs, including
