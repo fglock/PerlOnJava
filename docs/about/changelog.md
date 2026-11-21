@@ -6,6 +6,7 @@ priorities and future plans.
 
 ## Work in progress
 
+- Honor overloaded logical negation, warn on distinct constant-sub redefinitions with equal values, and preserve reference-valued scalar slots through localized glob aliases (#2122, #2075, #1939).
 - Preserve the `Can't use a hash as a reference` diagnostic for `%$hashref->{key}` and hash slices (#2132).
 - Preserve file contents on `sysopen` without `O_TRUNC`, fail `open` on undefined paths, avoid duplicate `closedir` warnings, and match Socket lookup flags and return values (#2128, #2125, #2095).
 - Register pure-Perl Encode codecs, preserve Unicode input in `decode_utf8`, implement `Unicode::Normalize::getComposite`, and provide Java-backed URI::Fast support (#2124, #2121, #2104, #2079, #2117).
