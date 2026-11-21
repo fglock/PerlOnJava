@@ -1260,6 +1260,16 @@ public class BytecodeCompiler implements Visitor {
             emitReg(lastResultReg);
         }
 
+        // Perl releases hash values before scalar pads and arrays at scope exit.
+        // DESTROY methods can observe objects released earlier in this sequence,
+        // so keep this order identical in both execution backends.
+        for (int reg : hashIndices) {
+            emit(preserveImplicitReturn
+                    ? Opcodes.RETURN_SCOPE_CLEANUP_HASH : Opcodes.SCOPE_EXIT_CLEANUP_HASH);
+            emitReg(reg);
+            if (preserveImplicitReturn) emitReg(lastResultReg);
+        }
+
         // Emit SCOPE_EXIT_CLEANUP for each my-scalar register in the exiting scope.
         // This calls RuntimeScalar.scopeExitCleanup() which handles:
         // 1. IO fd recycling for anonymous filehandle globs
@@ -1281,13 +1291,7 @@ public class BytecodeCompiler implements Visitor {
             }
         }
 
-        // Walk hash/array variables for nested blessed references.
-        for (int reg : hashIndices) {
-            emit(preserveImplicitReturn
-                    ? Opcodes.RETURN_SCOPE_CLEANUP_HASH : Opcodes.SCOPE_EXIT_CLEANUP_HASH);
-            emitReg(reg);
-            if (preserveImplicitReturn) emitReg(lastResultReg);
-        }
+        // Walk array variables last, after hash values and scalar pads.
         for (int reg : arrayIndices) {
             emit(preserveImplicitReturn
                     ? Opcodes.RETURN_SCOPE_CLEANUP_ARRAY : Opcodes.SCOPE_EXIT_CLEANUP_ARRAY);
@@ -1382,12 +1386,13 @@ public class BytecodeCompiler implements Visitor {
             return;
         }
 
-        for (int reg : cleanup.scalarRegs) {
-            emit(Opcodes.SCOPE_EXIT_CLEANUP);
-            emitReg(reg);
-        }
+        // Keep the lexical cleanup order used by normal scope exit.
         for (int reg : cleanup.hashRegs) {
             emit(Opcodes.SCOPE_EXIT_CLEANUP_HASH);
+            emitReg(reg);
+        }
+        for (int reg : cleanup.scalarRegs) {
+            emit(Opcodes.SCOPE_EXIT_CLEANUP);
             emitReg(reg);
         }
         for (int reg : cleanup.arrayRegs) {

@@ -190,7 +190,18 @@ public class EmitStatement {
             ctx.mv.visitVarInsn(Opcodes.ASTORE, returnedLvalueSlot);
         }
 
-        // Phase 1: Run scopeExitCleanup for scalar variables.
+        // Perl releases hash values before scalar pads and arrays at scope exit.
+        // DESTROY methods can observe objects released earlier in this sequence.
+        for (int idx : hashIndices) {
+            ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/MortalList",
+                    "scopeExitCleanupHash",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;)V",
+                    false);
+        }
+
+        // Run scopeExitCleanup for scalar variables after hash values.
         // This defers refCount decrements for blessed references with DESTROY,
         // and handles IO fd recycling for anonymous filehandle globs.
         for (int idx : scalarIndices) {
@@ -225,17 +236,7 @@ public class EmitStatement {
                     "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;Ljava/lang/String;)V",
                     false);
         }
-        // Phase 1b: Walk hash/array variables for nested blessed references.
-        // When a hash/array goes out of scope, any blessed refs stored inside
-        // (or nested inside sub-containers) need their refCounts decremented.
-        for (int idx : hashIndices) {
-            ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
-            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/runtimetypes/MortalList",
-                    "scopeExitCleanupHash",
-                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;)V",
-                    false);
-        }
+        // Arrays are released after hash values and scalar pads.
         for (int idx : arrayIndices) {
             if (returnedLvalueSlot >= 0) {
                 ctx.mv.visitVarInsn(Opcodes.ALOAD, returnedLvalueSlot);
