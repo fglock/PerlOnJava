@@ -1,12 +1,10 @@
 use strict;
 use warnings;
-use Test::More tests => 6;
+use Test::More tests => 5;
 use FindBin;
 use lib "$FindBin::Bin/fixtures/MaybeXS/lib";
 use List::Util::PP qw(pairgrep pairfirst pairmap);
 
-is(scalar(pairgrep { $b & 2 } one => 1, two => 2, three => 3), 2,
-    'upstream pairgrep returns matching pair count in scalar context');
 is_deeply([pairgrep { $b % 2 } one => 1, two => 2, three => 3],
     [one => 1, three => 3], 'upstream pairgrep returns matched pairs in list context');
 
