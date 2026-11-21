@@ -57,22 +57,22 @@ for my $cd_path (keys %$cd_paths) {
 }
 
 my $rows_seen = 0;
-my @weak_related_rows;
+my (@weak_cds, @weak_cd_artists, @weak_associations, @weak_association_artists);
 for my $name (keys %tests) {
     for my $artwork ($tests{$name}->all()) {
         die "$name returned the wrong artwork" unless $artwork->id == 1;
         my $cd = $artwork->cd;
-        push @weak_related_rows, $cd;
-        weaken($weak_related_rows[-1]);
+        push @weak_cds, $cd;
+        weaken($weak_cds[-1]);
         my $cd_artist = $cd->artist;
-        push @weak_related_rows, $cd_artist;
-        weaken($weak_related_rows[-1]);
+        push @weak_cd_artists, $cd_artist;
+        weaken($weak_cd_artists[-1]);
         my $association = $artwork->artwork_to_artist->first;
-        push @weak_related_rows, $association;
-        weaken($weak_related_rows[-1]);
+        push @weak_associations, $association;
+        weaken($weak_associations[-1]);
         my $association_artist = $association->artist;
-        push @weak_related_rows, $association_artist;
-        weaken($weak_related_rows[-1]);
+        push @weak_association_artists, $association_artist;
+        weaken($weak_association_artists[-1]);
         die "$name returned the wrong cd artist"
             unless $cd_artist->artistid == 1;
         die "$name returned the wrong association artist"
@@ -92,8 +92,14 @@ for my $name (keys %tests) {
 undef %tests;
 undef $ars;
 undef $schema;
-is(scalar(grep { defined $_ } @weak_related_rows), 0,
-    'relationship rows are released after the diamond resultsets are discarded');
+is(scalar(grep { defined $_ } @weak_cds), 0,
+    'CD rows are released after the diamond resultsets are discarded');
+is(scalar(grep { defined $_ } @weak_cd_artists), 0,
+    'CD artist rows are released after the diamond resultsets are discarded');
+is(scalar(grep { defined $_ } @weak_associations), 0,
+    'association rows are released after the diamond resultsets are discarded');
+is(scalar(grep { defined $_ } @weak_association_artists), 0,
+    'association artist rows are released after the diamond resultsets are discarded');
 is(scalar(grep { defined $_ } @weak_resultsets), 0,
     'discarded diamond cache releases every resultset');
 ok(!defined($weak_schema), 'discarded diamond resultset cache releases its schema');
