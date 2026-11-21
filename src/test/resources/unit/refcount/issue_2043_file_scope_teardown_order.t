@@ -12,9 +12,13 @@ our @destroy_order;
 }
 
 {
-    my $scalar = bless { name => 'scalar' }, 'Issue2043::TeardownOrderProbe';
-    my %hash = (
-        value => bless({ name => 'hash' }, 'Issue2043::TeardownOrderProbe'),
+    my $scalar_first = bless { name => 'scalar_first' }, 'Issue2043::TeardownOrderProbe';
+    my $scalar_second = bless { name => 'scalar_second' }, 'Issue2043::TeardownOrderProbe';
+    my %hash_first = (
+        value => bless({ name => 'hash_first' }, 'Issue2043::TeardownOrderProbe'),
+    );
+    my %hash_second = (
+        value => bless({ name => 'hash_second' }, 'Issue2043::TeardownOrderProbe'),
     );
     my @array = (
         bless({ name => 'array' }, 'Issue2043::TeardownOrderProbe'),
@@ -23,8 +27,8 @@ our @destroy_order;
 
 is_deeply(
     \@destroy_order,
-    [qw(hash scalar array)],
-    'mixed lexical teardown releases hash values before scalars and arrays',
+    [qw(hash_second hash_first scalar_second scalar_first array)],
+    'lexical teardown reverses hash and scalar declaration order before arrays',
 );
 
 done_testing();

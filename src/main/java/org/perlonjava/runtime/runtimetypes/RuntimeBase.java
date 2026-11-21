@@ -1980,6 +1980,160 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                             if (!firstArraySlot) result.append(',');
                             firstArraySlot = false;
                             result.append(arraySlot.kind()).append('#').append(arraySlot.identity());
+                            RuntimeScalar arrayOwnerCell = arraySlot.countedScalarOwner();
+                            if (arrayOwnerCell == null) {
+                                arrayOwnerCell = arraySlot.untrackedScalarOwner();
+                            }
+                            if (arrayOwnerCell != null) {
+                                result.append(":scalar=")
+                                        .append(System.identityHashCode(arrayOwnerCell))
+                                        .append(":weak=").append(WeakRefRegistry.isweak(arrayOwnerCell))
+                                        .append(":owns=").append(arrayOwnerCell.refCountOwned)
+                                        .append(":scopeExited=").append(arrayOwnerCell.scopeExited)
+                                        .append(":value=");
+                                if (arrayOwnerCell.value instanceof RuntimeBase arrayValue) {
+                                    result.append(arrayValue.getClass().getSimpleName())
+                                            .append('#').append(System.identityHashCode(arrayValue));
+                                } else {
+                                    result.append(arrayOwnerCell.value == null ? "null"
+                                            : arrayOwnerCell.value.getClass().getSimpleName());
+                                }
+                                RuntimeBase parentContainer = arrayOwnerCell.containerOwner;
+                                if (parentContainer != null) {
+                                    result.append(":parent=")
+                                            .append(parentContainer.getClass().getSimpleName())
+                                            .append('#').append(System.identityHashCode(parentContainer));
+                                    if (parentContainer instanceof RuntimeArray parentArray) {
+                                        PerlRuntime runtime = PerlRuntime.currentOrNull();
+                                        result.append("/size=").append(parentArray.elements.size())
+                                                .append("/activeArgs=").append(runtime != null
+                                                        && runtime.executionState().argsStack.contains(parentArray));
+                                        for (int i = 0; i < parentArray.elements.size(); i++) {
+                                            if (parentArray.elements.get(i) == arrayOwnerCell) {
+                                                result.append("/index=").append(i);
+                                                break;
+                                            }
+                                        }
+                                        result.append("/blessId=").append(parentArray.blessId)
+                                                .append("/ownerPaths=[");
+                                        boolean firstParentOwner = true;
+                                        for (PerlOwnerSlot parentSlot : parentArray.ownerSlotSnapshot()) {
+                                            if (!parentSlot.isActive()) continue;
+                                            if (!firstParentOwner) result.append(',');
+                                            firstParentOwner = false;
+                                            result.append(parentSlot.kind()).append('#')
+                                                    .append(parentSlot.identity());
+                                            RuntimeScalar parentOwnerCell = parentSlot.countedScalarOwner();
+                                            if (parentOwnerCell == null) {
+                                                parentOwnerCell = parentSlot.untrackedScalarOwner();
+                                            }
+                                            if (parentOwnerCell == null) continue;
+                                            result.append(":scalar=")
+                                                    .append(System.identityHashCode(parentOwnerCell))
+                                                    .append(":type=").append(parentOwnerCell.type)
+                                                    .append(":value=");
+                                            if (parentOwnerCell.value instanceof RuntimeBase parentValue) {
+                                                result.append(parentValue.getClass().getSimpleName())
+                                                        .append('#').append(System.identityHashCode(parentValue));
+                                            } else {
+                                                result.append(parentOwnerCell.value == null ? "null"
+                                                        : parentOwnerCell.value.getClass().getSimpleName());
+                                            }
+                                            RuntimeBase rootContainer = parentOwnerCell.containerOwner;
+                                            if (rootContainer != null) {
+                                                result.append(":root=")
+                                                        .append(rootContainer.getClass().getSimpleName())
+                                                        .append('#').append(System.identityHashCode(rootContainer));
+                                                if (rootContainer instanceof RuntimeArray rootArray) {
+                                                    result.append("/size=").append(rootArray.elements.size())
+                                                            .append("/activeArgs=").append(runtime != null
+                                                                    && runtime.executionState().argsStack.contains(rootArray));
+                                                    for (int i = 0; i < rootArray.elements.size(); i++) {
+                                                        if (rootArray.elements.get(i) == parentOwnerCell) {
+                                                            result.append("/index=").append(i);
+                                                            break;
+                                                        }
+                                                    }
+                                                } else if (rootContainer instanceof RuntimeHash rootHash) {
+                                                    result.append("/blessId=").append(rootHash.blessId)
+                                                            .append("/size=").append(rootHash.elements.size())
+                                                            .append("/refCount=").append(rootHash.refCount)
+                                                            .append("/keys=[");
+                                                    boolean firstRootKey = true;
+                                                    for (java.util.Map.Entry<String, RuntimeScalar> rootEntry
+                                                            : rootHash.elements.entrySet()) {
+                                                        if (rootEntry.getValue() != parentOwnerCell) continue;
+                                                        if (!firstRootKey) result.append(',');
+                                                        firstRootKey = false;
+                                                        result.append(rootEntry.getKey());
+                                                    }
+                                                    result.append("]/ownerPaths=[");
+                                                    boolean firstRootOwner = true;
+                                                    for (PerlOwnerSlot rootSlot : rootHash.ownerSlotSnapshot()) {
+                                                        if (!rootSlot.isActive()) continue;
+                                                        if (!firstRootOwner) result.append(',');
+                                                        firstRootOwner = false;
+                                                        result.append(rootSlot.kind()).append('#')
+                                                                .append(rootSlot.identity());
+                                                        RuntimeScalar rootOwnerCell = rootSlot.countedScalarOwner();
+                                                        if (rootOwnerCell == null) {
+                                                            rootOwnerCell = rootSlot.untrackedScalarOwner();
+                                                        }
+                                                        if (rootOwnerCell == null) continue;
+                                                        result.append(":scalar=")
+                                                                .append(System.identityHashCode(rootOwnerCell))
+                                                                .append(":value=");
+                                                        if (rootOwnerCell.value instanceof RuntimeBase rootValue) {
+                                                            result.append(rootValue.getClass().getSimpleName())
+                                                                    .append('#').append(System.identityHashCode(rootValue));
+                                                        } else {
+                                                            result.append(rootOwnerCell.value == null ? "null"
+                                                                    : rootOwnerCell.value.getClass().getSimpleName());
+                                                        }
+                                                        RuntimeBase rootParent = rootOwnerCell.containerOwner;
+                                                        if (rootParent != null) {
+                                                            result.append(":parent=")
+                                                                    .append(rootParent.getClass().getSimpleName())
+                                                                    .append('#').append(System.identityHashCode(rootParent));
+                                                            if (rootParent instanceof RuntimeArray rootParentArray) {
+                                                                result.append("/size=")
+                                                                        .append(rootParentArray.elements.size())
+                                                                        .append("/activeArgs=").append(runtime != null
+                                                                                && runtime.executionState().argsStack
+                                                                                        .contains(rootParentArray));
+                                                            } else if (rootParent instanceof RuntimeHash rootParentHash) {
+                                                                result.append("/keys=[");
+                                                                boolean firstKey = true;
+                                                                for (java.util.Map.Entry<String, RuntimeScalar> entry
+                                                                        : rootParentHash.elements.entrySet()) {
+                                                                    if (entry.getValue() != rootOwnerCell) continue;
+                                                                    if (!firstKey) result.append(',');
+                                                                    firstKey = false;
+                                                                    result.append(entry.getKey());
+                                                                }
+                                                                result.append(']');
+                                                            }
+                                                        }
+                                                    }
+                                                    result.append(']');
+                                                }
+                                            }
+                                        }
+                                        result.append(']');
+                                    } else if (parentContainer instanceof RuntimeHash parentHash) {
+                                        result.append("/keys=[");
+                                        boolean firstParentKey = true;
+                                        for (java.util.Map.Entry<String, RuntimeScalar> parentEntry
+                                                : parentHash.elements.entrySet()) {
+                                            if (parentEntry.getValue() != arrayOwnerCell) continue;
+                                            if (!firstParentKey) result.append(',');
+                                            firstParentKey = false;
+                                            result.append(parentEntry.getKey());
+                                        }
+                                        result.append(']');
+                                    }
+                                }
+                            }
                         }
                         result.append(']');
                     }
