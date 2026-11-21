@@ -57,27 +57,45 @@ for my $cd_path (keys %$cd_paths) {
 }
 
 my $rows_seen = 0;
+my @weak_related_rows;
 for my $name (keys %tests) {
     for my $artwork ($tests{$name}->all()) {
         die "$name returned the wrong artwork" unless $artwork->id == 1;
+        my $cd = $artwork->cd;
+        push @weak_related_rows, $cd;
+        weaken($weak_related_rows[-1]);
+        my $cd_artist = $cd->artist;
+        push @weak_related_rows, $cd_artist;
+        weaken($weak_related_rows[-1]);
+        my $association = $artwork->artwork_to_artist->first;
+        push @weak_related_rows, $association;
+        weaken($weak_related_rows[-1]);
+        my $association_artist = $association->artist;
+        push @weak_related_rows, $association_artist;
+        weaken($weak_related_rows[-1]);
         die "$name returned the wrong cd artist"
-            unless $artwork->cd->artist->artistid == 1;
+            unless $cd_artist->artistid == 1;
         die "$name returned the wrong association artist"
-            unless $artwork->artwork_to_artist->first->artist->artistid == 2;
+            unless $association_artist->artistid == 2;
         ++$rows_seen;
     }
 }
 
 is($rows_seen, 256, 'all diamond join/prefetch resultsets return the expected row');
 
-my ($first_key) = keys %tests;
-my $weak_resultset;
-weaken($weak_resultset = $tests{$first_key});
+my @weak_resultsets;
+for my $name (keys %tests) {
+    push @weak_resultsets, $tests{$name};
+    weaken($weak_resultsets[-1]);
+}
 
 undef %tests;
 undef $ars;
 undef $schema;
-ok(!defined($weak_resultset), 'discarded diamond cache releases its resultsets');
+is(scalar(grep { defined $_ } @weak_related_rows), 0,
+    'relationship rows are released after the diamond resultsets are discarded');
+is(scalar(grep { defined $_ } @weak_resultsets), 0,
+    'discarded diamond cache releases every resultset');
 ok(!defined($weak_schema), 'discarded diamond resultset cache releases its schema');
 
 done_testing();

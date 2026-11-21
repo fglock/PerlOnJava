@@ -25,6 +25,11 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
         return lvalue != null;
     }
 
+    /** Whether this proxy still denotes a Perl-owned value slot. */
+    boolean hasLivePerlValueOwner() {
+        return true;
+    }
+
     /**
      * Resolves the backing slot without applying its scalar dereference magic.
      * Callers such as tied()/untie() need the slot itself, not a FETCH result.

@@ -1270,7 +1270,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 || stagedValueOwner
                 || (referencedByScalarReference
                     && (hasScalarCellOwner() || (!requireLiveContainer && refCount > 0)))
-                || this instanceof RuntimeBaseProxy;
+                || (this instanceof RuntimeBaseProxy proxy && proxy.hasLivePerlValueOwner());
     }
 
     /** Scan container identities in place so repeated stores do not allocate a full history copy. */
@@ -1337,6 +1337,24 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     private synchronized List<RuntimeBase> containerOwnerSnapshot() {
         return new ArrayList<>(containerOwners);
+    }
+
+    String debugContainerOwners() {
+        PerlRuntime runtime = PerlRuntime.currentOrNull();
+        return containerOwnerSnapshot().stream().map(owner -> {
+            String state = owner.getClass().getSimpleName() + "#"
+                    + System.identityHashCode(owner)
+                    + ":stores=" + isStoredInAnyContainer(owner)
+                    + ":perlOwner=" + owner.hasCurrentPerlStorageOwner();
+            if (owner instanceof RuntimeArray array) {
+                state += ":size=" + array.elements.size()
+                        + ":args=" + (runtime != null
+                                && runtime.executionState().argsStack.contains(array));
+            } else if (owner instanceof RuntimeHash hash) {
+                state += ":size=" + hash.elements.size();
+            }
+            return state;
+        }).toList().toString();
     }
 
     boolean hasContainerOwnerIn(Set<RuntimeBase> candidates) {

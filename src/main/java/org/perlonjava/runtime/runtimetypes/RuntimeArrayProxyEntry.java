@@ -76,6 +76,12 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
     }
 
     @Override
+    boolean hasLivePerlValueOwner() {
+        return lvalue != null && parent.elements != null
+                && parent.elements.stream().anyMatch(element -> element == lvalue);
+    }
+
+    @Override
     public RuntimeScalar set(RuntimeScalar value) {
         if (parent.threadShared) SharedPerlStorage.validateStoredValue(value);
         vivify();

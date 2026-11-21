@@ -41,6 +41,11 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
         return parent;
     }
 
+    @Override
+    boolean hasLivePerlValueOwner() {
+        return lvalue != null && parent.containsElementCellIdentity(lvalue);
+    }
+
     /**
      * Constructs a RuntimeHashProxyEntry with key type tracking.
      *
