@@ -236,17 +236,22 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // release.
                 return !referent.hasIndependentPerlOwnerSlotForArgument();
             }
-            // An anonymous hash literal passed directly to a call has no
-            // source cell whose lifetime covers @_ . The argument alias is a
-            // borrow, so retain otherwise ownerless hash literals for the
-            // argument frame. Restrict this to a zero-owner hash; stored
-            // references and other temporary values retain their own rules.
-            return scalar.type == RuntimeScalarType.HASHREFERENCE
-                    && referent instanceof RuntimeHash hash
-                    && !hasPersistentArgumentCell(scalar)
-                    && !hasCurrentCountedCellOwner(scalar)
-                    && hash.refCount == 0
-                    && !hash.hasCurrentPerlStorageOwner();
+            // Anonymous aggregate literals passed directly to a call have no
+            // source cell whose lifetime covers @_. The argument alias is a
+            // borrow, so retain an otherwise ownerless literal for the
+            // argument frame. Stored references and other temporary values
+            // retain their own rules.
+            if (hasPersistentArgumentCell(scalar)
+                    || hasCurrentCountedCellOwner(scalar)) return false;
+            if (scalar.type == RuntimeScalarType.HASHREFERENCE
+                    && referent instanceof RuntimeHash hash) {
+                return hash.refCount == 0 && !hash.hasCurrentPerlStorageOwner();
+            }
+            if (scalar.type == RuntimeScalarType.ARRAYREFERENCE
+                    && referent instanceof RuntimeArray array) {
+                return array.refCount == 0 && !array.hasCurrentPerlStorageOwner();
+            }
+            return false;
         }
 
         private void retainListResultOwners(RuntimeBase value) {

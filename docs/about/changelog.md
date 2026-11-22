@@ -6,6 +6,8 @@ priorities and future plans.
 
 ## Work in progress
 
+- Retire active lexical owners on explicit `exit` before dispatching `END` blocks (#2043).
+- Stage temporary anonymous array references as call-argument owners so their elements remain alive through the call and release afterward (#2043).
 
 - Preserve imported CV owners through global destruction, keep runtime-only `eval STRING` captures usable without treating them as semantic closure owners, and release DBI handles after failed `prepare` or `do` (#2043).
 - Preserve reacquired counted referents when deferred zero-count lifecycle cleanup drains (#2043).

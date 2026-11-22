@@ -1010,6 +1010,10 @@ public class WarnDie {
         if ("START".equals(phase) || "CHECK".equals(phase)) {
             throw new PerlExitException(exitCode);
         }
+        // exit() bypasses the normal return epilogues of active Perl frames.
+        // Retire those lexical owners before END blocks, as ordinary frame
+        // unwinding does for other exceptional exits.
+        MyVarCleanupStack.unwindTo(0);
         // Flush file-scoped lexical cleanup before END blocks
         MortalList.flush();
         // Match normal shutdown: destroy captures unrelated to END now, while
