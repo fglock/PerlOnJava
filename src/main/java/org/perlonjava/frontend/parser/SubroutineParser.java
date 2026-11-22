@@ -2987,6 +2987,14 @@ public class SubroutineParser {
         ArrayList<PerlOwnerSlot> capturedAggregateOwnerSlots = new ArrayList<>();
         for (int i = 0; i < capturedValues.size(); i++) {
             Object value = capturedValues.get(i);
+            // Dynamic eval keeps broad implementation captures so its source
+            // can resolve lexical names at runtime. Those cells are not
+            // semantic closure edges unless the sub body references them
+            // directly; do not let the owner ledger extend their lifetime.
+            if (capturedNames == null || i >= capturedNames.size()
+                    || capturedNames.get(i) == null) {
+                continue;
+            }
             if (capturedNames != null && i < capturedNames.size()
                     && capturedNames.get(i) != null && value instanceof RuntimeBase runtimeValue) {
                 if (code.closedOverVariables == null) {

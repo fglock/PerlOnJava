@@ -730,8 +730,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     /** Retire this cell's container edge when the container loses its last Perl owner. */
     void releaseContainerOwner(RuntimeBase expectedOwner) {
+        RuntimeBase referent = (type & RuntimeScalarType.REFERENCE_BIT) != 0
+                && value instanceof RuntimeBase base ? base : null;
         removeContainerOwnerTracking(expectedOwner);
         refreshUntrackedReferenceOwner();
+        WeakRefRegistry.onContainerValueOwnerReleased(referent);
     }
 
     /** Retire this aggregate edge after a slot mutation removed its last copy. */
@@ -747,6 +750,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             removeContainerOwnerTracking(owner);
         }
         refreshUntrackedReferenceOwner();
+        WeakRefRegistry.onContainerValueOwnerReleased(
+                (type & RuntimeScalarType.REFERENCE_BIT) != 0
+                        && value instanceof RuntimeBase base ? base : null);
     }
 
     /** Refresh this direct cell after its aggregate's last current Perl owner leaves. */
@@ -1231,8 +1237,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return untrackedReferenceOwnerSlot;
     }
 
-    private boolean hasDurableStrongValueSlot() {
+    boolean hasDurableStrongValueSlot() {
         return hasStrongValueSlot(false, true);
+    }
+
+    /** Whether this scalar still occupies a concrete aggregate storage slot. */
+    boolean hasCurrentAggregateStorageSlot() {
+        synchronized (this) {
+            for (RuntimeBase owner : containerOwners) {
+                if (isStoredInContainer(owner)) return true;
+            }
+        }
+        return false;
     }
 
     /** Whether a slot is attached to a container that itself still has a Perl owner. */

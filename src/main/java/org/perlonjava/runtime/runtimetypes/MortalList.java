@@ -280,7 +280,11 @@ public class MortalList {
         }
         LifecycleRuntimeState state = state();
         if (state.foreachSourceOwners.size() < depth) {
-            throw new IllegalStateException("Foreach source owner stack underflow");
+            // An awaited callback can resume and complete a foreach whose
+            // source lease was part of this caller's saved depth. The resumed
+            // continuation already released that lease; this older Java frame
+            // must not try to restore a stack depth from before the await.
+            return;
         }
         while (state.foreachSourceOwners.size() > depth) {
             state.foreachSourceOwners.pop().release();
@@ -1221,59 +1225,19 @@ public class MortalList {
             RuntimeScalar.releaseIoOwner(val);
             if (val != null) val.releaseContainerOwner(hash);
         }
-        // Skip container walks only when there are NO blessed objects AND NO
-        // weak refs anywhere in the JVM. If weak refs exist (even to unblessed
-        // data), we must still cascade decrements so their weak-ref entries
-        // can be cleared when the referent's refCount reaches 0.
         if (!RuntimeBase.blessedObjectExists() && !WeakRefRegistry.weakRefsExist()
                 && !RuntimeScalar.watcherCleanupNeeded()) return;
-        // If the hash has outstanding references (e.g., from \%hash stored elsewhere),
-        // do NOT clean up elements — the hash is still alive and its elements are
-        // accessible through the reference. Cleanup will happen when the last
-        // reference is released (in DestroyDispatch.callDestroy).
         if (RuntimeScalar.watcherCleanupNeeded()) {
             RuntimeScalar.notifyDestroyedWatchersRecursively(hash);
         }
         if (hash.type == RuntimeHash.TIED_HASH && hash.elements instanceof TieHash tieHash) {
             tieHash.releaseTiedObject();
         }
-        // Quick scan: skip if no value could transitively contain blessed/tracked refs.
-        boolean needsWalk = RuntimeScalar.watcherCleanupNeeded();
-        for (RuntimeScalar val : hash.elements.values()) {
-            if (val != null && (val.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                    && val.value instanceof RuntimeBase rb) {
-                if (rb.blessId != 0 || rb.isRefCountTracked()) {
-                    needsWalk = true;
-                    break;
-                }
-                // Container ref — peek at children for any reference-type elements
-                if (rb instanceof RuntimeArray innerArr) {
-                    for (RuntimeScalar inner : innerArr.elements) {
-                        if (inner != null && (inner.type & RuntimeScalarType.REFERENCE_BIT) != 0) {
-                            needsWalk = true;
-                            break;
-                        }
-                    }
-                } else if (rb instanceof RuntimeHash innerHash) {
-                    for (RuntimeScalar inner : innerHash.elements.values()) {
-                        if (inner != null && (inner.type & RuntimeScalarType.REFERENCE_BIT) != 0) {
-                            needsWalk = true;
-                            break;
-                        }
-                    }
-                }
-                if (needsWalk) break;
-            }
-        }
-        if (!needsWalk) return;
-        RecursiveAggregateReleaseWalker releaseWalker = new RecursiveAggregateReleaseWalker();
-        // The boundary drains owner releases in LIFO order. Queue the hash's
-        // normal iteration order so its direct children retain the same
-        // destruction order, while releases appended by a child are drained
-        // before the next sibling.
+        // Retire the direct storage slots. A final child-container owner
+        // triggers cleanup of that child's own outgoing slots.
         for (RuntimeScalar val : hash.elements.values()) {
             if (preserveEscapedScalarCellValueOwner(val)) continue;
-            releaseWalker.defer(val);
+            deferDecrementRecursive(val);
         }
     }
 
@@ -1346,14 +1310,8 @@ public class MortalList {
                 if (elem != null) elem.releaseContainerOwner(arr);
             }
         }
-        // Skip container walks only when there are NO blessed objects AND NO
-        // weak refs anywhere in the JVM (see scopeExitCleanupHash for details).
         if (!RuntimeBase.blessedObjectExists() && !WeakRefRegistry.weakRefsExist()
                 && !RuntimeScalar.watcherCleanupNeeded()) return;
-        // If the array has outstanding references (e.g., from \@array stored elsewhere),
-        // do NOT clean up elements — the array is still alive and its elements are
-        // accessible through the reference. Cleanup will happen when the last
-        // reference is released (in DestroyDispatch.callDestroy).
         if (RuntimeScalar.watcherCleanupNeeded()) {
             RuntimeScalar.notifyDestroyedWatchersRecursively(arr);
         }
@@ -1366,57 +1324,25 @@ public class MortalList {
         if (arr.elementsAliased) {
             if (arr.ownedAliasElements == null || arr.ownedAliasElements.isEmpty()) return;
             RuntimeScalar[] owned = arr.ownedAliasElements.toArray(new RuntimeScalar[0]);
-            RecursiveAggregateReleaseWalker releaseWalker = new RecursiveAggregateReleaseWalker();
             for (RuntimeScalar elem : owned) {
                 if (preserveEscapedScalarCellValueOwner(elem)) {
                     arr.forgetOwnedAliasElement(elem);
                     continue;
                 }
-                releaseWalker.defer(elem);
+                deferDecrementRecursive(elem);
                 arr.forgetOwnedAliasElement(elem);
             }
             return;
         }
-        // Quick scan: check if any element either:
-        //   1. Owns a refCount (was assigned via setLarge with a tracked referent), OR
-        //   2. Is a direct blessed reference (blessId != 0), OR
-        //   3. Is a container (array/hash ref) that might hold nested blessed refs
-        // For case 3, we peek one level deep to avoid false positives for arrays
-        // of plain-data arrayrefs (like the life_bitpacked @grid).
-        boolean needsWalk = RuntimeScalar.watcherCleanupNeeded();
-        for (RuntimeScalar elem : arr.elements) {
-            if (elem == null || (elem.type & RuntimeScalarType.REFERENCE_BIT) == 0) continue;
-            // Fast check: refCountOwned means this ref was properly tracked via setLarge
-            if (elem.refCountOwned) { needsWalk = true; break; }
-            if (!(elem.value instanceof RuntimeBase rb)) continue;
-            // Direct blessed ref
-            if (rb.blessId != 0 || rb.isRefCountTracked()) { needsWalk = true; break; }
-            // Container ref — peek at children for reference-type elements
-            if (rb instanceof RuntimeArray innerArr) {
-                for (RuntimeScalar inner : innerArr.elements) {
-                    if (inner != null && (inner.type & RuntimeScalarType.REFERENCE_BIT) != 0) {
-                        needsWalk = true; break;
-                    }
-                }
-            } else if (rb instanceof RuntimeHash innerHash) {
-                for (RuntimeScalar inner : innerHash.elements.values()) {
-                    if (inner != null && (inner.type & RuntimeScalarType.REFERENCE_BIT) != 0) {
-                        needsWalk = true; break;
-                    }
-                }
-            }
-            if (needsWalk) break;
-        }
-        if (!needsWalk) return;
-        RecursiveAggregateReleaseWalker releaseWalker = new RecursiveAggregateReleaseWalker();
-        // Array element values are released from the end of the Perl array
-        // toward the beginning. Queue each direct owner in that order; the
-        // recursive walker processes a nested aggregate's children before
-        // returning to the next sibling.
-        for (int index = arr.elements.size() - 1; index >= 0; index--) {
-            RuntimeScalar elem = arr.elements.get(index);
+        // Array element values are released from the end toward the beginning.
+        TieArray tiedStorage = arr.type == RuntimeArray.TIED_ARRAY
+                && arr.elements instanceof TieArray tieArray ? tieArray : null;
+        int storageSize = tiedStorage == null ? arr.elements.size() : tiedStorage.rawStorageSize();
+        for (int index = storageSize - 1; index >= 0; index--) {
+            RuntimeScalar elem = tiedStorage == null
+                    ? arr.elements.get(index) : tiedStorage.rawStorageGet(index);
             if (preserveEscapedScalarCellValueOwner(elem)) continue;
-            releaseWalker.defer(elem);
+            deferDecrementRecursive(elem);
         }
     }
 
@@ -1510,186 +1436,27 @@ public class MortalList {
         releaseCountedOwnerImmediately(scalar, "MortalList.releaseTailCallArgElement");
     }
 
-    /**
-     * Iteratively process a scalar value: if it holds a reference to a
-     * tracked blessed object and owns a refCount, defer a decrement.
-     * If it holds a reference to an unblessed container, walk into
-     * its elements (iteratively with cycle detection to avoid
-     * StackOverflowError on circular data structures like ExifTool's).
-     */
+    /** Release only this scalar's direct owner edge. Aggregate destruction
+     * releases its own outgoing element slots through the storage-owner path. */
     private static void deferDecrementRecursive(RuntimeScalar scalar) {
-        if (!needsRecursiveReleaseWalk(scalar)) return;
-        new RecursiveAggregateReleaseWalker().deferEligible(scalar);
-    }
-
-    private static boolean needsRecursiveReleaseWalk(RuntimeScalar scalar) {
-        if (scalar == null || (scalar.type & RuntimeScalarType.REFERENCE_BIT) == 0
+        if (!isActive() || scalar == null || scalar.hasCodeSlotBinding()
+                || (scalar.type & RuntimeScalarType.REFERENCE_BIT) == 0
                 || WeakRefRegistry.isweak(scalar)
-                || !(scalar.value instanceof RuntimeBase topBase)) {
-            return false;
-        }
-        if (topBase.blessId != 0 || !topBase.isRefCountUntracked()) return true;
-        if (topBase instanceof RuntimeArray arr) {
-            for (RuntimeScalar elem : arr.elements) {
-                if (elem != null && (elem.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                        && elem.value instanceof RuntimeBase eb
-                        && (eb.blessId != 0 || eb.isRefCountTracked())) return true;
+                || !(scalar.value instanceof RuntimeBase base)) return;
+        if (scalar.refCountOwned) {
+            if (base.isPerlDestroyed() && base.refCount <= 0) {
+                base.retireZeroCountOwnerIdentity(
+                        scalar, "MortalList.deferDecrementRecursive destroyed referent");
+            } else {
+                deferDecrementIfTracked(scalar);
             }
-        } else if (topBase instanceof RuntimeHash hash) {
-            for (RuntimeScalar val : hash.elements.values()) {
-                if (val != null && (val.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                        && val.value instanceof RuntimeBase vb
-                        && (vb.blessId != 0 || vb.isRefCountTracked())) return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * Reuse traversal scratch while a dying aggregate releases its direct
-     * outgoing scalar slots. Each root is still drained separately so duplicate
-     * referents retain the same per-edge ownership and destruction ordering.
-     */
-    private static final class RecursiveAggregateReleaseWalker {
-        private ArrayDeque<RuntimeScalar> work;
-        private Set<RuntimeBase> visited;
-        private CleanupTargetProbe cleanupTargetProbe;
-        private boolean hasWorkset;
-
-        private RecursiveAggregateReleaseWalker() {
-            LifecycleHotPathDiagnostics.aggregateReleaseWalkerAllocated();
-        }
-
-        private void defer(RuntimeScalar scalar) {
-            if (!needsRecursiveReleaseWalk(scalar)) return;
-            deferEligible(scalar);
-        }
-
-        private void deferEligible(RuntimeScalar scalar) {
-            // Slow path: tracked or blessed referents need full walk with cycle detection.
-            // Use an explicit work queue + visited set to avoid stack overflow
-            // on circular references (e.g., ExifTool's self-referential hashes).
-            // Aggregate cleanup shares these two allocations across its direct
-            // children instead of constructing a queue and identity map per child.
-            if (!hasWorkset) {
-                work = new ArrayDeque<>();
-                visited = Collections.newSetFromMap(new IdentityHashMap<>());
-                hasWorkset = true;
-                LifecycleHotPathDiagnostics.aggregateReleaseWorksetAllocated();
-            }
-            LifecycleHotPathDiagnostics.aggregateReleaseRootProcessed();
-            work.push(scalar);
-
-            try {
-            while (!work.isEmpty()) {
-                RuntimeScalar s = work.pop();
-                if (s == null || (s.type & RuntimeScalarType.REFERENCE_BIT) == 0) continue;
-                if (WeakRefRegistry.isweak(s)) continue;
-                if (!(s.value instanceof RuntimeBase base)) continue;
-                if (!visited.add(base)) continue;  // already visited — cycle
-
-                if (base.blessId != 0) {
-                    if (s.refCountOwned) {
-                        if (base.refCountTrace) {
-                            base.traceRefCount(0, "MortalList.deferDecrementRecursive (blessed, queued)");
-                        }
-                        RuntimeBase.PendingOwnerRelease ownerRelease = base.queueOwnerRelease(
-                                s, "MortalList.deferDecrementRecursive blessed");
-                        // The selective count only covers counted edges. A live
-                        // package, lexical, closure, or other explicit owner can
-                        // still keep this container and its fields in use after
-                        // this counted edge leaves. Walk the fields only when no
-                        // current Perl owner identity remains.
-                        LifecycleRuntimeState state = state();
-                        markBoundaryWork(state);
-                        queueDeferredBase(state, base, ownerRelease, null, s);
-                    } else if (base.isRefCountTracked() && base.refCount == 0) {
-                        LifecycleRuntimeState state = state();
-                        markBoundaryWork(state);
-                        RuntimeBase.PendingOwnerRelease ownerRelease =
-                                base.queueLifecycleOnlyAtZero(
-                                        "MortalList.deferDecrementRecursive zero-count temporary");
-                        queueDeferredBase(state, base, ownerRelease, null, s);
-                    }
-                    // Do not walk a blessed container's fields here. Its DESTROY
-                    // callback can rescue the object, in which case those child
-                    // owner slots must remain live. DestroyDispatch performs the
-                    // cascade after the callback has made the final ownership
-                    // decision (and also handles classes without DESTROY).
-                } else {
-                    if (s.refCountOwned) {
-                        if (base.refCountTrace) {
-                            base.traceRefCount(0, "MortalList.deferDecrementRecursive (unblessed container, queued)");
-                        }
-                        RuntimeBase.PendingOwnerRelease ownerRelease = base.queueOwnerRelease(
-                                s, "MortalList.deferDecrementRecursive unblessed");
-                        LifecycleRuntimeState state = state();
-                        markBoundaryWork(state);
-                        queueDeferredBase(state, base, ownerRelease, null, s);
-                        if (base.refCount <= 0) {
-                            // The exact counted slot can outlive a referent whose
-                            // lifecycle already drove its compatibility count to
-                            // zero. Retire that slot, then let the queued lifecycle
-                            // token handle a still-live referent if needed.
-                            continue;
-                        }
-                        if (!WeakRefRegistry.weakRefsExist() && base.refCount > 1) {
-                            continue;
-                        }
-                        // A current owner proves this aggregate and its outgoing
-                        // slots remain live. Avoid scanning its descendants; only
-                        // probe the exceptional positive-count/no-owner case.
-                        if (base.hasPerlStrongOwnerIdentity()) {
-                            continue;
-                        }
-                        if (!cleanupTargetProbe().mayContainCleanupTargets(base)) {
-                            continue;
-                        }
-                    } else if (base.refCount > 0
-                            && !WeakRefRegistry.weakRefsExist()) {
-                        // A non-owning copy of a still-counted unblessed container
-                        // must not release that container's children. With no weak
-                        // refs anywhere, there is no weak-ref cleanup that requires
-                        // peeking inside before the container's own count reaches 0.
-                        continue;
-                    } else if (base.refCount > 0
-                            && (base.hasPerlStrongOwnerIdentity()
-                            || !cleanupTargetProbe().mayContainCleanupTargets(base))) {
-                        // This scalar is a non-owning copy of a still-live container.
-                        // Cleaning it up must not walk into the shared container and
-                        // release the original owner's children. A live Perl edge
-                        // is identified by its owner slot; it must not be inferred
-                        // from Java references after the fact.
-                        continue;
-                    }
-                    // A registered lexical aggregate owns its element slots even
-                    // when another scalar reference to the aggregate is released.
-                    // Decrement this scalar's aggregate edge above, then leave the
-                    // elements for the lexical aggregate's own scope cleanup.
-                    if (base.localBindingExists && MyVarCleanupStack.isRegistered(base)) continue;
-                    // Walk into unblessed containers to find nested blessed refs
-                    if (base instanceof RuntimeArray arr) {
-                        for (RuntimeScalar elem : arr.elements) {
-                            if (elem != null) work.push(elem);
-                        }
-                    } else if (base instanceof RuntimeHash hash) {
-                        for (RuntimeScalar val : hash.elements.values()) {
-                            if (val != null) work.push(val);
-                        }
-                    }
-                }
-            }
-            } finally {
-                work.clear();
-                visited.clear();
-            }
-        }
-
-        private CleanupTargetProbe cleanupTargetProbe() {
-            if (cleanupTargetProbe == null) {
-                cleanupTargetProbe = new CleanupTargetProbe();
-            }
-            return cleanupTargetProbe;
+        } else if (base.blessId != 0 && base.isRefCountTracked()
+                && base.refCount == 0) {
+            LifecycleRuntimeState state = state();
+            markBoundaryWork(state);
+            RuntimeBase.PendingOwnerRelease ownerRelease = base.queueLifecycleOnlyAtZero(
+                    "MortalList.deferDecrementRecursive zero-count temporary");
+            queueDeferredBase(state, base, ownerRelease, null, scalar);
         }
     }
 

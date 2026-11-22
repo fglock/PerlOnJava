@@ -4009,9 +4009,11 @@ public class BytecodeInterpreter {
                             int baseReg = evalBaseRegStack.pop();
                             boolean needsFlush = false;
                             BitSet myVars = code.myVarRegisters;
-                            for (int i = myVars.nextSetBit(baseReg);
-                                 i >= 0 && i < registers.length;
-                                 i = myVars.nextSetBit(i + 1)) {
+                            // Registers are allocated in declaration order. Exception
+                            // cleanup must therefore visit them in reverse order so
+                            // deferred DESTROY calls preserve Perl's lexical LIFO order.
+                            for (int i = registers.length - 1; i >= baseReg; i--) {
+                                if (!myVars.get(i)) continue;
                                 RuntimeBase reg = registers[i];
                                 if (reg == null) continue;
                                 if (reg instanceof RuntimeScalar rs) {
@@ -4147,9 +4149,8 @@ public class BytecodeInterpreter {
                 // would incorrectly decrement refCounts, causing premature DESTROY.
                 BitSet myVars = code.myVarRegisters;
                 boolean needsFlush = false;
-                for (int i = myVars.nextSetBit(firstMyVarReg);
-                     i >= 0 && i < registers.length;
-                     i = myVars.nextSetBit(i + 1)) {
+                for (int i = registers.length - 1; i >= firstMyVarReg; i--) {
+                    if (!myVars.get(i)) continue;
                     RuntimeBase reg = registers[i];
                     if (reg == null) continue;
                     if (reg instanceof RuntimeScalar rs) {

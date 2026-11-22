@@ -261,6 +261,10 @@ public final class PerlOwnerSlot {
         return untrackedScalarOwner == null ? null : untrackedScalarOwner.get();
     }
 
+    synchronized boolean hasUntrackedScalarOwnerAssociation() {
+        return untrackedScalarOwner != null;
+    }
+
     boolean isNativeCaptureOwner() {
         return kind == Kind.CLOSURE_PAD && nativeOwner;
     }

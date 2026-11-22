@@ -692,7 +692,10 @@ public class DestroyDispatch {
                 RuntimeScalar owner = slot.untrackedScalarOwner();
                 return owner != null
                         && !owner.isTransientArgumentValueOwner()
-                        && owner.hasLiveDurableStrongValueSlot()
+                        && (owner.hasLiveDurableStrongValueSlot()
+                            || ((referent.blessId != 0
+                                    || referent.isWeaklyRefCountTracked())
+                                && owner.hasCurrentAggregateStorageSlot()))
                         && !WeakRefRegistry.isweak(owner)
                         && (owner.type & RuntimeScalarType.REFERENCE_BIT) != 0
                         && owner.value == referent;

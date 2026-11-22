@@ -303,6 +303,16 @@ public class TieArray extends ArrayList<RuntimeScalar> {
         return tiedFetchSize(parent).getInt();
     }
 
+    /** Returns the locally stored slots without invoking tied FETCHSIZE. */
+    int rawStorageSize() {
+        return super.size();
+    }
+
+    /** Returns a locally stored slot without invoking tied FETCH. */
+    RuntimeScalar rawStorageGet(int index) {
+        return super.get(index);
+    }
+
     public RuntimeScalar get(int i) {
         return parent.get(i);
     }

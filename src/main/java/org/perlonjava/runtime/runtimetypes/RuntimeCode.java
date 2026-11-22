@@ -2301,7 +2301,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             ExecutionRuntimeState state, RuntimeScalar selfReference) {
         JvmFrameSnapshot snapshot = state.activeJvmFrameSnapshots.pollFirst();
         if (snapshot != null) {
-            restoreJvmFrameSnapshot(state, snapshot);
+            restoreJvmFrameMetadata(state, snapshot, false);
+            // A return can bypass a Java finally block that entered a local
+            // suppression scope. Clear that leaked scope when the caller was
+            // not already suppressing; never reassert a stale true snapshot,
+            // since a finally block may already have restored it.
+            if (!snapshot.flushSuppressed() && MortalList.isFlushSuppressed()) {
+                MortalList.suppressFlush(false);
+            }
             return;
         }
         if (selfReference != null) {
@@ -2331,13 +2338,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     private static void restoreJvmFrameSnapshot(
             ExecutionRuntimeState state, JvmFrameSnapshot snapshot) {
+        restoreJvmFrameMetadata(state, snapshot, true);
+    }
+
+    private static void restoreJvmFrameMetadata(
+            ExecutionRuntimeState state, JvmFrameSnapshot snapshot,
+            boolean restoreFlushSuppression) {
         while (state.activeJvmSelfReferences.size() > snapshot.selfDepth()) {
             state.activeJvmSelfReferences.pop();
         }
         while (state.activeJvmSortComparators.size() > snapshot.sortComparatorDepth()) {
             state.activeJvmSortComparators.pop();
         }
-        MortalList.suppressFlush(snapshot.flushSuppressed());
+        if (restoreFlushSuppression) {
+            MortalList.suppressFlush(snapshot.flushSuppressed());
+        }
     }
 
     /** Track whether a JVM-generated frame is a sort BLOCK pseudo-block. */

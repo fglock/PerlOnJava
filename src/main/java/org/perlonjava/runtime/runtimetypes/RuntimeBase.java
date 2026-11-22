@@ -1013,7 +1013,9 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             if (slot.kind() != PerlOwnerSlot.Kind.UNTRACKED_REFERENCE || !slot.isActive()) continue;
             RuntimeScalar owner = slot.untrackedScalarOwner();
             if (owner != null) {
-                if (owner.hasLiveDurableStrongValueSlot()) {
+                if (owner.hasLiveDurableStrongValueSlot()
+                        || ((blessId != 0 || isWeaklyRefCountTracked())
+                            && owner.hasCurrentAggregateStorageSlot())) {
                     owner.refreshUntrackedReferenceOwner();
                 } else {
                     owner.releaseUntrackedReferenceOwner(this);
@@ -1115,9 +1117,21 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     }
 
     void deferFinalReleaseToUncountedOwnerSlots() {
-        if (!hasUncountedPerlOwnerSlotIdentity()) return;
+        if (!hasUncountedPerlOwnerSlotIdentity()
+                && !hasRawUntrackedReferenceOwnerSlotIdentity()
+                && !(blessId != 0 && hasUntrackedReferenceOwnerSlotIdentity())) return;
         markRefCountWeaklyTracked();
         deferredFinalReleaseForUncountedOwners = true;
+    }
+
+    private boolean hasRawUntrackedReferenceOwnerSlotIdentity() {
+        for (PerlOwnerSlot slot : ownerSlotSnapshot()) {
+            if (slot.isActive()
+                    && slot.kind() == PerlOwnerSlot.Kind.UNTRACKED_REFERENCE
+                    && slot.referent() == this
+                    && !slot.hasUntrackedScalarOwnerAssociation()) return true;
+        }
+        return false;
     }
 
     /** Defer a zero-count lifecycle transition without encoding it as a count. */
@@ -1671,10 +1685,6 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                 .append(" generation=").append(REFCOUNT_TRACE_ENV
                         ? traceReferentGeneration(this) : 0)
                 .append(" refCount=").append(refCount)
-                .append(" state=").append(perlLifecycleState())
-                .append(" destroyFired=").append(destroyFired)
-                .append(" needsReDestroy=").append(needsReDestroy)
-                .append(" hasWeakRefs=").append(WeakRefRegistry.hasWeakRefsTo(this))
                 .append(" active=");
         java.util.LinkedHashMap<Integer, OwnerTrace> owners = traceOwners.get(this);
         if (owners == null || owners.isEmpty()) {
@@ -1690,7 +1700,11 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             }
             result.append(']');
         }
-        result.append(" capturePads=");
+        result.append(" state=").append(perlLifecycleState())
+                .append(" destroyFired=").append(destroyFired)
+                .append(" needsReDestroy=").append(needsReDestroy)
+                .append(" hasWeakRefs=").append(WeakRefRegistry.hasWeakRefsTo(this))
+                .append(" capturePads=");
         if (ownerSlots == null || ownerSlots.isEmpty()) {
             result.append("[]");
         } else {

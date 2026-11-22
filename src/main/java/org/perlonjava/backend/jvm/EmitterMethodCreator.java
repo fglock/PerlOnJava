@@ -1305,18 +1305,17 @@ public class EmitterMethodCreator implements Opcodes {
                 // When die throws a PerlDieException, Java exception handling jumps directly
                 // to this catch handler, skipping the emitScopeExitNullStores calls that
                 // would normally run at each block exit. This loop ensures DESTROY fires
-                // for blessed objects that went out of scope during die.
+                // for blessed objects that went out of scope during die. The recorded
+                // locals are already in scope-teardown order: inner scopes are emitted
+                // before their parents, and each scope's pad indices are sorted in Perl's
+                // cleanup order. Keep the first occurrence when a local appears in more
+                // than one enclosing scope's cleanup list.
                 // Note: DestroyDispatch.doCallDestroy saves/restores $@ around DESTROY,
                 // so this is safe to do before the $@ snapshot below.
                 if (evalCleanupLocals != null && !evalCleanupLocals.isEmpty()) {
-                    // De-duplicate indices while preserving order.
-                    // A variable may appear in multiple nested scopes - we want the last
-                    // occurrence (from the innermost scope) to win, and cleanup should
-                    // happen in reverse order (LIFO) to match Perl's DESTROY semantics.
+                    // De-duplicate indices while preserving recorded teardown order.
                     java.util.List<Integer> uniqueLocals = new java.util.ArrayList<>(
                             new java.util.LinkedHashSet<>(evalCleanupLocals));
-                    // Reverse to get LIFO order (innermost scope first)
-                    java.util.Collections.reverse(uniqueLocals);
                     for (int localIdx : uniqueLocals) {
                         mv.visitVarInsn(Opcodes.ALOAD, localIdx);
                         mv.visitMethodInsn(Opcodes.INVOKESTATIC,

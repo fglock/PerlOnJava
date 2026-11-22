@@ -452,6 +452,11 @@ final class LifecycleRuntimeState {
                 // Keep the boundary balanced without reviving a destroyed value.
                 this.ownerSlot = null;
             } else {
+                if (root.isRefCountUntracked() && root.refCount > 0) {
+                    // Adopt a positive legacy count before acquiring the
+                    // expression owner so the native lease pairs with it.
+                    root.setTrackedRefCount(root.refCount);
+                }
                 PerlOwnerSlot owner = new PerlOwnerSlot(PerlOwnerSlot.Kind.EXPRESSION_VALUE);
                 owner.acquireCountedNativeOwner(root, "MortalList temporary expression value");
                 this.ownerSlot = owner;

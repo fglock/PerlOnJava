@@ -7,8 +7,10 @@ priorities and future plans.
 ## Work in progress
 
 
-- Preserve imported CV owners through global destruction, retain only the lexical captures needed by `eval STRING`, and release DBI handles after failed `prepare` or `do` (#2043).
+- Preserve imported CV owners through global destruction, keep runtime-only `eval STRING` captures usable without treating them as semantic closure owners, and release DBI handles after failed `prepare` or `do` (#2043).
 - Preserve reacquired counted referents when deferred zero-count lifecycle cleanup drains (#2043).
+- Preserve Perl cleanup order across eval exceptions and resumed async foreach calls (#2043).
+- Keep current weak-tracked aggregate value slots and raw untracked owner identities alive through their matching release boundaries (#2043).
 - Report the active Perl helper argument in `B::REFCNT` for nested hash-slot values during `DESTROY` (#2043).
 - Keep temporary foreach-source values alive until normal or `last` exits in the bytecode interpreter, matching JVM cleanup and preventing premature destruction of list-returned rows (#2043).
 - Remove reachability-based lifetime decisions, root-query state, and sweep-only hooks; use current Perl owner slots for cleanup (#2043).
