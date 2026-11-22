@@ -75,6 +75,15 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
+    /** Push an explicit context while retaining dynamic context for runtime calls. */
+    public void pushCallContext(int callContext) {
+        if (ctx.contextType == RuntimeContextType.RUNTIME) {
+            ctx.mv.visitVarInsn(Opcodes.ILOAD, 2);
+        } else {
+            ctx.mv.visitLdcInsn(callContext);
+        }
+    }
+
     /**
      * Pushes the current package name onto the stack.
      */

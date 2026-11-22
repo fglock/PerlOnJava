@@ -226,6 +226,30 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     /**
+     * Seed an eval parser snapshot with the lexical package aliases captured at
+     * the eval site. A package statement in the eval source must not rebind an
+     * outer `our` declaration to the eval's current package.
+     */
+    private static void seedEvalOurAliases(
+            ScopedSymbolTable target, ScopedSymbolTable capturedSymbolTable) {
+        Map<String, String> aliases = new LinkedHashMap<>(
+                capturedSymbolTable.getVisibleOurRegistry());
+        RuntimeCode evalCaller = getActiveCodeAtCallerFrame(0);
+        if (evalCaller != null && evalCaller.ourVariableRegistry != null) {
+            aliases.putAll(evalCaller.ourVariableRegistry);
+        }
+        for (Map.Entry<String, String> alias : aliases.entrySet()) {
+            if (alias.getKey() == null || alias.getValue() == null) continue;
+            SymbolTable.SymbolEntry existing = target.getSymbolEntry(alias.getKey());
+            if (existing == null
+                    || ("our".equals(existing.decl())
+                    && !alias.getValue().equals(existing.perlPackage()))) {
+                target.addVariable(alias.getKey(), "our", alias.getValue(), null);
+            }
+        }
+    }
+
+    /**
      * Guard for the generated read-only parameter-unpack fast path. The
      * runtime validates the argument/hash shape and overload state; stable
      * field-cell candidates validate each field before enabling cached reads.
@@ -785,12 +809,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         int start = Math.min(signaturePositionalCount, args.size());
         int namedCount = args.size() - start;
         if ("%".equals(signatureSlurpySigil) && (namedCount & 1) != 0) {
-            dieTooFewForMissingRequiredNamed(args, start);
-            WarnDie.die(new RuntimeScalar(signatureKeyword != null
-                    ? "Odd number of elements in anonymous hash"
+            if (hasTooFewFunctionParametersNamedArguments(namedCount)) {
+                dieFunctionParametersValidation("Too few arguments for " + signatureKeyword
+                        + " " + signatureDiagnosticName());
+                return;
+            }
+            String message = signatureKeyword != null
+                    ? "Odd number of paired arguments for " + signatureKeyword + " "
+                            + signatureDiagnosticName()
                     : "Odd name/value argument for subroutine '"
-                            + (signatureSubName == null ? "" : signatureSubName) + "'"),
-                    new RuntimeScalar(""));
+                            + (signatureSubName == null ? "" : signatureSubName) + "'";
+            if (signatureKeyword != null) {
+                dieFunctionParametersValidation(message);
+                return;
+            }
+            WarnDie.die(new RuntimeScalar(message), new RuntimeScalar(""));
         }
         if (signatureNamedParams.isEmpty()) return;
         // A native signature with a trailing @ slurpy accepts an odd final
@@ -802,17 +835,42 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         if ((signatureKeyword != null || !"@".equals(signatureSlurpySigil))
                 && (namedCount & 1) != 0) {
-            dieTooFewForMissingRequiredNamed(args, start);
-            WarnDie.die(new RuntimeScalar(signatureKeyword != null
-                    ? "Odd number of elements in anonymous hash"
+            if (hasTooFewFunctionParametersNamedArguments(namedCount)) {
+                dieFunctionParametersValidation("Too few arguments for " + signatureKeyword
+                        + " " + signatureDiagnosticName());
+                return;
+            }
+            String message = signatureKeyword != null
+                    ? "Odd number of paired arguments for " + signatureKeyword + " "
+                            + signatureDiagnosticName()
                     : "Odd name/value argument for subroutine '"
-                            + (signatureSubName == null ? "" : signatureSubName) + "'"),
-                    new RuntimeScalar(""));
+                            + (signatureSubName == null ? "" : signatureSubName) + "'";
+            if (signatureKeyword != null) {
+                dieFunctionParametersValidation(message);
+                return;
+            }
+            WarnDie.die(new RuntimeScalar(message), new RuntimeScalar(""));
         }
 
         Map<String, RuntimeScalar> values = new LinkedHashMap<>();
         for (int i = start; i + 1 < args.size(); i += 2) {
             values.put(args.elements.get(i).toString(), args.elements.get(i + 1));
+        }
+        List<String> missing = new ArrayList<>();
+        for (String required : signatureRequiredNamedParams) {
+            if (!values.containsKey(required)) missing.add(required);
+        }
+        if (signatureKeyword != null && !missing.isEmpty()) {
+            String functionName = signatureDiagnosticName();
+            if (hasTooFewFunctionParametersNamedArguments(namedCount)) {
+                dieFunctionParametersValidation("Too few arguments for " + signatureKeyword
+                        + " " + functionName);
+                return;
+            }
+            String label = missing.size() == 1 ? "parameter" : "parameters";
+            dieFunctionParametersValidation("In " + signatureKeyword + " " + functionName
+                    + ": missing named " + label + ": " + String.join(", ", missing));
+            return;
         }
         if (signatureSlurpySigil == null) {
             List<String> unrecognized = new ArrayList<>();
@@ -822,6 +880,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
             }
             if (!unrecognized.isEmpty()) {
+                if (signatureKeyword != null) {
+                    String label = unrecognized.size() == 1 ? "parameter" : "parameters";
+                    dieFunctionParametersValidation("In " + signatureKeyword + " "
+                            + signatureDiagnosticName() + ": no such named " + label + ": "
+                            + String.join(", ", unrecognized));
+                    return;
+                }
                 boolean truncated = unrecognized.size() > 5;
                 String listed = truncated
                         ? String.join("', '", unrecognized.subList(0, 5)) + "', ..."
@@ -832,10 +897,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         + signatureSubName + "'";
                 WarnDie.die(new RuntimeScalar(message), new RuntimeScalar(""));
             }
-        }
-        List<String> missing = new ArrayList<>();
-        for (String required : signatureRequiredNamedParams) {
-            if (!values.containsKey(required)) missing.add(required);
         }
         if (!missing.isEmpty()) {
             int minimumNamedArgumentCount = signatureRequiredNamedParams.size() * 2;
@@ -856,21 +917,27 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
     }
 
-    private void dieTooFewForMissingRequiredNamed(RuntimeArray args, int start) {
-        if (signatureKeyword == null || signatureRequiredNamedParams.isEmpty()) return;
-        for (String required : signatureRequiredNamedParams) {
-            boolean present = false;
-            for (int i = start; i + 1 < args.size(); i += 2) {
-                if (required.equals(args.elements.get(i).toString())) {
-                    present = true;
-                    break;
-                }
-            }
-            if (!present) {
-                WarnDie.die(new RuntimeScalar("Too few arguments for " + signatureKeyword
-                        + " " + signatureSubName), new RuntimeScalar(""));
-            }
+    private String signatureDiagnosticName() {
+        if (signatureSubName == null) return "(anon)";
+        int namespaceSeparator = signatureSubName.lastIndexOf("::");
+        return namespaceSeparator < 0
+                ? signatureSubName
+                : signatureSubName.substring(namespaceSeparator + 2);
+    }
+
+    private boolean hasTooFewFunctionParametersNamedArguments(int namedCount) {
+        return signatureKeyword != null
+                && !signatureRequiredNamedParams.isEmpty()
+                && namedCount < signatureRequiredNamedParams.size() * 2;
+    }
+
+    private void dieFunctionParametersValidation(String message) {
+        CallerStack.CallerInfo callSite = activeCallerSiteAt(0);
+        if (callSite != null && callSite.filename() != null && callSite.line() > 0) {
+            WarnDie.dieAtCallSite(new RuntimeScalar(message), callSite.filename(), callSite.line());
+            return;
         }
+        WarnDie.die(new RuntimeScalar(message), new RuntimeScalar(""));
     }
 
     /** Bind Java callbacks that may be invoked by an arbitrary worker thread. */
@@ -2085,6 +2152,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     public static Integer getCallContextAt(int depth) {
+        Integer context = getRawCallContextAt(depth);
+        if (context != null && context == RuntimeContextType.BOOLEAN) {
+            return RuntimeContextType.SCALAR;
+        }
+        return context;
+    }
+
+    /** Return the unnormalized call context for runtime features that inspect parent ops. */
+    public static Integer getRawCallContextAt(int depth) {
         Deque<Integer> stack = callContextStack();
         int i = 0;
         for (Integer callContext : stack) {
@@ -2100,6 +2176,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * effective scalar context; parent-op consumers need the outer raw frame.
      */
     public static Integer getCallContextAtCallerFrame(int logicalFrame) {
+        Integer context = getRawCallContextAtCallerFrame(logicalFrame);
+        if (context != null && context == RuntimeContextType.BOOLEAN) {
+            return RuntimeContextType.SCALAR;
+        }
+        return context;
+    }
+
+    /** Return the unnormalized context for a logical call frame. */
+    public static Integer getRawCallContextAtCallerFrame(int logicalFrame) {
         if (logicalFrame < 0) return null;
         if (logicalFrame == 0) {
             Iterator<RuntimeCode> codeIterator = activeCodeStack().iterator();
@@ -2222,7 +2307,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     public static int effectiveCallContext(int callContext) {
-        return callContext == RuntimeContextType.LVALUE || callContext == RuntimeContextType.OBJECT
+        return callContext == RuntimeContextType.LVALUE
+                || callContext == RuntimeContextType.OBJECT
+                || callContext == RuntimeContextType.BOOLEAN
                 ? RuntimeContextType.SCALAR
                 : callContext;
     }
@@ -4865,6 +4952,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // IMPORTANT: The parseSymbolTable starts with the captured flags so that
             // the eval code is parsed with the correct feature/strict/warning context
             ScopedSymbolTable parseSymbolTable = capturedSymbolTable.snapShot();
+            seedEvalOurAliases(parseSymbolTable, capturedSymbolTable);
             parseSymbolTable.setCurrentPackage(currentPackage, ClassRegistry.isClass(currentPackage));
             // BEGIN blocks execute while eval STRING is parsed. Point the
             // special-variable pragma facade at this eval's private scope so
@@ -5545,6 +5633,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         ctx.evalCachedParseSymbolTable != null
                                 ? ctx.evalCachedParseSymbolTable
                                 : capturedSymbolTable.snapShot();
+                seedEvalOurAliases(parseSymbolTable, capturedSymbolTable);
                 parseSymbolTable.setCurrentPackage(
                         evalCurrentPackage, ClassRegistry.isClass(evalCurrentPackage));
                 String lexicalEvalWarningBits = parseSymbolTable.getWarningBitsString();
@@ -6322,6 +6411,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                    RuntimeScalar currentSub,
                                    RuntimeBase[] args,
                                    int callContext) {
+        return call(runtimeScalar, method, currentSub, args, callContext, null);
+    }
+
+    public static RuntimeList call(RuntimeScalar runtimeScalar,
+                                   RuntimeScalar method,
+                                   RuntimeScalar currentSub,
+                                   RuntimeBase[] args,
+                                   int callContext,
+                                   String autoboxBindings) {
         // Handle tied scalars: in Perl 5, $tied->method() evaluates $tied
         // (triggering FETCH) before method dispatch
         if (runtimeScalar.type == RuntimeScalarType.TIED_SCALAR
@@ -6334,7 +6432,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         for (RuntimeBase arg : args) {
             arg.setArrayOfAlias(a);
         }
-        return call(runtimeScalar, method, currentSub, a, callContext);
+        return call(runtimeScalar, method, currentSub, a, callContext, autoboxBindings);
     }
 
     /**
@@ -6363,13 +6461,59 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 methodArgs, callContext);
     }
 
+    public static RuntimeList callCached(int callsiteId, RuntimeScalar runtimeScalar,
+                                         RuntimeScalar method, RuntimeScalar currentSub,
+                                         RuntimeBase[] args, String autoboxBindings,
+                                         int callContext) {
+        RuntimeArray methodArgs = new RuntimeArray(args.length + 1);
+        for (RuntimeBase arg : args) {
+            arg.setArrayOfAlias(methodArgs);
+        }
+        return callCached(callsiteId, runtimeScalar, method, currentSub,
+                methodArgs, autoboxBindings, callContext);
+    }
+
+    public static RuntimeList callCached(int callsiteId, RuntimeScalar runtimeScalar,
+                                         RuntimeScalar method, RuntimeScalar currentSub,
+                                         CallArguments args, String autoboxBindings,
+                                         int callContext) {
+        try {
+            return callCached(callsiteId, runtimeScalar, method, currentSub,
+                    args.argumentValues(), autoboxBindings, callContext);
+        } finally {
+            args.finish();
+        }
+    }
+
+    public static RuntimeList callCached(int callsiteId, RuntimeScalar runtimeScalar,
+                                         RuntimeScalar method, RuntimeScalar currentSub,
+                                         RuntimeArray methodArgs, String autoboxBindings,
+                                         int callContext) {
+        String mappedClass = AutoboxRuntime.mappedClass(runtimeScalar, autoboxBindings);
+        if (mappedClass != null && isNamedMethod(method, "autobox_class")) {
+            return new RuntimeScalar(mappedClass).getList();
+        }
+        return callCachedWithAutoboxBindings(callsiteId, runtimeScalar, method,
+                currentSub, methodArgs, autoboxBindings, callContext);
+    }
+
     public static RuntimeList call(RuntimeScalar runtimeScalar,
                                    RuntimeScalar method,
                                    RuntimeScalar currentSub,
                                    CallArguments args,
                                    int callContext) {
+        return call(runtimeScalar, method, currentSub, args, callContext, null);
+    }
+
+    public static RuntimeList call(RuntimeScalar runtimeScalar,
+                                   RuntimeScalar method,
+                                   RuntimeScalar currentSub,
+                                   CallArguments args,
+                                   int callContext,
+                                   String autoboxBindings) {
         try {
-            return call(runtimeScalar, method, currentSub, args.argumentValues(), callContext);
+            return call(runtimeScalar, method, currentSub, args.argumentValues(),
+                    callContext, autoboxBindings);
         } finally {
             args.finish();
         }
@@ -6400,6 +6544,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                          RuntimeScalar currentSub,
                                          RuntimeArray methodArgs,
                                          int callContext) {
+        return callCachedWithAutoboxBindings(callsiteId, runtimeScalar, method,
+                currentSub, methodArgs, null, callContext);
+    }
+
+    private static RuntimeList callCachedWithAutoboxBindings(int callsiteId,
+                                         RuntimeScalar runtimeScalar,
+                                         RuntimeScalar method,
+                                         RuntimeScalar currentSub,
+                                         RuntimeArray methodArgs,
+                                         String autoboxBindings,
+                                         int callContext) {
         if ((method.type == RuntimeScalarType.STRING || method.type == RuntimeScalarType.BYTE_STRING)
                 && method.toString().startsWith(FIRST_ARGUMENT_METHOD_PREFIX)) {
             String actualMethod = method.toString().substring(FIRST_ARGUMENT_METHOD_PREFIX.length());
@@ -6421,7 +6576,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 ? RuntimeContextType.SCALAR : callContext;
         RuntimeList result = callCachedInner(
                 callsiteId, runtimeScalar, method, currentSub, methodArgs, calleeContext,
-                methodRuntime);
+                methodRuntime, autoboxBindings);
         return bindReturnedMethodCoderef(result, runtimeScalar, callContext);
         } catch (RuntimeException e) {
             if (!(e instanceof PerlExitException)) {
@@ -6445,7 +6600,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                          RuntimeScalar currentSub,
                                          RuntimeArray methodArgs,
                                          int callContext,
-                                         PerlRuntime methodRuntime) {
+                                         PerlRuntime methodRuntime,
+                                         String autoboxBindings) {
         // Handle tied scalars: the invocant may be a TIED_SCALAR returned
         // from a tied hash / array FETCH (e.g. $tied_hash{obj}->method).
         // Dispatch sees only the TIED_SCALAR shell, so unwrap to the
@@ -6454,7 +6610,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (runtimeScalar.type == RuntimeScalarType.TIED_SCALAR
                 && method.type != RuntimeScalarType.CODE) {
             return callCached(callsiteId, runtimeScalar.tiedFetch(), method,
-                    currentSub, methodArgs, callContext);
+                    currentSub, methodArgs, autoboxBindings, callContext);
         }
         RuntimeBase pjMethodInvHold = acquireMethodInvocantHold(runtimeScalar);
         try {
@@ -6474,7 +6630,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
             return callCachedMethodMiss(callsiteId, runtimeScalar, method, currentSub,
                     methodArgs, callContext, blessId, methodHash,
-                    runtimeCodeState, methodRuntime);
+                    runtimeCodeState, methodRuntime, autoboxBindings);
         } finally {
             releaseMethodInvocantHold(pjMethodInvHold);
         }
@@ -6616,11 +6772,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             int callsiteId, RuntimeScalar runtimeScalar, RuntimeScalar method,
             RuntimeScalar currentSub, RuntimeArray methodArgs, int callContext,
             int blessId, int methodHash, RuntimeCodeRuntimeState runtimeCodeState,
-            PerlRuntime methodRuntime) {
-        if (blessId != 0) {
+            PerlRuntime methodRuntime, String autoboxBindings) {
+        String autoboxClass = method.type == RuntimeScalarType.CODE
+                ? null : AutoboxRuntime.mappedClass(runtimeScalar, autoboxBindings);
+        if (blessId != 0 || autoboxClass != null) {
             String methodName = method.toString();
             if (!methodName.contains("::")) {
-                String perlClassName = NameNormalizer.getBlessStr(blessId);
+                String perlClassName = autoboxClass != null
+                        ? autoboxClass : NameNormalizer.getBlessStr(blessId);
                 RuntimeScalar resolvedMethod = InheritanceResolver.findMethodInHierarchy(
                         methodName, perlClassName, null, 0);
                 if (resolvedMethod != null && resolvedMethod.type == RuntimeScalarType.CODE) {
@@ -6656,7 +6815,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         RuntimeArray fallbackArgs = methodArgs;
         fallbackArgs.prependMethodCallInvocant(methodInvocantArgument(runtimeScalar));
         return dispatchPerlMethodAfterSelfInjected(
-                runtimeScalar, method, currentSub, fallbackArgs, callContext);
+                runtimeScalar, method, currentSub, fallbackArgs, callContext, autoboxClass);
     }
 
     /**
@@ -6747,6 +6906,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             RuntimeScalar currentSub,
             RuntimeArray args,
             int callContext) {
+        return dispatchPerlMethodAfterSelfInjected(
+                runtimeScalar, method, currentSub, args, callContext, null);
+    }
+
+    private static RuntimeList dispatchPerlMethodAfterSelfInjected(
+            RuntimeScalar runtimeScalar,
+            RuntimeScalar method,
+            RuntimeScalar currentSub,
+            RuntimeArray args,
+            int callContext,
+            String autoboxClass) {
 
         // System.out.println("call ->" + method + " " + currentPackage + " " + args + " " + callContext);
 
@@ -6775,7 +6945,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // Retrieve Perl class name
         String perlClassName;
 
-        if (RuntimeScalarType.isReference(invocant)) {
+        if (autoboxClass != null) {
+            perlClassName = autoboxClass;
+        } else if (RuntimeScalarType.isReference(invocant)) {
             // Handle all reference types (REFERENCE, ARRAYREFERENCE, HASHREFERENCE, etc.)
             int blessId = ((RuntimeBase) invocant.value).blessId;
             if (blessId == 0) {
@@ -6984,6 +7156,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Perl renders embedded NULs in a method name as the two visible
             // characters "\\0" in method lookup diagnostics.
             errorMethodName = errorMethodName.replace("\0", "\\0");
+            if (isDefaultAutoboxReference(invocant, autoboxClass)) {
+                throw new PerlCompilerException("Can't call method \"" + errorMethodName
+                        + "\" on unblessed reference");
+            }
             if (GlobalVariable.isPackageLoaded(perlClassName)) {
                 throw new PerlCompilerException("Can't locate object method \"" + errorMethodName
                         + "\" via package \"" + perlClassName + "\"");
@@ -6992,6 +7168,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     + "\" via package \"" + perlClassName + "\" (perhaps you forgot to load \""
                     + perlClassName + "\"?)");
         }
+    }
+
+    private static boolean isDefaultAutoboxReference(RuntimeScalar invocant, String autoboxClass) {
+        if (autoboxClass == null || RuntimeScalarType.blessedId(invocant) != 0) return false;
+        String type = AutoboxRuntime.autoboxType(invocant);
+        return ("ARRAY".equals(type) || "HASH".equals(type) || "CODE".equals(type))
+                && type.equals(autoboxClass);
     }
 
     /**
@@ -7009,19 +7192,35 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                    RuntimeScalar currentSub,
                                    RuntimeArray args,
                                    int callContext) {
+        return call(runtimeScalar, method, currentSub, args, callContext, null);
+    }
+
+    public static RuntimeList call(RuntimeScalar runtimeScalar,
+                                   RuntimeScalar method,
+                                   RuntimeScalar currentSub,
+                                   RuntimeArray args,
+                                   int callContext,
+                                   String autoboxBindings) {
+        String mappedClass = method.type == RuntimeScalarType.CODE
+                ? null : AutoboxRuntime.mappedClass(runtimeScalar, autoboxBindings);
+        if (mappedClass != null && isNamedMethod(method, "autobox_class")) {
+            return new RuntimeScalar(mappedClass).getList();
+        }
         if ((method.type == RuntimeScalarType.STRING || method.type == RuntimeScalarType.BYTE_STRING)
                 && method.toString().startsWith(FIRST_ARGUMENT_METHOD_PREFIX)) {
             String actualMethod = method.toString().substring(FIRST_ARGUMENT_METHOD_PREFIX.length());
             RuntimeScalar firstArgument = args.elements.isEmpty()
                     ? new RuntimeScalar() : args.elements.removeFirst();
-            return call(firstArgument, new RuntimeScalar(actualMethod), currentSub, args, callContext);
+            return call(firstArgument, new RuntimeScalar(actualMethod), currentSub, args,
+                    callContext, autoboxBindings);
         }
         // Handle tied scalars: the invocant may be a TIED_SCALAR returned
         // from a tied hash / array FETCH. Unwrap before dispatch so
         // isReference / blessId checks see the real underlying value.
         if (runtimeScalar.type == RuntimeScalarType.TIED_SCALAR
                 && method.type != RuntimeScalarType.CODE) {
-            return call(runtimeScalar.tiedFetch(), method, currentSub, args, callContext);
+            return call(runtimeScalar.tiedFetch(), method, currentSub, args,
+                    callContext, autoboxBindings);
         }
 
         RuntimeBase invHold = acquireMethodInvocantHold(runtimeScalar);
@@ -7031,11 +7230,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             int calleeContext = callContext == RuntimeContextType.METHOD_CODEREF
                     ? RuntimeContextType.SCALAR : callContext;
             RuntimeList result = dispatchPerlMethodAfterSelfInjected(
-                    runtimeScalar, method, currentSub, args, calleeContext);
+                    runtimeScalar, method, currentSub, args, calleeContext, mappedClass);
             return bindReturnedMethodCoderef(result, runtimeScalar, callContext);
         } finally {
             releaseMethodInvocantHold(invHold);
         }
+    }
+
+    private static boolean isNamedMethod(RuntimeScalar method, String name) {
+        return (method.type == RuntimeScalarType.STRING
+                || method.type == RuntimeScalarType.BYTE_STRING)
+                && name.equals(method.toString());
     }
 
     private static RuntimeList bindReturnedMethodCoderef(

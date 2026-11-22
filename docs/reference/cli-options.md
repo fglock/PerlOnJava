@@ -291,6 +291,6 @@ The following standard Perl options are not yet implemented:
 
 ## See Also
 
-- [Quick Start](../../QUICKSTART.md) - Getting started guide
+- [Quick Start](../getting-started/quickstart.md) - Getting started guide
 - [One-liners](../getting-started/oneliners.md) - Practical examples
 - [Feature Matrix](feature-matrix.md) - Supported features

@@ -616,8 +616,8 @@ if (TRACE_PACK) {
 
 ## Related Documentation
 
-- **[High-Yield Test Analysis Strategy](../prompts/high-yield-test-analysis-strategy.md)** - Debugging methodology
-- **[Documentation Analysis Report](../prompts/documentation-analysis-report.md)** - Current documentation status
+- **[High-Yield Test Analysis Strategy](../archive/prompts/high-yield-test-analysis-strategy.md)** - Debugging methodology
+- **[Documentation Analysis Report](../archive/prompts/documentation-analysis-report.md)** - Current documentation status
 - **[Perl pack/unpack Reference](https://perldoc.perl.org/functions/pack)** - Official Perl documentation
 
 ---

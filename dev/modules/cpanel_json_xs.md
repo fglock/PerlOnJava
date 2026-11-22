@@ -12,7 +12,7 @@ Success is measured as:
   sources live under `src/main/perl/lib/` (inside the JAR), and the upstream
   `t/*.t` suite lives under `src/test/resources/module/Cpanel-JSON-XS/t/` (or a
   single hyphenated name consistent with
-  [module-porting.md](../docs/guides/module-porting.md)), run by
+  [module-porting.md](../../docs/guides/module-porting.md)), run by
   `ModuleTestExecutionTest` / `make test-bundled-modules`, with **no edits** to
   upstream test files.
 - `make test-bundled-modules` (filtered to this module) reports **all tests
@@ -22,7 +22,7 @@ Success is measured as:
   (from upstream `XS.pm`), `Cpanel/JSON/XS/Type.pm`, `Cpanel/JSON/XS/Boolean.pm`.
 - `XSLoader::load('Cpanel::JSON::XS', $VERSION)` resolves to a **Java**
   implementation: `org.perlonjava.runtime.perlmodule.CpanelJsonXs` (name per
-  [module-porting.md](../docs/guides/module-porting.md)).
+  [module-porting.md](../../docs/guides/module-porting.md)).
 
 This document is the **single plan** whether you **extend today’s JSON::PP
 shim** or **start from scratch** with a Java-first encoder: either way the
@@ -71,7 +71,7 @@ shim** or **start from scratch** with a Java-first encoder: either way the
   `Digest::MD5`, `DBI`, `Text::CSV` style ports.
 - **Cons:** Large upfront effort; must track upstream releases.
 
-### Option C — Dual-backend CPAN module (Option B in [module-porting.md](../docs/guides/module-porting.md))
+### Option C — Dual-backend CPAN module (Option B in [module-porting.md](../../docs/guides/module-porting.md))
 
 - Ship `.java` **inside** the CPAN dist; `jcpan` compiles it.
 - **Pros:** upstream authors own the port.
@@ -242,10 +242,10 @@ failures in that subset”.
 ### Phase 12 — Cleanup and docs
 
 - [ ] Remove obsolete shim code paths if Java fully replaces them.
-- [ ] Update [bundled-modules.md](../docs/reference/bundled-modules.md),
-  [xs-compatibility.md](../docs/reference/xs-compatibility.md),
-  [feature-matrix.md](../docs/reference/feature-matrix.md),
-  [changelog.md](../docs/about/changelog.md).
+- [ ] Update [bundled-modules.md](../../docs/reference/bundled-modules.md),
+  [xs-compatibility.md](../../docs/reference/xs-compatibility.md),
+  [feature-matrix.md](../../docs/reference/feature-matrix.md),
+  [changelog.md](../../docs/about/changelog.md).
 - [ ] `./jcpan -t Cpanel::JSON::XS` green in CI (with `timeout` per `AGENTS.md`).
 
 ---
@@ -291,7 +291,7 @@ Document each in test harness or skip file with rationale:
 
 ## References
 
-- [Porting modules (Option A vs B)](../docs/guides/module-porting.md)
+- [Porting modules (Option A vs B)](../../docs/guides/module-porting.md)
 - [JSON test parity (error strings, utf8, incremental lessons)](json_test_parity.md)
 - [XS fallback overview](xs_fallback.md)
 - Upstream repo / tracker: linked from upstream `README` (RURBAN fork of JSON::XS).

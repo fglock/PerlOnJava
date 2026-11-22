@@ -34,6 +34,13 @@ PerlOnJava is a Perl 5 implementation that compiles Perl source code to JVM byte
 | [control-flow.md](control-flow.md) | Control flow implementation (die/eval, last/next/redo, block dispatchers) |
 | [block-dispatcher-optimization.md](block-dispatcher-optimization.md) | Block-level shared dispatchers for control flow |
 | [large-code-refactoring.md](large-code-refactoring.md) | Large code handling: proactive block refactoring and interpreter fallback |
+| [custom_bytecode/](custom_bytecode/README.md) | Bytecode interpreter backend: opcodes, closures, `eval STRING`, error reporting |
+| [regex.md](regex.md) | Regex engine integration and Perl-specific extensions |
+| [pack-unpack.md](pack-unpack.md) | `pack`/`unpack` implementation and format coverage |
+| [overload.md](overload.md) | Operator overloading (`use overload`) |
+| [tie.md](tie.md) | `tie`/`untie`/`tied` implementation |
+| [signal-handling.md](signal-handling.md) | `%SIG` handler dispatch and signal safety |
+| [alarm.md](alarm.md) | `alarm()` / `SIGALRM` implementation |
 | [../design/inline-cache.md](../design/inline-cache.md) | Inline caching design (runtime global cache implemented; per-site variant planned) |
 | [../design/method-call-optimization.md](../design/method-call-optimization.md) | Method call optimization plan (Phase 1 done; Phases 2-3 not yet implemented) |
 | [../design/interpreter.md](../design/interpreter.md) | Bytecode interpreter design |

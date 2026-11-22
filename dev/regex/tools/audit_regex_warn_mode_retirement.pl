@@ -49,7 +49,7 @@ scan_tree('src/test/resources/unit/regex', qr/\.t\z/,
 scan_tree('.agents/skills', qr/(?:SKILL|AGENTS)\.md\z/,
     qr/JPERL_UNIMPLEMENTED\s*(?:=|:)?\s*(?:warn|1)/,
     'active skill guidance still recommends unimplemented warn mode');
-for my $relative ('AGENTS.md', 'dev/implementation/regex.md',
+for my $relative ('AGENTS.md', 'dev/architecture/regex.md',
         'docs/design/joni-callout-fork.md') {
     check_file($relative, qr/JPERL_UNIMPLEMENTED\s*(?:=|:)?\s*(?:warn|1)/,
         'active guidance still recommends unimplemented warn mode');

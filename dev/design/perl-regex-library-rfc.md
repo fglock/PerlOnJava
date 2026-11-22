@@ -282,5 +282,5 @@ behavior or stabilize transitional routing decisions.
 Related documents:
 
 - `dev/design/regex-implementation.md`
-- `dev/implementation/regex.md`
+- `dev/architecture/regex.md`
 - `docs/design/joni-callout-fork.md`

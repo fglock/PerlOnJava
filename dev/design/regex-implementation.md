@@ -108,7 +108,7 @@ documentation reconciliation, and removal of temporary warning policy.
   `pod/perlrebackslash.pod` against the implementation.
 - Record supported, partial, intentionally divergent, and missing behavior with
   permanent evidence.
-- Reconcile `dev/implementation/regex.md` and
+- Reconcile `dev/architecture/regex.md` and
   `docs/design/joni-callout-fork.md` with the final architecture.
 - Remove redundant or stale project documentation, retaining useful rationale
   through concise links to canonical documents.
@@ -290,7 +290,7 @@ Preserve the candidate SHA and complete logs.
 
 ## Related Documents and Skills
 
-- `dev/implementation/regex.md`
+- `dev/architecture/regex.md`
 - `docs/reference/feature-matrix.md`
 - `docs/design/joni-callout-fork.md`
 - `.agents/skills/debug-perlonjava/SKILL.md`

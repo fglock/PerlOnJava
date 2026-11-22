@@ -112,7 +112,8 @@ By default it creates a separate worktree under `/tmp`, runs `git bisect --first
 
 - Regex implementation tooling: `dev/regex/tools/`
 - Feature and module tools: `dev/modules/`
-- Maintenance and historical migration tools: `dev/maintenance/`
+- Maintenance and historical migration tools: `dev/tools/maintenance/`
+- JVM profiling guide: `dev/tools/jvm_profiler/`
 - Reproducers and experimental snippets: `dev/sandbox/`
 - Benchmarks: `dev/bench/`
 
@@ -123,6 +124,6 @@ When adding new development tools:
    feature-specific and one-off work under its owning scoped directory.
 2. Make them executable: `chmod +x tool_name.sh`
 3. Add documentation to this README
-4. Reference from relevant documentation in `dev/prompts/`
+4. Reference it from the skill or design document that uses it
 5. Use clear, descriptive names
 6. Include usage examples and error handling

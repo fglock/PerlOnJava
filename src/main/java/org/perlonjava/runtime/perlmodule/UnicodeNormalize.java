@@ -92,6 +92,7 @@ public class UnicodeNormalize extends PerlModuleBase {
             unicodeNormalize.registerMethod("reorder", "$");
             unicodeNormalize.registerMethod("compose", "$");
             unicodeNormalize.registerMethod("getCombinClass", "$");
+            unicodeNormalize.registerMethod("getComposite", "$$");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Unicode::Normalize method: " + e.getMessage());
         }
@@ -111,6 +112,24 @@ public class UnicodeNormalize extends PerlModuleBase {
         }
         int cc = UCharacter.getCombiningClass(cp);
         return new RuntimeList(new RuntimeScalar(cc));
+    }
+
+    /** Return the Unicode canonical composite of two code points, if any. */
+    public static RuntimeList getComposite(RuntimeArray args, int ctx) {
+        if (args.size() < 2) {
+            return org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef.getList();
+        }
+        int first = args.get(0).getInt();
+        int second = args.get(1).getInt();
+        if (!Character.isValidCodePoint(first) || !Character.isValidCodePoint(second)) {
+            return org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef.getList();
+        }
+        String pair = new String(Character.toChars(first)) + new String(Character.toChars(second));
+        String composite = Normalizer.normalize(pair, Form.NFC);
+        if (composite.codePointCount(0, composite.length()) != 1) {
+            return org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef.getList();
+        }
+        return new RuntimeScalar(composite.codePointAt(0)).getList();
     }
 
     // Normalization Form D

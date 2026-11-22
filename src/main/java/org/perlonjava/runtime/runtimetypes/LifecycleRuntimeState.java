@@ -109,6 +109,10 @@ final class LifecycleRuntimeState {
     final ConcurrentHashMap<Integer, RuntimeScalar> destroyMethodCache = new ConcurrentHashMap<>();
     final Set<RuntimeBase> destroyableObjects =
             Collections.synchronizedSet(Collections.newSetFromMap(new IdentityHashMap<>()));
+    // Perl invokes DESTROY for blessed objects in refcount cycles during
+    // global destruction. Keep a weak registry so those
+    // cycles remain discoverable without extending object lifetime.
+    final WeakIdentitySet<RuntimeBase> globalDestroyables = new WeakIdentitySet<>();
     final Set<RuntimeBase> statementBoundaryDestroyableObjects =
             Collections.synchronizedSet(Collections.newSetFromMap(new IdentityHashMap<>()));
     RuntimeBase currentDestroyTarget;
@@ -182,6 +186,7 @@ final class LifecycleRuntimeState {
         destroyClassesChecked.clear();
         destroyMethodCache.clear();
         destroyableObjects.clear();
+        globalDestroyables.clear();
         statementBoundaryDestroyableObjects.clear();
         currentDestroyTarget = null;
         destroyTargetRescued = false;

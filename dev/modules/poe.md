@@ -81,7 +81,7 @@ Investigation confirmed this was a cascading failure from Bug 1. When POE::Kerne
 - Overloaded classes get negative blessIds; `Math.abs()` on cache keys collided with normal class IDs
 - Proxy can't fully replicate tied/magic/overloaded behavior of original objects
 
-**Current state**: DESTROY is not called for regular blessed objects. Tied variable DESTROY still works (uses scope-based cleanup via `TieScalar.tiedDestroy()`). See `dev/design/object_lifecycle.md` for future directions (scope-based ref counting recommended).
+**Current state**: DESTROY is not called for regular blessed objects. Tied variable DESTROY still works (uses scope-based cleanup via `TieScalar.tiedDestroy()`). See `dev/archive/design/object_lifecycle.md` for future directions (scope-based ref counting recommended).
 
 **Impact on POE**: POE's core event loop works without DESTROY. The only affected feature is `POE::Session::AnonEvent` postback cleanup — sessions using postbacks won't get automatic refcount decrement. Workaround: explicit cleanup or patching POE.
 
@@ -390,7 +390,7 @@ pass in tests that compare fd numbers of handles that were supposed to have been
   - Added 4-arg select() and FileDescriptorTable for I/O multiplexing
   - Fixed DestroyManager blessId collision with overloaded classes (Bug 13)
   - Removed DestroyManager — proxy reconstruction too fragile (close() corrupts proxy hash)
-  - Updated dev/design/object_lifecycle.md with findings
+  - Updated dev/archive/design/object_lifecycle.md with findings
 - [x] Phase 3.3: select() polling fix (2026-04-04, commit f119640a5)
   - Fixed 4-arg select() to poll pipe readiness instead of marking always ready (Bug 14)
   - select() now properly blocks when monitoring InternalPipeHandle with timeout
@@ -776,4 +776,4 @@ After Priority 6 (DESTROY), most of these should complete normally.
 ## Related Documents
 - `dev/modules/smoke_test_investigation.md` - Symbol $VERSION pattern
 - `dev/modules/io_stringy.md` - IO module porting patterns
-- `dev/design/object_lifecycle.md` - DESTROY and object lifecycle design
+- `dev/archive/design/object_lifecycle.md` - DESTROY and object lifecycle design

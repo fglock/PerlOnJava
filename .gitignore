@@ -74,7 +74,7 @@ logs/
 
 skip_control_flow.t
 dev/design/CONTROL_FLOW_FIX_RESULTS.md
-dev/prompts/CONTROL_FLOW_FIX_INSTRUCTIONS.md
+dev/archive/prompts/CONTROL_FLOW_FIX_INSTRUCTIONS.md
 
 # Ignore test artifact files (numbered .txt and .pod files)
 [0-9][0-9][0-9][0-9][0-9][0-9].txt
@@ -83,9 +83,9 @@ dev/prompts/CONTROL_FLOW_FIX_INSTRUCTIONS.md
 # Ignore top-level .md files except the existing ones
 /*.md
 !LICENSE.md
-!MILESTONES.md
 !README.md
-!QUICKSTART.md
+!CHANGELOG.md
+!CODE_OF_CONDUCT.md
 !CONTRIBUTING.md
 !AGENTS.md
 !SECURITY.md

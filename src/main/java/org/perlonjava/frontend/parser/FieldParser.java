@@ -124,9 +124,44 @@ public class FieldParser {
             parseFieldAttribute(parser, fieldPlaceholder);
         }
 
+        boolean hasBlockInitializer = false;
+
+        // Object::Pad's experimental init_expr form evaluates a block when the
+        // instance is constructed. Parse it with the same implicit receiver
+        // and lexical field bindings as an ordinary field default.
+        token = TokenUtils.peek(parser);
+        if (token.type == LexerTokenType.OPERATOR && token.text.equals("{")) {
+            hasBlockInitializer = true;
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
+            int initializerScope = parser.ctx.symbolTable.enterScope();
+            boolean wasInMethod = parser.isInMethod;
+            boolean wasInFieldInitializer = parser.isInFieldInitializer;
+            boolean wasParsingTakeReference = parser.parsingTakeReference;
+            parser.isInMethod = true;
+            parser.isInFieldInitializer = true;
+            parser.parsingTakeReference = false;
+            BlockNode initializer;
+            try {
+                initializer = ParseBlock.parseBlock(parser);
+            } finally {
+                parser.isInMethod = wasInMethod;
+                parser.isInFieldInitializer = wasInFieldInitializer;
+                parser.parsingTakeReference = wasParsingTakeReference;
+                parser.ctx.symbolTable.exitScope(initializerScope);
+            }
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+            initializer.setAnnotation("blockIsDoBlock", true);
+            StatementCopline.markOpScopedBlock(initializer);
+            markFieldInitializer(initializer);
+            fieldPlaceholder.operand = initializer;
+            fieldPlaceholder.setAnnotation("hasDefault", true);
+            fieldPlaceholder.setAnnotation("defaultOperator", "=");
+        }
+
         // Parse default value (optional)
         token = TokenUtils.peek(parser);
-        if (token.type == LexerTokenType.OPERATOR) {
+        if (!fieldPlaceholder.getBooleanAnnotation("hasDefault")
+                && token.type == LexerTokenType.OPERATOR) {
             String operator = token.text;
 
             // Support different assignment operators:
@@ -166,8 +201,13 @@ public class FieldParser {
             }
         }
 
-        // Consume statement terminator
-        StatementResolver.parseStatementTerminator(parser);
+        // The initializer's closing brace also terminates this declaration;
+        // Object::Pad permits the next field to follow without a semicolon.
+        if (hasBlockInitializer) {
+            if (TokenUtils.peek(parser).text.equals(";")) TokenUtils.consume(parser);
+        } else {
+            StatementResolver.parseStatementTerminator(parser);
+        }
 
         // A unit class keeps its package context after `class Name;`, so its
         // fields are parsed as later top-level statements rather than elements
@@ -179,7 +219,10 @@ public class FieldParser {
                     currentClass, ignored -> new java.util.ArrayList<>());
             fields.add(fieldPlaceholder);
             FieldRegistry.registerGeneratedConstructor(currentClass);
-            SubroutineNode constructor = ClassTransformer.generateUnitClassConstructor(fields, currentClass);
+            List<Node> adjustBlocks = parser.unitClassAdjustBlocks.getOrDefault(
+                    currentClass, List.of());
+            SubroutineNode constructor = ClassTransformer.generateUnitClassConstructor(
+                    fields, currentClass, adjustBlocks);
             SubroutineParser.handleNamedSubWithFilter(parser, constructor.name, constructor.prototype,
                     constructor.attributes, (org.perlonjava.frontend.astnode.BlockNode) constructor.block,
                     true, null);

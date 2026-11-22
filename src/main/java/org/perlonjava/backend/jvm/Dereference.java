@@ -6,6 +6,7 @@ import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
+import org.perlonjava.frontend.analysis.BooleanCallContext;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
@@ -20,6 +21,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class Dereference {
     // Callsite ID counter for inline method caching (unique across all compilations)
     private static final AtomicInteger nextMethodCallsiteId = new AtomicInteger(0);
+
+    private static void pushArrowCallContext(
+            EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
+        emitterVisitor.pushCallContext(BooleanCallContext.callContext(
+                node, emitterVisitor.ctx.contextType));
+    }
     
     /**
      * Handles the postfix `[]` operator.
@@ -1134,6 +1141,12 @@ public class Dereference {
             mv.visitVarInsn(Opcodes.ALOAD, methodSlot);
             mv.visitVarInsn(Opcodes.ALOAD, subSlot);
             mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
+            Object autoboxBindings = node.getAnnotation("autoboxBindings");
+            if (autoboxBindings instanceof java.util.Map<?, ?> bindings) {
+                mv.visitLdcInsn(encodeAutoboxBindings(bindings));
+            } else {
+                mv.visitInsn(Opcodes.ACONST_NULL);
+            }
             if (node.getBooleanAnnotation("wantedObjectContext")) {
                 mv.visitLdcInsn(RuntimeContextType.OBJECT);
             } else if (node.getBooleanAnnotation("bindMethodCoderef")) {
@@ -1146,7 +1159,7 @@ public class Dereference {
                         "()I",
                         false);
             } else {
-                emitterVisitor.pushCallContext();
+                pushArrowCallContext(emitterVisitor, node);
             }
             String argsDescriptor = directRuntimeArray
                     ? "Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;"
@@ -1155,7 +1168,7 @@ public class Dereference {
                     Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                     "callCached",
-                    "(ILorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;" + argsDescriptor + "I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
+                    "(ILorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;" + argsDescriptor + "Ljava/lang/String;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
                     false); // generate a cached .call()
 
             // Tagged returns control-flow handling for method calls:
@@ -1183,7 +1196,7 @@ public class Dereference {
                 // handoff as the bytecode interpreter. In particular this
                 // drains only deferred owners from the abandoned @_ frame.
                 mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
-                emitterVisitor.pushCallContext();
+                pushArrowCallContext(emitterVisitor, node);
                 mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                         "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                         "resolveTailCalls",
@@ -1255,7 +1268,7 @@ public class Dereference {
                             "()I",
                             false);
                 } else {
-                    emitterVisitor.pushCallContext();
+                    pushArrowCallContext(emitterVisitor, node);
                 }
                 mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                         "org/perlonjava/runtime/runtimetypes/RuntimeCode",
@@ -1339,6 +1352,21 @@ public class Dereference {
                 emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
             }
         }
+    }
+
+    private static String encodeAutoboxBindings(java.util.Map<?, ?> bindings) {
+        StringBuilder encoded = new StringBuilder();
+        for (var entry : bindings.entrySet()) {
+            if (!encoded.isEmpty()) encoded.append(';');
+            encoded.append(entry.getKey()).append('=');
+            if (entry.getValue() instanceof java.util.List<?> classes) {
+                for (int i = 0; i < classes.size(); i++) {
+                    if (i > 0) encoded.append('|');
+                    encoded.append(classes.get(i));
+                }
+            }
+        }
+        return encoded.toString();
     }
 
 
@@ -1570,6 +1598,10 @@ public class Dereference {
 
     public static void handleArrowHashDeref(EmitterVisitor emitterVisitor, BinaryOperatorNode node, String hashOperation) {
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) ->{} " + node);
+        if (node.left instanceof OperatorNode sigil && "%".equals(sigil.operator)) {
+            throw new PerlCompilerException(
+                    node.tokenIndex, "Can't use a hash as a reference", emitterVisitor.ctx.errorUtil);
+        }
         EmitterVisitor scalarVisitor =
                 emitterVisitor.with(RuntimeContextType.SCALAR); // execute operands in scalar context
 

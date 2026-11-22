@@ -10,6 +10,7 @@ import org.perlonjava.runtime.NamedCharacterExpansionMap;
 import org.perlonjava.runtime.WarningBitsRegistry;
 import org.perlonjava.runtime.debugger.DebugHooks;
 import org.perlonjava.runtime.operators.CompareOperators;
+import org.perlonjava.runtime.operators.MathOperators;
 import org.perlonjava.runtime.operators.ModuleOperators;
 import org.perlonjava.runtime.operators.ReferenceOperators;
 import org.perlonjava.runtime.operators.WarnDie;
@@ -2245,6 +2246,8 @@ public class BytecodeInterpreter {
                                 int currentSubReg = bytecode[pc++];
                                 int argsReg = bytecode[pc++];
                                 int context = bytecode[pc++];
+                                int autoboxBindingsIndex = bytecode[pc++];
+                                String autoboxBindings = code.stringPool[autoboxBindingsIndex];
 
                                 // Resolve RUNTIME context from register 2 (wantarray)
                                 if (context == RuntimeContextType.RUNTIME) {
@@ -2294,8 +2297,10 @@ public class BytecodeInterpreter {
                                 RuntimeList result;
                                 try {
                                     result = stagedArgs == null
-                                            ? RuntimeCode.call(invocant, method, currentSub, callArgs, context)
-                                            : RuntimeCode.call(invocant, method, currentSub, stagedArgs, context);
+                                            ? RuntimeCode.call(invocant, method, currentSub, callArgs,
+                                                    context, autoboxBindings)
+                                            : RuntimeCode.call(invocant, method, currentSub, stagedArgs,
+                                                    context, autoboxBindings);
 
                                     // Keep method calls on the shared tail-call handoff as well.
                                     result = RuntimeCode.resolveTailCalls(result, context);
@@ -4210,8 +4215,7 @@ public class BytecodeInterpreter {
                 RuntimeScalar val = (registers[rs] instanceof RuntimeScalar)
                         ? (RuntimeScalar) registers[rs]
                         : registers[rs].scalar();
-                registers[rd] = val.getBoolean() ?
-                        RuntimeScalarCache.scalarFalse : RuntimeScalarCache.scalarTrue;
+                registers[rd] = MathOperators.not(val);
                 return pc;
             }
             case Opcodes.NOT_NO_OVERLOAD -> {

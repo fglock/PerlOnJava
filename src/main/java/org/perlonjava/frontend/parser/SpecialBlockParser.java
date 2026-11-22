@@ -246,6 +246,21 @@ public class SpecialBlockParser {
             adjustSub.setAnnotation(annotation, Boolean.TRUE);
             block.setAnnotation(annotation, Boolean.TRUE);
 
+            // The class transformer invokes BUILD/ADJUST with the instance as
+            // the first argument. Bind it in the generated subroutine itself:
+            // the parser's temporary $self declaration only supports parsing
+            // field references, and is no longer in scope when deferred
+            // subroutine bodies are compiled (notably through eval STRING).
+            ListNode selfDeclaration = new ListNode(0);
+            selfDeclaration.elements.add(new OperatorNode("my",
+                    new OperatorNode("$", new IdentifierNode("self", parser.tokenIndex),
+                            parser.tokenIndex), parser.tokenIndex));
+            OperatorNode shiftSelf = new OperatorNode("shift",
+                    new OperatorNode("@", new IdentifierNode("_", parser.tokenIndex),
+                            parser.tokenIndex), parser.tokenIndex);
+            block.elements.addFirst(new BinaryOperatorNode("=", selfDeclaration,
+                    shiftSelf, parser.tokenIndex));
+
             if (classBuild) {
                 parser.classBuildBlocks.add(adjustSub);
                 return adjustSub;
@@ -575,11 +590,16 @@ public class SpecialBlockParser {
                     DynamicVariableManager.pushLocalVariable(InterpreterState.currentPackage.get());
                 }
                 try {
+                    ParserExtensionRegistry.pushActiveParser(parser);
+                    try {
                     result = PerlLanguageProvider.executePerlAST(
                             new BlockNode(nodes, tokenIndex),
                             parser.tokens,
                             parsedArgs,
                             executionContext);
+                    } finally {
+                        ParserExtensionRegistry.popActiveParser(parser);
+                    }
                 } finally {
                     if (blockPhase.equals("BEGIN")) {
                         DynamicVariableManager.popToLocalLevel(beginPackageLocalLevel);

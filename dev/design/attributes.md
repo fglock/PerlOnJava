@@ -170,7 +170,7 @@ Variable attribute dispatch happens in the **emitter/compiler** — when a `my`/
 
 ## Related Documents
 
-- `dev/prompts/test-failures-not-quick-fix.md` — Section 8 (Attribute System)
+- `dev/archive/prompts/test-failures-not-quick-fix.md` — Section 8 (Attribute System)
 - `dev/design/defer_blocks.md` — Similar implementation pattern
 
 ---

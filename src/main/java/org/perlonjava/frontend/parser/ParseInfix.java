@@ -24,6 +24,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 import static org.perlonjava.frontend.parser.OperatorParser.ensureOneOperand;
@@ -414,22 +415,11 @@ public class ParseInfix {
                             directCall.setAnnotation("subroutineKnownAtParseTime", false);
                             return new BinaryOperatorNode("(", directCall, right, parser.tokenIndex);
                         }
-                        // A sub name that was unresolved when this code was
-                        // compiled is a late-bound direct call in Perl's
-                        // Foo::bar->(LIST) syntax. If it was already defined,
-                        // preserve the ordinary coderef-returning call.
-                        if (left instanceof BinaryOperatorNode namedCall
-                                && "(".equals(namedCall.operator)
-                                && namedCall.right instanceof ListNode namedArgs
-                                && namedArgs.elements.isEmpty()
-                                && namedCall.left instanceof OperatorNode subRef
-                                && "&".equals(subRef.operator)
-                                && subRef.operand instanceof IdentifierNode
-                                && subRef.getBooleanAnnotation("directNamedCall")
-                                && Boolean.FALSE.equals(
-                                        subRef.getAnnotation("subroutineKnownAtParseTime"))) {
-                            return new BinaryOperatorNode("(", subRef, right, parser.tokenIndex);
-                        }
+                        // If the left side is already an explicit call such
+                        // as `fact3()`, invoke its returned coderef. Bareword
+                        // late-bound calls such as `Foo::bar->(LIST)` are
+                        // handled above while the left side is still an
+                        // IdentifierNode.
                         if (left instanceof OperatorNode op && isArrowReassociatingUnaryOperator(op.operator)) {
                             Node arrowLeft = coderefArrowLeft(op.operand);
                             BinaryOperatorNode arrowCall = new BinaryOperatorNode(token.text,
@@ -623,7 +613,24 @@ public class ParseInfix {
                             right = new BinaryOperatorNode("(", right, new ListNode(parser.tokenIndex), parser.tokenIndex);
                         }
 
-                        return new BinaryOperatorNode(token.text, left, right, parser.tokenIndex);
+                        Map<String, List<String>> autoboxBindings =
+                                parser.ctx.symbolTable.getAutoboxBindings();
+                        // Autobox treats direct aggregate variables as references
+                        // when it is lexically enabled: @a->method and %h->method
+                        // pass \@a and \%h respectively. Keep ordinary Perl
+                        // method parsing unchanged outside an active autobox scope.
+                        if (!autoboxBindings.isEmpty()) {
+                            left = referenceAggregateMethodInvocant(left, parser.tokenIndex);
+                        }
+                        BinaryOperatorNode methodCall = new BinaryOperatorNode(
+                                token.text, left, right, parser.tokenIndex);
+                        // A package/bareword invocant is a class name (for
+                        // example Foo->new), even when it happens to look like
+                        // an autoboxed native string.
+                        if (!autoboxBindings.isEmpty() && !isPackageMethodInvocant(left)) {
+                            methodCall.setAnnotation("autoboxBindings", autoboxBindings);
+                        }
+                        return methodCall;
                 }
             case "(":
                 // Handle function calls
@@ -765,6 +772,27 @@ public class ParseInfix {
                 }
                 throw new PerlCompilerException(Math.max(0, errorIndex), "syntax error", parser.ctx.errorUtil);
         }
+    }
+
+    private static Node referenceAggregateMethodInvocant(Node invocant, int tokenIndex) {
+        Node unwrapped = invocant;
+        while (unwrapped instanceof ListNode list
+                && list.parenthesized && list.elements.size() == 1) {
+            unwrapped = list.elements.getFirst();
+        }
+        if (unwrapped instanceof OperatorNode aggregate
+                && (aggregate.operator.equals("@") || aggregate.operator.equals("%"))) {
+            return new OperatorNode("\\", aggregate, tokenIndex);
+        }
+        return invocant;
+    }
+
+    /** Keep bare package names on ordinary method lookup, while allowing lexical
+     * variable names that parse directly as identifiers to use autobox bindings. */
+    private static boolean isPackageMethodInvocant(Node invocant) {
+        if (!(invocant instanceof IdentifierNode identifier)) return false;
+        String name = identifier.name;
+        return name.contains("::") || (!name.isEmpty() && Character.isUpperCase(name.charAt(0)));
     }
 
     private static boolean isAssignmentOperator(String operator) {

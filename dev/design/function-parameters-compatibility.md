@@ -22,7 +22,35 @@ the upstream XS parser plugin.
 
 ## Progress tracking
 
-### Current status: Core subset implemented; upstream compatibility work remains (2026-10-26)
+### Current status: Core subset implemented; upstream compatibility work remains (2026-11-20)
+
+Current checkpoint (2026-11-20, branch `feature/cpan-parser-compat-1264-2112`,
+PR #2132, source candidate based on `68f2b8e34`): automatic Type::Tiny parameterized and quoted
+composite expressions reify through overloaded code references; recursive
+Function::Parameters declarations preserve block prototypes and trailing
+arguments. Anonymous `fun` expression statements retain immediate postfix
+calls. Configured `shift` entries for ordinary function keywords now become
+leading invocants, preserve their type objects, and validate them at call time.
+Configured `install_sub` code references are now called directly instead of
+being stringified into `CODE(...)` package names. The interpreter now uses an
+`our` array or hash declaration's package when lowering global reads, and both
+eval parser paths seed aliases captured at the eval site. The immediate-call,
+configured-shift, runtime-installer, and eval package-alias regressions pass
+on system Perl, JVM, and interpreter. `nice -n 19 make` passed in 9m03 and
+`nice -n 19 make check-links` passed. Upstream `types_auto.t` (12/12),
+`bonus.t` (13/13), `lineno.t`, `lineno-torture.t`, and `eval.t` (5/5) pass.
+The compile-time `Function::Parameters->import(...)` bridge now registers
+configured parser keywords when called from a `BEGIN` block, including through
+a wrapper. The `elsewhere.t` regression passes on system Perl, JVM, and
+interpreter. Compile-time `install_sub` CVs are released at the synthetic
+`BEGIN` boundary, and malformed `$^H` configuration values warn once using
+the lexical warning category; the project regressions and upstream
+`lifetime.t` non-TODO assertions and `stringy_h.t` pass on both backends.
+`nice -n 19 make` passes on this candidate. Upstream `lifetime.t` retains its
+existing TODO for runtime-installed CV retention. Next: continue closing the
+remaining #2112 and #1264 compatibility gaps and rerun the complete upstream
+Function::Parameters suite after that work. Keep linked issues open while
+gaps remain.
 
 ### Completed
 
@@ -137,25 +165,47 @@ the upstream XS parser plugin.
   system Perl passes all nine top-level subtests. The timing failures need
   verification on a less-contended runner before attributing them to a runtime
   defect.
+- Function::Parameters calls now report module-compatible arity, odd-pair,
+  missing-name, unknown-name, and typed-parameter diagnostics at the captured
+  call site. Empty positional defaults lower to `undef`. The focused diagnostic
+  and empty-default tests pass on JVM and interpreter, and system Perl with the
+  upstream XS module. The current full upstream suite passes 47/56 programs;
+  remaining parser and warning/lifetime gaps are still open.
+- Register the `Function::Parameters` warnings category in the bundled module.
+  A focused test verifies that `no warnings 'Function::Parameters'` compiles on
+  JVM, interpreter, and system Perl with the upstream XS module. The malformed
+  `$^H` config warning in upstream `stringy_h.t` remains unresolved.
+- Typed method invocants with an explicit type prefix and `:` are now recognized
+  as explicit, so the method provider does not inject a second `$self`. Runtime
+  type failures identify the invocant separately from positional parameters
+  and report the invocation line.
+  The focused regression passes on JVM, interpreter, and system Perl with the
+  upstream XS module. Typed slurpy parameters now validate and coerce each
+  element, with a focused ordinal regression passing on JVM, interpreter, and
+  system Perl. The upstream `types_msg.t` passes all 13 assertions. `types_auto.t`
+  now parses bracket applications and composite operators in project unit
+  coverage. Its full upstream expression still has two failures: a bare
+  unknown type diagnostic and metadata for a deeply composed type.
+- Required named-argument validation now reports Function::Parameters' arity
+  error before an unknown key when the supplied key/value count is below the
+  required minimum. The focused regression passes on the JVM and interpreter.
+  The upstream suite improved from 12 failing programs / 16 failed assertions
+  to 11 / 15; the remaining failures are still under investigation.
 
 ### Next steps
 
-1. Add auto type grammar support for bracket parameterization and composite
-   operators, then rerun `types_auto.t`.
-2. Classify and fix the remaining upstream errors and incomplete files listed
-   above, preserving focused project regression coverage for each confirmed
-   PerlOnJava defect.
+1. Fix dynamic import visibility in `elsewhere.t`.
+2. Investigate the compile-time CV lifetime and malformed `$^H` warning in
+   `lifetime.t` and `stringy_h.t`.
 3. Continue method-modifier coverage and verify GraphQL WebSocket ordering on
    an uncongested runner before assigning that timing difference to runtime
    behavior.
 
 ### Open questions
 
-- Which configured keyword aliases should be part of the first public subset?
 - How should provider-specific metadata map onto the existing signature
   annotations without creating a second backend representation? The current
   `Function::Parameters::Info` implementation reuses these annotations.
-- Which configured keyword aliases should be part of the first public subset?
 
 ## Related references
 

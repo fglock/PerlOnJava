@@ -2,7 +2,7 @@
 
 This document is the canonical contract for the runtime-neutral Joni fork:
 host hooks, token lifecycle, dynamic continuations, and matcher control. The
-[regex implementation document](../../dev/implementation/regex.md) is
+[regex implementation document](../../dev/architecture/regex.md) is
 authoritative for Perl frontend/runtime ownership, Unicode generation,
 packaging, source policy, and project verification.
 
@@ -312,7 +312,7 @@ the runtime-neutral hook API. Generated tables follow the latest imported
 upstream Perl checkout, and the generator manifest records the source commit,
 versions, and input/output hashes as reproducible provenance rather than a
 permanent pin. See the canonical
-[regex implementation document](../../dev/implementation/regex.md#encoding-and-unicode-ownership)
+[regex implementation document](../../dev/architecture/regex.md#encoding-and-unicode-ownership)
 for precedence, generators, and regeneration gates.
 
 `CharacterPropertyResolver.Context` distinguishes outside, ordinary-class, and
@@ -356,7 +356,7 @@ or license terms.
 
 The canonical paths, relocation targets, and fail-closed verifier contract are
 documented in the
-[implementation reference](../../dev/implementation/regex.md#fork-and-distribution).
+[implementation reference](../../dev/architecture/regex.md#fork-and-distribution).
 They are evaluated against the JAR, notice bytes, and SBOM being delivered.
 
 ## Change verification
@@ -371,7 +371,7 @@ unwind, backtracking, and nested ACCEPT behavior through `TestControlVerb`,
 `script_run_accept_boundary.t`. Perl fixtures are validated first with system
 Perl and then on both PerlOnJava execution backends. Packaging, full-build,
 generated-data, and imported-corpus gates are maintained in the
-[canonical verification section](../../dev/implementation/regex.md#verification)
+[canonical verification section](../../dev/architecture/regex.md#verification)
 rather than duplicated here.
 
 Never approximate callbacks as post-match hooks, dynamic patterns as atomic
@@ -381,6 +381,6 @@ rejected pattern with a fallback matcher result.
 
 Related documents:
 
-- [Regex implementation](../../dev/implementation/regex.md)
+- [Regex implementation](../../dev/architecture/regex.md)
 - [Regex implementation plan](../../dev/design/regex-implementation.md)
 - [Standalone library RFC](../../dev/design/perl-regex-library-rfc.md) (proposal only)

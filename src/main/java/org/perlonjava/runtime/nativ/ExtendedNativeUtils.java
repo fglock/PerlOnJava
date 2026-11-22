@@ -11,6 +11,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeContextType.SCALAR;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef;
 
 public class ExtendedNativeUtils extends NativeUtils {
     public static final class State {
@@ -349,8 +350,8 @@ public class ExtendedNativeUtils extends NativeUtils {
         return result;
     }
 
-    public static RuntimeArray gethostbyaddr(int ctx, RuntimeBase... args) {
-        if (args.length < 2) return new RuntimeArray();
+    public static RuntimeBase gethostbyaddr(int ctx, RuntimeBase... args) {
+        if (args.length < 2) return ctx == SCALAR ? scalarUndef : new RuntimeArray();
 
         try {
             byte[] addr;
@@ -382,11 +383,14 @@ public class ExtendedNativeUtils extends NativeUtils {
             RuntimeArray.push(addresses, new RuntimeScalar(new String(addr, StandardCharsets.ISO_8859_1)));
             RuntimeArray.push(result, addresses);
 
+            if (ctx == SCALAR) {
+                return result.elements.getFirst().scalar();
+            }
             return result;
         } catch (PerlCompilerException e) {
             throw e;
         } catch (Exception e) {
-            return new RuntimeArray();
+            return ctx == SCALAR ? scalarUndef : new RuntimeArray();
         }
     }
 
@@ -414,8 +418,8 @@ public class ExtendedNativeUtils extends NativeUtils {
         return result;
     }
 
-    public static RuntimeArray getservbyport(int ctx, RuntimeBase... args) {
-        if (args.length < 2) return new RuntimeArray();
+    public static RuntimeBase getservbyport(int ctx, RuntimeBase... args) {
+        if (args.length < 2) return ctx == SCALAR ? scalarUndef : new RuntimeArray();
 
         int port = args[0].scalar().getInt();
         String protocol = args[1].toString();
@@ -435,6 +439,9 @@ public class ExtendedNativeUtils extends NativeUtils {
             RuntimeArray.push(result, new RuntimeScalar(protocol));
         }
 
+        if (ctx == SCALAR) {
+            return service == null ? scalarUndef : new RuntimeScalar(service);
+        }
         return result;
     }
 

@@ -121,7 +121,7 @@ and first path establish implementation cost.
   and on both PerlOnJava backends; 5.44 remains historical baseline evidence.
 - [x] Reduced the failure to recursive `new_from_lol` closure release and
   recorded an oracle-validated baseline reproducer at
-  [`dev/repros/issue-1649-html-tree-lifecycle.t`](../repros/issue-1649-html-tree-lifecycle.t).
+  [`dev/sandbox/repros/issue-1649-html-tree-lifecycle.t`](../sandbox/repros/issue-1649-html-tree-lifecycle.t).
 - [x] Added the permanent dependency-free regression at
   [`src/test/resources/unit/refcount/issue_1649_recursive_builder_pad_release.t`](../../src/test/resources/unit/refcount/issue_1649_recursive_builder_pad_release.t).
   Perl 5.44 and both PerlOnJava backends pass; the parent interpreter fails
@@ -130,7 +130,7 @@ and first path establish implementation cost.
   ownership walks. The explicit capture-owner lists now determine whether
   closure pads are live Perl edges.
 - [x] Added an oracle-validated parser lifecycle reproducer at
-  [`dev/repros/issue-1649-html-treebuilder-lifecycle.t`](../repros/issue-1649-html-treebuilder-lifecycle.t)
+  [`dev/sandbox/repros/issue-1649-html-treebuilder-lifecycle.t`](../sandbox/repros/issue-1649-html-treebuilder-lifecycle.t)
   for the remaining content and incremental parsing failures.
 - [x] Added typed owner-slot identity for closure pads, with acquire/transfer/
   release operations and a primitive identity regression. Existing selective
