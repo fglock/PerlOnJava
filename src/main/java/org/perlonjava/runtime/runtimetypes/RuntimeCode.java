@@ -2089,7 +2089,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // from the remaining owner identities and non-scalar CODE roots.
         if (PerlRuntime.currentOrNull() == null
                 || hasPerlOwnerForCaptureOtherThan(null)
-                || padConstantOwnerSlots.isEmpty()) {
+                || (padConstantOwnerSlots.isEmpty()
+                    && codeTemplateOwnerSlots.isEmpty())) {
             return;
         }
         clearPadConstantWeakRefs();
@@ -4378,6 +4379,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     // In Perl 5, MODIFY_CODE_ATTRIBUTES receives the closure prototype for closures.
     // Calling a closure prototype should die with "Closure prototype called".
     public boolean isClosurePrototype = false;
+    /** This anonymous CV is a noncapturing code template owned by its optree. */
+    public boolean isOptreeCodeTemplate;
     // Anonymous CODE attributes are dispatched before backend compilation.
     // These flags carry built-in effects until the executable definition and
     // (for closures) captured environment are available.
@@ -5219,6 +5222,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public RuntimeBase[] padConstants;
     /** One identity for each strong constant edge held by this optree. */
     private final List<PerlOwnerSlot> padConstantOwnerSlots = new ArrayList<>();
+    /** Noncapturing anonymous CV templates held by their containing optree. */
+    private final Map<Object, PerlOwnerSlot> codeTemplateOwnerSlots = new LinkedHashMap<>();
     /** Strong CV edges owned by this optree's compiled direct named-call sites. */
     private final List<CompiledDirectCallSite> compiledDirectCallSiteOwners = new ArrayList<>();
     private final Map<String, Map<Integer, CompiledDirectCallSite>>
@@ -5485,10 +5490,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public void transferPadConstantTreeTo(RuntimeCode target) {
         if (target == null || target == this
                 || (padConstants == null && padConstantClassName == null
-                    && padConstantArraysByClassName.isEmpty())) {
+                    && padConstantArraysByClassName.isEmpty()
+                    && codeTemplateOwnerSlots.isEmpty())) {
             return;
         }
         copyPadConstantTree(this, target, values -> values.clone());
+        for (Map.Entry<Object, PerlOwnerSlot> entry : codeTemplateOwnerSlots.entrySet()) {
+            PerlOwnerSlot previous = target.codeTemplateOwnerSlots.putIfAbsent(
+                    entry.getKey(), entry.getValue());
+            if (previous != null) entry.getValue().release();
+        }
+        codeTemplateOwnerSlots.clear();
         clearPadConstantWeakRefs();
     }
 
@@ -5496,6 +5508,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         RuntimeBase[] constants = allPadConstantValues();
         Set<String> registryNames = new LinkedHashSet<>(padConstantRegistryClassNames);
         List<PerlOwnerSlot> owners = new ArrayList<>(padConstantOwnerSlots);
+        owners.addAll(codeTemplateOwnerSlots.values());
         List<CompiledDirectCallSite> callSites =
                 new ArrayList<>(compiledDirectCallSiteOwners);
         padConstants = null;
@@ -5504,6 +5517,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         padConstantDescendantsByClassName.clear();
         padConstantRegistryClassNames.clear();
         padConstantOwnerSlots.clear();
+        codeTemplateOwnerSlots.clear();
         compiledDirectCallSiteOwners.clear();
         compiledDirectCallSitesByClassName.clear();
         for (CompiledDirectCallSite callSite : callSites) callSite.release();
@@ -5523,6 +5537,31 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         clearUnownedPadConstantWeakRefs(constants);
         removeUnownedPadConstantRegistryEntries(registryNames);
+    }
+
+    /** Record this optree's strong reference to a noncapturing anonymous CV template. */
+    public static RuntimeScalar retainOptreeCodeTemplate(
+            RuntimeCode owner, RuntimeScalar codeReference) {
+        if (owner == null || codeReference == null
+                || !(codeReference.value instanceof RuntimeCode template)) {
+            return codeReference;
+        }
+        Object templateKey = template;
+        if (!owner.codeTemplateOwnerSlots.containsKey(templateKey)) {
+            PerlOwnerSlot slot = new PerlOwnerSlot(PerlOwnerSlot.Kind.CODE_PAD_CONSTANT);
+            slot.acquireCodePadConstantIdentity(template);
+            owner.codeTemplateOwnerSlots.put(templateKey, slot);
+        }
+        return codeReference;
+    }
+
+    /** Bind an anonymous code literal to the currently executing optree. */
+    public static RuntimeScalar retainActiveOptreeCodeTemplate(RuntimeScalar codeReference) {
+        if (codeReference != null && codeReference.value instanceof RuntimeCode template) {
+            template.isOptreeCodeTemplate = true;
+            retainOptreeCodeTemplate(getActiveCodeAt(0), codeReference);
+        }
+        return codeReference;
     }
 
     private static void clearUnownedPadConstantWeakRefs(RuntimeBase[] constants) {

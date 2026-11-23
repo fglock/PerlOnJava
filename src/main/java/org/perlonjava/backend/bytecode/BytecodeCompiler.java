@@ -7866,6 +7866,7 @@ public class BytecodeCompiler implements Visitor {
                 && (node.attributes == null || !node.attributes.contains("const"))
                 && !subCompiler.hasStateVariableDeclarations) {
             // No closures - just wrap the InterpretedCode
+            subCode.isOptreeCodeTemplate = true;
             RuntimeScalar codeScalar = new RuntimeScalar(subCode);
             subCode.__SUB__ = codeScalar;  // Set __SUB__ for self-reference
             RuntimeScalar compileTimeAttributeCodeRef =

@@ -7,6 +7,7 @@ priorities and future plans.
 ## Work in progress
 
 - Retire active lexical owners on explicit `exit` before dispatching `END` blocks (#2043).
+- Retain noncapturing anonymous CODE templates through their source optrees on both backends while allowing eval-created CVs to be released after escape (#2043).
 - Stage temporary anonymous array references as call-argument owners so their elements remain alive through the call and release afterward (#2043).
 - Skip redundant package-root scans when reading an already-rooted global array, while preserving mutation-time ownership of added slots (#2043).
 

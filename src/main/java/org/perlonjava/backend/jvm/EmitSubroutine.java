@@ -967,6 +967,21 @@ public class EmitSubroutine {
                     false);
         }
 
+        // A noncapturing anonymous CV is a literal template owned by this
+        // optree, even after its result is stored and later cleared.
+        if ((node.name == null || node.name.equals("<anon>"))
+                && (visibleVariables.size() <= skipVariables
+                    || node.getBooleanAnnotation("lexicalLiteralConstantCv"))) {
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "retainActiveOptreeCodeTemplate",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)"
+                            + "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+            mv.visitInsn(Opcodes.POP);
+        }
+
         // 6. Clean up the stack if context is VOID
         if (ctx.contextType == RuntimeContextType.VOID) {
             mv.visitInsn(Opcodes.POP); // Remove the RuntimeScalar object from the stack

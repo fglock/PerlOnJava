@@ -285,6 +285,19 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         // exception propagation. Temporaries (hash element aliases, method return
         // values) are NOT in this set and should NOT get scopeExitCleanup.
         this.myVarRegisters = scanMyVarRegisters(bytecode, maxRegisters);
+        retainCodeTemplateConstants();
+    }
+
+    /** Record optree owners for file-compiled anonymous CODE templates. */
+    private void retainCodeTemplateConstants() {
+        if (constants == null || sourceName == null || sourceName.startsWith("(eval ")) return;
+        for (Object constant : constants) {
+            if (constant instanceof RuntimeScalar scalar
+                    && scalar.value instanceof RuntimeCode template
+                    && template.isOptreeCodeTemplate) {
+                RuntimeCode.retainOptreeCodeTemplate(this, scalar);
+            }
+        }
     }
 
     private static String sourceTextFromErrorUtil(ErrorMessageUtil errorUtil) {
