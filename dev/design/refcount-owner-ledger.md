@@ -24,7 +24,9 @@ explicit, auditable owner tokens.
 **Delivery issue:** [#2043](https://github.com/fglock/PerlOnJava/issues/2043)
 
 **Target PR:** [#1938](https://github.com/fglock/PerlOnJava/pull/1938)
-**Goal:** deliver Perl-exact owner counts, weak-reference lifetime, and deterministic `DESTROY` behavior without memory-sweep lifecycle decisions. The current full-master reconciliation candidate is `28240779ea`, built on merge commit `b39e14a70a` and current master `1ee4ff572d`. After restoring anonymous CODE template ownership, `nice -n 19 timeout 1800 make` passed in 8m04 and the Function::Parameters installer-lifetime regression passed 3/3 on both JVM and interpreter. The CPAN acceptance gate has not yet been rerun on this integrated candidate.
+**Goal:** deliver Perl-exact owner counts, weak-reference lifetime, and deterministic `DESTROY` behavior without memory-sweep lifecycle decisions. The current local PR reconciliation candidate is `3e97440c60`, based on merge commit `4b9540ab77`. The stale sweep/snapshot and diagnostic-only Java tests that referenced removed internal APIs were removed; the new `WatcherCleanupDoesNotTraverseLiveAggregateTest` preserves behavior coverage for direct-slot watcher cleanup. `nice -n 19 timeout 1800 make` passed on the exact commit in 7m18: `/tmp/issue2043-3e97440c60-make.log`.
+
+The eight-target CPAN acceptance run on the closely related full-master candidate `a7921dc14e` passed Template Toolkit (3,180), Excel::Writer::XLSX (5,138), Image::ExifTool (600), PPR (1,255), and DateTime (3,592). Catalyst failed two assertions already reproduced on current master; DBIx::Class retained the known transaction source-line mismatch; Mojolicious failed because `t/mojo/asset.t` could not fork under host resource pressure. This run did not include the additional POSIX and glob changes present in `3e97440c60`; rerun the acceptance gate on the exact PR candidate before publication. Logs: `/private/tmp/issue2043-a7921dc14e-cpan-acceptance.log` and `/tmp/cpan_random_logs/20261123-194152-33963/`.
 
 The first full-master build at `ae3f87c122` failed the new installer-lifetime regression because reconciliation had dropped the interpreter file-optree and JVM noncapturing-CODE owner registrations. Cherry-picking `3776bfa487` restored those paths; the focused test and full `make` now pass on `28240779ea`. Gate output: `/private/tmp/issue2043-fullmaster-template-fix-make.log`; focused logs: `/private/tmp/issue2043-fullmaster-template-fix-installer-{jvm,interpreter}.log`.
 
@@ -257,12 +259,10 @@ decisions. Temporary leases and suspended-frame owners remain explicit slots.
    normalized workbook checksums. The paired evidence is in
    `/private/tmp/issue2043-package-root-excel-paired.json`; the focused
    package-array workload and JFR samples are retained alongside it.
-3. Complete the remaining CPAN
-   release-acceptance gates on the final immutable candidate. Stop a gate on an
-   actionable failure, preserve its log, fix the cause, and restart from a new
-   immutable candidate.
-4. Reconcile the validated candidate with PR #1938 and update the PR only after
-   the required gates pass.
+3. Run the eight-target CPAN release-acceptance gate on immutable candidate
+   `3e97440c60`; compare its outcomes with the known baseline failures above.
+4. After the exact-candidate acceptance review, obtain authorization before
+   pushing the local PR reconciliation branch or changing issue #2043/PR #1938.
 
 ## Regression Matrix
 
