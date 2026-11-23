@@ -1228,7 +1228,7 @@ public class MortalList {
         if (!RuntimeBase.blessedObjectExists() && !WeakRefRegistry.weakRefsExist()
                 && !RuntimeScalar.watcherCleanupNeeded()) return;
         if (RuntimeScalar.watcherCleanupNeeded()) {
-            RuntimeScalar.notifyDestroyedWatchersRecursively(hash);
+            RuntimeScalar.notifyDestroyedWatchersForAggregateSlots(hash);
         }
         if (hash.type == RuntimeHash.TIED_HASH && hash.elements instanceof TieHash tieHash) {
             tieHash.releaseTiedObject();
@@ -1313,7 +1313,7 @@ public class MortalList {
         if (!RuntimeBase.blessedObjectExists() && !WeakRefRegistry.weakRefsExist()
                 && !RuntimeScalar.watcherCleanupNeeded()) return;
         if (RuntimeScalar.watcherCleanupNeeded()) {
-            RuntimeScalar.notifyDestroyedWatchersRecursively(arr);
+            RuntimeScalar.notifyDestroyedWatchersForAggregateSlots(arr);
         }
         if (arr.type == RuntimeArray.TIED_ARRAY && arr.elements instanceof TieArray tieArray) {
             tieArray.releaseTiedObject();

@@ -199,24 +199,22 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return watcherCleanupNeeded;
     }
 
-    /** Fire destruction magic for scalar slots owned by a dying aggregate. */
-    public static void notifyDestroyedWatchersRecursively(RuntimeBase value) {
-        Set<RuntimeBase> visited = Collections.newSetFromMap(new IdentityHashMap<>());
-        notifyDestroyedWatchersRecursively(value, visited);
+    /**
+     * Fire destruction magic for scalar slots directly owned by a dying aggregate.
+     * Nested referents keep their own slots while another Perl owner keeps them alive;
+     * their final-owner cleanup notifies those slots later.
+     */
+    public static void notifyDestroyedWatchersForAggregateSlots(RuntimeBase value) {
+        if (value instanceof RuntimeArray array) {
+            notifyDestroyedWatchersForSlots(array.elements);
+        } else if (value instanceof RuntimeHash hash) {
+            notifyDestroyedWatchersForSlots(hash.elements.values());
+        }
     }
 
-    private static void notifyDestroyedWatchersRecursively(RuntimeBase value, Set<RuntimeBase> visited) {
-        if (value == null || !visited.add(value)) return;
-        Collection<RuntimeScalar> elements;
-        if (value instanceof RuntimeArray array) elements = array.elements;
-        else if (value instanceof RuntimeHash hash) elements = hash.elements.values();
-        else return;
+    private static void notifyDestroyedWatchersForSlots(Collection<RuntimeScalar> elements) {
         for (RuntimeScalar scalar : elements) {
-            if (scalar == null) continue;
-            scalar.notifyDestroyedWatchers();
-            if (scalar.value instanceof RuntimeBase nested) {
-                notifyDestroyedWatchersRecursively(nested, visited);
-            }
+            if (scalar != null) scalar.notifyDestroyedWatchers();
         }
     }
 
