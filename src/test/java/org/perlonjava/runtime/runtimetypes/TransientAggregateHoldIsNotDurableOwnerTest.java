@@ -188,7 +188,7 @@ class TransientAggregateHoldIsNotDurableOwnerTest {
             MortalList.pushTemporaryRoot(root);
             try {
                 assertEquals(1, root.ownerSlotCount(
-                        PerlOwnerSlot.Kind.EXPRESSION_VALUE));
+                        PerlOwnerSlot.Kind.EXPRESSION_TEMPORARY_ROOT));
                 staged.add(codeCell);
                 closure.requestCaptureReleaseWhenUnowned();
                 staged.finish();
@@ -230,7 +230,7 @@ class TransientAggregateHoldIsNotDurableOwnerTest {
             MortalList.pushTemporaryRoot(root);
             try {
                 assertEquals(1, root.ownerSlotCount(
-                        PerlOwnerSlot.Kind.EXPRESSION_VALUE));
+                        PerlOwnerSlot.Kind.EXPRESSION_TEMPORARY_ROOT));
                 staged.add(codeCell);
                 closure.requestCaptureReleaseWhenUnowned();
                 staged.finish();

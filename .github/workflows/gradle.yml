@@ -22,12 +22,12 @@ jobs:
       - name: Checkout source
         id: checkout-source
         timeout-minutes: 10
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up JDK 24
         id: setup-java
         timeout-minutes: 10
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           java-version: '24'
           distribution: 'temurin'
@@ -35,7 +35,7 @@ jobs:
       - name: Setup Gradle
         id: setup-gradle
         timeout-minutes: 10
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
 
       # Use Makefile's 'ci' target which handles platform differences
       # Both platforms build and run tests; Windows uses the non-daemon wrapper.
@@ -73,7 +73,7 @@ jobs:
         id: checkout-perl5
         if: runner.os == 'Linux'
         timeout-minutes: 10
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: Perl/perl5
           path: perl5
@@ -100,7 +100,7 @@ jobs:
         id: upload-sbom
         if: runner.os == 'Linux'
         timeout-minutes: 10
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: sbom
           path: |
@@ -111,7 +111,7 @@ jobs:
         id: upload-failure
         if: failure()
         timeout-minutes: 10
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-results-${{ matrix.os }}
           path: |

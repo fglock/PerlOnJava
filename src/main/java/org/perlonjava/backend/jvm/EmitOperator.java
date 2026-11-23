@@ -5,6 +5,7 @@ import org.perlonjava.app.cli.CompilerOptions;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
+import org.perlonjava.frontend.analysis.BooleanCallContext;
 import org.perlonjava.frontend.analysis.ReturnTypeVisitor;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
@@ -1032,7 +1033,7 @@ public class EmitOperator {
             // but produce a RuntimeList for the split runtime method.
             // We use SCALAR context here because split's EXPR must be in scalar context
             // (e.g., `reverse $str` should reverse the string, not reverse a list).
-            emitSplitArgs(emitterVisitor, node.right);
+            emitSplitArgs(emitterVisitor, splitArgsWithAssignmentLimit(emitterVisitor, node.right));
 
             mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
             mv.visitInsn(Opcodes.SWAP);
@@ -1042,7 +1043,7 @@ public class EmitOperator {
             }
         } else {
             node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-            emitSplitArgs(emitterVisitor, node.right);
+            emitSplitArgs(emitterVisitor, splitArgsWithAssignmentLimit(emitterVisitor, node.right));
         }
         emitterVisitor.pushCallContext();
         boolean unicodeStrings = emitterVisitor.ctx.symbolTable != null
@@ -1063,6 +1064,14 @@ public class EmitOperator {
         } else if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
             handleScalarContext(emitterVisitor, node);
         }
+    }
+
+    private static Node splitArgsWithAssignmentLimit(EmitterVisitor visitor, Node args) {
+        int limit = visitor.ctx.splitAssignmentLimit;
+        if (limit <= 0 || !(args instanceof ListNode list) || list.elements.size() != 1) return args;
+        java.util.List<Node> elements = new java.util.ArrayList<>(list.elements);
+        elements.add(new NumberNode("-1", list.tokenIndex));
+        return new ListNode(elements, list.tokenIndex);
     }
 
     private static String splitDebugExtflags(BinaryOperatorNode node) {
@@ -1408,6 +1417,9 @@ public class EmitOperator {
     static void handleWantArrayOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
         emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ILOAD,
                 emitterVisitor.ctx.symbolTable.getVariableIndex("wantarray"));
+        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                "resolveWantArrayContext", "(I)I", false);
         emitOperator(node, emitterVisitor);
     }
 
@@ -1745,8 +1757,12 @@ public class EmitOperator {
             case "preAutoIncrement", "postAutoIncrement", "postAutoIncrementVoid",
                     "preAutoDecrement", "postAutoDecrement" ->
                     RuntimeContextType.LVALUE;
+            case "not", "!" -> RuntimeContextType.SCALAR;
             default -> RuntimeContextType.SCALAR;
         };
+        if (operator.equals("not") || operator.equals("!")) {
+            BooleanCallContext.markDirectCall(node.operand);
+        }
         node.operand.accept(emitterVisitor.with(operandContext));
         OperatorHandler operatorHandler = OperatorHandler.get(operator);
         if (operatorHandler != null) {

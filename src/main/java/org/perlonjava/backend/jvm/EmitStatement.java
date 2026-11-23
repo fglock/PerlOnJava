@@ -6,6 +6,7 @@ import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.analysis.ConstantFoldingVisitor;
+import org.perlonjava.frontend.analysis.BooleanCallContext;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.analysis.FindDeclarationVisitor;
 import org.perlonjava.frontend.analysis.RegexUsageDetector;
@@ -190,7 +191,18 @@ public class EmitStatement {
             ctx.mv.visitVarInsn(Opcodes.ASTORE, returnedLvalueSlot);
         }
 
-        // Phase 1: Run scopeExitCleanup for scalar variables.
+        // Perl releases hash values before scalar pads and arrays at scope exit.
+        // DESTROY methods can observe objects released earlier in this sequence.
+        for (int idx : hashIndices) {
+            ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/MortalList",
+                    "scopeExitCleanupHash",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;)V",
+                    false);
+        }
+
+        // Run scopeExitCleanup for scalar variables after hash values.
         // This defers refCount decrements for blessed references with DESTROY,
         // and handles IO fd recycling for anonymous filehandle globs.
         for (int idx : scalarIndices) {
@@ -225,17 +237,7 @@ public class EmitStatement {
                     "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;Ljava/lang/String;)V",
                     false);
         }
-        // Phase 1b: Walk hash/array variables for nested blessed references.
-        // When a hash/array goes out of scope, any blessed refs stored inside
-        // (or nested inside sub-containers) need their refCounts decremented.
-        for (int idx : hashIndices) {
-            ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
-            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/runtimetypes/MortalList",
-                    "scopeExitCleanupHash",
-                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;)V",
-                    false);
-        }
+        // Arrays are released after hash values and scalar pads.
         for (int idx : arrayIndices) {
             if (returnedLvalueSlot >= 0) {
                 ctx.mv.visitVarInsn(Opcodes.ALOAD, returnedLvalueSlot);
@@ -550,6 +552,7 @@ public class EmitStatement {
                     "(Lorg/perlonjava/runtime/runtimetypes/ExecutionRuntimeState;)I", false);
             emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ISTORE, conditionLocalLevel);
         }
+        BooleanCallContext.markDirectCall(node.condition);
         node.condition.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
         emitterVisitor.ctx.javaClassInfo.statementTokenIndex = savedConditionStatementToken;
 
@@ -1081,6 +1084,14 @@ public class EmitStatement {
             emitterVisitor.ctx.javaClassInfo.activeTryFinallyContext = tryFinallyContext;
         }
 
+        int jvmFrameDepthSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.jvmFrameStateSlot);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                "jvmFrameDepth",
+                "(Lorg/perlonjava/runtime/runtimetypes/ExecutionRuntimeState;)I", false);
+        mv.visitVarInsn(Opcodes.ISTORE, jvmFrameDepthSlot);
+
         // Define the try-catch block before visiting labels for maximum ASM compatibility
         mv.visitTryCatchBlock(tryStart, tryEnd, catchBlock, "java/lang/Throwable");
 
@@ -1098,24 +1109,34 @@ public class EmitStatement {
         // Exception handler
         mv.visitLabel(catchBlock);
 
+        mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.jvmFrameStateSlot);
+        mv.visitVarInsn(Opcodes.ILOAD, jvmFrameDepthSlot);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                "unwindJvmFramesToDepth",
+                "(Lorg/perlonjava/runtime/runtimetypes/ExecutionRuntimeState;I)V", false);
+
         // --------- Store the exception in the catch parameter ---------
         // Preserve a reference passed to die; non-Perl exceptions become strings.
         mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/runtimetypes/ErrorMessageUtil",
                 "exceptionValue",
                 "(Ljava/lang/Throwable;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
-        // Transform catch parameter to 'my'
-        OperatorNode catchParameter = new OperatorNode("my", node.catchParameter, node.tokenIndex);
-        // Create the lexical variable for the catch parameter, push it to the stack
-        catchParameter.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-        mv.visitInsn(Opcodes.SWAP);
-        mv.visitMethodInsn(
-                Opcodes.INVOKEVIRTUAL,
-                "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
-                "set",
-                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
-                false);
-        mv.visitInsn(Opcodes.POP);
+        if (node.catchParameter != null) {
+            // Transform catch parameter to 'my' and bind the exception value.
+            OperatorNode catchParameter = new OperatorNode("my", node.catchParameter, node.tokenIndex);
+            catchParameter.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+            mv.visitInsn(Opcodes.SWAP);
+            mv.visitMethodInsn(
+                    Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                    "set",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+            mv.visitInsn(Opcodes.POP);
+        } else {
+            mv.visitInsn(Opcodes.POP);
+        }
         // --------- end of store the catch parameter ---------
 
         // The catch variable now owns the exception.  Clear only the local

@@ -15,7 +15,7 @@ class MortalListDeferredCaptureTest {
             String className = "HTTP::Body::OctetStream";
             RuntimeHash referent = new RuntimeHash();
             referent.blessId = NameNormalizer.getBlessId(className);
-            referent.setTrackedRefCount(1);
+            referent.refCount = 1;
             installDestroy(className);
 
             RuntimeScalar pad = referenceTo(referent);
@@ -41,7 +41,7 @@ class MortalListDeferredCaptureTest {
             String className = "DeferredCaptureBoundary::Tracked";
             RuntimeHash referent = new RuntimeHash();
             referent.blessId = NameNormalizer.getBlessId(className);
-            referent.setTrackedRefCount(1);
+            referent.refCount = 1;
             installDestroy(className);
 
             RuntimeScalar pad = referenceTo(referent);

@@ -288,7 +288,7 @@ ok($result3 < $file_end - 10, "caller() line is not near EOF (was: $result3, EOF
 ## Related Documentation
 
 - `dev/design/log4perl-compatibility.md` - Log::Log4perl compatibility tracking
-- `dev/design/caller_stack_fix_plan.md` - Previous caller() fixes
+- `dev/archive/design/caller_stack_fix_plan.md` - Previous caller() fixes
 
 ## Progress Tracking
 

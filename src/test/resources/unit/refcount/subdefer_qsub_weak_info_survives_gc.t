@@ -38,13 +38,15 @@ sub qsub_like {
 $HOLDER = { isa => qsub_like() };
 
 my $code = $HOLDER->{isa};
-ok($DEFERRED{$code}, 'deferred info exists while holder owns deferred code');
+ok($DEFERRED{$code}, 'deferred info exists before gc');
 undef $code;
 
+Internals::jperl_gc() if defined &Internals::jperl_gc;
+
 my $survived = $DEFERRED{$HOLDER->{isa}};
-ok($survived, 'deferred info survives through holder metadata');
+ok($survived, 'deferred info survives gc through holder metadata');
 
 SKIP: {
     skip 'deferred info was cleared', 1 unless $survived;
-    is($HOLDER->{isa}->(), 'ok', 'deferred code can undefer through holder metadata');
+    is($HOLDER->{isa}->(), 'ok', 'deferred code can undefer after gc');
 }

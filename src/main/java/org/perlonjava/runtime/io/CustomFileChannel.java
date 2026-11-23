@@ -894,7 +894,22 @@ public class CustomFileChannel implements IOHandle {
 
     @Override
     public RuntimeScalar sysread(int length) {
-        return doRead(length, StandardCharsets.ISO_8859_1);
+        if (length <= 0) return doRead(length, StandardCharsets.ISO_8859_1);
+
+        // Keep each channel read bounded, but continue until the requested
+        // amount has been read or the file reaches EOF. Perl's sysread on a
+        // regular file can fill a request larger than MAX_READ_CHUNK; returning
+        // only the first internal chunk breaks callers that slide their window
+        // by the count returned from sysread.
+        StringBuilder result = new StringBuilder(Math.min(length, MAX_READ_CHUNK));
+        while (result.length() < length) {
+            int remaining = length - result.length();
+            RuntimeScalar chunk = doRead(Math.min(remaining, MAX_READ_CHUNK), StandardCharsets.ISO_8859_1);
+            String data = chunk.toString();
+            if (data.isEmpty()) break;
+            result.append(data);
+        }
+        return new RuntimeScalar(result.toString());
     }
 
     @Override

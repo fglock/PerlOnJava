@@ -96,6 +96,12 @@ public class EmitLiteral {
                 "suppressFlush", "(Z)Z", false);
         int wasFlushingSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
         mv.visitVarInsn(Opcodes.ISTORE, wasFlushingSlot);
+        int arrayLiteralThrowableSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        Label arrayLiteralTryStart = new Label();
+        Label arrayLiteralTryEnd = new Label();
+        Label arrayLiteralCatch = new Label();
+        Label arrayLiteralDone = new Label();
+        mv.visitLabel(arrayLiteralTryStart);
 
         // Create a new RuntimeArray instance
         mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeArray");
@@ -132,6 +138,7 @@ public class EmitLiteral {
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase",
                 "createReferenceWithTrackedElements", "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
         // Stack: [RuntimeScalar]  (the array reference we'll return)
+        mv.visitLabel(arrayLiteralTryEnd);
 
         // Restore previous suppressFlush state. We deliberately do NOT call
         // MortalList.flush() here: doing so would drain the entire pending
@@ -159,6 +166,25 @@ public class EmitLiteral {
                 "org/perlonjava/runtime/runtimetypes/MortalList",
                 "suppressFlush", "(Z)Z", false);
         mv.visitInsn(Opcodes.POP);
+        mv.visitJumpInsn(Opcodes.GOTO, arrayLiteralDone);
+
+        // If evaluating an element throws, abandon this literal's suppression
+        // scope before an enclosing eval or Perl try handler sees the exception.
+        mv.visitLabel(arrayLiteralCatch);
+        mv.visitVarInsn(Opcodes.ASTORE, arrayLiteralThrowableSlot);
+        mv.visitVarInsn(Opcodes.ILOAD, wasFlushingSlot);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/MortalList",
+                "suppressFlush", "(Z)Z", false);
+        mv.visitInsn(Opcodes.POP);
+        mv.visitVarInsn(Opcodes.ALOAD, arrayLiteralThrowableSlot);
+        mv.visitInsn(Opcodes.ATHROW);
+
+        mv.visitLabel(arrayLiteralDone);
+        // Register after nested handlers emitted by array elements so inner
+        // eval/try blocks retain their normal chance to catch exceptions first.
+        mv.visitTryCatchBlock(arrayLiteralTryStart, arrayLiteralTryEnd,
+                arrayLiteralCatch, "java/lang/Throwable");
 
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("visit(ArrayLiteralNode) end");
     }

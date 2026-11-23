@@ -42,6 +42,7 @@ is($destroyed, 0, 'nested object is not destroyed during assignment handoff');
 is($schema->storage->{active}, 1, 'returned object graph remains usable');
 
 undef $schema;
+Internals::jperl_gc() if defined &Internals::jperl_gc;
 
 ok(!defined $weak_schema, 'weak object ref clears after caller releases value');
 ok(!defined $weak_storage, 'weak nested ref clears after caller releases value');

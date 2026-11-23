@@ -245,6 +245,10 @@ public class SignatureParser {
                     customReifiedTypeValue = callCustomTypeReifier(
                             typeSource(typeSourceStart, typeSourceEnd), paramStartIndex);
                     typeConstraint = customTypeConstraintReference(customReifiedTypeValue, paramStartIndex);
+                } else if (typeConstraint instanceof StringNode string
+                        && !"moose".equals(parser.functionParametersTypeReifier)
+                        && hasAutomaticTypeSyntax(string.value)) {
+                    typeConstraint = parseAutomaticTypeSource(string.value, paramStartIndex);
                 }
             } else if (peekToken().type == LexerTokenType.IDENTIFIER) {
                 typeConstraint = parseUnparenthesizedTypeConstraint();
@@ -268,16 +272,35 @@ public class SignatureParser {
                             customReifiedTypeValue, paramStartIndex);
                 }
             } else if (customReifiedTypeValue == null) {
+                String quotedTypeName = typeConstraint instanceof StringNode string
+                        && string.value.matches("[A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_][A-Za-z0-9_]*)*")
+                        ? string.value : null;
                 typeConstraint = reifyQuotedTypeName(typeConstraint, paramStartIndex);
-            }
-            if (typeConstraint != null && customReifiedTypeValue == null) {
-                RuntimeScalar evaluatedType = SpecialBlockParser.runSpecialBlock(
-                        parser, "BEGIN", typeConstraint, RuntimeContextType.SCALAR).scalar();
+                String undefinedTypeName = quotedTypeName != null
+                        ? quotedTypeName : simpleReifiedTypeName(typeConstraint);
+                if (typeConstraint != null && customReifiedTypeValue == null) {
+                    RuntimeScalar evaluatedType;
+                    try {
+                        evaluatedType = SpecialBlockParser.runSpecialBlock(
+                                parser, "BEGIN", typeConstraint, RuntimeContextType.SCALAR).scalar();
+                    } catch (PerlCompilerException exception) {
+                        if (undefinedTypeName != null && exception.getMessage() != null
+                                && exception.getMessage().contains("Undefined subroutine &")) {
+                            String fullName = undefinedTypeName.startsWith("::")
+                                    ? undefinedTypeName.substring(2) : undefinedTypeName;
+                            if (!fullName.contains("::")) {
+                                fullName = parser.ctx.symbolTable.getCurrentPackage() + "::" + fullName;
+                            }
+                            parser.throwError(paramStartIndex, "Undefined type name " + fullName);
+                        }
+                        throw exception;
+                    }
                 if (RuntimeScalarType.blessedId(evaluatedType) != 0) {
                     customReifiedTypeValue = evaluatedType;
                     typeConstraint = customTypeConstraintReference(
                             customReifiedTypeValue, paramStartIndex);
                 }
+            }
             }
             if (typeConstraint != null && peekToken().text.equals(":")) {
                 consumeToken();
@@ -342,6 +365,16 @@ public class SignatureParser {
         }
 
         String metadataName = paramName == null ? sigil : sigil + paramName;
+        if (parsingFunctionParametersInvocant && paramName != null
+                && typeConstraint == null) {
+            RuntimeScalar configuredInvocantType =
+                    parser.functionParametersInvocantTypeObjects.get(paramName);
+            if (configuredInvocantType != null) {
+                customReifiedTypeValue = configuredInvocantType;
+                typeConstraint = customTypeConstraintReference(
+                        configuredInvocantType, paramStartIndex);
+            }
+        }
         if (parenthesizedTypeValue != null
                 && RuntimeScalarType.blessedId(parenthesizedTypeValue) != 0) {
             parameterTypeObjects.put(metadataName, parenthesizedTypeValue);
@@ -477,17 +510,25 @@ public class SignatureParser {
                     typeConstraint, sigil + paramName, paramStartIndex);
         }
         if (typeConstraintVariable != null && parser.functionParametersCheckArgumentTypes) {
+            String slurpyItemName = null;
+            Node checkedValue = paramVariable;
+            if (isSlurpy && "@".equals(sigil)) {
+                slurpyItemName = "__function_parameters_item_" + (++typedParameterCount);
+                checkedValue = new OperatorNode("$",
+                        new IdentifierNode(slurpyItemName, paramStartIndex), paramStartIndex);
+            }
+            List<Node> typeValidation = new ArrayList<>();
             Node hasCanMethod = typeConstraintMethodCall(typeConstraintVariable,
                     "can", new StringNode("has_coercion", paramStartIndex), paramStartIndex);
             Node hasCoercion = new BinaryOperatorNode("&&", hasCanMethod,
                     typeConstraintNoArgumentMethodCall(
                             typeConstraintVariable, "has_coercion", paramStartIndex),
                     paramStartIndex);
-            Node coercedValue = new BinaryOperatorNode("=", paramVariable,
+            Node coercedValue = new BinaryOperatorNode("=", checkedValue,
                     typeConstraintMethodCall(
-                            typeConstraintVariable, "coerce", paramVariable, paramStartIndex),
+                            typeConstraintVariable, "coerce", checkedValue, paramStartIndex),
                     paramStartIndex);
-            astNodes.add(new IfNode("if", hasCoercion,
+            typeValidation.add(new IfNode("if", hasCoercion,
                     new BlockNode(new ArrayList<>(List.of(coercedValue)), paramStartIndex),
                     null, paramStartIndex));
 
@@ -496,29 +537,48 @@ public class SignatureParser {
             if (inlineTypeCheck != null) {
                 failure = new OperatorNode("!", inlineTypeCheck, paramStartIndex);
                 message = typeConstraintMethodCall(
-                        typeConstraintVariable, "get_message", paramVariable, paramStartIndex);
+                        typeConstraintVariable, "get_message", checkedValue, paramStartIndex);
             } else {
                 Node check = typeConstraintMethodCall(
-                        typeConstraintVariable, "check", paramVariable, paramStartIndex);
+                        typeConstraintVariable, "check", checkedValue, paramStartIndex);
                 failure = new OperatorNode("!", check, paramStartIndex);
                 message = typeConstraintMethodCall(
-                        typeConstraintVariable, "get_message", paramVariable, paramStartIndex);
+                        typeConstraintVariable, "get_message", checkedValue, paramStartIndex);
             }
             if (parser.parsingFunctionParametersDeclaration) {
-                int parameterIndex = isNamed
-                        ? positionalParameterCount + namedParameterNames.size()
-                        : positionalParameterCount;
                 String keyword = parser.functionParametersKeyword == null
                         ? "fun" : parser.functionParametersKeyword;
                 String name = subroutineName == null ? "(anon)" : subroutineName;
-                String prefix = "In " + keyword + " " + name + ": parameter "
-                        + parameterIndex + " (" + sigil + paramName + "): ";
+                String position;
+                if (parsingFunctionParametersInvocant) {
+                    position = parser.functionParametersInvocantCount > 1
+                            ? "invocant " + invocantNames.size()
+                            : "invocant";
+                } else {
+                    int parameterIndex = isNamed
+                            ? positionalParameterCount - invocantNames.size() + namedParameterNames.size()
+                            : positionalParameterCount - invocantNames.size();
+                    if (isSlurpy) parameterIndex++;
+                    position = "parameter " + parameterIndex;
+                }
+                String prefix = "In " + keyword + " " + name + ": " + position
+                        + " (" + sigil + paramName + "): ";
                 message = new BinaryOperatorNode(".", new StringNode(prefix, paramStartIndex),
                         message, paramStartIndex);
             }
             Node die = new OperatorNode("die", new ListNode(List.of(message), paramStartIndex), paramStartIndex);
-            astNodes.add(new IfNode("if", failure,
-                    new BlockNode(new ArrayList<>(List.of(die)), paramStartIndex), null, paramStartIndex));
+            IfNode reject = new IfNode("if", failure,
+                    new BlockNode(new ArrayList<>(List.of(die)), paramStartIndex), null, paramStartIndex);
+            typeValidation.add(reject);
+            if (slurpyItemName != null) {
+                OperatorNode item = new OperatorNode("$",
+                        new IdentifierNode(slurpyItemName, paramStartIndex), paramStartIndex);
+                OperatorNode lexicalItem = new OperatorNode("my", item, paramStartIndex);
+                astNodes.add(new For1Node(null, true, lexicalItem, paramVariable,
+                        new BlockNode(typeValidation, paramStartIndex), null, paramStartIndex));
+            } else {
+                astNodes.addAll(typeValidation);
+            }
         }
     }
 
@@ -730,6 +790,41 @@ public class SignatureParser {
         return new BinaryOperatorNode("(", typeFunction, new ListNode(List.of(), index), index);
     }
 
+    private static String simpleReifiedTypeName(Node typeConstraint) {
+        if (typeConstraint instanceof BinaryOperatorNode call && "(".equals(call.operator)
+                && call.left instanceof OperatorNode reference && "&".equals(reference.operator)
+                && reference.operand instanceof IdentifierNode name
+                && call.right instanceof ListNode arguments && arguments.elements.isEmpty()) {
+            return name.name;
+        }
+        return null;
+    }
+
+    private static boolean hasAutomaticTypeSyntax(String source) {
+        return source.matches("(?s).*(?:\\||&|/|~|\\[|\\]).*");
+    }
+
+    private Node parseAutomaticTypeSource(String source, int sourceIndex) {
+        List<LexerToken> inlineTokens = new Lexer(source).tokenize();
+        int end = 0;
+        while (end < inlineTokens.size() && inlineTokens.get(end).type != LexerTokenType.EOF) end++;
+        ErrorMessageUtil previousErrorUtil = parser.ctx.errorUtil;
+        ErrorMessageUtil.SourceLocation declarationLocation =
+                previousErrorUtil.getSourceLocationAccurate(sourceIndex);
+        String inlineFile = "(inline_type:" + declarationLocation.fileName()
+                + ":" + declarationLocation.lineNumber() + ")";
+        parser.ctx.errorUtil = new ErrorMessageUtil(inlineFile, inlineTokens);
+        try {
+            Parser inlineParser = new Parser(parser.ctx, inlineTokens);
+            inlineParser.functionParametersTypes = parser.functionParametersTypes;
+            inlineParser.functionParametersTypeReifier = parser.functionParametersTypeReifier;
+            SignatureParser inlineSignatureParser = new SignatureParser(inlineParser);
+            return inlineSignatureParser.new AutomaticTypeExpressionParser(0, end).parse();
+        } finally {
+            parser.ctx.errorUtil = previousErrorUtil;
+        }
+    }
+
     private Node parseUnparenthesizedTypeConstraint() {
         int start = parser.tokenIndex;
         int parameterSigil = findTypeConstraintParameterSigil(start);
@@ -769,6 +864,12 @@ public class SignatureParser {
             return requireMooseTypeConstraints(reifiedType, start);
         }
 
+        if (hasAutomaticTypeOperator(start, parameterSigil)) {
+            Node automaticType = new AutomaticTypeExpressionParser(start, parameterSigil).parse();
+            parser.tokenIndex = parameterSigil;
+            return automaticType;
+        }
+
         int first = nextSignificantToken(start);
         int afterFirst = nextSignificantToken(first + 1);
         if (first == start && afterFirst == parameterSigil
@@ -800,6 +901,148 @@ public class SignatureParser {
             } else {
                 parser.tokens.remove(boundary);
             }
+        }
+    }
+
+    private boolean hasAutomaticTypeOperator(int start, int end) {
+        for (int index = start; index < end; index++) {
+            String text = parser.tokens.get(index).text;
+            if (Set.of("|", "&", "/", "~").contains(text)) return true;
+        }
+        return false;
+    }
+
+    /** Parse auto-reified Type::Tiny-style operators without treating bare type names as strings. */
+    private final class AutomaticTypeExpressionParser {
+        private final int end;
+        private int cursor;
+
+        private AutomaticTypeExpressionParser(int start, int end) {
+            this.cursor = start;
+            this.end = end;
+        }
+
+        private Node parse() {
+            Node expression = parseUnion();
+            if (nextSignificant(cursor) != end) {
+                parser.throwError(nextSignificant(cursor), "Malformed Function::Parameters type constraint");
+            }
+            return expression;
+        }
+
+        private Node parseUnion() {
+            Node left = parseIntersection();
+            while (take("|")) {
+                int index = previousSignificantToken(cursor);
+                left = new BinaryOperatorNode("|", left, parseIntersection(), index);
+            }
+            return left;
+        }
+
+        private Node parseIntersection() {
+            Node left = parseAlternative();
+            while (take("&")) {
+                int index = previousSignificantToken(cursor);
+                left = new BinaryOperatorNode("&", left, parseAlternative(), index);
+            }
+            return left;
+        }
+
+        private Node parseAlternative() {
+            Node left = parseUnary();
+            while (take("/")) {
+                int index = previousSignificantToken(cursor);
+                left = new BinaryOperatorNode("/", left, parseUnary(), index);
+            }
+            return left;
+        }
+
+        private Node parseUnary() {
+            int index = nextSignificant(cursor);
+            if (index < end && parser.tokens.get(index).text.matches("~+")) {
+                String complements = parser.tokens.get(index).text;
+                cursor = index + 1;
+                Node value = parseUnary();
+                for (int count = 0; count < complements.length(); count++) {
+                    value = new OperatorNode("~", value, index);
+                }
+                return value;
+            }
+            return parsePrimary();
+        }
+
+        private Node parsePrimary() {
+            int index = nextSignificant(cursor);
+            if (index >= end) {
+                parser.throwError(index, "Malformed Function::Parameters type constraint");
+            }
+            LexerToken token = parser.tokens.get(index);
+            Node value;
+            if ("(".equals(token.text)) {
+                cursor = index + 1;
+                value = parseUnion();
+                if (!take(")")) {
+                    parser.throwError(nextSignificant(cursor), "Malformed Function::Parameters type constraint");
+                }
+            } else if (token.type == LexerTokenType.IDENTIFIER) {
+                StringBuilder name = new StringBuilder(token.text);
+                cursor = index + 1;
+                while (true) {
+                    int separator = nextSignificant(cursor);
+                    int component = nextSignificant(separator + 1);
+                    if (separator < end && "::".equals(parser.tokens.get(separator).text)
+                            && component < end
+                            && parser.tokens.get(component).type == LexerTokenType.IDENTIFIER) {
+                        name.append("::").append(parser.tokens.get(component).text);
+                        cursor = component + 1;
+                    } else {
+                        break;
+                    }
+                }
+                Node typeFunction = new OperatorNode("&", new IdentifierNode(name.toString(), index), index);
+                value = new BinaryOperatorNode("(", typeFunction,
+                        new ListNode(List.of(), index), index);
+            } else {
+                parser.throwError(index, "Malformed Function::Parameters type constraint");
+                return null;
+            }
+
+            while (take("[")) {
+                List<Node> arguments = new ArrayList<>();
+                if (!peek("]")) {
+                    do {
+                        arguments.add(parseUnion());
+                    } while (take(","));
+                }
+                if (!take("]")) {
+                    parser.throwError(nextSignificant(cursor), "Malformed Function::Parameters type constraint");
+                }
+                ArrayLiteralNode argumentArray = new ArrayLiteralNode(arguments, index);
+                Node overloadedCodeRef = new OperatorNode("&", value, index);
+                value = new BinaryOperatorNode("(", overloadedCodeRef,
+                        new ListNode(List.of(argumentArray), index), index);
+            }
+            return value;
+        }
+
+        private boolean peek(String text) {
+            int index = nextSignificant(cursor);
+            return index < end && text.equals(parser.tokens.get(index).text);
+        }
+
+        private boolean take(String text) {
+            int index = nextSignificant(cursor);
+            if (index >= end || !text.equals(parser.tokens.get(index).text)) return false;
+            cursor = index + 1;
+            return true;
+        }
+
+        private int nextSignificant(int index) {
+            while (index < end && (parser.tokens.get(index).type == LexerTokenType.WHITESPACE
+                    || parser.tokens.get(index).type == LexerTokenType.NEWLINE)) {
+                index++;
+            }
+            return index;
         }
     }
 
@@ -1256,6 +1499,11 @@ public class SignatureParser {
         // Check if there's actually a default expression
         LexerToken next = peekToken();
         if (next.type == LexerTokenType.EOF || next.text.equals(",") || next.text.equals(")")) {
+            if (parser.parsingFunctionParametersDeclaration) {
+                Node undefDefault = new OperatorNode("undef", null, parser.tokenIndex);
+                defaultValueNodes.add(undefDefault);
+                return undefDefault;
+            }
             boolean isUndef = paramVariable instanceof OperatorNode && ((OperatorNode) paramVariable).operator.equals("undef");
             if (paramVariable != null && !isUndef) {
                 parser.throwError(previousDefaultOperatorIndex(), "Optional parameter lacks default expression");
@@ -1637,7 +1885,9 @@ public class SignatureParser {
     }
 
     private Node generateOddNamedArgsValidation() {
-        int fixedArgs = positionalParameterCount + (isMethod ? 1 : 0);
+        // Method bodies have already shifted their implicit receiver before
+        // signature AST runs, so @_ here contains user arguments only.
+        int fixedArgs = positionalParameterCount;
         Node remaining = new BinaryOperatorNode("-",
                 new OperatorNode("scalar", atUnderscore(parser), parser.tokenIndex),
                 new NumberNode(Integer.toString(fixedArgs), parser.tokenIndex),

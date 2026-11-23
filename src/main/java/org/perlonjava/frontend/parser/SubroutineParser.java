@@ -28,6 +28,7 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.util.*;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 
 import static org.perlonjava.frontend.parser.ParserTables.CORE_PROTOTYPES;
@@ -37,6 +38,7 @@ import static org.perlonjava.frontend.parser.SignatureParser.parseSignature;
 import static org.perlonjava.frontend.parser.TokenUtils.peek;
 
 public class SubroutineParser {
+    private static final AtomicLong FUNCTION_PARAMETERS_INSTALLER_SEQUENCE = new AtomicLong();
 
     // Create a static semaphore with 1 permit
     private static final Semaphore semaphore = new Semaphore(1);
@@ -315,11 +317,12 @@ public class SubroutineParser {
         }
         if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("SubroutineCall exists " + subExists + " prototype `" + prototype + "` attributes " + attributes);
 
-        // A recursive call is parsed while the declaration's own body is
-        // still being compiled.  Perl does not apply the just-declared
-        // prototype to that initial recursive call.
+        // Function::Parameters makes its declaration-header prototype visible
+        // while compiling the same body. Ordinary Perl recursive declarations
+        // retain the existing no-prototype behavior.
         if (!isMethod && !prototypeWasPredeclared
-                && parser.compilingSubroutineBodies.contains(fullName)) {
+                && parser.compilingSubroutineBodies.contains(fullName)
+                && !parser.functionParametersDeclaredPrototypes.contains(fullName)) {
             prototype = null;
         }
         boolean prototypeHasGlob = prototype != null && prototype.contains("*");
@@ -722,7 +725,18 @@ public class SubroutineParser {
                         }
                         Node callback = new SubroutineNode(null, null, null,
                                 callbackBody, false, currentIndex);
-                        ListNode arguments = new ListNode(List.of(callback), currentIndex);
+                        List<Node> callbackArguments = new ArrayList<>();
+                        callbackArguments.add(callback);
+                        String blockPrototype = prototype;
+                        if (blockPrototype != null && blockPrototype.startsWith("(")
+                                && blockPrototype.endsWith(")")) {
+                            blockPrototype = blockPrototype.substring(1, blockPrototype.length() - 1);
+                        }
+                        if (blockPrototype != null && blockPrototype.startsWith("&")) {
+                            callbackArguments.addAll(consumeArgsWithPrototype(
+                                    parser, blockPrototype.substring(1)).elements);
+                        }
+                        ListNode arguments = new ListNode(callbackArguments, currentIndex);
                         return new BinaryOperatorNode("(",
                                 new OperatorNode("&", nameNode, currentIndex),
                                 arguments,
@@ -857,7 +871,17 @@ public class SubroutineParser {
                 int separator = fullName.lastIndexOf("::");
                 if (separator >= 0 && !"new".equals(subName)) {
                     String packageName = fullName.substring(0, separator);
-                    if (ClassRegistry.isClass(packageName)) {
+                    RuntimeCode resolvedCode = parseTimeCodeRef != null
+                            && parseTimeCodeRef.value instanceof RuntimeCode code
+                                    ? code : null;
+                    // Imported CVs keep their defining package. An imported
+                    // function in a class body is still a function call; do
+                    // not attach the current class as method-call metadata to
+                    // its call site merely because its alias is in that class.
+                    boolean belongsToCurrentPackage = resolvedCode == null
+                            || resolvedCode.packageName == null
+                            || packageName.equals(resolvedCode.packageName);
+                    if (ClassRegistry.isClass(packageName) && belongsToCurrentPackage) {
                         codeRefNode.setAnnotation("directClassMethod", packageName);
                     }
                 }
@@ -1457,6 +1481,11 @@ public class SubroutineParser {
             String headerName = NameNormalizer.normalizeVariableName(
                     subName, parser.ctx.symbolTable.getCurrentPackage());
             parser.declaredSubPrototypes.put(headerName, prototype);
+            if (parser.parsingFunctionParametersDeclaration) {
+                parser.functionParametersDeclaredPrototypes.add(headerName);
+            } else {
+                parser.functionParametersDeclaredPrototypes.remove(headerName);
+            }
         }
 
         // Save the current subroutine context and set the new one
@@ -1602,7 +1631,8 @@ public class SubroutineParser {
                 return result;
             } else if (parser.parsingFunctionParametersDeclaration
                     && (parser.functionParametersRuntime
-                    || parser.functionParametersInstallSub != null)) {
+                    || parser.functionParametersInstallSub != null
+                    || parser.functionParametersInstallSubCallback != null)) {
                 String fullName = NameNormalizer.normalizeVariableName(
                         subName, parser.ctx.symbolTable.getCurrentPackage());
                 SubroutineNode runtimeCode = handleAnonSub(
@@ -1612,6 +1642,17 @@ public class SubroutineParser {
                     Node installer = new OperatorNode("&",
                             new IdentifierNode(parser.functionParametersInstallSub, currentIndex),
                             currentIndex);
+                    ListNode installerArguments = new ListNode(List.of(
+                            new StringNode(subName, currentIndex), runtimeCode), currentIndex);
+                    return new BinaryOperatorNode("(", installer, installerArguments, currentIndex);
+                }
+                if (parser.functionParametersInstallSubCallback != null) {
+                    long callbackId = FUNCTION_PARAMETERS_INSTALLER_SEQUENCE.incrementAndGet();
+                    String callbackName = "Function::Parameters::Internal::__install_callback_" + callbackId;
+                    GlobalVariable.globalVariables.put(callbackName,
+                            parser.functionParametersInstallSubCallback);
+                    Node installer = new OperatorNode("$",
+                            new IdentifierNode(callbackName, currentIndex), currentIndex);
                     ListNode installerArguments = new ListNode(List.of(
                             new StringNode(subName, currentIndex), runtimeCode), currentIndex);
                     return new BinaryOperatorNode("(", installer, installerArguments, currentIndex);
@@ -2987,6 +3028,14 @@ public class SubroutineParser {
         ArrayList<PerlOwnerSlot> capturedAggregateOwnerSlots = new ArrayList<>();
         for (int i = 0; i < capturedValues.size(); i++) {
             Object value = capturedValues.get(i);
+            // Dynamic eval keeps broad implementation captures so its source
+            // can resolve lexical names at runtime. Those cells are not
+            // semantic closure edges unless the sub body references them
+            // directly; do not let the owner ledger extend their lifetime.
+            if (capturedNames == null || i >= capturedNames.size()
+                    || capturedNames.get(i) == null) {
+                continue;
+            }
             if (capturedNames != null && i < capturedNames.size()
                     && capturedNames.get(i) != null && value instanceof RuntimeBase runtimeValue) {
                 if (code.closedOverVariables == null) {

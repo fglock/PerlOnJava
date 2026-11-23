@@ -850,6 +850,8 @@ public class EmitterMethodCreator implements Opcodes {
             int evalMethodInvocantDepthSlot = -1;
             int evalMortalMarkDepthSlot = -1;
             int evalTemporaryRootDepthSlot = -1;
+            int evalForeachSourceOwnerDepthSlot = -1;
+            int evalJvmFrameDepthSlot = -1;
             int evalThrowableSlot = -1;
 
             if (useTryCatch) {
@@ -892,6 +894,18 @@ public class EmitterMethodCreator implements Opcodes {
                         "org/perlonjava/runtime/runtimetypes/MortalList",
                         "temporaryRootDepth", "()I", false);
                 mv.visitVarInsn(Opcodes.ISTORE, evalTemporaryRootDepthSlot);
+                evalForeachSourceOwnerDepthSlot = ctx.symbolTable.allocateLocalVariable();
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/MortalList",
+                        "foreachSourceOwnerDepth", "()I", false);
+                mv.visitVarInsn(Opcodes.ISTORE, evalForeachSourceOwnerDepthSlot);
+                evalJvmFrameDepthSlot = ctx.symbolTable.allocateLocalVariable();
+                mv.visitVarInsn(Opcodes.ALOAD, ctx.javaClassInfo.jvmFrameStateSlot);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                        "jvmFrameDepth",
+                        "(Lorg/perlonjava/runtime/runtimetypes/ExecutionRuntimeState;)I", false);
+                mv.visitVarInsn(Opcodes.ISTORE, evalJvmFrameDepthSlot);
                 evalThrowableSlot = ctx.symbolTable.allocateLocalVariable();
 
                 tryStart = new Label();
@@ -899,7 +913,7 @@ public class EmitterMethodCreator implements Opcodes {
                 catchBlock = new Label();
                 endCatch = new Label();
 
-                // Define the try-catch block
+                // Define the try-catch block before visiting body labels.
                 mv.visitTryCatchBlock(tryStart, tryEnd, catchBlock, "java/lang/Throwable");
 
                 mv.visitLabel(tryStart);
@@ -1173,6 +1187,15 @@ public class EmitterMethodCreator implements Opcodes {
                 // Start of the catch block
                 mv.visitLabel(catchBlock);
 
+                // Direct JVM-to-JVM calls do not pass through RuntimeCode.apply.
+                // Remove generated frames that were bypassed by this eval catch.
+                mv.visitVarInsn(Opcodes.ALOAD, ctx.javaClassInfo.jvmFrameStateSlot);
+                mv.visitVarInsn(Opcodes.ILOAD, evalJvmFrameDepthSlot);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                        "unwindJvmFramesToDepth",
+                        "(Lorg/perlonjava/runtime/runtimetypes/ExecutionRuntimeState;I)V", false);
+
                 // Re-throw PerlNonLocalReturnException - eval BLOCK must not catch non-local returns
                 // from map/grep blocks. The Throwable is on the stack.
                 mv.visitInsn(Opcodes.DUP);
@@ -1216,6 +1239,10 @@ public class EmitterMethodCreator implements Opcodes {
                 mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                         "org/perlonjava/runtime/runtimetypes/MortalList",
                         "restoreTemporaryRootDepth", "(I)V", false);
+                mv.visitVarInsn(Opcodes.ILOAD, evalForeachSourceOwnerDepthSlot);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/MortalList",
+                        "restoreForeachSourceOwnerDepth", "(I)V", false);
                 emitEvalMethodInvocantCleanup(mv, ctx.javaClassInfo.jvmFrameStateSlot,
                         evalArgumentDepthSlot, evalMethodInvocantDepthSlot);
                 emitEvalDepthDecrement(mv);
@@ -1224,6 +1251,15 @@ public class EmitterMethodCreator implements Opcodes {
                 mv.visitVarInsn(Opcodes.ASTORE, evalThrowableSlot);
                 emitEvalMethodInvocantCleanup(mv, ctx.javaClassInfo.jvmFrameStateSlot,
                         evalArgumentDepthSlot, evalMethodInvocantDepthSlot);
+                mv.visitVarInsn(Opcodes.ALOAD, ctx.javaClassInfo.jvmFrameStateSlot);
+                mv.visitVarInsn(Opcodes.ALOAD, 0);
+                mv.visitFieldInsn(Opcodes.GETFIELD, ctx.javaClassInfo.javaClassName,
+                        "__SUB__", "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                        "popJvmFrame",
+                        "(Lorg/perlonjava/runtime/runtimetypes/ExecutionRuntimeState;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V",
+                        false);
                 // Leave the target return's roots in place while it propagates;
                 // its RuntimeCode.apply boundary restores its own entry depth.
                 mv.visitVarInsn(Opcodes.ALOAD, evalThrowableSlot);
@@ -1252,6 +1288,10 @@ public class EmitterMethodCreator implements Opcodes {
                 mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                         "org/perlonjava/runtime/runtimetypes/MortalList",
                         "restoreTemporaryRootDepth", "(I)V", false);
+                mv.visitVarInsn(Opcodes.ILOAD, evalForeachSourceOwnerDepthSlot);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/MortalList",
+                        "restoreForeachSourceOwnerDepth", "(I)V", false);
 
                 // Scope marks opened inside eval were bypassed by the thrown
                 // exception. Restore the eval-entry boundary before the
@@ -1265,18 +1305,17 @@ public class EmitterMethodCreator implements Opcodes {
                 // When die throws a PerlDieException, Java exception handling jumps directly
                 // to this catch handler, skipping the emitScopeExitNullStores calls that
                 // would normally run at each block exit. This loop ensures DESTROY fires
-                // for blessed objects that went out of scope during die.
+                // for blessed objects that went out of scope during die. The recorded
+                // locals are already in scope-teardown order: inner scopes are emitted
+                // before their parents, and each scope's pad indices are sorted in Perl's
+                // cleanup order. Keep the first occurrence when a local appears in more
+                // than one enclosing scope's cleanup list.
                 // Note: DestroyDispatch.doCallDestroy saves/restores $@ around DESTROY,
                 // so this is safe to do before the $@ snapshot below.
                 if (evalCleanupLocals != null && !evalCleanupLocals.isEmpty()) {
-                    // De-duplicate indices while preserving order.
-                    // A variable may appear in multiple nested scopes - we want the last
-                    // occurrence (from the innermost scope) to win, and cleanup should
-                    // happen in reverse order (LIFO) to match Perl's DESTROY semantics.
+                    // De-duplicate indices while preserving recorded teardown order.
                     java.util.List<Integer> uniqueLocals = new java.util.ArrayList<>(
                             new java.util.LinkedHashSet<>(evalCleanupLocals));
-                    // Reverse to get LIFO order (innermost scope first)
-                    java.util.Collections.reverse(uniqueLocals);
                     for (int localIdx : uniqueLocals) {
                         mv.visitVarInsn(Opcodes.ALOAD, localIdx);
                         mv.visitMethodInsn(Opcodes.INVOKESTATIC,
@@ -1541,6 +1580,7 @@ public class EmitterMethodCreator implements Opcodes {
                     "(Lorg/perlonjava/runtime/runtimetypes/ExecutionRuntimeState;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V",
                     false);
             mv.visitInsn(Opcodes.ARETURN); // Returns an Object
+
             mv.visitMaxs(0, 0); // Automatically computed
             mv.visitEnd();
 

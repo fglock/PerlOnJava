@@ -115,7 +115,7 @@ public class Internals extends PerlModuleBase {
 
     private static int bScalarFlags(RuntimeScalar scalar) {
         int flags = switch (scalar.type) {
-            case RuntimeScalarType.INTEGER -> 0x100 | 0x1000;
+            case RuntimeScalarType.INTEGER, RuntimeScalarType.BOOLEAN -> 0x100 | 0x1000;
             case RuntimeScalarType.DOUBLE -> 0x200 | 0x2000;
             case RuntimeScalarType.DUALVAR -> bScalarFlags(
                     ((DualVar) scalar.value).numericValue());
@@ -576,7 +576,15 @@ public class Internals extends PerlModuleBase {
             int rc = base.refCount;
             boolean compileHintsHash = base == GlobalVariable.getGlobalHash(
                     GlobalContext.encodeSpecialVar("H"));
-            int nativeOwners = base.nativeOwnerSlotCount();
+            // Expression leases keep runtime temporaries alive while values
+            // cross statement and foreach boundaries. They are not Perl SV
+            // owners, so hide both their native identities and any paired
+            // selective counts from SvREFCNT.
+            int expressionOwners = base.ownerSlotCount(PerlOwnerSlot.Kind.EXPRESSION_VALUE);
+            int countedExpressionOwners = base.countedNativeOwnerSlotCount(
+                    PerlOwnerSlot.Kind.EXPRESSION_VALUE);
+            int nativeOwners = base.nativeOwnerSlotCount() - expressionOwners;
+            if (base.isRefCountTracked()) rc -= countedExpressionOwners;
             if (compileHintsHash) {
                 // The package-root identity records the strong table edge for
                 // lifecycle cleanup, but Perl's SvREFCNT helper deliberately
@@ -669,6 +677,21 @@ public class Internals extends PerlModuleBase {
                 }
                 int argumentFrameOwners = base.currentArgumentFrameReferentOwnerCount();
                 adjust -= argumentFrameOwners;
+                boolean pendingBlessTemporary = fieldOwnedMethodResult
+                        && argumentFrameOwners == 0
+                        && MortalList.hasPendingBlessTemporaryFor(base);
+                boolean activeArgumentOwner = fieldOwnedMethodResult
+                        && argumentFrameOwners == 0
+                        && RuntimeCode.hasUncountedActiveHashArgumentOwner(base);
+                if (pendingBlessTemporary) {
+                    // The first bless result remains a mortal Perl owner until
+                    // its deferred temp boundary drains. The hash slot is a
+                    // second owner but is not in the selective refCount bridge.
+                    adjust++;
+                }
+                if (activeArgumentOwner) {
+                    adjust++;
+                }
             }
             int reported = rc + extra + adjust;
             return new RuntimeScalar(reported).getList();

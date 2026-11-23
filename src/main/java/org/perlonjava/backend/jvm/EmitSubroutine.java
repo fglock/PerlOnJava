@@ -10,6 +10,7 @@ import org.perlonjava.backend.bytecode.VariableCollectorVisitor;
 import org.perlonjava.backend.jvm.astrefactor.BlockRefactor;
 import org.perlonjava.frontend.analysis.BytecodeSizeEstimator;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
+import org.perlonjava.frontend.analysis.BooleanCallContext;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.frontend.semantic.SymbolTable;
@@ -966,6 +967,21 @@ public class EmitSubroutine {
                     false);
         }
 
+        // A noncapturing anonymous CV is a literal template owned by this
+        // optree, even after its result is stored and later cleared.
+        if ((node.name == null || node.name.equals("<anon>"))
+                && (visibleVariables.size() <= skipVariables
+                    || node.getBooleanAnnotation("lexicalLiteralConstantCv"))) {
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "retainActiveOptreeCodeTemplate",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)"
+                            + "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+            mv.visitInsn(Opcodes.POP);
+        }
+
         // 6. Clean up the stack if context is VOID
         if (ctx.contextType == RuntimeContextType.VOID) {
             mv.visitInsn(Opcodes.POP); // Remove the RuntimeScalar object from the stack
@@ -997,6 +1013,12 @@ public class EmitSubroutine {
      * @param emitterVisitor The visitor used for code emission.
      * @param node           The binary operator node representing the apply operation.
      */
+    private static void pushApplyCallContext(
+            EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
+        emitterVisitor.pushCallContext(BooleanCallContext.callContext(
+                node, emitterVisitor.ctx.contextType));
+    }
+
     static void handleApplyOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("handleApplyElementOperator " + node + " in context " + emitterVisitor.ctx.contextType);
         MethodVisitor mv = emitterVisitor.ctx.mv;
@@ -1183,7 +1205,7 @@ public class EmitSubroutine {
         if (node.left instanceof SubroutineNode subNode && subNode.useTryCatch) {
             mv.visitVarInsn(Opcodes.ALOAD, codeRefSlot);
             mv.visitVarInsn(Opcodes.ALOAD, 1);  // caller's @_ (slot 1) - shared, not copied
-            emitterVisitor.pushCallContext();
+            pushApplyCallContext(emitterVisitor, node);
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                     "apply",
@@ -1192,7 +1214,7 @@ public class EmitSubroutine {
 
             // A goto &sub marker must be resolved while this eval's generated
             // try/catch is active, so its eval-scope diagnostic reaches $@.
-            emitterVisitor.pushCallContext();
+            pushApplyCallContext(emitterVisitor, node);
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                     "resolveTailCalls",
@@ -1225,7 +1247,7 @@ public class EmitSubroutine {
         if (node.getBooleanAnnotation("shareCallerArgs")) {
             mv.visitVarInsn(Opcodes.ALOAD, codeRefSlot);
             mv.visitVarInsn(Opcodes.ALOAD, 1);  // caller's @_ (slot 1) - shared, not copied
-            emitterVisitor.pushCallContext();
+            pushApplyCallContext(emitterVisitor, node);
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                     "apply",
@@ -1435,7 +1457,7 @@ public class EmitSubroutine {
         mv.visitVarInsn(Opcodes.ALOAD, codeRefSlot);
         mv.visitVarInsn(Opcodes.ALOAD, nameSlot);
         mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
-        emitterVisitor.pushCallContext();   // Push call context to stack
+        pushApplyCallContext(emitterVisitor, node);   // Push call context to stack
         String callerPackage = emitterVisitor.ctx.symbolTable.getCurrentPackage();
         String callerFile = emitterVisitor.ctx.compilerOptions.fileName;
         int callerLine = 0;
@@ -1517,7 +1539,7 @@ public class EmitSubroutine {
             // (no control flow) incurs zero extra overhead.  (Phase 2 of
             // perf/reduce-apply-bytecode.)
             mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
-            emitterVisitor.pushCallContext();
+            pushApplyCallContext(emitterVisitor, node);
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                     "resolveTailCalls",

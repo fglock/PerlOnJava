@@ -19,7 +19,7 @@ CPU and memory performance.
 - **Share compatibility results** - Report reproducible `jcpan -t` failures
 - **Measure performance** - Contribute repeatable CPU, memory, and startup benchmarks
 
-For issue evidence, classification, and planning conventions, see the proposed
+For issue evidence, classification, and planning conventions, see the
 [Issue Reporting and Triage guide](docs/guides/issue-triage.md).
 
 ## Quick Start for Contributors
@@ -70,29 +70,34 @@ make test-all
 
 ```
 src/main/java/org/perlonjava/
-├── astnode/         # AST node representations
-├── parser/          # Parser implementation
-├── lexer/           # Tokenization
-├── codegen/         # Bytecode generation and class creation
-├── astvisitor/      # AST traversal (EmitterVisitor, PrinterVisitor)
-├── runtime/         # Runtime implementations (RuntimeScalar, RuntimeArray, etc.)
-├── operators/       # Operator implementations
-├── regex/           # Regex engine integration
-├── perlmodule/      # Java implementations of Perl modules
-└── scriptengine/    # JSR 223 scripting API
+├── app/             # CLI entry point and JSR-223 ScriptEngine
+├── frontend/        # lexer, parser, AST nodes, semantic analysis
+├── backend/
+│   ├── jvm/         # JVM bytecode emitter (ASM)
+│   └── bytecode/    # bytecode interpreter backend
+├── runtime/
+│   ├── runtimetypes/  # RuntimeScalar, RuntimeArray, RuntimeHash, RuntimeCode, ...
+│   ├── operators/     # Perl operator implementations
+│   ├── regex/         # regex engine integration
+│   ├── io/            # file handles and I/O layers
+│   └── perlmodule/    # Java implementations of Perl (XS) modules
+└── core/            # build-time configuration
 
-src/main/perl/lib/   # Perl module implementations
-src/test/resources/  # Test files
+src/main/perl/lib/   # bundled Perl modules
+src/test/resources/  # Perl test files
+third_party/joni/    # forked regex engine
 ```
 
 ### Key Components
 
-- **Lexer** (`lexer/Lexer.java`) - Tokenizes Perl source
-- **Parser** (`parser/Parser.java`) - Builds AST from tokens
-- **EmitterVisitor** (`astvisitor/`) - Traverses AST and coordinates bytecode generation
-- **Emit classes** (`codegen/`) - Generate JVM bytecode using ASM library
-- **Runtime** (`runtime/`) - RuntimeScalar, RuntimeArray, RuntimeHash, RuntimeCode
-- **Operators** (`operators/`) - Perl operator implementations
+- **Lexer** (`frontend/lexer/`) - Tokenizes Perl source
+- **Parser** (`frontend/parser/`) - Builds the AST from tokens
+- **JVM backend** (`backend/jvm/`) - Emits JVM bytecode using the ASM library
+- **Interpreter backend** (`backend/bytecode/`) - Compiles the AST to custom bytecode and interprets it
+- **Runtime** (`runtime/runtimetypes/`) - RuntimeScalar, RuntimeArray, RuntimeHash, RuntimeCode
+- **Operators** (`runtime/operators/`) - Perl operator implementations
+
+See the [Architecture Guide](docs/reference/architecture.md) for details.
 
 ### Test Organization
 
@@ -167,10 +172,11 @@ User-facing documentation is in `docs/`:
 
 ### Developer Documentation
 
-Developer documentation is in `dev/`:
-- **architecture/** - Internal architecture docs
-- **implementation/** - Implementation notes (regex, tie, overload)
-- **maintenance/** - Maintenance procedures
+Developer documentation is in `dev/` (see [dev/README.md](dev/README.md)):
+- **architecture/** - How subsystems work today, including per-feature implementation notes
+- **design/** - Proposals and active plans; finished work is in `dev/archive/`
+- **modules/** - CPAN module porting notes
+- **tools/** - Developer scripts
 
 See also **[AGENTS.md](AGENTS.md)** for detailed testing commands, unimplemented features, environment variables, and git workflow rules.
 
@@ -186,16 +192,16 @@ See also **[AGENTS.md](AGENTS.md)** for detailed testing commands, unimplemented
 ### High-Risk Areas
 
 When modifying these, test extensively:
-- **String parsing** (`parser/StringDoubleQuoted.java`)
-- **Lexer** (`lexer/Lexer.java`)
+- **String parsing** (`frontend/parser/StringDoubleQuoted.java`)
+- **Lexer** (`frontend/lexer/Lexer.java`)
 - **Unicode handling** - Surrogate pairs, identifier parsing
 - **Control flow** - die/eval, loop control
-- **Bytecode generation** (`codegen/`, `astvisitor/EmitterVisitor.java`)
+- **Bytecode generation** (`backend/jvm/`, `backend/bytecode/`)
 
 ### Adding Operators
 
-1. Implement in `operators/` package
-2. Add parser support in `parser/`
+1. Implement in the `runtime/operators/` package
+2. Add parser support in `frontend/parser/`
 3. Add tests in `src/test/resources/unit/`
 4. Update [Feature Matrix](docs/reference/feature-matrix.md)
 
@@ -218,10 +224,7 @@ PerlOnJava accepts AI-assisted contributions with proper attribution. See **[AI_
 
 ## Code of Conduct
 
-- Be respectful and constructive
-- Focus on technical merit
-- Help newcomers
-- Keep discussions on-topic
+All participants are expected to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Getting Help
 

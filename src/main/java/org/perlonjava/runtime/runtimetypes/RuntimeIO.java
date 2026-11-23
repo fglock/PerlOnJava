@@ -510,6 +510,8 @@ public class RuntimeIO extends RuntimeScalar {
     public IOHandle ioHandle = new ClosedIOHandle(); // Initialize with ClosedIOHandle
     /** Distinguishes an explicitly closed handle from a never-opened IO placeholder. */
     public boolean explicitlyClosed;
+    /** Marks a closed directory so a destructor's repeated closedir is quiet. */
+    public boolean explicitlyClosedDirectory;
     /**
      * Directory handle for directory operations (opendir, readdir, etc.).
      * Mutually exclusive with ioHandle - a RuntimeIO is either a file or directory handle.
@@ -600,6 +602,7 @@ public class RuntimeIO extends RuntimeScalar {
         this.slurpReadAttempted = other.slurpReadAttempted;
         replaceIOHandle(other.ioHandle);
         this.explicitlyClosed = other.explicitlyClosed;
+        this.explicitlyClosedDirectory = other.explicitlyClosedDirectory;
         this.directoryIO = other.directoryIO;
         this.openedPath = other.openedPath;
         this.needFlush = other.needFlush;
@@ -963,15 +966,21 @@ public class RuntimeIO extends RuntimeScalar {
      * @return RuntimeIO handle for the opened file, or null on error
      */
     public static RuntimeIO open(String fileName, String mode) {
-        return open(fileName, mode, false);
+        return open(fileName, mode, false, false, false, false, false, false);
     }
 
     /** Open from sysopen while applying only the lexical sysopen layers. */
-    public static RuntimeIO openForSysopen(String fileName, String mode) {
-        return open(fileName, mode, true);
+    public static RuntimeIO openForSysopen(String fileName, String mode,
+                                           boolean readable, boolean writable,
+                                           boolean create, boolean truncate,
+                                           boolean append) {
+        return open(fileName, mode, true, readable, writable, create, truncate, append);
     }
 
-    private static RuntimeIO open(String fileName, String mode, boolean sysopen) {
+    private static RuntimeIO open(String fileName, String mode, boolean sysopen,
+                                  boolean sysopenReadable, boolean sysopenWritable,
+                                  boolean sysopenCreate, boolean sysopenTruncate,
+                                  boolean sysopenAppend) {
         mode = normalizeOpenMode(mode);
         RuntimeIO fh = new RuntimeIO();
         try {
@@ -1042,7 +1051,17 @@ public class RuntimeIO extends RuntimeScalar {
                 getGlobalVariable("main::!").set(2);
                 return null;
             }
-            Set<StandardOpenOption> options = fh.convertMode(mode);
+            Set<StandardOpenOption> options;
+            if (sysopen) {
+                options = new HashSet<>();
+                if (sysopenReadable) options.add(StandardOpenOption.READ);
+                if (sysopenWritable) options.add(StandardOpenOption.WRITE);
+                if (sysopenCreate) options.add(StandardOpenOption.CREATE);
+                if (sysopenTruncate) options.add(StandardOpenOption.TRUNCATE_EXISTING);
+                if (sysopenAppend) options.add(StandardOpenOption.APPEND);
+            } else {
+                options = fh.convertMode(mode);
+            }
             fh.openedPath = filePath;
 
             // Windows rejects FileChannel.open(directory) with access denied,
@@ -1066,8 +1085,9 @@ public class RuntimeIO extends RuntimeScalar {
             // Add the handle to the LRU cache
             addHandle(fh.ioHandle);
 
-            // Truncate the file if mode is '>' (already done by TRUNCATE_EXISTING)
-            if (">".equals(mode)) {
+            // Truncate ordinary opens here. sysopen's exact flags are already
+            // reflected in the channel options above.
+            if ((sysopen && sysopenTruncate) || (!sysopen && ">".equals(mode))) {
                 fh.ioHandle.truncate(0);
             }
             // Position at end of file for append mode

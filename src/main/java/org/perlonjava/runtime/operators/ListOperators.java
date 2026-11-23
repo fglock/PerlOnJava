@@ -126,7 +126,15 @@ public class ListOperators {
                 GlobalVariable.aliasTemporaryGlobalVariable("main::_", element);
 
                 // Apply the Perl map subroutine with the outer @_ as arguments
-                RuntimeList result = RuntimeCode.apply(perlMapClosure, mapArgs, RuntimeContextType.LIST);
+                int mapContext = ctx == RuntimeContextType.RUNTIME
+                        ? RuntimeCode.currentRawCallContext() : ctx;
+                RuntimeCode.pushMapGrepBlockWantArrayContext(mapContext);
+                RuntimeList result;
+                try {
+                    result = RuntimeCode.apply(perlMapClosure, mapArgs, RuntimeContextType.LIST);
+                } finally {
+                    RuntimeCode.popMapGrepBlockWantArrayContext();
+                }
 
                 // Check for non-local return from map block
                 if (result instanceof RuntimeControlFlowList cfList

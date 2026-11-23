@@ -112,6 +112,8 @@ public final class ExecutionRuntimeState {
     public final Deque<RuntimeScalar> activeJvmSelfReferences = new ArrayDeque<>();
     /** Sort pseudo-block state for active JVM-generated Perl methods. */
     public final Deque<Boolean> activeJvmSortComparators = new ArrayDeque<>();
+    /** Dynamic state captured at entry to JVM-generated Perl method frames. */
+    public final Deque<RuntimeCode.JvmFrameSnapshot> activeJvmFrameSnapshots = new ArrayDeque<>();
     /** Dynamic extent of a sort comparator invocation, including called subs. */
     public int activeSortComparatorInvocations;
     /** Combined Perl frame depth immediately before each sort comparator call. */
@@ -137,6 +139,8 @@ public final class ExecutionRuntimeState {
     /** One-shot caller()[4] overrides for methods entered through runtime dispatch. */
     public final Deque<Boolean> methodCallHasArgsOverrides = new ArrayDeque<>();
     public final Deque<Integer> callContextStack = new ArrayDeque<>();
+    /** Enclosing context visible to wantarray() from a map/grep callback. */
+    public final Deque<Integer> mapGrepBlockWantArrayContexts = new ArrayDeque<>();
     /** Call-site packages pending association with the CV entered for each call context. */
     public final Deque<String> pendingCallerPackages = new ArrayDeque<>();
     public int evalDepth;

@@ -20,12 +20,12 @@ class TemporaryControlFlowRootTraversalTest {
             try {
                 assertEquals(returnedReference, transfer.getReturnValue());
                 assertEquals(1, transfer.ownerSlotCount(
-                        PerlOwnerSlot.Kind.EXPRESSION_VALUE));
+                        PerlOwnerSlot.Kind.EXPRESSION_TEMPORARY_ROOT));
             } finally {
                 MortalList.popTemporaryRoot(transfer);
             }
             assertEquals(0, transfer.ownerSlotCount(
-                    PerlOwnerSlot.Kind.EXPRESSION_VALUE));
+                    PerlOwnerSlot.Kind.EXPRESSION_TEMPORARY_ROOT));
         }
     }
 }

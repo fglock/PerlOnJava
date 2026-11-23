@@ -30,6 +30,8 @@ public class GlobalDestruction {
                 Collections.newSetFromMap(new IdentityHashMap<>());
         Set<RuntimeCode> deferredCodeCleanup =
                 Collections.newSetFromMap(new IdentityHashMap<>());
+        MortalList.CleanupTargetProbe cleanupTargetProbe =
+                new MortalList.CleanupTargetProbe();
 
         // Snapshot the collections before iterating: a DESTROY callback may
         // mutate GlobalVariable.{globalVariables,globalArrays,globalHashes}
@@ -41,7 +43,7 @@ public class GlobalDestruction {
 
         // Walk all global scalars
         for (RuntimeScalar val : new ArrayList<>(GlobalVariable.scalarSlots().values())) {
-            destroyIfTracked(val, visited, deferredCodeCleanup);
+            destroyIfTracked(val, visited, deferredCodeCleanup, cleanupTargetProbe);
         }
 
         // CODE slots are kept in a separate namespace map from ordinary
@@ -51,7 +53,7 @@ public class GlobalDestruction {
             if (code != null && code.value instanceof RuntimeCode runtimeCode) {
                 runtimeCode.releaseCaptures();
             }
-            destroyIfTracked(code, visited, deferredCodeCleanup);
+            destroyIfTracked(code, visited, deferredCodeCleanup, cleanupTargetProbe);
         }
 
         // Walk global arrays for blessed ref elements
@@ -69,7 +71,7 @@ public class GlobalDestruction {
                 continue;
             }
             for (RuntimeScalar elem : new ArrayList<>(arr.elements)) {
-                destroyIfTracked(elem, visited, deferredCodeCleanup);
+                destroyIfTracked(elem, visited, deferredCodeCleanup, cleanupTargetProbe);
             }
         }
 
@@ -87,7 +89,7 @@ public class GlobalDestruction {
                 continue;
             }
             for (RuntimeScalar elem : new ArrayList<>(hash.elements.values())) {
-                destroyIfTracked(elem, visited, deferredCodeCleanup);
+                destroyIfTracked(elem, visited, deferredCodeCleanup, cleanupTargetProbe);
             }
         }
 
@@ -139,7 +141,8 @@ public class GlobalDestruction {
     private static void destroyIfTracked(
             RuntimeScalar val,
             Set<RuntimeBase> visited,
-            Set<RuntimeCode> deferredCodeCleanup) {
+            Set<RuntimeCode> deferredCodeCleanup,
+            MortalList.CleanupTargetProbe cleanupTargetProbe) {
         if (val != null
                 && (val.type & RuntimeScalarType.REFERENCE_BIT) != 0
                 && val.value instanceof RuntimeBase base
@@ -148,14 +151,15 @@ public class GlobalDestruction {
                 // object untracked, but a later method
                 // definition must still be observed at global destruction.
                 && (base.isRefCountTracked() || (base.blessId != 0 && !base.destroyFired))) {
-            destroyBaseIfTracked(base, visited, deferredCodeCleanup);
+            destroyBaseIfTracked(base, visited, deferredCodeCleanup, cleanupTargetProbe);
         }
     }
 
     private static void destroyBaseIfTracked(
             RuntimeBase base,
             Set<RuntimeBase> visited,
-            Set<RuntimeCode> deferredCodeCleanup) {
+            Set<RuntimeCode> deferredCodeCleanup,
+            MortalList.CleanupTargetProbe cleanupTargetProbe) {
         if (base == null
                 || (!base.isRefCountTracked() && (base.blessId == 0 || base.destroyFired))
                 || !visited.add(base)) {
@@ -175,13 +179,15 @@ public class GlobalDestruction {
             DestroyDispatch.callDestroy(base);
             return;
         }
-        if (base instanceof RuntimeArray arr && MortalList.containerMayContainCleanupTargets(base)) {
+        if (base instanceof RuntimeArray arr
+                && cleanupTargetProbe.mayContainCleanupTargets(base)) {
             for (RuntimeScalar elem : new ArrayList<>(arr.elements)) {
-                destroyIfTracked(elem, visited, deferredCodeCleanup);
+                destroyIfTracked(elem, visited, deferredCodeCleanup, cleanupTargetProbe);
             }
-        } else if (base instanceof RuntimeHash hash && MortalList.containerMayContainCleanupTargets(base)) {
+        } else if (base instanceof RuntimeHash hash
+                && cleanupTargetProbe.mayContainCleanupTargets(base)) {
             for (RuntimeScalar elem : new ArrayList<>(hash.elements.values())) {
-                destroyIfTracked(elem, visited, deferredCodeCleanup);
+                destroyIfTracked(elem, visited, deferredCodeCleanup, cleanupTargetProbe);
             }
         }
     }

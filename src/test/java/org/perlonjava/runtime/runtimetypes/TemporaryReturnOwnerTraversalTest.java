@@ -81,7 +81,7 @@ class TemporaryReturnOwnerTraversalTest {
             try {
                 assertEquals(target, ((RuntimeScalar) expression.elements.getFirst()).value);
                 assertEquals(1, expression.ownerSlotCount(
-                        PerlOwnerSlot.Kind.EXPRESSION_VALUE));
+                        PerlOwnerSlot.Kind.EXPRESSION_TEMPORARY_ROOT));
             } finally {
                 MortalList.popTemporaryRoot(expression);
             }
@@ -100,13 +100,13 @@ class TemporaryReturnOwnerTraversalTest {
             try {
                 assertEquals(target, ((RuntimeScalar) expression.elements.getFirst()).value);
                 assertEquals(1, expression.ownerSlotCount(
-                        PerlOwnerSlot.Kind.EXPRESSION_VALUE));
+                        PerlOwnerSlot.Kind.EXPRESSION_TEMPORARY_ROOT));
             } finally {
                 MortalList.popTemporaryRoot(expression);
             }
 
             assertEquals(0, expression.ownerSlotCount(
-                    PerlOwnerSlot.Kind.EXPRESSION_VALUE));
+                    PerlOwnerSlot.Kind.EXPRESSION_TEMPORARY_ROOT));
         }
     }
 }

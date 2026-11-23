@@ -41,14 +41,14 @@ class TemporaryRootReleaseDoesNotTraverseTest {
             MortalList.pushTemporaryRoot(temporaryRoot);
             try {
                 assertEquals(1, temporaryRoot.ownerSlotCount(
-                        PerlOwnerSlot.Kind.EXPRESSION_VALUE));
+                        PerlOwnerSlot.Kind.EXPRESSION_TEMPORARY_ROOT));
                 MortalList.popTemporaryRoot(temporaryRoot);
 
                 assertEquals(0, nestedValues.valuesCalls,
                         "temporary-root leases record their owner directly without walking nested graphs");
             } finally {
                 if (temporaryRoot.ownerSlotCount(
-                        PerlOwnerSlot.Kind.EXPRESSION_VALUE) != 0) {
+                        PerlOwnerSlot.Kind.EXPRESSION_TEMPORARY_ROOT) != 0) {
                     MortalList.popTemporaryRoot(temporaryRoot);
                 }
             }

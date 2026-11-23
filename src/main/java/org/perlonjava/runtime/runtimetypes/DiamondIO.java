@@ -133,6 +133,18 @@ public class DiamondIO {
     /** Reads diamond input while preserving whether the source used <<>>. */
     public static RuntimeBase readline(RuntimeScalar arg, int ctx, boolean doubleDiamond) {
         State state = state();
+        RuntimeArray argv = getGlobalArray("main::ARGV");
+        switchTraversalForArgv(state, argv);
+        RuntimeIO tiedArgvHandle = getGlobalIO("main::ARGV").getRuntimeIO();
+        // Perl routes <> through the ARGV handle when it is tied. This takes
+        // precedence over a previously exhausted file traversal, because the
+        // tied handle may be installed after that traversal reached EOF.
+        if (tiedArgvHandle instanceof TieHandle) {
+            if (state.readingStarted) {
+                resetTraversalState(state);
+            }
+            return Readline.readline(tiedArgvHandle, ctx);
+        }
         if (ctx == RuntimeContextType.LIST) {
             // Handle LIST context
             RuntimeList lines = new RuntimeList();
@@ -142,12 +154,11 @@ public class DiamondIO {
             }
             return lines;
         } else {
-            RuntimeArray argv = getGlobalArray("main::ARGV");
-            switchTraversalForArgv(state, argv);
             // A completed diamond loop is reusable after Perl code refills
             // @ARGV. In particular, `@ARGV = (...)` between separate `<>`
             // loops must begin a new traversal rather than retain EOF forever.
             RuntimeIO stdin = getGlobalIO("main::STDIN").getRuntimeIO();
+            RuntimeIO argvHandle = getGlobalIO("main::ARGV").getRuntimeIO();
             // A new non-empty @ARGV always starts a new traversal. An empty
             // @ARGV can also be intentional: reopening STDIN between diamond
             // loops must make the later loop consume the replacement handle.
@@ -163,9 +174,9 @@ public class DiamondIO {
                 // Check if @ARGV was initially empty to determine STDIN fallback behavior
                 state.argvWasInitiallyEmpty = argv.isEmpty();
 
-                RuntimeIO argvHandle = getGlobalIO("main::ARGV").getRuntimeIO();
                 // Only use ARGV filehandle directly if @ARGV is empty (handles aliased filehandles like *ARGV = *DATA)
-                if (argvHandle != null && !(argvHandle.ioHandle instanceof ClosedIOHandle) && getGlobalArray("main::ARGV").isEmpty()) {
+                if (argvHandle != null && !(argvHandle.ioHandle instanceof ClosedIOHandle)
+                        && getGlobalArray("main::ARGV").isEmpty()) {
                     state.currentReader = argvHandle;
                 } else if (state.argvWasInitiallyEmpty) {
                     if (stdin == null || stdin.ioHandle instanceof ClosedIOHandle) {

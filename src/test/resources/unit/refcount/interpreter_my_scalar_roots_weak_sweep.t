@@ -29,8 +29,10 @@ sub interpreter_frame_keeps_my_schema {
     my $schema = IMSR_Schema->new;
     my $source = $schema->{source};
 
+    Internals::jperl_gc() if defined &Internals::jperl_gc;
+
     ok defined $source->{schema},
-        'interpreter my scalar remains a strong owner';
+        'interpreter my scalar is a root during weak sweep';
     is $source->{schema}, $schema,
         'weak backref still points at the live lexical schema';
 

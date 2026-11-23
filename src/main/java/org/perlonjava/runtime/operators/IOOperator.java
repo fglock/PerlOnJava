@@ -854,6 +854,14 @@ public class IOOperator {
             if (pid > 0) return new RuntimeScalar(pid);
             return scalarTrue;
         }
+        // A two-argument open with an undefined path is a failed file open.
+        // Do not stringify undef to the empty string: RuntimeIO.open("") is
+        // reserved for opening the standard input handle.
+        if (args.length == 2 && args[1].scalar().type == RuntimeScalarType.UNDEF) {
+            GlobalVariable.getGlobalVariable("main::!").set(2); // ENOENT
+            return scalarUndef;
+        }
+
         // Perl allows whitespace around the mode sigil ('< ', ' >', '< :utf8')
         RuntimeBase[] modeAndArgs = Arrays.copyOfRange(args, 1, args.length);
         String rawMode = args[1].toString();
@@ -1920,9 +1928,11 @@ public class IOOperator {
         } else if (baseMode == O_WRONLY) {
             if ((mode & O_APPEND) != 0) {
                 modeStr = ">>";
-            } else if ((mode & O_TRUNC) != 0 || (mode & O_CREAT) != 0) {
+            } else if ((mode & O_TRUNC) != 0) {
                 modeStr = ">";
             } else {
+                // The sysopen flags are applied separately below; RuntimeIO's
+                // ordinary ">" mode would incorrectly truncate the file.
                 modeStr = ">";
             }
         } else if (baseMode == O_RDWR) {
@@ -1957,7 +1967,8 @@ public class IOOperator {
                         if (!applyFilePermissions(file.toPath(), 0600)) {
                             throw new IOException("Unable to make newly created file readable");
                         }
-                        fh = RuntimeIO.openForSysopen(fileName, modeStr);
+                        fh = RuntimeIO.openForSysopen(fileName, modeStr,
+                                true, false, false, false, false);
                         if (fh == null) {
                             return scalarUndef;
                         }
@@ -2005,7 +2016,10 @@ public class IOOperator {
         }
 
         if (fh == null) {
-            fh = RuntimeIO.openForSysopen(fileName, modeStr);
+            fh = RuntimeIO.openForSysopen(fileName, modeStr,
+                    baseMode != O_WRONLY, baseMode != O_RDONLY,
+                    (mode & O_CREAT) != 0, (mode & O_TRUNC) != 0,
+                    (mode & O_APPEND) != 0);
         }
         if (fh == null) {
             return scalarUndef;

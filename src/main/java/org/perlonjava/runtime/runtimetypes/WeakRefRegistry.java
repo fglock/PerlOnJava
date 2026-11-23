@@ -13,6 +13,9 @@ import java.util.Set;
  */
 public class WeakRefRegistry {
 
+    /** Numeric compatibility marker for tests of the weakly tracked state. */
+    public static final int WEAKLY_TRACKED = 0;
+
     private static LifecycleRuntimeState state() {
         return PerlRuntime.current().lifecycleState;
     }
@@ -66,6 +69,10 @@ public class WeakRefRegistry {
             throw new PerlCompilerException("Can't weaken a nonreference");
         }
         if (!(ref.value instanceof RuntimeBase base)) return;
+        // Older producers used a negative raw count as the untracked sentinel.
+        // The explicit tracking state is authoritative now, but normalize that
+        // legacy representation before choosing the weak-reference transition.
+        if (base.refCount < 0) base.markRefCountUntracked();
         LifecycleRuntimeState state = state();
         if (state.weakScalars.contains(ref)) return;  // already weak
 
@@ -293,8 +300,36 @@ public class WeakRefRegistry {
         return weakRefs != null && !weakRefs.isEmpty();
     }
 
+    /** Drop untracked scalar owners whose storage or proxy slot has gone away. */
+    private static void releaseDetachedUntrackedReferenceOwners(RuntimeBase referent) {
+        for (PerlOwnerSlot slot : referent.ownerSlotSnapshot()) {
+            if (slot.kind() != PerlOwnerSlot.Kind.UNTRACKED_REFERENCE
+                    || !slot.isActive() || slot.referent() != referent) continue;
+            RuntimeScalar owner = slot.untrackedScalarOwner();
+            if (owner == null && !slot.hasUntrackedScalarOwnerAssociation()) {
+                continue;
+            } else if (owner == null || owner.untrackedReferenceOwnerSlot() != slot) {
+                slot.release();
+            } else if (isweak(owner)
+                    || !(owner.hasLiveCurrentStrongValueSlot()
+                        || ((referent.blessId != 0
+                                || referent.isWeaklyRefCountTracked())
+                            && owner.hasCurrentAggregateStorageSlot()))) {
+                owner.releaseUntrackedReferenceOwner(referent);
+            }
+        }
+    }
+
     /** Finish tracked cleanup when its final owner slot leaves. */
     static void onStrongOwnerSlotReleased(RuntimeBase referent) {
+        if (referent != null && PerlRuntime.currentOrNull() != null) {
+            releaseDetachedUntrackedReferenceOwners(referent);
+            // A proxy can retain an untracked value owner while its lvalue
+            // parent is live. Recheck those exact proxy owners when the parent
+            // loses its final Perl storage owner; no later release on the
+            // value referent is guaranteed to trigger that check for us.
+            referent.recheckProxyValueOwnersIfUnowned();
+        }
         if (referent instanceof RuntimeCode code) {
             code.releasePadConstantsForUntrackedOwnerSlot();
             code.finishActiveCodeOwnerRelease();
@@ -323,7 +358,7 @@ public class WeakRefRegistry {
             return;
         }
         if (referent == null
-                || !referent.isWeaklyRefCountTracked()
+                || (!referent.isWeaklyRefCountTracked() && !referent.isRefCountUntracked())
                 || referent.hasOwnerSlots()
                 || PerlRuntime.currentOrNull() == null
                 || !hasWeakRefsTo(referent)
@@ -341,6 +376,27 @@ public class WeakRefRegistry {
         } else {
             clearWeakRefsTo(referent);
         }
+    }
+
+    /** Finish an uncounted value after one aggregate storage edge is retired. */
+    static void onContainerValueOwnerReleased(RuntimeBase referent) {
+        boolean aggregate = referent instanceof RuntimeArray || referent instanceof RuntimeHash;
+        if ((!aggregate && (referent == null || referent.blessId == 0))
+                || referent.isPerlDestroyed()
+                || referent.isRefCountTracked()
+                || referent.refCount != 0
+                || referent.hasOwnerSlots()
+                || referent.localBindingExists
+                || referent.hasPendingOwnerRelease()
+                || referent.hasClosureCaptureOwner()
+                || GlobalVariable.isPackageRootedAggregate(referent)
+                || PerlRuntime.currentOrNull() == null
+                || (referent instanceof RuntimeArray array && array.threadShared)) {
+            return;
+        }
+        // The incoming storage owner is gone. Let an aggregate release its
+        // direct element slots recursively through this same boundary.
+        DestroyDispatch.callDestroy(referent);
     }
 
     /** Recheck cleared aggregate cleanup after a suspended lexical owner retires. */

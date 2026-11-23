@@ -4,7 +4,7 @@ use IPC::Open3 qw(open3);
 use Symbol qw(gensym);
 use Test::More;
 
-my $is_jperl = defined &Internals::jperl_freetmps;
+my $is_jperl = defined &Internals::jperl_gc;
 plan skip_all => 'nested PerlOnJava launcher required' unless $is_jperl;
 
 my $launcher = $^X eq 'jperl' ? './jperl' : $^X;

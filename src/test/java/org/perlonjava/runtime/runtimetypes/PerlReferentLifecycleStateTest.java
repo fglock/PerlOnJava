@@ -23,8 +23,8 @@ class PerlReferentLifecycleStateTest {
             referent.beginPerlDestruction();
             referent.markPerlDestroyed();
             assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, referent.perlLifecycleState());
-            assertEquals(0, referent.refCount,
-                    "a destroyed referent has no remaining Perl owner count");
+            assertEquals(-1, referent.refCount,
+                    "the explicit lifecycle state does not encode refCount sentinels");
         }
     }
 
@@ -33,7 +33,7 @@ class PerlReferentLifecycleStateTest {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
             RuntimeHash referent = new RuntimeHash();
-            referent.setTrackedRefCount(0);
+            referent.refCount = 0;
 
             DestroyDispatch.callDestroy(referent);
 

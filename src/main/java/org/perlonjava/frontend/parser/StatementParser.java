@@ -660,30 +660,33 @@ public class StatementParser {
 
         // Parse the catch block
         TokenUtils.consume(parser, LexerTokenType.IDENTIFIER); // "catch"
+        Node catchParameter = null;
         if (TokenUtils.peek(parser).text.equals("{")) {
-            var location = parser.ctx.errorUtil.getSourceLocationAccurate(parser.tokenIndex);
-            throw new PerlParserException("catch block requires a (VAR) at "
-                    + location.fileName() + " line " + location.lineNumber() + ".\n");
+            if (!parser.syntaxKeywordTryAllowsUnboundCatch) {
+                var location = parser.ctx.errorUtil.getSourceLocationAccurate(parser.tokenIndex);
+                throw new PerlParserException("catch block requires a (VAR) at "
+                        + location.fileName() + " line " + location.lineNumber() + ".\n");
+            }
+        } else {
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "(");
+            LexerToken catchToken = TokenUtils.peek(parser);
+            if (catchToken.type == LexerTokenType.IDENTIFIER
+                    && (catchToken.text.equals("my") || catchToken.text.equals("our")
+                    || catchToken.text.equals("state"))) {
+                var location = parser.ctx.errorUtil.getSourceLocationAccurate(parser.tokenIndex);
+                String near = "(" + catchToken.text;
+                String at = " at " + location.fileName() + " line " + location.lineNumber();
+                throw new PerlParserException("Can't redeclare catch variable as \""
+                        + catchToken.text + "\"" + at + ", near \"" + near + "\"\n"
+                        + "syntax error" + at + ", near \"" + near + " \"\n");
+            }
+            // Suppress strict vars check — catch ($e) implicitly declares $e.
+            boolean savedParsingDeclaration = parser.parsingDeclaration;
+            parser.parsingDeclaration = true;
+            catchParameter = parser.parseExpression(0);
+            parser.parsingDeclaration = savedParsingDeclaration;
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
         }
-        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "(");
-        LexerToken catchToken = TokenUtils.peek(parser);
-        if (catchToken.type == LexerTokenType.IDENTIFIER
-                && (catchToken.text.equals("my") || catchToken.text.equals("our")
-                || catchToken.text.equals("state"))) {
-            var location = parser.ctx.errorUtil.getSourceLocationAccurate(parser.tokenIndex);
-            String near = "(" + catchToken.text;
-            String at = " at " + location.fileName() + " line " + location.lineNumber();
-            throw new PerlParserException("Can't redeclare catch variable as \""
-                    + catchToken.text + "\"" + at + ", near \"" + near + "\"\n"
-                    + "syntax error" + at + ", near \"" + near + " \"\n");
-        }
-        // Suppress strict vars check for the catch variable — catch ($e) implicitly
-        // declares $e as a lexical variable, similar to my $e.
-        boolean savedParsingDeclaration = parser.parsingDeclaration;
-        parser.parsingDeclaration = true;
-        Node catchParameter = parser.parseExpression(0); // Parse the exception variable
-        parser.parsingDeclaration = savedParsingDeclaration;
-        TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
 
         // Register the catch variable in a scope so the parse-time strict vars
         // check can find it inside the catch block body.
@@ -1803,7 +1806,7 @@ public class StatementParser {
         packageExistsCache.put(packageName, true);
         GlobalVariable.ensurePackageStash(packageName);
 
-        boolean isClass = token.text.equals("class");
+        boolean isClass = token.text.equals("class") || token.text.equals("role");
 
         // Emit experimental warning for 'class' if warnings are enabled
         if (isClass && parser.ctx.symbolTable.isWarningCategoryEnabled("experimental::class")) {
@@ -1819,8 +1822,12 @@ public class StatementParser {
         }
 
         IdentifierNode nameNode = new IdentifierNode(packageName, parser.tokenIndex);
-        OperatorNode packageNode = new OperatorNode(token.text, nameNode, parser.tokenIndex);
+        // Roles share Object::Pad's class-body lowering and package dispatch;
+        // retain the existing class operator for both execution backends.
+        OperatorNode packageNode = new OperatorNode(token.text.equals("role") ? "class" : token.text,
+                nameNode, parser.tokenIndex);
         packageNode.setAnnotation("isClass", isClass);
+        packageNode.setAnnotation("isRole", token.text.equals("role"));
 
         // Register this as a Perl 5.38+ class for proper stringification
         if (isClass) {
@@ -1951,8 +1958,7 @@ public class StatementParser {
     private static void parseClassAttributes(Parser parser, OperatorNode packageNode, String className) {
         LexerToken token = TokenUtils.peek(parser);
 
-        // Check for :isa attribute
-        if (token.text.equals(":")) {
+        while (token.text.equals(":")) {
             TokenUtils.consume(parser); // consume ':'
             token = TokenUtils.peek(parser);
 
@@ -2044,12 +2050,85 @@ public class StatementParser {
 
                 // Expect closing parenthesis
                 TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
+            } else if (token.text.equals("repr") || token.text.equals("compat")
+                    || token.text.equals("Struct")) {
+                String attribute = TokenUtils.consume(parser).text;
+                String attributeValue = "";
+                if (TokenUtils.peek(parser).text.equals("(")) {
+                    TokenUtils.consume(parser, LexerTokenType.OPERATOR, "(");
+                    LexerToken value = TokenUtils.peek(parser);
+                    if (value.type != LexerTokenType.IDENTIFIER) {
+                        throw new PerlCompilerException(parser.tokenIndex,
+                                "Expected value for :" + attribute + " attribute", parser.ctx.errorUtil);
+                    }
+                    attributeValue = TokenUtils.consume(parser).text;
+                    TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
+                }
+                if (attribute.equals("repr") && !attributeValue.equals("HASH")) {
+                    throw PerlCompilerException.withSourceLocation(packageNode.getIndex(),
+                            "PerlOnJava supports only Object::Pad :repr(HASH)", parser.ctx.errorUtil);
+                }
+                if (attribute.equals("compat") && !attributeValue.equals("invokable")) {
+                    throw PerlCompilerException.withSourceLocation(packageNode.getIndex(),
+                            "Unsupported Object::Pad compatibility mode: " + attributeValue,
+                            parser.ctx.errorUtil);
+                }
+                if (attribute.equals("Struct")) {
+                    if (!attributeValue.isEmpty() && !attributeValue.equals("readonly")) {
+                        throw PerlCompilerException.withSourceLocation(packageNode.getIndex(),
+                                "Unsupported Object::Pad Struct mode: " + attributeValue,
+                                parser.ctx.errorUtil);
+                    }
+                    packageNode.setAnnotation("struct", Boolean.TRUE);
+                    packageNode.setAnnotation("structReadonly", attributeValue.equals("readonly"));
+                }
+            } else if (token.text.equals("does")) {
+                TokenUtils.consume(parser);
+                TokenUtils.consume(parser, LexerTokenType.OPERATOR, "(");
+                String roleName = parseQualifiedClassAttributeName(parser, ":does(");
+                TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
+
+                if (!ClassRegistry.isClass(roleName)) {
+                    ModuleOperators.require(new RuntimeScalar(NameNormalizer.moduleToFilename(roleName)));
+                }
+                if (!ClassRegistry.isClass(roleName)) {
+                    throw PerlCompilerException.withSourceLocation(packageNode.getIndex(),
+                            "Class :does attribute requires a role but \"" + roleName + "\" is not one",
+                            parser.ctx.errorUtil);
+                }
+                @SuppressWarnings("unchecked")
+                List<String> roles = (List<String>) packageNode.getAnnotation("doesRoles");
+                if (roles == null) {
+                    roles = new ArrayList<>();
+                    packageNode.setAnnotation("doesRoles", roles);
+                }
+                roles.add(roleName);
             } else {
                 // Unknown attribute - throw error for now
                 throw new PerlCompilerException(parser.tokenIndex,
                         "Unknown class attribute: :" + token.text, parser.ctx.errorUtil);
             }
+            token = TokenUtils.peek(parser);
         }
+    }
+
+    private static String parseQualifiedClassAttributeName(Parser parser, String attribute) {
+        LexerToken token = TokenUtils.peek(parser);
+        if (token.type != LexerTokenType.IDENTIFIER) {
+            throw new PerlCompilerException(parser.tokenIndex,
+                    "Expected class or role name after " + attribute, parser.ctx.errorUtil);
+        }
+        String name = TokenUtils.consume(parser).text;
+        while (TokenUtils.peek(parser).text.equals("::")) {
+            TokenUtils.consume(parser);
+            token = TokenUtils.peek(parser);
+            if (token.type != LexerTokenType.IDENTIFIER) {
+                throw new PerlCompilerException(parser.tokenIndex,
+                        "Expected identifier after '::'", parser.ctx.errorUtil);
+            }
+            name += "::" + TokenUtils.consume(parser).text;
+        }
+        return name;
     }
 
     /**
@@ -2175,6 +2254,15 @@ public class StatementParser {
                         SubroutineParser.handleNamedSubWithFilter(parser, accessor.name, accessor.prototype,
                                 accessor.attributes, (BlockNode) accessor.block, true, null);
                     }
+                }
+
+                SubroutineNode structValuesConstructor =
+                        (SubroutineNode) block.getAnnotation("deferredStructValuesConstructor");
+                if (structValuesConstructor != null) {
+                    SubroutineParser.handleNamedSubWithFilter(parser,
+                            structValuesConstructor.name, structValuesConstructor.prototype,
+                            structValuesConstructor.attributes, (BlockNode) structValuesConstructor.block,
+                            true, null);
                 }
 
                 // Restore the package context after class transformation

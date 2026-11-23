@@ -1,6 +1,10 @@
 package org.perlonjava.runtime.runtimetypes;
 
+import java.util.AbstractMap;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -11,6 +15,21 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("unit")
 class TemporaryRootCodeStateOwnerTest {
+    private static final class CountingHashValues extends AbstractMap<String, RuntimeScalar> {
+        private int valuesCalls;
+
+        @Override
+        public Set<Entry<String, RuntimeScalar>> entrySet() {
+            return Collections.emptySet();
+        }
+
+        @Override
+        public Collection<RuntimeScalar> values() {
+            valuesCalls++;
+            return List.of();
+        }
+    }
+
     @Test
     void currentScalarAndAggregateStateOwnersProveTemporaryRootWithoutGraphWalk() {
         PerlRuntime runtime = new PerlRuntime();
@@ -22,9 +41,14 @@ class TemporaryRootCodeStateOwnerTest {
             code.bindStateScalar("scalar", stateScalar);
             code.bindStateArray("array", stateArray);
             code.bindStateHash("hash", stateHash);
+
+            CountingHashValues opaqueValues = new CountingHashValues();
+            RuntimeHash opaque = new RuntimeHash();
+            opaque.elements = opaqueValues;
             RuntimeArray root = new RuntimeArray();
             root.localBindingExists = true;
             root.elements.add(code.createReference());
+            root.elements.add(opaque.createReference());
 
             MortalList.pushTemporaryRoot(root);
             try {
@@ -34,7 +58,14 @@ class TemporaryRootCodeStateOwnerTest {
                             .findFirst().orElseThrow();
                     assertTrue(code.hasCurrentStateOwner(stateValue, stateOwner),
                             "the CODE_STATE slot must match the current CV binding");
+                    assertFalse(MortalList.temporaryRootDirectlyReferences(stateValue),
+                            "the root contains the owning CODE object, not the state value");
+                    assertTrue(ReachabilityWalker.isReachableFromTemporaryRoots(stateValue));
                 }
+                assertTrue(MortalList.temporaryRootDirectlyReferences(code),
+                        "the temporary root directly contains the CODE state owner");
+                assertEquals(0, opaqueValues.valuesCalls,
+                        "validated CODE_STATE paths must avoid the fallback graph walk");
             } finally {
                 MortalList.popTemporaryRoot(root);
                 root.elements.clear();

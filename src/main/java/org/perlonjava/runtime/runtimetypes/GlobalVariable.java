@@ -2316,7 +2316,10 @@ public class GlobalVariable {
                 markPackageGlobalRoot(var);
                 globalArrays.put(key, var);
             }
-        } else {
+        } else if (!var.isPackageGlobalRoot) {
+            // Global-array table writes mark the aggregate, and its mutation
+            // paths mark subsequently stored cells. Rewalking every existing
+            // array on each package-variable read only repeats owner checks.
             markPackageGlobalRoot(var);
         }
         if (isaArray) {

@@ -31,6 +31,7 @@ sub eval_with_cursor_lexical {
 }
 
 eval_with_cursor_lexical();
+Internals::jperl_gc() if defined &Internals::jperl_gc;
 
 ok(!defined $weak_cursor,
     'eval seed alias does not keep direct eval lexical alive after scope exit');

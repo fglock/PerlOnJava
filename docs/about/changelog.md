@@ -6,19 +6,57 @@ priorities and future plans.
 
 ## Work in progress
 
-- Preserve imported CV owners through global destruction, retain only the lexical captures needed by `eval STRING`, and release DBI handles after failed `prepare` or `do` (#2043).
+- Retire active lexical owners on explicit `exit` before dispatching `END` blocks (#2043).
+- Retain noncapturing anonymous CODE templates through their source optrees on both backends while allowing eval-created CVs to be released after escape (#2043).
+- Stage temporary anonymous array references as call-argument owners so their elements remain alive through the call and release afterward (#2043).
+- Skip redundant package-root scans when reading an already-rooted global array, while preserving mutation-time ownership of added slots (#2043).
+
+- Preserve imported CV owners through global destruction, keep runtime-only `eval STRING` captures usable without treating them as semantic closure owners, and release DBI handles after failed `prepare` or `do` (#2043).
+- Preserve reacquired counted referents when deferred zero-count lifecycle cleanup drains (#2043).
+- Preserve Perl cleanup order across eval exceptions and resumed async foreach calls (#2043).
+- Keep current weak-tracked aggregate value slots and raw untracked owner identities alive through their matching release boundaries (#2043).
+- Report the active Perl helper argument in `B::REFCNT` for nested hash-slot values during `DESTROY` (#2043).
+- Keep temporary foreach-source values alive until normal or `last` exits in the bytecode interpreter, matching JVM cleanup and preventing premature destruction of list-returned rows (#2043).
 - Remove reachability-based lifetime decisions, root-query state, and sweep-only hooks; use current Perl owner slots for cleanup (#2043).
+- Reuse cycle-detection worksets while releasing outgoing values from dying arrays and hashes, reducing per-element queue and visited-set initialization (#2043).
+- Restore array-literal flush state on early exits, unwind generated JVM frames at eval/try boundaries, and exclude expression-only owner leases from `B::REFCNT` (#2043).
+- Reuse cleanup-target pre-scan worksets across candidate roots, skip probes for zero-count or currently owned aggregates, and fold direct weak-reference checks into that traversal (#2043).
 - Release abandoned JVM direct-call owners when code generation falls back to the interpreter, allowing redefined CV optree constants to be reaped (#2043).
 - Release DBIx::Class phantom-chain result sources after fresh anonymous hash arguments leave their call frame (#2043).
 - Preserve caller lexical cleanup ownership through interpreter aliases so failed-connect DBIx::Class Storage can be released at scope exit (#2043).
 - Construct DBI handles with core `bless`, matching native DBI and avoiding false leak reports for its cached driver handle (#2043).
-- Release Test2 assertion events after callbacks finish, including events passed through temporary method arguments (#2043).
-- Return the unparsed character count from `POSIX::strtod` and provide the platform-width `POSIX::LONG_MAX` constant (#2071, #2091).
-- Route localized STDERR writes to blessed tied handles and retain nested temporary filehandles during interpreter STDOUT duplication (#2034, #2015).
+- Retire overwritten temporary call arguments after callbacks, releasing Test2 Amnesty facets while preserving returned values (#2043).
+- Load nested `do` and `require` files in the active runtime package, preserving Mojolicious Lite sandbox namespaces through eval strings (#2043).
+- Remove the tokenless decrement compatibility path and its root-count repair now that releases identify their owner slots (#2043).
+- Keep temporary list-assignment results from becoming owners of their scalar LHS cells (#2043).
+- Release list-assignment temporary cell owners after returned values reach the caller, so weak fields no longer pin optree constants (#2043).
+- Represent untracked, tracked, and weak-tracked referents separately from their nonnegative owner counts (#2043).
+- Drain scoped owner releases at block exit even while statement flushing is suppressed, preserving earlier pending releases (#2043).
+
+- Honor overloaded logical negation, warn on distinct constant-sub redefinitions with equal values, and preserve reference-valued scalar slots through localized glob aliases (#2122, #2075, #1939).
+- Preserve the `Can't use a hash as a reference` diagnostic for `%$hashref->{key}` and hash slices (#2132).
+- Preserve file contents on `sysopen` without `O_TRUNC`, fail `open` on undefined paths, avoid duplicate `closedir` warnings, and match Socket lookup flags and return values (#2128, #2125, #2095).
+- Register pure-Perl Encode codecs, preserve Unicode input in `decode_utf8`, implement `Unicode::Normalize::getComposite`, and provide Java-backed URI::Fast support (#2124, #2121, #2104, #2079, #2117).
+- Add parser compatibility providers for `Syntax::Keyword::Try` and method syntax; support the Object::Pad 0.800 class, role, `:experimental(init_expr)` field blocks, hash representation, `:Struct(readonly)`, MOP method subset, imported functions in methods, lexical parameters shadowing fields, and strict `ADJUST`/`BUILD` `$self` binding (#2112, #2089, #2056).
+- Preserve Function::Parameters' required named-argument arity diagnostic when unknown keys are also supplied (#1361).
+- Register dynamically delegated Function::Parameters imports made in `BEGIN` blocks so configured keywords are available to the parser (#1361).
+- Release temporary compile-time Function::Parameters installer CVs at the `BEGIN` boundary, and warn on malformed lexical config using its warning category (#1361).
+- Match Function::Parameters signature diagnostics and call-site locations, typed method invocants and slurpy element validation; treat empty positional defaults as `undef` and register its warning category (#1361).
+- Bind and type-check configured Function::Parameters `shift` invocants for ordinary function aliases (#1361).
+- Preserve configured Function::Parameters `install_sub` code references when installing runtime aliases (#1361).
+- Preserve caller `our` array and hash aliases across package changes in eval STRING bodies (#1361).
+- Parse automatic and quoted Type::Tiny parameterized/composite expressions in Function::Parameters signatures; preserve recursive block-prototype trailing arguments (#1361).
+- Insert implicit invocants for multiline empty Function::Parameters method and classmethod signatures when attributes follow the closing parenthesis (#1361).
+- Add lexical autobox dispatch for native scalar and reference values, including `autobox::Core` and `Moose::Autobox` delegated imports, bundled `autobox::Core`, merged class lookup, `autobox_class`, `autobox::universal::type` scalar flags, direct aggregate invocants, `$^H` scope bits that respect `no autobox`, `Want` scalar and boolean returns, and `DESTROY` dispatch for unreachable cycles during process teardown (#1264).
+- Honor tied `*ARGV` for diamond reads, including after a previous traversal reaches EOF (#2110, #2111).
+- Preserve explicit empty split fields in fixed-arity assignments, restore parsed XML attribute order and `XML::LibXML` ID indexing, decode HTML href character references, and add a JSON::PP-backed `JSON::SL` compatibility subset (#2088, #1323, #1332, #2097, #1321).
+- Preserve list context for localized hash slices, overloaded readline and `pairgrep`; preserve map block versus nested-subroutine `wantarray` contexts; honor overloaded `&{}` replacements and retain overload exceptions during post-increment (#2081, #2080, #2084, #2046, #2062).
+- Resolve registered warning categories from blessed objects passed to `warnings::warnif` (#2063).
 - Install MakeMaker `install_share` data with portable Windows file-copy handling and module paths, expose B's unsigned-integer flag, preserve unsigned 64-bit numeric conversion in parsing and packing, and keep integer precision in `List::Util::uniqnum` (#2068, #2000).
 - Resolve PadWalker caller pads through Perl wrappers, keep `CORE::GLOBAL::caller` overrides dynamic across eval callbacks, apply `set_closed_over` replacements when lazy JVM subs materialize, and preserve autodie errors when caller-stack traversal is exhausted (#2069, #2064, #2060, #2032).
 - Preserve `PerlIO::via` layer reconfiguration and seek callbacks for BOM-aware decoding, report malformed UTF-8 through `:encoding` layers, resolve `Cwd::realpath` for a missing final component, and bound memory allocation for large `sysread` requests (#2058, #2055, #2047).
 - Fix Perl parser handling of postfix increment in concatenated `print` arguments, commented DATA/END markers, the punctuation hash `%;`, and semicolon-disambiguated hash dereferences (#2066, #2065, #2061, #2054).
+- Parse `do return` statements, preserve hash literals with quoted URL values, autoquote keyword fat-comma call arguments, recognize adjacent quotes after word operators, and bind unary minus before regex matching (#2113, #2106, #2105, #2099, #2090).
 - Preserve explicit wide-scalar character-class membership when compiling repeats, including newline, and use pinned Perl Block aliases for wildcard candidates without ICU fallback (#2070, #1487).
 - Enable HotSpot C2 compilation of large methods; the eval STRING benchmark improved about 1.6x in five paired runs.
 - Preserve standard MakeMaker `MY::test` prerequisites so generated test data is built before CPAN tests run (#2050).
@@ -41,15 +79,13 @@ priorities and future plans.
 - Preserve qualified indirect constructors under `strict subs`, `__DATA__` hash keys, inline terminal source markers, `our` self-references under `strict vars`, and bare unary `fc` after conditional feature imports (#2027, #2010, #2008, #1979).
 - Retain eval-block direct-call targets with their parent CV across repeated execution (#1649).
 - Preserve temporary-root identity across implicit return preparation so scope cleanup pops the root it pushed (#1649).
-- Preserve control-flow return payloads and pending suspended-frame owners at END; trim temporary roots skipped by exceptional call and eval unwinds (#1649).
+- Follow strong references held by temporary list returns during root reachability checks (#1649).
+- Preserve control-flow return payloads and pending suspended-frame owners during END-boundary root checks; trim temporary roots skipped by exceptional call and eval unwinds (#1649).
 - Root current package CODE slots by stash identity, including anonymous and eval-defined closures, and ignore detached glob slots after their aliases move (#1649).
 - Track IO handle replacement and executable regex callback owners through their current runtime slots (#1649).
-- Remove the tokenless decrement compatibility path and its root-count repair now that releases identify their owner slots (#2043).
-- Keep temporary list-assignment results from becoming owners of their scalar LHS cells (#2043).
-- Release list-assignment temporary cell owners after returned values reach the caller, so weak fields no longer pin optree constants (#2043).
-- Represent untracked, tracked, and weak-tracked referents separately from their nonnegative owner counts (#2043).
-- Drain scoped owner releases at block exit even while statement flushing is suppressed, preserving earlier pending releases (#2043).
 - Clear weak observers from rescued object graphs at the END boundary while preserving independently rooted objects and strong Perl edges (#1649).
+- Short-circuit temporary-root reachability checks when direct strong edges prove the referent is reachable (#1649).
+- Skip rescued-graph END traversal when the runtime has no registered weak observers (#1649).
 - Load `Exporter::Heavy` before compile-time imports so `export_to_level` targets the importing package (#1649).
 - Preserve aggregate element ownership when a foreach lexical aliases a stored scalar during scope cleanup (#1649).
 - Resolve `SvREFCNT` live-scalar adjustments from current owner slots instead of scanning the lexical registry (#1649).
@@ -123,7 +159,6 @@ priorities and future plans.
 - Track first-bless mortal references with deferred owner identities while preserving weak-source behavior (#1649).
 - Defer weakly tracked `undef` cleanup to current argument-alias identities, preserving the tracking sentinel (#1649).
 - Release aggregate closure captures without decrementing another owner's counted edge (#1649).
-- Keep temporary glob-reference filehandles alive through their active `@_` frame, preventing premature TLS socket destruction (#1649, #1957).
 - Disable corrective sweeps by default while migrating to explicit reference ownership; retain temporary scalar call and mortal return values through their caller boundaries, and balance argument, scalar-cell, closure, aggregate, package scalar/array/hash roots, tied-handler, shared-view, named CODE, persistent state, and destructor lifetimes (#1649).
 - Keep queued END callbacks live through their current queue owner and active-code handoff, without a synthetic positive count (#1649).
 - Publish pending return-owner identities before detaching counted scalar slots, preserving imported END callbacks through queue publication (#1649).

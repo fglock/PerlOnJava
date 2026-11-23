@@ -1,0 +1,22 @@
+name: Feature request
+description: A missing Perl feature, module, or tooling capability
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What you need
+      description: The feature and the program or module that depends on it.
+    validations:
+      required: true
+  - type: textarea
+    id: example
+    attributes:
+      label: Example
+      description: Perl code that should work once the feature exists.
+      render: perl
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Links to perldoc, the feature matrix entry, or related issues.

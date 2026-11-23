@@ -22,7 +22,7 @@ class TemporaryRootNestedReturnMutationTest {
             MortalList.pushTemporaryRoot(transfer);
             try {
                 assertEquals(1, transfer.ownerSlotCount(
-                        PerlOwnerSlot.Kind.EXPRESSION_VALUE));
+                        PerlOwnerSlot.Kind.EXPRESSION_TEMPORARY_ROOT));
                 assertEquals(oldReferent, ((RuntimeScalar) returnValues.elements.getFirst()).value);
 
                 returnValues.elements.set(0, newReferent.createReference());
@@ -36,7 +36,7 @@ class TemporaryRootNestedReturnMutationTest {
             }
 
             assertEquals(0, transfer.ownerSlotCount(
-                    PerlOwnerSlot.Kind.EXPRESSION_VALUE));
+                    PerlOwnerSlot.Kind.EXPRESSION_TEMPORARY_ROOT));
         }
     }
 }

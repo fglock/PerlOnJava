@@ -83,6 +83,7 @@ public class StatementResolver {
         parser.validateRemainingByteSourceUtf8();
         int currentIndex = parser.tokenIndex;
         LexerToken token = peek(parser);
+        validateFunctionParametersHint(parser, currentIndex);
         boolean coreQualifiedControl = false;
 
         // Perl permits control-flow keywords to be explicitly qualified, e.g.
@@ -110,6 +111,16 @@ public class StatementResolver {
         if (token.type == LexerTokenType.IDENTIFIER) {
             ParserKeywordPlugin plugin = parser.getKeywordPlugin(token.text);
             if (plugin != null) {
+                if (plugin instanceof FunctionParametersKeywordPlugin
+                        && "fun".equals(token.text)
+                        && "(".equals(parser.tokens.get(
+                                Whitespace.skipWhitespace(parser, parser.tokenIndex + 1, parser.tokens)).text)) {
+                    // An anonymous Function::Parameters declaration can also
+                    // be an expression statement, especially when immediately
+                    // invoked with `->()`. Parse it through the expression path
+                    // so postfix operators remain attached to the CV.
+                    return parser.parseExpression(0);
+                }
                 return plugin.parse(parser, token.text);
             }
         }
@@ -206,6 +217,11 @@ public class StatementResolver {
                 case "class" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("class")
                         ? StatementParser.parsePackageDeclaration(parser, token)
                         : null;
+
+                // Object::Pad provides roles alongside its class feature.
+                // `role` is not part of core feature 'class', so recognize it
+                // independently when parsing a declaration.
+                case "role" -> StatementParser.parsePackageDeclaration(parser, token);
 
                 case "use", "no" -> StatementParser.parseUseDeclaration(parser, token);
 
@@ -409,6 +425,15 @@ public class StatementResolver {
                             );
                             method.setAnnotation("isMethod", true);
 
+                            // transformUnitClassMethod injects the implicit
+                            // receiver and then places signature declarations
+                            // after its shift.  The signature must be attached
+                            // before that transformation, just as it is for a
+                            // braced class transformed after parsing.
+                            if (signatureAST != null && !signatureAST.elements.isEmpty()) {
+                                method.setAnnotation("signatureAST", signatureAST);
+                            }
+
                             // A braced class receives this transformation when its
                             // complete block is processed.  A unit class (`class
                             // Name;`) has no such closing block, so transform each
@@ -420,11 +445,6 @@ public class StatementResolver {
                                         method.attributes, (BlockNode) method.block, false, null);
                             }
 
-                            // If we have a signature, store it in the method for ClassTransformer to handle
-                            // The signature AST needs to go AFTER $self = shift (added by ClassTransformer)
-                            if (signatureAST != null && !signatureAST.elements.isEmpty()) {
-                                method.setAnnotation("signatureAST", signatureAST);
-                            }
                             yield method;
                         }
                         } finally {
@@ -1573,6 +1593,31 @@ public class StatementResolver {
                 }
                 LexerToken prevToken = prevIndex >= currentIndex ? parser.tokens.get(prevIndex) : null;
 
+                // The closing delimiter of a quoted hash key can be reached
+                // while this raw-token scan is outside string mode. Do not
+                // mistake that closing quote for a new string opener; the
+                // value's quote after => starts the quoted region to track.
+                int beforePrevIndex = prevIndex - 1;
+                while (beforePrevIndex >= currentIndex
+                        && parser.tokens.get(beforePrevIndex).type == LexerTokenType.WHITESPACE) {
+                    beforePrevIndex--;
+                }
+                int afterQuoteIndex = parser.tokenIndex;
+                while (afterQuoteIndex < parser.tokens.size()
+                        && parser.tokens.get(afterQuoteIndex).type == LexerTokenType.WHITESPACE) {
+                    afterQuoteIndex++;
+                }
+                boolean closesQuotedKey = prevToken != null
+                        && prevToken.type == LexerTokenType.IDENTIFIER
+                        && beforePrevIndex >= currentIndex
+                        && parser.tokens.get(beforePrevIndex).type == LexerTokenType.OPERATOR
+                        && parser.tokens.get(beforePrevIndex).text.equals(token.text)
+                        && afterQuoteIndex < parser.tokens.size()
+                        && parser.tokens.get(afterQuoteIndex).text.equals("=>");
+                if (closesQuotedKey) {
+                    continue;
+                }
+
                 // Only treat quote as opening when context suggests a string start.
                 // This avoids latching onto trailing quote tokens emitted after
                 // already-parsed quoted keys/values.
@@ -1831,6 +1876,23 @@ public class StatementResolver {
             return myNode;
         }
         return null;
+    }
+
+    private static void validateFunctionParametersHint(Parser parser, int tokenIndex) {
+        if (parser.getKeywordPlugin("fun") == null) return;
+        RuntimeScalar hint = HintHashRegistry.getCompileTimeHintCell(
+                "Function::Parameters/config");
+        if (hint == null
+                || org.perlonjava.runtime.runtimetypes.RuntimeScalarType.isReference(hint)) {
+            parser.markMalformedFunctionParametersConfigWarning(null);
+            return;
+        }
+        if (!parser.markMalformedFunctionParametersConfigWarning(hint)) return;
+        String message = "Function::Parameters: $^H{'Function::Parameters/config'} is not a reference; skipping: "
+                + hint;
+        WarnDie.warnWithCategoryFromCode(new RuntimeScalar(message),
+                new RuntimeScalar(parser.ctx.errorUtil.warningLocation(tokenIndex)),
+                "Function::Parameters", parser.ctx.symbolTable.getWarningBitsString());
     }
 
     /**

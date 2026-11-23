@@ -430,7 +430,7 @@ boundary column records narrower diagnostic or representation differences.
 ### Reading regex support
 
 Each matrix row names the focused tracked tests that demonstrate the listed
-behavior. `dev/implementation/regex.md` explains the ownership boundary between
+behavior. `dev/architecture/regex.md` explains the ownership boundary between
 Perl source policy, the runtime adapter, and the maintained Joni fork; the
 callout-fork design records its runtime-neutral contract.
 
@@ -461,7 +461,7 @@ applicable on the JVM. Direct `\K` in lookaround follows the current Perl
 executable's rejection even though one POD sentence describes it as allowed.
 
 The current source-level architecture is described in
-[`dev/implementation/regex.md`](../../dev/implementation/regex.md) and the
+[`dev/architecture/regex.md`](../../dev/architecture/regex.md) and the
 runtime-neutral callback contract in
 [`docs/design/joni-callout-fork.md`](../design/joni-callout-fork.md). Delivery
 validation is recorded in the regex implementation plan rather than duplicated

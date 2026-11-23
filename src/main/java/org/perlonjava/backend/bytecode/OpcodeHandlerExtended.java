@@ -774,7 +774,7 @@ public class OpcodeHandlerExtended {
         int rd = bytecode[pc++];
         int wantarrayReg = bytecode[pc++];
         int ctx = ((RuntimeScalar) registers[wantarrayReg]).getInt();
-        registers[rd] = Operator.wantarray(ctx);
+        registers[rd] = Operator.wantarray(RuntimeCode.resolveWantArrayContext(ctx));
         return pc;
     }
 
@@ -1155,12 +1155,53 @@ public class OpcodeHandlerExtended {
         int rs = bytecode[pc++];
 
         RuntimeBase iterable = registers[rs];
-        java.util.Iterator<RuntimeScalar> iterator = iterable.iterator();
-
-        // Store iterator as a constant (preserve the Iterator object)
-        // Wrap in RuntimeScalar for storage
-        registers[rd] = new RuntimeScalar(iterator);
+        int sourceOwnerDepth = MortalList.pushForeachSourceOwners(iterable);
+        try {
+            java.util.Iterator<RuntimeScalar> iterator = iterable.iterator();
+            registers[rd] = new RuntimeScalar(
+                    new ForeachSourceIterator(iterator, sourceOwnerDepth));
+        } catch (RuntimeException | Error failure) {
+            MortalList.restoreForeachSourceOwnerDepth(sourceOwnerDepth);
+            throw failure;
+        }
         return pc;
+    }
+
+    /** Release the source-value owners paired with an interpreted foreach iterator. */
+    public static void releaseForeachSourceOwners(RuntimeScalar iteratorScalar) {
+        if (iteratorScalar != null
+                && iteratorScalar.value instanceof ForeachSourceIterator iterator) {
+            iterator.releaseSourceOwners();
+        }
+    }
+
+    private static final class ForeachSourceIterator
+            implements java.util.Iterator<RuntimeScalar> {
+        private final java.util.Iterator<RuntimeScalar> delegate;
+        private final int sourceOwnerDepth;
+        private boolean released;
+
+        private ForeachSourceIterator(
+                java.util.Iterator<RuntimeScalar> delegate, int sourceOwnerDepth) {
+            this.delegate = delegate;
+            this.sourceOwnerDepth = sourceOwnerDepth;
+        }
+
+        @Override
+        public boolean hasNext() {
+            return delegate.hasNext();
+        }
+
+        @Override
+        public RuntimeScalar next() {
+            return delegate.next();
+        }
+
+        private void releaseSourceOwners() {
+            if (released) return;
+            released = true;
+            MortalList.restoreForeachSourceOwnerDepth(sourceOwnerDepth);
+        }
     }
 
     /**

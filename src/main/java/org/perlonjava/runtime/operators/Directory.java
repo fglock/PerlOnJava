@@ -201,13 +201,14 @@ public class Directory {
             Path fullDirPath = RuntimeIO.resolvePath(dirPath);
             DirectoryStream<Path> stream = Files.newDirectoryStream(fullDirPath);
             DirectoryIO dirIO = new DirectoryIO(stream, dirPath);
+            RuntimeIO newDirectoryIO = new RuntimeIO(dirIO);
 
             if ((dirHandle.type == RuntimeScalarType.GLOB || dirHandle.type == RuntimeScalarType.GLOBREFERENCE) && dirHandle.value instanceof RuntimeGlob glob) {
-                glob.setIO(new RuntimeIO(dirIO));
+                glob.setIO(newDirectoryIO);
                 MyVarCleanupStack.retainLiveIoGlobOwners(glob, dirHandle);
             } else {
                 RuntimeScalar directoryGlob = new RuntimeGlob(null)
-                        .setIO(new RuntimeIO(dirIO)).createReference();
+                        .setIO(newDirectoryIO).createReference();
                 dirHandle.set(directoryGlob);
             }
 
@@ -236,6 +237,10 @@ public class Directory {
 
     public static RuntimeScalar closedir(RuntimeScalar runtimeScalar) {
         RuntimeIO dirIO = runtimeScalar.getRuntimeIO();
+        if (dirIO != null && dirIO.explicitlyClosedDirectory) {
+            getGlobalVariable("main::!").set(9);
+            return RuntimeScalarCache.scalarUndef;
+        }
         if (dirIO == null || dirIO.directoryIO == null) {
             getGlobalVariable("main::!").set(9);
             warnIfNotDirectoryHandle(runtimeScalar, "closedir");
@@ -251,6 +256,7 @@ public class Directory {
                 handleIOException(e, "Directory operation failed");
             }
             dirIO.directoryIO = null;
+            dirIO.explicitlyClosedDirectory = true;
             return scalarTrue;
         }
         warnIfNotDirectoryHandle(runtimeScalar, "closedir");

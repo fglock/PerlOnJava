@@ -10,6 +10,7 @@ import org.perlonjava.runtime.NamedCharacterExpansionMap;
 import org.perlonjava.runtime.WarningBitsRegistry;
 import org.perlonjava.runtime.debugger.DebugHooks;
 import org.perlonjava.runtime.operators.CompareOperators;
+import org.perlonjava.runtime.operators.MathOperators;
 import org.perlonjava.runtime.operators.ModuleOperators;
 import org.perlonjava.runtime.operators.ReferenceOperators;
 import org.perlonjava.runtime.operators.WarnDie;
@@ -1785,6 +1786,13 @@ public class BytecodeInterpreter {
                                 pc = OpcodeHandlerExtended.executeIteratorNext(bytecode, pc, registers);
                             }
 
+                            case Opcodes.FOREACH_SOURCE_RELEASE -> {
+                                // Release the temporary source-value lease acquired with the iterator.
+                                int iterReg = bytecode[pc++];
+                                OpcodeHandlerExtended.releaseForeachSourceOwners(
+                                        (RuntimeScalar) registers[iterReg]);
+                            }
+
                             case Opcodes.FOREACH_NEXT_OR_EXIT -> {
                                 // Superinstruction for foreach loops (do-while layout).
                                 // Combines: hasNext check, next() call, and conditional jump to body.
@@ -2330,6 +2338,8 @@ public class BytecodeInterpreter {
                                 int currentSubReg = bytecode[pc++];
                                 int argsReg = bytecode[pc++];
                                 int context = bytecode[pc++];
+                                int autoboxBindingsIndex = bytecode[pc++];
+                                String autoboxBindings = code.stringPool[autoboxBindingsIndex];
 
                                 // Resolve RUNTIME context from register 2 (wantarray)
                                 if (context == RuntimeContextType.RUNTIME) {
@@ -2379,8 +2389,10 @@ public class BytecodeInterpreter {
                                 RuntimeList result;
                                 try {
                                     result = stagedArgs == null
-                                            ? RuntimeCode.call(invocant, method, currentSub, callArgs, context)
-                                            : RuntimeCode.call(invocant, method, currentSub, stagedArgs, context);
+                                            ? RuntimeCode.call(invocant, method, currentSub, callArgs,
+                                                    context, autoboxBindings)
+                                            : RuntimeCode.call(invocant, method, currentSub, stagedArgs,
+                                                    context, autoboxBindings);
 
                                     // Keep method calls on the shared tail-call handoff as well.
                                     result = RuntimeCode.resolveTailCalls(result, context);
@@ -4002,9 +4014,11 @@ public class BytecodeInterpreter {
                             int baseReg = evalBaseRegStack.pop();
                             boolean needsFlush = false;
                             BitSet myVars = code.myVarRegisters;
-                            for (int i = myVars.nextSetBit(baseReg);
-                                 i >= 0 && i < registers.length;
-                                 i = myVars.nextSetBit(i + 1)) {
+                            // Registers are allocated in declaration order. Exception
+                            // cleanup must therefore visit them in reverse order so
+                            // deferred DESTROY calls preserve Perl's lexical LIFO order.
+                            for (int i = registers.length - 1; i >= baseReg; i--) {
+                                if (!myVars.get(i)) continue;
                                 RuntimeBase reg = registers[i];
                                 if (reg == null) continue;
                                 if (reg instanceof RuntimeScalar rs) {
@@ -4140,9 +4154,8 @@ public class BytecodeInterpreter {
                 // would incorrectly decrement refCounts, causing premature DESTROY.
                 BitSet myVars = code.myVarRegisters;
                 boolean needsFlush = false;
-                for (int i = myVars.nextSetBit(firstMyVarReg);
-                     i >= 0 && i < registers.length;
-                     i = myVars.nextSetBit(i + 1)) {
+                for (int i = registers.length - 1; i >= firstMyVarReg; i--) {
+                    if (!myVars.get(i)) continue;
                     RuntimeBase reg = registers[i];
                     if (reg == null) continue;
                     if (reg instanceof RuntimeScalar rs) {
@@ -4402,8 +4415,7 @@ public class BytecodeInterpreter {
                 RuntimeScalar val = (registers[rs] instanceof RuntimeScalar)
                         ? (RuntimeScalar) registers[rs]
                         : registers[rs].scalar();
-                registers[rd] = val.getBoolean() ?
-                        RuntimeScalarCache.scalarFalse : RuntimeScalarCache.scalarTrue;
+                registers[rd] = MathOperators.not(val);
                 return pc;
             }
             case Opcodes.NOT_NO_OVERLOAD -> {

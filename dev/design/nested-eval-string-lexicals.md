@@ -296,8 +296,8 @@ Plan drafted; implementation not started.
 - Subagent investigation transcript:
   `/var/folders/r9/9y2qm0t12bxc10jbthrttn8h0000gn/T/devin-overflows-501/f1a337c9/content.txt`
   (full technical walkthrough of both backends, ~200 lines).
-- Related doc: `dev/custom_bytecode/EVAL_STRING_SPEC.md`.
-- Related doc: `dev/custom_bytecode/CLOSURE_IMPLEMENTATION_STATUS.md`.
+- Related doc: `dev/architecture/custom_bytecode/EVAL_STRING_SPEC.md`.
+- Related doc: `dev/architecture/custom_bytecode/CLOSURE_IMPLEMENTATION_STATUS.md`.
 - PR that surfaced the bug:
   https://github.com/fglock/PerlOnJava/pull/511
   (Geo::IP fix — 2 of the 8 test files still fail due to this issue.)

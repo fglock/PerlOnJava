@@ -730,8 +730,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     /** Retire this cell's container edge when the container loses its last Perl owner. */
     void releaseContainerOwner(RuntimeBase expectedOwner) {
+        RuntimeBase referent = (type & RuntimeScalarType.REFERENCE_BIT) != 0
+                && value instanceof RuntimeBase base ? base : null;
         removeContainerOwnerTracking(expectedOwner);
         refreshUntrackedReferenceOwner();
+        WeakRefRegistry.onContainerValueOwnerReleased(referent);
     }
 
     /** Retire this aggregate edge after a slot mutation removed its last copy. */
@@ -747,6 +750,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             removeContainerOwnerTracking(owner);
         }
         refreshUntrackedReferenceOwner();
+        WeakRefRegistry.onContainerValueOwnerReleased(
+                (type & RuntimeScalarType.REFERENCE_BIT) != 0
+                        && value instanceof RuntimeBase base ? base : null);
     }
 
     /** Refresh this direct cell after its aggregate's last current Perl owner leaves. */
@@ -1231,8 +1237,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return untrackedReferenceOwnerSlot;
     }
 
-    private boolean hasDurableStrongValueSlot() {
+    boolean hasDurableStrongValueSlot() {
         return hasStrongValueSlot(false, true);
+    }
+
+    /** Whether this scalar still occupies a concrete aggregate storage slot. */
+    boolean hasCurrentAggregateStorageSlot() {
+        synchronized (this) {
+            for (RuntimeBase owner : containerOwners) {
+                if (isStoredInContainer(owner)) return true;
+            }
+        }
+        return false;
     }
 
     /** Whether a slot is attached to a container that itself still has a Perl owner. */
@@ -1270,7 +1286,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 || stagedValueOwner
                 || (referencedByScalarReference
                     && (hasScalarCellOwner() || (!requireLiveContainer && refCount > 0)))
-                || this instanceof RuntimeBaseProxy;
+                || (this instanceof RuntimeBaseProxy proxy
+                    && proxy.hasLivePerlValueOwner(requirePersistentContainer));
     }
 
     /** Scan container identities in place so repeated stores do not allocate a full history copy. */
@@ -1337,6 +1354,24 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     private synchronized List<RuntimeBase> containerOwnerSnapshot() {
         return new ArrayList<>(containerOwners);
+    }
+
+    String debugContainerOwners() {
+        PerlRuntime runtime = PerlRuntime.currentOrNull();
+        return containerOwnerSnapshot().stream().map(owner -> {
+            String state = owner.getClass().getSimpleName() + "#"
+                    + System.identityHashCode(owner)
+                    + ":stores=" + isStoredInAnyContainer(owner)
+                    + ":perlOwner=" + owner.hasCurrentPerlStorageOwner();
+            if (owner instanceof RuntimeArray array) {
+                state += ":size=" + array.elements.size()
+                        + ":args=" + (runtime != null
+                                && runtime.executionState().argsStack.contains(array));
+            } else if (owner instanceof RuntimeHash hash) {
+                state += ":size=" + hash.elements.size();
+            }
+            return state;
+        }).toList().toString();
     }
 
     boolean hasContainerOwnerIn(Set<RuntimeBase> candidates) {
@@ -1423,6 +1458,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     PerlOwnerSlot.Kind.UNTRACKED_REFERENCE);
             untrackedReferenceOwnerSlot.associateUntrackedScalarOwner(this);
         }
+        if (this instanceof RuntimeBaseProxy proxy) {
+            untrackedReferenceOwnerSlot.associateUntrackedProxyValueParent(
+                    proxy.argumentAliasContainer());
+        }
         // Transfer the existing identity in place. PerlOwnerSlot installs its
         // new referent before releasing the previous one, so cleanup callbacks
         // cannot observe a gap where this scalar's current value has no owner.
@@ -1502,6 +1541,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             retainUntrackedReferenceOwner(referent);
         } else if (untrackedReferenceOwnerSlot != null) {
             releaseUntrackedReferenceOwner(untrackedReferenceOwnerSlot.referent());
+        }
+        refreshTransientUntrackedOwnerClassification();
+    }
+
+    private void refreshTransientUntrackedOwnerClassification() {
+        if (untrackedReferenceOwnerSlot != null) {
+            untrackedReferenceOwnerSlot.refreshTransientUntrackedOwnerClassification();
         }
     }
 
@@ -2071,6 +2117,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     void finishMortalReturnHandoff() {
         mortalReturnSnapshot = false;
+        refreshTransientUntrackedOwnerClassification();
         mortalReturnSourceOwnerIdentity = 0;
         mortalReturnSourceReleaseSequence = 0;
         mortalReturnSourceReferent = null;
@@ -2267,6 +2314,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         untrackedReferenceOwnerSlot = null;
         if (destination.untrackedReferenceOwnerSlot != null) {
             destination.untrackedReferenceOwnerSlot.associateUntrackedScalarOwner(destination);
+            RuntimeBase proxyParent = destination instanceof RuntimeBaseProxy proxy
+                    ? proxy.argumentAliasContainer() : null;
+            destination.untrackedReferenceOwnerSlot.associateUntrackedProxyValueParent(
+                    proxyParent);
         }
     }
 
@@ -4649,6 +4700,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         boolean oldArgumentAliasReleaseQueued = false;
         boolean retireOldCountedOwnerAfterPublish = false;
         boolean oldOwnerTraceReleasedDuringReplacement = false;
+        PerlOwnerSlot displacedCountedOwnerSlot = countedOwnerSlot;
+        PerlOwnerSlot replacementCountedOwnerSlot = null;
         PerlOwnerSlot.PendingRelease oldCountedOwnerRelease = null;
         boolean newOwned = false;
         RuntimeBase newReferent = null;
@@ -4694,6 +4747,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 // paths; retire that token without decrementing a count that
                 // has already reached zero or the referent is destroyed.
                 retireOldCountedOwnerAfterPublish = true;
+                if (newOwned) {
+                    // Keep the stale slot intact until the replacement value
+                    // is published, but acquire the new edge on a fresh slot.
+                    // Reusing the stale identity here would make its deferred
+                    // retirement detach the replacement's owner slot too.
+                    replacementCountedOwnerSlot = new PerlOwnerSlot(countedOwnerKind());
+                    replacementCountedOwnerSlot.acquireCountedScalarReplacementOwner(
+                            this, newReferent,
+                            "RuntimeScalar.setLargeRefCounted stale aggregate replacement");
+                }
             } else if (oldBase.refCount <= 0) {
                 throw new IllegalStateException(
                         "counted scalar replacement requires a positive old reference count");
@@ -4737,11 +4800,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.value = copyScalarPayload(value.type, value.value);
         long referenceSlotMutationVersion = noteReferenceSlotMutation();
         this.refCountOwned = newOwned;
+        if (replacementCountedOwnerSlot != null) {
+            countedOwnerSlot = replacementCountedOwnerSlot;
+        }
         this.scalarReferenceContentsOwner = null;
         if (retireOldCountedOwnerAfterPublish) {
             // The replacement is now visible. Retire the old slot only after
             // publication, while carrying its exact count obligation forward.
-            oldCountedOwnerRelease = countedOwnerSlot.releaseCountedIdentity();
+            oldCountedOwnerRelease = displacedCountedOwnerSlot.releaseCountedIdentity();
             if (oldCountedOwnerRelease == null) {
                 throw new IllegalStateException(
                         "published scalar replacement lost its old release token");
@@ -6647,9 +6713,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 OverloadContext ctx = OverloadContext.prepare(blessId);
                 if (ctx != null) {
                     // Try overload method
+                    int originalType = type;
+                    Object originalValue = value;
                     RuntimeScalar result = ctx.tryOverload("(&{}", unaryDerefOverloadArgs());
                     // If the subroutine returns the object itself then it will not be called again
-                    if (overloadReturnedDifferentObject(result)) {
+                    if ((result != null && result.type == CODE)
+                            || overloadReturnedDifferentObject(result)
+                            || (result == this && (type != originalType || value != originalValue))) {
                         return result.codeDerefNonStrict(packageName);
                     }
                 }
@@ -6721,8 +6791,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             if (blessId < 0) {
                 OverloadContext ctx = OverloadContext.prepare(blessId);
                 if (ctx != null) {
+                    int originalType = type;
+                    Object originalValue = value;
                     RuntimeScalar result = ctx.tryOverload("(&{}", unaryDerefOverloadArgs());
-                    if (overloadReturnedDifferentObject(result)) {
+                    if ((result != null && result.type == CODE)
+                            || overloadReturnedDifferentObject(result)
+                            || (result == this && (type != originalType || value != originalValue))) {
                         return result.codeDerefStrict();
                     }
                 }
@@ -7395,7 +7469,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.numericContextSeen = false;
         this.firstClassRegexScalar = false;
         this.formatPictureTainted = false;
-        if (this.type != RuntimeScalarType.TIED_SCALAR
+        if (blessedId(this) == 0
+                && this.type != RuntimeScalarType.TIED_SCALAR
                 && this.type != RuntimeScalarType.STRING
                 && this.type != RuntimeScalarType.BYTE_STRING
                 && this.type != RuntimeScalarType.VSTRING) {
@@ -7511,20 +7586,20 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                             return preAutoIncrementWithoutWatcherNotification();
                         }
 
-                        // With fallback enabled, Perl autogenerates ++ from
-                        // numeric conversion when no ++ or + overload exists.
-                        result = ctx.tryOverloadFallback(this, "(0+");
-                        if (result != null) {
-                            set(result);
-                            return preAutoIncrementWithoutWatcherNotification();
-                        }
-
                         // Try fallback to + operator with undef as third argument (mutator indicator)
                         result = ctx.tryOverload("(+", new RuntimeArray(this, scalarOne, scalarUndef));
                         if (result != null) {
                             // For fallback, + should NOT modify operand, so we handle assignment
                             set(result);
                             return this;
+                        }
+
+                        // With fallback enabled, Perl autogenerates ++ from
+                        // numeric conversion only when neither ++ nor + exists.
+                        result = ctx.tryOverloadFallback(this, "(0+");
+                        if (result != null) {
+                            set(result);
+                            return preAutoIncrementWithoutWatcherNotification();
                         }
 
                     }
@@ -7554,6 +7629,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     /** Postfix ++ in void context for a proven lexical lvalue. */
     public void postAutoIncrementVoid() {
         watcherMutationDepth++;
+        boolean completed = false;
         try {
             if (getClass() == RuntimeScalar.class
                     && type == INTEGER
@@ -7562,15 +7638,20 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 if (integerValue < Long.MAX_VALUE) {
                     warnImprecisionForAutoOperation(1);
                     setIntegerValue(integerValue + 1);
-                    return;
+                    completed = true;
+                } else {
+                    postAutoIncrementWithoutWatcherNotification();
+                    completed = true;
                 }
+            } else {
+                postAutoIncrementWithoutWatcherNotification();
+                completed = true;
             }
-            postAutoIncrementWithoutWatcherNotification();
         } finally {
             watcherMutationDepth--;
             refreshArgumentAliasOwnerSlots();
-            notifyModifiedWatchers();
         }
+        if (completed) notifyModifiedWatchers();
     }
 
     /** Implements ++ while lexical {@code use integer} is active. */
@@ -7657,7 +7738,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     private RuntimeScalar postAutoIncrementWithoutWatcherNotification() {
         warnImprecisionForAutoOperation(1);
-        if (this.type != RuntimeScalarType.TIED_SCALAR
+        if (blessedId(this) == 0
+                && this.type != RuntimeScalarType.TIED_SCALAR
                 && this.type != RuntimeScalarType.STRING
                 && this.type != RuntimeScalarType.BYTE_STRING
                 && this.type != RuntimeScalarType.VSTRING) {
@@ -7797,20 +7879,20 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                             return old;
                         }
 
-                        // Numeric conversion is the final autogeneration
-                        // route for an overloaded postfix increment.
-                        result = ctx.tryOverloadFallback(this, "(0+");
-                        if (result != null) {
-                            set(result);
-                            preAutoIncrementWithoutWatcherNotification();
-                            return old;
-                        }
-
                         // Try fallback to + operator with undef as third argument (mutator indicator)
                         result = ctx.tryOverload("(+", new RuntimeArray(this, scalarOne, scalarUndef));
                         if (result != null) {
                             // For fallback, + should NOT modify operand, so we handle assignment
                             set(result);
+                            return old;
+                        }
+
+                        // Numeric conversion is the final autogeneration
+                        // route when neither ++ nor + overloads are present.
+                        result = ctx.tryOverloadFallback(this, "(0+");
+                        if (result != null) {
+                            set(result);
+                            preAutoIncrementWithoutWatcherNotification();
                             return old;
                         }
 

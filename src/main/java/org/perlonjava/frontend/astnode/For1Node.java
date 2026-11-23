@@ -40,6 +40,13 @@ public class For1Node extends AbstractNode {
     public int preEvaluatedArrayIndex = -1;
 
     /**
+     * If nonnegative, the foreach source owners were acquired alongside
+     * {@link #preEvaluatedArrayIndex} before the implicit {@code local $_}
+     * statement boundary.
+     */
+    public int preEvaluatedForeachSourceOwnerDepthIndex = -1;
+
+    /**
      * Constructs a new For1Node with the specified parts of the for loop.
      *
      * @param useNewScope this loop creates a new variable scope

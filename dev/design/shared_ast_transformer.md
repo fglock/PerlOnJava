@@ -1082,7 +1082,7 @@ BlockNode {
 
 - `dev/design/interpreter.md` - Interpreter architecture
 - `dev/design/logical_or_list_context.md` - Context propagation challenges
-- `dev/custom_bytecode/BYTECODE_DOCUMENTATION.md` - Bytecode format
+- `dev/architecture/custom_bytecode/BYTECODE_DOCUMENTATION.md` - Bytecode format
 
 ## Existing Analysis Visitors (to integrate)
 

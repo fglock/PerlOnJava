@@ -1157,7 +1157,8 @@ public class EmitVariable {
         MethodVisitor mv = ctx.mv;
         // Determine the assign type based on the left side.
         // Inspect the AST and get the L-value context: SCALAR or LIST
-        int lvalueContext = LValueVisitor.getContext(node);
+        int lvalueContext = isLocalizedHashSliceAssignment(node.left)
+                ? RuntimeContextType.LIST : LValueVisitor.getContext(node);
         if (isKeyValueHashSliceLvalueSub(node.left)) {
             String assignmentKind = isIndexValueArraySliceLvalueSub(node.left) ? "list"
                     : lvalueContext == RuntimeContextType.SCALAR
@@ -1832,7 +1833,14 @@ public class EmitVariable {
                     elements.add(right);
                     right = new ListNode(elements, node.tokenIndex);
                 }
-                right.accept(emitterVisitor.with(RuntimeContextType.LIST));   // emit the value
+                int previousSplitLimit = ctx.splitAssignmentLimit;
+                int targetCount = fixedScalarListTargetCount(node.left);
+                if (targetCount > 0) ctx.splitAssignmentLimit = targetCount;
+                try {
+                    right.accept(emitterVisitor.with(RuntimeContextType.LIST));   // emit the value
+                } finally {
+                    ctx.splitAssignmentLimit = previousSplitLimit;
+                }
 
                 if (isLocalAssignment) {
                     // Clone the list before calling local()
@@ -1908,6 +1916,20 @@ public class EmitVariable {
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("SET end");
     }
 
+    private static int fixedScalarListTargetCount(Node target) {
+        if (target instanceof OperatorNode op
+                && (op.operator.equals("my") || op.operator.equals("our") || op.operator.equals("state"))) {
+            target = op.operand;
+        }
+        if (!(target instanceof ListNode list) || list.elements.isEmpty()) return 0;
+        for (Node element : list.elements) {
+            if (element instanceof OperatorNode op
+                    && (op.operator.equals("@") || op.operator.equals("%")
+                    || op.operator.equals("array") || op.operator.equals("hash"))) return 0;
+        }
+        return list.elements.size();
+    }
+
     /** Normalize parser-local declared-reference slice syntax into the
      * localized ref-alias form consumed by the slice emitter. */
     private static BinaryOperatorNode normalizeLocalizedDeclaredReferenceSlice(BinaryOperatorNode node) {
@@ -1938,6 +1960,20 @@ public class EmitVariable {
                 && (access.operator.equals("{") || access.operator.equals("["))
                 && access.left instanceof OperatorNode sigil
                 && sigil.operator.equals("%");
+    }
+
+    private static boolean isLocalizedHashSliceAssignment(Node node) {
+        if (!(node instanceof OperatorNode local) || !local.operator.equals("local")) {
+            return false;
+        }
+        Node operand = local.operand;
+        while (operand instanceof ListNode list && list.elements.size() == 1) {
+            operand = list.elements.getFirst();
+        }
+        return operand instanceof BinaryOperatorNode slice
+                && slice.operator.equals("{")
+                && slice.left instanceof OperatorNode sigil
+                && sigil.operator.equals("@");
     }
 
     private static String keyValueSliceDescription(Node node) {

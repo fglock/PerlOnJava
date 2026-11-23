@@ -237,6 +237,9 @@ public final class PerlThreadControlBlock {
                     MortalList.flushDeferredCaptures();
                     RuntimeRegex.emitCurrentRuntimeDebugFreeTraces();
                 }
+                // A child interpreter must not finalize objects whose shared
+                // references remain owned by the parent thread. Teardown uses
+                // its package owner slots without scanning unreachable cycles.
                 GlobalDestruction.runGlobalDestruction();
                 return new Outcome(value, failure);
             });

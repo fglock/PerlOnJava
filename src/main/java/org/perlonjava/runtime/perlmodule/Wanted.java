@@ -26,7 +26,7 @@ public class Wanted extends PerlModuleBase {
     }
 
     private static Integer callerContext() {
-        return RuntimeCode.getCallContextAtCallerFrame(1);
+        return RuntimeCode.getRawCallContextAtCallerFrame(1);
     }
 
     public static RuntimeList context(RuntimeArray args, int ctx) {
@@ -72,7 +72,9 @@ public class Wanted extends PerlModuleBase {
                             && caller != RuntimeContextType.LVALUE_LIST);
                     case "INFINITY" -> caller != null && RuntimeContextType.isListLike(caller);
                     case "OBJECT" -> caller != null && caller == RuntimeContextType.OBJECT;
-                    case "BOOL", "BOOLEAN", "ARRAY", "HASH", "CODE", "GLOB",
+                    case "BOOL", "BOOLEAN" -> caller != null
+                            && caller == RuntimeContextType.BOOLEAN;
+                    case "ARRAY", "HASH", "CODE", "GLOB",
                             "REF", "REFSCALAR" -> false;
                     default -> {
                         if (requested.matches("[0-9]+")) {

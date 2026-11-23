@@ -1579,7 +1579,8 @@ public class CompileAssignment {
             int elemReg = bc.lastResultReg;
             // Preserve the outer value for self-referential RHS expressions:
             // localization begins after both sides have been evaluated.
-            bc.compileNode(node.right, -1, rhsContext);
+            bc.compileNode(node.right, -1,
+                    hashSlice ? RuntimeContextType.LIST : rhsContext);
             int valueReg = bc.lastResultReg;
             if (!hashSlice) {
                 // Hash fetches return the live element scalar. Saving the local
@@ -1932,6 +1933,36 @@ public class CompileAssignment {
             // emits nothing - a silent no-op assignment. Reproduced by:
             //     local ($h->{x}) = 99;   inside an eval-STRING-compiled sub
             if (element instanceof BinaryOperatorNode binOp) {
+                if (binOp.operator.equals("{")
+                        && binOp.left instanceof OperatorNode sliceSigil
+                        && sliceSigil.operator.equals("@")) {
+                    bc.compileNode(node.right, -1, RuntimeContextType.LIST);
+                    int valueListReg = bc.lastResultReg;
+                    bc.beginLocalHashLvalueCompile();
+                    try {
+                        bc.compileNode(binOp, -1, RuntimeContextType.LIST);
+                    } finally {
+                        bc.endLocalHashLvalueCompile();
+                    }
+                    int targetListReg = bc.lastResultReg;
+                    bc.emit(Opcodes.PUSH_LOCAL_VARIABLE);
+                    bc.emitReg(targetListReg);
+                    int resultReg = bc.allocateRegister();
+                    bc.emit(Opcodes.SET_FROM_LIST);
+                    bc.emitReg(resultReg);
+                    bc.emitReg(targetListReg);
+                    bc.emitReg(valueListReg);
+                    if (rhsContext == RuntimeContextType.SCALAR) {
+                        int countReg = bc.allocateRegister();
+                        bc.emit(Opcodes.LIST_TO_COUNT);
+                        bc.emitReg(countReg);
+                        bc.emitReg(resultReg);
+                        bc.lastResultReg = countReg;
+                    } else {
+                        bc.lastResultReg = resultReg;
+                    }
+                    return true;
+                }
                 if (binOp.operator.equals("[")
                         && binOp.left instanceof OperatorNode arraySliceOp
                         && arraySliceOp.operator.equals("@")
@@ -2092,6 +2123,43 @@ public class CompileAssignment {
                 bc.emitReg(elemReg);
                 refreshOurRegister(bc, varName, nameIdx, Opcodes.LOAD_GLOBAL_SCALAR);
                 if (i == 0) bc.lastResultReg = localReg;
+            } else if (element instanceof OperatorNode globOp && globOp.operator.equals("*")) {
+                int elemReg;
+                if (aggregateConsumedRhs) {
+                    elemReg = bc.allocateRegister();
+                    bc.emit(Opcodes.LOAD_UNDEF);
+                    bc.emitReg(elemReg);
+                } else {
+                    int idxReg = bc.allocateRegister();
+                    bc.emit(Opcodes.LOAD_INT);
+                    bc.emitReg(idxReg);
+                    bc.emit(i);
+                    elemReg = bc.allocateRegister();
+                    bc.emit(Opcodes.ARRAY_GET);
+                    bc.emitReg(elemReg);
+                    bc.emitReg(valueReg);
+                    bc.emitReg(idxReg);
+                }
+
+                int globReg;
+                if (globOp.operand instanceof IdentifierNode globId) {
+                    String globalGlobName = NameNormalizer.normalizeVariableName(
+                            globId.name, bc.getCurrentPackage());
+                    int nameIdx = bc.addToStringPool(globalGlobName);
+                    globReg = bc.allocateRegister();
+                    bc.emitWithToken(Opcodes.LOCAL_GLOB, node.getIndex());
+                    bc.emitReg(globReg);
+                    bc.emit(nameIdx);
+                } else {
+                    bc.compileNode(globOp.operand, -1, RuntimeContextType.SCALAR);
+                    globReg = emitGlobDeref(bc, bc.lastResultReg, node.getIndex());
+                    bc.emit(Opcodes.PUSH_LOCAL_VARIABLE);
+                    bc.emitReg(globReg);
+                }
+                bc.emit(Opcodes.STORE_GLOB);
+                bc.emitReg(globReg);
+                bc.emitReg(elemReg);
+                if (i == 0) bc.lastResultReg = globReg;
             } else if (element instanceof BinaryOperatorNode binOp) {
                 // Element is an lvalue expression (e.g. $h->{k}, $a[i], $obj->attr).
                 // Compile to get the element reference, localize it, and assign RHS[i].
@@ -2679,8 +2747,8 @@ public class CompileAssignment {
                         // assignment even when it contains just one array or
                         // hash variable.  Its RHS must therefore retain list
                         // context (in particular, for `eval { ... }`).
-                        bytecodeCompiler.compileNode(node.right, -1, RuntimeContextType.LIST);
-                        int listReg = bytecodeCompiler.lastResultReg;
+                        int listReg = compileFixedListAssignmentRhs(
+                                bytecodeCompiler, node.right, listNode.elements.size());
 
                         // Convert to list if needed
                         int rhsListReg = bytecodeCompiler.allocateRegister();
@@ -2884,7 +2952,12 @@ public class CompileAssignment {
                         && globTarget.operator.equals("*")) {
                     compileLocalScalarRhs(bytecodeCompiler, node.right);
                 } else {
-                    bytecodeCompiler.compileNode(node.right, -1, rhsContext);
+                    int listWidth = fixedListAssignmentWidth(node.left);
+                    if (listWidth > 0 && rhsContext == RuntimeContextType.LIST) {
+                        compileFixedListAssignmentRhs(bytecodeCompiler, node.right, listWidth);
+                    } else {
+                        bytecodeCompiler.compileNode(node.right, -1, rhsContext);
+                    }
                 }
             }
             int valueReg = bytecodeCompiler.lastResultReg;
@@ -4706,6 +4779,29 @@ public class CompileAssignment {
         emitReleaseConsumedRhsTemp(bytecodeCompiler, node.right, valueReg, reg);
         bytecodeCompiler.lastResultReg = reg;
         return true;
+    }
+
+    private static int fixedListAssignmentWidth(Node left) {
+        if (left instanceof ListNode list) return list.elements.size();
+        if (left instanceof OperatorNode declaration
+                && (declaration.operator.equals("my") || declaration.operator.equals("state"))
+                && declaration.operand instanceof ListNode list) return list.elements.size();
+        return 0;
+    }
+
+    private static int compileFixedListAssignmentRhs(
+            BytecodeCompiler bc, Node rhs, int width) {
+        int previousLimit = bc.getSplitAssignmentLimit();
+        if (width > 0 && rhs instanceof BinaryOperatorNode split
+                && split.operator.equals("split")) {
+            bc.setSplitAssignmentLimit(width);
+        }
+        try {
+            bc.compileNode(rhs, -1, RuntimeContextType.LIST);
+            return bc.lastResultReg;
+        } finally {
+            bc.setSplitAssignmentLimit(previousLimit);
+        }
     }
 
     private static boolean isKeyValueHashSliceLvalueSub(Node node) {

@@ -196,6 +196,8 @@ public class ScopedSymbolTable {
     private final FastStack<String> useVersionStack = new FastStack<>();
     /** Lexically scoped parser keywords installed by compile-time modules. */
     private final FastStack<Map<String, ParserKeywordPlugin>> parserKeywordPluginsStack = new FastStack<>();
+    /** Lexically scoped autobox mappings captured on method-call AST nodes. */
+    private final FastStack<Map<String, List<String>>> autoboxBindingsStack = new FastStack<>();
     // A stack to manage nested scopes of symbol tables.
     private final FastStack<SymbolTable> symbolTableStack = new FastStack<>();
     private final FastStack<PackageInfo> packageStack = new FastStack<>();
@@ -256,6 +258,7 @@ public class ScopedSymbolTable {
         regexDebugFlagsStack.push(0);
         useVersionStack.push(null);
         parserKeywordPluginsStack.push(EMPTY_PLUGINS);
+        autoboxBindingsStack.push(Map.of());
         // Initialize the package name
         packageStack.push(new PackageInfo("main", false, null));
         // Initialize the subroutine stack with empty string (no subroutine)
@@ -358,6 +361,7 @@ public class ScopedSymbolTable {
         useVersionStack.push(null);
         Map<String, ParserKeywordPlugin> curPlugins = parserKeywordPluginsStack.peek();
         parserKeywordPluginsStack.push(curPlugins.isEmpty() ? EMPTY_PLUGINS : new LinkedHashMap<>(curPlugins));
+        autoboxBindingsStack.push(copyAutoboxBindings(autoboxBindingsStack.peek()));
 
         // Return the current size of the symbol table stack as the scope index
         return symbolTableStack.size() - 1;
@@ -416,6 +420,7 @@ public class ScopedSymbolTable {
             regexDebugFlagsStack.pop();
             useVersionStack.pop();
             parserKeywordPluginsStack.pop();
+            autoboxBindingsStack.pop();
         }
         // Propagate the child scope's index to the parent to prevent slot reuse.
         // This ensures that local variable slots allocated inside conditional branches
@@ -497,6 +502,11 @@ public class ScopedSymbolTable {
                 }
             }
         }
+        // Perl destroys lexical hashes in reverse declaration order. The
+        // symbol maps are HashMaps, so their iteration order cannot define
+        // observable DESTROY ordering. Pad indices increase with declaration
+        // order and remain unique across the active scope chain.
+        indices.sort(java.util.Comparator.reverseOrder());
         return indices;
     }
 
@@ -514,6 +524,8 @@ public class ScopedSymbolTable {
                 }
             }
         }
+        // Native Perl clears lexical arrays in declaration order.
+        indices.sort(java.util.Comparator.naturalOrder());
         return indices;
     }
 
@@ -535,6 +547,9 @@ public class ScopedSymbolTable {
                 }
             }
         }
+        // DESTROY order is observable; scalar pads leave scope in reverse
+        // declaration order, independent of HashMap iteration order.
+        indices.sort(java.util.Comparator.reverseOrder());
         return indices;
     }
 
@@ -1211,10 +1226,30 @@ public class ScopedSymbolTable {
         // Parser keyword plugins.
         Map<String, ParserKeywordPlugin> srcPlugins = this.parserKeywordPluginsStack.peek();
         st.parserKeywordPluginsStack.push(srcPlugins.isEmpty() ? EMPTY_PLUGINS : new LinkedHashMap<>(srcPlugins));
+        st.autoboxBindingsStack.push(copyAutoboxBindings(this.autoboxBindingsStack.peek()));
 
         st.lexicalRegexPragmaChanged = this.lexicalRegexPragmaChanged;
 
         return st;
+    }
+
+    private static Map<String, List<String>> copyAutoboxBindings(
+            Map<String, List<String>> bindings) {
+        if (bindings.isEmpty()) return Map.of();
+        Map<String, List<String>> copy = new LinkedHashMap<>();
+        bindings.forEach((type, classes) -> copy.put(type, List.copyOf(classes)));
+        return copy;
+    }
+
+    /** Current lexical autobox bindings, with immutable class lists. */
+    public Map<String, List<String>> getAutoboxBindings() {
+        return autoboxBindingsStack.peek();
+    }
+
+    /** Replace bindings in the active lexical scope. */
+    public void setAutoboxBindings(Map<String, List<String>> bindings) {
+        autoboxBindingsStack.set(autoboxBindingsStack.size() - 1,
+                copyAutoboxBindings(bindings));
     }
 
     /**

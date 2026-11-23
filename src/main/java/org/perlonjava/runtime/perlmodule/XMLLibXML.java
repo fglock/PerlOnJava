@@ -304,6 +304,7 @@ public class XMLLibXML extends PerlModuleBase {
                 {"getElementsByTagName"},
                 {"getElementsByTagNameNS"},
                 {"getElementsByLocalName"},
+                {"indexElements", "docIndexElements"},
                 // XS underscore aliases needed by original LibXML.pm Perl wrappers
                 {"_setDocumentElement", "setDocumentElement"},
                 {"_toString",           "documentToString"},
@@ -914,6 +915,7 @@ public class XMLLibXML extends PerlModuleBase {
             StringWriter sw = new StringWriter();
             tr.transform(new DOMSource(node), new StreamResult(sw));
             String result = sw.toString();
+            result = restoreParsedAttributeOrder(result, node);
             // Remove standalone="no" from declaration to match libxml2 output style
             if (withDecl) {
                 result = result.replace(" standalone=\"no\"", "");
@@ -984,6 +986,71 @@ public class XMLLibXML extends PerlModuleBase {
             }
         }
         return sb.toString();
+    }
+
+    private static final String ATTRIBUTE_ORDER_KEY = "__perlAttributeOrder__";
+
+    private static void recordParsedAttributeOrder(Document doc, String xml) {
+        List<List<String>> parsed = new ArrayList<>();
+        java.util.regex.Matcher tags = java.util.regex.Pattern
+            .compile("<([A-Za-z_:][A-Za-z0-9_.:-]*)([^<>]*)>").matcher(xml);
+        java.util.regex.Pattern attrPattern = java.util.regex.Pattern
+            .compile("(?:^|\\s)([A-Za-z_:][A-Za-z0-9_.:-]*)\\s*=");
+        while (tags.find()) {
+            List<String> names = new ArrayList<>();
+            java.util.regex.Matcher attrs = attrPattern.matcher(tags.group(2));
+            while (attrs.find()) names.add(attrs.group(1));
+            parsed.add(names);
+        }
+        List<Element> elements = new ArrayList<>();
+        collectElements(doc.getDocumentElement(), elements);
+        for (int i = 0; i < Math.min(parsed.size(), elements.size()); i++)
+            elements.get(i).setUserData(ATTRIBUTE_ORDER_KEY, parsed.get(i), null);
+    }
+
+    private static void collectElements(Element element, List<Element> result) {
+        if (element == null) return;
+        result.add(element);
+        NodeList children = element.getChildNodes();
+        for (int i = 0; i < children.getLength(); i++)
+            if (children.item(i) instanceof Element child) collectElements(child, result);
+    }
+
+    private static String restoreParsedAttributeOrder(String xml, Node node) {
+        Document doc = node instanceof Document d ? d : node.getOwnerDocument();
+        if (doc == null || doc.getDocumentElement() == null) return xml;
+        List<Element> elements = new ArrayList<>();
+        collectElements(doc.getDocumentElement(), elements);
+        java.util.regex.Pattern tagPattern = java.util.regex.Pattern
+            .compile("<([A-Za-z_:][A-Za-z0-9_.:-]*)(\\s+[^<>]*?)?(/?)>");
+        java.util.regex.Pattern attrPattern = java.util.regex.Pattern
+            .compile("([A-Za-z_:][A-Za-z0-9_.:-]*)\\s*=\\\"([^\\\"]*)\\\"");
+        java.util.regex.Matcher matcher = tagPattern.matcher(xml);
+        StringBuffer output = new StringBuffer();
+        int elementIndex = 0;
+        while (matcher.find()) {
+            String replacement = matcher.group();
+            if (elementIndex < elements.size()) {
+                Element element = elements.get(elementIndex++);
+                Object orderValue = element.getUserData(ATTRIBUTE_ORDER_KEY);
+                if (orderValue instanceof List<?> order && !order.isEmpty()) {
+                    java.util.LinkedHashMap<String, String> values = new java.util.LinkedHashMap<>();
+                    java.util.regex.Matcher attrMatcher = attrPattern.matcher(
+                        matcher.group(2) == null ? "" : matcher.group(2));
+                    while (attrMatcher.find()) values.put(attrMatcher.group(1), attrMatcher.group(2));
+                    List<String> names = new ArrayList<>();
+                    for (Object name : order) if (values.containsKey(name)) names.add((String) name);
+                    for (String name : values.keySet()) if (!names.contains(name)) names.add(name);
+                    StringBuilder rebuilt = new StringBuilder("<").append(matcher.group(1));
+                    for (String name : names)
+                        rebuilt.append(' ').append(name).append("=\"").append(values.get(name)).append('"');
+                    replacement = rebuilt.append(matcher.group(3)).append('>').toString();
+                }
+            }
+            matcher.appendReplacement(output, java.util.regex.Matcher.quoteReplacement(replacement));
+        }
+        matcher.appendTail(output);
+        return output.toString();
     }
 
     private static final int XML_PARSE_NOBLANKS = 256; // keep_blanks(0) sets this flag
@@ -1107,6 +1174,7 @@ public class XMLLibXML extends PerlModuleBase {
                 source.setSystemId(args.get(2).toString());
             }
             doc = db.parse(source);
+            recordParsedAttributeOrder(doc, xmlStr);
             if (!opts.keepBlanks) stripBlankTextNodes(doc);
             // Store detected encoding in user data for getEncoding() calls
             String declEnc = doc.getXmlEncoding();
@@ -3139,6 +3207,33 @@ public class XMLLibXML extends PerlModuleBase {
         }
 
         return wrapNode(null).getList();
+    }
+
+    /** Build the document's persistent ID lookup cache, matching libxml2's
+     * explicit indexElements() entry point.  getElementById() also refreshes
+     * this cache as it searches, so this is an eager pass over the live tree.
+     */
+    @SuppressWarnings("unchecked")
+    public static RuntimeList docIndexElements(RuntimeArray args, int ctx) {
+        Document doc = (Document) getNode(args.get(0));
+        Map<String, Element> cache = (Map<String, Element>) doc.getUserData("__xmlIdCache__");
+        if (cache == null) {
+            cache = new HashMap<>();
+            doc.setUserData("__xmlIdCache__", cache, null);
+        }
+        indexElementIds(doc.getDocumentElement(), cache);
+        return new RuntimeList();
+    }
+
+    private static void indexElementIds(Element element, Map<String, Element> cache) {
+        if (element == null) return;
+        String xmlId = element.getAttributeNS("http://www.w3.org/XML/1998/namespace", "id");
+        String id = element.getAttribute("id");
+        if (!xmlId.isEmpty()) cache.put(xmlId, element);
+        if (!id.isEmpty()) cache.put(id, element);
+        NodeList children = element.getChildNodes();
+        for (int i = 0; i < children.getLength(); i++)
+            if (children.item(i) instanceof Element child) indexElementIds(child, cache);
     }
 
     private static Element findElementById(Element el, String id) {

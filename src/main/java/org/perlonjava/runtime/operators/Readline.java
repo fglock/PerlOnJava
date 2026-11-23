@@ -19,6 +19,13 @@ public class Readline {
      * @return A RuntimeBase with the line(s).
      */
     public static RuntimeBase readline(RuntimeScalar fileHandle, int ctx) {
+        // A TieHandle is already the filehandle wrapper.  Treating its
+        // TIED_SCALAR type like an ordinary tied scalar would FETCH the tied
+        // object and lose the READLINE dispatch target.
+        if (fileHandle instanceof TieHandle tieHandle) {
+            return TieHandle.tiedReadline(tieHandle, ctx);
+        }
+
         // Resolving a lexical/aggregate element can retire statement-temporary
         // diagnostic state. Save the compiler-provided source spelling before
         // that resolution and attach it to the resulting IO below.
@@ -38,9 +45,10 @@ public class Readline {
         if (blessId < 0) {
             OverloadContext overloadCtx = OverloadContext.prepare(blessId);
             if (overloadCtx != null) {
-                RuntimeScalar result = overloadCtx.tryOverload("(<>", new RuntimeArray(fileHandle));
+                RuntimeList result = overloadCtx.tryOverloadList(
+                        "(<>", new RuntimeArray(fileHandle), ctx);
                 if (result != null) {
-                    return result;
+                    return ctx == RuntimeContextType.LIST ? result : result.getFirst();
                 }
             }
         }

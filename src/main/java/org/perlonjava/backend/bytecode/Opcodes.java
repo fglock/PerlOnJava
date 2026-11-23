@@ -388,7 +388,7 @@ public class Opcodes {
     public static final short CALL_SUB = 57;
 
     /**
-     * Call method: rd = RuntimeCode.call(obj_reg, method_name, args_reg, context)
+     * Call method: rd = RuntimeCode.call(obj_reg, method_name, args_reg, context, autobox_bindings)
      */
     public static final short CALL_METHOD = 58;
 
@@ -2806,6 +2806,8 @@ public class Opcodes {
 
     /** Flush mortals and advance the Perl statement-lifetime boundary. */
     public static final short MORTAL_STATEMENT_FLUSH = 645;
+    /** Release the foreach source-value lease acquired with ITERATOR_CREATE. Format: iteratorReg. */
+    public static final short FOREACH_SOURCE_RELEASE = 646;
 
     private Opcodes() {
     } // Utility class - no instantiation

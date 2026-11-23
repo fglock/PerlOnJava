@@ -4,8 +4,12 @@ import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.perlonjava.frontend.parser.StringParser;
 import org.perlonjava.runtime.runtimetypes.*;
 
+import javax.crypto.AEADBadTagException;
+import javax.crypto.Cipher;
 import javax.crypto.Mac;
 import javax.crypto.SecretKey;
+import javax.crypto.spec.IvParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -62,6 +66,8 @@ public final class CryptX extends PerlModuleBase {
         CryptX misc = new CryptX("Crypt::Misc");
         CryptX digest = new CryptX("Crypt::Digest");
         CryptX hmac = new CryptX("Crypt::Mac::HMAC");
+        CryptX keyDerivation = new CryptX("Crypt::KeyDerivation");
+        CryptX chacha20Poly1305 = new CryptX("Crypt::AuthEnc::ChaCha20Poly1305");
         try {
             core.registerMethod("_ltc_build_settings", "buildSettings", null);
             core.registerMethod("_ltc_mp_name", "mpName", null);
@@ -86,6 +92,13 @@ public final class CryptX extends PerlModuleBase {
             hmac.registerMethod("hmac_hex", "hmacHex", null);
             hmac.registerMethod("hmac_b64", "hmacBase64", null);
             hmac.registerMethod("hmac_b64u", "hmacBase64Url", null);
+
+            keyDerivation.registerMethod("pbkdf2", "pbkdf2", null);
+
+            chacha20Poly1305.registerMethod("chacha20poly1305_encrypt_authenticate",
+                    "chacha20poly1305EncryptAuthenticate", null);
+            chacha20Poly1305.registerMethod("chacha20poly1305_decrypt_verify",
+                    "chacha20poly1305DecryptVerify", null);
 
         } catch (NoSuchMethodException e) {
             throw new IllegalStateException("Unable to initialize " + MODULE, e);
@@ -269,6 +282,102 @@ public final class CryptX extends PerlModuleBase {
         } catch (Exception e) {
             throw cryptoError("Crypt::Mac::HMAC", algorithm, e);
         }
+    }
+
+    public static RuntimeList pbkdf2(RuntimeArray args, int ctx) {
+        byte[] password = bytes(arg(args, 0), "Crypt::KeyDerivation::pbkdf2 password");
+        byte[] salt = bytes(arg(args, 1), "Crypt::KeyDerivation::pbkdf2 salt");
+        int iterations = args.size() > 2 ? args.get(2).getInt() : 5000;
+        String algorithm = args.size() > 3 ? args.get(3).toString() : "SHA256";
+        int outputLength = args.size() > 4 ? args.get(4).getInt() : 32;
+        if (iterations < 1) {
+            throw new PerlCompilerException(
+                    "FATAL: Crypt::KeyDerivation::pbkdf2 iterations must be positive");
+        }
+        if (outputLength < 0) {
+            throw new PerlCompilerException(
+                    "FATAL: Crypt::KeyDerivation::pbkdf2 length must be nonnegative");
+        }
+
+        try {
+            Mac mac = mac(algorithm);
+            mac.init(new RawKey(password, mac.getAlgorithm()));
+            int digestLength = mac.getMacLength();
+            byte[] result = new byte[outputLength];
+            int resultOffset = 0;
+            for (int block = 1; resultOffset < outputLength; block++) {
+                byte[] firstInput = java.util.Arrays.copyOf(salt, salt.length + 4);
+                firstInput[salt.length] = (byte) (block >>> 24);
+                firstInput[salt.length + 1] = (byte) (block >>> 16);
+                firstInput[salt.length + 2] = (byte) (block >>> 8);
+                firstInput[salt.length + 3] = (byte) block;
+
+                byte[] u = mac.doFinal(firstInput);
+                byte[] derived = u.clone();
+                for (int iteration = 1; iteration < iterations; iteration++) {
+                    u = mac.doFinal(u);
+                    for (int i = 0; i < digestLength; i++) derived[i] ^= u[i];
+                }
+
+                int copyLength = Math.min(digestLength, outputLength - resultOffset);
+                System.arraycopy(derived, 0, result, resultOffset, copyLength);
+                resultOffset += copyLength;
+            }
+            return new RuntimeScalar(result).getList();
+        } catch (PerlCompilerException e) {
+            throw e;
+        } catch (Exception e) {
+            throw cryptoError("Crypt::KeyDerivation", algorithm, e);
+        }
+    }
+
+    public static RuntimeList chacha20poly1305EncryptAuthenticate(RuntimeArray args, int ctx) {
+        byte[] key = bytes(arg(args, 0), "ChaCha20-Poly1305 key");
+        byte[] nonce = bytes(arg(args, 1), "ChaCha20-Poly1305 nonce");
+        byte[] aad = bytes(arg(args, 2), "ChaCha20-Poly1305 additional data");
+        byte[] plaintext = bytes(arg(args, 3), "ChaCha20-Poly1305 plaintext");
+        try {
+            Cipher cipher = chacha20Poly1305(Cipher.ENCRYPT_MODE, key, nonce, aad);
+            byte[] encrypted = cipher.doFinal(plaintext);
+            int tagOffset = encrypted.length - 16;
+            RuntimeList result = new RuntimeList();
+            result.elements.add(new RuntimeScalar(java.util.Arrays.copyOf(encrypted, tagOffset)));
+            result.elements.add(new RuntimeScalar(
+                    java.util.Arrays.copyOfRange(encrypted, tagOffset, encrypted.length)));
+            return result;
+        } catch (Exception e) {
+            throw cryptoError("Crypt::AuthEnc::ChaCha20Poly1305", "ChaCha20-Poly1305", e);
+        }
+    }
+
+    public static RuntimeList chacha20poly1305DecryptVerify(RuntimeArray args, int ctx) {
+        byte[] key = bytes(arg(args, 0), "ChaCha20-Poly1305 key");
+        byte[] nonce = bytes(arg(args, 1), "ChaCha20-Poly1305 nonce");
+        byte[] aad = bytes(arg(args, 2), "ChaCha20-Poly1305 additional data");
+        byte[] ciphertext = bytes(arg(args, 3), "ChaCha20-Poly1305 ciphertext");
+        byte[] tag = bytes(arg(args, 4), "ChaCha20-Poly1305 tag");
+        try {
+            byte[] input = java.util.Arrays.copyOf(ciphertext, ciphertext.length + tag.length);
+            System.arraycopy(tag, 0, input, ciphertext.length, tag.length);
+            Cipher cipher = chacha20Poly1305(Cipher.DECRYPT_MODE, key, nonce, aad);
+            return new RuntimeScalar(cipher.doFinal(input)).getList();
+        } catch (AEADBadTagException e) {
+            return new RuntimeScalar().getList();
+        } catch (Exception e) {
+            throw cryptoError("Crypt::AuthEnc::ChaCha20Poly1305", "ChaCha20-Poly1305", e);
+        }
+    }
+
+    private static Cipher chacha20Poly1305(int mode, byte[] key, byte[] nonce, byte[] aad) throws Exception {
+        Cipher cipher;
+        try {
+            cipher = Cipher.getInstance("ChaCha20-Poly1305");
+        } catch (Exception first) {
+            cipher = Cipher.getInstance("ChaCha20-Poly1305", "BC");
+        }
+        cipher.init(mode, new SecretKeySpec(key, "ChaCha20"), new IvParameterSpec(nonce));
+        cipher.updateAAD(aad);
+        return cipher;
     }
 
     private static MessageDigest messageDigest(String algorithm) throws Exception {

@@ -71,6 +71,8 @@ public class EmitterContext {
      * The type of the current context, defined by the RuntimeContextType enum - VOID, SCALAR, etc
      */
     public int contextType;
+    /** Fixed target count while emitting a list assignment RHS, or zero. */
+    public int splitAssignmentLimit;
     /**
      * Indicates whether the current context is for a boxed object (true) or a native object (false).
      */
@@ -242,7 +244,10 @@ public class EmitterContext {
     public EmitterContext with(int contextType) {
         if (contextCache != null) {
             EmitterContext cached = contextCache.get(contextType);
-            if (cached != null) return cached;
+            if (cached != null) {
+                cached.splitAssignmentLimit = this.splitAssignmentLimit;
+                return cached;
+            }
         } else {
             contextCache = new HashMap<>();
         }
@@ -251,6 +256,7 @@ public class EmitterContext {
                 this.mv, this.cw, contextType, this.isBoxed, this.errorUtil, this.compilerOptions,
                 this.unitcheckBlocks);
         newContext.isLvalueSubroutine = this.isLvalueSubroutine;
+        newContext.splitAssignmentLimit = this.splitAssignmentLimit;
         newContext.sourceLexicalSlotMap = this.sourceLexicalSlotMap;
         contextCache.put(contextType, newContext);
         return newContext;

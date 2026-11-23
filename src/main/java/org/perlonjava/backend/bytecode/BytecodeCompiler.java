@@ -3,6 +3,7 @@ package org.perlonjava.backend.bytecode;
 
 import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.frontend.analysis.ConstantFoldingVisitor;
+import org.perlonjava.frontend.analysis.BooleanCallContext;
 import org.perlonjava.frontend.analysis.DoBlockResultAnalysis;
 import org.perlonjava.frontend.analysis.FindDeclarationVisitor;
 import org.perlonjava.frontend.analysis.LValueVisitor;
@@ -306,8 +307,13 @@ public class BytecodeCompiler implements Visitor {
     Set<String> gotoLabelsInsideConstruct;
     Set<String> gotoLabelsInsideGiven;
     private int givenBlockDepth;
+    // A fixed list assignment preserves split()'s terminal empty fields.
+    private int splitAssignmentLimit = -1;
     /** True while compiling the body of a {@code :lvalue} subroutine. */
     private boolean compilingLvalueSubroutine;
+
+    public int getSplitAssignmentLimit() { return splitAssignmentLimit; }
+    public void setSplitAssignmentLimit(int limit) { splitAssignmentLimit = limit; }
 
     boolean isCompilingLvalueSubroutine() {
         return compilingLvalueSubroutine;
@@ -1255,6 +1261,16 @@ public class BytecodeCompiler implements Visitor {
             emitReg(lastResultReg);
         }
 
+        // Perl releases hash values before scalar pads and arrays at scope exit.
+        // DESTROY methods can observe objects released earlier in this sequence,
+        // so keep this order identical in both execution backends.
+        for (int reg : hashIndices) {
+            emit(preserveImplicitReturn
+                    ? Opcodes.RETURN_SCOPE_CLEANUP_HASH : Opcodes.SCOPE_EXIT_CLEANUP_HASH);
+            emitReg(reg);
+            if (preserveImplicitReturn) emitReg(lastResultReg);
+        }
+
         // Emit SCOPE_EXIT_CLEANUP for each my-scalar register in the exiting scope.
         // This calls RuntimeScalar.scopeExitCleanup() which handles:
         // 1. IO fd recycling for anonymous filehandle globs
@@ -1276,13 +1292,7 @@ public class BytecodeCompiler implements Visitor {
             }
         }
 
-        // Walk hash/array variables for nested blessed references.
-        for (int reg : hashIndices) {
-            emit(preserveImplicitReturn
-                    ? Opcodes.RETURN_SCOPE_CLEANUP_HASH : Opcodes.SCOPE_EXIT_CLEANUP_HASH);
-            emitReg(reg);
-            if (preserveImplicitReturn) emitReg(lastResultReg);
-        }
+        // Walk array variables last, after hash values and scalar pads.
         for (int reg : arrayIndices) {
             emit(preserveImplicitReturn
                     ? Opcodes.RETURN_SCOPE_CLEANUP_ARRAY : Opcodes.SCOPE_EXIT_CLEANUP_ARRAY);
@@ -1377,12 +1387,13 @@ public class BytecodeCompiler implements Visitor {
             return;
         }
 
-        for (int reg : cleanup.scalarRegs) {
-            emit(Opcodes.SCOPE_EXIT_CLEANUP);
-            emitReg(reg);
-        }
+        // Keep the lexical cleanup order used by normal scope exit.
         for (int reg : cleanup.hashRegs) {
             emit(Opcodes.SCOPE_EXIT_CLEANUP_HASH);
+            emitReg(reg);
+        }
+        for (int reg : cleanup.scalarRegs) {
+            emit(Opcodes.SCOPE_EXIT_CLEANUP);
             emitReg(reg);
         }
         for (int reg : cleanup.arrayRegs) {
@@ -6388,7 +6399,13 @@ public class BytecodeCompiler implements Visitor {
                 } else if (hasVariable(varName) && isDynamicOurVariable(varName)) {
                     // 'our' array - must load from global table to see local() changes
                     arrayReg = allocateRegister();
-                    String globalArrayName = NameNormalizer.normalizeVariableName(((IdentifierNode) node.operand).name, getCurrentPackage());
+                    SymbolTable.SymbolEntry ourEntry = symbolTable.getSymbolEntry(varName);
+                    String ourPackage = node.getAnnotation("ourPackage") instanceof String packageName
+                            ? packageName
+                            : ourEntry != null ? ourEntry.perlPackage() : null;
+                    String globalArrayName = NameNormalizer.normalizeVariableName(
+                            ((IdentifierNode) node.operand).name,
+                            ourPackage == null ? getCurrentPackage() : ourPackage);
                     int nameIdx = addToStringPool(globalArrayName);
                     emit(Opcodes.LOAD_GLOBAL_ARRAY);
                     emitReg(arrayReg);
@@ -6497,8 +6514,13 @@ public class BytecodeCompiler implements Visitor {
                     // 'our' hash - must load from global table to see local() changes
                     hashReg = allocateRegister();
                     String rawHashName = ((IdentifierNode) node.operand).name;
+                    SymbolTable.SymbolEntry ourEntry = symbolTable.getSymbolEntry(varName);
+                    String ourPackage = node.getAnnotation("ourPackage") instanceof String packageName
+                            ? packageName
+                            : ourEntry != null ? ourEntry.perlPackage() : null;
                     String globalHashName = rawHashName.equals("::") ? "main::"
-                            : NameNormalizer.normalizeVariableName(rawHashName, getCurrentPackage());
+                            : NameNormalizer.normalizeVariableName(rawHashName,
+                                    ourPackage == null ? getCurrentPackage() : ourPackage);
                     int nameIdx = addToStringPool(globalHashName);
                     emit(Opcodes.LOAD_GLOBAL_HASH);
                     emitReg(hashReg);
@@ -7844,6 +7866,7 @@ public class BytecodeCompiler implements Visitor {
                 && (node.attributes == null || !node.attributes.contains("const"))
                 && !subCompiler.hasStateVariableDeclarations) {
             // No closures - just wrap the InterpretedCode
+            subCode.isOptreeCodeTemplate = true;
             RuntimeScalar codeScalar = new RuntimeScalar(subCode);
             subCode.__SUB__ = codeScalar;  // Set __SUB__ for self-reference
             RuntimeScalar compileTimeAttributeCodeRef =
@@ -8681,6 +8704,12 @@ public class BytecodeCompiler implements Visitor {
             patchJump(explicitLoopExitPatch, loopEndPc);
         }
 
+        // The JVM emitter restores temporary foreach source owners at this
+        // boundary. The bytecode interpreter retains the same source values
+        // from ITERATOR_CREATE until every normal or `last` exit reaches here.
+        emit(Opcodes.FOREACH_SOURCE_RELEASE);
+        emitReg(iterReg);
+
         if (!multiVarRegs.isEmpty()) {
             for (int heldReg : multiVarAliasHeldRegs) {
                 if (heldReg >= 0) {
@@ -9208,6 +9237,7 @@ public class BytecodeCompiler implements Visitor {
             emit(Opcodes.GET_LOCAL_LEVEL);
             emitReg(conditionLocalLevelReg);
         }
+        BooleanCallContext.markDirectCall(node.condition);
         compileNode(node.condition, -1, RuntimeContextType.SCALAR);
         statementTokenIndex = savedConditionStatementToken;
         int condReg = lastResultReg;
@@ -9411,18 +9441,20 @@ public class BytecodeCompiler implements Visitor {
         emitReg(ignoredEvalResult);
         emit(RuntimeContextType.SCALAR);
 
-        OperatorNode catchDeclaration = new OperatorNode(
-                "my", node.catchParameter, node.getIndex());
-        compileNode(catchDeclaration, -1, RuntimeContextType.SCALAR);
-        int catchReg = lastResultReg;
+        if (node.catchParameter != null) {
+            OperatorNode catchDeclaration = new OperatorNode(
+                    "my", node.catchParameter, node.getIndex());
+            compileNode(catchDeclaration, -1, RuntimeContextType.SCALAR);
+            int catchReg = lastResultReg;
 
-        int errorReg = allocateRegister();
-        emit(Opcodes.LOAD_GLOBAL_SCALAR);
-        emitReg(errorReg);
-        emit(addToStringPool("main::@"));
-        emit(Opcodes.ASSIGN_LEXICAL_SCALAR);
-        emitReg(catchReg);
-        emitReg(errorReg);
+            int errorReg = allocateRegister();
+            emit(Opcodes.LOAD_GLOBAL_SCALAR);
+            emitReg(errorReg);
+            emit(addToStringPool("main::@"));
+            emit(Opcodes.ASSIGN_LEXICAL_SCALAR);
+            emitReg(catchReg);
+            emitReg(errorReg);
+        }
 
         // The exception has been transferred to $e.  Keep the dynamically
         // localized error slot empty for the catch body, as Perl does.

@@ -45,6 +45,8 @@ public class DestroyDispatch {
         if (referent == null || blessId == 0) return;
         String className = NameNormalizer.getBlessStr(blessId);
         boolean hasDestroy = className != null && classHasDestroy(blessId, className);
+        if (hasDestroy) state().globalDestroyables.add(referent);
+        else state().globalDestroyables.remove(referent);
         boolean statementBoundaryCleanup = isStatementBoundaryCleanupClassName(className);
         if ((hasDestroy && className != null && className.endsWith("::Cursor"))
                 || statementBoundaryCleanup) {
@@ -64,7 +66,12 @@ public class DestroyDispatch {
         if (referent != null) {
             state().destroyableObjects.remove(referent);
             state().statementBoundaryDestroyableObjects.remove(referent);
+            state().globalDestroyables.remove(referent);
         }
+    }
+
+    public static ArrayList<RuntimeBase> snapshotGlobalDestroyables() {
+        return state().globalDestroyables.snapshot();
     }
 
     public static ArrayList<RuntimeBase> snapshotDestroyableObjects() {
@@ -284,14 +291,23 @@ public class DestroyDispatch {
             referent.beginPerlDestruction();
             WeakRefRegistry.clearWeakRefsTo(referent, finalCountedOwner);
             releaseTiedContainerOwner(referent);
-            if (referent instanceof RuntimeHash hash) {
-                MortalList.scopeExitCleanupDestroyedHash(hash);
-            } else if (referent instanceof RuntimeArray arr) {
-                MortalList.scopeExitCleanupDestroyedArray(arr);
-            } else if (referent instanceof RuntimeScalar scalar) {
-                RuntimeScalar.scopeExitCleanupDestroyed(scalar);
-            } else if (referent instanceof RuntimeCode code) {
-                code.releaseStateStorage();
+            // This path can run inside another object's DESTROY callback.
+            // Drain only the outgoing releases added by this dying referent
+            // before returning to that Perl code; otherwise its B::REFCNT
+            // checks observe child edges from a hash already marked destroyed.
+            MortalList.pushMark();
+            try {
+                if (referent instanceof RuntimeHash hash) {
+                    MortalList.scopeExitCleanupDestroyedHash(hash);
+                } else if (referent instanceof RuntimeArray arr) {
+                    MortalList.scopeExitCleanupDestroyedArray(arr);
+                } else if (referent instanceof RuntimeScalar scalar) {
+                    RuntimeScalar.scopeExitCleanupDestroyed(scalar);
+                } else if (referent instanceof RuntimeCode code) {
+                    code.releaseStateStorage();
+                }
+            } finally {
+                MortalList.popAndFlush();
             }
             referent.markPerlDestroyed();
             return;
@@ -625,7 +641,7 @@ public class DestroyDispatch {
     }
 
     static boolean hasCurrentPerlOwnerSlot(RuntimeBase referent) {
-        return hasCurrentPerlOwnerSlot(referent, referent.ownerSlotSnapshot());
+        return referent != null && referent.hasCurrentPerlOwnerSlotIdentity();
     }
 
     /**
@@ -683,7 +699,10 @@ public class DestroyDispatch {
                 RuntimeScalar owner = slot.untrackedScalarOwner();
                 return owner != null
                         && !owner.isTransientArgumentValueOwner()
-                        && owner.hasLiveDurableStrongValueSlot()
+                        && (owner.hasLiveDurableStrongValueSlot()
+                            || ((referent.blessId != 0
+                                    || referent.isWeaklyRefCountTracked())
+                                && owner.hasCurrentAggregateStorageSlot()))
                         && !WeakRefRegistry.isweak(owner)
                         && (owner.type & RuntimeScalarType.REFERENCE_BIT) != 0
                         && owner.value == referent;

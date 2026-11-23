@@ -371,6 +371,23 @@ public class ListParser {
             "eq", "ne", "equ", "neu", "lt", "gt", "le", "ge", "cmp"
     );
 
+    static boolean isAutoquotableFatCommaKey(Parser parser, LexerToken token) {
+        if (!AUTOQUOTABLE_KEYWORDS.contains(token.text)) {
+            return false;
+        }
+        // This is a lookahead used while parsing optional arguments. Do not
+        // call TokenUtils.consume/peek here: those process newlines and may
+        // realize a pending heredoc, which would mutate parser state merely
+        // because an argument boundary was checked.
+        int nextIndex = parser.tokenIndex + 1;
+        while (nextIndex < parser.tokens.size()
+                && parser.tokens.get(nextIndex).type == LexerTokenType.WHITESPACE) {
+            nextIndex++;
+        }
+        return nextIndex < parser.tokens.size()
+                && parser.tokens.get(nextIndex).text.equals("=>");
+    }
+
     /**
      * Checks if a token is a list terminator, with special handling for autoquoting.
      * Keywords like "and", "or", "xor", "if", "unless", "while", "until", "for", "foreach", "when"

@@ -212,8 +212,8 @@ Each framework should be tested for:
 
 ## Related Files
 
-- Test results: `dev/framework-testing/RESULTS.md`
-- Navigation guide: `dev/framework-testing/GUIDE.md`
+- Test results: `dev/modules/framework-testing/RESULTS.md`
+- Navigation guide: `dev/modules/framework-testing/GUIDE.md`
 - Examples: `examples/http_server_plack/`
 - Framework compatibility sandbox scripts: `dev/sandbox/http_server/`
 

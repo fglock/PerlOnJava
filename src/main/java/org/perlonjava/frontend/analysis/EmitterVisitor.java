@@ -51,7 +51,9 @@ public class EmitterVisitor implements Visitor {
     public EmitterVisitor with(int contextType) {
         // Check if the visitor is already cached
         if (visitorCache.containsKey(contextType)) {
-            return visitorCache.get(contextType);
+            EmitterVisitor cached = visitorCache.get(contextType);
+            cached.ctx.splitAssignmentLimit = ctx.splitAssignmentLimit;
+            return cached;
         }
         // Create a new visitor and cache it
         EmitterVisitor newVisitor = new EmitterVisitor(ctx.with(contextType));
@@ -70,6 +72,15 @@ public class EmitterVisitor implements Visitor {
             ctx.mv.visitVarInsn(Opcodes.ILOAD, 2);
         } else {
             ctx.mv.visitLdcInsn(ctx.contextType);
+        }
+    }
+
+    /** Push an explicit context while retaining dynamic context for runtime calls. */
+    public void pushCallContext(int callContext) {
+        if (ctx.contextType == RuntimeContextType.RUNTIME) {
+            ctx.mv.visitVarInsn(Opcodes.ILOAD, 2);
+        } else {
+            ctx.mv.visitLdcInsn(callContext);
         }
     }
 

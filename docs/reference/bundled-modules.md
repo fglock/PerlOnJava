@@ -14,6 +14,7 @@ Recent CPAN compatibility additions include:
 | `CryptX` | Perl bootstrap + Java XS bridge | Functional base64, digest, and HMAC entry points; broader CryptX APIs remain incomplete |
 | `Future::AsyncAwait` | Bundled pure Perl module plus PerlOnJava async runtime | Native `async`/`await` syntax and upstream-compatible Future integration |
 | `JSON::DWIW` | Pure Perl over bundled `JSON::PP` | Relaxed legacy JSON API, file conversion, booleans, and compatibility helpers |
+| `JSON::SL` | Pure Perl over bundled `JSON::PP` | JSON decoding and a limited JSON Pointer feed API; native incremental parser and Tuba callbacks are not implemented |
 | `Taint::Runtime` | Perl + Java XS bridge | Runtime taint toggling and scalar taint inspection |
 | `String::Similarity` | Java XS bridge | Unicode-aware `fstrcmp`/`similarity` implementation |
 | `Socket6` | Pure Perl over Java-backed `Socket` | Legacy Socket6 flat-result API and IPv6 sockaddr helpers |
@@ -234,6 +235,7 @@ These are loaded automatically or via `use`:
 |--------|---------------|-------|
 | `Data::Dumper` | Java + Perl | |
 | `JSON` / `JSON::PP` | Perl | `JSON` delegates to the bundled pure-Perl `JSON::PP` |
+| `JSON::SL` | Perl | Bundled facade reuses `JSON::PP`; `feed` can emit completed pointer matches from an incomplete enclosing document, with limited streaming compatibility |
 | `Cpanel::JSON::XS` (+ `::Type`, `::Boolean`) | Perl | Same encoder/decoder as `JSON::PP`; XS-only type-aware `encode_json` / `decode_json` arguments are not supported |
 | `YAML::PP` | Java + Perl | |
 | `TOML` | Java | |

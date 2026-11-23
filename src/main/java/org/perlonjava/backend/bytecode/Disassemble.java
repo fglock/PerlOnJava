@@ -1323,10 +1323,12 @@ public class Disassemble {
                         int currentSubReg = interpretedCode.bytecode[pc++];
                         argsReg = interpretedCode.bytecode[pc++];
                         ctx = interpretedCode.bytecode[pc++];
+                        int autoboxBindingsIndex = interpretedCode.bytecode[pc++];
                         sb.append("CALL_METHOD r").append(rd).append(" = r").append(invocantReg)
                                 .append("->r").append(methodReg)
                                 .append("(r").append(argsReg).append(", sub=r").append(currentSubReg)
-                                .append(", ctx=").append(ctx).append(")\n");
+                                .append(", ctx=").append(ctx)
+                                .append(", autobox=s").append(autoboxBindingsIndex).append(")\n");
                         break;
                     case Opcodes.HOLD_METHOD_INVOCANT: {
                         int heldInvocantReg = interpretedCode.bytecode[pc++];
@@ -1628,6 +1630,10 @@ public class Disassemble {
                         rd = interpretedCode.bytecode[pc++];
                         rs = interpretedCode.bytecode[pc++];
                         sb.append("ITERATOR_NEXT r").append(rd).append(" = r").append(rs).append(".next()\n");
+                        break;
+                    case Opcodes.FOREACH_SOURCE_RELEASE:
+                        rs = interpretedCode.bytecode[pc++];
+                        sb.append("FOREACH_SOURCE_RELEASE r").append(rs).append("\n");
                         break;
                     case Opcodes.FOREACH_NEXT_OR_EXIT: {
                         rd = interpretedCode.bytecode[pc++];

@@ -96,6 +96,7 @@ public class HintHashRegistry {
             // lifetime ends with the BEGIN block.
             if (changed && (value.type == org.perlonjava.runtime.runtimetypes.RuntimeScalarType.CODE
                     || "charnames".equals(entry.getKey())
+                    || "Function::Parameters/config".equals(entry.getKey())
                     || !org.perlonjava.runtime.runtimetypes.RuntimeScalarType.isReference(value))) {
                 pragmaUpdates.put(entry.getKey(), new RuntimeScalar(value));
             }
@@ -138,6 +139,12 @@ public class HintHashRegistry {
         }
 
         return value == null ? null : new RuntimeScalar(value);
+    }
+
+    /** Return the live compile-time hint cell for parser-side identity checks. */
+    public static RuntimeScalar getCompileTimeHintCell(String key) {
+        RuntimeHash hintHash = GlobalVariable.getGlobalHash(GlobalContext.encodeSpecialVar("H"));
+        return hintHash == null ? null : hintHash.elements.get(key);
     }
 
     /**

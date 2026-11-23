@@ -65,18 +65,18 @@ class RuntimeArrayMethodCallArgumentsTest {
     }
 
     @Test
-    void stableMethodInvocantPrependPreservesInlineArguments() {
+    void stableMethodInvocantPrependHonorsRootTrackingSuppression() {
         RuntimeArray arguments = RuntimeArray.methodCallArguments(2);
         RuntimeScalar invocant = new RuntimeScalar("object");
         RuntimeScalar explicit = new RuntimeScalar("explicit");
         explicit.setArrayOfAlias(arguments);
 
-        assertTrue(arguments.enableStableMethodArgumentRecycle());
+        assertTrue(arguments.suppressRootTrackingForStableMethodArguments());
         arguments.prependMethodCallInvocant(invocant);
 
         assertSame(invocant, arguments.elements.get(0));
         assertSame(explicit, arguments.elements.get(1));
-        arguments.disableStableMethodArgumentRecycle();
+        arguments.resumeMethodArgumentRootTracking();
     }
 
     @Test

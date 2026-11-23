@@ -49,20 +49,21 @@ public class EmitControlFlow {
         java.util.List<Integer> arrayIndices =
                 EmitStatement.withoutCaptured(ctx, ctx.symbolTable.getMyArrayIndicesInScope(0));
 
-        for (int idx : scalarIndices) {
-            ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
-            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/runtimetypes/MortalList",
-                    "deferDecrementIfNotCaptured",
-                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V",
-                    false);
-        }
+        // Match Perl's scope-exit ordering: hash values, scalar pads, arrays.
         for (int idx : hashIndices) {
             ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
             ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/MortalList",
                     "scopeExitCleanupHash",
                     "(Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;)V",
+                    false);
+        }
+        for (int idx : scalarIndices) {
+            ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/MortalList",
+                    "deferDecrementIfNotCaptured",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V",
                     false);
         }
         for (int idx : arrayIndices) {
@@ -590,6 +591,17 @@ public class EmitControlFlow {
                         "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)V",
                         false);
             }
+            // Release hash values before scalar pads, matching Perl's destructor
+            // order. Arrays remain last so aggregate teardown sees the same edge
+            // sequence as ordinary scope exit.
+            for (int idx : hashIndices) {
+                ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
+                ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/MortalList",
+                        "scopeExitCleanupHash",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;)V",
+                        false);
+            }
             // Captured scalar slots belong to the enclosing closure frame.
             // They can receive an anonymous socket while this callback runs,
             // but returning from the callback must not release that enclosing
@@ -611,16 +623,7 @@ public class EmitControlFlow {
                         "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V",
                         false);
             }
-            // Also process hash/array variables — their elements may hold tracked
-            // references that need refCount decrements on scope exit.
-            for (int idx : hashIndices) {
-                ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
-                ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                        "org/perlonjava/runtime/runtimetypes/MortalList",
-                        "scopeExitCleanupHash",
-                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;)V",
-                        false);
-            }
+            // Arrays are released after hash values and scalar pads.
             for (int idx : arrayIndices) {
                 ctx.javaClassInfo.loadSpillRef(ctx.mv, spillRef);
                 ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);

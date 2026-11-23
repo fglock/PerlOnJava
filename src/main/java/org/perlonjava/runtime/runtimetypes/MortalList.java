@@ -21,6 +21,42 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class MortalList {
     private static final AtomicInteger runtimesWithBoundaryWork = new AtomicInteger();
+    private static final ThreadLocal<ReachabilityQueryStats> activeReachabilityQueryStats =
+            new ThreadLocal<>();
+
+    static final class ReachabilityQueryMeasurement implements AutoCloseable {
+        private final ReachabilityQueryStats stats;
+        private final ReachabilityQueryStats previous;
+
+        private ReachabilityQueryMeasurement(
+                ReachabilityQueryStats stats, ReachabilityQueryStats previous) {
+            this.stats = stats;
+            this.previous = previous;
+        }
+
+        ReachabilityQueryStats stats() {
+            return stats;
+        }
+
+        @Override
+        public void close() {
+            if (activeReachabilityQueryStats.get() == stats) {
+                if (previous == null) activeReachabilityQueryStats.remove();
+                else activeReachabilityQueryStats.set(previous);
+            }
+        }
+    }
+
+    static ReachabilityQueryMeasurement measureReachabilityQueries() {
+        ReachabilityQueryStats previous = activeReachabilityQueryStats.get();
+        ReachabilityQueryStats stats = new ReachabilityQueryStats();
+        activeReachabilityQueryStats.set(stats);
+        return new ReachabilityQueryMeasurement(stats, previous);
+    }
+
+    static ReachabilityQueryStats activeReachabilityQueryStats() {
+        return activeReachabilityQueryStats.get();
+    }
 
     static final class DeferredArgumentOwnerRelease {
         final RuntimeBase base;
@@ -65,7 +101,7 @@ public class MortalList {
                     || !state.pendingTiedReleases.isEmpty()
                     || !state.pendingIoReleases.isEmpty()
                     || !state.pendingUntrackedReturnOwnerReleases.isEmpty()
-                    || !state.pendingTransientListAssignmentRhs.isEmpty()
+                    || !state.pendingTransientListAssignmentRhsByFrame.isEmpty()
                     || state.deferredCapturesMayBeReady;
             if (!needed && state.boundaryWorkRegistered.compareAndSet(true, false)) {
                 runtimesWithBoundaryWork.decrementAndGet();
@@ -135,10 +171,124 @@ public class MortalList {
         while (roots.size() > depth) roots.pop().release();
     }
 
+    /** Diagnostic direct-edge query; lifecycle decisions do not call this method. */
+    static boolean temporaryRootDirectlyReferences(RuntimeBase target) {
+        if (target == null) return false;
+        if (target.hasTemporaryRootOwnerSlotIdentity()) return true;
+        for (LifecycleRuntimeState.TemporaryRootLease lease : state().temporaryRoots) {
+            if (directlyReferencesTemporaryRootValue(lease.root(), target)) return true;
+        }
+        return false;
+    }
+
+    private static boolean directlyReferencesTemporaryRootValue(
+            RuntimeBase value, RuntimeBase target) {
+        if (value == target) return true;
+        if (value instanceof RuntimeScalar scalar) {
+            return !WeakRefRegistry.isweak(scalar)
+                    && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                    && scalar.value == target;
+        }
+        if (value instanceof RuntimeArray array) {
+            if (array.elements == null) return false;
+            for (RuntimeScalar element : array.elements) {
+                if (element == target || element != null
+                        && !WeakRefRegistry.isweak(element)
+                        && (element.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                        && element.value == target) return true;
+            }
+            return false;
+        }
+        if (value instanceof RuntimeHash hash) {
+            if (hash.elements == null) return false;
+            for (java.util.Map.Entry<String, RuntimeScalar> entry : hash.elements.entrySet()) {
+                RuntimeScalar element = entry.getValue();
+                if (element == target || element != null
+                        && !WeakRefRegistry.isweak(element)
+                        && (element.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                        && element.value == target) return true;
+            }
+            return false;
+        }
+        if (value instanceof RuntimeList list) {
+            if (list instanceof RuntimeControlFlowList flow
+                    && directlyReferencesTemporaryRootValue(flow.getReturnValue(), target)) {
+                return true;
+            }
+            for (RuntimeBase element : list.elements) {
+                if (element == target || element instanceof RuntimeScalar scalar
+                        && directlyReferencesTemporaryRootValue(scalar, target)) return true;
+            }
+        }
+        return false;
+    }
+
     public static void clearTemporaryRoots() {
         LifecycleRuntimeState state = state();
         ArrayDeque<LifecycleRuntimeState.TemporaryRootLease> roots = state.temporaryRoots;
         while (!roots.isEmpty()) roots.pop().release();
+    }
+
+    /**
+     * Retain reference values in an evaluated list source until its foreach
+     * finishes. The returned depth is the matching cleanup point.
+     */
+    public static int pushForeachSourceOwners(RuntimeBase source) {
+        LifecycleRuntimeState state = state();
+        int depth = state.foreachSourceOwners.size();
+        if (!(source instanceof RuntimeList) && !(source instanceof RuntimeArray)) return depth;
+
+        LifecycleRuntimeState.ForeachSourceOwnerLease lease =
+                new LifecycleRuntimeState.ForeachSourceOwnerLease();
+        try {
+            if (source instanceof RuntimeArray array) {
+                // A durable array slot already owns its element references.
+                // Temporary result arrays need direct item owners because
+                // their container slots do not outlive the statement flush
+                // that precedes the first foreach iteration.
+                if (!array.hasPersistentPerlStrongOwnerIdentity()) {
+                    for (RuntimeScalar value : array.elements) lease.retain(value);
+                    lease.retainReferent(array);
+                }
+            } else {
+                RuntimeList list = (RuntimeList) source;
+                for (java.util.Iterator<RuntimeScalar> values = list.iterator(); values.hasNext();) {
+                    lease.retain(values.next());
+                }
+            }
+            state.foreachSourceOwners.push(lease);
+            return depth;
+        } catch (RuntimeException | Error failure) {
+            try {
+                lease.release();
+            } catch (RuntimeException | Error cleanupFailure) {
+                failure.addSuppressed(cleanupFailure);
+            }
+            throw failure;
+        }
+    }
+
+    /** Current foreach source owner depth for frame and eval cleanup. */
+    public static int foreachSourceOwnerDepth() {
+        return state().foreachSourceOwners.size();
+    }
+
+    /** Release foreach source owners acquired after {@code depth}. */
+    public static void restoreForeachSourceOwnerDepth(int depth) {
+        if (depth < 0) {
+            throw new IllegalArgumentException("Invalid foreach source owner depth: " + depth);
+        }
+        LifecycleRuntimeState state = state();
+        if (state.foreachSourceOwners.size() < depth) {
+            // An awaited callback can resume and complete a foreach whose
+            // source lease was part of this caller's saved depth. The resumed
+            // continuation already released that lease; this older Java frame
+            // must not try to restore a stack depth from before the await.
+            return;
+        }
+        while (state.foreachSourceOwners.size() > depth) {
+            state.foreachSourceOwners.pop().release();
+        }
     }
 
     public static boolean isDeferredCapture(RuntimeScalar scalar) {
@@ -155,6 +305,20 @@ public class MortalList {
         if (referent == null) return false;
         for (RuntimeBase pending : state().pending) {
             if (pending == referent) return true;
+        }
+        return false;
+    }
+
+    /** Whether this referent still has its first-bless mortal owner queued. */
+    public static boolean hasPendingBlessTemporaryFor(RuntimeBase referent) {
+        if (referent == null) return false;
+        LifecycleRuntimeState state = state();
+        for (int i = 0; i < state.pending.size(); i++) {
+            if (state.pending.get(i) == referent
+                    && "bless mortal temporary".equals(
+                            state.pendingTransientOwnerKinds.get(i))) {
+                return true;
+            }
         }
         return false;
     }
@@ -191,7 +355,7 @@ public class MortalList {
             return;
         }
         LifecycleRuntimeState state = state();
-        if (state.flushing) return;
+        if (state.flushing || state.flushSuppressed) return;
 
         int returnIndex = -1;
         int sourceIndex = -1;
@@ -632,13 +796,59 @@ public class MortalList {
         }
         RuntimeCode executionCode = RuntimeCode.getActiveCodeAt(0);
         int executionDepth = RuntimeCode.currentExecutionDepth();
-        int drainAtExecutionDepth = RuntimeCode.isCurrentExecutionTopLevel()
+        boolean topLevel = RuntimeCode.isCurrentExecutionTopLevel();
+        int drainAtExecutionDepth = topLevel
                 ? executionDepth : Math.max(0, executionDepth - 1);
+        RuntimeCode drainAtExecutionCode = drainAtExecutionDepth == executionDepth
+                ? executionCode : RuntimeCode.getActiveCodeAt(1);
+        LifecycleRuntimeState.TransientListAssignmentFrame frame =
+                new LifecycleRuntimeState.TransientListAssignmentFrame(
+                        drainAtExecutionCode, drainAtExecutionDepth);
+        long drainAtStatementBoundary = state.statementBoundarySequence + 1;
         markBoundaryWork(state);
-        state.pendingTransientListAssignmentRhs.add(
-                new LifecycleRuntimeState.PendingTransientListAssignmentRhs(
-                        rhs, executionCode, executionDepth, drainAtExecutionDepth,
-                        state.statementBoundarySequence + 1));
+        LifecycleRuntimeState.TransientListAssignmentQueue queue =
+                state.pendingTransientListAssignmentRhsByFrame.get(frame);
+        if (queue == null) {
+            boolean reusing = state.reusableTransientListAssignmentQueues != null;
+            queue = state.obtainTransientListAssignmentQueue();
+            if (reusing) LifecycleHotPathDiagnostics.transientRhsFrameQueueReused();
+            else LifecycleHotPathDiagnostics.frameQueueAllocated();
+            state.pendingTransientListAssignmentRhsByFrame.put(frame, queue);
+        }
+        queue.append(rhs, ++state.nextTransientListAssignmentSequence,
+                drainAtStatementBoundary);
+        LifecycleHotPathDiagnostics.transientRhsAppended();
+    }
+
+    /** Hand pending returned-list copies to the caller when their frame exits. */
+    static void handoffTransientListAssignmentRhs(
+            LifecycleRuntimeState state,
+            RuntimeCode executionCode, int executionDepth,
+            RuntimeCode callerCode, int callerDepth) {
+        if (state == null || executionDepth <= 0) return;
+        LifecycleRuntimeState.TransientListAssignmentFrame source =
+                new LifecycleRuntimeState.TransientListAssignmentFrame(
+                        executionCode, executionDepth);
+        LifecycleRuntimeState.TransientListAssignmentQueue sourceQueue =
+                state.pendingTransientListAssignmentRhsByFrame.remove(source);
+        if (sourceQueue == null || sourceQueue.isEmpty()) {
+            if (sourceQueue != null) state.recycleTransientListAssignmentQueue(sourceQueue);
+            return;
+        }
+
+        LifecycleRuntimeState.TransientListAssignmentFrame target =
+                new LifecycleRuntimeState.TransientListAssignmentFrame(
+                        callerCode, Math.max(0, callerDepth));
+        long nextBoundary = state.statementBoundarySequence + 1;
+        LifecycleRuntimeState.TransientListAssignmentQueue targetQueue =
+                state.pendingTransientListAssignmentRhsByFrame.get(target);
+        if (targetQueue == null) {
+            sourceQueue.retagAll(nextBoundary);
+            state.pendingTransientListAssignmentRhsByFrame.put(target, sourceQueue);
+        } else {
+            sourceQueue.handoffTo(targetQueue, nextBoundary);
+            state.recycleTransientListAssignmentQueue(sourceQueue);
+        }
     }
 
     static void releaseTransientListAssignmentRhs(RuntimeArray rhs) {
@@ -657,25 +867,16 @@ public class MortalList {
             LifecycleRuntimeState state) {
         RuntimeCode executionCode = RuntimeCode.getActiveCodeAt(0);
         int executionDepth = RuntimeCode.currentExecutionDepth();
-        for (int index = 0; index < state.pendingTransientListAssignmentRhs.size();) {
-            LifecycleRuntimeState.PendingTransientListAssignmentRhs pending =
-                    state.pendingTransientListAssignmentRhs.get(index);
-            boolean returnedToSameDepthCaller =
-                    pending.drainAtExecutionDepth < pending.executionDepth
-                    && executionDepth == pending.executionDepth
-                    && executionCode != pending.executionCode;
-            boolean boundaryPassed = state.statementBoundarySequence
-                    >= pending.drainAtStatementBoundary;
-            boolean executionReturned = executionDepth <= pending.drainAtExecutionDepth
-                    || returnedToSameDepthCaller;
-            boolean ready = executionDepth == 0
-                    || (boundaryPassed && executionReturned);
-            if (ready) {
-                state.pendingTransientListAssignmentRhs.remove(index);
-                releaseTransientListAssignmentRhs(pending.array);
-            } else {
-                index++;
-            }
+        LifecycleRuntimeState.TransientListAssignmentFrame frame =
+                new LifecycleRuntimeState.TransientListAssignmentFrame(
+                        executionCode, executionDepth);
+        LifecycleRuntimeState.TransientListAssignmentQueue queue =
+                state.pendingTransientListAssignmentRhsByFrame.get(frame);
+        if (queue == null) return;
+        queue.drainAtBoundary(state.statementBoundarySequence);
+        if (queue.isEmpty()) {
+            state.pendingTransientListAssignmentRhsByFrame.remove(frame);
+            state.recycleTransientListAssignmentQueue(queue);
         }
     }
 
@@ -839,7 +1040,7 @@ public class MortalList {
             return;
         }
         LifecycleRuntimeState state = state();
-        if (state.flushing || state.deferredReleaseDrainDepth != 0) {
+        if (state.flushing || state.flushSuppressed || state.deferredReleaseDrainDepth != 0) {
             deferDecrementIfTracked(scalar);
             return;
         }
@@ -1003,28 +1204,6 @@ public class MortalList {
 
     private static void scopeExitCleanupHashBody(
             RuntimeHash hash, RuntimeBase returned, boolean finalRelease) {
-        if (finalRelease && RuntimeBase.refCountTraceEnabled()) {
-            System.err.println("[DESTROY-HASH-CLEANUP] begin hash="
-                    + System.identityHashCode(hash) + " generation="
-                    + RuntimeBase.traceReferentGeneration(hash) + " refCount=" + hash.refCount
-                    + " blessId=" + hash.blessId + " keys=" + hash.elements.size());
-            for (java.util.Map.Entry<String, RuntimeScalar> entry : hash.elements.entrySet()) {
-                RuntimeScalar value = entry.getValue();
-                RuntimeBase referent = value != null && value.value instanceof RuntimeBase base
-                        ? base : null;
-                System.err.println("[DESTROY-HASH-CELL] hash=" + System.identityHashCode(hash)
-                        + " generation=" + RuntimeBase.traceReferentGeneration(hash)
-                        + " key=" + entry.getKey() + " scalar="
-                        + (value == null ? 0 : System.identityHashCode(value))
-                        + " owns=" + (value != null && value.refCountOwned)
-                        + " weak=" + (value != null && WeakRefRegistry.isweak(value))
-                        + " referent=" + (referent == null ? 0 : System.identityHashCode(referent))
-                        + " referentGeneration=" + (referent == null ? 0
-                                : RuntimeBase.traceReferentGeneration(referent))
-                        + " referentRefCount=" + (referent == null ? 0 : referent.refCount)
-                        + " referentBlessId=" + (referent == null ? 0 : referent.blessId));
-            }
-        }
         // Clear localBindingExists: the named variable's scope is ending.
         // This allows subsequent refCount==0 events (from setLargeRefCounted
         // or flush) to correctly trigger callDestroy, since the local
@@ -1032,6 +1211,7 @@ public class MortalList {
         hash.localBindingExists = false;
         if (!finalRelease) RuntimeCode.releaseActiveLexicalOwner(hash);
         hash.releaseUnownedClosureCaptures();
+        hash.recheckProxyValueOwnersIfUnowned();
         if (!finalRelease && hash.hasClosureCaptureOwner()) {
             hash.scopeExited = true;
             return;
@@ -1045,54 +1225,17 @@ public class MortalList {
             RuntimeScalar.releaseIoOwner(val);
             if (val != null) val.releaseContainerOwner(hash);
         }
-        // Skip container walks only when there are NO blessed objects AND NO
-        // weak refs anywhere in the JVM. If weak refs exist (even to unblessed
-        // data), we must still cascade decrements so their weak-ref entries
-        // can be cleared when the referent's refCount reaches 0.
         if (!RuntimeBase.blessedObjectExists() && !WeakRefRegistry.weakRefsExist()
                 && !RuntimeScalar.watcherCleanupNeeded()) return;
-        // If the hash has outstanding references (e.g., from \%hash stored elsewhere),
-        // do NOT clean up elements — the hash is still alive and its elements are
-        // accessible through the reference. Cleanup will happen when the last
-        // reference is released (in DestroyDispatch.callDestroy).
         if (RuntimeScalar.watcherCleanupNeeded()) {
             RuntimeScalar.notifyDestroyedWatchersRecursively(hash);
         }
         if (hash.type == RuntimeHash.TIED_HASH && hash.elements instanceof TieHash tieHash) {
             tieHash.releaseTiedObject();
         }
-        // Quick scan: skip if no value could transitively contain blessed/tracked refs.
-        boolean needsWalk = RuntimeScalar.watcherCleanupNeeded();
+        // Retire the direct storage slots. A final child-container owner
+        // triggers cleanup of that child's own outgoing slots.
         for (RuntimeScalar val : hash.elements.values()) {
-            if (val != null && (val.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                    && val.value instanceof RuntimeBase rb) {
-                if (rb.blessId != 0 || rb.isRefCountTracked()) {
-                    needsWalk = true;
-                    break;
-                }
-                // Container ref — peek at children for any reference-type elements
-                if (rb instanceof RuntimeArray innerArr) {
-                    for (RuntimeScalar inner : innerArr.elements) {
-                        if (inner != null && (inner.type & RuntimeScalarType.REFERENCE_BIT) != 0) {
-                            needsWalk = true;
-                            break;
-                        }
-                    }
-                } else if (rb instanceof RuntimeHash innerHash) {
-                    for (RuntimeScalar inner : innerHash.elements.values()) {
-                        if (inner != null && (inner.type & RuntimeScalarType.REFERENCE_BIT) != 0) {
-                            needsWalk = true;
-                            break;
-                        }
-                    }
-                }
-                if (needsWalk) break;
-            }
-        }
-        if (!needsWalk) return;
-        List<RuntimeScalar> valuesInDestructionOrder = new ArrayList<>(hash.elements.values());
-        Collections.reverse(valuesInDestructionOrder);
-        for (RuntimeScalar val : valuesInDestructionOrder) {
             if (preserveEscapedScalarCellValueOwner(val)) continue;
             deferDecrementRecursive(val);
         }
@@ -1138,6 +1281,7 @@ public class MortalList {
         arr.localBindingExists = false;
         if (!finalRelease) RuntimeCode.releaseActiveLexicalOwner(arr);
         arr.releaseUnownedClosureCaptures();
+        arr.recheckProxyValueOwnersIfUnowned();
         if (!finalRelease && arr.hasClosureCaptureOwner()) {
             arr.scopeExited = true;
             return;
@@ -1166,14 +1310,8 @@ public class MortalList {
                 if (elem != null) elem.releaseContainerOwner(arr);
             }
         }
-        // Skip container walks only when there are NO blessed objects AND NO
-        // weak refs anywhere in the JVM (see scopeExitCleanupHash for details).
         if (!RuntimeBase.blessedObjectExists() && !WeakRefRegistry.weakRefsExist()
                 && !RuntimeScalar.watcherCleanupNeeded()) return;
-        // If the array has outstanding references (e.g., from \@array stored elsewhere),
-        // do NOT clean up elements — the array is still alive and its elements are
-        // accessible through the reference. Cleanup will happen when the last
-        // reference is released (in DestroyDispatch.callDestroy).
         if (RuntimeScalar.watcherCleanupNeeded()) {
             RuntimeScalar.notifyDestroyedWatchersRecursively(arr);
         }
@@ -1196,38 +1334,13 @@ public class MortalList {
             }
             return;
         }
-        // Quick scan: check if any element either:
-        //   1. Owns a refCount (was assigned via setLarge with a tracked referent), OR
-        //   2. Is a direct blessed reference (blessId != 0), OR
-        //   3. Is a container (array/hash ref) that might hold nested blessed refs
-        // For case 3, we peek one level deep to avoid false positives for arrays
-        // of plain-data arrayrefs (like the life_bitpacked @grid).
-        boolean needsWalk = RuntimeScalar.watcherCleanupNeeded();
-        for (RuntimeScalar elem : arr.elements) {
-            if (elem == null || (elem.type & RuntimeScalarType.REFERENCE_BIT) == 0) continue;
-            // Fast check: refCountOwned means this ref was properly tracked via setLarge
-            if (elem.refCountOwned) { needsWalk = true; break; }
-            if (!(elem.value instanceof RuntimeBase rb)) continue;
-            // Direct blessed ref
-            if (rb.blessId != 0 || rb.isRefCountTracked()) { needsWalk = true; break; }
-            // Container ref — peek at children for reference-type elements
-            if (rb instanceof RuntimeArray innerArr) {
-                for (RuntimeScalar inner : innerArr.elements) {
-                    if (inner != null && (inner.type & RuntimeScalarType.REFERENCE_BIT) != 0) {
-                        needsWalk = true; break;
-                    }
-                }
-            } else if (rb instanceof RuntimeHash innerHash) {
-                for (RuntimeScalar inner : innerHash.elements.values()) {
-                    if (inner != null && (inner.type & RuntimeScalarType.REFERENCE_BIT) != 0) {
-                        needsWalk = true; break;
-                    }
-                }
-            }
-            if (needsWalk) break;
-        }
-        if (!needsWalk) return;
-        for (RuntimeScalar elem : arr.elements) {
+        // Array element values are released from the end toward the beginning.
+        TieArray tiedStorage = arr.type == RuntimeArray.TIED_ARRAY
+                && arr.elements instanceof TieArray tieArray ? tieArray : null;
+        int storageSize = tiedStorage == null ? arr.elements.size() : tiedStorage.rawStorageSize();
+        for (int index = storageSize - 1; index >= 0; index--) {
+            RuntimeScalar elem = tiedStorage == null
+                    ? arr.elements.get(index) : tiedStorage.rawStorageGet(index);
             if (preserveEscapedScalarCellValueOwner(elem)) continue;
             deferDecrementRecursive(elem);
         }
@@ -1323,168 +1436,65 @@ public class MortalList {
         releaseCountedOwnerImmediately(scalar, "MortalList.releaseTailCallArgElement");
     }
 
-    /**
-     * Iteratively process a scalar value: if it holds a reference to a
-     * tracked blessed object and owns a refCount, defer a decrement.
-     * If it holds a reference to an unblessed container, walk into
-     * its elements (iteratively with cycle detection to avoid
-     * StackOverflowError on circular data structures like ExifTool's).
-     */
+    /** Release only this scalar's direct owner edge. Aggregate destruction
+     * releases its own outgoing element slots through the storage-owner path. */
     private static void deferDecrementRecursive(RuntimeScalar scalar) {
-        if (scalar == null || (scalar.type & RuntimeScalarType.REFERENCE_BIT) == 0) return;
-        if (WeakRefRegistry.isweak(scalar)) return;
-        if (!(scalar.value instanceof RuntimeBase topBase)) return;
-
-        // Fast path for leaf references (the overwhelmingly common case):
-        // unblessed, untracked referents with no nested containers to walk.
-        if (topBase.blessId == 0 && topBase.isRefCountUntracked()) {
-            // Unblessed, untracked — nothing to do unless it's a container.
-            if (topBase instanceof RuntimeArray arr) {
-                // Check if any element is a tracked ref before iterating.
-                boolean hasTracked = false;
-                for (RuntimeScalar elem : arr.elements) {
-                    if (elem != null && (elem.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                            && elem.value instanceof RuntimeBase eb
-                            && (eb.blessId != 0 || eb.isRefCountTracked())) {
-                        hasTracked = true;
-                        break;
-                    }
-                }
-                if (!hasTracked) return;
-            } else if (topBase instanceof RuntimeHash hash) {
-                boolean hasTracked = false;
-                for (RuntimeScalar val : hash.elements.values()) {
-                    if (val != null && (val.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                            && val.value instanceof RuntimeBase vb
-                            && (vb.blessId != 0 || vb.isRefCountTracked())) {
-                        hasTracked = true;
-                        break;
-                    }
-                }
-                if (!hasTracked) return;
+        if (!isActive() || scalar == null || scalar.hasCodeSlotBinding()
+                || (scalar.type & RuntimeScalarType.REFERENCE_BIT) == 0
+                || WeakRefRegistry.isweak(scalar)
+                || !(scalar.value instanceof RuntimeBase base)) return;
+        if (scalar.refCountOwned) {
+            if (base.isPerlDestroyed() && base.refCount <= 0) {
+                base.retireZeroCountOwnerIdentity(
+                        scalar, "MortalList.deferDecrementRecursive destroyed referent");
             } else {
-                return;  // Non-container unblessed untracked leaf — nothing to do
+                deferDecrementIfTracked(scalar);
             }
-        }
-
-        // Slow path: tracked or blessed referents need full walk with cycle detection.
-        // Use an explicit work queue + visited set to avoid stack overflow
-        // on circular references (e.g., ExifTool's self-referential hashes).
-        ArrayDeque<RuntimeScalar> work = new ArrayDeque<>();
-        Set<RuntimeBase> visited = Collections.newSetFromMap(new IdentityHashMap<>());
-        work.add(scalar);
-
-        while (!work.isEmpty()) {
-            RuntimeScalar s = work.poll();
-            if (s == null || (s.type & RuntimeScalarType.REFERENCE_BIT) == 0) continue;
-            if (WeakRefRegistry.isweak(s)) continue;
-            if (!(s.value instanceof RuntimeBase base)) continue;
-            if (!visited.add(base)) continue;  // already visited — cycle
-
-            if (base.blessId != 0) {
-                if (s.refCountOwned && base.refCount > 0) {
-                    if (base.refCountTrace) {
-                        base.traceRefCount(0, "MortalList.deferDecrementRecursive (blessed, queued)");
-                    }
-                    RuntimeBase.PendingOwnerRelease ownerRelease = base.queueOwnerRelease(
-                            s, "MortalList.deferDecrementRecursive blessed");
-                    // The selective count only covers counted edges. A live
-                    // package, lexical, closure, or other explicit owner can
-                    // still keep this container and its fields in use after
-                    // this counted edge leaves. Walk the fields only when no
-                    // current Perl owner identity remains.
-                    LifecycleRuntimeState state = state();
-                    markBoundaryWork(state);
-                    queueDeferredBase(state, base, ownerRelease, null, s);
-                } else if (base.isRefCountTracked() && base.refCount == 0) {
-                    LifecycleRuntimeState state = state();
-                    markBoundaryWork(state);
-                    RuntimeBase.PendingOwnerRelease ownerRelease =
-                            base.queueLifecycleOnlyAtZero(
-                                    "MortalList.deferDecrementRecursive zero-count temporary");
-                    queueDeferredBase(state, base, ownerRelease, null, s);
-                }
-                // Do not walk a blessed container's fields here. Its DESTROY
-                // callback can rescue the object, in which case those child
-                // owner slots must remain live. DestroyDispatch performs the
-                // cascade after the callback has made the final ownership
-                // decision (and also handles classes without DESTROY).
-            } else {
-                boolean hasDirectWeakElementRefs = containerHasWeakElementRefs(base);
-                boolean hasCleanupTargets = hasDirectWeakElementRefs
-                        || containerMayContainCleanupTargets(base);
-                if (s.refCountOwned && base.refCount > 0) {
-                    if (base.refCountTrace) {
-                        base.traceRefCount(0, "MortalList.deferDecrementRecursive (unblessed container, queued)");
-                    }
-                    RuntimeBase.PendingOwnerRelease ownerRelease = base.queueOwnerRelease(
-                            s, "MortalList.deferDecrementRecursive unblessed");
-                    LifecycleRuntimeState state = state();
-                    markBoundaryWork(state);
-                    queueDeferredBase(state, base, ownerRelease, null, s);
-                    if (!WeakRefRegistry.weakRefsExist() && base.refCount > 1) {
-                        continue;
-                    }
-                    if (!hasCleanupTargets
-                            || base.hasPerlStrongOwnerIdentity()) {
-                        continue;
-                    }
-                } else if (base.refCount > 0
-                        && !WeakRefRegistry.weakRefsExist()) {
-                    // A non-owning copy of a still-counted unblessed container
-                    // must not release that container's children. With no weak
-                    // refs anywhere, there is no weak-ref cleanup that requires
-                    // peeking inside before the container's own count reaches 0.
-                    continue;
-                } else if (base.refCount > 0
-                        && (!hasCleanupTargets
-                        || base.hasPerlStrongOwnerIdentity())) {
-                    // This scalar is a non-owning copy of a still-live container.
-                    // Cleaning it up must not walk into the shared container and
-                    // release the original owner's children. A live Perl edge
-                    // is identified by its owner slot; it must not be inferred
-                    // from Java references after the fact.
-                    continue;
-                }
-                // A registered lexical aggregate owns its element slots even
-                // when another scalar reference to the aggregate is released.
-                // Decrement this scalar's aggregate edge above, then leave the
-                // elements for the lexical aggregate's own scope cleanup.
-                if (base.localBindingExists && MyVarCleanupStack.isRegistered(base)) continue;
-                // Walk into unblessed containers to find nested blessed refs
-                if (base instanceof RuntimeArray arr) {
-                    for (RuntimeScalar elem : arr.elements) {
-                        if (elem != null) work.add(elem);
-                    }
-                } else if (base instanceof RuntimeHash hash) {
-                    for (RuntimeScalar val : hash.elements.values()) {
-                        if (val != null) work.add(val);
-                    }
-                }
-            }
+        } else if (base.blessId != 0 && base.isRefCountTracked()
+                && base.refCount == 0) {
+            LifecycleRuntimeState state = state();
+            markBoundaryWork(state);
+            RuntimeBase.PendingOwnerRelease ownerRelease = base.queueLifecycleOnlyAtZero(
+                    "MortalList.deferDecrementRecursive zero-count temporary");
+            queueDeferredBase(state, base, ownerRelease, null, scalar);
         }
     }
 
-    static boolean containerMayContainCleanupTargets(RuntimeBase base) {
-        if (!(base instanceof RuntimeArray || base instanceof RuntimeHash)) return false;
-        ArrayDeque<RuntimeBase> work = new ArrayDeque<>();
-        Set<RuntimeBase> visited = Collections.newSetFromMap(new IdentityHashMap<>());
-        work.add(base);
+    /** Reusable scratch for the cleanup-target pre-scan of nested aggregates. */
+    static final class CleanupTargetProbe {
+        private ArrayDeque<RuntimeBase> work;
+        private Set<RuntimeBase> visited;
 
-        while (!work.isEmpty()) {
-            RuntimeBase cur = work.poll();
-            if (cur == null || !visited.add(cur)) continue;
-            if (cur instanceof RuntimeArray arr) {
-                for (RuntimeScalar elem : arr.elements) {
-                    if (scalarMayContainCleanupTarget(elem, work)) return true;
+        boolean mayContainCleanupTargets(RuntimeBase base) {
+            if (!(base instanceof RuntimeArray || base instanceof RuntimeHash)) return false;
+            if (work == null) {
+                work = new ArrayDeque<>();
+                visited = Collections.newSetFromMap(new IdentityHashMap<>());
+                LifecycleHotPathDiagnostics.aggregateReleaseProbeWorksetAllocated();
+            }
+            LifecycleHotPathDiagnostics.aggregateReleaseProbeRootProcessed();
+            work.add(base);
+
+            try {
+                while (!work.isEmpty()) {
+                    RuntimeBase cur = work.poll();
+                    if (cur == null || !visited.add(cur)) continue;
+                    if (cur instanceof RuntimeArray arr) {
+                        for (RuntimeScalar elem : arr.elements) {
+                            if (scalarMayContainCleanupTarget(elem, work)) return true;
+                        }
+                    } else if (cur instanceof RuntimeHash hash) {
+                        for (RuntimeScalar value : hash.elements.values()) {
+                            if (scalarMayContainCleanupTarget(value, work)) return true;
+                        }
+                    }
                 }
-            } else if (cur instanceof RuntimeHash hash) {
-                for (RuntimeScalar value : hash.elements.values()) {
-                    if (scalarMayContainCleanupTarget(value, work)) return true;
-                }
+                return false;
+            } finally {
+                work.clear();
+                visited.clear();
             }
         }
-        return false;
     }
 
     private static boolean scalarMayContainCleanupTarget(RuntimeScalar scalar,
@@ -1499,24 +1509,6 @@ public class MortalList {
             work.add(base);
         } else if (base instanceof RuntimeCode && base.isRefCountTracked()) {
             return true;
-        }
-        return false;
-    }
-
-    private static boolean containerHasWeakElementRefs(RuntimeBase base) {
-        if (!WeakRefRegistry.weakRefsExist()) return false;
-        if (base instanceof RuntimeArray arr) {
-            for (RuntimeScalar elem : arr.elements) {
-                if (elem != null && WeakRefRegistry.hasWeakRefsTo(elem)) {
-                    return true;
-                }
-            }
-        } else if (base instanceof RuntimeHash hash) {
-            for (RuntimeScalar value : hash.elements.values()) {
-                if (value != null && WeakRefRegistry.hasWeakRefsTo(value)) {
-                    return true;
-                }
-            }
         }
         return false;
     }
@@ -1625,6 +1617,76 @@ public class MortalList {
         drainDeferredArgumentOwnerReleases();
     }
 
+    /** Drain the selected pending range depth-first, preserving frame LIFO order. */
+    private static void processDeferredOwnerEntriesLifoFrom(
+            int startIdx, boolean clearWeakRefsForLocalBinding) {
+        LifecycleRuntimeState state = state();
+        int resumeDepth = state.pendingReleaseResumeDepth;
+        int floor = startIdx;
+        int cursor = state.pending.size() - 1;
+        int observedSize = state.pending.size();
+        try {
+            while (true) {
+                int liveSize = state.pending.size();
+                if (cursor >= liveSize) cursor = liveSize - 1;
+                if (floor > liveSize) floor = liveSize;
+                if (observedSize > liveSize) observedSize = liveSize;
+                if (cursor < floor) {
+                    if (state.pendingReleaseResumeDepth > resumeDepth) {
+                        int resumeIndex = --state.pendingReleaseResumeDepth;
+                        int offset = resumeIndex * 2;
+                        cursor = state.pendingReleaseResumeStack[offset];
+                        floor = state.pendingReleaseResumeStack[offset + 1];
+                        continue;
+                    }
+                    int currentSize = state.pending.size();
+                    if (currentSize > observedSize) {
+                        floor = observedSize;
+                        cursor = currentSize - 1;
+                        observedSize = currentSize;
+                        continue;
+                    }
+                    observedSize = currentSize;
+                    break;
+                }
+
+                int currentIndex = cursor--;
+                int previousSize = state.pending.size();
+                RuntimeBase.PendingOwnerRelease ownerRelease =
+                        state.pendingOwnerReleases.get(currentIndex);
+                if (ownerRelease != null && ownerRelease.completed.get()) continue;
+                String transientOwnerKind =
+                        state.pendingTransientOwnerKinds.get(currentIndex);
+                RuntimeBase base = state.pending.get(currentIndex);
+                boolean argumentAliasOwnsBase =
+                        base.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_ALIAS) != 0
+                            && base.countedOwnerSlotCount() == 0;
+                if (argumentAliasOwnsBase) {
+                    state.deferredArgumentOwnerReleases.add(
+                            new DeferredArgumentOwnerRelease(base, ownerRelease,
+                                    transientOwnerKind));
+                } else {
+                    processDeferredBase(base, clearWeakRefsForLocalBinding,
+                            ownerRelease, transientOwnerKind);
+                }
+
+                int currentSize = state.pending.size();
+                if (currentSize > previousSize) {
+                    state.pushPendingReleaseResume(cursor, floor);
+                    floor = previousSize;
+                    cursor = currentSize - 1;
+                    observedSize = currentSize;
+                } else if (currentSize < observedSize) {
+                    // A nested exact drain may have truncated its own tail.
+                    // Allow later appends to reuse those queue positions.
+                    observedSize = currentSize;
+                }
+            }
+        } finally {
+            state.pendingReleaseResumeDepth = resumeDepth;
+        }
+    }
+
     static void drainDeferredArgumentOwnerReleases() {
         LifecycleRuntimeState state = state();
         if (state.deferredArgumentOwnerReleases.isEmpty()) return;
@@ -1673,9 +1735,14 @@ public class MortalList {
      */
     public static boolean suppressFlush(boolean suppress) {
         LifecycleRuntimeState state = state();
-        boolean prev = state.flushing;
-        state.flushing = suppress;
+        boolean prev = state.flushSuppressed;
+        state.flushSuppressed = suppress;
         return prev;
+    }
+
+    /** Return whether deferred-owner flushing is currently suppressed. */
+    public static boolean isFlushSuppressed() {
+        return state().flushSuppressed;
     }
 
     static void finalizeClearedAggregateOwnerAfterScopeExit(RuntimeBase base) {
@@ -1710,6 +1777,8 @@ public class MortalList {
                             transientOwnerKind));
             return;
         }
+        ReachabilityQueryStats queryStats = activeReachabilityQueryStats();
+        if (queryStats != null) queryStats.deferredBasesProcessed++;
         if (ownerRelease != null
                 && !base.completeQueuedOwnerRelease(
                         ownerRelease, "MortalList.processDeferredBase")) {
@@ -1739,6 +1808,13 @@ public class MortalList {
             // finalization request. Process that lifecycle boundary directly;
             // do not manufacture a positive refCount just to enter this path.
             finalRelease = true;
+        }
+        // Counted slots are detached before their queued decrement runs. Their
+        // slot-release callback therefore still sees the old count as a live
+        // parent owner. Recheck proxy-backed scalar values after the count
+        // transition, when the parent may have lost its final Perl owner.
+        if (base instanceof RuntimeArray || base instanceof RuntimeHash) {
+            base.recheckProxyValueOwnersIfUnowned();
         }
         if (finalRelease) {
             boolean aggregateReferent = base instanceof RuntimeArray || base instanceof RuntimeHash;
@@ -1920,11 +1996,11 @@ public class MortalList {
     public static void flush() {
         LifecycleRuntimeState state = state();
         if (!state.mortalActive) return;
-        if (state.flushing) return;
+        if (state.flushing || state.flushSuppressed) return;
         if (state.pending.isEmpty() && state.pendingTiedReleases.isEmpty()
                 && state.pendingIoReleases.isEmpty()
                 && state.pendingUntrackedReturnOwnerReleases.isEmpty()
-                && state.pendingTransientListAssignmentRhs.isEmpty()) {
+                && state.pendingTransientListAssignmentRhsByFrame.isEmpty()) {
             processReadyDeferredCaptures(state);
             refreshBoundaryWork(state);
             return;
@@ -1981,14 +2057,17 @@ public class MortalList {
         LifecycleRuntimeState state = state();
         if (startIdx >= state.pending.size()) return;
         state.deferredReleaseDrainDepth++;
-        // Loop because DESTROY may add further entries
-        int i = startIdx;
+        int pendingIdx = startIdx;
         try {
-            while (i < state.pending.size()) {
-                processDeferredBase(state.pending.get(i), clearWeakRefsForLocalBinding,
-                        state.pendingOwnerReleases.get(i),
-                        state.pendingTransientOwnerKinds.get(i));
-                i++;
+            // Exact operation-boundary releases keep queue order. Frame marks
+            // use depth-first LIFO draining; this path can be nested inside a
+            // destructor's count probe and must preserve its established order.
+            while (pendingIdx < state.pending.size()) {
+                int currentIndex = pendingIdx++;
+                processDeferredBase(state.pending.get(currentIndex),
+                        clearWeakRefsForLocalBinding,
+                        state.pendingOwnerReleases.get(currentIndex),
+                        state.pendingTransientOwnerKinds.get(currentIndex));
             }
         } finally {
             state.deferredReleaseDrainDepth--;
@@ -2020,7 +2099,7 @@ public class MortalList {
         owners.addAll(args.elements);
 
         LifecycleRuntimeState state = state();
-        if (state.flushing) return;
+        if (state.flushing || state.flushSuppressed) return;
         state.flushing = true;
         try {
             for (int i = state.pending.size() - 1; i >= 0; i--) {
@@ -2144,11 +2223,11 @@ public class MortalList {
         if (runtimesWithBoundaryWork.get() == 0) return;
         LifecycleRuntimeState state = state();
         if (!state.mortalActive) return;
-        if (state.flushing) return;
+        if (state.flushing || state.flushSuppressed) return;
         if (state.pending.isEmpty() && state.pendingTiedReleases.isEmpty()
                 && state.pendingIoReleases.isEmpty()
                 && state.pendingUntrackedReturnOwnerReleases.isEmpty()
-                && state.pendingTransientListAssignmentRhs.isEmpty()) {
+                && state.pendingTransientListAssignmentRhsByFrame.isEmpty()) {
             processReadyDeferredCaptures(state);
             refreshBoundaryWork(state);
             return;
@@ -2163,7 +2242,7 @@ public class MortalList {
         if (state.pending.size() <= mark && state.pendingTiedReleases.size() <= tiedMark
                 && state.pendingIoReleases.size() <= ioMark
                 && state.pendingUntrackedReturnOwnerReleases.size() <= untrackedReturnOwnerMark
-                && state.pendingTransientListAssignmentRhs.isEmpty()) {
+                && state.pendingTransientListAssignmentRhsByFrame.isEmpty()) {
             processReadyDeferredCaptures(state);
             refreshBoundaryWork(state);
             return;
