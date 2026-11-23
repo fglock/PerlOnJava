@@ -238,9 +238,9 @@ public final class PerlThreadControlBlock {
                     RuntimeRegex.emitCurrentRuntimeDebugFreeTraces();
                 }
                 // A child interpreter must not finalize objects whose shared
-                // references remain owned by the parent thread. The process
-                // level pass handles otherwise unreachable reference cycles.
-                GlobalDestruction.runGlobalDestruction(false);
+                // references remain owned by the parent thread. Teardown uses
+                // its package owner slots without scanning unreachable cycles.
+                GlobalDestruction.runGlobalDestruction();
                 return new Outcome(value, failure);
             });
             result = outcome.value();
@@ -367,7 +367,7 @@ public final class PerlThreadControlBlock {
                 if (snapshot != null) snapshot.close();
                 MortalList.flush();
                 MortalList.flushDeferredCaptures();
-                GlobalDestruction.runGlobalDestruction(false);
+                GlobalDestruction.runGlobalDestruction();
             });
             runtime.close();
         } else if (snapshot != null) {
