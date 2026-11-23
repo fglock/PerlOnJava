@@ -358,7 +358,7 @@ public class WeakRefRegistry {
             return;
         }
         if (referent == null
-                || !referent.isWeaklyRefCountTracked()
+                || (!referent.isWeaklyRefCountTracked() && !referent.isRefCountUntracked())
                 || referent.hasOwnerSlots()
                 || PerlRuntime.currentOrNull() == null
                 || !hasWeakRefsTo(referent)
