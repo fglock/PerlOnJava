@@ -778,6 +778,17 @@ public class WarnDie {
     }
 
     public static RuntimeBase die(RuntimeBase message, RuntimeScalar where, String fileName, int lineNumber) {
+        return die(message, where, fileName, lineNumber, false);
+    }
+
+    /** Raise a validation error using the Perl call site captured by the caller. */
+    public static RuntimeBase dieAtCallSite(RuntimeBase message, String fileName, int lineNumber) {
+        return die(message, new RuntimeScalar(""), fileName, lineNumber, true);
+    }
+
+    private static RuntimeBase die(
+            RuntimeBase message, RuntimeScalar where, String fileName, int lineNumber,
+            boolean preferCallSite) {
         var errVariable = getGlobalVariable("main::@");
         var oldErr = new RuntimeScalar(errVariable);
         RuntimeScalar first = message.getFirst();
@@ -798,7 +809,10 @@ public class WarnDie {
             // not append a source location to that special scalar value.
             if (!out.endsWith("\n") && first.type != RuntimeScalarType.REGEX) {
                 // Add " at FILE line N" location
-                String location = signatureMismatchLocation(out, where);
+                String location = preferCallSite && fileName != null && !fileName.isEmpty()
+                        && lineNumber > 0
+                                ? " at " + fileName + " line " + lineNumber
+                                : signatureMismatchLocation(out, where);
                 if (location.isEmpty() && fileName != null && lineNumber > 0) {
                     location = " at " + fileName + " line " + lineNumber;
                 }
@@ -895,11 +909,13 @@ public class WarnDie {
      * compile-time location.
      */
     private static String signatureMismatchLocation(String message, RuntimeScalar definitionWhere) {
-        if (!message.startsWith("Too few arguments for subroutine '")
-                && !message.startsWith("Too many arguments for subroutine '")
+        if (!message.startsWith("Too few arguments for ")
+                && !message.startsWith("Too many arguments for ")
                 && !message.startsWith("Odd name/value argument for subroutine '")
+                && !message.startsWith("Odd number of paired arguments for ")
                 && !message.startsWith("Missing required named parameter")
                 && !message.startsWith("Unrecognized named parameter")
+                && !isFunctionParametersDiagnostic(message)
                 // Native subs use Perl's conventional Usage: diagnostic for
                 // arguments that cannot be represented by their prototype.
                 // These errors, like signature errors, are reported at the
@@ -926,6 +942,16 @@ public class WarnDie {
             }
         }
         return definitionWhere.toString();
+    }
+
+    private static boolean isFunctionParametersDiagnostic(String message) {
+        if (!message.startsWith("In ")) return false;
+        return message.contains(": parameter ")
+                || message.contains(": missing named parameter:")
+                || message.contains(": missing named parameters:")
+                || message.contains(": no such named parameter:")
+                || message.contains(": no such named parameters:")
+                || message.contains(": invocant");
     }
 
     private static RuntimeScalar snapshotWarningHandler() {

@@ -23,6 +23,11 @@ public class GlobalDestruction {
      * on any tracked blessed references that haven't been destroyed yet.
      */
     public static void runGlobalDestruction() {
+        runGlobalDestruction(true);
+    }
+
+    /** Run global destruction, optionally scanning otherwise unreachable cycles. */
+    public static void runGlobalDestruction(boolean scanUnrootedCycles) {
         // Set ${^GLOBAL_PHASE} to "DESTRUCT"
         PerlRuntime.current().executionState.globalDestruction = true;
         GlobalVariable.getGlobalVariable(GlobalContext.GLOBAL_PHASE).set("DESTRUCT");
@@ -90,6 +95,23 @@ public class GlobalDestruction {
             }
             for (RuntimeScalar elem : new ArrayList<>(hash.elements.values())) {
                 destroyIfTracked(elem, visited, deferredCodeCleanup, cleanupTargetProbe);
+            }
+        }
+
+        // File-scope lexical roots can disappear before this pass while
+        // leaving blessed objects in reference cycles. Perl still invokes
+        // their DESTROY methods during global destruction. The runtime keeps
+        // weak records of all live objects whose classes define DESTROY;
+        // these records find cycle members without extending their lifetime.
+        // Use the same visited set so objects reached through both package
+        // roots and the cycle registry are dispatched only once.
+        if (scanUnrootedCycles) {
+            ReachabilityWalker.RootReachabilitySnapshot perlRoots =
+                    ReachabilityWalker.reachableFromRootsSnapshotWithStatus();
+            for (RuntimeBase object : DestroyDispatch.snapshotGlobalDestroyables()) {
+                if (!perlRoots.isReachable(object)) {
+                    destroyBaseIfTracked(object, visited);
+                }
             }
         }
 

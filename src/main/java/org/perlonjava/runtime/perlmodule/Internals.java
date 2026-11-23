@@ -115,7 +115,7 @@ public class Internals extends PerlModuleBase {
 
     private static int bScalarFlags(RuntimeScalar scalar) {
         int flags = switch (scalar.type) {
-            case RuntimeScalarType.INTEGER -> 0x100 | 0x1000;
+            case RuntimeScalarType.INTEGER, RuntimeScalarType.BOOLEAN -> 0x100 | 0x1000;
             case RuntimeScalarType.DOUBLE -> 0x200 | 0x2000;
             case RuntimeScalarType.DUALVAR -> bScalarFlags(
                     ((DualVar) scalar.value).numericValue());

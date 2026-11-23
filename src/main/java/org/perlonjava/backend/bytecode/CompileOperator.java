@@ -1,6 +1,7 @@
 package org.perlonjava.backend.bytecode;
 
 import org.perlonjava.frontend.astnode.*;
+import org.perlonjava.frontend.analysis.BooleanCallContext;
 import org.perlonjava.frontend.analysis.RegexLiteralAnalyzer;
 import org.perlonjava.frontend.parser.StringParser;
 import org.perlonjava.runtime.NamedCharacterExpansionMap;
@@ -631,7 +632,14 @@ public class CompileOperator {
             bc.lastResultReg = rd;
             return;
         }
-        emitSimpleUnaryScalar(bc, node, opcode);
+        BooleanCallContext.markDirectCall(logicalOperand);
+        bc.compileNode(logicalOperand, -1, RuntimeContextType.SCALAR);
+        int scalarReg = bc.lastResultReg;
+        int rd = bc.allocateOutputRegister();
+        bc.emit(opcode);
+        bc.emitReg(rd);
+        bc.emitReg(scalarReg);
+        bc.lastResultReg = rd;
     }
 
     private static void visitDieWarn(BytecodeCompiler bc, OperatorNode node, String op) {

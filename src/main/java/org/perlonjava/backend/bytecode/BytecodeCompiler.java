@@ -3,6 +3,7 @@ package org.perlonjava.backend.bytecode;
 
 import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.frontend.analysis.ConstantFoldingVisitor;
+import org.perlonjava.frontend.analysis.BooleanCallContext;
 import org.perlonjava.frontend.analysis.DoBlockResultAnalysis;
 import org.perlonjava.frontend.analysis.FindDeclarationVisitor;
 import org.perlonjava.frontend.analysis.LValueVisitor;
@@ -6398,7 +6399,13 @@ public class BytecodeCompiler implements Visitor {
                 } else if (hasVariable(varName) && isDynamicOurVariable(varName)) {
                     // 'our' array - must load from global table to see local() changes
                     arrayReg = allocateRegister();
-                    String globalArrayName = NameNormalizer.normalizeVariableName(((IdentifierNode) node.operand).name, getCurrentPackage());
+                    SymbolTable.SymbolEntry ourEntry = symbolTable.getSymbolEntry(varName);
+                    String ourPackage = node.getAnnotation("ourPackage") instanceof String packageName
+                            ? packageName
+                            : ourEntry != null ? ourEntry.perlPackage() : null;
+                    String globalArrayName = NameNormalizer.normalizeVariableName(
+                            ((IdentifierNode) node.operand).name,
+                            ourPackage == null ? getCurrentPackage() : ourPackage);
                     int nameIdx = addToStringPool(globalArrayName);
                     emit(Opcodes.LOAD_GLOBAL_ARRAY);
                     emitReg(arrayReg);
@@ -6507,8 +6514,13 @@ public class BytecodeCompiler implements Visitor {
                     // 'our' hash - must load from global table to see local() changes
                     hashReg = allocateRegister();
                     String rawHashName = ((IdentifierNode) node.operand).name;
+                    SymbolTable.SymbolEntry ourEntry = symbolTable.getSymbolEntry(varName);
+                    String ourPackage = node.getAnnotation("ourPackage") instanceof String packageName
+                            ? packageName
+                            : ourEntry != null ? ourEntry.perlPackage() : null;
                     String globalHashName = rawHashName.equals("::") ? "main::"
-                            : NameNormalizer.normalizeVariableName(rawHashName, getCurrentPackage());
+                            : NameNormalizer.normalizeVariableName(rawHashName,
+                                    ourPackage == null ? getCurrentPackage() : ourPackage);
                     int nameIdx = addToStringPool(globalHashName);
                     emit(Opcodes.LOAD_GLOBAL_HASH);
                     emitReg(hashReg);
@@ -9224,6 +9236,7 @@ public class BytecodeCompiler implements Visitor {
             emit(Opcodes.GET_LOCAL_LEVEL);
             emitReg(conditionLocalLevelReg);
         }
+        BooleanCallContext.markDirectCall(node.condition);
         compileNode(node.condition, -1, RuntimeContextType.SCALAR);
         statementTokenIndex = savedConditionStatementToken;
         int condReg = lastResultReg;
@@ -9427,18 +9440,20 @@ public class BytecodeCompiler implements Visitor {
         emitReg(ignoredEvalResult);
         emit(RuntimeContextType.SCALAR);
 
-        OperatorNode catchDeclaration = new OperatorNode(
-                "my", node.catchParameter, node.getIndex());
-        compileNode(catchDeclaration, -1, RuntimeContextType.SCALAR);
-        int catchReg = lastResultReg;
+        if (node.catchParameter != null) {
+            OperatorNode catchDeclaration = new OperatorNode(
+                    "my", node.catchParameter, node.getIndex());
+            compileNode(catchDeclaration, -1, RuntimeContextType.SCALAR);
+            int catchReg = lastResultReg;
 
-        int errorReg = allocateRegister();
-        emit(Opcodes.LOAD_GLOBAL_SCALAR);
-        emitReg(errorReg);
-        emit(addToStringPool("main::@"));
-        emit(Opcodes.ASSIGN_LEXICAL_SCALAR);
-        emitReg(catchReg);
-        emitReg(errorReg);
+            int errorReg = allocateRegister();
+            emit(Opcodes.LOAD_GLOBAL_SCALAR);
+            emitReg(errorReg);
+            emit(addToStringPool("main::@"));
+            emit(Opcodes.ASSIGN_LEXICAL_SCALAR);
+            emitReg(catchReg);
+            emitReg(errorReg);
+        }
 
         // The exception has been transferred to $e.  Keep the dynamically
         // localized error slot empty for the catch body, as Perl does.

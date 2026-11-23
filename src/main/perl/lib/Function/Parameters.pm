@@ -2,6 +2,7 @@ package Function::Parameters;
 
 use strict;
 use warnings;
+use warnings::register;
 
 our $VERSION = '0.01';
 
@@ -11,9 +12,11 @@ require Function::Parameters::Info;
 # runtime hook validates direct imports while leaving registration to parser.
 sub import {
     shift if @_ && $_[0] eq __PACKAGE__;
+    my %configuration;
     for my $argument (@_) {
         if (ref($argument) eq 'HASH') {
             for my $keyword (keys %$argument) {
+                $configuration{$keyword} = $argument->{$keyword};
                 _validate_keyword($keyword);
                 my $definition = $argument->{$keyword};
                 my $defaults = ref($definition) eq 'HASH'
@@ -28,6 +31,8 @@ sub import {
             die "Function::Parameters: import argument must be a tag, keyword, or hash\n";
         }
     }
+    $^H{'Function::Parameters/config'} = \%configuration;
+    Function::Parameters::register_parser_keywords(@_);
     return;
 }
 

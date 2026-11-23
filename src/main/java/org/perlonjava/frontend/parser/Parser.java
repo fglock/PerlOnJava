@@ -17,6 +17,7 @@ import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.PerlParserException;
 import org.perlonjava.runtime.runtimetypes.PerlRuntime;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.CompilationRuntimeState;
 import org.perlonjava.runtime.perlmodule.Strict;
 
@@ -26,6 +27,7 @@ import java.util.Deque;
 import java.util.IdentityHashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -248,6 +250,8 @@ public class Parser {
     // Are we currently parsing a my/our/state declaration's variable list?
     // Used to suppress strict vars checking for the variable being declared.
     public boolean parsingDeclaration = false;
+    /** Syntax::Keyword::Try permits an unbound catch block; core feature 'try' does not. */
+    public boolean syntaxKeywordTryAllowsUnboundCatch = false;
     // True only while parsing the body of an async subroutine. Nested ordinary
     // subs reset this flag so await placement checks remain lexical.
     public boolean parsingFutureAsyncAwaitSub = false;
@@ -287,6 +291,8 @@ public class Parser {
     public boolean parsingFunctionParametersOptionalInvocant = false;
     /** Number of leading positional parameters used as Function::Parameters invocants. */
     public int functionParametersInvocantCount = 1;
+    /** Configured type objects for implicit Function::Parameters invocants. */
+    public Map<String, RuntimeScalar> functionParametersInvocantTypeObjects = Map.of();
     /** Whether configured Function::Parameters signatures enforce exact arity. */
     public boolean functionParametersStrict = true;
     /** Whether configured Function::Parameters signatures run type constraints. */
@@ -301,6 +307,9 @@ public class Parser {
     /** Whether Function::Parameters signatures accept default arguments. */
     public boolean functionParametersDefaultArguments = true;
     public String functionParametersInstallSub;
+    /** Runtime code reference used to install configured Function::Parameters subs. */
+    public RuntimeScalar functionParametersInstallSubCallback;
+    private RuntimeScalar warnedMalformedFunctionParametersConfig;
     public String functionParametersTypeReifier;
     /** Optional compile-time callback used by Function::Parameters reify_type. */
     public org.perlonjava.runtime.runtimetypes.RuntimeScalar functionParametersTypeReifierCallback;
@@ -332,6 +341,8 @@ public class Parser {
     public final Map<String, List<Node>> unitClassAdjustBlocks = new LinkedHashMap<>();
     /** Prototypes published by declaration headers while this source is parsed. */
     public final Map<String, String> declaredSubPrototypes = new LinkedHashMap<>();
+    /** Function::Parameters prototype declarations apply inside their own recursive body. */
+    public final Set<String> functionParametersDeclaredPrototypes = new LinkedHashSet<>();
     /** Named subroutines whose bodies are currently being parsed, including closure ancestors. */
     public final Deque<String> compilingSubroutineBodies = new ArrayDeque<>();
     // List to store heredoc nodes encountered during parsing.
@@ -378,6 +389,17 @@ public class Parser {
         if (ctx != null && ctx.symbolTable != null) {
             setCurrentScope(ctx.symbolTable);
         }
+    }
+
+    /** Suppress repeat warnings for the same malformed lexical config value. */
+    public boolean markMalformedFunctionParametersConfigWarning(RuntimeScalar value) {
+        if (value == null || org.perlonjava.runtime.runtimetypes.RuntimeScalarType.isReference(value)) {
+            warnedMalformedFunctionParametersConfig = null;
+            return false;
+        }
+        if (value == warnedMalformedFunctionParametersConfig) return false;
+        warnedMalformedFunctionParametersConfig = value;
+        return true;
     }
 
     // Add this constructor to the Parser class

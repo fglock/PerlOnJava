@@ -1,6 +1,7 @@
 package org.perlonjava.backend.bytecode;
 
 import org.perlonjava.frontend.analysis.ConstantFoldingVisitor;
+import org.perlonjava.frontend.analysis.BooleanCallContext;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.backend.jvm.ByteCodeSourceMapper;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
@@ -13,6 +14,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 public class CompileBinaryOperator {
     static void visitBinaryOperator(BytecodeCompiler bytecodeCompiler, BinaryOperatorNode node) {
@@ -79,7 +81,9 @@ public class CompileBinaryOperator {
 
         // Handle -> operator specially for hashref/arrayref dereference
         if (node.operator.equals("->")) {
-            if (node.left instanceof OperatorNode sigil && sigil.operator.equals("%")) {
+            if (node.right instanceof HashLiteralNode
+                    && node.left instanceof OperatorNode sigil
+                    && sigil.operator.equals("%")) {
                 bytecodeCompiler.throwCompilerException("Can't use a hash as a reference");
                 return;
             }
@@ -167,7 +171,8 @@ public class CompileBinaryOperator {
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(coderefReg);
                 bytecodeCompiler.emitReg(argsReg);
-                int callContext = bytecodeCompiler.currentCallContext;
+                int callContext = BooleanCallContext.callContext(
+                        node, bytecodeCompiler.currentCallContext);
                 if (callContext == RuntimeContextType.LIST
                         && bytecodeCompiler.isCompilingForeachList()
                         && directCallIsLvalue(bytecodeCompiler, node)) {
@@ -280,7 +285,9 @@ public class CompileBinaryOperator {
                             ? RuntimeContextType.METHOD_CODEREF
                             : node.getBooleanAnnotation("inheritRawCallContext")
                             ? RuntimeContextType.INHERITED
-                            : bytecodeCompiler.currentCallContext);
+                            : BooleanCallContext.callContext(node, bytecodeCompiler.currentCallContext));
+                    bytecodeCompiler.emit(bytecodeCompiler.addToStringPool(
+                            encodeAutoboxBindings(node.getAnnotation("autoboxBindings"))));
                     if (holdInvocantDuringArguments) {
                         bytecodeCompiler.emit(Opcodes.RELEASE_METHOD_INVOCANT);
                     }
@@ -476,6 +483,10 @@ public class CompileBinaryOperator {
                     && bytecodeCompiler.isCompilingForeachList()
                     && directCallIsLvalue(bytecodeCompiler, node)) {
                 bytecodeCompiler.currentCallContext = RuntimeContextType.LVALUE_LIST;
+            }
+            if (node.operator.equals("(") || node.operator.equals("()")) {
+                bytecodeCompiler.currentCallContext = BooleanCallContext.callContext(
+                        node, bytecodeCompiler.currentCallContext);
             }
             int rd;
             try {
@@ -804,6 +815,25 @@ public class CompileBinaryOperator {
 
 
         bytecodeCompiler.lastResultReg = rd;
+    }
+
+    private static String encodeAutoboxBindings(Object annotation) {
+        if (!(annotation instanceof Map<?, ?> bindings) || bindings.isEmpty()) return "";
+        StringBuilder encoded = new StringBuilder();
+        for (var entry : bindings.entrySet()) {
+            if (!(entry.getKey() instanceof String type)
+                    || !(entry.getValue() instanceof List<?> classes)) continue;
+            if (!encoded.isEmpty()) encoded.append(';');
+            encoded.append(type).append('=');
+            boolean first = true;
+            for (Object value : classes) {
+                if (!(value instanceof String className)) continue;
+                if (!first) encoded.append('|');
+                encoded.append(className);
+                first = false;
+            }
+        }
+        return encoded.toString();
     }
 
 
