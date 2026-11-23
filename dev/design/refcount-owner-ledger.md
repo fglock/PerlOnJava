@@ -19,12 +19,12 @@ delivery for removing lifecycle decisions based on memory sweeps; #1649 is its
 historical origin. The design replaces selective-refcount heuristics with
 explicit, auditable owner tokens.
 
-## Current Status (2026-11-22 — resumed)
+## Current Status (2026-11-23 — resumed)
 
 **Delivery issue:** [#2043](https://github.com/fglock/PerlOnJava/issues/2043)
 
 **Target PR:** [#1938](https://github.com/fglock/PerlOnJava/pull/1938)
-**Goal:** deliver Perl-exact owner counts, weak-reference lifetime, and deterministic `DESTROY` behavior without memory-sweep lifecycle decisions. Candidate commit `2362185545` adds explicit-`exit` cleanup and temporary-array argument ownership fixes with regressions on top of `f012dac872`. `nice -n 19 timeout 1800 make` passes. The eight-target acceptance build passed; six CPAN targets passed and two retain known failures, described below.
+**Goal:** deliver Perl-exact owner counts, weak-reference lifetime, and deterministic `DESTROY` behavior without memory-sweep lifecycle decisions. Candidate commit `11838413af` adds the explicit-`exit`, temporary-array argument, and package-array root-scan fixes with regressions on top of `f012dac872`. `nice -n 19 timeout 1800 make` passes in 8m33, and `make check-links` passes. The eight-target acceptance build passed; six CPAN targets passed and two retain known failures, described below.
 
 ### Checkpoint and diagnosis
 
@@ -34,7 +34,7 @@ The eight-target acceptance run on the preceding committed candidate `f012dac872
 
 The Mojolicious `t/mojo/asset.t` fork assertion fails on both the candidate and master JVMs with `Can't fork: Resource temporarily unavailable`; system Perl passes. This remains unclassified and is consistent with host process pressure.
 
-The final eight-target acceptance run (`nice -n 19 timeout 28860 make test-cpan-release-acceptance`) passed Excel::Writer::XLSX, PPR, Template Toolkit, Catalyst, File::RandomAccess, and DateTime. DBIx::Class reports one assertion failure in `t/storage/txn.t` (expected source line 451, got lines 448 and 447); its three shutdown LeakTracer failures are resolved. Mojolicious `t/mojo/asset.t` still fails its fork assertion with `Can't fork: Resource temporarily unavailable`, as it did on master. The acceptance build phase passed in 8m04. Full output is `/private/tmp/issue2043-followup-cpan-acceptance.log`; per-target logs are under `/tmp/cpan_random_logs/20261122-195656-78690/`. The generated compatibility reports now contain this run's updates and must be preserved. The current branch is `wip/issue2043-handoff-20261121-154515`; no changes have been published to PR #1938. The issue #2043 source changes, focused regressions, full Make gate, and upstream DBIx relationship/inflate leak tests are verified; the remaining acceptance failures are the transaction-line mismatch and Mojolicious fork limitation.
+The final eight-target acceptance run on `11838413af` (`nice -n 19 timeout 28860 make test-cpan-release-acceptance`) passed Excel::Writer::XLSX, PPR, Template Toolkit, Catalyst, File::RandomAccess, and DateTime. DBIx::Class reports one assertion failure in `t/storage/txn.t` (expected source line 451, got lines 448 and 447); its three shutdown LeakTracer failures are resolved. Mojolicious `t/mojo/asset.t` still fails its fork assertion with `Can't fork: Resource temporarily unavailable`, as it did on master; this remains covered by the user's prior waiver. The acceptance build phase passed in 8m17 and regenerated the launcher JAR with SHA-256 `d34af367d8fc07806c55de82d6ecbd512073753cddcdf6661570255d6c8ce626`. Full output is `/private/tmp/issue2043-package-root-cpan-acceptance.log`; per-target logs are under `/tmp/cpan_random_logs/20261122-230238-55924/`. The generated compatibility reports now contain this run's updates and must be preserved. PR #1938 remains open at `75dd7d542f1f86bff930beb1c5779be74fa27955`, is DIRTY against current master, and has no human review. The source fixes, focused regressions, full Make gate, and upstream DBIx relationship/inflate leak tests are verified; the remaining acceptance failures are the existing transaction-line mismatch and waived Mojolicious fork limitation.
 
 ### Permanent regression evidence
 
@@ -42,7 +42,7 @@ The DBIx tests are permanent project-owned Perl tests under `src/test/resources/
 
 The exception-unwind regression passes on system Perl, JVM, and interpreter. It fails on the unfixed `aebe3b0742` source (the JVM reports `first` before `second`) and passes on the current candidate. The complete `nice -n 19 timeout 900 make` gate passed after adding it (all five unit shards, Joni, and home integration). A full Make run on the unfixed baseline failed 11 other JVM unit assertions across three shards; the focused regression result is separately captured in `/private/tmp/issue2043-unfixed-lifo-direct.log`.
 
-`nested_untracked_aggregate_owner_release.t` adds six system-Perl-validated checks for nested array/hash release, a surviving shared owner, weak observers, and destructor rescue. It passes on JVM and interpreter. Ordinary final array/hash cleanup now retires direct element owners and lets final child-container release cascade through that container's own slots; it no longer allocates `RecursiveAggregateReleaseWalker` worksets or probes descendants with `CleanupTargetProbe`. Scope-exit's existing liveness guards and one-level eligibility checks remain, as does `CleanupTargetProbe` for global destruction. The full optimization and performance measurements remain outstanding.
+`nested_untracked_aggregate_owner_release.t` adds six system-Perl-validated checks for nested array/hash release, a surviving shared owner, weak observers, and destructor rescue. It passes on JVM and interpreter. Ordinary final array/hash cleanup now retires direct element owners and lets final child-container release cascade through that container's own slots; it no longer allocates `RecursiveAggregateReleaseWalker` worksets or probes descendants with `CleanupTargetProbe`. Scope-exit's existing liveness guards and one-level eligibility checks remain, as does `CleanupTargetProbe` for global destruction. The package-array root-marking fast path and paired performance evidence are recorded under Current Work; broader lifecycle allocation and performance coverage remains outstanding.
 
 
 The latest Excel::Writer::XLSX 1.15 run covered all 1,247 distribution test files against the rebuilt candidate: 1,246 passed and the optional `t/utility/xl_parse_date.t` was skipped because Date::Manip and Date::Calc are unavailable. The first `jcpan -t` batch reached its one-hour timeout without failures; a correctly scoped MakeMaker batch passed the remaining 498 files (4,276 assertions), and the optional test was run separately to record its skip. Logs: `/private/tmp/issue2043-excel-writer-xlsx-final-candidate.log`, `/private/tmp/issue2043-excel-writer-xlsx-final-resumed.log`, and `/private/tmp/issue2043-excel-writer-xlsx-final-optional.log`.
@@ -77,7 +77,7 @@ A broader persistent-worker profile wrote three checksum-identical workbooks, ea
 | 2026-11-22 | Run the full repository gate after adding both DBIx regressions | `nice -n 19 timeout 900 make` passes in 8m01 (`/private/tmp/issue2043-make-with-dbix-regression.log`). The optional external DBIx tests were run separately with `DBIC_CLASS_TEST_ROOT` set. |
 | 2026-11-22 | Revalidate the resultset section after the JVM frame-exit fix | All 12 upstream resultset files pass on JVM with no retained references. System Perl passes 11; interpreter passes 7 and has five 600-second timeouts. The current full repository gate passes in 7m16. |
 
-The latest full gate, `nice -n 19 timeout 900 make`, passed in 7m13 after removing the ordinary scope-exit eligibility pre-scans and using raw local slot access for tied-array storage (`/private/tmp/issue2043-tied-array-cleanup-full-make.log`). It completed all five Java/Perl unit shards, Joni tests, and home integration tests. The launcher JAR at `target/perlonjava-5.44.1.jar` has SHA-256 `f0a5437ed9a1db3ae11720b0831b4818ff99ba71c460062ea6e049ff0d1bb9f0`. A shard-0 run immediately before it also passed all 1,681 tests after the ownership changes; its two remaining failures were the async-await cases fixed before the full gate.
+The latest full gate, `nice -n 19 timeout 1800 make`, passed in 8m33 on commit `11838413af` (`/private/tmp/issue2043-package-root-make.log`). It completed all five Java/Perl unit shards, Joni tests, home integration tests, and `PackageArrayRootMarkingFastPathTest`. That build's launcher JAR SHA-256 was `dada35bd36b0a0346604193d4ee924664e25f4fb886bf69f1981021854d37404`; the later acceptance build regenerated the same source commit's JAR as recorded above.
 
 The current-master baseline `nice -n 19 timeout 900 make` passed at `506371c134` in 6m50 (`/private/tmp/issue2043-master-baseline-make.log`). The pre-edit candidate run at `aebe3b0742`, `JPERL_TEST_SHARD=0 nice -n 19 timeout 900 make`, reported 11 Java test failures in 5m52 (`/private/tmp/issue2043-pre-edit-shard0-make.log`). The ten failures in the later full candidate gate and the one extra pre-edit reachability-query failure are resolved on the current working tree. The latest full gate also completed the thread-shared queue clone test without reproducing its earlier `ConcurrentModificationException`.
 
@@ -87,10 +87,10 @@ Direct runs against the final rebuilt JAR passed `destroy_eval_die.t` (10/10), `
 
 | Area | Evidence | Next action |
 |---|---|---|
-| Excel::Writer::XLSX performance evidence | The complete 1,247-test surface passes on the latest candidate: 1,246 pass and one optional skip. The latest `chart_axis28.t` comparison has seven stable, checksum-matched pairs; candidate/before throughput is 0.993 with 95% interval [0.886, 1.128]. Walker/workset/probe counts fell substantially; JFR sampled allocation weight did not. | Measure the broader Excel workload. Do not claim a speedup from the current test. |
-| DBIx::Class acceptance | All 12 upstream `t/resultset/*.t` files pass on JVM with no LeakTracer-retained references. System Perl passes 11; `update_delete.t` has three SQL execution-status mismatches, also with no LeakTracer-retained references. The interpreter passes 7; five tests exceed 600 seconds, including `update_delete.t`. The focused plus-select and row-parser shutdown regressions pass on system Perl and both PerlOnJava backends. Logs are under `/private/tmp/issue2043-resultset-{direct,perl,interpreter}-*.log`; the interpreter timeout is evidence of incomplete compatibility, not a passing result. | Diagnose the interpreter slow cases and classify the three system-Perl `update_delete.t` mismatches; then run the broader DBIx acceptance suite on the final source. |
+| Excel::Writer::XLSX performance evidence | On commit `11838413af`, a seven-pair persistent-worker comparison of `chart_axis28.t` against exact parent source `2362185545` produced matching normalized workbook checksums and stable warmups at observed nice 19. Candidate/before throughput was 11.92× with bootstrap 95% interval [10.53, 13.68]. A separate package-array read workload improved 6.64× [5.91, 7.37]. JFR allocation samples showed the repeated `getGlobalArray` → `markPackageGlobalRoot` snapshot path before the change and none after. Reports: `/private/tmp/issue2043-package-root-excel-paired.json` and `/private/tmp/issue2043-package-array-paired.json`. | The repeated package-array root scan is resolved and measured. Keep the exact-parent benchmark artifacts; avoid claiming portfolio-wide speedup. |
+| DBIx::Class acceptance | The eight-target JVM acceptance scan completed 325 test programs / 43,020 assertions with one failure: the existing `t/storage/txn.t` source-line mismatch (expected 451, got 448 and 447). The earlier three LeakTracer shutdown failures are resolved. The five interpreter resultset timeouts and three system-Perl `update_delete.t` SQL-status mismatches remain separately unclassified. | Classify the interpreter timeouts and system-Perl SQL-status mismatches before claiming cross-backend DBIx acceptance. |
 | Focused compatibility retests | Moo weak accessor and Template Toolkit string tests pass on both backends. Standard Perl passes Moo; its Template Toolkit run could not load `Template::Stash::XS` because the temporary standard-Perl environment lacks that native build. | No focused retest remains; preserve the standard-Perl Template Toolkit environment limitation. |
-| PR integration | On 2026-11-22, PR #1938 remained open at `75dd7d542f1f86bff930beb1c5779be74fa27955` with no review decision; GitHub returned merge state `UNKNOWN`. Reading issue #2043 comments failed with a network error, so the live claim is unverified. This branch remains separate recovery work. | Recheck issue and PR state when the API is reachable. Reconcile the tested working-tree changes with the latest PR head in an isolated worktree, preserve its existing work, and validate that exact candidate before updating the PR. |
+| PR integration | PR #1938 remains open at `75dd7d542f1f86bff930beb1c5779be74fa27955`, is DIRTY against current master, and has no human review. The live issue body and comments are readable; the active claim still describes the earlier `aebe3b0742` checkpoint. | Refresh the claim and reconcile only intended #2043 changes with the latest PR head in an isolated worktree. Do not publish until that exact candidate has the required evidence and authorization. |
 
 ### Complete step-by-step delivery plan
 
@@ -243,11 +243,14 @@ decisions. Temporary leases and suspended-frame owners remain explicit slots.
    path. Existing liveness guards remain. Tied arrays use raw local storage
    access during slot retirement so cleanup does not call Perl `FETCHSIZE`.
    Global destruction still uses `CleanupTargetProbe`.
-2. Both the `chart_axis28.t` paired comparison and broader Excel profile are
-   complete but show no demonstrated end-to-end gain. The broader JFR points
-   to repeated package-root marking, so audit its mutation paths before making
-   a separate guarded change; do not attribute that hotspot to aggregate
-   cleanup or infer a speedup from the lifecycle counter reductions.
+2. Skip repeated package-root marking when `getGlobalArray` reads an already
+   rooted aggregate; global table writes establish the root and array mutation
+   paths register later slots. The fast-path regression passes, and the
+   seven-pair `chart_axis28.t` comparison against exact parent `2362185545`
+   measures 11.92× throughput (95% interval [10.53, 13.68]) with matching
+   normalized workbook checksums. The paired evidence is in
+   `/private/tmp/issue2043-package-root-excel-paired.json`; the focused
+   package-array workload and JFR samples are retained alongside it.
 3. Complete the remaining CPAN
    release-acceptance gates on the final immutable candidate. Stop a gate on an
    actionable failure, preserve its log, fix the cause, and restart from a new
