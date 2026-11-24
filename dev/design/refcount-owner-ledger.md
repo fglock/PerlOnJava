@@ -24,9 +24,9 @@ explicit, auditable owner tokens.
 **Delivery issue:** [#2043](https://github.com/fglock/PerlOnJava/issues/2043)
 
 **Target PR:** [#1938](https://github.com/fglock/PerlOnJava/pull/1938)
-**Goal:** deliver Perl-exact owner counts, weak-reference lifetime, and deterministic `DESTROY` behavior without memory-sweep lifecycle decisions. The current local PR reconciliation candidate is `3e97440c60`, based on merge commit `4b9540ab77`. The stale sweep/snapshot and diagnostic-only Java tests that referenced removed internal APIs were removed; the new `WatcherCleanupDoesNotTraverseLiveAggregateTest` preserves behavior coverage for direct-slot watcher cleanup. `nice -n 19 timeout 1800 make` passed on the exact commit in 7m18: `/tmp/issue2043-3e97440c60-make.log`.
+**Goal:** deliver Perl-exact owner counts, weak-reference lifetime, and deterministic `DESTROY` behavior without memory-sweep lifecycle decisions. The current local PR reconciliation candidate is `3e97440c60`, based on merge commit `4b9540ab77`. With the user's authorization, stale Java tests for removed sweep, snapshot, and diagnostic internals were removed; `WatcherCleanupDoesNotTraverseLiveAggregateTest` adds behavior-level coverage for direct-slot watcher cleanup. `nice -n 19 timeout 1800 make` passed on the exact commit in 7m18: `/tmp/issue2043-3e97440c60-make.log`.
 
-The eight-target CPAN acceptance run on the closely related full-master candidate `a7921dc14e` passed Template Toolkit (3,180), Excel::Writer::XLSX (5,138), Image::ExifTool (600), PPR (1,255), and DateTime (3,592). Catalyst failed two assertions already reproduced on current master; DBIx::Class retained the known transaction source-line mismatch; Mojolicious failed because `t/mojo/asset.t` could not fork under host resource pressure. This run did not include the additional POSIX and glob changes present in `3e97440c60`; rerun the acceptance gate on the exact PR candidate before publication. Logs: `/private/tmp/issue2043-a7921dc14e-cpan-acceptance.log` and `/tmp/cpan_random_logs/20261123-194152-33963/`.
+The exact-candidate eight-target CPAN acceptance run completed. Template Toolkit passed 3,180 assertions; Excel::Writer::XLSX passed 5,138; Image::ExifTool passed 600; PPR passed 1,255; DateTime passed 3,592. Catalyst failed 2/3,477 assertions across 10 programs, reproducing the current-master baseline. DBIx::Class failed 1/43,020 at the known `t/storage/txn.t` source-line mismatch. Mojolicious failed 1/3,735 because `t/mojo/asset.t` could not fork (`Resource temporarily unavailable`), matching the known host limitation. Full output: `/tmp/issue2043-ee8fedef48-cpan-acceptance.log`; per-target logs: `/tmp/cpan_random_logs/20261123-225249-47395/`. The run regenerated CPAN reports; preserve those files uncommitted.
 
 The first full-master build at `ae3f87c122` failed the new installer-lifetime regression because reconciliation had dropped the interpreter file-optree and JVM noncapturing-CODE owner registrations. Cherry-picking `3776bfa487` restored those paths; the focused test and full `make` now pass on `28240779ea`. Gate output: `/private/tmp/issue2043-fullmaster-template-fix-make.log`; focused logs: `/private/tmp/issue2043-fullmaster-template-fix-installer-{jvm,interpreter}.log`.
 
@@ -259,10 +259,12 @@ decisions. Temporary leases and suspended-frame owners remain explicit slots.
    normalized workbook checksums. The paired evidence is in
    `/private/tmp/issue2043-package-root-excel-paired.json`; the focused
    package-array workload and JFR samples are retained alongside it.
-3. Run the eight-target CPAN release-acceptance gate on immutable candidate
-   `3e97440c60`; compare its outcomes with the known baseline failures above.
-4. After the exact-candidate acceptance review, obtain authorization before
-   pushing the local PR reconciliation branch or changing issue #2043/PR #1938.
+3. Exact-candidate release acceptance is complete. The three failures are
+   classified as current-master or host-resource issues; the generated CPAN
+   report files remain uncommitted.
+4. The local PR reconciliation candidate is validated, but remote PR #1938 has
+   not been updated. Recheck its live state and obtain explicit authorization
+   before pushing the candidate.
 
 ## Regression Matrix
 
