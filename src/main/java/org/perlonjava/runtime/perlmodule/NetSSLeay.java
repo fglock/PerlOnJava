@@ -366,6 +366,8 @@ public class NetSSLeay extends PerlModuleBase {
     private static final Map<Long, EvpMdCtx> EVP_MD_CTX_HANDLES = new CurrentRuntimeMap<>(s -> s.evpMdContexts);
     private static final Map<Long, HmacCtx> HMAC_CTX_HANDLES = new CurrentRuntimeMap<>(s -> s.hmacContexts);
     private static final Map<Long, KeyPair> RSA_HANDLES = new CurrentRuntimeMap<>(s -> s.rsaKeys);
+    private static final int MIN_RSA_KEY_BITS = 1024;
+    private static final int MAX_RSA_KEY_BITS = 8192;
     private static final Map<Long, Long> ASN1_TIME_HANDLES = new CurrentRuntimeMap<>(s -> s.asn1Times);
     private static final Map<Long, SslCtxState> CTX_HANDLES = new CurrentRuntimeMap<>(s -> s.sslContexts);
     private static final Map<Long, SslState> SSL_HANDLES = new CurrentRuntimeMap<>(s -> s.sslStates);
@@ -3798,7 +3800,10 @@ public class NetSSLeay extends PerlModuleBase {
 
     public static RuntimeList RSA_generate_key(RuntimeArray args, int ctx) {
         // RSA_generate_key(bits, e, [cb], [cb_arg])
-        int bits = args.size() > 0 ? (int) args.get(0).getLong() : 2048;
+        int bits = args.size() > 0 ? parseRsaKeySize(args.get(0)) : 2048;
+        if (bits < MIN_RSA_KEY_BITS || bits > MAX_RSA_KEY_BITS) {
+            return new RuntimeScalar().getList();
+        }
         // e (public exponent) is typically 65537 — Java handles this internally
 
         // Handle callback argument
@@ -3821,6 +3826,12 @@ public class NetSSLeay extends PerlModuleBase {
 
         try {
             KeyPairGenerator kpg = KeyPairGenerator.getInstance("RSA");
+            // The bundled netssleay_phase5_6.t uses 1024 bits to keep its RSA round-trip
+            // test fast. Preserve that OpenSSL-compatible legacy request; 1024-bit RSA
+            // is not suitable for new key material, which should use at least 2048 bits.
+            // Reject weaker and unbounded sizes above; suppress only this documented
+            // legacy-compatible generation call.
+            // codeql[java/insufficient-key-size]
             kpg.initialize(bits, SECURE_RANDOM);
 
             // Call callback during key generation if provided
@@ -3851,6 +3862,24 @@ public class NetSSLeay extends PerlModuleBase {
             return new RuntimeScalar(handleId).getList();
         } catch (NoSuchAlgorithmException e) {
             return new RuntimeScalar().getList(); // undef
+        }
+    }
+
+    private static int parseRsaKeySize(RuntimeScalar requestedBits) {
+        try {
+            int type = RuntimeScalarType.effectiveType(requestedBits);
+            if (type == RuntimeScalarType.INTEGER || type == RuntimeScalarType.DOUBLE) {
+                double number = requestedBits.getDouble();
+                if (!Double.isFinite(number) || number != Math.rint(number)
+                        || number < MIN_RSA_KEY_BITS || number > MAX_RSA_KEY_BITS) {
+                    return -1;
+                }
+                return (int) number;
+            }
+            String text = requestedBits.toString().trim();
+            return new java.math.BigDecimal(text).intValueExact();
+        } catch (NumberFormatException | ArithmeticException e) {
+            return -1;
         }
     }
 
