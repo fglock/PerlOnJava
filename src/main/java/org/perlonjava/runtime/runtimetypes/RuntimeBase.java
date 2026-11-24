@@ -1180,7 +1180,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     }
 
     /** Live concurrent view of untracked edges; callers never allocate a copied set. */
-    private synchronized java.util.Set<PerlOwnerSlot> untrackedReferenceOwnerSlotsView() {
+    synchronized java.util.Set<PerlOwnerSlot> untrackedReferenceOwnerSlotsView() {
         return untrackedReferenceOwnerSlots == null
                 ? java.util.Collections.emptySet() : untrackedReferenceOwnerSlots;
     }

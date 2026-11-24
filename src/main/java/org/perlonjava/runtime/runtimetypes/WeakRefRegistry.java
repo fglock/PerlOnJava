@@ -302,9 +302,8 @@ public class WeakRefRegistry {
 
     /** Drop untracked scalar owners whose storage or proxy slot has gone away. */
     private static void releaseDetachedUntrackedReferenceOwners(RuntimeBase referent) {
-        for (PerlOwnerSlot slot : referent.ownerSlotSnapshot()) {
-            if (slot.kind() != PerlOwnerSlot.Kind.UNTRACKED_REFERENCE
-                    || !slot.isActive() || slot.referent() != referent) continue;
+        for (PerlOwnerSlot slot : referent.untrackedReferenceOwnerSlotsView()) {
+            if (!slot.isActive() || slot.referent() != referent) continue;
             RuntimeScalar owner = slot.untrackedScalarOwner();
             if (owner == null && !slot.hasUntrackedScalarOwnerAssociation()) {
                 continue;
