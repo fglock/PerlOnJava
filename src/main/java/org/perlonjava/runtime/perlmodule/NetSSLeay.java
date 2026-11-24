@@ -3800,8 +3800,10 @@ public class NetSSLeay extends PerlModuleBase {
 
     public static RuntimeList RSA_generate_key(RuntimeArray args, int ctx) {
         // RSA_generate_key(bits, e, [cb], [cb_arg])
-        int bits = args.size() > 0 ? parseRsaKeySize(args.get(0)) : 2048;
-        if (bits < MIN_RSA_KEY_BITS || bits > MAX_RSA_KEY_BITS) {
+        int bits;
+        try {
+            bits = args.size() > 0 ? parseRsaKeySize(args.get(0)) : MIN_RSA_KEY_BITS;
+        } catch (IllegalArgumentException e) {
             return new RuntimeScalar().getList();
         }
         // e (public exponent) is typically 65537 — Java handles this internally
@@ -3868,14 +3870,18 @@ public class NetSSLeay extends PerlModuleBase {
                 double number = requestedBits.getDouble();
                 if (!Double.isFinite(number) || number != Math.rint(number)
                         || number < MIN_RSA_KEY_BITS || number > MAX_RSA_KEY_BITS) {
-                    return -1;
+                    throw new IllegalArgumentException("Invalid RSA key size");
                 }
                 return (int) number;
             }
             String text = requestedBits.toString().trim();
-            return new java.math.BigDecimal(text).intValueExact();
+            int bits = new java.math.BigDecimal(text).intValueExact();
+            if (bits < MIN_RSA_KEY_BITS || bits > MAX_RSA_KEY_BITS) {
+                throw new IllegalArgumentException("Invalid RSA key size");
+            }
+            return bits;
         } catch (NumberFormatException | ArithmeticException e) {
-            return -1;
+            throw new IllegalArgumentException("Invalid RSA key size", e);
         }
     }
 
