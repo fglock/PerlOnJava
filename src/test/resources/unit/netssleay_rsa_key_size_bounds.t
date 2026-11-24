@@ -15,7 +15,7 @@ BEGIN {
         };
 }
 
-plan tests => 9;
+plan tests => 10;
 
 for my $case (
     [ 0, 'zero-bit RSA key' ],
@@ -24,6 +24,7 @@ for my $case (
     [ 1024, 'legacy 1024-bit RSA key' ],
     [ 2047, 'RSA key below the 2048-bit minimum' ],
     [ 8193, 'RSA key above the generation limit' ],
+    [ 2048.5, 'fractional RSA key size' ],
     [ 'not-a-number', 'nonnumeric RSA key size' ],
 ) {
     my ($bits, $description) = @$case;

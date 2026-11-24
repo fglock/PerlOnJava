@@ -3865,15 +3865,6 @@ public class NetSSLeay extends PerlModuleBase {
 
     private static int parseRsaKeySize(RuntimeScalar requestedBits) {
         try {
-            int type = RuntimeScalarType.effectiveType(requestedBits);
-            if (type == RuntimeScalarType.INTEGER || type == RuntimeScalarType.DOUBLE) {
-                double number = requestedBits.getDouble();
-                if (!Double.isFinite(number) || number != Math.rint(number)
-                        || number < MIN_RSA_KEY_BITS || number > MAX_RSA_KEY_BITS) {
-                    throw new IllegalArgumentException("Invalid RSA key size");
-                }
-                return (int) number;
-            }
             String text = requestedBits.toString().trim();
             int bits = new java.math.BigDecimal(text).intValueExact();
             if (bits < MIN_RSA_KEY_BITS || bits > MAX_RSA_KEY_BITS) {
