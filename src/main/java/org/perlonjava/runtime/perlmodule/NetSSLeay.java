@@ -366,7 +366,7 @@ public class NetSSLeay extends PerlModuleBase {
     private static final Map<Long, EvpMdCtx> EVP_MD_CTX_HANDLES = new CurrentRuntimeMap<>(s -> s.evpMdContexts);
     private static final Map<Long, HmacCtx> HMAC_CTX_HANDLES = new CurrentRuntimeMap<>(s -> s.hmacContexts);
     private static final Map<Long, KeyPair> RSA_HANDLES = new CurrentRuntimeMap<>(s -> s.rsaKeys);
-    private static final int MIN_RSA_KEY_BITS = 1024;
+    private static final int MIN_RSA_KEY_BITS = 2048;
     private static final int MAX_RSA_KEY_BITS = 8192;
     private static final Map<Long, Long> ASN1_TIME_HANDLES = new CurrentRuntimeMap<>(s -> s.asn1Times);
     private static final Map<Long, SslCtxState> CTX_HANDLES = new CurrentRuntimeMap<>(s -> s.sslContexts);
@@ -3826,12 +3826,8 @@ public class NetSSLeay extends PerlModuleBase {
 
         try {
             KeyPairGenerator kpg = KeyPairGenerator.getInstance("RSA");
-            // src/test/resources/unit/netssleay_phase5_6.t uses 1024 bits to keep its
-            // RSA round-trip test fast. Preserve that OpenSSL-compatible legacy request.
-            // 1024-bit RSA is not suitable for new keys; use at least 2048 bits.
-            // Reject weaker and unbounded sizes above; suppress only this documented
-            // legacy-compatible generation call.
-            // codeql[java/insufficient-key-size]
+            // RSA_generate_key is limited to sizes accepted by parseRsaKeySize.
+            // The minimum is 2048 bits because this API also supports signing.
             kpg.initialize(bits, SECURE_RANDOM);
 
             // Call callback during key generation if provided

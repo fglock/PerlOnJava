@@ -6,7 +6,7 @@ priorities and future plans.
 
 ## Work in progress
 
-- Bound Net::SSLeay RSA key generation to 1024–8192 bits, retaining 1024 bits for the bundled fast RSA round-trip test and legacy callers while rejecting weaker or unbounded sizes.
+- Require Net::SSLeay and Crypt::OpenSSL::RSA key generation to use 2048–8192 bits; reject weaker and unbounded sizes and keep the RSA round-trip and padding tests active at the minimum supported size.
 - Retire active lexical owners on explicit `exit` before dispatching `END` blocks (#2043).
 - Retain noncapturing anonymous CODE templates through their source optrees on both backends while allowing eval-created CVs to be released after escape (#2043).
 - Stage temporary anonymous array references as call-argument owners so their elements remain alive through the call and release afterward (#2043).

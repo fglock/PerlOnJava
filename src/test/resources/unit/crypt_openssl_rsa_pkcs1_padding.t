@@ -20,7 +20,7 @@ BEGIN {
 
 plan tests => 1;
 
-my $rsa = Crypt::OpenSSL::RSA->generate_key(1024);
+my $rsa = Crypt::OpenSSL::RSA->generate_key(2048);
 $rsa->use_pkcs1_padding;
 my $signature = $rsa->sign('PKCS#1 selector regression');
 

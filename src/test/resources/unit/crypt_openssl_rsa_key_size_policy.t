@@ -21,19 +21,21 @@ BEGIN {
         or plan skip_all => 'Crypt::OpenSSL::RSA required';
 }
 
-plan tests => 14;
+plan tests => 18;
 
 sub rejects_key_size {
     my ($bits, $label) = @_;
     my $generated = eval { Crypt::OpenSSL::RSA->generate_key($bits); 1 };
     ok(!$generated, "$label is rejected before key generation");
-    like($@, qr/RSA key size must be an integer from 1024 through 8192 bits/,
+    like($@, qr/RSA key size must be an integer from 2048 through 8192 bits/,
         "$label reports the accepted RSA key-size range");
 }
 
 rejects_key_size(0, 'zero bits');
 rejects_key_size(512, 'undersized RSA key');
+rejects_key_size(1024, 'legacy 1024-bit RSA key');
 rejects_key_size(1025, 'non-byte-aligned RSA key');
+rejects_key_size(2040, 'RSA key below the 2048-bit minimum');
 rejects_key_size(8193, 'oversized RSA key');
 rejects_key_size(2048.5, 'fractional RSA key size');
 rejects_key_size('not-a-number', 'nonnumeric RSA key size');

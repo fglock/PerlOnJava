@@ -9,7 +9,7 @@ use warnings;
 use Test::More;
 BEGIN {
     Test::More::plan(skip_all => 'tests PerlOnJava Net::SSLeay implementation')
-        unless $^X eq 'jperl' || $^X =~ m{(?:^|[\\/])jperl(?:\.bat)?$};
+        unless $^X eq 'jperl' || $^X =~ m{(?:^|[\\/])(?:jperl|jperl-exec)(?:\.bat)?$};
     eval { require Net::SSLeay; Net::SSLeay->import; 1 }
         or do {
             require Test::More;
@@ -94,17 +94,17 @@ Net::SSLeay::BN_free($_) for $bn, $bn2, $bn3, $bn4;
 # Phase 6: RSA encrypt/decrypt + sign/verify round-trip
 # -----------------------------------------------------------------
 
-# 2048 is slow; 1024 keeps the test fast
-my $rsa = Net::SSLeay::RSA_generate_key(1024, 65537);
-ok($rsa, 'RSA_generate_key(1024)');
+# Use the minimum supported RSA key size for the round-trip test.
+my $rsa = Net::SSLeay::RSA_generate_key(2048, 65537);
+ok($rsa, 'RSA_generate_key(2048)');
 my $size = Net::SSLeay::RSA_size($rsa);
-is($size, 128, 'RSA_size returns 128 for 1024-bit key');
+is($size, 256, 'RSA_size returns 256 for 2048-bit key');
 
 # Encrypt with public key, decrypt with private key
 my $plain = "hello, ssleay";
 my $ct = '';
 my $n = Net::SSLeay::RSA_public_encrypt($plain, $ct, $rsa, 1);
-is($n, 128, 'RSA_public_encrypt returns 128 (PKCS1 padding, 1024-bit key)');
+is($n, 256, 'RSA_public_encrypt returns 256 (PKCS1 padding, 2048-bit key)');
 
 my $pt = '';
 my $m = Net::SSLeay::RSA_private_decrypt($ct, $pt, $rsa, 1);
@@ -121,7 +121,7 @@ is($pt2, $plain, 'RSA_private_encrypt / RSA_public_decrypt round-trip');
 my $message = "The quick brown fox jumps over the lazy dog";
 my $digest_nid = Net::SSLeay::EVP_get_digestbyname('sha256');
 my $sig = Net::SSLeay::RSA_sign($digest_nid, $message, $rsa);
-ok(defined $sig && length $sig == 128, 'RSA_sign returns 128-byte signature');
+ok(defined $sig && length $sig == 256, 'RSA_sign returns 256-byte signature');
 is(Net::SSLeay::RSA_verify($digest_nid, $message, $sig, $rsa), 1,
    'RSA_verify succeeds for matching signature');
 is(Net::SSLeay::RSA_verify($digest_nid, "tampered", $sig, $rsa), 0,

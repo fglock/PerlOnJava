@@ -941,10 +941,8 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **YAML::Syck** compatibility module backed by bundled `YAML::PP`.
 - ✅  **IO::Socket::SSL** module backed by Java `javax.net.ssl` SSLEngine.
 - ✅  **Net::SSLeay** module backed by Java security APIs (2327 CPAN tests pass).
-  `RSA_generate_key` accepts 1024–8192-bit requests. The 1024-bit legacy floor
-  remains because `netssleay_phase5_6.t` uses it to keep the RSA round-trip test
-  fast; 1024-bit RSA is not suitable for new key material. Use at least 2048
-  bits for new keys ([CodeQL guidance](https://codeql.github.com/codeql-query-help/java/java-insufficient-key-size/));
+  `RSA_generate_key` accepts 2048–8192-bit requests, rejecting weaker and
+  unbounded sizes ([CodeQL guidance](https://codeql.github.com/codeql-query-help/java/java-insufficient-key-size/));
   3072 bits provides 128-bit NIST security strength ([SP 800-57, Part 1 Rev. 5](https://csrc.nist.gov/pubs/sp/800/57/pt1/r5/final)).
 - ✅  **Plack::Handler::Netty** PSGI web server with HTTP/HTTPS, streaming, 32k+ req/sec. See [Web Server Guide](../../examples/http_server_plack/README.md).
 
