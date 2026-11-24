@@ -2,7 +2,6 @@ use strict;
 use warnings;
 use Scalar::Util qw(weaken);
 use Test::More;
-use Test::Exception;
 
 BEGIN {
     my $root = $ENV{DBIC_CLASS_TEST_ROOT};
