@@ -3826,9 +3826,9 @@ public class NetSSLeay extends PerlModuleBase {
 
         try {
             KeyPairGenerator kpg = KeyPairGenerator.getInstance("RSA");
-            // The bundled netssleay_phase5_6.t uses 1024 bits to keep its RSA round-trip
-            // test fast. Preserve that OpenSSL-compatible legacy request; 1024-bit RSA
-            // is not suitable for new key material, which should use at least 2048 bits.
+            // src/test/resources/unit/netssleay_phase5_6.t uses 1024 bits to keep its
+            // RSA round-trip test fast. Preserve that OpenSSL-compatible legacy request.
+            // 1024-bit RSA is not suitable for new keys; use at least 2048 bits.
             // Reject weaker and unbounded sizes above; suppress only this documented
             // legacy-compatible generation call.
             // codeql[java/insufficient-key-size]
