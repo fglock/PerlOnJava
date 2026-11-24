@@ -3832,7 +3832,6 @@ public class NetSSLeay extends PerlModuleBase {
             // Reject weaker and unbounded sizes above; suppress only this documented
             // legacy-compatible generation call.
             // codeql[java/insufficient-key-size]
-
             kpg.initialize(bits, SECURE_RANDOM);
 
             // Call callback during key generation if provided
