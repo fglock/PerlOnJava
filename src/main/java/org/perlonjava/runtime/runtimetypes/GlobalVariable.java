@@ -97,6 +97,8 @@ public class GlobalVariable {
     // subroutine retains Perl's compact CODE stash representation.
     static final Map<String, Boolean> explicitGlobAssignments =
             new CurrentRuntimePlainMap<>(state -> state.explicitGlobAssignments());
+    static final Map<String, String> inheritedStashCodeAliases =
+            new CurrentRuntimePlainMap<>(state -> state.inheritedStashCodeAliases());
 
     /** Record that a named typeglob exists, even if its runtime assignment is unreachable. */
     public static void markGlobAssigned(String globName) {
@@ -1212,6 +1214,13 @@ public class GlobalVariable {
         }
     }
 
+    public static void recordInheritedStashCodeAlias(String alias, String source) {
+        if (alias == null || source == null || alias.isEmpty() || source.isEmpty()) return;
+        if (!source.equals(inheritedStashCodeAliases.put(alias, source))) {
+            invalidateStashEnumerationCache();
+        }
+    }
+
     public static boolean isIORefHiddenAfterStashDelete(String key) {
         PerlRuntime runtime = PerlRuntime.currentOrNull();
         if (runtime != null && runtime.standardIOGlob(key) != null) {
@@ -1288,11 +1297,13 @@ public class GlobalVariable {
         if (!fromGlob.equals(canonical)) {
             globAliases.put(fromGlob, canonical);
             invalidatePackageRootSnapshot();
+            invalidateStashEnumerationCache();
         }
         // Also ensure toGlob points to the canonical name (unless it would create a self-loop)
         if (!toGlob.equals(canonical) && !toGlob.equals(fromGlob)) {
             globAliases.put(toGlob, canonical);
             invalidatePackageRootSnapshot();
+            invalidateStashEnumerationCache();
         }
     }
 
@@ -2787,7 +2798,8 @@ public class GlobalVariable {
 
     public static RuntimeScalar definedGlobalCodeRefAsScalar(RuntimeScalar key) {
         // Handle GLOB type: extract CODE slot from the glob
-        if (key.type == RuntimeScalarType.GLOB && key.value instanceof RuntimeGlob glob) {
+        if ((key.type == RuntimeScalarType.GLOB || key.type == RuntimeScalarType.GLOBREFERENCE)
+                && key.value instanceof RuntimeGlob glob) {
             return definedGlobalCodeRefAsScalar(glob.globName);
         }
         // Handle CODE type: check the RuntimeCode object directly.
@@ -2803,7 +2815,8 @@ public class GlobalVariable {
         // Handle values that are already CODE/GLOB scalars before falling back
         // to package-relative symbolic name lookup. This covers `defined &$coderef`,
         // where the parser passes the CODE scalar rather than a symbolic name.
-        if (key.type == RuntimeScalarType.GLOB && key.value instanceof RuntimeGlob glob) {
+        if ((key.type == RuntimeScalarType.GLOB || key.type == RuntimeScalarType.GLOBREFERENCE)
+                && key.value instanceof RuntimeGlob glob) {
             return definedGlobalCodeRefAsScalar(glob.globName);
         }
         if (key.type == RuntimeScalarType.CODE && key.value instanceof RuntimeCode runtimeCode) {

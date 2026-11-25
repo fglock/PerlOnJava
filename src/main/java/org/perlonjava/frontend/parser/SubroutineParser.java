@@ -2439,11 +2439,12 @@ public class SubroutineParser {
                         : (String) entryAst.getAnnotation("lexicalSubName");
                 if (subName != null
                         && lexicalSubStorageName != null
+                        && entryAst.getBooleanAnnotation("runtimeLexicalSub")
                         && isLexicalSubStorageReferenced(explicitlyUsedVars, entry.name())
                         && WarningFlags.ckWarnForScope(parser.ctx.symbolTable, "closure")) {
                     String warning = entryAst.getBooleanAnnotation("lexicalSubHasBody")
-                            ? "Subroutine \"&" + lexicalSubStorageName + "\" is not available"
-                            : "Subroutine \"&" + lexicalSubStorageName + "\" will not stay shared";
+                            ? "Subroutine \"&" + lexicalSubStorageName + "\" will not stay shared"
+                            : "Subroutine \"&" + lexicalSubStorageName + "\" is not available";
                     WarnDie.warn(new RuntimeScalar(warning),
                             new RuntimeScalar(parser.ctx.errorUtil
                                     .warningLocation(block.tokenIndex)));

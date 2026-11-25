@@ -790,6 +790,7 @@ public class StatementResolver {
                                         // A plain assignment leaves a fresh backend compiler
                                         // unaware that the generated name is lexical.
                                         varDecl.setAnnotation("runtimeLexicalSub", true);
+                                        innerVarNode.setAnnotation("runtimeLexicalSub", true);
                                         BinaryOperatorNode lexicalAssignment =
                                                 new BinaryOperatorNode("=", varDecl, anonSub, parser.tokenIndex);
                                         yield lexicalAssignment;
@@ -810,6 +811,7 @@ public class StatementResolver {
                                             || (declaration.equals("state") && packageSubAlreadyDefined);
                                     if (runtimeLexicalSub) {
                                         varDecl.setAnnotation("runtimeLexicalSub", true);
+                                        innerVarNode.setAnnotation("runtimeLexicalSub", true);
                                         varDecl.setAnnotation("lexicalSubScopeIndex",
                                                 parser.ctx.symbolTable.currentScopeIndex());
                                         varDecl.setAnnotation("lexicalSubWarningFrame",
