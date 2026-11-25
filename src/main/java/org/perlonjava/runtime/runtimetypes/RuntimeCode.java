@@ -10398,11 +10398,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             throw new PerlCompilerException("Not a subroutine reference");
         }
 
-        // Handle GLOB type: \&{*glob} - get the code slot directly from the glob
+        // Handle glob values and references: \&{*glob} - get the code slot directly from the glob
         // Globs stringify with a "*" prefix (e.g., "*main::test_sub") which would
         // cause normalizeVariableName to look up the wrong name
-        if (runtimeScalar.type == RuntimeScalarType.GLOB) {
-            RuntimeGlob glob = (RuntimeGlob) runtimeScalar.value;
+        if ((runtimeScalar.type == RuntimeScalarType.GLOB
+                || runtimeScalar.type == RuntimeScalarType.GLOBREFERENCE)
+                && runtimeScalar.value instanceof RuntimeGlob glob) {
             RuntimeScalar savedCode = glob.getSavedCodeSlot();
             if (savedCode != null) {
                 return savedCode;
