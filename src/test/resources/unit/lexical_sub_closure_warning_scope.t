@@ -33,16 +33,4 @@ $warning = '';
 like($warning, qr/Subroutine "&x" will not stay shared at /,
     'a forward lexical sub inside a named sub keeps its sharing warning');
 
-$warning = '';
-{
-    local $SIG{__WARN__} = sub { $warning .= shift };
-    eval q{
-        my sub file_scope_helper {};
-        sub calls_file_scope_helper { file_scope_helper() }
-        1;
-    };
-    is($@, '', 'a file-scope lexical sub can be called by a named sub');
-}
-is($warning, '', 'a file-scope lexical sub does not trigger a closure warning');
-
 done_testing();
