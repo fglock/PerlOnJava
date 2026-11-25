@@ -851,19 +851,18 @@ public class ModuleOperators {
         // declarations in the JVM backend (see EmitOperator.handlePackageOperator).
         CallerStack.CallerInfo loadCaller = CallerStack.peek(0);
         String callerPackage = loadCaller == null ? null : loadCaller.packageName();
-        // A non-main caller frame is the most precise context for runtime
-        // require and for `use`, which pushes its parser package explicitly.
-        // Compile-time special blocks can leave a main-package frame on the
-        // stack while requireInPackage has already supplied a non-main package
-        // through InterpreterState.currentPackage; do not let that stale main
-        // frame erase the explicit package context.
-        parsedArgs.initialPackage = callerPackage != null
-                && !callerPackage.isEmpty()
-                && (!"main".equals(callerPackage)
-                        || savedPackage == null || savedPackage.isEmpty()
-                        || "main".equals(savedPackage))
-                ? callerPackage
-                : savedPackage;
+        // A package supplied by requireInPackage (or selected by a package
+        // declaration while executing a module) is more precise than the
+        // caller stack. In particular, `use` can leave its caller's frame on
+        // the stack while the loaded module performs a nested require. Use the
+        // caller frame when the runtime tracker has no non-main package.
+        boolean hasSavedPackage = savedPackage != null
+                && !savedPackage.isEmpty() && !"main".equals(savedPackage);
+        parsedArgs.initialPackage = hasSavedPackage
+                ? savedPackage
+                : callerPackage != null && !callerPackage.isEmpty()
+                        ? callerPackage
+                        : savedPackage;
         
         // Save and clear %^H (hints hash) to prevent hint leakage into required modules.
         // In Perl >= 5.11 (which we emulate), hints don't leak into require'd files.

@@ -132,8 +132,11 @@ public class SubroutineParser {
                 boolean nextIsIdentifier = nextToken.type == LexerTokenType.IDENTIFIER;
                 boolean nextIsMethodDereference = nextToken.text.equals("->");
                 boolean nextIsStatementModifier = nextIsIdentifier && isStatementModifierKeyword(nextToken.text);
+                boolean fileScopeLexicalSub = varNode.getBooleanAnnotation("lexicalSubStorage")
+                        && !varNode.getBooleanAnnotation("runtimeLexicalSub");
 
-                if (useExplicitParen || hasPrototype || !nextIsIdentifier || nextIsStatementModifier || parser.parsingForLoopVariable) {
+                if (useExplicitParen || hasPrototype || !nextIsIdentifier || nextIsStatementModifier
+                        || parser.parsingForLoopVariable || fileScopeLexicalSub) {
                     // This is a lexical sub/method - use the hidden variable instead of package lookup
                     // The varNode is the "my $name__lexsub_123" or "my $name__lexmethod_123" variable
 
@@ -2437,6 +2440,9 @@ public class SubroutineParser {
                 OperatorNode entryAst = entry.ast();
                 String lexicalSubStorageName = entryAst == null ? null
                         : (String) entryAst.getAnnotation("lexicalSubName");
+                boolean fileScopeLexicalSub = entryAst != null
+                        && entryAst.getBooleanAnnotation("lexicalSubStorage")
+                        && !entryAst.getBooleanAnnotation("runtimeLexicalSub");
                 if (subName != null
                         && lexicalSubStorageName != null
                         && entryAst.getBooleanAnnotation("runtimeLexicalSub")
@@ -2461,6 +2467,7 @@ public class SubroutineParser {
                             && ("my".equals(entry.decl()) || "state".equals(entry.decl()))
                             && (entryAst == null
                                 || !entryAst.getBooleanAnnotation("lexicalMethodStorage"))
+                            && !fileScopeLexicalSub
                             && explicitlyUsedVars.contains(entry.name())
                             && WarningFlags.ckWarnForScope(parser.ctx.symbolTable, "closure")) {
                         WarnDie.warn(new RuntimeScalar("Subroutine \"" + entry.name()
