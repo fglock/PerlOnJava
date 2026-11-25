@@ -31,6 +31,8 @@ BEGIN {
     my $backend = $ENV{PERL_JSON_BACKEND};
     if (defined $backend && $backend eq 'JSON::backportPP') {
         require JSON::backportPP;
+    } elsif (defined $backend && $backend eq 'JSON::XS') {
+        require JSON::XS;
     } else {
         require JSON::PP;
     }
@@ -63,29 +65,28 @@ BEGIN {
 
 our $VERSION = '4.11';
 
-# Inherit all encode/decode/option methods from JSON::PP.  Using @ISA
-# (rather than re-exporting every sub) means future JSON::PP updates
-# are picked up automatically.
-our @ISA = ('JSON::PP');
+# Inherit the selected backend's encode/decode/option methods. In XS mode,
+# JSON::XS is the pure-Perl compatibility adapter; otherwise we use JSON::PP.
+our @ISA = (defined $ENV{PERL_JSON_BACKEND}
+            && $ENV{PERL_JSON_BACKEND} eq 'JSON::XS')
+    ? ('JSON::XS') : ('JSON::PP');
 
 our @EXPORT = qw(from_json to_json jsonToObj objToJson encode_json decode_json);
 
 # Backend introspection variables populated by the real CPAN JSON
 # after it loads a backend.  Mirror the CPAN semantics: when
-# `PERL_JSON_BACKEND` picked `JSON::backportPP`, report that
-# (and set the module-PP name to match); otherwise report
-# JSON::PP as the backend.  Tests look at both.
-our ($Backend, $BackendModule, $BackendModulePP);
+# Report the requested adapter separately from its PP implementation and
+# native XS status.  Tests inspect all three values.
+our ($Backend, $BackendModule, $BackendModulePP, $BackendModuleXS);
 BEGIN {
-    my $chosen = (defined $ENV{PERL_JSON_BACKEND}
-                      && $ENV{PERL_JSON_BACKEND} eq 'JSON::backportPP')
-                 ? 'JSON::backportPP'
-                 : 'JSON::PP';
+    my $chosen = defined $ENV{PERL_JSON_BACKEND}
+                      && $ENV{PERL_JSON_BACKEND} =~ /\A(?:JSON::backportPP|JSON::XS)\z/
+                 ? $ENV{PERL_JSON_BACKEND} : 'JSON::PP';
     $Backend         = $chosen;
     $BackendModule   = $chosen;
-    $BackendModulePP = $chosen;
+    $BackendModulePP = $chosen eq 'JSON::backportPP' ? $chosen : 'JSON::PP';
+    $BackendModuleXS = undef;
 }
-our $BackendModuleXS;   # left undef: no XS backend available
 
 our $DEBUG = 0;
 $DEBUG = $ENV{PERL_JSON_DEBUG} if exists $ENV{PERL_JSON_DEBUG};
