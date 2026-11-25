@@ -167,6 +167,7 @@ public class DataSection {
 
     /** A source marker occupies the rest of its physical line. */
     private static boolean isStandaloneMarker(List<LexerToken> tokens, int markerIndex) {
+        if (tokens.get(markerIndex).text.equals("__END__")) return true;
         for (int i = markerIndex + 1; i < tokens.size(); i++) {
             LexerToken token = tokens.get(i);
             if (token.type == LexerTokenType.WHITESPACE) continue;
@@ -202,9 +203,9 @@ public class DataSection {
 
     /**
      * Returns whether an identifier token is a source-level DATA/END marker.
-     * Markers are recognized when they occupy the rest of a physical line,
-     * optionally qualified with CORE::. Perl also accepts an unqualified
-     * terminal marker after code on the same line.
+     * DATA markers occupy the rest of a physical line, optionally qualified
+     * with CORE::. __END__ terminates source at the marker and ignores the
+     * remainder of its line.
      */
     static boolean isSourceMarker(List<LexerToken> tokens, int markerIndex) {
         if (markerIndex < 0 || markerIndex >= tokens.size()) return false;
@@ -232,6 +233,9 @@ public class DataSection {
                 return false;
             }
         }
+        // __END__ terminates source at the marker itself; any remaining text
+        // on that physical line is payload and must not be parsed as Perl.
+        if (marker.text.equals("__END__")) return true;
         return isStandaloneMarker(tokens, markerIndex);
     }
 

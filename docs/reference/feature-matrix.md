@@ -399,7 +399,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **`lvalue` subroutines**: Subroutines with attribute `:lvalue` are supported.
 - ✅  **`Forcing main package`**: Identifiers starting with `::` are in `main` package.
 - ✅  **Lexical subroutines**: Subroutines declared `my`, `state`, or `our` are supported.
-- 🚧  **Subroutine attributes**: `:lvalue`, `:prototype`, and custom attributes via `MODIFY_CODE_ATTRIBUTES`/`FETCH_CODE_ATTRIBUTES`.
+- 🚧  **Subroutine attributes**: `:lvalue`, `:prototype`, and custom attributes via `MODIFY_CODE_ATTRIBUTES`/`FETCH_CODE_ATTRIBUTES`; custom CODE hooks receive the `attributes::import` caller frame required by lexical handlers.
 - ✅  **CORE operator references**: `\&CORE::X` returns callable CODE refs for built-in functions with correct prototypes: `my $r = \&CORE::length; $r->("hello")`
 
 ---
@@ -532,7 +532,7 @@ in this capability matrix.
 - ✅  **`<$fh>`**: `<$fh>` and `<STDIN>` operators are implemented.
 - ✅  **`<ARGV>`**: `ARGV` and $ARGV are implemented.
 - ✅  **`<*.*>`**: `<*.*>` glob operator is implemented.
-- ✅  **End of file markers**: Source code control characters `^D` and `^Z`, and the tokens `__END__` and `__DATA__` are implemented.
+- ✅  **End of file markers**: Source code control characters `^D` and `^Z`, and the tokens `__END__` and `__DATA__` are implemented. `__END__` stops source parsing even when same-line text follows.
 - ❌  **Startup processing**: processing `$sitelib/sitecustomize.pl` at startup is not enabled.
 - ✅  **Smartmatch operator**: `~~` and `given`/`when` behavior is supported on both backends. See the rerunnable [audit probe](../../dev/tools/feature-audit/remaining_semantics.t).
 - ✅  **File test operators**: `-R`, `-W`, `-X`, `-O` (for real uid/gid), this implementation assumes that the real user ID corresponds to the current user running the Java application.

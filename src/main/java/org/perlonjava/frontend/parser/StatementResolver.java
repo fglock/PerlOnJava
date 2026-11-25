@@ -221,7 +221,9 @@ public class StatementResolver {
                 // Object::Pad provides roles alongside its class feature.
                 // `role` is not part of core feature 'class', so recognize it
                 // independently when parsing a declaration.
-                case "role" -> StatementParser.parsePackageDeclaration(parser, token);
+                case "role" -> nextNonWhitespaceTokenIs(parser, currentIndex + 1, "{")
+                        ? null
+                        : StatementParser.parsePackageDeclaration(parser, token);
 
                 case "use", "no" -> StatementParser.parseUseDeclaration(parser, token);
 
@@ -1398,7 +1400,6 @@ public class StatementResolver {
     private static boolean nextNonWhitespaceTokenIs(Parser parser, int index, String text) {
         int next = Whitespace.skipWhitespace(parser, index, parser.tokens);
         return next < parser.tokens.size()
-                && parser.tokens.get(next).type == LexerTokenType.IDENTIFIER
                 && parser.tokens.get(next).text.equals(text);
     }
 
