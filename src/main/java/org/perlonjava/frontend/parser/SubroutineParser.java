@@ -132,8 +132,7 @@ public class SubroutineParser {
                 boolean nextIsIdentifier = nextToken.type == LexerTokenType.IDENTIFIER;
                 boolean nextIsMethodDereference = nextToken.text.equals("->");
                 boolean nextIsStatementModifier = nextIsIdentifier && isStatementModifierKeyword(nextToken.text);
-                boolean fileScopeLexicalSub = varNode.getBooleanAnnotation("lexicalSubStorage")
-                        && !varNode.getBooleanAnnotation("runtimeLexicalSub");
+                boolean fileScopeLexicalSub = varNode.getBooleanAnnotation("fileScopeLexicalSub");
 
                 if (useExplicitParen || hasPrototype || !nextIsIdentifier || nextIsStatementModifier
                         || parser.parsingForLoopVariable || fileScopeLexicalSub) {
@@ -2441,16 +2440,24 @@ public class SubroutineParser {
                 String lexicalSubStorageName = entryAst == null ? null
                         : (String) entryAst.getAnnotation("lexicalSubName");
                 boolean fileScopeLexicalSub = entryAst != null
-                        && entryAst.getBooleanAnnotation("lexicalSubStorage")
-                        && !entryAst.getBooleanAnnotation("runtimeLexicalSub");
+                        && entryAst.getBooleanAnnotation("fileScopeLexicalSub");
+                boolean lexicalSubReferenced = entryAst == null
+                        ? explicitlyUsedVars.contains(entry.name())
+                        : isLexicalSubStorageReferenced(
+                                explicitlyUsedVars, entry.name(), entryAst);
                 if (subName != null
+                        && sigil.equals("&")
                         && lexicalSubStorageName != null
                         && entryAst.getBooleanAnnotation("runtimeLexicalSub")
-                        && isLexicalSubStorageReferenced(explicitlyUsedVars, entry.name())
+                        && lexicalSubReferenced
                         && WarningFlags.ckWarnForScope(parser.ctx.symbolTable, "closure")) {
-                    String warning = entryAst.getBooleanAnnotation("lexicalSubHasBody")
-                            ? "Subroutine \"&" + lexicalSubStorageName + "\" will not stay shared"
-                            : "Subroutine \"&" + lexicalSubStorageName + "\" is not available";
+                    boolean enclosingSubIsAnonymous =
+                            entryAst.getAnnotation("lexicalSubWarningFrame")
+                                    instanceof Parser.LexicalSubWarningFrame owner
+                                    && owner.anonymous;
+                    String warning = enclosingSubIsAnonymous
+                            ? "Subroutine \"&" + lexicalSubStorageName + "\" is not available"
+                            : "Subroutine \"&" + lexicalSubStorageName + "\" will not stay shared";
                     WarnDie.warn(new RuntimeScalar(warning),
                             new RuntimeScalar(parser.ctx.errorUtil
                                     .warningLocation(block.tokenIndex)));
@@ -2467,8 +2474,10 @@ public class SubroutineParser {
                             && ("my".equals(entry.decl()) || "state".equals(entry.decl()))
                             && (entryAst == null
                                 || !entryAst.getBooleanAnnotation("lexicalMethodStorage"))
+                            && (entryAst == null
+                                || !entryAst.getBooleanAnnotation("runtimeLexicalSub"))
                             && !fileScopeLexicalSub
-                            && explicitlyUsedVars.contains(entry.name())
+                            && lexicalSubReferenced
                             && WarningFlags.ckWarnForScope(parser.ctx.symbolTable, "closure")) {
                         WarnDie.warn(new RuntimeScalar("Subroutine \"" + entry.name()
                                         + "\" will not stay shared"),
@@ -2943,6 +2952,16 @@ public class SubroutineParser {
         return referencedVariables.stream()
                 .anyMatch(reference -> reference.startsWith("$")
                         && reference.endsWith("::" + unqualified));
+    }
+
+    private static boolean isLexicalSubStorageReferenced(
+            Set<String> referencedVariables, String lexicalStorageName,
+            OperatorNode lexicalSubDeclaration) {
+        if (isLexicalSubStorageReferenced(referencedVariables, lexicalStorageName)) return true;
+        if (lexicalSubDeclaration == null) return false;
+        Object hiddenVarName = lexicalSubDeclaration.getAnnotation("hiddenVarName");
+        return hiddenVarName instanceof String name
+                && isLexicalSubStorageReferenced(referencedVariables, "$" + name);
     }
 
 

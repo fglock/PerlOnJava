@@ -546,6 +546,13 @@ public class StatementResolver {
                                 // must use this semantic metadata, never its spelling.
                                 innerVarNode.setAnnotation("lexicalSubStorage", true);
                                 innerVarNode.setAnnotation("lexicalSubName", subName);
+                                boolean fileScopeLexicalSub = !parser.ctx.symbolTable.isInSubroutineBody()
+                                        && parser.parsingRuntimeLoopBodyDepth == 0;
+                                innerVarNode.setAnnotation("fileScopeLexicalSub", fileScopeLexicalSub);
+                                Parser.LexicalSubWarningFrame lexicalSubOwnerFrame =
+                                        parser.lexicalSubWarningFrames == null
+                                                ? null : parser.lexicalSubWarningFrames.peek();
+                                innerVarNode.setAnnotation("lexicalSubWarningFrame", lexicalSubOwnerFrame);
 
                                 // For state variables, assign a unique ID for persistent tracking
                                 if (declaration.equals("state")) {
@@ -560,6 +567,8 @@ public class StatementResolver {
                                 varDecl.setAnnotation("declaringPackage", parser.ctx.symbolTable.getCurrentPackage());
                                 varDecl.setAnnotation("lexicalSubStorage", true);
                                 varDecl.setAnnotation("lexicalSubName", subName);
+                                varDecl.setAnnotation("fileScopeLexicalSub", fileScopeLexicalSub);
+                                varDecl.setAnnotation("lexicalSubWarningFrame", lexicalSubOwnerFrame);
 
                                 // IMPORTANT: Manually add the hidden variable to the symbol table
                                 // Since we're returning an assignment node, parseVariableDeclaration won't be called again
