@@ -28,7 +28,7 @@ $VERSION = "1.61";
 {
     no strict 'refs';
     for my $method (qw(
-        version error_diag error_input known_attributes
+        version error_diag error_input known_attributes csv
         PV IV NV CSV_TYPE_PV CSV_TYPE_IV CSV_TYPE_NV
         CSV_FLAGS_IS_QUOTED CSV_FLAGS_IS_BINARY
         CSV_FLAGS_ERROR_IN_FIELD CSV_FLAGS_IS_MISSING
