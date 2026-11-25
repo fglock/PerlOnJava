@@ -27,6 +27,8 @@ under PerlOnJava (and optionally system Perl for comparison). Use them to:
 | `benchmark_string.pl` | String operations (concat, substr, etc.) |
 | `benchmark_threads.pl` | Ithread snapshot, creation, scheduling, and join overhead |
 | `performance_over_perl.py` | Paired, warmup-aware Perl versus PerlOnJava workload measurements |
+| `three_engine/compare.py` | Paired PerlOnJava, Perl, and JRuby microbenchmarks |
+| `three_engine/worker.pl`, `three_engine/worker.rb` | Matching workload workers for the three-engine comparison |
 | `tests/test_performance_over_perl.py` | Unit tests for stability, checksums, eligibility, and paired statistics |
 
 ## Running
@@ -39,6 +41,27 @@ under PerlOnJava (and optionally system Perl for comparison). Use them to:
 perl  dev/bench/benchmark_closure.pl
 ./jperl dev/bench/benchmark_closure.pl
 ```
+
+## Compare PerlOnJava, Perl, and JRuby
+
+The three-engine comparison measures numeric accumulation, captured-closure
+calls, method dispatch, string operations, and regex matching. Each worker
+checks a workload-specific checksum. A fresh process triplet runs each
+workload; engine order is randomized, and the engines run sequentially so they
+do not compete with one another for CPU. PerlOnJava and JRuby use the same
+explicit JDK.
+
+```sh
+python3 dev/bench/three_engine/compare.py \
+  --java-home "$(/usr/libexec/java_home -v 24)" \
+  --output /tmp/three-engine-comparison.json
+```
+
+The default run uses seven fresh-process triplets, five one-second warmup
+windows, and seven one-second measurement windows per engine. The JSON output
+contains raw samples and must stay outside the repository. The published
+summary and methodology are in
+[`three_engine_comparison.md`](three_engine_comparison.md).
 
 For the #1863 acceptance anchors, compare the original method-call loop, the
 original captured-closure loop, and bit-packed Life. Pin the standard Perl
