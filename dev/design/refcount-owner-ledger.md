@@ -1,6 +1,6 @@
 # Perl-Exact Reference Ownership and Closure-Pad Lifetime
 
-**Status:** Design in progress  
+Status: Active — 2026-11-25
 **Issue:** [#1132](https://github.com/fglock/PerlOnJava/issues/1132)  
 **Related architecture:**
 [Weaken & DESTROY](../architecture/weaken-destroy.md),
@@ -36,7 +36,7 @@ The first full-master build at `ae3f87c122` failed the new installer-lifetime re
 
 The eight-target CPAN acceptance rerun on source commit `316886c227` completed all target logs. DateTime passed 3,592 assertions; Image::ExifTool passed 113 files / 600 assertions; Template Toolkit passed 121 files / 3,180 assertions; PPR passed 1,255 assertions; and Excel::Writer::XLSX passed 1,247 files / 5,138 assertions. Mojolicious failed 37 assertions across 45 test programs because subprocesses could not fork under host resource pressure. Catalyst failed two assertions across ten test programs; the same `unit_core_plugin.t` and `unit_core_script_run_options.t` failures reproduce with the current-master JAR at `1ee4ff572d`. DBIx::Class had its single `t/storage/txn.t` source-line mismatch (expected 451, got 448 and 447), reproduced earlier on baseline `278c12be27`. Full output: `/private/tmp/issue2043-fullmaster-template-fix-cpan-acceptance.log`; per-target logs: `/tmp/cpan_random_logs/20261123-142534-68681/`. The run regenerated the three CPAN report files; keep them uncommitted.
 
-### Checkpoint and diagnosis
+### Delivery background and diagnosis
 
 The explicit-`exit` path previously ran END before active Perl frames retired their lexical owners. `WarnDie.exit()` now unwinds those registrations before flushing deferred releases and dispatching END. The new `dbix_schema_init_shutdown_lifecycle.t` passes on system Perl, JVM, and interpreter with DBICTest LeakTracer reporting no retained references. Full Make passes on the narrowed candidate; logs: `/private/tmp/issue2043-exit-unwind-final-make.log` and `/private/tmp/issue2043-schema-final-{perl-dbic,jvm,interpreter}.log`.
 
@@ -249,7 +249,7 @@ observers, or destruction timing. The reachability walker and scalar registry
 are removed; lifecycle code uses owner-slot identities for final-release
 decisions. Temporary leases and suspended-frame owners remain explicit slots.
 
-## Current Work
+## Completed Cleanup and Allocation Work
 
 1. Ordinary final array/hash cleanup now retires direct outgoing slots; the
    recursive walker and one-level eligibility pre-scans are gone from that
@@ -339,18 +339,16 @@ Run on JVM and interpreter backends with `timeout` and complete output logs:
 - Integrate current `master`, rerun focused and full gates on the exact commit,
   and only then mark the issue-fix PR ready.
 
-## Progress Tracking
+## Historical Handoff Notes
 
-### Current checkpoint
+### Earlier ownership rewrite handoff
 
-The current status and evidence are maintained in the
-[ownership rewrite handoff](perl-ownership-rewrite.md#current-handoff-2026-11-15).
-The candidate has removed production reachability decisions and sweep
-infrastructure. The DBIx and Test2 owner transitions have focused regressions;
-the merged candidate passes the focused DBIx leak tests and direct survivor
-checks. CI passes on the published candidate and PR #1938 is ready for human
-review. The broader 37-program failure inventory is retained as historical
-integration context. #2037 and #2034 remain separate post-merge follow-ups.
+The current status and next action are recorded in the dated section near the
+top of this document. The earlier
+[ownership rewrite handoff](perl-ownership-rewrite.md#current-handoff-2026-11-15)
+records prior candidate evidence and is superseded for current PR state. The
+broader failure inventory remains historical context; #2037 and #2034 are
+separate follow-up work.
 
 ### Historical handoff: issue #1132 / PR #1204
 
