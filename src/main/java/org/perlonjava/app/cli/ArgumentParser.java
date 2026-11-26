@@ -361,6 +361,20 @@ public class ArgumentParser {
         if (tokens.length == 0) {
             return;
         }
+        if (isEnvExecutable(tokens[0])) {
+            int interpreterIndex = 1;
+            if (interpreterIndex < tokens.length && "-S".equals(tokens[interpreterIndex])) {
+                interpreterIndex++;
+            }
+            if (interpreterIndex < tokens.length
+                    && isPerlInterpreterWithTrailingSemicolon(tokens[interpreterIndex])) {
+                processPerlShebangSwitches(
+                        String.join(" ", java.util.Arrays.copyOfRange(tokens, interpreterIndex, tokens.length))
+                                .replaceFirst(";(?=\\s|$)", ""),
+                        parsedArgs);
+                return;
+            }
+        }
         if (isPerlInterpreterWithTrailingSemicolon(tokens[0])) {
             // Some test scripts have a typo in the interpreter token (for
             // example, "#!/usr/bin/perl;"). When PerlOnJava is already
@@ -376,6 +390,11 @@ public class ArgumentParser {
         }
         List<String> cmd = buildShebangCommand(tokens);
         delegateToShebangInterpreter(args, cmd, index);
+    }
+
+    private static boolean isEnvExecutable(String token) {
+        int separator = Math.max(token.lastIndexOf('/'), token.lastIndexOf('\\'));
+        return "env".equals(token.substring(separator + 1));
     }
 
     private static boolean isPerlInterpreterWithTrailingSemicolon(String token) {
