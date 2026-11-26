@@ -1747,6 +1747,25 @@ public class MortalList {
                                             String transientOwnerKind) {
         if (base.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_ALIAS) != 0
                 && base.countedOwnerSlotCount() == 0) {
+            // An active argument alias still reaches this referent, so its
+            // zero-count lifecycle decision waits for the frame to end. The
+            // released counted edge is already gone, though: complete its
+            // count transition now so the count matches the remaining slots
+            // while the callee runs, and defer only the lifecycle decision.
+            if (ownerRelease != null && !ownerRelease.isLifecycleOnlyAtZero()
+                    && base.isRefCountTracked() && base.refCount > 0
+                    && base.completeQueuedOwnerRelease(
+                            ownerRelease, "MortalList.processDeferredBase argument alias")) {
+                base.releaseTransientTraceOwner(transientOwnerKind,
+                        "MortalList.processDeferredBase argument alias");
+                if (!base.releaseTrackedOwnerCount(
+                        "MortalList.processDeferredBase argument alias")) {
+                    return;
+                }
+                ownerRelease = base.queueLifecycleOnlyAtZero(
+                        "MortalList.processDeferredBase argument alias");
+                transientOwnerKind = null;
+            }
             state().deferredArgumentOwnerReleases.add(
                     new DeferredArgumentOwnerRelease(base, ownerRelease,
                             transientOwnerKind));
