@@ -1484,7 +1484,9 @@ public class MortalList {
         markBoundaryWork(state);
         RuntimeBase.PendingOwnerRelease ownerRelease = base.queueLifecycleOnlyAtZero(
                 "MortalList.anonymousLiteral");
-        queueDeferredBase(state, base, ownerRelease, null, reference);
+        // The literal's reference is not an argument-frame owner, so the
+        // entry carries no owner scalar and needs no frame lookup.
+        queueDeferredBase(state, base, ownerRelease, null, null);
         return reference;
     }
 
@@ -1745,6 +1747,16 @@ public class MortalList {
     private static void processDeferredBase(RuntimeBase base, boolean clearWeakRefsForLocalBinding,
                                             RuntimeBase.PendingOwnerRelease ownerRelease,
                                             String transientOwnerKind) {
+        if (ownerRelease != null && ownerRelease.isLifecycleOnlyAtZero()
+                && base.refCount > 0 && transientOwnerKind == null
+                && (base instanceof RuntimeArray || base instanceof RuntimeHash)) {
+            // A lifecycle-only token asks for cleanup only if the aggregate is
+            // still unowned. A counted owner has taken it since queueing, so
+            // no owner left and the token neither changes the count nor makes
+            // a lifecycle decision. Most anonymous literals take this path.
+            base.completeQueuedOwnerRelease(ownerRelease, "MortalList.processDeferredBase");
+            return;
+        }
         if (base.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_ALIAS) != 0
                 && base.countedOwnerSlotCount() == 0) {
             // An active argument alias still reaches this referent, so its
