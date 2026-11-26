@@ -47,6 +47,7 @@ my $search = 0;   # Flag to indicate if a search for JDBC driver by class name i
 my $direct = 0;   # Flag to indicate if direct Maven coordinates are provided
 my $verbose = 0;  # Flag to enable verbose output for debugging
 my $upgrade = 0;  # Flag to upgrade dependencies to their latest versions
+my $upgrade_bundled = 0;  # Stage current CPAN releases for bundled providers
 my %config;       # Hash to store key-value pairs for configuration updates
 my $help = 0;     # Flag to show help message
 
@@ -60,6 +61,7 @@ GetOptions(
     "direct" => \$direct,    # Use direct Maven coordinates
     "verbose" => \$verbose,  # Enable verbose output
     "upgrade" => \$upgrade,  # Upgrade dependencies to latest versions
+    "upgrade-bundled" => \$upgrade_bundled,
     "D=s%" => \%config,      # Key-value configuration pairs
 ) or show_help();
 
@@ -67,7 +69,7 @@ GetOptions(
 show_help() if $help;
 
 # Show current configuration if no specific actions are requested
-show_config() unless ($search || $direct || $upgrade || %config || @ARGV);
+show_config() unless ($search || $direct || $upgrade || $upgrade_bundled || %config || @ARGV);
 
 # Update configuration if any key-value pairs are provided
 update_configuration(\%config) if %config;
@@ -77,6 +79,12 @@ handle_dependencies() if ($search || $direct);
 
 # Upgrade dependencies to their latest versions if the upgrade option is provided
 update_to_latest_versions() if $upgrade;
+
+# Apply CPAN updates only after validation in an isolated worktree.
+if ($upgrade_bundled) {
+    my $status = system($^X, 'dev/tools/cpan_import_sync.pl', '--apply', '--root', '.');
+    exit($status == -1 ? 1 : ($status >> 8));
+}
 
 # Function to display help message and usage instructions
 sub show_help {
@@ -100,6 +108,7 @@ Dependency Management Options:
     --direct                        Use direct Maven coordinates
     --verbose                       Enable verbose output
     --upgrade                       Upgrade dependencies to their latest versions
+    --upgrade-bundled               Validate and apply current bundled CPAN releases
 
 Examples:
     ./Configure.pl                              # Show current configuration
@@ -107,6 +116,7 @@ Examples:
     ./Configure.pl --search org.h2.Driver       # Search for JDBC driver
     ./Configure.pl --direct com.h2database:h2:2.2.224
     ./Configure.pl --upgrade                    # Upgrade all dependencies
+    ./Configure.pl --upgrade-bundled            # Validate and apply bundled CPAN updates
 ';
     exit;
 }

@@ -117,6 +117,51 @@ By default it creates a separate worktree under `/tmp`, runs `git bisect --first
 - Reproducers and experimental snippets: `dev/sandbox/`
 - Benchmarks: `dev/bench/`
 
+## CPAN port updates
+
+`cpan_import_sync.pl` uses `cpan-import-registry.json` to record maintained
+CPAN provider versions, port modes, source mappings, and test fixtures. Check
+the local provider contracts without network access:
+
+```bash
+make check-bundled-modules
+```
+
+Stage stable releases outside the checkout by default. Use `CHECK=1` for the
+offline version-contract check, and `UPDATE=1` to apply candidates only after
+all validation gates pass. `MODULES` accepts a comma-separated list:
+
+```bash
+make update-bundled-modules MODULES=Compress::Raw::Zlib,Compress::Raw::Bzip2
+make update-bundled-modules CHECK=1
+make update-bundled-modules UPDATE=1 MODULES=Clone-PP
+```
+
+The tool verifies release identity, archive checksums, package metadata, and
+bundled runtime prerequisite versions before extraction. It writes a porting
+report with each staged candidate. Staging does not apply files to the source
+tree. The porting report lists compatibility version targets and upstream
+tests omitted by the declared mappings. Optional PerlOnJava patches are listed per distribution in the registry
+and stored under `dev/tools/cpan-import-patches/`; staging fails if a patch no
+longer applies. Directory mappings are refreshed exactly, including removal
+of files no longer present upstream. `--apply` requires a clean checkout,
+applies the candidate in a temporary worktree, runs system Perl and staged
+`jperl` tests, `make`, and `make test-bundled-modules`, then applies the
+validated diff to the checkout. `Configure.pl --upgrade-bundled` uses this
+validated apply path.
+This workflow is separate from
+`dev/import-perl5/` syncing, the shipped `jcpan` distroprefs and patches, and
+`make test-bundled-modules`.
+
+## CPAN release acceptance
+
+`make test-cpan-release-acceptance` runs the selected acceptance distributions
+sequentially with one test worker. It records the host's configured process
+limits and samples total and current-user process counts every 10 seconds while
+each distribution runs. The gate transcript is saved at
+`build/reports/cpan-release-acceptance.log` to help distinguish a test failure
+from host process exhaustion in fork-based tests such as Mojolicious.
+
 ## Adding New Tools
 
 When adding new development tools:

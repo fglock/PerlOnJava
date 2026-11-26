@@ -125,6 +125,7 @@ my $activity_grace = 600;   # after soft timeout, allow this many idle seconds
 my $max_runtime    = $DEFAULT_MAX_RUNTIME;  # hard cap per target module
 my $progress_interval = 60;
 my $jcpan_jobs  = 1;      # passed through as `jcpan --jobs N`
+my $process_snapshots = 0;
 my $report_only = 0;
 my $install     = 0;      # --install: use jcpan (install) instead of jcpan -t
 my $retest_age  = 0;      # --retest-age DAYS: include modules tested N+ days ago
@@ -145,6 +146,7 @@ GetOptions(
     'max-runtime=i' => \$max_runtime,
     'progress-interval=i' => \$progress_interval,
     'jobs=i'       => \$jcpan_jobs,
+    'process-snapshots' => \$process_snapshots,
     'report-only'  => \$report_only,
     'install'      => \$install,
     'retest-age=i' => \$retest_age,
@@ -410,12 +412,19 @@ for my $module (@selected) {
         $selected_index, scalar @selected, command_label(@cmd),
         $module_timeout, $activity_grace,
         $module_max_runtime ? "${module_max_runtime}s" : 'disabled';
+    print "  Host process snapshot before target: ",
+        host_process_capacity_snapshot(), "\n"
+        if $process_snapshots;
 
     my $start = time();
     my $log_path = log_path_for($module);
     my ($output_tail, $timed_out, $timeout_error) = run_with_timeout(
         \@cmd, $module_timeout, $log_path, $module_max_runtime,
+        $process_snapshots,
     );
+    print "  Host process snapshot after target: ",
+        host_process_capacity_snapshot(), "\n"
+        if $process_snapshots;
 
     my $elapsed = sprintf('%.1f', time() - $start);
 
@@ -1462,6 +1471,39 @@ sub command_arg_label {
     return "'$arg'";
 }
 
+# Capture total and current-user process counts for capacity-sensitive gates.
+# Keep this opt-in because collecting a snapshot starts `ps` and ordinary
+# random-tester runs do not need the extra process or log output.
+sub host_process_capacity_snapshot {
+    my $ps;
+    my $opened;
+    {
+        local $SIG{__WARN__} = sub {
+            warn @_ unless $_[0] =~ /^Can't exec "ps":/;
+        };
+        $opened = open $ps, '-|', 'ps', '-axo', 'uid=,pid=';
+    }
+    return 'unavailable (could not start ps)' unless $opened;
+
+    my @rows = <$ps>;
+    my $status = close $ps;
+    return format_host_process_capacity_snapshot(\@rows, $<, $status);
+}
+
+sub format_host_process_capacity_snapshot {
+    my ($rows, $real_uid, $ps_succeeded) = @_;
+    return 'unavailable (ps failed)' unless $ps_succeeded;
+
+    my ($total, $user_total) = (0, 0);
+    for my $row (@$rows) {
+        my ($uid, $pid) = split ' ', $row;
+        next unless defined $uid && defined $pid;
+        $total++;
+        $user_total++ if $uid == $real_uid;
+    }
+    return "total=$total, uid=$real_uid, user_total=$user_total";
+}
+
 # Run a command with a progress-aware timeout.  The per-module timeout is a
 # soft wall clock: after it expires, output activity can keep the run alive
 # until --max-runtime (default 90 minutes) or --activity-grace idle seconds.
@@ -1470,7 +1512,7 @@ sub command_arg_label {
 # pipe-writer discovery makes that worker part of this run's cleanup too.
 # Returns ($output, $timed_out, $timeout_error).
 sub run_with_timeout {
-    my ($cmd, $secs, $log_path, $hard_cap) = @_;
+    my ($cmd, $secs, $log_path, $hard_cap, $take_process_snapshots) = @_;
     my @cmd = ref($cmd) eq 'ARRAY' ? @$cmd : ('/bin/sh', '-c', $cmd);
     $hard_cap = $max_runtime unless defined $hard_cap;
 
@@ -1615,6 +1657,9 @@ sub run_with_timeout {
 
         if (!$timed_out && !$interrupted && $progress_interval && time() >= $next_progress) {
             print_progress_line($start, $last_output, $secs);
+            print "  Host process snapshot during target: ",
+                host_process_capacity_snapshot(), "\n"
+                if $take_process_snapshots;
             $next_progress += $progress_interval
                 while $next_progress && $next_progress <= time();
         }

@@ -1,4 +1,4 @@
-.PHONY: all help clean test test-unit test-bench test-perl-optional test-cpan-tester test-interpreter check-thread-test-sources check-thread-core-test-sources check-thread-ecosystem-test-sources check-thread-regex-test-sources test-thread-tooling test-threads test-threads-core test-threads-core-platform test-threads-core-mode test-threads-windows test-threads-regex test-threads-release test-threads-ecosystem test-bundled-modules test-cpan-distroprefs test-cpan-release-acceptance test-exiftool test-all test-gradle test-gradle-unit test-gradle-all test-gradle-parallel test-maven-parallel build run wrapper check-java-gradle dev ci sbom sbom-java sbom-perl sbom-clean check-links perl5-update perl5-sync perl5-sync-check
+.PHONY: all help clean test test-unit test-bench test-perl-optional test-cpan-tester test-interpreter check-thread-test-sources check-thread-core-test-sources check-thread-ecosystem-test-sources check-thread-regex-test-sources test-thread-tooling test-threads test-threads-core test-threads-core-platform test-threads-core-mode test-threads-windows test-threads-regex test-threads-release test-threads-ecosystem test-bundled-modules test-cpan-distroprefs test-cpan-release-acceptance test-exiftool test-all test-gradle test-gradle-unit test-gradle-all test-gradle-parallel test-maven-parallel build run wrapper check-java-gradle dev ci sbom sbom-java sbom-perl sbom-clean check-links perl5-update perl5-sync perl5-sync-check check-bundled-modules update-bundled-modules
 
 PERL ?= perl
 GRADLE_ARGS ?=
@@ -27,6 +27,8 @@ THREAD_TOOLING_TESTS := \
 	dev/tools/tests/perl_test_runner_weighted_integration.t
 
 CPAN_TESTER_TESTS := \
+	dev/tools/tests/cpan_import_sync.t \
+	dev/tools/tests/cpan_release_acceptance_contract.t \
 	dev/tools/tests/cpan_random_tester_parser.t \
 	dev/tools/tests/cpan_random_tester_perl_oracle.t \
 	dev/tools/tests/cpan_random_tester_timeout.t
@@ -125,6 +127,8 @@ help:
 	@echo ""
 	@echo "Additional test gates"
 	@echo "  make test-bundled-modules   Bundled CPAN module tests"
+	@echo "  make check-bundled-modules  Check bundled CPAN provider versions offline"
+	@echo "  make update-bundled-modules Stage current CPAN releases for review"
 	@echo "  make test-interpreter       Unit tests on the bytecode interpreter backend"
 	@echo "  make test-threads           ithreads compatibility gate"
 	@echo "  make test-cpan-distroprefs  Bundled CPAN distroprefs checks"
@@ -255,6 +259,25 @@ endif
 # Offline parser and result-classification regression coverage for the CPAN tester.
 test-cpan-tester:
 	timeout 120 prove $(CPAN_TESTER_TESTS)
+
+# Shared registry for offline provider consistency and staged upstream updates.
+check-bundled-modules:
+	perl dev/tools/cpan_import_sync.pl --check
+
+update-bundled-modules:
+	@set -e; \
+	if [ "$(CHECK)" = "1" ] && [ "$(UPDATE)" = "1" ]; then \
+		echo "CHECK=1 and UPDATE=1 are mutually exclusive" >&2; exit 2; \
+	fi; \
+	selection=; \
+	if [ -n "$(MODULES)" ]; then selection="--only=$(MODULES)"; fi; \
+	if [ "$(CHECK)" = "1" ]; then \
+		perl dev/tools/cpan_import_sync.pl --check $$selection; \
+	elif [ "$(UPDATE)" = "1" ]; then \
+		perl dev/tools/cpan_import_sync.pl --apply $$selection; \
+	else \
+		perl dev/tools/cpan_import_sync.pl --update $$selection; \
+	fi
 
 # Unit tests using bytecode interpreter backend (feature parity check)
 test-interpreter:
@@ -425,8 +448,11 @@ endif
 
 # Release acceptance gate. Build the development shadow JAR before invoking
 # jcpan, then keep the CPAN run sequential so no test process shares a JAR
-# while it is being written. The tester writes per-target diagnostics under
-# /tmp/cpan_random_logs and this target retains the complete gate transcript.
+# while it is being written. Run one CPAN test worker at a time: Mojolicious
+# includes a fork assertion, and parallel test workers can exhaust the shared
+# host's process slots. Capture host process counts before, during, and after
+# each target so capacity pressure is visible in the retained gate transcript.
+# The tester writes per-target diagnostics under /tmp/cpan_random_logs.
 test-cpan-release-acceptance: build
 	@mkdir -p build/reports
 	@log="build/reports/cpan-release-acceptance.log"; \
@@ -434,8 +460,17 @@ test-cpan-release-acceptance: build
 	echo "CPAN release acceptance log: $$log"; \
 	echo "Selected modules: $$modules" > "$$log"; \
 	echo "Commit: $$(git rev-parse --short HEAD)" >> "$$log"; \
+	echo "Shell process limit (ulimit -u): $$(ulimit -u)" >> "$$log"; \
+	if command -v sysctl >/dev/null 2>&1; then \
+		sysctl kern.maxproc kern.maxprocperuid 2>/dev/null >> "$$log" || true; \
+	fi; \
+	if [ -r /sys/fs/cgroup/pids.current ] && [ -r /sys/fs/cgroup/pids.max ]; then \
+		echo "cgroup pids.current: $$(cat /sys/fs/cgroup/pids.current)" >> "$$log"; \
+		echo "cgroup pids.max: $$(cat /sys/fs/cgroup/pids.max)" >> "$$log"; \
+	fi; \
 	timeout 28800 perl dev/tools/cpan_random_tester.pl \
-		--modules "$$modules" --jobs 8 --strict-exit \
+		--modules "$$modules" --jobs 1 --strict-exit \
+		--process-snapshots --progress-interval 10 \
 		--timeout 2400 --activity-grace 600 --max-runtime 5400 \
 		--perl-oracle never >> "$$log" 2>&1; \
 	status=$$?; cat "$$log"; exit $$status

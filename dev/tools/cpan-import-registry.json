@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "modules": [
+    {
+      "distribution": "Clone-PP",
+      "source": "https://metacpan.org/dist/Clone-PP",
+      "port_mode": "full-import",
+      "upstream_distribution_version": "1.09",
+      "providers": [
+        {
+          "kind": "perl_version",
+          "module": "Clone::PP",
+          "path": "src/main/perl/lib/Clone/PP.pm",
+          "version": "1.08",
+          "contract": "bundled module release"
+        }
+      ],
+      "files": [
+        { "source": "lib/Clone/PP.pm", "target": "src/main/perl/lib/Clone/PP.pm" },
+        { "source": "t", "target": "src/test/resources/module/Clone-PP/t" }
+      ],
+      "update_policy": "stage-and-manual-port",
+      "tests": ["src/test/resources/module/Clone-PP/t"]
+    },
+    {
+      "distribution": "Compress-Raw-Zlib",
+      "source": "https://metacpan.org/dist/Compress-Raw-Zlib",
+      "port_mode": "rewritten",
+      "upstream_distribution_version": "2.224",
+      "providers": [
+        {
+          "kind": "perl_version",
+          "module": "Compress::Raw::Zlib",
+          "path": "src/main/perl/lib/Compress/Raw/Zlib.pm",
+          "version": "2.224",
+          "same_version_as_upstream": true,
+          "contract": "upstream package API"
+        },
+        {
+          "kind": "java_runtime_scalar",
+          "module": "Compress::Raw::Zlib",
+          "path": "src/main/java/org/perlonjava/runtime/perlmodule/CompressRawZlib.java",
+          "symbol": "Compress::Raw::Zlib::XS_VERSION",
+          "version": "2.224",
+          "same_version_as_upstream": true,
+          "contract": "CPAN XS API compatibility"
+        }
+      ],
+      "files": [
+        { "source": "t", "target": "src/test/resources/module/Compress-Raw-Zlib/t" }
+      ],
+      "update_policy": "stage-and-manual-port",
+      "tests": ["src/test/resources/unit/compress_raw_zlib_gzip_wrapper.t"]
+    },
+    {
+      "distribution": "Compress-Raw-Bzip2",
+      "source": "https://metacpan.org/dist/Compress-Raw-Bzip2",
+      "port_mode": "rewritten",
+      "upstream_distribution_version": "2.224",
+      "providers": [
+        {
+          "kind": "perl_version",
+          "module": "Compress::Raw::Bzip2",
+          "path": "src/main/perl/lib/Compress/Raw/Bzip2.pm",
+          "version": "2.224",
+          "same_version_as_upstream": true,
+          "contract": "upstream package API"
+        },
+        {
+          "kind": "java_static_string",
+          "module": "Compress::Raw::Bzip2",
+          "path": "src/main/java/org/perlonjava/runtime/perlmodule/CompressRawBzip2.java",
+          "symbol": "XS_VERSION",
+          "version": "2.224",
+          "same_version_as_upstream": true,
+          "contract": "CPAN XS API compatibility"
+        },
+        {
+          "kind": "gradle_catalog",
+          "provider": "commons-compress",
+          "path": "gradle/libs.versions.toml",
+          "symbol": "commons-compress",
+          "version": "1.28.0",
+          "contract": "independent backing library version"
+        }
+      ],
+      "files": [
+        { "source": "t", "target": "src/test/resources/module/Compress-Raw-Bzip2/t" }
+      ],
+      "update_policy": "stage-and-manual-port",
+      "tests": ["src/test/resources/unit/compress_raw_bzip2.t"]
+    }
+  ]
+}

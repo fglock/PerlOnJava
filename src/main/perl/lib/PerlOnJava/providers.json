@@ -18,6 +18,30 @@
       "test_strategy": "bundled-provider"
     },
     {
+      "module": "Object::Pad",
+      "version": "0.800",
+      "distribution": "Object-Pad",
+      "provider": "compatibility-shim",
+      "shadow_policy": "forbidden",
+      "test_strategy": "bundled-provider"
+    },
+    {
+      "module": "Compress::Raw::Zlib",
+      "version": "2.224",
+      "distribution": "Compress-Raw-Zlib",
+      "provider": "java-xs",
+      "shadow_policy": "forbidden",
+      "test_strategy": "bundled-provider"
+    },
+    {
+      "module": "Compress::Raw::Bzip2",
+      "version": "2.224",
+      "distribution": "Compress-Raw-Bzip2",
+      "provider": "java-xs",
+      "shadow_policy": "forbidden",
+      "test_strategy": "bundled-provider"
+    },
+    {
       "module": "Moose",
       "version": "2.4000",
       "distribution": "Moose",

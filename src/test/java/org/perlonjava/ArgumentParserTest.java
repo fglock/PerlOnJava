@@ -1,5 +1,7 @@
 package org.perlonjava;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -65,6 +67,23 @@ public class ArgumentParserTest {
                 "#!/usr/bin/env perl5 -w\nprint qq(ok\\n);\n", options));
         assertTrue(options.perlShebangProcessed);
         assertTrue(options.warnFlag);
+    }
+
+    @Test
+    void envPerlShebangWithTrailingSemicolonPreservesSwitches() throws Exception {
+        Path script = Files.createTempFile("perlonjava-env-shebang-", ".pl");
+        try {
+            Files.writeString(script, "#!/usr/bin/env perl; -w\n1;\n");
+
+            CompilerOptions options = ArgumentParser.parseArguments(
+                    new String[] { script.toString() });
+
+            assertTrue(options.warnFlag);
+            assertTrue(options.perlShebangProcessed);
+            assertEquals(script.toString(), options.fileName);
+        } finally {
+            Files.deleteIfExists(script);
+        }
     }
 
     @Test
