@@ -93,6 +93,11 @@ sub WriteMakefile {
 
     my $name = $args{NAME} or die "NAME is required\n";
     my $version = $args{VERSION} || ($args{VERSION_FROM} && _extract_version($args{VERSION_FROM})) || '0';
+    $version = _printable_version($version);
+    my $display_version = $version;
+    $display_version =~ s/\Av//;
+    $args{MIN_PERL_VERSION} = _printable_version($args{MIN_PERL_VERSION})
+        if defined $args{MIN_PERL_VERSION};
 
     # Match upstream MakeMaker before serializing metadata.  A number of old
     # distributions carry a trailing CR in ABSTRACT; embedding it in a quoted
@@ -113,7 +118,7 @@ sub WriteMakefile {
         delete $args{$key}{'Module::Build'} if ref $args{$key} eq 'HASH';
     }
     
-    print "PerlOnJava MakeMaker: $name v$version\n";
+    print "PerlOnJava MakeMaker: $name v$display_version\n";
     print "=" x 60, "\n";
     
     # Check prerequisites. Mirrors upstream ExtUtils::MakeMaker (5.42 / 7.76):
@@ -213,7 +218,7 @@ sub _merge_prereq_hash {
 }
 
 sub _installed_file_for_module {
-    my ($module) = @_;
+    my $module = @_ > 1 ? $_[1] : $_[0];
     my $file = $module;
     $file =~ s{::}{/}g;
     $file .= '.pm';
@@ -223,6 +228,25 @@ sub _installed_file_for_module {
         return $candidate if -r $candidate;
     }
     return;
+}
+
+# CPAN::Meta::Spec calls this helper through the MM compatibility class.
+{
+    no strict 'refs';
+    *MM::_installed_file_for_module = \&_installed_file_for_module;
+}
+
+sub _printable_version {
+    my ($value) = @_;
+    return $value unless defined $value;
+    my $string = "$value";
+    return $string unless $string =~ /[\x00-\x1f\x7f]/;
+    my $parsed = eval {
+        require version;
+        version->parse($value);
+    };
+    return $parsed->stringify if $parsed;
+    return $string;
 }
 
 sub _check_prereqs {
@@ -846,6 +870,8 @@ sub _extract_version {
 
 sub _create_install_makefile {
     my ($name, $version, $args, $pm, $scripts, $mm) = @_;
+    my $display_version = $version;
+    $display_version =~ s/\Av//;
     
     # Create a Makefile that builds into ./blib when 'make' runs, runs tests
     # against ./blib when 'make test' runs, and copies files to INSTALLSITELIB
@@ -1179,7 +1205,7 @@ UNINSTALL = \$(NOECHO) \$(PERLRUN) -e "1"
 $extra_macros_str
 
 all:: pm_to_blib pl_files pure_all blib_scripts config
-\t\@echo "PerlOnJava: $name v$version built ($file_count files in ./blib)"
+\t\@echo "PerlOnJava: $name v$display_version built ($file_count files in ./blib)"
 
 $depend_rules_str
 # pm_to_blib: stage module/data files into ./blib/lib (matches standard
@@ -1241,7 +1267,7 @@ $install_cmds_str
 \t\tmkdir -p "\$(INSTALLSITELIB)/auto/\$(FULLEXT)" && \\
 \t\tcp -r "\$(INST_AUTODIR)/"* "\$(INSTALLSITELIB)/auto/\$(FULLEXT)/" 2>/dev/null || true; \\
 \tfi
-\t\@echo "PerlOnJava: $name v$version installed ($file_count files) to \$(INSTALLSITELIB)"
+\t\@echo "PerlOnJava: $name v$display_version installed ($file_count files) to \$(INSTALLSITELIB)"
 
 doc_install::
 \t\@true
@@ -1312,7 +1338,8 @@ sub _make_makefile_comments {
 
     for my $key (qw(ABSTRACT AUTHOR LICENSE SIGN MIN_PERL_VERSION)) {
         next unless exists $args->{$key};
-        my $value = $args->{$key};
+        my $value = $key eq 'MIN_PERL_VERSION'
+            ? _printable_version($args->{$key}) : $args->{$key};
         if ($key eq 'AUTHOR') {
             $comment .= "#     AUTHOR => [q[$value]]\n";
         } else {
@@ -1578,7 +1605,48 @@ sub _shell_fixin {
     for ($file, $payload, $payload_name) {
         s/'/'\\''/g;
     }
-    return "\t\@\$(PERL) -e 'my (\$\$f,\$\$payload,\$\$payload_name,\$\$perl)=\@ARGV; open my \$\$in,q{<},\$\$f or exit 0; my \@lines=<\$\$in>; close \$\$in; exit 0 unless \@lines && \$\$lines[0] =~ /^#!.*\\bperl(?:\\s+(.*))?\\r?\\n?\\z/; my \$\$args=defined \$\$1 ? q{ }.\$\$1 : q{}; open my \$\$payload_fh,q{>},\$\$payload or die \$\$!; print \$\$payload_fh \@lines; close \$\$payload_fh or die \$\$!; chmod 0644,\$\$payload; my \$\$d=chr 36; my \$\$at=chr 64; chmod 0644,\$\$f or die \$\$!; open my \$\$out,q{>},\$\$f or die \$\$!; print \$\$out qq{#!/bin/sh\\n}; print \$\$out q{dir=}.\$\$d.q{(dirname \"}.\$\$d.q{0\")}.qq{\\n}; print \$\$out q{exec \"}.\$\$perl.q{\"}.\$\$args.q{ \"}.\$\$d.q{dir/}.\$\$payload_name.q{\" \"}.\$\$d.\$\$at.q{\"}.qq{\\n}; close \$\$out or die \$\$!; chmod 0755,\$\$f;' '$file' '$payload' '$payload_name' '\$(PERL)'";
+    my $program = <<'PERL';
+my ($f, $payload, $payload_name, $perl) = @ARGV;
+open my $in, q{<}, $f or exit 0;
+my @lines = <$in>;
+close $in;
+exit 0 unless @lines && $lines[0] =~ /^#!.*\bperl(?:\s+(.*))?\r?\n?\z/;
+my $args = defined $1 ? q{ } . $1 : q{};
+open my $payload_fh, q{>}, $payload or die $!;
+print {$payload_fh} @lines;
+close $payload_fh or die $!;
+chmod 0644, $payload;
+require Text::ParseWords;
+my @words = Text::ParseWords::shellwords($perl);
+die q{empty PERL command} unless @words;
+my $sq = chr 39;
+my $quote = sub {
+    my ($word) = @_;
+    my $quoted = $sq;
+    for my $char (split //, $word) {
+        if ($char eq $sq) {
+            $quoted .= $sq . q{"} . $sq . q{"} . $sq;
+        } else {
+            $quoted .= $char;
+        }
+    }
+    return $quoted . $sq;
+};
+my $command = join q{ }, map { $quote->($_) } @words;
+my $d = chr 36;
+my $at = chr 64;
+chmod 0644, $f or die $!;
+open my $out, q{>}, $f or die $!;
+print {$out} qq{#!/bin/sh\n};
+print {$out} q{dir=} . $d . q{(dirname "} . $d . q{0")} . qq{\n};
+print {$out} q{exec } . $command . $args . q{ "} . $d . q{dir/}
+    . $payload_name . q{" "} . $d . $at . q{"} . qq{\n};
+close $out or die $!;
+chmod 0755, $f;
+PERL
+    $program =~ s/\s*\n\s*/ /g;
+    $program =~ s/\$/\$\$/g;
+    return "\t\@\$(PERL) -e '$program' '$file' '$payload' '$payload_name' '\$(PERL)'";
 }
 
 # Helper: generate postamble for File::ShareDir::Install

@@ -270,6 +270,9 @@ public class IdentifierParser {
             if (token.type != LexerTokenType.IDENTIFIER
                     && token.type != LexerTokenType.NUMBER
                     && token.type != LexerTokenType.STRING
+                    && !(token.text.equals("'")
+                            && (nextToken.type == LexerTokenType.IDENTIFIER
+                                    || nextToken.type == LexerTokenType.NUMBER))
                     // Whitespace also separates a sigil from a
                     // punctuation-named variable: `% %` is `%%`, just as
                     // `$ ;` is `$;`.  Keep it eligible for the ordinary

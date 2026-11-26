@@ -200,14 +200,13 @@ public class Version extends PerlModuleBase {
             }
         }
         
-        // For qv(), prepend 'v' if not already present and set original with v prefix
+        // For qv(), the internal version is dotted decimal while stringification
+        // retains the caller's spelling, as in the core version module.
         if (forceQv) {
             isVString = true;
             if (!version.startsWith("v")) {
                 version = "v" + version;
             }
-            // For qv(), the original is the v-prefixed version
-            originalVersionStr = new RuntimeScalar(version);
         } else if (!version.startsWith("v")) {
             // A lax leading-dot multi-part value is a dotted decimal with an
             // implicit zero major component.  Keep it out of the decimal
