@@ -2451,7 +2451,7 @@ public class StatementParser {
         if (parser.parsingEvalString && "1;".equals(remainingSource.trim())) {
             Parser enclosingParser = ParserExtensionRegistry.getActiveParser();
             if (enclosingParser != null && enclosingParser != parser) {
-                applySourceFilterToRemainingTokens(enclosingParser);
+                enclosingParser.deferSourceFilter();
             }
             return;
         }

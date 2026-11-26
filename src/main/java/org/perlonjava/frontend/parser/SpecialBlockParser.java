@@ -723,6 +723,9 @@ public class SpecialBlockParser {
                 restoreStack(parser.ctx.symbolTable.strictOptionsStack, savedStrictOptionsStack);
             }
         }
+        if (blockPhase.equals("BEGIN")) {
+            parser.applyPendingSourceFilter();
+        }
         GlobalVariable.setGlobalVariable("main::@", ""); // Reset error variable
 
         if (!blockPhase.equals("BEGIN")) {
