@@ -19,6 +19,9 @@ our @ISA        = qw(Cpanel::JSON::XS Exporter);
 our @EXPORT     = qw(encode_json decode_json);
 our @EXPORT_OK  = qw(encode_json decode_json true false is_bool);
 
+sub is_xs { 0 }
+sub is_pp { 1 }
+
 *encode_json = \&Cpanel::JSON::XS::encode_json;
 *decode_json = \&Cpanel::JSON::XS::decode_json;
 *true        = \&Cpanel::JSON::XS::true;

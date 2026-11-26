@@ -17,6 +17,7 @@ Recent CPAN compatibility additions include:
 | `JSON::SL` | Pure Perl over bundled `JSON::PP` | JSON decoding and a limited JSON Pointer feed API; native incremental parser and Tuba callbacks are not implemented |
 | `Taint::Runtime` | Perl + Java XS bridge | Runtime taint toggling and scalar taint inspection |
 | `String::Similarity` | Java XS bridge | Unicode-aware `fstrcmp`/`similarity` implementation |
+| `Text::Levenshtein::XS` | Perl + Java XS bridge | Unicode code-point edit distance with optional maximum-distance threshold |
 | `Socket6` | Pure Perl over Java-backed `Socket` | Legacy Socket6 flat-result API and IPv6 sockaddr helpers |
 | `Email::Address::XS` | Pure Perl compatibility subset | Address parsing/object API used by `Email::Sender` |
 | `Want` | Pure Perl compatibility subset | Non-lvalue predicates used by `JSONP`; full op-tree introspection is not yet available |
@@ -240,6 +241,7 @@ These are loaded automatically or via `use`:
 | `YAML::PP` | Java + Perl | |
 | `TOML` | Java | |
 | `Text::CSV` | Java | |
+| `Text::Levenshtein::XS` | Java + Perl | Upstream 0.503 API; Unicode code-point distance and `undef` when a non-zero threshold is exceeded |
 | `Storable` | Java + Perl | `freeze`, `thaw`, `dclone`, `store`, `retrieve`, `nstore`, `nfreeze` — produces and consumes the native Perl `pst0` binary format, interoperable with system perl in both directions. See `dev/modules/storable_binary_format.md`. |
 | `Clone` | Java + Perl | Deep copy |
 | `Scalar::Util` | Java | `blessed`, `reftype`, `weaken`, `dualvar`, etc. |

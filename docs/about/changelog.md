@@ -37,6 +37,8 @@ priorities and future plans.
 - Represent untracked, tracked, and weak-tracked referents separately from their nonnegative owner counts (#2043).
 - Drain scoped owner releases at block exit even while statement flushing is suppressed, preserving earlier pending releases (#2043).
 
+- Fix MakeMaker module lookup, script wrappers and v-string serialization; select the requested JSON XS-compatible backend; add Text::CSV::csv and XML::LibXML node API aliases; match version::qv stringification (#2175, #2164, #2153, #2140, #2116, #2114, #2157, #2126).
+- Parse lexical code attributes, MooseX role calls, legacy spaced `@_`, chained prototype calls, qualified class methods, indirect imports with slash arguments, trailing-text `__END__` markers, and the `socket` DSL term (#2172, #2168, #2161, #2154, #2158, #2139, #2137, #2127).
 - Honor overloaded logical negation, warn on distinct constant-sub redefinitions with equal values, and preserve reference-valued scalar slots through localized glob aliases (#2122, #2075, #1939).
 - Preserve the `Can't use a hash as a reference` diagnostic for `%$hashref->{key}` and hash slices (#2132).
 - Preserve file contents on `sysopen` without `O_TRUNC`, fail `open` on undefined paths, avoid duplicate `closedir` warnings, and match Socket lookup flags and return values (#2128, #2125, #2095).
@@ -52,6 +54,7 @@ priorities and future plans.
 - Parse automatic and quoted Type::Tiny parameterized/composite expressions in Function::Parameters signatures; preserve recursive block-prototype trailing arguments (#1361).
 - Insert implicit invocants for multiline empty Function::Parameters method and classmethod signatures when attributes follow the closing parenthesis (#1361).
 - Add lexical autobox dispatch for native scalar and reference values, including `autobox::Core` and `Moose::Autobox` delegated imports, bundled `autobox::Core`, merged class lookup, `autobox_class`, `autobox::universal::type` scalar flags, direct aggregate invocants, `$^H` scope bits that respect `no autobox`, `Want` scalar and boolean returns, and `DESTROY` dispatch for unreachable cycles during process teardown (#1264).
+- Bundle a Java-backed `Text::Levenshtein::XS` 0.503 implementation with Unicode code-point and maximum-distance compatibility (#1648).
 - Honor tied `*ARGV` for diamond reads, including after a previous traversal reaches EOF (#2110, #2111).
 - Preserve explicit empty split fields in fixed-arity assignments, restore parsed XML attribute order and `XML::LibXML` ID indexing, decode HTML href character references, and add a JSON::PP-backed `JSON::SL` compatibility subset (#2088, #1323, #1332, #2097, #1321).
 - Preserve list context for localized hash slices, overloaded readline and `pairgrep`; preserve map block versus nested-subroutine `wantarray` contexts; honor overloaded `&{}` replacements and retain overload exceptions during post-increment (#2081, #2080, #2084, #2046, #2062).

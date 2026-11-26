@@ -196,6 +196,16 @@ public class Variable {
         // Store the current position before parsing the identifier
         int startIndex = parser.tokenIndex;
 
+        // In Perl's legacy @ '_ spelling, whitespace is ignored around the
+        // apostrophe and the result is the special argument array @_ (not a
+        // package-qualified @main::_ variable).
+        if (sigil.equals("@") && nextNonWsToken.text.equals("'")
+                && nextNonWsIndex + 1 < parser.tokens.size()
+                && parser.tokens.get(nextNonWsIndex + 1).type == LexerTokenType.IDENTIFIER
+                && parser.tokens.get(nextNonWsIndex + 1).text.equals("_")) {
+            parser.tokenIndex = nextNonWsIndex + 1;
+        }
+
         String varName = IdentifierParser.parseComplexIdentifier(parser, sigil.equals("*"));
         if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("Parsing variable: " + varName);
 

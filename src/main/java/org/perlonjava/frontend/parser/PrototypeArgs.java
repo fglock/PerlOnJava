@@ -620,6 +620,7 @@ public class PrototypeArgs {
     private static void parsePrototypeArguments(Parser parser, ListNode args, String prototype, boolean hasParentheses) {
         boolean isOptional = false;
         boolean needComma = false;
+        boolean codeReferenceBlockJustParsed = false;
         int skipCount = 0;  // Number of prototype characters to skip (for flattened my/our/state)
 
         // Check for consecutive commas which should always be a syntax error
@@ -667,10 +668,28 @@ public class PrototypeArgs {
                     needComma = true;
                 }
                 case '@', '%' -> {
-                    handleListOrHashArgument(parser, args, needComma);
+                    if (codeReferenceBlockJustParsed) {
+                        // A trailing list slot after a block callback only
+                        // stops before an outer fat-comma chain. Ordinary
+                        // whitespace or comma-separated list arguments still
+                        // belong to the prototype's slurpy slot.
+                        if (!TokenUtils.peek(parser).text.equals("=>")) {
+                            handleListOrHashArgument(parser, args, needComma);
+                        }
+                    } else {
+                        handleListOrHashArgument(parser, args, needComma);
+                    }
                     needComma = true;
+                    codeReferenceBlockJustParsed = false;
                 }
-                case '&' -> needComma = handleCodeReferenceArgument(parser, args, isOptional, needComma);
+                case '&' -> {
+                    int blockStart = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
+                    int oldSize = args.elements.size();
+                    needComma = handleCodeReferenceArgument(parser, args, isOptional, needComma);
+                    codeReferenceBlockJustParsed = oldSize < args.elements.size()
+                            && blockStart < parser.tokens.size()
+                            && parser.tokens.get(blockStart).text.equals("{");
+                }
                 case '+' -> {
                     handlePlusArgument(parser, args, isOptional, needComma);
                     needComma = true;

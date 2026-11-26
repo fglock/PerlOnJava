@@ -573,7 +573,32 @@ public class SubroutineParser {
 
         // Check if the subroutine call has parentheses
         boolean hasParentheses = peek(parser).text.equals("(");
+        // A qualified package name immediately followed by `->` is a class
+        // invocant even when a same-named subroutine exists. Perl parses
+        // `Foo::Bar->new` as a method call on the package string; calling
+        // Foo::Bar first can accidentally recurse forever.
+        String qualifiedInvocant = subName.endsWith("::")
+                ? subName.substring(0, subName.length() - 2) : subName;
+        if (!isMethod && subName.contains("::") && peek(parser).text.equals("->")
+                && (Boolean.TRUE.equals(GlobalVariable.packageExistsCache.get(qualifiedInvocant))
+                        || packageDeclaredInSource(parser, qualifiedInvocant))) {
+            return new StringNode(qualifiedInvocant, currentIndex);
+        }
         if (!subExists && !hasParentheses) {
+            // `import Package /pattern/` is Perl's indirect method form of
+            // `Package->import(/pattern/)`. The package token is the
+            // invocant, and a slash-delimited expression may begin its args.
+            if (subName.equals("import")
+                    && peek(parser).type == LexerTokenType.IDENTIFIER
+                    && hasQualifiedImportSlashArgument(parser)) {
+                int invocantIndex = parser.tokenIndex;
+                String packageName = IdentifierParser.parseSubroutineIdentifier(parser);
+                Node invocant = new StringNode(packageName, invocantIndex);
+                ListNode arguments = consumeArgsWithPrototype(parser, "@");
+                return makeIndirectCall(parser, invocant, "import", arguments,
+                        currentIndex, invocantIndex);
+            }
+
             // Perl allows calling not-yet-declared subs without parentheses when the
             // following token is not an identifier (e.g. `skip "msg", 2;`).
             // This is heavily used by the perl5 test harness (test.pl) inside SKIP/TODO blocks.
@@ -1017,6 +1042,47 @@ public class SubroutineParser {
             index++;
         }
         return index < parser.tokens.size() && parser.tokens.get(index).text.equals("=>");
+    }
+
+    private static boolean hasQualifiedImportSlashArgument(Parser parser) {
+        int index = parser.tokenIndex;
+        if (index >= parser.tokens.size()
+                || parser.tokens.get(index).type != LexerTokenType.IDENTIFIER) return false;
+        index++;
+        boolean qualified = false;
+        while (index + 1 < parser.tokens.size()
+                && parser.tokens.get(index).text.equals("::")
+                && parser.tokens.get(index + 1).type == LexerTokenType.IDENTIFIER) {
+            qualified = true;
+            index += 2;
+        }
+        if (!qualified) return false;
+        index = Whitespace.skipWhitespace(parser, index, parser.tokens);
+        return index < parser.tokens.size() && parser.tokens.get(index).text.equals("/");
+    }
+
+    private static boolean packageDeclaredInSource(Parser parser, String packageName) {
+        List<LexerToken> tokens = parser.tokens;
+        for (int i = 0; i < tokens.size(); i++) {
+            LexerToken token = tokens.get(i);
+            if (token.type != LexerTokenType.IDENTIFIER || !token.text.equals("package")) continue;
+
+            int index = Whitespace.skipWhitespace(parser, i + 1, tokens);
+            StringBuilder candidate = new StringBuilder();
+            while (index < tokens.size()) {
+                LexerToken part = tokens.get(index);
+                if (part.type == LexerTokenType.IDENTIFIER) {
+                    candidate.append(part.text);
+                } else if (part.type == LexerTokenType.OPERATOR && part.text.equals("::")) {
+                    candidate.append("::");
+                } else {
+                    break;
+                }
+                index++;
+            }
+            if (candidate.toString().equals(packageName)) return true;
+        }
+        return false;
     }
 
     private static boolean isValidIndirectMethod(String subName, Parser parser) {
@@ -3135,7 +3201,7 @@ public class SubroutineParser {
             int lineNum = parser.ctx.errorUtil != null
                     ? parser.ctx.errorUtil.getLineNumber(declTokenIndex) : 0;
             CallerStack.push(packageName, fileName, lineNum);
-            CallerStack.push(packageName, fileName, lineNum);
+            CallerStack.push("attributes", fileName, lineNum);
             try {
                 RuntimeList result = RuntimeCode.apply(method, callArgs, RuntimeContextType.LIST);
 
