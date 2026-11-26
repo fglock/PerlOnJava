@@ -275,6 +275,27 @@ public class ExceptionFormatter {
                                 line = frame.code().errorUtil.getSourceLocationLineTextAccurate(tokenIndex);
                             }
 
+                            String evalEntryFilename = filename;
+                            String evalEntryLine = line;
+                            boolean evalEntryHasHostSourceLocation = false;
+                            if (frame.virtualEvalFrame() && frame.evalEntryPc() >= 0
+                                    && frame.code().pcToTokenIndex != null
+                                    && !frame.code().pcToTokenIndex.isEmpty()) {
+                                var evalEntry = frame.code().pcToTokenIndex.floorEntry(
+                                        frame.evalEntryPc());
+                                if (evalEntry != null && frame.code().errorUtil != null) {
+                                    ErrorMessageUtil.SourceLocation entryLocation =
+                                            frame.code().errorUtil.getSourceLocationAccurate(
+                                                    evalEntry.getValue());
+                                    evalEntryFilename = entryLocation.fileName();
+                                    // EVAL_TRY is mapped to the token before the eval
+                                    // expression's reported caller line.
+                                    evalEntryLine = Integer.toString(entryLocation.lineNumber() + 1);
+                                    evalEntryHasHostSourceLocation = evalEntryFilename != null
+                                            && !evalEntryFilename.startsWith("(eval");
+                                }
+                            }
+
                             String subName = frame.subroutineName();
                             // Don't add package prefix if subName already contains "::" or is a special name like "(eval)".
                             // Explicitly renamed eval closures keep their original source package for location
@@ -297,6 +318,10 @@ public class ExceptionFormatter {
                                 // state at this eval entry, not the enclosing
                                 // InterpretedCode's function-wide default.
                                 entry.add(frame.warningBits());
+                                if (evalEntryHasHostSourceLocation) {
+                                    entry.add(evalEntryFilename);
+                                    entry.add(evalEntryLine);
+                                }
                                 // Unlike an ordinary interpreter frame, this
                                 // synthetic inline-eval entry already is the Perl
                                 // frame caller(0) must return. Do not apply the

@@ -7549,8 +7549,8 @@ public class BytecodeCompiler implements Visitor {
         emit(nameIdx);
         emitReg(codeReg);
 
-        // Step 6: Register subroutine location for %DB::sub (only in debug mode)
-        if (DebugState.isDebugMode() && errorUtil != null) {
+        // Step 6: Register subroutine locations when debugger mode or $^P tracing requests them.
+        if (DebugState.shouldTrackSubroutineLocations() && errorUtil != null) {
             int startLine = errorUtil.getLineNumber(node.getIndex());
             // Use start line as end line for now (accurate end would require tracking block end)
             DebugState.registerSubroutine(fullName, sourceName, startLine, startLine);
