@@ -9716,6 +9716,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 res.add(new RuntimeScalar(normalizeCallerPackage(pkg)));  // package
                 String locationFile = locationFrameInfo.get(1);
                 String locationLine = locationFrameInfo.get(2);
+                boolean hasInterpreterEvalEntryLocation = locationFrameInfo.size() > 7
+                        && "interpreter-virtual-eval".equals(locationFrameInfo.get(4));
+                if (hasInterpreterEvalEntryLocation) {
+                    locationFile = locationFrameInfo.get(6);
+                    locationLine = locationFrameInfo.get(7);
+                }
                 int reportedLine;
                 try {
                     reportedLine = Integer.parseInt(locationLine);
@@ -9724,7 +9730,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
                 CallerStack.CallerInfo uplevelCallSite = subUplevelCallSite(
                         trackedActiveCodeFrame, locationFile, reportedLine);
-                if (uplevelCallSite != null
+                if (!hasInterpreterEvalEntryLocation && uplevelCallSite != null
                         && uplevelCallSite.filename() != null && uplevelCallSite.line() > 0) {
                     locationFile = uplevelCallSite.filename();
                     locationLine = Integer.toString(uplevelCallSite.line());

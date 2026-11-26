@@ -140,7 +140,7 @@ public class InterpreterState {
      *
      * @return true if a frame was pushed and must be popped by the caller
      */
-    public static boolean pushEvalFrameForCurrentInterpreter() {
+    public static boolean pushEvalFrameForCurrentInterpreter(int evalEntryPc) {
         InterpreterFrame current = current();
         if (current == null || current.code() == null) {
             return false;
@@ -152,21 +152,27 @@ public class InterpreterState {
         }
 
         callerPackageStack().add(packageName);
+        ArrayList<int[]> pcs = pcStack();
         frameStack().push(new InterpreterFrame(
                 current.code(),
                 packageName,
                 "(eval)",
                 true,
-                WarningBitsRegistry.getRuntimeWarningBits()));
+                WarningBitsRegistry.getRuntimeWarningBits(),
+                evalEntryPc));
 
-        ArrayList<int[]> pcs = pcStack();
         // An inline eval is a virtual Perl frame over the same physical
-        // interpreter dispatch.  Share the mutable PC holder so the virtual
-        // frame follows each opcode instead of retaining the eval-entry PC.
-        // The duplicate stack entry keeps getStack()/getPcStack() aligned and
-        // pop() removes only the virtual frame's alias.
+        // interpreter dispatch. Share its live PC holder so exception stacks
+        // continue to follow execution; caller() can use evalEntryPc for the
+        // eval frame's source location.
         pcs.add(pcs.isEmpty() ? new int[]{0} : pcs.getLast());
         return true;
+    }
+
+    /** Push a virtual eval frame using the current PC when its entry was not retained. */
+    public static boolean pushEvalFrameForCurrentInterpreter() {
+        ArrayList<int[]> pcs = pcStack();
+        return pushEvalFrameForCurrentInterpreter(pcs.isEmpty() ? -1 : pcs.getLast()[0]);
     }
 
     /** True when the active interpreter stack already exposes an eval caller frame. */
@@ -281,16 +287,23 @@ public class InterpreterState {
                                        String packageName,
                                        String subroutineName,
                                        boolean virtualEvalFrame,
-                                       String warningBits) {
+                                       String warningBits,
+                                       int evalEntryPc) {
+            public InterpreterFrame(InterpretedCode code, String packageName,
+                                    String subroutineName, boolean virtualEvalFrame,
+                                    String warningBits) {
+                this(code, packageName, subroutineName, virtualEvalFrame, warningBits, -1);
+            }
+
             public InterpreterFrame(InterpretedCode code, String packageName, String subroutineName) {
                 this(code, packageName, subroutineName, false,
-                        code == null ? null : code.warningBitsString);
+                        code == null ? null : code.warningBitsString, -1);
             }
 
             public InterpreterFrame(InterpretedCode code, String packageName,
                                     String subroutineName, boolean virtualEvalFrame) {
                 this(code, packageName, subroutineName, virtualEvalFrame,
-                        code == null ? null : code.warningBitsString);
+                        code == null ? null : code.warningBitsString, -1);
             }
     }
 

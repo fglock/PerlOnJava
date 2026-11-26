@@ -2342,8 +2342,9 @@ public class SubroutineParser {
                 : packageToUse;
         org.perlonjava.runtime.perlmodule.Mro.incrementPackageGeneration(definitionPackage);
 
-        // Register subroutine location for %DB::sub (only in debug mode)
-        if (DebugState.isDebugMode() && parser.ctx.errorUtil != null && block != null) {
+        // Register subroutine locations when debugger mode or $^P tracing requests them.
+        if (DebugState.shouldTrackSubroutineLocations()
+                && parser.ctx.errorUtil != null && block != null) {
             int startLine = parser.ctx.errorUtil.getLineNumber(block.tokenIndex);
             // Use current position as end for now (could track block end for accuracy)
             int endLine = parser.ctx.errorUtil.getLineNumber(parser.tokenIndex);

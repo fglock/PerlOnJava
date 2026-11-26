@@ -14,6 +14,7 @@ import org.perlonjava.runtime.operators.StringOperators;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.perlmodule.Utf8;
 import org.perlonjava.runtime.perlmodule.Warnings;
+import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.nio.charset.StandardCharsets;
@@ -668,7 +669,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                                         int trustedCalloutCount, boolean patternByteBacked,
                                         boolean lexicalReStrict, String sourceDiagnosticPattern,
                                         NamedCharacterExpansionMap preResolvedNamedCharacters) {
-        String userPropertyPackage = currentUserPropertyPackage();
+        String userPropertyPackage = currentUserPropertyPackage(patternString);
         boolean userPropertyConstructedBeforeRun = SOURCE_REGEX_COMPILED_BEFORE_RUN.get();
         RuntimeScalar namedCharacterTranslator = preResolvedNamedCharacters == null
                 ? org.perlonjava.runtime.HintHashRegistry.getCompileTimeHint("charnames")
@@ -696,6 +697,25 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     static String currentUserPropertyPackage() {
         String packageName = InterpreterState.currentPackage.get().toString();
         return packageName == null || packageName.isBlank() ? "main" : packageName;
+    }
+
+    private static String currentUserPropertyPackage(String pattern) {
+        String packageName = currentUserPropertyPackage();
+        String activeCallerPackage = RuntimeCode.getActiveRegexPropertyCallerPackage();
+        if (activeCallerPackage == null || activeCallerPackage.isBlank()
+                || activeCallerPackage.equals(packageName)) {
+            return packageName;
+        }
+        Matcher matcher = USER_DEFINED_PROPERTY_PATTERN.matcher(pattern);
+        while (matcher.find()) {
+            String property = matcher.group(2);
+            if (!property.contains("::")
+                    && GlobalVariable.isGlobalCodeRefDefined(
+                            activeCallerPackage + "::" + property)) {
+                return activeCallerPackage;
+            }
+        }
+        return packageName;
     }
 
     static String currentDynamicUserPropertyPackage() {

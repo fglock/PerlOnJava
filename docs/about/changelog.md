@@ -6,7 +6,8 @@ priorities and future plans.
 
 ## Work in progress
 
-- Fix CODE-slot lookup through glob references, inherited import stash visibility, false file-scope lexical-sub warnings, and caller package reporting in BEGIN closures (#2173, #2165, #2138, #2136, #2102, #2078).
+- Preserve interpreter eval caller locations and runtime metadata for tracing and deferred Unicode properties (#2042, #2135, #2118).
+- Fix CODE-slot lookup through glob references, inherited import stash visibility, false file-scope lexical-sub warnings, and caller package reporting in BEGIN closures (#2173, #2170, #2165, #2138, #2136, #2102, #2078).
 - Require Net::SSLeay and Crypt::OpenSSL::RSA key generation to use 2048–8192 bits; reject weaker and unbounded sizes and keep the RSA round-trip and padding tests active at the minimum supported size.
 - Retire active lexical owners on explicit `exit` before dispatching `END` blocks (#2043).
 - Track anonymous CODE templates in eval-created optrees on both backends and release their direct-call owners at eval completion or CV teardown (#2043).

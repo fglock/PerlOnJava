@@ -3023,7 +3023,7 @@ public class BytecodeInterpreter {
                                 RuntimeCode.incrementEvalDepth();
 
                                 boolean pushedCallerFrame = visibleEvalFrame
-                                        && InterpreterState.pushEvalFrameForCurrentInterpreter();
+                                        && InterpreterState.pushEvalFrameForCurrentInterpreter(pc - 6);
                                 evalCallerFrameStack.push(pushedCallerFrame);
                                 if (pushedCallerFrame) {
                                     frame.virtualEvalFrameDepth++;
