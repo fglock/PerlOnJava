@@ -6,9 +6,10 @@ use Time::HiRes qw(clock_gettime CLOCK_MONOTONIC);
 my ($kind) = @ARGV;
 $| = 1;
 die "unknown workload: $kind\n"
-    unless defined($kind) && $kind =~ /\A(?:numeric|closure|method|string|regex)\z/;
+    unless defined($kind) && $kind =~ /\A(?:numeric|closure|method|string|regex|eval-string)\z/;
 
-my ($x, $sink, $closure, $object);
+my ($x, $sink, $closure, $object, $eval_id);
+$eval_id = 0;
 if ($kind eq 'numeric') {
     $x = 0;
 } elsif ($kind eq 'closure') {
@@ -57,6 +58,14 @@ while (my $line = <STDIN>) {
             for (1 .. 1000) {
                 my $value = 'alpha-1234-beta';
                 $sink += length('ALPHA' . reverse(substr($value, 6, 4)));
+            }
+            $operations += 1000;
+        }
+    } elsif ($kind eq 'eval-string') {
+        while (clock_gettime(CLOCK_MONOTONIC) < $deadline) {
+            for (1 .. 1000) {
+                my $id = ++$eval_id;
+                $sink += eval "1 + $id - $id";
             }
             $operations += 1000;
         }

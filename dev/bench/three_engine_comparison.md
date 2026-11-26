@@ -29,7 +29,7 @@ Ruby workers express those operations in their respective languages.
 
 ## Method
 
-The runner uses five workloads: local numeric accumulation; repeated calls to
+The reported run used five workloads: local numeric accumulation; repeated calls to
 a closure capturing a value; method dispatch that updates two object fields;
 uppercase, reverse, concatenate, and length operations on a fixed ASCII
 string; and a regex capture of four digits. All three workers use the same
@@ -50,6 +50,14 @@ pairwise speedup is calculated from the two engines' medians in that triplet.
 The table's pairwise result is the geometric mean of those seven ratios. The
 interval resamples the paired ratios with replacement. This design reduces
 order and short-term host-load effects, though it cannot remove them.
+
+The runner also supports an `eval-string` workload. On each operation, the Perl
+and Ruby workers compile a source string containing a monotonically increasing
+identifier in `1 + identifier - identifier`; every source string is distinct
+and evaluates to one. The worker process persists across warmup and measured
+windows, so identifiers are not reused between windows. This workload was added
+after the reported run and has no results in the table above; rerun the command
+below to collect them.
 
 ## Environment and limits
 
