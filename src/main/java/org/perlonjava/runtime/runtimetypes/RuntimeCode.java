@@ -9586,7 +9586,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 && !DebugState.isDebugMode()
                 && !currentEvalFrameHasPerlName
                 && frame < stackTraceSize
-                && isEvalStringImplementationFrame(stackTrace.get(frame));
+                && isEvalStringImplementationFrame(stackTrace.get(frame))
+                && !isSubFrameInEvalString(stackTrace.get(frame));
         boolean interpreterFrameBeforeVirtualEval = currentFrameIsInterpreter
                 && frame + 1 < stackTraceSize
                 && isVirtualEvalFrame(stackTrace.get(frame + 1));
@@ -9756,9 +9757,24 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 boolean syntheticOwnSubFrame = frameInfo.size() > 4
                         && "synthetic-own-sub".equals(frameInfo.get(4));
 
+                // A JVM-compiled sub's own formatted frame is skipped to reach
+                // its call site. When that call site is an interpreter eval
+                // BLOCK, the eval entry supplies the location, but the callee
+                // at this level is still the skipped sub: (eval) belongs to
+                // the next level out.
+                boolean evalSlotOfSkippedJvmSub = false;
+                if (interpreterVirtualEvalFrame && frame == argsFrame + 1
+                        && frame > 0 && frame - 1 < stackTraceSize) {
+                    ArrayList<String> skippedFrame = stackTrace.get(frame - 1);
+                    String skippedName = skippedFrame.size() > 3 ? skippedFrame.get(3) : null;
+                    evalSlotOfSkippedJvmSub = skippedFrame.size() == 4
+                            && skippedName != null && !skippedName.isEmpty()
+                            && !skippedName.startsWith("(");
+                }
+
                 // Synthetic frames such as eval blocks describe the frame itself,
                 // not the previous caller, so preserve their own subroutine name.
-                if ((syntheticOwnSubFrame || virtualEvalFrame
+                if (!evalSlotOfSkippedJvmSub && (syntheticOwnSubFrame || virtualEvalFrame
                         && frameSubName != null && frameSubName.startsWith("("))) {
                     subName = frameSubName;
                 }
@@ -10683,6 +10699,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return frame.size() > 4
                 && ("virtual-eval".equals(frame.get(4))
                 || "interpreter-virtual-eval".equals(frame.get(4)));
+    }
+
+    /**
+     * A sub compiled by eval STRING keeps the (eval N) source name. The
+     * interpreter formats the eval body's own frame as (eval), and a sub
+     * defined inside it with that sub's name (empty for an anonymous sub).
+     * Only the former is the eval frame.
+     */
+    private static boolean isSubFrameInEvalString(ArrayList<String> frame) {
+        String name = frame.size() > 3 ? frame.get(3) : null;
+        return name != null && !name.startsWith("(");
     }
 
     private static boolean isEvalStringImplementationFrame(ArrayList<String> frame) {
