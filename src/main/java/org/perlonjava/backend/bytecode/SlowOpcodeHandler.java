@@ -1663,6 +1663,18 @@ public class SlowOpcodeHandler {
         return pc;
     }
 
+    /**
+     * The name RuntimeCode.apply reports to AUTOLOAD for an undefined CV:
+     * its reference origin, or else the glob it was created for.
+     */
+    private static String undefinedCodeCalleeName(RuntimeCode runtimeCode) {
+        if (runtimeCode.referenceOriginFqn != null) return runtimeCode.referenceOriginFqn;
+        if (runtimeCode.packageName != null && runtimeCode.subName != null) {
+            return runtimeCode.packageName + "::" + runtimeCode.subName;
+        }
+        return null;
+    }
+
     /** Resolve a direct named call, preserving its last visible CV after stash deletion. */
     public static int executeDirectNamedCodeCall(int[] bytecode, int pc,
                                                   RuntimeBase[] registers, InterpretedCode code) {
@@ -1692,8 +1704,7 @@ public class SlowOpcodeHandler {
                 && runtimeCode.compilerSupplier == null
                 && !runtimeCode.isBuiltin
                 && !runtimeCode.defined()
-                && runtimeCode.referenceOriginFqn != null
-                && !name.equals(runtimeCode.referenceOriginFqn)) {
+                && !name.equals(undefinedCodeCalleeName(runtimeCode))) {
             // An undefined CV may be reached through a typeglob alias. Keep
             // the call-site name on a private CV copy so AUTOLOAD sees the
             // invoked glob without changing the aliased target's identity.
