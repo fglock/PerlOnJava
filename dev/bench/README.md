@@ -45,7 +45,8 @@ perl  dev/bench/benchmark_closure.pl
 ## Compare PerlOnJava, Perl, and JRuby
 
 The three-engine comparison measures numeric accumulation, captured-closure
-calls, method dispatch, string operations, and regex matching. Each worker
+calls, method dispatch, string operations, regex matching, and eval-string
+compilation. Each eval operation compiles a distinct source string. Each worker
 checks a workload-specific checksum. A fresh process triplet runs each
 workload; engine order is randomized, and the engines run sequentially so they
 do not compete with one another for CPU. PerlOnJava and JRuby use the same
