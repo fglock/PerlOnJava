@@ -131,6 +131,7 @@ public class POSIX extends PerlModuleBase {
             module.registerMethod("_const_SEEK_SET", "const_SEEK_SET", null);
             module.registerMethod("_const_SEEK_CUR", "const_SEEK_CUR", null);
             module.registerMethod("_const_SEEK_END", "const_SEEK_END", null);
+            module.registerMethod("_const_LONG_MAX", "const_LONG_MAX", null);
 
             // Signal constants
             module.registerMethod("_const_SIGHUP", "const_SIGHUP", null);
@@ -1394,6 +1395,16 @@ public class POSIX extends PerlModuleBase {
 
     public static RuntimeList const_SEEK_END(RuntimeArray args, int ctx) {
         return new RuntimeScalar(2).getList();
+    }
+
+    // C long is 32 bits on Windows and follows the pointer width on Unix.
+    public static RuntimeList const_LONG_MAX(RuntimeArray args, int ctx) {
+        String os = System.getProperty("os.name", "").toLowerCase();
+        String model = System.getProperty("sun.arch.data.model", "64");
+        long max = os.startsWith("windows") || "32".equals(model)
+                ? Integer.MAX_VALUE
+                : Long.MAX_VALUE;
+        return new RuntimeScalar(max).getList();
     }
 
     // Fcntl constants
