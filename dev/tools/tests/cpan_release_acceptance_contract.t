@@ -19,8 +19,10 @@ close $tf;
 my @modules = qw(PPR Catalyst Mojolicious Image::ExifTool DateTime Template DBIx::Class Excel::Writer::XLSX);
 like($make_text, qr/^test-cpan-release-acceptance: build$/m,
     'release acceptance target builds before testing');
-like($make_text, qr/--modules "\$\$modules".*--jobs 8 --strict-exit/s,
-    'release target uses explicit modules, parallel test jobs, and strict exit');
+like($make_text, qr/--modules "\$\$modules".*--jobs 1 --strict-exit/s,
+    'release target uses explicit modules, one test worker, and strict exit');
+like($make_text, qr/one CPAN test worker at a time.*process slots/s,
+    'release target documents why tests run without parallel workers');
 like($make_text, qr/timeout 28800 perl dev\/tools\/cpan_random_tester\.pl/s,
     'release target has an outer timeout');
 for my $module (@modules) {

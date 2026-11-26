@@ -425,7 +425,9 @@ endif
 
 # Release acceptance gate. Build the development shadow JAR before invoking
 # jcpan, then keep the CPAN run sequential so no test process shares a JAR
-# while it is being written. The tester writes per-target diagnostics under
+# while it is being written. Run one CPAN test worker at a time: Mojolicious
+# includes a fork assertion, and parallel test workers can exhaust the shared
+# host's process slots. The tester writes per-target diagnostics under
 # /tmp/cpan_random_logs and this target retains the complete gate transcript.
 test-cpan-release-acceptance: build
 	@mkdir -p build/reports
@@ -435,7 +437,7 @@ test-cpan-release-acceptance: build
 	echo "Selected modules: $$modules" > "$$log"; \
 	echo "Commit: $$(git rev-parse --short HEAD)" >> "$$log"; \
 	timeout 28800 perl dev/tools/cpan_random_tester.pl \
-		--modules "$$modules" --jobs 8 --strict-exit \
+		--modules "$$modules" --jobs 1 --strict-exit \
 		--timeout 2400 --activity-grace 600 --max-runtime 5400 \
 		--perl-oracle never >> "$$log" 2>&1; \
 	status=$$?; cat "$$log"; exit $$status
