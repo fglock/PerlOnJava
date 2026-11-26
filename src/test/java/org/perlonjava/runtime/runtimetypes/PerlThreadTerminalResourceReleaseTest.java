@@ -48,4 +48,25 @@ class PerlThreadTerminalResourceReleaseTest {
             parent.close();
         }
     }
+
+    @Test
+    void detachBetweenFinishAndCompletionReleasesChildRuntime() throws Exception {
+        PerlRuntime parent = new PerlRuntime().initialize();
+        try (PerlRuntime.Binding ignored = parent.bind()) {
+            PerlThreadControlBlock thread = PerlThreadControlBlock.create(parent,
+                    child -> new RuntimeScalar(1));
+            // Detach after the child records its terminal state but before it
+            // publishes completion: detach() sees an unfinished thread, so the
+            // child must perform the release.
+            thread.beforeTerminalHandoff = thread::detach;
+            thread.start();
+            thread.platformThread().join(TimeUnit.SECONDS.toMillis(5));
+
+            assertFalse(thread.platformThread().isAlive());
+            assertNull(thread.childRuntime());
+            assertEquals(PerlThreadControlBlock.State.DETACHED, thread.state());
+        } finally {
+            parent.close();
+        }
+    }
 }

@@ -39,6 +39,8 @@ public final class PerlThreadControlBlock {
     private volatile Throwable error;
     private volatile boolean detached;
     private Thread platformThread;
+    /** Test seam: runs on the child thread after its terminal state is recorded. */
+    volatile Runnable beforeTerminalHandoff;
 
     private PerlThreadControlBlock(PerlRuntime parent, EntryPoint entryPoint) {
         Objects.requireNonNull(parent, "parent");
@@ -248,8 +250,19 @@ public final class PerlThreadControlBlock {
         } catch (Throwable failure) {
             finish(State.FAILED, failure);
         } finally {
-            finished.countDown();
-            if (detached) {
+            Runnable hook = beforeTerminalHandoff;
+            if (hook != null) hook.run();
+            // detach() decides under this lock whether the thread has already
+            // finished. Publishing completion and reading the detached flag
+            // under the same lock makes exactly one side release the
+            // terminal resources, whichever order the two threads take.
+            boolean releaseHere;
+            synchronized (this) {
+                finished.countDown();
+                releaseHere = detached;
+                if (releaseHere) state = State.DETACHED;
+            }
+            if (releaseHere) {
                 reportAbnormalTermination();
                 registry.remove(this);
                 releaseTerminalResources();
