@@ -27,9 +27,9 @@ index.
 | Item | Value |
 |---|---|
 | Local branch | `wip/issue2043-pr1938-20261125`, tracking `origin/wip/alias-cell-ownership-20261030-185849` (the PR head branch) |
-| Gated commit | `544f830ada`: two master merges (`4e2c8a471e`, `513d00c0fa`) and the fixes below on top of PR head `7288fb4faf`; not yet pushed |
-| Full gate | `nice -n 19 make` on `544f830ada`: `BUILD SUCCESSFUL` in 7m24, exit 0 (`/tmp/issue2043-final-make3.log`). Mergeable with `origin/master` `859ab46dde` |
-| Next step | Push without force, confirm PR #1938 is open and mergeable, update its Validation section, then maintainer review |
+| Gated commit | `6e0d709701`: the fixes below and two master merges (`4e2c8a471e`, `513d00c0fa`) on top of `7288fb4faf`. PR #1938 is at `f1b900b129`; `6e0d709701` adds only the literal-token fast path and is not yet pushed |
+| Full gate | `nice -n 19 make` on `6e0d709701`: `BUILD SUCCESSFUL` in 8m08, exit 0 (`/tmp/issue2043-final-make4.log`); earlier `544f830ada` passed in 7m24. Mergeable with `origin/master` `859ab46dde` |
+| Next step | Push `6e0d709701` and this record, rerun hosted CI (the `f1b900b129` Ubuntu run timed out a 10-second child process in `zz_perlonjava_process.t` during a 44-minute run), then maintainer review |
 
 ### Delivered in this batch
 
@@ -41,6 +41,7 @@ index.
 | `42bd3500da` | A counted release on a referent reached through an active argument alias completes its count transition at once; only the zero-count lifecycle decision waits for the frame. Fixes `op/inccode.t` test 60, which was the first `my (undef, ...) = @_` call in the file, not an `@INC` hook leak | `list_assign_undef_target_argument_refcount.t`; fails on PR head |
 | `219240d2a6` | Interpreter direct calls of an undefined CV through a glob alias compare the call site with the name `apply` reports, so `AUTOLOAD` sees the alias | `autoload_named_glob_alias_name.t` |
 | `1d41d3f85e` | `PerlThreadControlBlock` hands terminal release to exactly one of `detach()` and the finishing child. Pre-existing on master; found as an intermittent gate failure | JUnit `detachBetweenFinishAndCompletionReleasesChildRuntime`; scratch harness shows the leak before the fix (`/tmp/issue2043-detach-race-unfixed.log`) |
+| `6e0d709701` | A lifecycle-only token on an aggregate that has gained a counted owner only completes, and literal entries carry no owner scalar. Restores the cost of a literal-heavy loop (2 million stored `[..]`/`{..}`) to the level before the literal mortal; it had been about 10% slower | Interleaved timings in the commit message; lifetime probes, focused matrix, and `unit/refcount/` rerun on the change |
 
 The `MortalList.pushMark()` wrapper around `invokeIncHook`, the
 `UNTRACKED_REFERENCE` orphaning hook in `PerlOwnerSlot`, and a brace-only
@@ -181,16 +182,21 @@ are explicit slots.
 
 ## Acceptance evidence
 
-**CPAN, exact PR head `ee827a2ad5` (2026-11-24).** Excel::Writer::XLSX
-(1,263 files / 5,189 tests), PPR (1,255), Image::ExifTool with
-File::RandomAccess (113 files / 600), DateTime (3,592), and Template Toolkit
-(121 files / 3,180) pass. Three failures are classified outside this work:
+**CPAN, `f1b900b129` (2026-11-26).** `make test-cpan-release-acceptance`
+exited 2 (`/tmp/issue2043-acceptance-make.log`, per-target logs in
+`/tmp/cpan_random_logs/20261126-145614-6579/`). PPR (1,255 tests), DateTime
+(3,592), Excel::Writer::XLSX, Template Toolkit, and Image::ExifTool pass. Each
+failure was rerun against master and an earlier build:
 
-| Target | Failure | Issue |
+| Target | Failure | Classification |
 |---|---|---|
-| DBIx::Class | 1 of 43,020: `t/storage/txn.t` caller source line (expected 451, got 448 and 447); reproduces on baseline `278c12be27` | [#2170](https://github.com/fglock/PerlOnJava/issues/2170) |
-| Catalyst | 2 of 3,477 parser assertions; reproduces on master `1ee4ff572d` | [#2168](https://github.com/fglock/PerlOnJava/issues/2168) |
-| Mojolicious | 1 of 3,735: `t/mojo/asset.t` cannot fork under host pressure; waived by the maintainer | [#2169](https://github.com/fglock/PerlOnJava/issues/2169) |
+| Catalyst | 24 of 3,820: `t/arg_constraints.t` 21 and `t/query_constraints.t` 3 return `Bad Request` for Type::Tiny argument constraints | Master regression: first bad `a4ee1c0c99` (#2176), parent `c9f4de5f3b` passes 18/18; identical on master `859ab46dde` |
+| Mojolicious | `t/mojo/template.t` 24 of 226 lose template error line and context | Master regression: first bad `e75f4d39d9` (#2187), parent `357bccf2c9` passes 226/226; identical on master |
+| Mojolicious | `t/mojo/asset.t` cannot fork | Waived by the maintainer, [#2169](https://github.com/fglock/PerlOnJava/issues/2169) |
+| DBIx::Class | 1 of 43,020: `t/storage/txn.t` test 89 reports the opening lines (448, 447) of a multi-line nested `txn_do` call where Perl reports the closing line (451) | Pre-existing `caller` line gap. Master passes this file, but reports the same opening lines when the block runs on its own (`/tmp/issue2043-txn-min3.pl`), and a plain multi-line call with an anonymous sub argument gives opening lines on master and this branch where Perl gives closing lines (`/tmp/issue2043-callerline3.pl`). [#2170](https://github.com/fglock/PerlOnJava/issues/2170) is closed; this needs a follow-up |
+
+The earlier run on `ee827a2ad5` (2026-11-24) passed the same five targets and
+had the same `txn.t` failure, then attributed to #2170.
 
 **DBIx::Class leak coverage.** `diamond_prefetch_cursor_leak.t`,
 `diamond_prefetch_cursor_leak_permutations.t`, and
