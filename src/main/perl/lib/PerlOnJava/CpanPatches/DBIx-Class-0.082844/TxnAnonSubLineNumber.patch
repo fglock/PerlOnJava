@@ -1,0 +1,18 @@
+--- t/storage/txn.t.orig
++++ t/storage/txn.t
+@@ -442,7 +442,14 @@
+   # FIXME - investigate what confuses the regex engine below
+ 
+   # do not reformat - line-num part of the test
+-  my $ln = __LINE__ + 6;
++  # Perl 5.45.4 (GH #24396) keeps the line of a statement containing an
++  # anonymous sub, so the inner txn_do reports its opening line. Earlier
++  # perls report the line where that call ends. PerlOnJava follows 5.45.4.
++  my $ln = __LINE__ + (
++    ( "$]" >= 5.045004
++      or ($ENV{PERLONJAVA_EXECUTABLE} || $^X || '') =~ /jperl/i
++    ) ? 7 : 10
++  );
+   throws_ok {
+     $s->txn_do( sub {
+       $s->txn_do( sub {
