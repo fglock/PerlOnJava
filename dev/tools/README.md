@@ -153,6 +153,15 @@ This workflow is separate from
 `dev/import-perl5/` syncing, the shipped `jcpan` distroprefs and patches, and
 `make test-bundled-modules`.
 
+## CPAN release acceptance
+
+`make test-cpan-release-acceptance` runs the selected acceptance distributions
+sequentially with one test worker. It records the host's configured process
+limits and samples total and current-user process counts every 10 seconds while
+each distribution runs. The gate transcript is saved at
+`build/reports/cpan-release-acceptance.log` to help distinguish a test failure
+from host process exhaustion in fork-based tests such as Mojolicious.
+
 ## Adding New Tools
 
 When adding new development tools:

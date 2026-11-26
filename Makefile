@@ -28,6 +28,7 @@ THREAD_TOOLING_TESTS := \
 
 CPAN_TESTER_TESTS := \
 	dev/tools/tests/cpan_import_sync.t \
+	dev/tools/tests/cpan_release_acceptance_contract.t \
 	dev/tools/tests/cpan_random_tester_parser.t \
 	dev/tools/tests/cpan_random_tester_perl_oracle.t \
 	dev/tools/tests/cpan_random_tester_timeout.t
@@ -449,8 +450,9 @@ endif
 # jcpan, then keep the CPAN run sequential so no test process shares a JAR
 # while it is being written. Run one CPAN test worker at a time: Mojolicious
 # includes a fork assertion, and parallel test workers can exhaust the shared
-# host's process slots. The tester writes per-target diagnostics under
-# /tmp/cpan_random_logs and this target retains the complete gate transcript.
+# host's process slots. Capture host process counts before, during, and after
+# each target so capacity pressure is visible in the retained gate transcript.
+# The tester writes per-target diagnostics under /tmp/cpan_random_logs.
 test-cpan-release-acceptance: build
 	@mkdir -p build/reports
 	@log="build/reports/cpan-release-acceptance.log"; \
@@ -458,8 +460,17 @@ test-cpan-release-acceptance: build
 	echo "CPAN release acceptance log: $$log"; \
 	echo "Selected modules: $$modules" > "$$log"; \
 	echo "Commit: $$(git rev-parse --short HEAD)" >> "$$log"; \
+	echo "Shell process limit (ulimit -u): $$(ulimit -u)" >> "$$log"; \
+	if command -v sysctl >/dev/null 2>&1; then \
+		sysctl kern.maxproc kern.maxprocperuid 2>/dev/null >> "$$log" || true; \
+	fi; \
+	if [ -r /sys/fs/cgroup/pids.current ] && [ -r /sys/fs/cgroup/pids.max ]; then \
+		echo "cgroup pids.current: $$(cat /sys/fs/cgroup/pids.current)" >> "$$log"; \
+		echo "cgroup pids.max: $$(cat /sys/fs/cgroup/pids.max)" >> "$$log"; \
+	fi; \
 	timeout 28800 perl dev/tools/cpan_random_tester.pl \
 		--modules "$$modules" --jobs 1 --strict-exit \
+		--process-snapshots --progress-interval 10 \
 		--timeout 2400 --activity-grace 600 --max-runtime 5400 \
 		--perl-oracle never >> "$$log" 2>&1; \
 	status=$$?; cat "$$log"; exit $$status
