@@ -264,7 +264,19 @@ check-bundled-modules:
 	perl dev/tools/cpan_import_sync.pl --check
 
 update-bundled-modules:
-	perl dev/tools/cpan_import_sync.pl --update
+	@set -e; \
+	if [ "$(CHECK)" = "1" ] && [ "$(UPDATE)" = "1" ]; then \
+		echo "CHECK=1 and UPDATE=1 are mutually exclusive" >&2; exit 2; \
+	fi; \
+	selection=; \
+	if [ -n "$(MODULES)" ]; then selection="--only=$(MODULES)"; fi; \
+	if [ "$(CHECK)" = "1" ]; then \
+		perl dev/tools/cpan_import_sync.pl --check $$selection; \
+	elif [ "$(UPDATE)" = "1" ]; then \
+		perl dev/tools/cpan_import_sync.pl --apply $$selection; \
+	else \
+		perl dev/tools/cpan_import_sync.pl --update $$selection; \
+	fi
 
 # Unit tests using bytecode interpreter backend (feature parity check)
 test-interpreter:

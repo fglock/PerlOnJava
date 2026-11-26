@@ -39,6 +39,15 @@ write_file($bzip_perl_path,
     "package Compress::Raw::Bzip2; our \$VERSION = '2.224'; 1;\n");
 write_file($bzip_java_path, 'static final String XS_VERSION = "2.224";' . "\n");
 write_file($catalog_path, 'commons-compress = "1.28.0"' . "\n");
+write_json(File::Spec->catfile($root, 'src', 'main', 'perl', 'lib', 'PerlOnJava',
+    'providers.json'), {
+        schema_version => 1,
+        providers => [{
+            module => 'DBI', version => '1.643', distribution => 'DBI',
+            provider => 'bundled-perl', shadow_policy => 'forbidden',
+            test_strategy => 'bundled-provider',
+        }],
+    });
 
 my $consumer = {
     distribution => 'MooseX-LocalAttribute',
@@ -167,6 +176,14 @@ isnt($status, 0, 'consumer is rejected when it needs newer Compress::Raw::Zlib')
 like($output, qr/Compress::Raw::Zlib >= 2\.225.*2\.224/s,
     'compression-provider diagnostic uses the effective bundled Perl version');
 
+write_candidate('1.645', 0, 'DBI');
+my $runtime_provider_stage = File::Spec->catdir($stage_root, 'runtime-provider-manifest');
+($status, $output) = run_sync('--update', '--module', 'MooseX-LocalAttribute',
+    '--fixture-dir', $fixture, '--stage-dir', $runtime_provider_stage);
+isnt($status, 0, 'candidate is checked against bundled providers outside the update registry');
+like($output, qr/DBI >= 1\.645.*1\.643/s,
+    'dependency diagnostic uses the runtime provider-manifest version');
+
 my $overlay = File::Spec->catdir($temporary, 'dependency-blib', 'lib');
 make_path(File::Spec->catdir($overlay, 'Object'));
 write_file(File::Spec->catfile($overlay, 'Object', 'Pad.pm'),
@@ -196,6 +213,28 @@ ok(-f File::Spec->catfile($candidate, 'candidate', 'src', 'test', 'resources', '
         'MooseX-LocalAttribute', 't', 'upstream.t'),
     'upstream test mappings are prepared beneath the staged candidate');
 ok(-f $provider_path, 'staging does not overwrite a bundled provider');
+like(read_file(File::Spec->catfile($candidate, 'PERLONJAVA-PORTING.txt')),
+    qr/All upstream \.t files are selected/,
+    'porting report records that all upstream tests are mapped');
+
+my $test_mapping = $consumer->{files}[1];
+$consumer->{files}[1] = {
+    source => 't/upstream.t',
+    target => 'src/test/resources/module/MooseX-LocalAttribute/t/upstream.t',
+};
+write_json($registry_path,
+    { schema_version => 1, modules => [$object_pad, $zlib, $bzip, $consumer] });
+my $selective_stage = File::Spec->catdir($stage_root, 'selective-tests');
+($status, $output) = run_sync('--update', '--module', 'MooseX-LocalAttribute',
+    '--overlay-dir', $overlay, '--fixture-dir', $fixture, '--stage-dir', $selective_stage);
+is($status, 0, 'partial test mapping still stages a reviewable candidate');
+my $selective_report = read_file(File::Spec->catfile($selective_stage,
+    'MooseX-LocalAttribute-1.0', 'PERLONJAVA-PORTING.txt'));
+like($selective_report, qr/Upstream tests not selected.*t\/new-upstream\.t/s,
+    'porting report identifies upstream tests not selected by registry mappings');
+$consumer->{files}[1] = $test_mapping;
+write_json($registry_path,
+    { schema_version => 1, modules => [$object_pad, $zlib, $bzip, $consumer] });
 
 write_candidate('0.800', 0);
 my $release_path = File::Spec->catfile($fixture, 'release', 'MooseX-LocalAttribute.json');
@@ -281,7 +320,17 @@ write_file(File::Spec->catfile($apply_root, 'src', 'main', 'perl', 'lib', 'Moose
     'LocalAttribute.pm'), "package MooseX::LocalAttribute; our \$VERSION = '0.8'; 1;\n");
 write_file(File::Spec->catfile($apply_root, 'src', 'test', 'resources', 'module',
     'MooseX-LocalAttribute', 't', 'obsolete.t'), "die 'stale fixture should be removed';\n");
+write_file(File::Spec->catfile($apply_root, 'jperl'), <<'JPERL');
+#!/bin/sh
+if [ "${FAKE_JPERL_FAIL:-}" = "1" ]; then
+  echo "fixture jperl failure" >&2
+  exit 9
+fi
+if [ -n "${FAKE_JPERL_LOG:-}" ]; then printf '%s\n' "$*" >> "$FAKE_JPERL_LOG"; fi
+printf '%s\n' '1..1' 'ok 1 - staged test was passed to jperl'
+JPERL
 write_file(File::Spec->catfile($apply_root, 'Makefile'), 'all:' . "\n");
+chmod 0755, File::Spec->catfile($apply_root, 'jperl');
 system('git', '-C', $apply_root, 'init', '--quiet') == 0 or die "cannot initialize apply fixture repository\n";
 system('git', '-C', $apply_root, 'config', 'user.name', 'CPAN updater test') == 0
     or die "cannot configure fixture repository identity\n";
@@ -294,9 +343,15 @@ system('git', '-C', $apply_root, 'commit', '--quiet', '-m', 'fixture') == 0
 my $fake_bin = File::Spec->catdir($temporary, 'fake-bin');
 make_path($fake_bin);
 write_file(File::Spec->catfile($fake_bin, 'nice'), "#!/bin/sh\nshift 2\nexec \"\$@\"\n");
+write_file(File::Spec->catfile($fake_bin, 'patch'), <<'PATCH');
+#!/bin/sh
+if [ "${FAKE_PATCH_FAIL:-}" = "1" ]; then exit 9; fi
+exec /usr/bin/patch "$@"
+PATCH
 write_file(File::Spec->catfile($fake_bin, 'make'), <<'MAKE');
 #!/bin/sh
 if [ "$1" = "-C" ]; then cd "$2" || exit 1; shift 2; fi
+if [ "$1" = "test-bundled-modules" ] && [ "${FAKE_BUNDLED_TEST_FAIL:-}" = "1" ]; then exit 10; fi
 if [ "${FAKE_MAKE_FAIL:-}" = "1" ]; then exit 9; fi
 if [ "$1" = "test-bundled-modules" ]; then
   mkdir -p build/test-results/testModule
@@ -304,13 +359,14 @@ if [ "$1" = "test-bundled-modules" ]; then
     printf '%s\n' '<testsuite/>' \
       > build/test-results/testModule/TEST-org.perlonjava.ModuleTestExecutionTest.xml
   else
-    printf '%s\n' '<testsuite><testcase name="module/MooseX-LocalAttribute/t/upstream.t"/></testsuite>' \
+    printf '%s\n' '<testsuite><testcase name="module/MooseX-LocalAttribute/t/upstream.t"/><testcase name="module/MooseX-LocalAttribute/t/new-upstream.t"/></testsuite>' \
     > build/test-results/testModule/TEST-org.perlonjava.ModuleTestExecutionTest.xml
   fi
 fi
 exit 0
 MAKE
-chmod 0755, File::Spec->catfile($fake_bin, 'nice'), File::Spec->catfile($fake_bin, 'make');
+chmod 0755, File::Spec->catfile($fake_bin, 'nice'),
+    File::Spec->catfile($fake_bin, 'patch'), File::Spec->catfile($fake_bin, 'make');
 
 my $original_root = $root;
 my $original_registry = $registry_path;
@@ -319,16 +375,25 @@ $registry_path = $apply_registry;
 write_candidate('0.800', 0);
 my $apply_stage = File::Spec->catdir($stage_root, 'apply-success');
 local $ENV{PATH} = $fake_bin . $Config::Config{path_sep} . $ENV{PATH};
-($status, $output) = run_sync('--apply', '--module', 'MooseX-LocalAttribute',
-    '--fixture-dir', $fixture, '--stage-dir', $apply_stage);
+my $jperl_log = File::Spec->catfile($temporary, 'staged-jperl.log');
+{
+    local $ENV{FAKE_JPERL_LOG} = $jperl_log;
+    ($status, $output) = run_sync('--apply', '--module', 'MooseX-LocalAttribute',
+        '--fixture-dir', $fixture, '--stage-dir', $apply_stage);
+}
 diag($output) if $status;
 is($status, 0, 'apply validates the staged update in a temporary worktree');
+like(read_file($jperl_log), qr/(?:upstream\.t.*new-upstream\.t|new-upstream\.t.*upstream\.t)/s,
+    'jperl runs both staged upstream tests before worktree application');
 ok(-f File::Spec->catfile($apply_root, 'src', 'main', 'perl', 'lib', 'MooseX',
         'LocalAttribute.pm'),
     'validated full-import source is applied to the clean checkout');
 ok(-f File::Spec->catfile($apply_root, 'src', 'test', 'resources', 'module',
         'MooseX-LocalAttribute', 't', 'upstream.t'),
     'validated upstream tests are applied with their source');
+ok(-f File::Spec->catfile($apply_root, 'src', 'test', 'resources', 'module',
+        'MooseX-LocalAttribute', 't', 'new-upstream.t'),
+    'newly added upstream tests are included by the directory mapping');
 like(read_file(File::Spec->catfile($apply_root, 'src', 'main', 'perl', 'lib', 'MooseX',
         'LocalAttribute.pm')), qr/\$VERSION\s*=\s*'1\.0'/,
     'full-import provider version target follows the selected release');
@@ -365,6 +430,71 @@ is($failure_status, '', 'failed validation leaves no tracked checkout changes');
 
 {
     local $ENV{FAKE_MAKE_FAIL} = 0;
+    local $ENV{FAKE_UPSTREAM_FAIL} = 1;
+    ($status, $output) = run_sync('--apply', '--module', 'MooseX-LocalAttribute',
+        '--fixture-dir', $fixture, '--stage-dir', File::Spec->catdir($stage_root, 'perl-failure'));
+}
+isnt($status, 0, 'failed system Perl tests reject apply');
+like($output, qr/system Perl tests failed for MooseX-LocalAttribute/,
+    'system Perl failure is identified');
+is(`git -C "$failure_root" status --porcelain`, '',
+    'system Perl failure leaves the checkout unchanged');
+
+{
+    local $ENV{FAKE_MAKE_FAIL} = 0;
+    local $ENV{FAKE_JPERL_FAIL} = 1;
+    ($status, $output) = run_sync('--apply', '--module', 'MooseX-LocalAttribute',
+        '--fixture-dir', $fixture, '--stage-dir', File::Spec->catdir($stage_root, 'jperl-failure'));
+}
+isnt($status, 0, 'failed staged jperl tests reject apply');
+like($output, qr/jperl tests failed for MooseX-LocalAttribute/,
+    'staged jperl failure is identified');
+is(`git -C "$failure_root" status --porcelain`, '',
+    'staged jperl failure leaves the checkout unchanged');
+
+{
+    local $ENV{FAKE_MAKE_FAIL} = 0;
+    local $ENV{FAKE_BUNDLED_TEST_FAIL} = 1;
+    ($status, $output) = run_sync('--apply', '--module', 'MooseX-LocalAttribute',
+        '--fixture-dir', $fixture, '--stage-dir', File::Spec->catdir($stage_root, 'bundled-failure'));
+}
+isnt($status, 0, 'failed bundled-module tests reject apply');
+like($output, qr/make test-bundled-modules failed in validation worktree/,
+    'bundled-module test failure is identified');
+is(`git -C "$failure_root" status --porcelain`, '',
+    'bundled-module test failure leaves the checkout unchanged');
+
+{
+    local $ENV{FAKE_MAKE_FAIL} = 0;
+    local $ENV{FAKE_PATCH_FAIL} = 1;
+    ($status, $output) = run_sync('--apply', '--module', 'MooseX-LocalAttribute',
+        '--fixture-dir', $fixture, '--stage-dir', File::Spec->catdir($stage_root, 'patch-failure'));
+}
+isnt($status, 0, 'patch failure rejects apply');
+like($output, qr/patch .*failed for MooseX-LocalAttribute/,
+    'patch failure is identified');
+is(`git -C "$failure_root" status --porcelain`, '',
+    'patch failure leaves the checkout unchanged');
+
+my $download_fixture = File::Spec->catdir($temporary, 'download-failure');
+write_json(File::Spec->catfile($download_fixture, 'release', 'MooseX-LocalAttribute.json'), {
+    name => 'MooseX-LocalAttribute', version => '1.0', maturity => 'released',
+    download_url => 'file:///no-such-cpan-archive.tar.gz', checksum_sha256 => '0' x 64,
+});
+{
+    local $ENV{FAKE_MAKE_FAIL} = 0;
+    ($status, $output) = run_sync('--apply', '--module', 'MooseX-LocalAttribute',
+        '--fixture-dir', $download_fixture,
+        '--stage-dir', File::Spec->catdir($stage_root, 'download-failure'));
+}
+isnt($status, 0, 'download failure rejects apply');
+like($output, qr/release download URL is missing/,
+    'download failure is identified before network access');
+is(`git -C "$failure_root" status --porcelain`, '',
+    'download failure leaves the checkout unchanged');
+
+{
+    local $ENV{FAKE_MAKE_FAIL} = 0;
     local $ENV{FAKE_TEST_UNDISCOVERED} = 1;
     ($status, $output) = run_sync('--apply', '--module', 'MooseX-LocalAttribute',
         '--fixture-dir', $fixture, '--stage-dir', File::Spec->catdir($stage_root, 'audit-failure'));
@@ -396,7 +526,11 @@ sub write_candidate {
     $archive->add_data("$dist-$version/lib/MooseX/LocalAttribute.pm",
         "package MooseX::LocalAttribute; our \$VERSION = '0.8'; 1;\n", { mode => 0644 });
     $archive->add_data("$dist-$version/t/upstream.t",
-        "print \"1..1\\nok 1 - fixture upstream test\\n\";\n", { mode => 0644 });
+        "die 'fixture upstream failure' if \$ENV{FAKE_UPSTREAM_FAIL}; "
+        . "print \"1..1\\nok 1 - fixture upstream test\\n\";\n", { mode => 0644 });
+    $archive->add_data("$dist-$version/t/new-upstream.t",
+        "die 'fixture upstream failure' if \$ENV{FAKE_UPSTREAM_FAIL}; "
+        . "print \"1..1\\nok 1 - newly added fixture test\\n\";\n", { mode => 0644 });
     $archive->add_data('../../escape.txt', 'bad', { mode => 0644 }) if $unsafe;
     my $archive_path = File::Spec->catfile($fixture, 'archive', "$dist-$version.tar.gz");
     $archive->write($archive_path, Archive::Tar::COMPRESS_GZIP())

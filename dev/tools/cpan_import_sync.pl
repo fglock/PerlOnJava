@@ -11,6 +11,7 @@ use File::Find qw(find);
 use File::Path qw(make_path remove_tree);
 use File::Spec;
 use File::Temp qw(tempdir);
+use FindBin qw($RealBin);
 use Getopt::Long qw(GetOptions);
 use HTTP::Tiny;
 use JSON::PP qw(decode_json encode_json);
@@ -55,7 +56,25 @@ die "Unsupported CPAN import registry schema\n"
         && ($registry->{schema_version} || 0) == 1
         && ref($registry->{modules}) eq 'ARRAY';
 
-my (%module_by_name, %distribution_by_name);
+my (%module_by_name, %runtime_provider_by_module, %distribution_by_name);
+my $runtime_provider_file = absolute_from_root(
+    'src/main/perl/lib/PerlOnJava/providers.json');
+if (-f $runtime_provider_file) {
+    my $runtime_manifest = read_json($runtime_provider_file);
+    die "invalid bundled-provider manifest at $runtime_provider_file\n"
+        unless ref($runtime_manifest) eq 'HASH'
+            && ($runtime_manifest->{schema_version} || 0) == 1
+            && ref($runtime_manifest->{providers}) eq 'ARRAY';
+    for my $provider (@{$runtime_manifest->{providers}}) {
+        die "invalid bundled provider entry in $runtime_provider_file\n"
+            unless ref($provider) eq 'HASH' && $provider->{module}
+                && defined($provider->{version});
+        die "duplicate bundled provider $provider->{module}\n"
+            if $runtime_provider_by_module{$provider->{module}};
+        $runtime_provider_by_module{$provider->{module}} = $provider;
+    }
+}
+
 for my $entry (@{$registry->{modules}}) {
     die "Invalid CPAN import registry entry\n"
         unless ref($entry) eq 'HASH'
@@ -77,15 +96,25 @@ for my $entry (@{$registry->{modules}}) {
     }
 }
 
+my @requested_modules = defined($option{module})
+    ? split(/,/, $option{module}, -1)
+    : ();
+die "--only values must be comma-separated distribution or module names\n"
+    if grep { !/\A[\w:\-]+\z/ } @requested_modules;
+my %requested_found;
 my @selected = grep {
-    !$option{module}
-        || $_->{distribution} eq $option{module}
-        || (defined($option{module})
-            && grep { defined($_->{module}) && $_->{module} eq $option{module} }
-                @{$_->{providers} || []})
+    my $entry = $_;
+    !@requested_modules || grep {
+        my $requested = $_;
+        my $matches = $entry->{distribution} eq $requested
+            || grep { defined($_->{module}) && $_->{module} eq $requested }
+                @{$entry->{providers} || []};
+        $requested_found{$requested} = 1 if $matches;
+        $matches;
+    } @requested_modules;
 } @{$registry->{modules}};
-die "No CPAN distribution registered for '$option{module}'\n"
-    if $option{module} && !@selected;
+my @unknown_modules = grep { !$requested_found{$_} } @requested_modules;
+die "No CPAN distribution registered for '$_'\n" for @unknown_modules;
 
 if ($option{check}) {
     my $errors = 0;
@@ -255,7 +284,7 @@ sub stage_release {
     apply_patches($entry, $destination);
     synchronize_candidate($entry, $release, $destination);
     write_file(File::Spec->catfile($destination, 'PERLONJAVA-PORTING.txt'),
-        porting_report($entry, $release));
+        porting_report($entry, $release, $destination));
     print "$entry->{distribution}: staged $release->{version} at $destination\n";
     return $destination;
 }
@@ -286,6 +315,7 @@ sub apply_releases {
         for my $pair (@staged) {
             apply_candidate($pair->[0], $pair->[1], $worktree);
             validate_upstream_tests($pair->[0], $pair->[1]);
+            validate_jperl_tests($pair->[0], $pair->[1]);
         }
         validate_worktree(\@staged, $worktree);
         apply_validated_diff($worktree);
@@ -387,6 +417,41 @@ sub validate_upstream_tests {
         my $status = system('timeout', '3600', 'prove', '-r', File::Spec->catdir($destination, 't'));
         die "system Perl tests failed for $entry->{distribution}\n" if $status != 0;
     }
+}
+
+sub validate_jperl_tests {
+    my ($entry, $destination) = @_;
+    my $tests = File::Spec->catdir($destination, 't');
+    return unless -d $tests;
+
+    my @lib_paths = grep { -d $_ } map {
+        File::Spec->catdir($destination, split m{/}, $_)
+    } qw(
+        candidate/src/main/perl/lib
+        candidate/lib
+        lib
+        t/lib
+        blib/lib
+        blib/arch
+    );
+    push @lib_paths, grep { length } split(
+        quotemeta($Config::Config{path_sep} || ':'),
+        $ENV{PERL5LIB} || '',
+    );
+    local $ENV{PERL5LIB} = join($Config::Config{path_sep} || ':', @lib_paths);
+
+    my $jperl = File::Spec->catfile($option{root}, 'jperl');
+    die "jperl is missing from validation root $option{root}\n" unless -x $jperl;
+    my $runner = File::Spec->catfile($RealBin, 'perl_test_runner.pl');
+    my $report = 'PERLONJAVA-JPERL-TESTS.json';
+    my $original_dir = getcwd();
+    chdir $destination or die "cannot enter staged distribution $destination: $!\n";
+    my $status = system('timeout', '3600', $^X, $runner,
+        '--jperl', $jperl, '--jobs', '1', '--timeout', '3600',
+        '--strict-exit', '--output', $report, 't');
+    chdir $original_dir or die "cannot return to $original_dir: $!\n";
+    die "jperl tests failed for $entry->{distribution} (status $status)\n"
+        if $status != 0;
 }
 
 sub validate_worktree {
@@ -540,7 +605,9 @@ sub check_candidate_prerequisites {
     return unless ref($meta->{prereqs}) eq 'HASH';
     my $requires = $meta->{prereqs}{runtime}{requires} || {};
     for my $module (sort keys %$requires) {
-        my $provider = $module_by_name{$module} or next;
+        my $provider = $module_by_name{$module}
+            || $runtime_provider_by_module{$module}
+            or next;
         my $actual = effective_provider_version($provider);
         next unless defined $actual;
         my $required = $requires->{$module};
@@ -561,7 +628,9 @@ sub effective_provider_version {
         my $version = read_module_version($overlay);
         return $version if defined $version;
     }
-    return read_declared_version($provider);
+    my $actual = read_declared_version($provider) if $provider->{path};
+    return $actual if defined $actual;
+    return $provider->{version};
 }
 
 sub read_module_version {
@@ -642,14 +711,74 @@ sub synchronize_candidate {
 }
 
 sub porting_report {
-    my ($entry, $release) = @_;
+    my ($entry, $release, $destination) = @_;
+    my @unselected_tests = unselected_upstream_tests($entry, $destination);
+    my $mapping_report = join('', map {
+        "  $_->{source} -> $_->{target}\n"
+    } @{$entry->{files} || []});
+    my $version_report = join('', map {
+        my $provider = $_;
+        my $current = read_declared_version($provider) // $provider->{version};
+        my $target = $provider->{same_version_as_upstream}
+            ? "set to $release->{version}"
+            : $entry->{port_mode} eq 'full-import'
+                && grep { $_->{target} eq $provider->{path} } @{$entry->{files} || []}
+                    ? 'refresh from mapped upstream source'
+                    : "preserve $current";
+        my $symbol = $provider->{symbol} ? " ($provider->{symbol})" : '';
+        "  $provider->{module} $provider->{path}$symbol: $current -> $target\n"
+    } @{$entry->{providers} || []});
+    my $test_report = @unselected_tests
+        ? join('', "Upstream tests not selected by the registry mappings:\n",
+            map { "  - $_\n" } @unselected_tests)
+        : "All upstream .t files are selected by the registry mappings.\n";
     return join '',
         "CPAN distribution: $entry->{distribution}\n",
         "Candidate release: $release->{version}\n",
         "Port mode: $entry->{port_mode}\n",
         "Policy: ", ($entry->{update_policy} || 'manual review'), "\n",
+        "Source and fixture mappings:\n", $mapping_report,
+        "Provider compatibility version fields:\n", $version_report,
+        $test_report,
         "This directory is staged outside the source tree. Review the diff and\n",
         "run the declared PerlOnJava and upstream tests before applying it.\n";
+}
+
+sub unselected_upstream_tests {
+    my ($entry, $destination) = @_;
+    my $upstream_root = File::Spec->catdir($destination, 't');
+    return () unless -d $upstream_root;
+
+    my @tests;
+    find({
+        wanted => sub {
+            push @tests, $File::Find::name
+                if -f $File::Find::name && $File::Find::name =~ /\.t\z/;
+        },
+        no_chdir => 1,
+    }, $upstream_root);
+
+    my %selected;
+    for my $mapping (@{$entry->{files} || []}) {
+        my $source = File::Spec->catfile($destination, split m{/}, $mapping->{source});
+        if (-d $source) {
+            find({
+                wanted => sub {
+                    return unless -f $File::Find::name && $File::Find::name =~ /\.t\z/;
+                    $selected{$File::Find::name} = 1;
+                },
+                no_chdir => 1,
+            }, $source);
+        } elsif (-f $source && $source =~ /\.t\z/) {
+            $selected{$source} = 1;
+        }
+    }
+
+    return sort map {
+        my $relative = File::Spec->abs2rel($_, $destination);
+        $relative =~ s{\\}{/}g;
+        $relative;
+    } grep { !$selected{$_} } @tests;
 }
 
 sub absolute_from_root {

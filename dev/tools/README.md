@@ -127,23 +127,28 @@ the local provider contracts without network access:
 make check-bundled-modules
 ```
 
-Stage the latest stable MetaCPAN releases outside the checkout for review:
+Stage stable releases outside the checkout by default. Use `CHECK=1` for the
+offline version-contract check, and `UPDATE=1` to apply candidates only after
+all validation gates pass. `MODULES` accepts a comma-separated list:
 
 ```bash
-make update-bundled-modules
-perl dev/tools/cpan_import_sync.pl --update --only Clone-PP
+make update-bundled-modules MODULES=Compress::Raw::Zlib,Compress::Raw::Bzip2
+make update-bundled-modules CHECK=1
+make update-bundled-modules UPDATE=1 MODULES=Clone-PP
 ```
 
 The tool verifies release identity, archive checksums, package metadata, and
 bundled runtime prerequisite versions before extraction. It writes a porting
 report with each staged candidate. Staging does not apply files to the source
-tree. Optional PerlOnJava patches are listed per distribution in the registry
+tree. The porting report lists compatibility version targets and upstream
+tests omitted by the declared mappings. Optional PerlOnJava patches are listed per distribution in the registry
 and stored under `dev/tools/cpan-import-patches/`; staging fails if a patch no
 longer applies. Directory mappings are refreshed exactly, including removal
 of files no longer present upstream. `--apply` requires a clean checkout,
-applies the candidate in a temporary worktree, runs system Perl tests, `make`,
-and `make test-bundled-modules`, then applies the validated diff to the
-checkout. `Configure.pl --upgrade-bundled` uses this validated apply path.
+applies the candidate in a temporary worktree, runs system Perl and staged
+`jperl` tests, `make`, and `make test-bundled-modules`, then applies the
+validated diff to the checkout. `Configure.pl --upgrade-bundled` uses this
+validated apply path.
 This workflow is separate from
 `dev/import-perl5/` syncing, the shipped `jcpan` distroprefs and patches, and
 `make test-bundled-modules`.
