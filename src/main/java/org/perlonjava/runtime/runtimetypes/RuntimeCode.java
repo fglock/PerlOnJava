@@ -7439,6 +7439,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             if (scalarContext) {
                 String pkg = locationFrameInfo.getFirst();
                 RuntimeCode reportedCode = activeCodeAtCallerFrame(trackedActiveCodeFrame);
+                if (isAnonymousCallerCode(reportedCode)
+                        && pkg.equals(reportedCode.packageName)) {
+                    String callSitePackage = getCallerPackageAtCallerFrame(trackedActiveCodeFrame);
+                    if (callSitePackage != null && !callSitePackage.isEmpty()) {
+                        pkg = callSitePackage;
+                    }
+                }
                 if (isEvalClosureSandboxPackage(pkg)) {
                     CallerStack.CallerInfo compileSite = CallerStack.peek(0);
                     if (compileSite != null && compileSite.packageName() != null
@@ -7462,6 +7469,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 String pkg = locationFrameInfo.get(0);
                 String callSitePackage = getCallerPackageAtCallerFrame(trackedActiveCodeFrame);
                 RuntimeCode reportedCode = activeCodeAtCallerFrame(trackedActiveCodeFrame);
+                if (isAnonymousCallerCode(reportedCode)
+                        && pkg.equals(reportedCode.packageName)
+                        && callSitePackage != null && !callSitePackage.isEmpty()) {
+                    pkg = callSitePackage;
+                }
                 if (isEvalClosureSandboxPackage(pkg)) {
                     CallerStack.CallerInfo compileSite = CallerStack.peek(0);
                     if (compileSite != null && compileSite.packageName() != null
@@ -8306,6 +8318,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             previous = active;
         }
         return null;
+    }
+
+    private static boolean isAnonymousCallerCode(RuntimeCode code) {
+        return code != null && (code.subName == null || code.subName.isEmpty()
+                || "__ANON__".equals(code.subName));
     }
 
     private static boolean isCarpStackActive() {
@@ -10381,11 +10398,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             throw new PerlCompilerException("Not a subroutine reference");
         }
 
-        // Handle GLOB type: \&{*glob} - get the code slot directly from the glob
+        // Handle glob values and references: \&{*glob} - get the code slot directly from the glob
         // Globs stringify with a "*" prefix (e.g., "*main::test_sub") which would
         // cause normalizeVariableName to look up the wrong name
-        if (runtimeScalar.type == RuntimeScalarType.GLOB) {
-            RuntimeGlob glob = (RuntimeGlob) runtimeScalar.value;
+        if ((runtimeScalar.type == RuntimeScalarType.GLOB
+                || runtimeScalar.type == RuntimeScalarType.GLOBREFERENCE)
+                && runtimeScalar.value instanceof RuntimeGlob glob) {
             RuntimeScalar savedCode = glob.getSavedCodeSlot();
             if (savedCode != null) {
                 return savedCode;

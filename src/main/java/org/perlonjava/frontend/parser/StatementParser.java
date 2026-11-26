@@ -1621,6 +1621,16 @@ public class StatementParser {
                     if (codeList.size() == 1) {
                         RuntimeScalar code = codeList.getFirst();
                         if (code.getBoolean()) {
+                            if (importMethod.equals("import")
+                                    && !GlobalVariable.existsGlobalCodeRef(packageName + "::import")
+                                    && code.value instanceof RuntimeCode importedCode
+                                    && importedCode.packageName != null
+                                    && !importedCode.packageName.isEmpty()
+                                    && !importedCode.packageName.equals(packageName)) {
+                                GlobalVariable.recordInheritedStashCodeAlias(
+                                        packageName + "::import",
+                                        importedCode.packageName + "::import");
+                            }
                             // call the method
                             if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Use call : " + importMethod + "(" + args + ")");
                             RuntimeArray importArgs = args.getArrayOfAlias();
