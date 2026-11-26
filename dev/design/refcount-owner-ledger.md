@@ -190,10 +190,10 @@ failure was rerun against master and an earlier build:
 
 | Target | Failure | Classification |
 |---|---|---|
-| Catalyst | 24 of 3,820: `t/arg_constraints.t` 21 and `t/query_constraints.t` 3 return `Bad Request` for Type::Tiny argument constraints | Master regression: first bad `a4ee1c0c99` (#2176), parent `c9f4de5f3b` passes 18/18; identical on master `859ab46dde` |
-| Mojolicious | `t/mojo/template.t` 24 of 226 lose template error line and context | Master regression: first bad `e75f4d39d9` (#2187), parent `357bccf2c9` passes 226/226; identical on master |
+| Catalyst | 24 of 3,820: `t/arg_constraints.t` 21 and `t/query_constraints.t` 3 return `Bad Request` for Type::Tiny argument constraints | Master regression: first bad `a4ee1c0c99` (#2176), parent `c9f4de5f3b` passes 18/18; identical on master `859ab46dde`; [#2194](https://github.com/fglock/PerlOnJava/issues/2194) |
+| Mojolicious | `t/mojo/template.t` 24 of 226 lose template error line and context | Master regression: first bad `e75f4d39d9` (#2187), parent `357bccf2c9` passes 226/226; identical on master; [#2195](https://github.com/fglock/PerlOnJava/issues/2195) |
 | Mojolicious | `t/mojo/asset.t` cannot fork | Waived by the maintainer, [#2169](https://github.com/fglock/PerlOnJava/issues/2169) |
-| DBIx::Class | 1 of 43,020: `t/storage/txn.t` test 89 reports the opening lines (448, 447) of a multi-line nested `txn_do` call where Perl reports the closing line (451) | Pre-existing `caller` line gap. Master passes this file, but reports the same opening lines when the block runs on its own (`/tmp/issue2043-txn-min3.pl`), and a plain multi-line call with an anonymous sub argument gives opening lines on master and this branch where Perl gives closing lines (`/tmp/issue2043-callerline3.pl`). [#2170](https://github.com/fglock/PerlOnJava/issues/2170) is closed; this needs a follow-up |
+| DBIx::Class | 1 of 43,020: `t/storage/txn.t` test 89 reports the opening lines (448, 447) of a multi-line nested `txn_do` call where Perl reports the closing line (451) | Pre-existing `caller` line gap. Master passes this file, but reports the same opening lines when the block runs on its own (`/tmp/issue2043-txn-min3.pl`), and a plain multi-line call with an anonymous sub argument gives opening lines on master and this branch where Perl gives closing lines (`/tmp/issue2043-callerline3.pl`). Tracked in [#2196](https://github.com/fglock/PerlOnJava/issues/2196); [#2170](https://github.com/fglock/PerlOnJava/issues/2170) is closed |
 
 The earlier run on `ee827a2ad5` (2026-11-24) passed the same five targets and
 had the same `txn.t` failure, then attributed to #2170.
