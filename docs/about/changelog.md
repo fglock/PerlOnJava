@@ -6,7 +6,7 @@ priorities and future plans.
 
 ## Work in progress
 
-- Preserve interpreter eval caller locations and runtime metadata for tracing and deferred Unicode properties (#2170, #2042, #2135, #2118).
+- Preserve interpreter eval caller locations and runtime metadata for tracing and deferred Unicode properties (#2042, #2135, #2118).
 - Fix CODE-slot lookup through glob references, inherited import stash visibility, false file-scope lexical-sub warnings, and caller package reporting in BEGIN closures (#2173, #2165, #2138, #2136, #2102, #2078).
 - Fix MakeMaker module lookup, script wrappers and v-string serialization; select the requested JSON XS-compatible backend; add Text::CSV::csv and XML::LibXML node API aliases; match version::qv stringification (#2175, #2164, #2153, #2140, #2116, #2114, #2157, #2126).
 - Parse lexical code attributes, MooseX role calls, legacy spaced `@_`, chained prototype calls, qualified class methods, indirect imports with slash arguments, trailing-text `__END__` markers, and the `socket` DSL term (#2172, #2168, #2161, #2154, #2158, #2139, #2137, #2127).
