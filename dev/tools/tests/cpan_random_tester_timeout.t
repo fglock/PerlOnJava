@@ -53,6 +53,8 @@ for my $name (qw(
 # the monitor's output pipe open exactly like CPAN.pm did in production.
 sub note_run_descendants { }
 sub command_label { return join ' ', @_ }
+sub print_progress_line { }
+sub host_process_capacity_snapshot { return 'total=fixture, uid=fixture'; }
 
 my $temporary = tempdir(CLEANUP => 1);
 my $pid_file = File::Spec->catfile($temporary, 'detached.pid');
@@ -99,6 +101,21 @@ chomp(my $detached_pid = <$pid_fh>);
 close $pid_fh;
 ok($detached_pid =~ /^\d+$/, 'detached child recorded its PID');
 ok(!kill(0, $detached_pid), 'detached pipe writer was killed at the hard cap');
+
+my $capacity_output = '';
+my $capacity_timed_out;
+$progress_interval = 1;
+{
+    local *STDOUT;
+    open STDOUT, '>', \$capacity_output
+        or die "cannot capture capacity-snapshot output: $!";
+    (undef, $capacity_timed_out) = run_with_timeout(
+        [$^X, '-e', 'select undef, undef, undef, 2'], 10, undef, 5, 1,
+    );
+}
+ok(!$capacity_timed_out, 'process-snapshot sampling does not time out a healthy target');
+like($capacity_output, qr/Host process snapshot during target: total=fixture, uid=fixture/,
+    'timeout monitor records process snapshots during a running target');
 
 # Ctrl-C is delivered to the supervisor, not the isolated command process
 # group. The supervisor must terminate and reap that process tree before it
