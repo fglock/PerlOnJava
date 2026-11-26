@@ -428,6 +428,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
     @Override
     public RuntimeList apply(RuntimeArray args, int callContext) {
         if (codeReferenceUndefined) {
+            if (hasDefinitionAfterUndef()) return super.apply(args, callContext);
             throw RuntimeCode.undefinedCodeReferenceException(this, null);
         }
         // Return cached constant value if this sub has been const-folded
@@ -533,6 +534,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
     @Override
     public RuntimeList apply(String subroutineName, RuntimeArray args, int callContext) {
         if (codeReferenceUndefined) {
+            if (hasDefinitionAfterUndef()) return super.apply(subroutineName, args, callContext);
             throw RuntimeCode.undefinedCodeReferenceException(this, subroutineName);
         }
         // Return cached constant value if this sub has been const-folded
@@ -614,7 +616,17 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
      */
     @Override
     public boolean defined() {
-        return !codeReferenceUndefined;
+        return !codeReferenceUndefined || hasDefinitionAfterUndef();
+    }
+
+    /**
+     * After `undef &$code`, Perl keeps the same CV and a later `sub NAME {...}`
+     * for a glob holding it defines that CV in place. The new body is
+     * installed in the RuntimeCode fields, not in this object's bytecode, so
+     * an undefined interpreted CV with such a body behaves as a RuntimeCode.
+     */
+    private boolean hasDefinitionAfterUndef() {
+        return codeReferenceUndefined && super.defined();
     }
 
     /**
