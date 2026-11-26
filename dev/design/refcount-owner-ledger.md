@@ -1,186 +1,535 @@
 # Perl-Exact Reference Ownership and Closure-Pad Lifetime
 
 Status: Active — 2026-11-26
-**Issue:** [#1132](https://github.com/fglock/PerlOnJava/issues/1132)  
-**Related architecture:**
-[Weaken & DESTROY](../architecture/weaken-destroy.md),
-[Refcount alignment plan](refcount_alignment_plan.md), and
-[Refcount alignment progress](refcount_alignment_progress.md)
+
+**Delivery issue:** [#2043](https://github.com/fglock/PerlOnJava/issues/2043)
+(origin [#1132](https://github.com/fglock/PerlOnJava/issues/1132), history in #1649).
+**Target PR:** [#1938](https://github.com/fglock/PerlOnJava/pull/1938).
+**Related:** [Weaken & DESTROY](../architecture/weaken-destroy.md),
+[Refcount alignment plan](refcount_alignment_plan.md),
+[Refcount alignment progress](refcount_alignment_progress.md).
 
 ## Objective
 
-Align PerlOnJava's observable reference counts, weak-reference lifetime, closure
-capture lifetime, cycles, and deterministic `DESTROY` behavior with system Perl.
-The implementation must distinguish real Perl ownership from JVM reachability
-and compiler-generated capture metadata.
+Align PerlOnJava's observable reference counts, weak-reference lifetime,
+closure capture lifetime, cycles, and deterministic `DESTROY` with system
+Perl, using explicit owner tokens instead of JVM reachability or
+selective-refcount heuristics.
 
-Issue #1132 established the owner-ledger work. Issue #2043 is the current
-delivery for removing lifecycle decisions based on memory sweeps; #1649 is its
-historical origin. The design replaces selective-refcount heuristics with
-explicit, auditable owner tokens.
+Issue #2043 adds one constraint: no lifecycle decision may depend on a memory
+scan. Reference counts, weak-observer clearing, and destruction timing must
+follow maintained owner-slot state. Do not add tree walks, snapshots, or
+proxy-list sweeps to fix a failure; fix the owner transition or maintain an
+index.
 
-## Current Status (2026-11-26 — regression continuation)
+## Current state (2026-11-26)
 
-**Delivery issue:** [#2043](https://github.com/PerlOnJava/issues/2043)
+| Item | Value |
+|---|---|
+| Local branch | `wip/issue2043-pr1938-20261125`, tracking `origin/wip/alias-cell-ownership-20261030-185849` (the PR head branch) |
+| Committed HEAD | `7288fb4faf`, equal to the PR head, so a plain `git push` fast-forwards |
+| PR #1938 | Open, hosted checks green on `7288fb4faf`, but **conflicting with `master`** (checked 2026-11-26 12:47) |
+| Master | `origin/master` is `357bccf2c9`, 10 commits ahead of the branch. Conflicts: `docs/about/changelog.md`, `ModuleOperators.java`, `GlobalVariable.java` |
+| Working tree | Uncommitted: 12 Java files, this document, and 6 new unit tests. Do not reset, stash, or discard. Backup: `/tmp/wip-unstaged-20261126-125432.patch` and `/tmp/wip-untracked-20261126-125432.tgz` |
+| Development JAR | `target/perlonjava-5.44.1.jar`, written 12:36, built from the current working tree |
+| Last full gate | `nice -n 19 make` on the working tree: exit 2 after 10m07, one failure (`array_last_index_anon_array_owner.t`). Log: `/tmp/issue2043-step3-owner-slot-step4-undefined-only-make.log` |
 
-**Target PR:** [#1938](https://github.com/PerlOnJava/pull/1938)
-**Goal:** deliver Perl-exact owner counts, weak-reference lifetime, and deterministic `DESTROY` behavior without memory-sweep lifecycle decisions. The earlier source candidate is `1d3e96f2a6`; it removed the recursive cleanup walker and one-level eligibility probes.
+### Focused test matrix
 
-The current local continuation is on branch `wip/issue2043-pr1938-20261125`. Implementation commit `9d22a6a6ce` is merged with current master `cfd34e3dd7` by `2edf51f698`. It gives eval-created anonymous CV templates explicit owner slots in both eval interpreter paths, releases their direct-call owners at eval completion or CV teardown, removes the global-destruction cleanup-target pre-scan, and indexes every owner-slot kind count on add, release, and reclassification. `ownerSlotCount` now reads the maintained count instead of walking the ledger. The latest change replaces `RuntimeHash.undefine()`'s O(N) destroyability probe with a direct-value identity index maintained by hash mutations, scalar replacement, and blessing; aliases and wrapped shared maps choose progressive cleanup conservatively without scanning values. `RuntimeHashDestroyableValueIndexTest` and `OwnerSlotKindCountIndexTest` pass in the full `nice -n 19 timeout 1800 make` gate on merge commit `2edf51f698` (8m18, `/tmp/issue2043-post-merge-make.log`). The `undef_hash_owner_index.t` regression passes system Perl, JVM, and interpreter; `tied_container_undef.t` passes on both PerlOnJava backends. `nice -n 19 make check-links` passes with 1,426 links and no errors. Full focused output is in `/tmp/issue2043-undef-hash-index-post-merge-{jvm,interpreter}.log` and `/tmp/issue2043-tied-container-undef-post-merge-{jvm,interpreter}.log`.
+Each cell is JVM / interpreter. "master" is the JAR built from `cfd34e3dd7`
+(`/private/tmp/issue2043-master-scan-check`), "HEAD" the JAR built from
+`2edf51f698` (`/private/tmp/issue2043-pre-scan-merge`), "WIP" the current
+working tree. The master and HEAD columns are in `/tmp/issue2043-baseline/`;
+the WIP column was rerun at 12:50 and is in `/tmp/issue2043-validate/`. The six
+tests marked *new* are untracked files in `src/test/resources/unit/`; all six
+pass system Perl (20 assertions, `/tmp/issue2043-added-tests-system-perl.log`).
 
-GitHub still reports PR #1938 at the earlier head `71281ce332689ead7da3bf1f584544d0f37cdd00`, conflicting with `master` (checked 2026-11-26). The locally merged and tested branch has not yet been pushed. The last recorded hosted checks were on head `71896006ff6d3d92dd6b302f7c8c9eaa8b3b2e28`. `tied_handler_value_cell_alias.t` still fails only on the interpreter backend and reproduces on master `4a5c33753f`, so it is pre-existing and outside this continuation.
+| Test | master | HEAD | WIP | Required action |
+|---|---|---|---|---|
+| `op/inccode.t`, `op/inccode-tie.t` (imported) | 75 / 75 | fail 60 / fail 60 | fail 60 / fail 60 | Fix A. Branch regression. |
+| `array_last_index_anon_array_owner.t` (*new*) | 0 of 3 / 0 of 3 | 2 of 3 / 2 of 3 | 0 of 3 / 0 of 3 | Fix B. The WIP made it worse. |
+| `autoload_named_glob_alias_name.t` (*new*) | pass / fail | fail / fail | pass / fail | Fix C. Interpreter only. |
+| `core_builtin_reference_alias.t` (*new*) | pass / 4 of 6 | pass / 4 of 6 | 6 of 6 / 6 of 6 | Done. |
+| `eval_regex_code_hints_refcount.t` | pass / pass | pass / pass | pass / pass | Done. |
+| `readonly_coercion_argument_lifetime.t` | pass / pass | pass / pass | 8 of 8 / 8 of 8 | Done. |
+| `core_prototype_alias_origin.t` (*new*) | pass / fail | pass / fail | pass / pass | Done. |
+| `lvalue_sub_explicit_return_readonly.t` (*new*) | pass / pass | 4 of 8 / 0 of 8 | 8 of 8 / 8 of 8 | Done. |
+| `require_error_lists_all_searched_paths.t` (*new*) | fail / fail | fail / fail | pass / pass | Done. |
+| `goto_tailcall_cleanup.t` | pass / pass | pass / pass | 13 of 13 / 13 of 13 | Done. |
 
-PR #2171 merged as `fe8f9a3113b81b952c667cf7952a9961cf5573d8`. RSA generation below 2048 bits is rejected in both Net::SSLeay and Crypt::OpenSSL::RSA; round-trip and padding tests remain active at 2048. The former 1024-bit test key was a project-authored speed shortcut, not an upstream Net::SSLeay requirement. Commit `1d3e96f2a6` parses requested sizes as `BigDecimal`, rejects non-integers and out-of-range values before JCE, and preserves Perl `undef` behavior for invalid Net::SSLeay requests. Hosted CodeQL, Ubuntu, Windows, and dependency-submission checks passed on PR head `71896006ff6d3d92dd6b302f7c8c9eaa8b3b2e28`; those results are for the earlier head.
+### Open failures
 
-The eight-target acceptance gate was rerun on exact PR head `ee827a2ad50e0e070ab0154355528a452967cbdf` (run `20261124-235045-6870`). Five targets passed: Excel::Writer::XLSX (1,263 files / 5,189 tests), PPR (1,255), Image::ExifTool (113 files / 600), DateTime (3,592), and Template Toolkit (121 files / 3,180). The Image::ExifTool run also passed File::RandomAccess (600 tests). DBIx::Class failed 1/43,020 at the known `t/storage/txn.t` source-line mismatch; Catalyst failed 2/3,477 parser assertions; Mojolicious failed 1/3,735 because `t/mojo/asset.t` could not fork (`Resource temporarily unavailable`). These three failures are tracked in [#2170](https://github.com/PerlOnJava/issues/2170), [#2168](https://github.com/PerlOnJava/issues/2168), and [#2169](https://github.com/PerlOnJava/issues/2169). Full output: `/tmp/issue2043-ee827a2ad5-cpan-acceptance.log`; per-target logs: `/tmp/cpan_random_logs/20261124-235045-6870/`. The run regenerated CPAN reports; keep those changes uncommitted.
+**A. `op/inccode.t` assertion 60 (branch regression, imported test).** After
+`do "foo"` through an `@INC` hook `sub { $die, $data }`, the CODE reference
+`$die` reports 2 references where 1 is expected. Assertions 61–63 (`$data`,
+and both values after `do "bar"`) pass, so the extra owner is specific to the
+first CODE element of the hook's return list and does not accumulate. The
+uncommitted `MortalList.pushMark()` / `flushAboveMark()` wrapper around
+`invokeIncHook` in `ModuleOperators` does not change the result; the owner is
+not a mortal queued above that mark.
 
-The three classified acceptance failures are tracked separately: [Catalyst's `role { ... }` parser ambiguity (#2168)](https://github.com/fglock/PerlOnJava/issues/2168), [Mojolicious host fork exhaustion (#2169)](https://github.com/fglock/PerlOnJava/issues/2169), and [DBIx transaction caller source locations (#2170)](https://github.com/fglock/PerlOnJava/issues/2170).
+**B. `\$#{[]}` after the anonymous array is freed (new test).** Perl returns
+`undef` for `$$ref` and warns `Attempt to set length of freed array` on
+assignment. At HEAD only the first assertion fails (`-1` instead of `undef`).
+The working tree fails all three. The log history bisects this: the test was
+still 2 of 3 at 11:46 (`/tmp/issue2043-array-release-trace.jvm.log`), after
+the generation rewrite of `RuntimeArray.java` (last edited 11:04), and 0 of 3
+at 11:57 (`/tmp/issue2043-finalfix-array_last_index_anon_array_owner.t.jvm.log`).
+The regression is therefore in the later edits to
+`RuntimeArraySizeLvalue.java`, not in the generation rewrite and not in the
+12:35 `PerlOwnerSlot` hook, which was added afterwards and changed nothing.
 
-The first full-master build at `ae3f87c122` failed the new installer-lifetime regression because reconciliation had dropped the interpreter file-optree and JVM noncapturing-CODE owner registrations. Cherry-picking `3776bfa487` restored those paths; the focused test and full `make` now pass on `28240779ea`. Gate output: `/private/tmp/issue2043-fullmaster-template-fix-make.log`; focused logs: `/private/tmp/issue2043-fullmaster-template-fix-installer-{jvm,interpreter}.log`.
+**C. `autoload_named_glob_alias_name.t` on the interpreter (new test).**
+`*alias = *target; alias();` with no `target` defined must set `$AUTOLOAD` to
+`main::alias`. The JVM backend passes because `RuntimeCode` now prefers a
+qualified call-site name over `referenceOriginFqn` at both
+"Does AUTOLOAD exist?" sites. The interpreter still reports `main::target`.
+The uncommitted block in `SlowOpcodeHandler` (after
+`throwIfDirectCallUndefined`) that clones the CV and sets
+`referenceOriginFqn` has no effect on this test. This fails on the master
+interpreter too, so it is an interpreter gap rather than a ledger regression.
 
-The eight-target CPAN acceptance rerun on source commit `316886c227` completed all target logs. DateTime passed 3,592 assertions; Image::ExifTool passed 113 files / 600 assertions; Template Toolkit passed 121 files / 3,180 assertions; PPR passed 1,255 assertions; and Excel::Writer::XLSX passed 1,247 files / 5,138 assertions. Mojolicious failed 37 assertions across 45 test programs because subprocesses could not fork under host resource pressure. Catalyst failed two assertions across ten test programs; the same `unit_core_plugin.t` and `unit_core_script_run_options.t` failures reproduce with the current-master JAR at `1ee4ff572d`. DBIx::Class had its single `t/storage/txn.t` source-line mismatch (expected 451, got 448 and 447), reproduced earlier on baseline `278c12be27`. Full output: `/private/tmp/issue2043-fullmaster-template-fix-cpan-acceptance.log`; per-target logs: `/tmp/cpan_random_logs/20261123-142534-68681/`. The run regenerated the three CPAN report files; keep them uncommitted.
+### Next steps
 
-### Delivery background and diagnosis
+Read this whole section before starting. The order is chosen so that the
+ten-minute full gate runs once.
 
-The explicit-`exit` path previously ran END before active Perl frames retired their lexical owners. `WarnDie.exit()` now unwinds those registrations before flushing deferred releases and dispatching END. The new `dbix_schema_init_shutdown_lifecycle.t` passes on system Perl, JVM, and interpreter with DBICTest LeakTracer reporting no retained references. Full Make passes on the narrowed candidate; logs: `/private/tmp/issue2043-exit-unwind-final-make.log` and `/private/tmp/issue2043-schema-final-{perl-dbic,jvm,interpreter}.log`.
+#### Build and test loop
 
-The eight-target acceptance run on the preceding committed candidate `f012dac872` completed with Excel::Writer::XLSX, PPR, Template Toolkit, Catalyst, File::RandomAccess, and DateTime passing. Mojolicious failed one assertion in `t/mojo/asset.t`; DBIx::Class failed LeakTracer checks in `t/inflate/core.t`, `t/inflate/datetime.t`, and `t/relationship/core.t`, plus a transaction error-line mismatch in `t/storage/txn.t`. A separate master worktree passed upstream `t/relationship/core.t` (82 tests, LeakTracer clean), confirming that the relationship leak was a candidate regression. Its focused case used `set_producers([$producer], { attribute => 2 })` followed by an undirected relationship list. The root cause was that anonymous array references passed as arguments lacked the staged owner token already used for anonymous hashes. `RuntimeCode.CallArguments` now stages that owner; the new temporary-array and DBIx shutdown regressions pass on system Perl, JVM, and interpreter. Upstream DBIx `t/relationship/core.t`, `t/inflate/core.t`, and `t/inflate/datetime.t` now pass on JVM with clean LeakTracer checks. `t/storage/txn.t` still has a PerlOnJava error-line mismatch at test 89.
+Three commands are used throughout. Never run two of them at the same time in
+this checkout, and never edit files while one is running.
 
-The Mojolicious `t/mojo/asset.t` fork assertion fails on both the candidate and master JVMs with `Can't fork: Resource temporarily unavailable`; system Perl passes. This remains unclassified and is consistent with host process pressure.
+1. **Fast JAR build, about one minute, no tests.** Use this for every
+   iteration. AGENTS.md permits it when a no-test build is required, provided
+   `make` runs before the push.
 
-The final eight-target acceptance run on `11838413af` (`nice -n 19 timeout 28860 make test-cpan-release-acceptance`) passed Excel::Writer::XLSX, PPR, Template Toolkit, Catalyst, File::RandomAccess, and DateTime. DBIx::Class reports one assertion failure in `t/storage/txn.t` (expected source line 451, got lines 448 and 447); its three shutdown LeakTracer failures are resolved. Mojolicious `t/mojo/asset.t` still fails its fork assertion with `Can't fork: Resource temporarily unavailable`, as it did on master; this remains covered by the user's prior waiver. The acceptance build phase passed in 8m17 and regenerated the launcher JAR with SHA-256 `d34af367d8fc07806c55de82d6ecbd512073753cddcdf6661570255d6c8ce626`. Full output is `/private/tmp/issue2043-package-root-cpan-acceptance.log`; per-target logs are under `/tmp/cpan_random_logs/20261122-230238-55924/`. The generated compatibility reports now contain this run's updates and must be preserved. At that earlier checkpoint, PR #1938 was open at `75dd7d542f1f86bff930beb1c5779be74fa27955` and DIRTY against master; see the current status above. The source fixes, focused regressions, full Make gate, and upstream DBIx relationship/inflate leak tests are verified; the remaining acceptance failures are the existing transaction-line mismatch and waived Mojolicious fork limitation.
+   ```bash
+   nice -n 19 ./gradlew shadowJar installDist > /tmp/issue2043-jar.log 2>&1; echo "EXIT: $?" >> /tmp/issue2043-jar.log
+   tail -5 /tmp/issue2043-jar.log
+   ```
 
-### Permanent regression evidence
+   If it prints `BUILD FAILED`, read the compiler error in the log, fix it,
+   and rebuild. Do not run tests against a JAR from a failed build: check
+   that `ls -la target/perlonjava-5.44.1.jar` shows a time later than your
+   last edit.
 
-The DBIx tests are permanent project-owned Perl tests under `src/test/resources/unit/refcount`: `diamond_prefetch_cursor_leak.t`, `diamond_prefetch_cursor_leak_permutations.t`, and `diamond_prefetch_shutdown_leak.t`. They require `DBIC_CLASS_TEST_ROOT` and skip cleanly otherwise. Before the proxy fix, JVM and interpreter each failed four weak-witness checks (Schema, Storage, DBH, combined), while system Perl collected the witnesses. With the candidate, all three project tests pass on JVM and interpreter; the shutdown case passes 768 functional checks and the permutation case passes 772 assertions. Standard Perl passes all three as well, and DBICTest LeakTracer reports no retained references. Upstream DBIx `t/prefetch/diamond.t` passes 768 assertions, `t/60core.t` passes 125 assertions, and `t/52leaks.t` exits 0 on JVM. Moo's `t/accessor-weaken.t` (19 assertions) and Template Toolkit's `t/string.t` (95 assertions) pass on JVM and interpreter. The full `jcpan -t DBIx::Class` run reached storage tests and timed out after one hour (exit 124). Earlier candidate runs of all 12 `t/resultset/*.t` files found shutdown leaks in `plus_select.t` and `rowparser_internals.t`; a scoped reproduction isolated the JVM-only inflated-result lifetime issue to `Relationship::Base::catch`. The frame-exit fix described above resolves those failures: all 12 resultset files now pass on JVM, and LeakTracer reports no retained references in each. The system-Perl resultset sweep passes 11 files; its three `update_delete.t` SQL execution-status mismatches are unrelated to leak witnesses. The interpreter resultset sweep passes 7 files; five exceed 600 seconds and remain unclassified. Current and historical evidence is retained in `/private/tmp/issue2043-resultset-*` and `/private/tmp/issue2043-latest-dbix-*`. Devel::FindRef is unavailable because its distribution requires XS and cannot be installed by `jcpan`.
+2. **Focused matrix, about two minutes, both backends.** Pass an output
+   directory. It prints one line per cell; compare against the table above.
 
-The exception-unwind regression passes on system Perl, JVM, and interpreter. It fails on the unfixed `aebe3b0742` source (the JVM reports `first` before `second`) and passes on the current candidate. The complete `nice -n 19 timeout 900 make` gate passed after adding it (all five unit shards, Joni, and home integration). A full Make run on the unfixed baseline failed 11 other JVM unit assertions across three shards; the focused regression result is separately captured in `/private/tmp/issue2043-unfixed-lifo-direct.log`.
+   ```bash
+   OUT=/tmp/issue2043-iter; mkdir -p $OUT; U=src/test/resources/unit
+   for t in array_last_index_anon_array_owner autoload_named_glob_alias_name \
+            core_builtin_reference_alias core_prototype_alias_origin \
+            eval_regex_code_hints_refcount goto_tailcall_cleanup \
+            lvalue_sub_explicit_return_readonly readonly_coercion_argument_lifetime \
+            require_error_lists_all_searched_paths; do
+     timeout 120 ./jperl $U/$t.t               > $OUT/$t-jvm.log 2>&1
+     timeout 120 ./jperl --interpreter $U/$t.t > $OUT/$t-interp.log 2>&1
+     for m in jvm interp; do
+       echo "$t $m ok=$(grep -c '^ok' $OUT/$t-$m.log) notok=$(grep -c '^not ok' $OUT/$t-$m.log)"
+     done
+   done
+   for t in inccode inccode-tie; do
+     (cd perl5_t/t && timeout 300 ../../jperl op/$t.t)               > $OUT/$t-jvm.log 2>&1
+     (cd perl5_t/t && timeout 300 ../../jperl --interpreter op/$t.t) > $OUT/$t-interp.log 2>&1
+     for m in jvm interp; do
+       echo "$t $m ok=$(grep -c '^ok' $OUT/$t-$m.log) notok=$(grep -c '^not ok' $OUT/$t-$m.log)"
+     done
+   done
+   ```
 
-`nested_untracked_aggregate_owner_release.t` adds six system-Perl-validated checks for nested array/hash release, a surviving shared owner, weak observers, and destructor rescue. It passes on JVM and interpreter. Ordinary final array/hash cleanup now retires direct element owners and lets final child-container release cascade through that container's own slots; it no longer allocates `RecursiveAggregateReleaseWalker` worksets or probes descendants with `CleanupTargetProbe`. Global destruction traverses nested aggregate roots directly with cycle tracking. Scope-exit liveness checks remain, and owner-kind presence queries use maintained O(1) counts. The package-array root-marking fast path and paired performance/allocation evidence are recorded under Current Work; the measurements cover the Excel workloads and do not claim a portfolio-wide effect.
+   While working on one fix, run only its test by hand instead of the whole
+   loop; run the whole loop before moving to the next step.
 
+3. **Full gate, about ten minutes.** Run it once, in step 5. Earlier full
+   runs are wasted time: a unit failure outside the matrix is unlikely to be
+   found faster by `make` than by the matrix, and any later edit invalidates
+   the result.
 
-The latest Excel::Writer::XLSX 1.15 run covered all 1,247 distribution test files against the rebuilt candidate: 1,246 passed and the optional `t/utility/xl_parse_date.t` was skipped because Date::Manip and Date::Calc are unavailable. The first `jcpan -t` batch reached its one-hour timeout without failures; a correctly scoped MakeMaker batch passed the remaining 498 files (4,276 assertions), and the optional test was run separately to record its skip. Logs: `/private/tmp/issue2043-excel-writer-xlsx-final-candidate.log`, `/private/tmp/issue2043-excel-writer-xlsx-final-resumed.log`, and `/private/tmp/issue2043-excel-writer-xlsx-final-optional.log`.
+Fixes A, B, and C touch different files. Develop them one at a time, but
+when two candidate edits are ready together, compile them in one JAR build.
 
-With the latest launcher JAR and the installed DBIx::Class 0.082844 dependency tree, all three focused `diamond_prefetch_*` issue tests pass on JVM and interpreter: `/private/tmp/issue2043-latest-diamond_prefetch_cursor_leak.t-{jvm,interp}.log`, `/private/tmp/issue2043-latest-diamond_prefetch_cursor_leak_permutations.t-{jvm,interp}.log`, and `/private/tmp/issue2043-latest-diamond_prefetch_shutdown_leak.t-{jvm,interp}.log`.
+#### Step 1. Snapshot the working tree (5 minutes)
 
-The `chart_axis28.t` workload was measured against an isolated before artifact that retains the recursive release walker and the same other current-source changes. Seven randomized persistent-worker pairs each passed the normalized XLSX checksum; all pairs passed the warmup stability limits with observed nice 19. Candidate/before throughput geometric mean is 0.970, with bootstrap 95% interval [0.869, 1.075], so this test does not show a reliable end-to-end gain. Diagnostic counters for 100 workbook writes show aggregate release walkers/worksets 9,298→0, release roots 26,537→0, recursive-probe worksets 3,888→1, and probe roots 14,574→184; owner-slot visits changed 6,349,994→6,343,314. Queue counters are also captured: transient RHS appends/drains are 13,294/13,294 on both artifacts, with 19,213 handoffs; frame queues allocate 6 and reuse 5,441 times; boundary queues allocate 0 with 14,241 marks; entry/boundary buffer growths are 14/13 on both. Separate JFR allocation samples total 7.804 GB before and 7.808 GB candidate; this sampled total is effectively unchanged and does not support an allocation-reduction claim for that change alone. Reports and raw profiles: `/private/tmp/issue2043-chart-axis-persistent-paired.json`, `/private/tmp/issue2043-chart-axis-before.jfr`, `/private/tmp/issue2043-chart-axis-candidate.jfr`, and the corresponding `*-diag-*.json` files. The baseline full Make gate failed only `ReachabilityQueryCostTest.repeatedContainerScopeCleanupDoesNotEnumerateNestedStashRoots`, which is the expected scan-count difference; all candidate shards pass.
+The uncommitted work exists nowhere else. Commit it locally before the merge.
+Nothing is pushed in this step.
 
-The same paired workload was repeated on the latest source and launcher JAR (`f0a5437ed9a1db3ae11720b0831b4818ff99ba71c460062ea6e049ff0d1bb9f0`) with seven stable, checksum-matched pairs and worker niceness 20. Candidate/before throughput geometric mean is 0.993, with bootstrap 95% interval [0.886, 1.128]. This interval also includes no change, so the latest candidate has no demonstrated end-to-end speedup on this workload. The first rerun had no effective low-priority setting and was excluded. Valid report and logs: `/private/tmp/issue2043-chart-axis-persistent-paired-latest-nice.json`, `/private/tmp/issue2043-chart-axis-paired-latest-nice.log`; excluded run: `/private/tmp/issue2043-chart-axis-persistent-paired-latest.json`.
+```bash
+git status -s                       # expect the 13 modified and 6 untracked paths listed in git, nothing else
+git add -A
+git commit -m "wip: snapshot issue 2043 regression fixes before master merge"
+git branch wip/issue2043-snapshot-20261126      # backup pointer; delete in step 7
+SNAP=$(git rev-parse HEAD); echo $SNAP          # record this SHA; later steps use it
+```
 
-A broader persistent-worker profile wrote three checksum-identical workbooks, each with four 30-row data sheets, formulas, formatting, tables, conditional formatting, merged cells, and a chart. The same output hash was produced by both JARs. Elapsed time was 86.14s before and 87.06s on the candidate; this is a single diagnostic profile and does not establish a slowdown or speedup. Lifecycle counters changed from 2,447 aggregate walkers / 6,791 roots / 4,274 probe roots to 0 / 0 / 112, while owner-slot visits stayed nearly flat (3,781,284→3,779,397). JFR execution samples were dominated on both artifacts by `IdentityHashMap.containsKey` through `RuntimeScalar.markPrepopulatedPackageAggregateOwner` and `GlobalVariable.markPackageGlobalRoot`; allocation samples were led by `IdentityHashMap.init`. This identifies a separate package-root marking hotspot for further source-path and mutation audit; no change has been made from this profile alone. Artifacts: `/private/tmp/issue2043-excel-broad-profile-v2.json`, both `/private/tmp/issue2043-excel-broad-v2-{before,candidate}.jfr` recordings and their `*-diag-*.json` files. The initial 300-row worker exceeded its 120s timeout; the reduced workload was smoke-checked with system Perl and completed on both JARs.
+The commit is local and the PR is squash-merged, so a `wip:` subject is
+acceptable here. If `git status` shows a path you do not recognize, stop and
+ask; do not add it.
 
-The next narrow allocation change makes `WeakRefRegistry.releaseDetachedUntrackedReferenceOwners` iterate the existing untracked-owner index instead of allocating and filtering a snapshot of every owner slot. Full `nice -n 19 timeout 1800 make` passes on `339bf5cd7a` (`/tmp/issue2043-339bf5cd7a-make.log`). Seven randomized persistent-worker pairs on `chart_axis28.t` have stable warmups, matching workbook checksums, and observed nice 20; candidate/before throughput is 1.074 with bootstrap 95% interval [1.061, 1.088]. JFR allocation sample weights changed from 8.126 GB to 7.617 GB overall (about 6.3% lower), from 257.5 MB to 203.3 MB for `IdentityHashMap`, and from 22.3 MB to 1.4 MB on stacks beginning with `ownerSlotSnapshot`. These are sampled weights, not exact allocation totals. The paired report is `/private/tmp/issue2043-untracked-index-paired.json`; the exact JAR hashes and raw profiles are recorded there and in `/private/tmp/issue2043-untracked-index-{before,candidate}.jfr`.
+#### Step 2. Merge master and rebuild once (30–60 minutes)
 
+The PR cannot merge until this is done, and fix A edits a conflicting file,
+so merge first.
 
-### Completed milestones
+```bash
+git fetch origin master
+git merge origin/master             # expect three conflicts
+```
 
-| Date | Delivered scope | Evidence |
+Resolve each file, then `git add` it:
+
+- `docs/about/changelog.md`: keep every bullet from both sides under
+  `## Work in progress`. Do not move bullets into a released section.
+- `src/main/java/org/perlonjava/runtime/runtimetypes/GlobalVariable.java`:
+  the working tree did not change this file, so the conflict is between
+  committed branch code and master. Compare the sides with
+  `git show :2:<path> > /tmp/ours.java` (branch) and
+  `git show :3:<path> > /tmp/theirs.java` (master). Keep the branch's
+  owner-slot calls and add master's new logic around them.
+- `src/main/java/org/perlonjava/runtime/operators/ModuleOperators.java`:
+  master changed package and caller context for nested `require`
+  (`3614619c27`, `4e22a6895b`, `6a501b1dd9`). Take master's version of the
+  hook-invocation block and **drop the `MortalList.pushMark()` /
+  `flushAboveMark()` wrapper**; it is proven ineffective (failure A) and is
+  the main source of the conflict. Keep the other WIP change in this file:
+  the removal of `syntheticBundledInc`, so that `incEntriesChecked` always
+  records the entry. `require_error_lists_all_searched_paths.t` depends on it.
+
+Finish with `GIT_EDITOR=true git commit`, confirm
+`git log --oneline origin/master..HEAD | head -3` shows the merge and the
+snapshot, then run the fast JAR build and the focused matrix with
+`OUT=/tmp/issue2043-postmerge`.
+
+Expected result: identical to the WIP column above.
+
+If it is not what you expect:
+
+- **The merge reports different conflicting files.** Master moved again.
+  Resolve by the same rule: branch owner-slot code plus master's new logic.
+  If a conflict is in a file under `runtimetypes/` that you cannot resolve
+  with confidence, run `git merge --abort` (safe: the snapshot is committed)
+  and ask the maintainer.
+- **The JAR build fails after the merge.** The error is almost always a
+  method that master renamed or a signature the branch changed. Fix the call
+  site; do not revert master's commit.
+- **A matrix cell that was passing now fails.** Find out whether master
+  alone fails it before debugging: build a master JAR in a separate worktree
+  (one minute, no tests) and run the one test there.
+
+  ```bash
+  git worktree add /tmp/issue2043-master-357b origin/master
+  (cd /tmp/issue2043-master-357b && nice -n 19 ./gradlew shadowJar installDist > /tmp/issue2043-master-357b-jar.log 2>&1)
+  timeout 120 /tmp/issue2043-master-357b/jperl src/test/resources/unit/<test>.t
+  ```
+
+  If master also fails, it is pre-existing: record it under Known limitations
+  and continue. If master passes, the merge resolution is wrong; re-read the
+  conflict hunks for that subsystem. Keep this worktree until step 5 and
+  remove it in step 7.
+
+#### Step 3. Fix B: restore the array test to 2 of 3, then reach 3 of 3
+
+Do this first: it is the only failure the working tree itself introduced.
+
+1. Restore the two warning assertions. Compare the working version of
+   `RuntimeArraySizeLvalue.java` with the PR head:
+   `git diff 7288fb4faf HEAD -- src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeArraySizeLvalue.java`.
+   Three edits are candidates, in this order of likelihood:
+   `argumentAliasContainer()` now returns `null` unless the parent has
+   `refCount > 0` or a strong owner identity; the two
+   `hasLivePerlValueOwner` overrides return `false`; the constructor no
+   longer clears `arrayLengthLvalueOrphaned`. Revert one, rebuild the JAR,
+   and run the test on JVM. Stop at the first revert that returns 2 of 3 and
+   keep the other edits.
+2. Remove the `UNTRACKED_REFERENCE` block added to `PerlOwnerSlot` (the
+   `array.orphanArraySizeLvalues()` call near line 1430). It did not move the
+   result, so it is not the owning transition.
+3. Fix assertion 1. The anonymous array `[]` in `\$#{[]}` must have its
+   size-proxy generation invalidated when the statement's temporary owner is
+   released. Find which owner that is before editing: add a temporary
+   `System.err.println` with `new Throwable().printStackTrace()` at the top
+   of `RuntimeArray.orphanArraySizeLvalues()` and a second print where the
+   anonymous-array owner slot is released (`PerlOwnerSlot`, the release
+   method that contains `registeredInOwnerLedger = false`), printing `kind`
+   and `System.identityHashCode(previous)`. Run
+   `timeout 60 ./jperl -e 'my $r = \$#{[]}; print defined $$r ? "live\n" : "undef\n"'`.
+   The release line whose identity matches the array tells you the slot
+   kind. Call `orphanArraySizeLvalues()` from that transition, guarded by
+   `!array.hasPerlStrongOwner()`. Remove the prints before the matrix run.
+
+Done when the test is 3 of 3 on both backends and the imported `$#`
+coverage is unchanged: record
+`(cd perl5_t/t && timeout 300 ../../jperl op/array.t | grep -c '^ok')`
+before the first edit of this step and require the same count afterwards.
+The constraint from the Objective applies: the fix
+is one call at one owner transition. Do not re-add a list of proxies and do
+not walk arrays to find them.
+
+If it does not work:
+
+- **None of the three reverts restores 2 of 3.** Reverse the whole WIP
+  change to that one file and confirm:
+  `git diff 7288fb4faf $SNAP -- <path to RuntimeArraySizeLvalue.java> | git apply -R`.
+  If the file no longer compiles against the generation fields in
+  `RuntimeArray.java`, reverse `RuntimeArray.java` the same way. That returns
+  to the PR-head proxy-list implementation, which is known to give 2 of 3.
+- **The release print never shows the array.** The array has no owner slot
+  at all; it is an untracked temporary whose reference count never rises.
+  In that case the transition is the statement-end mortal flush. Look at how
+  `MortalList.scopeExitCleanupArrayBody()` reaches `orphanArraySizeLvalues()`
+  for lexical arrays (line 1306) and find the equivalent point for a
+  temporary reference.
+- **Assertion 1 is still failing after about two hours.** Stop. Report the
+  slot kind you found and what you tried. The maintainer decides between
+  more time and deferring: the test is 0 of 3 on master, so 2 of 3 is an
+  improvement, but a new test may not be committed failing. Deferral means
+  leaving this one test file out of the commit and opening a follow-up
+  issue; that is the maintainer's decision, not yours.
+
+#### Step 4. Fix A, then fix C
+
+**Fix A, `@INC` hook return list.** Identify the owner before changing code.
+
+```bash
+cat > /tmp/issue2043-inc-trace.pl << 'EOF'
+my $die = sub { die };
+my $data = [];
+unshift @INC, sub { $die, $data };
+print "before: ", &Internals::SvREFCNT($die), "\n";
+do "foo";
+print "after:  ", &Internals::SvREFCNT($die), "\n";
+print Internals::jperl_owner_trace($die), "\n";
+EOF
+PJ_REFCOUNT_TRACE=1 timeout 60 ./jperl /tmp/issue2043-inc-trace.pl > /tmp/issue2043-inc-trace.log 2>&1
+```
+
+`before` and `after` must be equal; today `after` is one higher. The trace
+output lists the live owner slots on the CODE object with their kinds and
+acquire sites. Run the same script on the master JAR
+(`/private/tmp/issue2043-master-scan-check/jperl`) and compare: the slot
+present on the branch and absent on master is the leak. Then find where that
+slot kind is acquired on the path `ModuleOperators.invokeIncHook` →
+`readIncHookSource`, and release it where the hook result stops being used
+(after `readIncHookSource` returns or throws). The first return-list element
+is the one treated as a possible source filter or generator, which is why
+only `$die` leaks; start with the branch of `readIncHookSource` that
+inspects element 0 as CODE.
+
+Done when both files are 75 of 75 on both backends.
+
+If it does not work:
+
+- **The trace prints `NOT_REF` or no slot list.** Pass the reference itself
+  (`$die`, not `\$die`) and confirm `PJ_REFCOUNT_TRACE=1` is in the
+  environment of the `jperl` process.
+- **Branch and master traces show the same slots.** The difference is then
+  in how `Internals::SvREFCNT` counts, not in a leaked slot. Compare
+  `Internals.svRefcount` between `origin/master` and HEAD for a slot kind
+  that the branch counts and master did not. Do not re-add an
+  `ARGUMENT_ALIAS` subtraction; that was tried and broke two other tests.
+- **The fix makes 61–63 or another refcount test fail.** The release is in
+  the wrong place and is dropping an owner that `$data` or a later `do`
+  still needs. Undo it and release only the element-0 CODE owner.
+- **No owning transition is found after about two hours.** Stop and report
+  the two traces. This is a regression against master on an imported test,
+  so it cannot be deferred without the maintainer's decision.
+
+**Fix C, interpreter AUTOLOAD name.** Find out why the JVM fix does not
+apply. In `RuntimeCode`, both "Does AUTOLOAD exist?" sites now use
+`subroutineName` when it contains `::`. Print `subroutineName` and
+`code.referenceOriginFqn` at both sites and run
+`timeout 60 ./jperl --interpreter src/test/resources/unit/autoload_named_glob_alias_name.t`.
+
+- If `subroutineName` is empty or unqualified on the interpreter, the fix
+  is at the interpreter call opcode: pass the call-site name (the handler
+  in `SlowOpcodeHandler` already has it in `name`) into the `apply` call the
+  way the JVM backend does. Then delete the CV-cloning block from
+  `SlowOpcodeHandler`; it is dead code.
+- If `subroutineName` is correct but neither site is reached, the
+  interpreter takes a third dispatch path; find it by printing a stack trace
+  from the `AUTOLOAD` assignment and apply the same name preference there.
+
+Done when the test passes on both backends and
+`core_builtin_reference_alias.t` stays 6 of 6 on both.
+
+If the interpreter needs a change to its call convention (a new opcode
+operand, or a changed `apply` signature used by other opcodes), stop and
+report that boundary. Either way, remove the `SlowOpcodeHandler` block if it
+is still without effect: unproven code does not ship.
+
+After fixes A, B, and C: one JAR build, then the whole matrix with
+`OUT=/tmp/issue2043-final`. Every cell must pass. Run the six new tests and
+any test you added with system Perl again
+(`prove src/test/resources/unit/<file>.t > /tmp/issue2043-final/perl-<file>.log 2>&1`).
+
+#### Step 5. Full gate, once (10–15 minutes)
+
+Preconditions: `git status` shows only intended edits, no debug prints remain
+(`git diff | grep -n 'System.err\|printStackTrace'` prints nothing new), and
+nothing else is running in this checkout. Commit the fixes first so the gate
+validates a commit, using the format in AGENTS.md, one logical fix per
+commit.
+
+```bash
+git fetch origin master && git merge-tree --write-tree HEAD origin/master > /dev/null && echo "still mergeable"
+nice -n 19 timeout 1800 make > /tmp/issue2043-final-make.log 2>&1; echo "EXIT: $?" >> /tmp/issue2043-final-make.log
+tail -30 /tmp/issue2043-final-make.log
+```
+
+Do not touch the checkout until it exits. Expected: `BUILD SUCCESSFUL` and
+`EXIT: 0`.
+
+If it is not what you expect:
+
+- **`still mergeable` is not printed.** Master gained a new conflict. Merge
+  it now (as in step 2), rerun the JAR build and matrix, then start this step
+  again. If master only advanced without conflict, do not merge; the gate is
+  valid for the commit you push.
+- **A unit test fails.** Do not rerun `make`. Run that one test with
+  `./jperl` and `./jperl --interpreter`, then against
+  `/tmp/issue2043-master-357b/jperl` (step 2) and the PR-head JAR
+  `/private/tmp/issue2043-pre-scan-merge/jperl`. Fails on master: pre-existing,
+  record it and ask whether the gate may proceed. Passes on master, fails on
+  the PR-head JAR: an older branch regression; fix it with the JAR-build
+  loop. Passes on both: caused by today's fixes; bisect by reverting them one
+  at a time. After any code change, the full gate must run again from the
+  start, so batch every fix before rerunning it.
+- **The run is killed at 1800 seconds or a test fails only on timing.** Two
+  other sessions load this host. Check
+  `ps aux | awk '$3 > 20 {print $2, $3, $11, $12}'`; do not kill their
+  processes. Wait for them to finish and rerun once. Do not raise a test
+  timeout.
+
+#### Step 6. Document and publish (20 minutes)
+
+1. `docs/about/changelog.md`, under `## Work in progress`, one terse bullet
+   each for the user-visible fixes in this batch: `require` errors list every
+   searched `@INC` entry; an lvalue sub rejects a readonly value from an
+   explicit `return`; CORE builtins keep their identity and prototype through
+   glob aliases; `AUTOLOAD` reports the called alias name; `@INC` hook return
+   values are released after loading; `\$#{[]}` is orphaned when the array is
+   freed. Omit a bullet whose fix was deferred.
+2. Replace this "Current state" section with the final matrix (all cells from
+   `/tmp/issue2043-final/`), the gate result, and the remaining next step
+   (maintainer review). Add one row to "Completed phases". Move any deferred
+   item to "Known limitations" with its issue number.
+3. Documentation-only commit, then the two checks:
+
+   ```bash
+   nice -n 19 make check-links > /tmp/issue2043-final-check-links.log 2>&1; echo "EXIT: $?" >> /tmp/issue2043-final-check-links.log
+   git diff --check origin/wip/alias-cell-ownership-20261030-185849..HEAD
+   git status -s            # must be empty
+   ```
+
+   These two edits change no runtime file, so the step 5 gate stays valid.
+   If you change any Java, Perl, or test file after step 5, rerun step 5.
+4. Push without force and verify:
+
+   ```bash
+   git push origin HEAD:wip/alias-cell-ownership-20261030-185849
+   gh pr view 1938 --json state,headRefOid,mergeable,mergeStateStatus
+   ```
+
+   Expected: `OPEN`, `headRefOid` equal to `git rev-parse HEAD`, and
+   `mergeable` `MERGEABLE`. Update the PR description's Validation section
+   with the gate commit, duration, and log names. Watch hosted checks with
+   `gh pr checks 1938`. Do not merge.
+
+If it is not what you expect:
+
+- **The push is rejected as non-fast-forward.** Someone pushed to the PR
+  branch. Do not force. `git fetch`, inspect
+  `git log HEAD..origin/wip/alias-cell-ownership-20261030-185849`, merge it,
+  and return to step 5.
+- **`mergeable` is `CONFLICTING`.** Master moved between the gate and the
+  push. Merge master, rerun the JAR build, the matrix, and step 5.
+- **A hosted check fails.** Read the failing job log with
+  `gh run view --log-failed`. A Windows-only failure follows the
+  `debug-windows-ci` skill. Do not push a speculative fix; reproduce or
+  reason from the log first.
+
+#### Step 7. Clean up
+
+```bash
+git worktree remove /tmp/issue2043-master-357b      # if created
+git branch -D wip/issue2043-snapshot-20261126       # only after the push is verified
+ps aux | awk '$3 > 20 {print $2, $3, $11, $12}'     # no JVM of yours remains
+```
+
+Keep the logs under `/tmp/issue2043-final/` and
+`/tmp/issue2043-final-make.log`; the PR description refers to them. After the
+maintainer merges: verify #2043 is resolved, move the design sections below
+to `dev/architecture/`, archive this plan, and run
+`perl dev/tools/gen_design_index.pl`.
+
+## Completed phases
+
+| Date | Delivered scope | Source and evidence |
 |---|---|---|
-| 2026-11-19 | Cached hot owner-kind counts, narrow identity indexes, and reusable cleanup/probe worksets | Owner-ledger unit gate passed; earlier performance measurements remain inconclusive and are not a broad speedup claim. |
-| 2026-11-19 | Correct nested hash-slot `B::REFCNT` reporting during `DESTROY` | System-Perl-validated regression; DBIx `t/60core.t` and `t/101populate_rs.t` passed. |
-| 2026-11-21 | Retain interpreter foreach source owners through normal and `last` exits (`4edc5faa51`) | System Perl, JVM, interpreter, and focused DBIx diamond regression passed. |
-| 2026-11-21 | Release overwritten temporary call-argument owners, including Test2 Amnesty facets (`eb8907f362`) | System Perl, JVM, and interpreter regressions passed; source build succeeded. |
-| 2026-11-21 | Restore eval/die `DESTROY` LIFO ordering and the owner-trace snapshot prefix | System Perl, JVM, and interpreter checks pass; filtered refcount Make shard passes on the current candidate. These edits remain uncommitted and are not full acceptance. |
-| 2026-11-21 | Repair weak-tracked scalar storage, raw untracked slots, legacy count adoption, and async foreach owner restoration | Full `nice -n 19 timeout 900 make` passed all five shards, Joni, and home integration on the tested working tree; focused lifecycle Perl tests passed on JVM and interpreter. |
-| 2026-11-21 | Cascade ordinary aggregate cleanup through direct outgoing storage slots | `nice -n 19 timeout 900 make` passed all five shards, Joni, and home integration after restoring scope-exit eligibility guards; new nested untracked aggregate test passes on system Perl, JVM, and interpreter. No performance claim yet. |
-| 2026-11-21 | Complete Excel::Writer::XLSX 1.15 test surface in two bounded batches | Across the original CPAN run and resumed `make test TEST_FILES=...`, all 1,247 discovered tests have results: 1,246 pass and one optional `xl_parse_date.t` skip for missing Date::Manip/Date::Calc. No test failures. Candidate JAR SHA-256: `59e46391b0836faa350ce71ad86e312d9b138565cd66f41f51bdcaeaa58313b0`. |
-| 2026-11-22 | Measure direct-slot cleanup against its isolated recursive-walker baseline | Seven stable, checksum-matched pairs complete. The interval includes no change; lifecycle counters show walker/workset/probe reductions, while total sampled JFR allocation weight is unchanged. No speedup claim. |
-| 2026-11-22 | Remove ordinary scope-exit pre-scans and preserve tied-array cleanup behavior | Full `make` passes in 7m13; new ownership, tied-array, and taint tests pass on the applicable backends. JAR SHA-256 is recorded below. |
-| 2026-11-22 | Repeat paired `chart_axis28.t` measurement on the latest JAR | Seven stable, checksum-matched pairs at nice 20; throughput ratio 0.993, bootstrap 95% interval [0.886, 1.128]. No reliable end-to-end gain. |
-| 2026-11-22 | Profile a broader multi-sheet Excel workload against before and latest JARs | Three matching workbooks per artifact; lifecycle walker/workset counts 2,447→0 and probe roots 4,274→112. Single-profile elapsed times are nearly equal; JFR points to repeated package-root marking as a separate hotspot. |
-| 2026-11-22 | Separate runtime-only eval captures from semantic closure owners | New regression passes on system Perl, JVM, and interpreter; DBIx row-parser shutdown repro reports no leaks on both PerlOnJava backends. Full Make passes after the runtime change. |
-| 2026-11-22 | Add focused coverage for DBIx inflated `+select` result shutdown | The regression first exposed four JVM DBIx Storage/Schema/DBH shutdown leaks. The JVM frame-exit fix resolves them; the project regression passes on system Perl and both backends with no LeakTracer-retained references. |
-| 2026-11-22 | Run the full repository gate after adding both DBIx regressions | `nice -n 19 timeout 900 make` passes in 8m01 (`/private/tmp/issue2043-make-with-dbix-regression.log`). The optional external DBIx tests were run separately with `DBIC_CLASS_TEST_ROOT` set. |
-| 2026-11-22 | Revalidate the resultset section after the JVM frame-exit fix | All 12 upstream resultset files pass on JVM with no retained references. System Perl passes 11; interpreter passes 7 and has five 600-second timeouts. The current full repository gate passes in 7m16. |
-| 2026-11-26 | Remove the hash destroyability eligibility scan from `undef %hash` | Maintained direct-value identity index; full Make passes in 7m22. New index unit test passes, and the progressive-destructor regression passes system Perl, JVM, and interpreter. |
-| 2026-11-26 | Merge current master into the PR branch and rerun the full gate | The regular merge resolves the PR conflict locally; `nice -n 19 timeout 1800 make` passes on `2edf51f698` in 8m18. Focused `undef %hash` and tied-container regressions pass on JVM and interpreter. |
+| 2026-11-19 | Maintained owner-kind counts and narrow identity indexes; correct nested hash-slot `B::REFCNT` during `DESTROY` | Owner-ledger unit gate; DBIx `t/60core.t`, `t/101populate_rs.t` |
+| 2026-11-21 | Interpreter foreach source owners retained through normal and `last` exits; overwritten temporary call-argument owners released | `4edc5faa51`, `eb8907f362`; system Perl, JVM, interpreter |
+| 2026-11-21 | eval/die `DESTROY` LIFO order; weak-tracked scalar storage, raw untracked slots, and async foreach owner restoration | Fails on unfixed `aebe3b0742`; full `make` passed |
+| 2026-11-21 | Ordinary aggregate cleanup retires direct outgoing slots; `RecursiveAggregateReleaseWalker` and `CleanupTargetProbe` removed from that path | `nested_untracked_aggregate_owner_release.t` on system Perl and both backends |
+| 2026-11-22 | Scope-exit pre-scans removed; tied arrays use raw storage during slot retirement | Full `make` passed |
+| 2026-11-22 | Runtime-only eval captures separated from semantic closure owners; JVM frame-exit owner release | All 12 DBIx `t/resultset/*.t` pass on JVM with LeakTracer clean |
+| 2026-11-22 | Anonymous array call arguments stage an owner token; explicit `exit` unwinds lexical owners before `END` | `dbix_schema_init_shutdown_lifecycle.t`; DBIx `t/relationship/core.t`, `t/inflate/*.t` |
+| 2026-11-22 | Package-array root marking skipped for already rooted aggregates | `11838413af`; `PackageArrayRootMarkingFastPathTest` |
+| 2026-11-24 | `releaseDetachedUntrackedReferenceOwners` iterates the untracked-owner index instead of an owner-slot snapshot | `339bf5cd7a`; full `make` passed |
+| 2026-11-24 | Eight-target CPAN acceptance on exact PR head | `ee827a2ad5`; see Acceptance evidence |
+| 2026-11-26 | Reachability scans removed: eval-created CV templates own explicit slots, the global-destruction cleanup pre-scan is gone, and `ownerSlotCount` reads maintained per-kind counts | `9d22a6a6ce`; `OwnerSlotKindCountIndexTest` |
+| 2026-11-26 | `undef %hash` selects destructor ordering from a maintained direct-value identity index | `RuntimeHashDestroyableValueIndexTest`, `undef_hash_owner_index.t` |
+| 2026-11-26 | Master merged into the PR branch | `2edf51f698`; full `make` passed in 8m18; hosted checks green |
 
-The latest full gate, `nice -n 19 timeout 1800 make`, passed in 8m33 on commit `11838413af` (`/private/tmp/issue2043-package-root-make.log`). It completed all five Java/Perl unit shards, Joni tests, home integration tests, and `PackageArrayRootMarkingFastPathTest`. That build's launcher JAR SHA-256 was `dada35bd36b0a0346604193d4ee924664e25f4fb886bf69f1981021854d37404`; the later acceptance build regenerated the same source commit's JAR as recorded above.
+## Design
 
-The current-master baseline `nice -n 19 timeout 900 make` passed at `506371c134` in 6m50 (`/private/tmp/issue2043-master-baseline-make.log`). The pre-edit candidate run at `aebe3b0742`, `JPERL_TEST_SHARD=0 nice -n 19 timeout 900 make`, reported 11 Java test failures in 5m52 (`/private/tmp/issue2043-pre-edit-shard0-make.log`). The ten failures in the later full candidate gate and the one extra pre-edit reachability-query failure are resolved on the current working tree. The latest full gate also completed the thread-shared queue clone test without reproducing its earlier `ConcurrentModificationException`.
-
-Direct runs against the final rebuilt JAR passed `destroy_eval_die.t` (10/10), `issue_2043_nested_aggregate_destroy_lifo.t` (2/2), `list_assignment_hash_tail_releases_displaced_owner.t` (5/5), `owner_trace_snapshot.t` (3/3), and `issue_2043_interpreted_foreach_source_lifetime.t` (7/7) on JVM and interpreter. The full repository gate does not replace DBIx acceptance with that dependency available.
-
-### Remaining acceptance work
-
-| Area | Evidence | Next action |
-|---|---|---|
-| Excel::Writer::XLSX performance and allocation evidence | The package-array root scan comparison on `11838413af` showed 11.92× throughput on `chart_axis28.t` and 6.64× on package-array reads against exact parent `2362185545`. The latest seven-pair comparison of `339bf5cd7a` against `3e97440c60` shows 1.074× throughput [95% interval 1.061, 1.088], matching checksums and stable warmups at nice 20. JFR sampled allocation weight fell about 6.3% overall, with the `ownerSlotSnapshot` stack falling 93.6%. Reports: `/private/tmp/issue2043-package-root-excel-paired.json`, `/private/tmp/issue2043-package-array-paired.json`, and `/private/tmp/issue2043-untracked-index-paired.json`. | The allocation path is now directly targeted and measured; treat JFR as sampled evidence and avoid claiming a portfolio-wide speedup. |
-| DBIx::Class acceptance | Exact PR head `ee827a2ad5` completed 325 DBIx test programs / 43,020 assertions with one failure: `t/storage/txn.t` expected source line 451, got 448 and 447. Baseline `278c12be27` reproduces it. | Classified as the caller-source-location follow-up in #2170; no owner-ledger leak failure remains in this gate. |
-| Catalyst acceptance | Exact PR head `ee827a2ad5` has the same two parser assertions across ten programs as the current-master reproduction at `1ee4ff572d`; the pre-merge candidate passed the target. | Classified in #2168; no owner-ledger fix is indicated by this result. |
-| Mojolicious acceptance | Exact PR head `ee827a2ad5` fails one assertion in `t/mojo/asset.t` with `Can't fork: Resource temporarily unavailable`, matching the recorded host limitation. | Classified in #2169 and covered by the user's waiver; retain the run log. |
-| Focused compatibility retests | Moo weak accessor and Template Toolkit string tests pass on both backends. Standard Perl passes Moo; its Template Toolkit run could not load `Template::Stash::XS` because the temporary standard-Perl environment lacks that native build. | No focused retest remains; preserve the standard-Perl Template Toolkit environment limitation. |
-| PR review and closure | GitHub still reports PR #1938 at `71281ce332689ead7da3bf1f584544d0f37cdd00`, conflicting with `master`; local branch includes tested merge commit `2edf51f698`. | Publish the reconciled branch to the same PR, then verify hosted checks and await maintainer review and merge. After merge, verify #2043 resolution, move current behavior to `dev/architecture/`, archive this plan, and regenerate the design index. |
-
-### Complete step-by-step delivery plan
-
-1. **Resume from this checkpoint.** On 2026-11-24, PR #1938 contains the owner-ledger work, the merged #2171 change, and the RSA minimum-size update. The three classified CPAN failures have separate issues (#2168–#2170). Keep the generated CPAN report changes uncommitted.
-2. **Use TDD for every distinct failure.** Keep existing tests unchanged. Where coverage is missing, add a focused permanent test under `src/test/resources/unit` or the owning Java unit-test tree before production changes. For Perl tests, run system Perl first and save complete output. Prove the regression on the unfixed parent and preserve the failure log.
-3. **Retain the lifecycle fixes.** The ten full-candidate shard-0 failures and the extra pre-edit reachability-query failure now pass; the latest full Make gate passes. Keep the owner-ledger and async foreach changes together because they address current ownership and resume boundaries.
-4. **Reconfirm the proxy-owner fix.** The three diamond regressions and upstream `t/prefetch/diamond.t` and `t/60core.t` pass with the DBIx prerequisite available. Preserve the pre-fix/fixed logs. Confirm the optional DBIx dependency skip behavior remains clean.
-5. **Retain DBIx limitations accurately.** Focused `t/prefetch/diamond.t`, `t/60core.t`, and `t/52leaks.t` passed; all 12 upstream `t/resultset/*.t` files pass on JVM, and focused project regressions pass on system Perl and both backends. The exact-head eight-target run has only the known `t/storage/txn.t` caller-line mismatch, tracked in #2170. The interpreter resultset timeouts and system-Perl `update_delete.t` SQL-status mismatches remain classified limitations; do not claim all-backend DBIx acceptance.
-6. **Record completed compatibility gates.** Focused Moo and Template Toolkit checks pass on both backends. The exact-head eight-target run passed Excel::Writer::XLSX, PPR, Image::ExifTool, File::RandomAccess, DateTime, and Template Toolkit. Catalyst, Mojolicious, and DBIx failures are tracked in #2168–#2170 and reproduced on the exact PR head.
-7. **Review and document the final source.** Run `git diff --check`, review all runtime/support code, verify tests are in `src/`, and remove temporary diagnostics that are not needed. The Work in progress changelog now includes the eval exception, async foreach, and owner-slot lifecycle behavior. Run `make check-links` and offline link checking for changed Markdown.
-8. **Commit and run immutable gates.** Commit the reviewed candidate before the final repository gate. Run `nice -n 19 timeout 900 make` on that exact source commit and focused acceptance gates. If any source changes follow, commit them and rerun affected tests plus `make`.
-9. **Verify the published PR candidate.** The earlier published head was `71896006ff6d3d92dd6b302f7c8c9eaa8b3b2e28` and includes merged #2171. The locally reconciled branch passes full Make on `2edf51f698`; publish it to the same PR and verify hosted checks before review.
-10. **Close delivery after review.** Await human review and maintainer merge. Then verify issue #2043 is resolved, move the current behavior to `dev/architecture/`, archive this design, and regenerate the index with `perl dev/tools/gen_design_index.pl`.
-
-Preflight backups of the dirty source state are `/tmp/wip-unstaged-20261121-144256.patch`, `/tmp/wip-staged-20261121-144256.patch`, `/tmp/wip-status-20261121-144256.txt`, and the later post-timeout snapshot `/tmp/wip-unstaged-20261121-154419.patch`, `/tmp/wip-staged-20261121-154419.patch`, `/tmp/wip-status-20261121-154419.txt`.
-
-## Semantic Ownership Model
+### Ownership model
 
 ```text
 RuntimeCode --semantic capture--> RuntimeScalar pad cell --strong slot--> referent
 ```
 
-These edges have different meanings:
-
 - The declaring scope and semantic closure captures own the pad cell.
-- A strong pad cell owns exactly one referent token.
-- A weak pad cell owns no referent token.
-- Multiple closures can share one pad cell without changing the referent count.
-- Conservative compiler metadata and generated JVM object fields are not Perl
-  roots and own neither the pad nor its referent.
+- A strong pad cell owns exactly one referent token; a weak pad cell owns none.
+- Closures sharing one pad cell do not change the referent count.
+- Compiler metadata and generated JVM object fields are not Perl roots and
+  own neither the pad nor its referent.
 
-### Required invariants
+### Invariants
 
-1. A live pad cell owns at most one token for its current referent.
-2. A strong, live pad cell owns exactly one token when its referent is tracked.
-3. `semanticCaptureCount` affects pad lifetime, not referent cardinality.
-4. Metadata captures never affect Perl lifetime.
-5. Reassignment releases the old pad token before acquiring the new one.
-6. `weaken()` releases the pad token and captures do not recreate it.
-7. The final pad owner releases the token exactly once.
-8. Lifecycle decisions follow owner slots directly; Java reachability does not create or retire Perl owners.
-9. Java reachability alone cannot create a Perl owner.
-10. Strong Perl cycles remain alive until a strong edge is explicitly broken.
+1. A live pad cell owns at most one token for its current referent, and
+   exactly one when the cell is strong and the referent is tracked.
+2. `semanticCaptureCount` affects pad lifetime, not referent cardinality.
+3. Metadata captures never affect Perl lifetime.
+4. Reassignment releases the old token before acquiring the new one.
+5. `weaken()` releases the pad token; captures do not recreate it.
+6. The final pad owner releases the token exactly once.
+7. Lifecycle decisions follow owner slots. Java reachability neither creates
+   nor retires a Perl owner.
+8. Strong Perl cycles stay alive until a strong edge is explicitly broken.
+9. No root traversal, snapshot, or sweep changes reference counts, weak
+   observers, or destruction timing.
 
-## Runtime State
+### Runtime state
 
-The scalar and closure state should make ownership explicit:
-
-- `slotOwnsReferent`: the scalar slot owns one strong referent token. The
-  existing `refCountOwned` field can initially implement this state, but its
-  meaning must be narrowed and documented.
+- `slotOwnsReferent` (currently `refCountOwned`): the scalar slot owns one
+  strong referent token.
 - `scopeOwnerAlive`: the declaring lexical scope still owns the pad cell.
-- `semanticCaptureCount`: number of live Perl closures sharing the pad cell.
-- `metadataCaptureCount`: conservative or diagnostic captures that do not
-  affect Perl ownership.
+- `semanticCaptureCount`: live Perl closures sharing the pad cell.
+- `metadataCaptureCount`: conservative or diagnostic captures with no
+  ownership effect.
 - `CaptureBinding`: a `RuntimeCode` record pairing a pad cell with capture
-  provenance. Each semantic binding is released exactly once.
+  provenance; each semantic binding is released exactly once.
 
-`scopeExited` may remain during migration, but it must become derived lifecycle
-state rather than an ownership heuristic.
+`scopeExited` is derived lifecycle state, not an ownership heuristic.
 
-## State Transitions
+### State transitions
 
 | Event | Pad ownership | Referent ownership |
 |---|---|---|
 | Strong lexical assignment | Scope owns pad | Pad owns one token |
-| First semantic closure capture | Add pad owner | Unchanged |
-| Additional closure capture | Add pad owner | Unchanged |
+| Semantic closure capture (first or additional) | Add pad owner | Unchanged |
 | Metadata capture | Unchanged | Unchanged |
-| Declaring scope exits | Remove scope owner | Retain token while semantic captures remain |
+| Declaring scope exits | Remove scope owner | Token kept while semantic captures remain |
 | One of several closures is released | Remove one pad owner | Unchanged |
 | Final closure is released after scope exit | Pad becomes dead | Release one token |
 | Captured scalar is reassigned | Pad remains live | Release old token; acquire one new token |
@@ -188,109 +537,96 @@ state rather than an ownership heuristic.
 | Captured scalar is unweakened | Pad remains live and strong | Acquire one token |
 
 A borrowed scalar promoted into a semantic captured pad acquires one pad-slot
-token. Further closures sharing that pad do not acquire additional tokens.
+token. Further closures sharing that pad acquire none.
 
-## Exact Capture Provenance
+### Capture provenance
 
-Both execution backends must produce equivalent capture descriptors.
+Both backends produce equivalent capture descriptors.
 
-### JVM backend
+- **JVM:** attach semantic `CaptureBinding` records at compile time. Do not
+  infer ownership from reflected generated fields.
+- **Interpreter:** distinguish lexicals the closure references from
+  conservative snapshots of visible registers. Preserve `eval STRING` access
+  to lexicals without making unrelated registers permanent owners. Release
+  bindings through `RuntimeCode.releaseCaptures()`, as the JVM backend does.
+- **Threads:** rebuild slot ownership and semantic captures in an ithread
+  clone from capture descriptors, not from the source scalar's transient
+  `refCountOwned`.
 
-- Attach semantic `CaptureBinding` records during compilation.
-- Do not infer Perl ownership solely from reflected generated fields.
-- Keep generated closure objects and compiler metadata opaque to ownership.
+### Owner ledger
 
-### Interpreter backend
+Every owner-producing path names an owner kind: scalar or pad slot, aggregate
+element, package global, glob or stash slot, CODE storage, tie wrapper, pad
+constant, temporary call hold, explicit destruction rescue, or another
+runtime-specific strong Perl edge. Debug validation asserts
+`refCount == sum(authoritative owner tokens)`. Temporary aliases, generated
+fields, and conservative captures produce no token.
 
-- Distinguish lexicals referenced by the closure from conservative snapshots of
-  all visible registers.
-- Preserve `eval STRING` access to lexicals without making unrelated register
-  metadata permanent owners.
-- Release semantic bindings through the same `RuntimeCode.releaseCaptures()`
-  path as the JVM backend.
-
-### Threads
-
-- Reconstruct slot ownership and semantic captures in an independent ithread
-  snapshot from capture descriptors.
-- Do not infer cloned ownership from the source scalar's transient
-  `refCountOwned` value.
-
-## Authoritative Owner Ledger
-
-Tracked referents need an authoritative count separate from conservative JVM
-reachability and historical selective-count drift. Every owner-producing path
-must identify an owner kind:
-
-- Scalar or pad slot
-- Aggregate element
-- Package global
-- Glob or stash slot
-- CODE storage
-- Tie wrapper
-- Pad constant
-- Temporary call hold
-- Explicit destruction rescue
-- Other runtime-specific strong Perl edges
-
-Debug validation should assert:
-
-```text
-refCount == sum(authoritative owner tokens)
-```
-
-Temporary aliases, generated fields, and conservative captures must not produce
-authoritative tokens. During migration, legacy or uncertain holds must be
-recorded separately so they cannot prevent weak cleanup indefinitely.
-
-## Lifecycle Ownership and Diagnostic Queries
-
-Weak-reference cleanup and destruction follow current owner-slot identities. A
-referent remains alive while any Perl strong slot remains, including edges in
+A referent stays alive while any strong Perl slot remains, including edges in
 strong cycles. Releasing the final slot performs cleanup through the ordinary
-container and lifecycle paths.
+container and lifecycle paths. Temporary leases and suspended-frame owners
+are explicit slots.
 
-No root traversal, snapshot, or sweep may change reference counts, weak
-observers, or destruction timing. The reachability walker and scalar registry
-are removed; lifecycle code uses owner-slot identities for final-release
-decisions. Temporary leases and suspended-frame owners remain explicit slots.
+### Scan-free mechanisms
 
-## Completed Cleanup and Allocation Work
+| Decision | Mechanism |
+|---|---|
+| Owner-kind presence and counts | Per-kind counts maintained on add, release, and reclassification |
+| Final array and hash cleanup | Retire direct element owners; child containers cascade through their own slots |
+| `undef %hash` destructor ordering | Direct-value identity index maintained by hash mutation, scalar replacement, and blessing; aliased cells and wrapped shared maps take progressive cleanup |
+| Global destruction | Visit each nested aggregate once through the existing cycle-detection set; no cleanup-target pre-scan |
+| Eval-created anonymous CVs | Explicit owner slots, released at eval completion or CV teardown |
+| Package-array roots | Global table writes establish the root; reads of a rooted aggregate skip re-marking |
+| Detached untracked owners | Iterate the untracked-owner index |
+| `\$#array` proxies (`RuntimeArraySizeLvalue`) | Generation identity on the array; orphaning replaces the generation (uncommitted) |
 
-1. Ordinary final array/hash cleanup now retires direct outgoing slots; the
-   recursive walker and one-level eligibility pre-scans are gone from that
-   path. Existing liveness guards remain. Tied arrays use raw local storage
-   access during slot retirement so cleanup does not call Perl `FETCHSIZE`.
-   Global destruction visits each nested aggregate through its existing
-   cycle-detection set and no longer pre-scans aggregates for cleanup targets.
-2. `undef %hash` uses a maintained direct-value identity index to select
-   one-shot versus progressive destructor ordering without a separate full
-   value scan. Aliased cells and wrapped shared maps conservatively use
-   progressive cleanup. The new ordering regression passes system Perl, JVM,
-   and interpreter.
-3. Skip repeated package-root marking when `getGlobalArray` reads an already
-   rooted aggregate; global table writes establish the root and array mutation
-   paths register later slots. The fast-path regression passes, and the
-   seven-pair `chart_axis28.t` comparison against exact parent `2362185545`
-   measures 11.92× throughput (95% interval [10.53, 13.68]) with matching
-   normalized workbook checksums. The paired evidence is in
-   `/private/tmp/issue2043-package-root-excel-paired.json`; the focused
-   package-array workload and JFR samples are retained alongside it.
-4. Exact-head release acceptance is complete. Five targets pass; the three
-   failures are classified in #2168–#2170. The run-updated CPAN report files
-   remain uncommitted in the worktree.
-5. GitHub still reports PR #1938 at `71281ce332689ead7da3bf1f584544d0f37cdd00`,
-   conflicting with `master`; the tested local branch includes merge commit
-   `2edf51f698`. Publish this branch to the same PR and verify hosted checks.
-   Then await maintainer review and merge before archiving this design and
-   updating architecture docs.
+## Acceptance evidence
 
-## Regression Matrix
+**CPAN, exact PR head `ee827a2ad5` (2026-11-24).** Excel::Writer::XLSX
+(1,263 files / 5,189 tests), PPR (1,255), Image::ExifTool with
+File::RandomAccess (113 files / 600), DateTime (3,592), and Template Toolkit
+(121 files / 3,180) pass. Three failures are classified outside this work:
 
-Every new or changed Perl test must pass system Perl before PerlOnJava is used
-as an implementation oracle.
+| Target | Failure | Issue |
+|---|---|---|
+| DBIx::Class | 1 of 43,020: `t/storage/txn.t` caller source line (expected 451, got 448 and 447); reproduces on baseline `278c12be27` | [#2170](https://github.com/fglock/PerlOnJava/issues/2170) |
+| Catalyst | 2 of 3,477 parser assertions; reproduces on master `1ee4ff572d` | [#2168](https://github.com/fglock/PerlOnJava/issues/2168) |
+| Mojolicious | 1 of 3,735: `t/mojo/asset.t` cannot fork under host pressure; waived by the maintainer | [#2169](https://github.com/fglock/PerlOnJava/issues/2169) |
 
-### Pad and closure ownership
+**DBIx::Class leak coverage.** `diamond_prefetch_cursor_leak.t`,
+`diamond_prefetch_cursor_leak_permutations.t`, and
+`diamond_prefetch_shutdown_leak.t` under `src/test/resources/unit/refcount/`
+require `DBIC_CLASS_TEST_ROOT` and skip without it. They pass on system Perl
+and both backends. Upstream `t/prefetch/diamond.t`, `t/60core.t`,
+`t/52leaks.t`, and all 12 `t/resultset/*.t` pass on JVM with LeakTracer clean.
+
+**Performance, `chart_axis28.t`, seven checksum-matched pairs at nice 19–20.**
+Results are per workload and are not a portfolio-wide claim; JFR figures are
+sampled weights.
+
+| Change | Throughput ratio (95% interval) | Allocation |
+|---|---|---|
+| Direct-slot cleanup against the recursive walker | 0.970 [0.869, 1.075] and 0.993 [0.886, 1.128]: no reliable change | Unchanged (7.80 GB) |
+| Package-array root fast path (`11838413af` against `2362185545`) | 11.92 [10.53, 13.68] | Not measured |
+| Untracked-owner index (`339bf5cd7a` against `3e97440c60`) | 1.074 [1.061, 1.088] | 8.126 GB to 7.617 GB |
+
+## Known limitations
+
+- `tied_handler_value_cell_alias.t` fails only on the interpreter and
+  reproduces on master `4a5c33753f`.
+- Five DBIx `t/resultset/*.t` files exceed 600 seconds on the interpreter;
+  unclassified. All-backend DBIx acceptance is not claimed.
+- System Perl reports three `update_delete.t` SQL-status mismatches in the
+  DBIx resultset sweep, unrelated to leak witnesses.
+- A full `jcpan -t DBIx::Class` run does not finish within one hour.
+- #2037 and #2034 are separate follow-up work.
+
+## Regression matrix
+
+New or changed Perl tests must pass system Perl before PerlOnJava output is
+used to drive a fix.
+
+**Pad and closure ownership**
 
 - Zero, one, and two closures sharing one lexical retain one referent owner.
 - Independent lexical copies produce independent referent owners.
@@ -299,83 +635,54 @@ as an implementation oracle.
 - The final release clears weak observers and invokes `DESTROY` exactly once.
 - Nested closures and returned closures share the correct pad cell.
 - Argument aliases and borrowed captures are promoted exactly once.
-- Self-capturing CODE and strong closure cycles match Perl behavior.
+- Self-capturing CODE and strong closure cycles match Perl.
 
-### Mutation
+**Mutation**
 
-- Weakening a captured slot makes it non-owning.
-- Unweakening a live captured slot restores one owner.
-- Reassignment releases the old referent and retains the new referent.
+- Weakening a captured slot makes it non-owning; unweakening restores one owner.
+- Reassignment releases the old referent and retains the new one.
 - Repeated reassignment cannot release a stale referent through deferred work.
 - Ordinary weak references clear when no strong owner exists.
 
-### Capture provenance
+**Capture provenance**
 
 - JVM and interpreter closures report equivalent semantic captures.
-- Conservative interpreter register snapshots do not retain unrelated objects.
+- Interpreter register snapshots do not retain unrelated objects.
 - `eval STRING` retains only the Perl-visible lexical environment for the
   correct code-object lifetime.
 - Generated JVM objects and reflected fields do not become Perl roots.
 - ithread clones reconstruct independent ownership.
 
-### Existing compatibility guards
-
-Preserve and run:
+**Compatibility guards to keep green**
 
 - `unit/weak_localized_cache_lifetime.t`
-- Closure-cycle, captured-scalar, weak-callback, Sub::Quote, and Sub::Defer tests
-  under `unit/refcount/`
-- Focused Moo and Sub::Quote tests
-- DBIx::Class leak-tracer and weak-registry tests
+- Closure-cycle, captured-scalar, weak-callback, Sub::Quote, and Sub::Defer
+  tests under `unit/refcount/`
+- Focused Moo and Sub::Quote tests, DBIx::Class leak-tracer and weak-registry
+  tests
 - Exact-refcount tests using `B::REFCNT` or `Test2::Tools::Refcount`
+- Issue #1132: the Future reproducer prints `completed=1`,
+  `Future::Utils::repeat` prints `ready=1 result=final`, and
+  Net::Async::HTTP `t/05redir.t`, `t/30timeout.t`, and `t/32remove.t` pass on
+  both backends
 
-## Historical issue #1132 ecosystem acceptance
+## Final gates
 
-Run on JVM and interpreter backends with `timeout` and complete output logs:
+- Every new or changed Perl test passes system Perl first.
+- The focused test fails on the unfixed parent, with the log kept.
+- Focused tests pass on JVM and interpreter.
+- `make` passes with complete captured output on the exact source commit.
+- `make check-links` passes.
+- No unexpected high-CPU PerlOnJava JVM remains.
 
-1. The issue #1132 Future reproducer prints `completed=1` without a lost-sequence
-   warning.
-2. `Future::Utils::repeat` prints `ready=1 result=final`.
-3. `Net::Async::HTTP` `t/05redir.t` completes without warning or timeout.
-4. Full Future and Net::Async::HTTP distributions complete.
-5. Cookie and Bzip2 failures remain separately classified.
-6. Focused Moo, Sub::Quote, and DBIx::Class leak tests remain green.
+## History
 
-## Final Gates
+The [ownership rewrite handoff](perl-ownership-rewrite.md#current-handoff-2026-11-15)
+and PR [#1204](https://github.com/fglock/PerlOnJava/pull/1204) (branch
+`fix/issue-1132-closure-lifetime`) record the earlier issue #1132 delivery.
+Both are superseded by the current state above.
 
-- Run every new or changed Perl test with system Perl first.
-- Retain evidence that the focused issue test fails on the unfixed parent.
-- Run focused tests on both PerlOnJava backends.
-- Run `make` with complete captured output and zero failures.
-- Run `make check-links` and offline `lychee` where required.
-- Verify no unexpected high-CPU PerlOnJava JVM remains.
-- Integrate current `master`, rerun focused and full gates on the exact commit,
-  and only then mark the issue-fix PR ready.
+## Open question
 
-## Historical Handoff Notes
-
-### Earlier ownership rewrite handoff
-
-The current status and next action are recorded in the dated section near the
-top of this document. The earlier
-[ownership rewrite handoff](perl-ownership-rewrite.md#current-handoff-2026-11-15)
-records prior candidate evidence and is superseded for current PR state. The
-broader failure inventory remains historical context; #2037 and #2034 are
-separate follow-up work.
-
-### Historical handoff: issue #1132 / PR #1204
-
-This section records the earlier issue-linked PR
-[#1204](https://github.com/PerlOnJava/pull/1204) handoff. Its branch was
-`fix/issue-1132-closure-lifetime`; retained commits were `5b693177f`,
-`1702edb70`, `4832540d6`, `9fcab6e81`, and `87b4fdee3`. These historical
-branch instructions do not define the current continuation.
-
-The Net::Async::HTTP 0.50 distribution is installed through `jcpan` in the
-local CPAN cache. JVM and interpreter `t/30timeout.t` and `t/32remove.t` now
-pass. Preserve both focused ownership regressions when evolving the ledger.
-
-### Open Questions
-
-- Can additional compiler-created aggregate temporaries be made explicit in
-  the owner ledger, rather than relying on opcode-specific transfers?
+Can the remaining compiler-created aggregate temporaries be made explicit in
+the owner ledger instead of relying on opcode-specific transfers?

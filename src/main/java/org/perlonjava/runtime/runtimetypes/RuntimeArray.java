@@ -34,15 +34,25 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         return array != null ? array : new RuntimeArray();
     }
 
-    /** Outstanding {@code $#array} proxies; retained only for lexical teardown. */
-    private List<RuntimeArraySizeLvalue> arraySizeLvalues;
+    /** Identity shared by live {@code $#array} proxies for the current AV state. */
+    private Object arraySizeLvalueGeneration = new Object();
+    /** Active local-array generations, including ancestors whose proxies survive localization. */
+    private final Set<Object> activeArraySizeLvalueGenerations =
+            Collections.newSetFromMap(new IdentityHashMap<>());
     private Integer tiedLocalSizeOverride;
-    /** Number of pre-existing $# proxies at each local-array entry. */
-    private Stack<Integer> localArraySizeLvalueCounts;
+    /** Previous size-proxy generation at each local-array entry. */
+    private Stack<Object> localArraySizeLvalueGenerations;
 
-    void registerArraySizeLvalue(RuntimeArraySizeLvalue proxy) {
-        if (arraySizeLvalues == null) arraySizeLvalues = new ArrayList<>();
-        arraySizeLvalues.add(proxy);
+    {
+        activeArraySizeLvalueGenerations.add(arraySizeLvalueGeneration);
+    }
+
+    Object arraySizeLvalueGeneration() {
+        return arraySizeLvalueGeneration;
+    }
+
+    boolean isArraySizeLvalueGenerationActive(Object generation) {
+        return activeArraySizeLvalueGenerations.contains(generation);
     }
 
     void clearTiedLocalSizeOverride() {
@@ -51,22 +61,16 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
 
     void orphanArraySizeLvalues() {
         arrayLengthLvalueOrphaned = true;
-        if (arraySizeLvalues == null) return;
-        for (RuntimeArraySizeLvalue proxy : arraySizeLvalues) {
-            proxy.orphan();
-        }
-        arraySizeLvalues.clear();
+        activeArraySizeLvalueGenerations.clear();
+        arraySizeLvalueGeneration = new Object();
+        activeArraySizeLvalueGenerations.add(arraySizeLvalueGeneration);
     }
 
-    private void orphanLocalArraySizeLvalues() {
-        int preservedCount = localArraySizeLvalueCounts == null
-                || localArraySizeLvalueCounts.isEmpty() ? 0
-                : localArraySizeLvalueCounts.pop();
-        if (arraySizeLvalues == null) return;
-        for (int i = arraySizeLvalues.size() - 1; i >= preservedCount; i--) {
-            arraySizeLvalues.get(i).orphan();
-            arraySizeLvalues.remove(i);
-        }
+    private void restoreLocalArraySizeLvalueGeneration() {
+        if (localArraySizeLvalueGenerations == null
+                || localArraySizeLvalueGenerations.isEmpty()) return;
+        activeArraySizeLvalueGenerations.remove(arraySizeLvalueGeneration);
+        arraySizeLvalueGeneration = localArraySizeLvalueGenerations.pop();
     }
 
     public static final int PLAIN_ARRAY = 0;
@@ -3164,10 +3168,12 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      */
     @Override
     public void dynamicSaveState() {
-        if (localArraySizeLvalueCounts == null) {
-            localArraySizeLvalueCounts = new Stack<>();
+        if (localArraySizeLvalueGenerations == null) {
+            localArraySizeLvalueGenerations = new Stack<>();
         }
-        localArraySizeLvalueCounts.push(arraySizeLvalues == null ? 0 : arraySizeLvalues.size());
+        localArraySizeLvalueGenerations.push(arraySizeLvalueGeneration);
+        arraySizeLvalueGeneration = new Object();
+        activeArraySizeLvalueGenerations.add(arraySizeLvalueGeneration);
         // Create a new RuntimeArray to save the current state
         RuntimeArray currentState = new RuntimeArray();
         // Copy the current elements to the new state
@@ -3217,7 +3223,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             // that temporary AV and become orphaned at restoration.  Keep
             // proxies that predate the local scope attached to the restored
             // outer array.
-            if (!preserveSuspendedValues) orphanLocalArraySizeLvalues();
+            if (!preserveSuspendedValues) restoreLocalArraySizeLvalueGeneration();
             // Before discarding the current (local scope's) elements, defer
             // refCount decrements for any tracked blessed references they own.
             // Without this, `local @_ = ($obj)` where $obj is tracked would

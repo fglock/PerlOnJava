@@ -587,7 +587,9 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             untrackedReferentOwnersNeedRecheck = true;
             adjustIndexedOwnerSlotCount(kind, 1);
             if (PerlOwnerSlot.isCountedKind(kind)) countedOwnerSlots++;
-            if (PerlOwnerSlot.isPerlOwnerKind(kind)) perlStrongOwnerSlots++;
+            if (PerlOwnerSlot.isPerlOwnerKind(kind)) {
+                perlStrongOwnerSlots++;
+            }
             if (kind == PerlOwnerSlot.Kind.CODE_SLOT) {
                 if (codeSlotOwnerSlots == null) {
                     codeSlotOwnerSlots = java.util.concurrent.ConcurrentHashMap.newKeySet();
@@ -613,7 +615,9 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             PerlOwnerSlot.Kind kind = slot.kind();
             adjustIndexedOwnerSlotCount(kind, -1);
             if (PerlOwnerSlot.isCountedKind(kind)) countedOwnerSlots--;
-            if (PerlOwnerSlot.isPerlOwnerKind(kind)) perlStrongOwnerSlots--;
+            if (PerlOwnerSlot.isPerlOwnerKind(kind)) {
+                perlStrongOwnerSlots--;
+            }
             if (kind == PerlOwnerSlot.Kind.CODE_SLOT) {
                 if (codeSlotOwnerSlots != null) {
                     codeSlotOwnerSlots.remove(slot);

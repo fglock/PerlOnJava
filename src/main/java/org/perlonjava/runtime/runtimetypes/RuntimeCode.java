@@ -3666,12 +3666,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 && scalar.type == RuntimeScalarType.READONLY_SCALAR) {
             throw new PerlCompilerException("Can't return a readonly value from lvalue subroutine");
         }
+        if (value instanceof RuntimeControlFlowList flow
+                && flow.getControlFlowType() == ControlFlowType.RETURN) {
+            requireWritableLvalueReturn(callContext, flow.getReturnValue());
+            return;
+        }
         if (value instanceof RuntimeList list) {
             // A list lvalue may be a key/value hash slice returned to foreach.
             // foreach aliases its writable value cells and never assigns to the
             // alternating key literals; direct assignment is rejected at the
             // call site by the compiler.
-            if (callContext == RuntimeContextType.LVALUE_LIST) {
+            if (callContext == RuntimeContextType.LVALUE_LIST && list.keyValueHashSlice) {
                 return;
             }
             for (RuntimeBase element : list.elements) {
@@ -12167,9 +12172,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
             // Does AUTOLOAD exist?
             // If subroutineName is empty, construct it from the RuntimeCode's package and sub name
-            String fullSubName = code.referenceOriginFqn != null
-                    ? code.referenceOriginFqn : subroutineName;
-            if (fullSubName.isEmpty() && code.packageName != null && code.subName != null) {
+            String fullSubName = subroutineName != null && subroutineName.contains("::")
+                    ? subroutineName : code.referenceOriginFqn;
+            if ((fullSubName == null || fullSubName.isEmpty())
+                    && code.packageName != null && code.subName != null) {
                 fullSubName = code.packageName + "::" + code.subName;
             }
 
@@ -12590,11 +12596,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
 
             // Does AUTOLOAD exist?
-            String fullSubName = code.referenceOriginFqn != null
-                    ? code.referenceOriginFqn
-                    : (code.packageName != null && code.subName != null)
-                            ? code.packageName + "::" + code.subName
-                            : subroutineName;
+            String fullSubName = subroutineName != null && subroutineName.contains("::")
+                    ? subroutineName
+                    : code.referenceOriginFqn != null
+                            ? code.referenceOriginFqn
+                            : (code.packageName != null && code.subName != null)
+                                    ? code.packageName + "::" + code.subName : "";
 
             if (!fullSubName.isEmpty() && fullSubName.contains("::")) {
                 RuntimeScalar importedStubAutoload = findImportedStubAutoload(code, fullSubName);
@@ -12936,11 +12943,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // System.out.println("type: " + code.type);
         if (code.type == RuntimeScalarType.CODE) {
             if (code.value instanceof RuntimeCode runtimeCode
-                    && runtimeCode.prototype == null
-                    && runtimeCode.referenceOriginFqn != null
-                    && runtimeCode.referenceOriginFqn.startsWith("CORE::")) {
-                String coreName = runtimeCode.referenceOriginFqn.substring("CORE::".length());
-                if (CORE_PROTOTYPES.containsKey(coreName)) {
+                    && runtimeCode.prototype == null) {
+                String coreName = null;
+                if (runtimeCode.referenceOriginFqn != null
+                        && runtimeCode.referenceOriginFqn.startsWith("CORE::")) {
+                    coreName = runtimeCode.referenceOriginFqn.substring("CORE::".length());
+                } else if ("CORE".equals(runtimeCode.packageName)) {
+                    // A CORE CV may have been aliased into another glob after
+                    // its origin metadata was set. Its defining package/name
+                    // still identify the prototype when the alias origin does
+                    // not.
+                    coreName = runtimeCode.subName;
+                }
+                if (coreName != null && CORE_PROTOTYPES.containsKey(coreName)) {
                     return new RuntimeScalar(CORE_PROTOTYPES.get(coreName));
                 }
             }
@@ -13421,6 +13436,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     // through a returned marker instead of an exception. Retire
                     // its locals before finally discards the cleanup-stack mark.
                     MyVarCleanupStack.unwindTo(cleanupMark, executionState);
+                }
+                // Explicit return statements bypass the generated block's
+                // ordinary return-list conversion. Validate the actual value
+                // here so readonly literals remain invalid lvalue-sub returns
+                // on both backends, including returns carried by map/grep
+                // control-flow markers.
+                if (isLvalueCode(this)) {
+                    requireWritableLvalueReturn(callContext, result);
                 }
                 RuntimeList returned = detachTryExpressionLvalueResult(
                         coerceScalarCallResult(result, effectiveContext, callContext, !isLvalueCode(this)),

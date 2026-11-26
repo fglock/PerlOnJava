@@ -1053,13 +1053,14 @@ public class BytecodeInterpreter {
                             // REGISTER OPERATIONS
                             // =================================================================
 
-                            case Opcodes.ALIAS -> {
+                            case Opcodes.ALIAS, Opcodes.ALIAS_PRESERVE_READONLY -> {
                                 // Register alias: rd = rs (shares reference, does NOT copy value)
                                 // Must unwrap RuntimeScalarReadOnly to prevent read-only values in variable registers
                                 int dest = bytecode[pc++];
                                 int src = bytecode[pc++];
                                 RuntimeBase srcVal = registers[src];
-                                RuntimeBase aliasValue = isImmutableProxy(srcVal)
+                                RuntimeBase aliasValue = opcode != Opcodes.ALIAS_PRESERVE_READONLY
+                                        && isImmutableProxy(srcVal)
                                         ? ensureMutableScalar(srcVal) : srcVal;
                                 RuntimeBase displaced = registers[dest];
                                 boolean callerOwned = RuntimeCode.isActiveLexicalCellInCallerFrame(

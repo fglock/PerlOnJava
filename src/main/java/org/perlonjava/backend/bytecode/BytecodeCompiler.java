@@ -1210,7 +1210,7 @@ public class BytecodeCompiler implements Visitor {
 
     int separateReturnRegister(int sourceReg) {
         int resultReg = allocateRegister();
-        emit(Opcodes.ALIAS);
+        emit(Opcodes.ALIAS_PRESERVE_READONLY);
         emitReg(resultReg);
         emitReg(sourceReg);
         return resultReg;

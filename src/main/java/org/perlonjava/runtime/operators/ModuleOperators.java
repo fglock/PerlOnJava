@@ -602,10 +602,8 @@ public class ModuleOperators {
                 RuntimeArray prefetchedIncArray = incArray;
 
                 // The launcher may supply only project test paths. Keep the
-                // bundled library available for runtime loading, but do not
-                // claim this synthesized fallback as a user-searched @INC
-                // entry in Perl's diagnostic.
-                boolean syntheticBundledInc = false;
+                // bundled library available for runtime loading and include it
+                // in diagnostics because the search does consult this entry.
                 boolean seenBundledInc = false;
                 Map<Integer, CachedTiedIncEntry> prefetchedTiedEntries = new HashMap<>();
                 for (int i = 0; i < incArray.size(); i++) {
@@ -622,7 +620,6 @@ public class ModuleOperators {
                 }
                 if (!seenBundledInc) {
                     incArray.push(new RuntimeScalar(GlobalContext.JAR_PERLLIB));
-                    syntheticBundledInc = true;
                 }
 
                 // Re-fetch the global array on every iteration. An @INC hook
@@ -643,10 +640,7 @@ public class ModuleOperators {
                             dirScalar = dirScalar.tiedFetch();
                         }
                     }
-                    if (!(syntheticBundledInc
-                            && GlobalContext.JAR_PERLLIB.equals(dirScalar.toString()))) {
-                        incEntriesChecked.add(dirScalar.toString());
-                    }
+                    incEntriesChecked.add(dirScalar.toString());
 
                     // For absolute/relative paths (starting with /, ./, ../), only try hooks
                     // Regular directory entries should be skipped for such paths
@@ -672,33 +666,44 @@ public class ModuleOperators {
                         // restart from slot zero after replacing @INC.
                         RuntimeScalar incCursor = getGlobalVariable("main::INC");
                         incCursor.set(i);
-                        RuntimeList hookResult = invokeIncHook(dirScalar, fileName);
-                        if (!incCursor.getDefinedBoolean()) {
-                            i = -1;
-                            continue;
-                        }
-                        if (hookResult != null) {
-                            IncHookSource hookSource;
-                            try {
-                                hookSource = readIncHookSource(hookResult);
-                            } catch (PerlExitException e) {
-                                throw e;
-                            } catch (Throwable t) {
-                                if (isRequire && setINC) {
-                                    getGlobalHash("main::INC").elements.put(fileName, new RuntimeScalar());
+                        MortalList.pushMark();
+                        try {
+                            RuntimeList hookResult = invokeIncHook(dirScalar, fileName);
+                            if (!incCursor.getDefinedBoolean()) {
+                                i = -1;
+                                continue;
+                            }
+                            if (hookResult != null) {
+                                IncHookSource hookSource;
+                                try {
+                                    hookSource = readIncHookSource(hookResult);
+                                } catch (PerlExitException e) {
+                                    throw e;
+                                } catch (Throwable t) {
+                                    if (isRequire && setINC) {
+                                        getGlobalHash("main::INC").elements.put(fileName, new RuntimeScalar());
+                                    }
+                                    GlobalVariable.setGlobalVariable("main::@",
+                                            findInnermostCause(t).getMessage());
+                                    return new RuntimeScalar();
                                 }
-                                GlobalVariable.setGlobalVariable("main::@", findInnermostCause(t).getMessage());
-                                return new RuntimeScalar();
+                                if (hookSource != null) {
+                                    code = hookSource.code;
+                                    actualFileName = incHookFileName(dirScalar, fileName);
+                                    incHookRef = dirScalar;
+                                    break;
+                                }
                             }
-                            if (hookSource != null) {
-                                code = hookSource.code;
-                                actualFileName = incHookFileName(dirScalar, fileName);
-                                incHookRef = dirScalar;
-                                break;
-                            }
+                            // If hook returned undef or we couldn't use the result, continue
+                            // to next @INC entry.
+                            continue;
+                        } finally {
+                            // The hook's return list is consumed while reading its source.
+                            // End its temporary owner lifetime here, including when source
+                            // generation throws before a source string is produced.
+                            MortalList.flushAboveMark();
+                            MortalList.popMark();
                         }
-                        // If hook returned undef or we couldn't use the result, continue to next @INC entry
-                        continue;
                     }
 
                     // Original string handling for directory paths

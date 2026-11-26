@@ -1685,6 +1685,26 @@ public class SlowOpcodeHandler {
         if (labelIdx >= 0) {
             RuntimeCode.throwIfDirectCallUndefined(codeRef, name, code.stringPool[labelIdx]);
         }
+        if (classNameIdx < 0 && codeRef.type == RuntimeScalarType.CODE
+                && codeRef.value instanceof RuntimeCode runtimeCode
+                && runtimeCode.subroutine == null
+                && runtimeCode.methodHandle == null
+                && runtimeCode.compilerSupplier == null
+                && !runtimeCode.isBuiltin
+                && !runtimeCode.defined()
+                && runtimeCode.referenceOriginFqn != null
+                && !name.equals(runtimeCode.referenceOriginFqn)) {
+            // An undefined CV may be reached through a typeglob alias. Keep
+            // the call-site name on a private CV copy so AUTOLOAD sees the
+            // invoked glob without changing the aliased target's identity.
+            RuntimeCode callSiteCode = runtimeCode.cloneForClosure();
+            callSiteCode.referenceOriginFqn = name;
+            RuntimeScalar callSiteCodeRef = new RuntimeScalar();
+            callSiteCodeRef.type = codeRef.type;
+            callSiteCodeRef.value = callSiteCode;
+            registers[rd] = callSiteCodeRef;
+            return pc;
+        }
         if (classNameIdx >= 0 && codeRef.value instanceof RuntimeCode runtimeCode) {
             // Class-method identity belongs to this compiled call site. Mutating
             // the CV found in the stash leaks the class marker into unrelated

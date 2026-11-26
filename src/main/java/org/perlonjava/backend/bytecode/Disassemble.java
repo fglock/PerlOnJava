@@ -154,9 +154,12 @@ public class Disassemble {
                         sb.append("GOTO_IF_TRUE_NO_OVERLOAD r").append(condReg).append(" -> ").append(target).append("\n");
                         break;
                     case Opcodes.ALIAS:
+                    case Opcodes.ALIAS_PRESERVE_READONLY:
                         int dest = interpretedCode.bytecode[pc++];
                         int src = interpretedCode.bytecode[pc++];
-                        sb.append("ALIAS r").append(dest).append(" = r").append(src).append("\n");
+                        sb.append(opcode == Opcodes.ALIAS_PRESERVE_READONLY
+                                ? "ALIAS_PRESERVE_READONLY r" : "ALIAS r")
+                                .append(dest).append(" = r").append(src).append("\n");
                         break;
                     case Opcodes.LOAD_CONST:
                         int rd = interpretedCode.bytecode[pc++];

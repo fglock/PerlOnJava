@@ -2809,6 +2809,9 @@ public class Opcodes {
     /** Release the foreach source-value lease acquired with ITERATOR_CREATE. Format: iteratorReg. */
     public static final short FOREACH_SOURCE_RELEASE = 646;
 
+    /** Return-value register alias that retains readonly literal identity. */
+    public static final short ALIAS_PRESERVE_READONLY = 647;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }
