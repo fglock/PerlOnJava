@@ -44,6 +44,33 @@ ok($distribution->_perlonjava_run_build_code_action,
 ok(-f 'lib/Generated/PurePerl.pm',
     'generated pure-Perl module exists before fallback installation');
 
+open my $retry_build_pl, '>', 'Build.PL' or die "cannot rewrite Build.PL: $!";
+print {$retry_build_pl} <<'BUILD_PL';
+my $pure_perl = grep { $_ eq '--pureperl_only' } @ARGV;
+open my $build, '>', 'Build' or die "cannot write Build: $!";
+if ($pure_perl) {
+print {$build} <<'BUILD';
+#!/usr/bin/env perl
+use strict;
+use warnings;
+exit 0 unless ($ARGV[0] || '') eq 'code';
+require File::Path;
+File::Path::make_path('lib/Generated');
+open my $generated, '>', 'lib/Generated/PurePerlRetry.pm' or die $!;
+print {$generated} "package Generated::PurePerlRetry; 1;\\n";
+close $generated or die $!;
+BUILD
+} else {
+    print {$build} "exit 1;\n";
+}
+close $build or die "cannot close Build: $!";
+BUILD_PL
+close $retry_build_pl or die "cannot close Build.PL: $!";
+ok($distribution->_perlonjava_run_build_code_action,
+    'fallback retries failed code generation in pure-Perl mode');
+ok(-f 'lib/Generated/PurePerlRetry.pm',
+    'pure-Perl retry runs the code generation action');
+
 open my $broken_build_pl, '>', 'Build.PL' or die "cannot rewrite Build.PL: $!";
 print {$broken_build_pl} "exit 1;\n";
 close $broken_build_pl or die "cannot close Build.PL: $!";
