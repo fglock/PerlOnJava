@@ -80,9 +80,9 @@ handle_dependencies() if ($search || $direct);
 # Upgrade dependencies to their latest versions if the upgrade option is provided
 update_to_latest_versions() if $upgrade;
 
-# Stage CPAN releases in a temporary directory for manual review and porting.
+# Apply CPAN updates only after validation in an isolated worktree.
 if ($upgrade_bundled) {
-    my $status = system($^X, 'dev/tools/cpan_import_sync.pl', '--update', '--root', '.');
+    my $status = system($^X, 'dev/tools/cpan_import_sync.pl', '--apply', '--root', '.');
     exit($status == -1 ? 1 : ($status >> 8));
 }
 
@@ -108,7 +108,7 @@ Dependency Management Options:
     --direct                        Use direct Maven coordinates
     --verbose                       Enable verbose output
     --upgrade                       Upgrade dependencies to their latest versions
-    --upgrade-bundled               Stage current bundled CPAN releases for review
+    --upgrade-bundled               Validate and apply current bundled CPAN releases
 
 Examples:
     ./Configure.pl                              # Show current configuration
@@ -116,7 +116,7 @@ Examples:
     ./Configure.pl --search org.h2.Driver       # Search for JDBC driver
     ./Configure.pl --direct com.h2database:h2:2.2.224
     ./Configure.pl --upgrade                    # Upgrade all dependencies
-    ./Configure.pl --upgrade-bundled            # Stage bundled CPAN releases
+    ./Configure.pl --upgrade-bundled            # Validate and apply bundled CPAN updates
 ';
     exit;
 }

@@ -6,7 +6,7 @@ priorities and future plans.
 
 ## Work in progress
 
-- Normalize MakeMaker prerequisite v-strings, handle semicolon Perl env shebangs, add a shared CPAN provider registry and staged update tool, run Module::Build code generation during XS fallback, and serialize release acceptance tests to reduce process pressure (#2126, #2018, #1294, #2169, #1278, #1114).
+- Normalize MakeMaker prerequisite v-strings, handle semicolon Perl env shebangs, add validated CPAN release staging and apply, run Module::Build code generation during XS fallback, and serialize release acceptance tests to reduce process pressure (#2126, #2018, #1294, #2169, #1278, #1114).
 - Fix CODE-slot lookup through glob references, inherited import stash visibility, false file-scope lexical-sub warnings, and caller package reporting in BEGIN closures (#2173, #2165, #2138, #2136, #2102, #2078).
 - Fix MakeMaker module lookup, script wrappers and v-string serialization; select the requested JSON XS-compatible backend; add Text::CSV::csv and XML::LibXML node API aliases; match version::qv stringification (#2175, #2164, #2153, #2140, #2116, #2114, #2157, #2126).
 - Parse lexical code attributes, MooseX role calls, legacy spaced `@_`, chained prototype calls, qualified class methods, indirect imports with slash arguments, trailing-text `__END__` markers, and the `socket` DSL term (#2172, #2168, #2161, #2154, #2158, #2139, #2137, #2127).

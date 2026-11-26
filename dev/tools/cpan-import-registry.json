@@ -74,6 +74,14 @@
           "version": "2.224",
           "same_version_as_upstream": true,
           "contract": "CPAN XS API compatibility"
+        },
+        {
+          "kind": "gradle_catalog",
+          "provider": "commons-compress",
+          "path": "gradle/libs.versions.toml",
+          "symbol": "commons-compress",
+          "version": "1.28.0",
+          "contract": "independent backing library version"
         }
       ],
       "files": [

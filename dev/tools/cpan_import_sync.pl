@@ -3,6 +3,7 @@ use strict;
 use warnings;
 
 use Archive::Tar;
+use Config ();
 use Cwd qw(abs_path getcwd);
 use Digest::SHA ();
 use File::Basename qw(dirname basename);
@@ -32,14 +33,17 @@ GetOptions(
     'only=s'        => \$option{module},
     'check'         => \$option{check},
     'update'        => \$option{update},
+    'apply'         => \$option{apply},
     'help'          => \$help,
 ) or usage(2);
 usage(0) if $help;
-usage(2) if $option{check} && $option{update};
-$option{check} = 1 unless $option{check} || $option{update};
+my $mode_count = grep { $_ } @option{qw(check update apply)};
+usage(2) if $mode_count > 1;
+$option{check} = 1 unless $mode_count;
 
 $option{root} = abs_path($option{root}) || die "Cannot resolve repository root\n";
-$option{registry} = absolute_from_root($option{registry});
+$option{registry} = abs_path(absolute_from_root($option{registry}))
+    || die "Cannot resolve registry path\n";
 $option{stage_dir} ||= tempdir('perlonjava-cpan-import-XXXXXX', TMPDIR => 1, CLEANUP => 0);
 $option{stage_dir} = absolute_path($option{stage_dir});
 $option{fixture_dir} = absolute_path($option{fixture_dir}) if $option{fixture_dir};
@@ -94,13 +98,26 @@ if ($option{check}) {
 
 make_path($option{stage_dir});
 my $errors = 0;
-for my $entry (@selected) {
-    my $ok = eval { stage_release($entry); 1 };
+if ($option{apply}) {
+    my $ok = eval { apply_releases(\@selected); 1 };
     if (!$ok) {
-        my $error = $@ || 'unknown staging error';
+        my $error = $@ || 'unknown apply error';
         $error =~ s/\s+\z//;
-        warn "$entry->{distribution}: $error\n";
+        warn "CPAN update apply: $error\n";
         $errors++;
+    }
+} else {
+    for my $entry (@selected) {
+        my $ok = eval {
+            stage_release($entry);
+            1;
+        };
+        if (!$ok) {
+            my $error = $@ || 'unknown staging error';
+            $error =~ s/\s+\z//;
+            warn "$entry->{distribution}: $error\n";
+            $errors++;
+        }
     }
 }
 exit $errors ? 1 : 0;
@@ -108,11 +125,12 @@ exit $errors ? 1 : 0;
 sub usage {
     my ($status) = @_;
     print <<'USAGE';
-Usage: cpan_import_sync.pl [--check | --update] [--only DIST|MODULE]
+Usage: cpan_import_sync.pl [--check | --update | --apply] [--only DIST|MODULE]
        [--root DIR] [--registry FILE] [--stage-dir DIR]
 
 --check       Verify the pinned versions in the registry without network access.
 --update      Resolve a stable CPAN release and stage it without changing source.
+--apply       Stage releases, validate them in an isolated worktree, then apply.
 --only        Select one distribution or primary module.
 USAGE
     exit $status;
@@ -205,6 +223,200 @@ sub stage_release {
     write_file(File::Spec->catfile($destination, 'PERLONJAVA-PORTING.txt'),
         porting_report($entry, $release));
     print "$entry->{distribution}: staged $release->{version} at $destination\n";
+    return $destination;
+}
+
+sub apply_releases {
+    my ($entries) = @_;
+    ensure_clean_checkout();
+    my @staged = map { [$_, stage_release($_)] } @$entries;
+    my $worktree = tempdir('perlonjava-cpan-worktree-XXXXXX', TMPDIR => 1, CLEANUP => 0);
+    rmdir $worktree or die "cannot prepare worktree path $worktree: $!\n";
+    my $added = system('git', '-C', $option{root}, 'worktree', 'add', '--detach', $worktree, 'HEAD');
+    if ($added != 0) {
+        rmdir $worktree;
+        die "cannot create validation worktree\n";
+    }
+
+    my $ok = eval {
+        for my $pair (@staged) {
+            apply_candidate($pair->[0], $pair->[1], $worktree);
+            validate_upstream_tests($pair->[0], $pair->[1]);
+        }
+        validate_worktree(\@staged, $worktree);
+        apply_validated_diff($worktree);
+        1;
+    };
+    my $error = $@;
+    my $removed = system('git', '-C', $option{root}, 'worktree', 'remove', '--force', $worktree);
+    warn "cannot remove validation worktree $worktree\n" if $removed != 0;
+    die $error unless $ok;
+    print "applied validated CPAN releases: ", join(', ', map {
+        $_->[0]{distribution} . ' ' . basename($_->[1])
+    } @staged), "\n";
+}
+
+sub ensure_clean_checkout {
+    my $status = `git -C "$option{root}" status --porcelain`;
+    die "--apply requires a clean checkout; no source files were changed\n" if length $status;
+}
+
+sub apply_candidate {
+    my ($entry, $destination, $worktree) = @_;
+    for my $mapping (@{$entry->{files} || []}) {
+        my $source = File::Spec->catfile($destination, 'candidate', split m{/}, $mapping->{target});
+        die "staged mapping is missing $mapping->{source}\n" unless -e $source;
+        my $target = File::Spec->catfile($worktree, split m{/}, $mapping->{target});
+        if (-d $source) {
+            find({
+                wanted => sub {
+                    return unless -f $File::Find::name;
+                    my $relative = File::Spec->abs2rel($File::Find::name, $source);
+                    my $out = File::Spec->catfile($target, $relative);
+                    make_path(dirname($out));
+                    copy_file($File::Find::name, $out);
+                },
+                no_chdir => 1,
+            }, $source);
+        } else {
+            make_path(dirname($target));
+            copy_file($source, $target);
+        }
+    }
+
+    # The selected release is recorded in the staged report; extract it from
+    # the staged directory name so live and fixture releases share this path.
+    my ($version) = basename($destination) =~ /\Q$entry->{distribution}\E-(.+)\z/;
+    die "cannot determine staged release version\n" unless $version;
+    update_version_targets($entry, $version, $worktree);
+    my $registry_file = File::Spec->catfile($worktree, File::Spec->abs2rel($option{registry}, $option{root}));
+    my $registry = read_json($registry_file);
+    for my $registered (@{$registry->{modules}}) {
+        next unless $registered->{distribution} eq $entry->{distribution};
+        $registered->{upstream_distribution_version} = $version;
+        for my $provider (@{$registered->{providers} || []}) {
+            $provider->{version} = $version
+                if $provider->{same_version_as_upstream} || $entry->{port_mode} eq 'full-import';
+        }
+    }
+    write_file($registry_file, JSON::PP->new->canonical->pretty->encode($registry));
+}
+
+sub update_version_targets {
+    my ($entry, $version, $worktree) = @_;
+    for my $provider (@{$entry->{providers} || []}) {
+        next unless $provider->{same_version_as_upstream};
+        my $path = File::Spec->catfile($worktree, split m{/}, $provider->{path});
+        open my $fh, '<:raw', $path or die "cannot read version target $path: $!\n";
+        local $/;
+        my $source = <$fh>;
+        close $fh or die "cannot close version target $path: $!\n";
+        my $count;
+        if ($provider->{kind} eq 'perl_version') {
+            $count = ($source =~ s/(\$VERSION\s*=\s*)(?:'[^']*'|"[^"]*"|[\w.]+)/$1 . "'$version'"/e);
+        } elsif ($provider->{kind} eq 'java_static_string') {
+            my $symbol = quotemeta($provider->{symbol});
+            $count = ($source =~ s/(\b$symbol\s*=\s*")[^"]*(")/$1 . $version . $2/e);
+        } elsif ($provider->{kind} eq 'java_runtime_scalar') {
+            my $symbol = quotemeta($provider->{symbol});
+            $count = ($source =~ s/(getGlobalVariable\("$symbol"\)\s*\.set\(new RuntimeScalar\(")[^"]*("\)\))/ $1 . $version . $2 /e);
+        } else {
+            die "unsupported version target kind $provider->{kind}\n";
+        }
+        die "cannot update version target $provider->{path}\n" unless $count;
+        write_file($path, $source);
+    }
+}
+
+sub validate_upstream_tests {
+    my ($entry, $destination) = @_;
+    my $lib = File::Spec->catdir($destination, 'lib');
+    if (-d File::Spec->catdir($destination, 't')) {
+        local $ENV{PERL5LIB} = join($Config::Config{path_sep} || ':', $lib,
+            ($ENV{PERL5LIB} || ''));
+        my $status = system('timeout', '3600', 'prove', '-r', File::Spec->catdir($destination, 't'));
+        die "system Perl tests failed for $entry->{distribution}\n" if $status != 0;
+    }
+}
+
+sub validate_worktree {
+    my ($staged, $worktree) = @_;
+    my $make = system('nice', '-n', '19', 'make', '-C', $worktree);
+    die "make failed in validation worktree\n" if $make != 0;
+    my $bundled = system('nice', '-n', '19', 'make', '-C', $worktree, 'test-bundled-modules');
+    die "make test-bundled-modules failed in validation worktree\n" if $bundled != 0;
+    for my $pair (@$staged) {
+        audit_module_tests_discovered($pair->[0], $pair->[1], $worktree);
+    }
+}
+
+sub audit_module_tests_discovered {
+    my ($entry, $destination, $worktree) = @_;
+    my $report = File::Spec->catfile($worktree, 'build', 'test-results', 'testModule',
+        'TEST-org.perlonjava.ModuleTestExecutionTest.xml');
+    my $skip_file = File::Spec->catfile($worktree, 'src', 'test', 'java', 'org',
+        'perlonjava', 'ModuleTestExecutionTest.java');
+    open my $skip_fh, '<', $skip_file or die "cannot read module test skip list: $!\n";
+    local $/;
+    my $skip_source = <$skip_fh>;
+    close $skip_fh;
+    my %skipped = map { $_ => 1 } $skip_source =~ /"(module\/[^\"]+\.t)"/g;
+
+    my @expected;
+    for my $mapping (@{$entry->{files} || []}) {
+        next unless $mapping->{target} =~ m{\Asrc/test/resources/module/};
+        my $source = File::Spec->catdir($destination, 'candidate', split m{/}, $mapping->{target});
+        my @files;
+        if (-d $source) {
+            find({
+                wanted => sub {
+                    push @files, $File::Find::name
+                        if -f $File::Find::name && $File::Find::name =~ /\.t\z/;
+                },
+                no_chdir => 1,
+            }, $source);
+        } elsif ($source =~ /\.t\z/ && -f $source) {
+            @files = ($source);
+        }
+        for my $file (@files) {
+            my $relative = File::Spec->abs2rel($file, $source);
+            my $test_path = $mapping->{target};
+            $test_path =~ s{\Asrc/test/resources/}{};
+            $test_path = File::Spec->catfile($test_path, $relative) if -d $source;
+            $test_path =~ s{\\}{/}g;
+            push @expected, $test_path;
+        }
+    }
+    return unless @expected;
+    open my $report_fh, '<', $report or die "bundled module test report is missing\n";
+    my $report_text = do { local $/; <$report_fh> };
+    close $report_fh;
+    for my $test (@expected) {
+        next if $skipped{$test};
+        die "refreshed test $test was not discovered by ModuleTestExecutionTest\n"
+            unless index($report_text, $test) >= 0;
+    }
+}
+
+sub apply_validated_diff {
+    my ($worktree) = @_;
+    my $staged = system('git', '-C', $worktree, 'add', '-A');
+    die "cannot stage validated worktree changes\n" if $staged != 0;
+    my ($patch_fh, $patch_path) = File::Temp::tempfile('perlonjava-cpan-apply-XXXXXX',
+        DIR => $worktree, UNLINK => 0);
+    close $patch_fh or die "cannot close patch file: $!\n";
+    my $ok = eval {
+        my $saved = system('git', '-C', $worktree, 'diff', '--cached', '--binary', 'HEAD', "--output=$patch_path");
+        die "cannot capture validated worktree changes\n" if $saved != 0;
+        my $checked = system('git', '-C', $option{root}, 'apply', '--check', $patch_path);
+        die "validated update no longer applies cleanly\n" if $checked != 0;
+        my $applied = system('git', '-C', $option{root}, 'apply', $patch_path);
+        die "cannot apply validated update\n" if $applied != 0;
+        1;
+    };
+    my $error = $@;
+    unlink $patch_path or warn "cannot remove temporary patch $patch_path: $!\n";
+    die $error unless $ok;
 }
 
 sub locate_release {
@@ -212,18 +424,35 @@ sub locate_release {
     if ($option{fixture_dir}) {
         my $path = File::Spec->catfile($option{fixture_dir}, 'release', "$entry->{distribution}.json");
         if (-f $path) {
-            my $release = read_json($path);
-            $release->{archive} ||= "$release->{name}-$release->{version}.tar.gz";
-            return $release;
+            return select_stable_release($entry, read_json($path));
         }
     }
+    my $query = 'distribution:' . $entry->{distribution};
+    $query =~ s/([^A-Za-z0-9_.:-])/sprintf('%%%02X', ord($1))/ge;
     my $response = HTTP::Tiny->new(timeout => 30)->get(
-        'https://fastapi.metacpan.org/v1/release/' . $entry->{distribution});
+        'https://fastapi.metacpan.org/v1/release/_search?size=100&sort=date:desc&query=' . $query);
     die "MetaCPAN release lookup failed: $response->{status} $response->{reason}\n"
         unless $response->{success};
-    my $release = decode_json($response->{content});
-    die "MetaCPAN returned a developer release\n"
-        if ($release->{maturity} || '') =~ /dev|developer|trial/i;
+    return select_stable_release($entry, decode_json($response->{content}));
+}
+
+sub select_stable_release {
+    my ($entry, $data) = @_;
+    my @releases;
+    if (ref($data) eq 'HASH' && ref($data->{releases}) eq 'ARRAY') {
+        @releases = @{$data->{releases}};
+    } elsif (ref($data) eq 'HASH' && ref($data->{hits}{hits}) eq 'ARRAY') {
+        @releases = map { $_->{_source} || $_ } @{$data->{hits}{hits}};
+    } else {
+        @releases = ($data);
+    }
+    @releases = sort { ($b->{date} || '') cmp ($a->{date} || '') } grep {
+        ref($_) eq 'HASH'
+            && ($_->{maturity} || '') =~ /\A(?:released|stable)\z/i
+            && (!$_->{name} || $_->{name} eq $entry->{distribution})
+    } @releases;
+    die "MetaCPAN returned no stable release for $entry->{distribution}\n" unless @releases;
+    my $release = { %{$releases[0]} };
     $release->{name} ||= $entry->{distribution};
     $release->{archive} ||= "$release->{name}-$release->{version}.tar.gz";
     return $release;

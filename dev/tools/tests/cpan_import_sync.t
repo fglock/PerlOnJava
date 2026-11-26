@@ -2,6 +2,7 @@ use strict;
 use warnings;
 
 use Archive::Tar;
+use Config ();
 use Digest::SHA ();
 use File::Basename qw(dirname);
 use File::Find qw(find);
@@ -42,9 +43,18 @@ write_file($catalog_path, 'commons-compress = "1.28.0"' . "\n");
 my $consumer = {
     distribution => 'MooseX-LocalAttribute',
     source => 'https://metacpan.org/dist/MooseX-LocalAttribute',
-    port_mode => 'rewritten',
+    port_mode => 'full-import',
     upstream_distribution_version => '0.9',
-    providers => [],
+    providers => [{
+        kind => 'perl_version', module => 'MooseX::LocalAttribute',
+        path => 'src/main/perl/lib/MooseX/LocalAttribute.pm', version => '0.8',
+        same_version_as_upstream => JSON::PP::true,
+        contract => 'full-import module version',
+    }],
+    files => [
+        { source => 'lib/MooseX/LocalAttribute.pm', target => 'src/main/perl/lib/MooseX/LocalAttribute.pm' },
+        { source => 't', target => 'src/test/resources/module/MooseX-LocalAttribute/t' },
+    ],
     update_policy => 'stage-and-manual-port',
     tests => [],
 };
@@ -101,7 +111,11 @@ my $bzip = {
 write_json($registry_path,
     { schema_version => 1, modules => [$object_pad, $zlib, $bzip, $consumer] });
 
-my ($status, $output) = run_sync('--check', '--module', 'Object-Pad');
+my ($status, $output) = run_sync('--apply', '--update');
+isnt($status, 0, 'conflicting update modes are rejected');
+like($output, qr/Usage: cpan_import_sync\.pl/, 'mode conflict prints command usage');
+
+($status, $output) = run_sync('--check', '--module', 'Object-Pad');
 is($status, 0, 'offline check accepts a consistent provider');
 like($output, qr/contracts are consistent \(1 distributions\)/,
     'module selection limits the offline report');
@@ -175,6 +189,12 @@ find({
     no_chdir => 1,
 }, $candidate);
 ok(@staged_sources, 'verified release source is staged');
+ok(-f File::Spec->catfile($candidate, 'candidate', 'src', 'main', 'perl', 'lib',
+        'MooseX', 'LocalAttribute.pm'),
+    'full source mappings are prepared beneath the staged candidate');
+ok(-f File::Spec->catfile($candidate, 'candidate', 'src', 'test', 'resources', 'module',
+        'MooseX-LocalAttribute', 't', 'upstream.t'),
+    'upstream test mappings are prepared beneath the staged candidate');
 ok(-f $provider_path, 'staging does not overwrite a bundled provider');
 
 write_candidate('0.800', 0);
@@ -206,23 +226,157 @@ like($output, qr/unsafe archive path/, 'unsafe path is reported');
 ok(!-e File::Spec->catfile($temporary, 'escape.txt'),
     'archive path validation prevents traversal outside staging');
 
+write_candidate('0.800', 0);
+my $stable_release_path = File::Spec->catfile($fixture, 'release', 'MooseX-LocalAttribute.json');
+my $stable_release = read_json($stable_release_path);
+write_json($stable_release_path, {
+    releases => [
+        { %$stable_release, version => '9.9', maturity => 'developer', date => '2026-12-01' },
+        { %$stable_release, version => '1.0', maturity => 'released', date => '2026-01-01' },
+    ],
+});
+my $stable_stage = File::Spec->catdir($stage_root, 'stable-selection');
+($status, $output) = run_sync('--update', '--module', 'MooseX-LocalAttribute',
+    '--overlay-dir', $overlay, '--fixture-dir', $fixture, '--stage-dir', $stable_stage);
+diag($output) if $status;
+is($status, 0, 'release lookup selects a stable release when a newer trial exists');
+ok(-d File::Spec->catdir($stable_stage, 'MooseX-LocalAttribute-1.0'),
+    'stable selection stages the released version');
+
+write_candidate('0.800', 0, undef, 'Wrong-Distribution');
+my $mismatch_stage = File::Spec->catdir($stage_root, 'distribution-mismatch');
+($status, $output) = run_sync('--update', '--module', 'MooseX-LocalAttribute',
+    '--overlay-dir', $overlay, '--fixture-dir', $fixture, '--stage-dir', $mismatch_stage);
+isnt($status, 0, 'candidate metadata with a different distribution is rejected');
+like($output, qr/META\.json distribution name does not match/,
+    'distribution mismatch explains the candidate metadata error');
+
+write_json($stable_release_path, { releases => [
+    { %$stable_release, version => '9.9', maturity => 'developer' },
+] });
+($status, $output) = run_sync('--update', '--module', 'MooseX-LocalAttribute',
+    '--fixture-dir', $fixture, '--stage-dir', File::Spec->catdir($stage_root, 'no-stable'));
+isnt($status, 0, 'release lookup rejects a distribution with no stable release');
+like($output, qr/no stable release/, 'absence of a stable release is explicit');
+
+my $apply_root = File::Spec->catdir($temporary, 'apply-repo');
+my $apply_registry = File::Spec->catfile($apply_root, 'dev', 'tools', 'cpan-import-registry.json');
+my $apply_registry_entry = {
+    schema_version => 1,
+    modules => [{ %$consumer, tests => [] }],
+};
+write_json($apply_registry, $apply_registry_entry);
+write_file(File::Spec->catfile($apply_root, 'src', 'test', 'java', 'org', 'perlonjava',
+    'ModuleTestExecutionTest.java'), 'class ModuleTestExecutionTest {}' . "\n");
+write_file(File::Spec->catfile($apply_root, 'src', 'main', 'perl', 'lib', 'MooseX',
+    'LocalAttribute.pm'), "package MooseX::LocalAttribute; our \$VERSION = '0.8'; 1;\n");
+write_file(File::Spec->catfile($apply_root, 'Makefile'), 'all:' . "\n");
+system('git', '-C', $apply_root, 'init', '--quiet') == 0 or die "cannot initialize apply fixture repository\n";
+system('git', '-C', $apply_root, 'config', 'user.name', 'CPAN updater test') == 0
+    or die "cannot configure fixture repository identity\n";
+system('git', '-C', $apply_root, 'config', 'user.email', 'cpan-updater-test@example.invalid') == 0
+    or die "cannot configure fixture repository identity\n";
+system('git', '-C', $apply_root, 'add', '-A') == 0 or die "cannot stage fixture repository\n";
+system('git', '-C', $apply_root, 'commit', '--quiet', '-m', 'fixture') == 0
+    or die "cannot commit fixture repository\n";
+
+my $fake_bin = File::Spec->catdir($temporary, 'fake-bin');
+make_path($fake_bin);
+write_file(File::Spec->catfile($fake_bin, 'nice'), "#!/bin/sh\nshift 2\nexec \"\$@\"\n");
+write_file(File::Spec->catfile($fake_bin, 'make'), <<'MAKE');
+#!/bin/sh
+if [ "$1" = "-C" ]; then cd "$2" || exit 1; shift 2; fi
+if [ "${FAKE_MAKE_FAIL:-}" = "1" ]; then exit 9; fi
+if [ "$1" = "test-bundled-modules" ]; then
+  mkdir -p build/test-results/testModule
+  if [ "${FAKE_TEST_UNDISCOVERED:-}" = "1" ]; then
+    printf '%s\n' '<testsuite/>' \
+      > build/test-results/testModule/TEST-org.perlonjava.ModuleTestExecutionTest.xml
+  else
+    printf '%s\n' '<testsuite><testcase name="module/MooseX-LocalAttribute/t/upstream.t"/></testsuite>' \
+    > build/test-results/testModule/TEST-org.perlonjava.ModuleTestExecutionTest.xml
+  fi
+fi
+exit 0
+MAKE
+chmod 0755, File::Spec->catfile($fake_bin, 'nice'), File::Spec->catfile($fake_bin, 'make');
+
+my $original_root = $root;
+my $original_registry = $registry_path;
+$root = $apply_root;
+$registry_path = $apply_registry;
+write_candidate('0.800', 0);
+my $apply_stage = File::Spec->catdir($stage_root, 'apply-success');
+local $ENV{PATH} = $fake_bin . $Config::Config{path_sep} . $ENV{PATH};
+($status, $output) = run_sync('--apply', '--module', 'MooseX-LocalAttribute',
+    '--fixture-dir', $fixture, '--stage-dir', $apply_stage);
+diag($output) if $status;
+is($status, 0, 'apply validates the staged update in a temporary worktree');
+ok(-f File::Spec->catfile($apply_root, 'src', 'main', 'perl', 'lib', 'MooseX',
+        'LocalAttribute.pm'),
+    'validated full-import source is applied to the clean checkout');
+ok(-f File::Spec->catfile($apply_root, 'src', 'test', 'resources', 'module',
+        'MooseX-LocalAttribute', 't', 'upstream.t'),
+    'validated upstream tests are applied with their source');
+like(read_file(File::Spec->catfile($apply_root, 'src', 'main', 'perl', 'lib', 'MooseX',
+        'LocalAttribute.pm')), qr/\$VERSION\s*=\s*'1\.0'/,
+    'full-import provider version target follows the selected release');
+my $applied_registry = read_json($apply_registry);
+is($applied_registry->{modules}[0]{upstream_distribution_version}, '1.0',
+    'apply updates the registry only after validation succeeds');
+
+my $failure_root = File::Spec->catdir($temporary, 'apply-failure-repo');
+system('git', 'clone', '--quiet', $apply_root, $failure_root) == 0
+    or die "cannot clone failure fixture repository\n";
+$root = $failure_root;
+$registry_path = File::Spec->catfile($failure_root, 'dev', 'tools', 'cpan-import-registry.json');
+local $ENV{FAKE_MAKE_FAIL} = 1;
+my $failed_apply_stage = File::Spec->catdir($stage_root, 'apply-failure');
+($status, $output) = run_sync('--apply', '--module', 'MooseX-LocalAttribute',
+    '--fixture-dir', $fixture, '--stage-dir', $failed_apply_stage);
+diag($output) if $status;
+isnt($status, 0, 'failed worktree validation rejects apply');
+like(read_file(File::Spec->catfile($failure_root, 'src', 'main', 'perl', 'lib', 'MooseX',
+        'LocalAttribute.pm')), qr/\$VERSION\s*=\s*'0\.8'/,
+    'failed validation leaves the checkout source unchanged');
+my $failure_status = `git -C "$failure_root" status --porcelain`;
+diag(`git -C "$failure_root" diff -- dev/tools/cpan-import-registry.json`) if length $failure_status;
+is($failure_status, '', 'failed validation leaves no tracked checkout changes');
+
+{
+    local $ENV{FAKE_MAKE_FAIL} = 0;
+    local $ENV{FAKE_TEST_UNDISCOVERED} = 1;
+    ($status, $output) = run_sync('--apply', '--module', 'MooseX-LocalAttribute',
+        '--fixture-dir', $fixture, '--stage-dir', File::Spec->catdir($stage_root, 'audit-failure'));
+}
+isnt($status, 0, 'apply rejects refreshed tests missing from the discovery report');
+like($output, qr/not discovered by ModuleTestExecutionTest/,
+    'test discovery audit identifies the omitted upstream test');
+is(`git -C "$failure_root" status --porcelain`, '',
+    'test discovery failure leaves the checkout unchanged');
+
+$root = $original_root;
+$registry_path = $original_registry;
+
 done_testing();
 
 sub write_candidate {
-    my ($minimum, $unsafe, $requirement_package) = @_;
+    my ($minimum, $unsafe, $requirement_package, $meta_name) = @_;
     $requirement_package //= 'Object::Pad';
     my $dist = 'MooseX-LocalAttribute';
     my $version = '1.0';
     my $archive = Archive::Tar->new;
     my $meta = {
-        name => $dist,
+        name => $meta_name || $dist,
         version => $version,
         prereqs => { runtime => { requires => { $requirement_package => $minimum } } },
     };
     $archive->add_data("$dist-$version/META.json", encode_json($meta),
         { mode => 0644 });
     $archive->add_data("$dist-$version/lib/MooseX/LocalAttribute.pm",
-        "package MooseX::LocalAttribute; 1;\n", { mode => 0644 });
+        "package MooseX::LocalAttribute; our \$VERSION = '0.8'; 1;\n", { mode => 0644 });
+    $archive->add_data("$dist-$version/t/upstream.t",
+        "print \"1..1\\nok 1 - fixture upstream test\\n\";\n", { mode => 0644 });
     $archive->add_data('../../escape.txt', 'bad', { mode => 0644 }) if $unsafe;
     my $archive_path = File::Spec->catfile($fixture, 'archive', "$dist-$version.tar.gz");
     $archive->write($archive_path, Archive::Tar::COMPRESS_GZIP())
