@@ -1,7 +1,11 @@
 package org.perlonjava.runtime.debugger;
 
+import org.perlonjava.runtime.runtimetypes.GlobalContext;
+import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.PerlRuntime;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
+import org.perlonjava.runtime.runtimetypes.RuntimeHash;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.util.Deque;
 
@@ -19,6 +23,13 @@ public final class DebugState {
     public static boolean isDebugMode() {
         if (!anyDebugMode) return false;
         return current().debugMode;
+    }
+
+    /** Whether Perl requested source locations for named subs through $^P. */
+    public static boolean shouldTrackSubroutineLocations() {
+        return isDebugMode()
+                || (GlobalVariable.getGlobalVariable(GlobalContext.DEBUGGER_FLAGS).getInt()
+                        & 0x10) != 0;
     }
 
     public static void setDebugMode(boolean enabled) {
@@ -70,9 +81,11 @@ public final class DebugState {
 
     public static void registerSubroutine(String fullName, String filename, int startLine, int endLine) {
         DebugRuntimeState state = current();
-        if (state.debugMode) {
-            state.subLocations.put(fullName, filename + ":" + startLine + "-" + endLine);
-        }
+        if (!shouldTrackSubroutineLocations()) return;
+        String location = filename + ":" + startLine + "-" + endLine;
+        state.subLocations.put(fullName, location);
+        RuntimeHash dbSub = GlobalVariable.getGlobalHash("DB::sub");
+        dbSub.put(fullName, new RuntimeScalar(location));
     }
 
     public static void pushArgs(RuntimeArray args) {
