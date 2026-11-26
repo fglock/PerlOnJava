@@ -1,4 +1,4 @@
-.PHONY: all help clean test test-unit test-bench test-perl-optional test-cpan-tester test-interpreter check-thread-test-sources check-thread-core-test-sources check-thread-ecosystem-test-sources check-thread-regex-test-sources test-thread-tooling test-threads test-threads-core test-threads-core-platform test-threads-core-mode test-threads-windows test-threads-regex test-threads-release test-threads-ecosystem test-bundled-modules test-cpan-distroprefs test-cpan-release-acceptance test-exiftool test-all test-gradle test-gradle-unit test-gradle-all test-gradle-parallel test-maven-parallel build run wrapper check-java-gradle dev ci sbom sbom-java sbom-perl sbom-clean check-links perl5-update perl5-sync perl5-sync-check
+.PHONY: all help clean test test-unit test-bench test-perl-optional test-cpan-tester test-interpreter check-thread-test-sources check-thread-core-test-sources check-thread-ecosystem-test-sources check-thread-regex-test-sources test-thread-tooling test-threads test-threads-core test-threads-core-platform test-threads-core-mode test-threads-windows test-threads-regex test-threads-release test-threads-ecosystem test-bundled-modules test-cpan-distroprefs test-cpan-release-acceptance test-exiftool test-all test-gradle test-gradle-unit test-gradle-all test-gradle-parallel test-maven-parallel build run wrapper check-java-gradle dev ci sbom sbom-java sbom-perl sbom-clean check-links perl5-update perl5-sync perl5-sync-check check-bundled-modules update-bundled-modules
 
 PERL ?= perl
 GRADLE_ARGS ?=
@@ -27,6 +27,7 @@ THREAD_TOOLING_TESTS := \
 	dev/tools/tests/perl_test_runner_weighted_integration.t
 
 CPAN_TESTER_TESTS := \
+	dev/tools/tests/cpan_import_sync.t \
 	dev/tools/tests/cpan_random_tester_parser.t \
 	dev/tools/tests/cpan_random_tester_perl_oracle.t \
 	dev/tools/tests/cpan_random_tester_timeout.t
@@ -125,6 +126,8 @@ help:
 	@echo ""
 	@echo "Additional test gates"
 	@echo "  make test-bundled-modules   Bundled CPAN module tests"
+	@echo "  make check-bundled-modules  Check bundled CPAN provider versions offline"
+	@echo "  make update-bundled-modules Stage current CPAN releases for review"
 	@echo "  make test-interpreter       Unit tests on the bytecode interpreter backend"
 	@echo "  make test-threads           ithreads compatibility gate"
 	@echo "  make test-cpan-distroprefs  Bundled CPAN distroprefs checks"
@@ -255,6 +258,13 @@ endif
 # Offline parser and result-classification regression coverage for the CPAN tester.
 test-cpan-tester:
 	timeout 120 prove $(CPAN_TESTER_TESTS)
+
+# Shared registry for offline provider consistency and staged upstream updates.
+check-bundled-modules:
+	perl dev/tools/cpan_import_sync.pl --check
+
+update-bundled-modules:
+	perl dev/tools/cpan_import_sync.pl --update
 
 # Unit tests using bytecode interpreter backend (feature parity check)
 test-interpreter:

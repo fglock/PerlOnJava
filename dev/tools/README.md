@@ -117,6 +117,31 @@ By default it creates a separate worktree under `/tmp`, runs `git bisect --first
 - Reproducers and experimental snippets: `dev/sandbox/`
 - Benchmarks: `dev/bench/`
 
+## CPAN port updates
+
+`cpan_import_sync.pl` uses `cpan-import-registry.json` to record maintained
+CPAN provider versions, port modes, source mappings, and test fixtures. Check
+the local provider contracts without network access:
+
+```bash
+make check-bundled-modules
+```
+
+Stage the latest stable MetaCPAN releases outside the checkout for review:
+
+```bash
+make update-bundled-modules
+perl dev/tools/cpan_import_sync.pl --update --only Clone-PP
+```
+
+The tool verifies release identity, archive checksums, package metadata, and
+bundled runtime prerequisite versions before extraction. It writes a porting
+report with each staged candidate. Staging does not apply files to the source
+tree; maintainers must review rewritten ports and run the declared tests
+before copying changes. This workflow is separate from `dev/import-perl5/`
+syncing, the shipped `jcpan` distroprefs and patches, and
+`make test-bundled-modules`.
+
 ## Adding New Tools
 
 When adding new development tools:
