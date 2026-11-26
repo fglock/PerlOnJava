@@ -372,6 +372,7 @@ public class ArgumentParser {
                         String.join(" ", java.util.Arrays.copyOfRange(tokens, interpreterIndex, tokens.length))
                                 .replaceFirst(";(?=\\s|$)", ""),
                         parsedArgs);
+                parsedArgs.perlShebangProcessed = true;
                 return;
             }
         }
@@ -382,6 +383,7 @@ public class ArgumentParser {
             // interpreter instead of trying to exec a path ending in ';'.
             processPerlShebangSwitches(
                     shebangLine.replaceFirst(";(?=\\s|$)", ""), parsedArgs);
+            parsedArgs.perlShebangProcessed = true;
             return;
         }
         if (isPerlOnJavaExecutable(Paths.get(tokens[0]))) {
