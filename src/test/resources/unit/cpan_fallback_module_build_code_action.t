@@ -11,6 +11,11 @@ plan skip_all => 'PerlOnJava CPAN fallback hook is not installed'
         CPAN::Distribution->can('_perlonjava_run_build_code_action');
     };
 
+{
+    no warnings 'once';
+    $CPAN::Frontend = bless {}, 'Local::QuietCPANFrontend';
+}
+
 my $original_dir = Cwd::getcwd();
 my $build_dir = tempdir(CLEANUP => 1);
 chdir $build_dir or die "cannot chdir to $build_dir: $!";
@@ -47,3 +52,6 @@ ok(!$distribution->_perlonjava_run_build_code_action,
 
 chdir $original_dir or die "cannot return to $original_dir: $!";
 done_testing();
+
+package Local::QuietCPANFrontend;
+sub myprint { return 1 }
