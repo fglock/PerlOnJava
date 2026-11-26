@@ -38,6 +38,11 @@ priorities and future plans.
 - Release list-assignment temporary cell owners after returned values reach the caller, so weak fields no longer pin optree constants (#2043).
 - Represent untracked, tracked, and weak-tracked referents separately from their nonnegative owner counts (#2043).
 - Drain scoped owner releases at block exit even while statement flushing is suppressed, preserving earlier pending releases (#2043).
+- Free anonymous `[...]` and `{...}` literals that no Perl slot owns at statement end, so dereferenced temporaries run `DESTROY` and orphan their `$#` proxies (#2043).
+- Copy the current last index through a `\$#array` reference, and `undef` once the array is freed (#2043).
+- Apply counted releases for argument-aliased referents immediately and defer only their lifecycle decision, so `my (undef, ...) = @_` no longer adds a visible reference (#2043).
+- List every searched `@INC` entry in `require` errors, reject readonly values from explicit `return` in lvalue subs, keep CORE builtin identity and prototype through glob aliases, and report the called glob alias to `AUTOLOAD` on both backends (#2043).
+- Release a detached thread's child runtime regardless of whether `detach` runs before or after the thread finishes.
 - Fix MakeMaker module lookup, script wrappers and v-string serialization; select the requested JSON XS-compatible backend; add Text::CSV::csv and XML::LibXML node API aliases; match version::qv stringification (#2175, #2164, #2153, #2140, #2116, #2114, #2157, #2126).
 - Parse lexical code attributes, MooseX role calls, legacy spaced `@_`, chained prototype calls, qualified class methods, indirect imports with slash arguments, trailing-text `__END__` markers, and the `socket` DSL term (#2172, #2168, #2161, #2154, #2158, #2139, #2137, #2127).
 - Honor overloaded logical negation, warn on distinct constant-sub redefinitions with equal values, and preserve reference-valued scalar slots through localized glob aliases (#2122, #2075, #1939).
