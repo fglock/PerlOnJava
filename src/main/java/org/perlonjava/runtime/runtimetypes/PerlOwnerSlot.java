@@ -1426,11 +1426,6 @@ public final class PerlOwnerSlot {
             PerlRuntime.releaseOwnerSlotReferent(previousState, previous);
         }
         registeredInOwnerLedger = false;
-        if (kind == Kind.UNTRACKED_REFERENCE
-                && previous instanceof RuntimeArray array
-                && !array.hasPerlStrongOwner()) {
-            array.orphanArraySizeLvalues();
-        }
         finishDeferredCodeRelease(previous);
         finishDeferredCodePadConstantRelease(previous, kind);
         finishDeferredScalarCellRelease(previous);

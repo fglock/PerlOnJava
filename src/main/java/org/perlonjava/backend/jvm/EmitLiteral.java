@@ -137,6 +137,9 @@ public class EmitLiteral {
         // preventing premature destruction of referents stored in anonymous arrays.
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase",
                 "createReferenceWithTrackedElements", "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/runtimetypes/MortalList",
+                "anonymousLiteral",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
         // Stack: [RuntimeScalar]  (the array reference we'll return)
         mv.visitLabel(arrayLiteralTryEnd);
 
@@ -231,6 +234,9 @@ public class EmitLiteral {
                 "org/perlonjava/runtime/runtimetypes/RuntimeHash",
                 "createHashRef",
                 "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/runtimetypes/MortalList",
+                "anonymousLiteral",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
 
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("visit(HashLiteralNode) end");
     }

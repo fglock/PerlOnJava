@@ -1468,6 +1468,27 @@ public class MortalList {
     }
 
     /**
+     * Queue the statement-temporary lifetime of a fresh anonymous aggregate
+     * literal ({@code [...]} or {@code {...}}). Perl's anonymous constructor returns a mortal reference; when
+     * no Perl slot has taken ownership by the time the mortal boundary
+     * drains, the aggregate is freed. A literal that was stored in the
+     * meantime has a positive count and the lifecycle-only token leaves it.
+     */
+    public static RuntimeScalar anonymousLiteral(RuntimeScalar reference) {
+        if (!isActive() || reference == null
+                || !(reference.value instanceof RuntimeBase base)
+                || !base.isRefCountTracked() || base.refCount != 0) {
+            return reference;
+        }
+        LifecycleRuntimeState state = state();
+        markBoundaryWork(state);
+        RuntimeBase.PendingOwnerRelease ownerRelease = base.queueLifecycleOnlyAtZero(
+                "MortalList.anonymousLiteral");
+        queueDeferredBase(state, base, ownerRelease, null, reference);
+        return reference;
+    }
+
+    /**
      * Mortal-ize blessed refs with refCount==0 in a RuntimeList that will be
      * discarded (void-context call result). Without this, objects that were
      * blessed but never stored in a named variable would leak.
