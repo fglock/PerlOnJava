@@ -2,7 +2,7 @@ require 'json'
 
 STDOUT.sync = true
 kind = ARGV.fetch(0)
-unless %w[numeric closure method string regex].include?(kind)
+unless %w[numeric closure method string regex eval-string].include?(kind)
   abort "unknown workload: #{kind}"
 end
 
@@ -26,6 +26,7 @@ object_class = Class.new do
 end
 object = object_class.new
 pattern = /alpha-(\d{4})/
+eval_id = 0
 
 STDIN.each_line do |line|
   seconds = JSON.parse(line).fetch('seconds')
@@ -53,6 +54,11 @@ STDIN.each_line do |line|
       1000.times do
         match = pattern.match('alpha-1234-beta')
         sink += match[1].to_i if match
+      end
+    when 'eval-string'
+      1000.times do
+        eval_id += 1
+        sink += eval("1 + #{eval_id} - #{eval_id}")
       end
     end
     operations += 1000

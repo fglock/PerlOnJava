@@ -666,44 +666,33 @@ public class ModuleOperators {
                         // restart from slot zero after replacing @INC.
                         RuntimeScalar incCursor = getGlobalVariable("main::INC");
                         incCursor.set(i);
-                        MortalList.pushMark();
-                        try {
-                            RuntimeList hookResult = invokeIncHook(dirScalar, fileName);
-                            if (!incCursor.getDefinedBoolean()) {
-                                i = -1;
-                                continue;
-                            }
-                            if (hookResult != null) {
-                                IncHookSource hookSource;
-                                try {
-                                    hookSource = readIncHookSource(hookResult);
-                                } catch (PerlExitException e) {
-                                    throw e;
-                                } catch (Throwable t) {
-                                    if (isRequire && setINC) {
-                                        getGlobalHash("main::INC").elements.put(fileName, new RuntimeScalar());
-                                    }
-                                    GlobalVariable.setGlobalVariable("main::@",
-                                            findInnermostCause(t).getMessage());
-                                    return new RuntimeScalar();
-                                }
-                                if (hookSource != null) {
-                                    code = hookSource.code;
-                                    actualFileName = incHookFileName(dirScalar, fileName);
-                                    incHookRef = dirScalar;
-                                    break;
-                                }
-                            }
-                            // If hook returned undef or we couldn't use the result, continue
-                            // to next @INC entry.
+                        RuntimeList hookResult = invokeIncHook(dirScalar, fileName);
+                        if (!incCursor.getDefinedBoolean()) {
+                            i = -1;
                             continue;
-                        } finally {
-                            // The hook's return list is consumed while reading its source.
-                            // End its temporary owner lifetime here, including when source
-                            // generation throws before a source string is produced.
-                            MortalList.flushAboveMark();
-                            MortalList.popMark();
                         }
+                        if (hookResult != null) {
+                            IncHookSource hookSource;
+                            try {
+                                hookSource = readIncHookSource(hookResult);
+                            } catch (PerlExitException e) {
+                                throw e;
+                            } catch (Throwable t) {
+                                if (isRequire && setINC) {
+                                    getGlobalHash("main::INC").elements.put(fileName, new RuntimeScalar());
+                                }
+                                GlobalVariable.setGlobalVariable("main::@", findInnermostCause(t).getMessage());
+                                return new RuntimeScalar();
+                            }
+                            if (hookSource != null) {
+                                code = hookSource.code;
+                                actualFileName = incHookFileName(dirScalar, fileName);
+                                incHookRef = dirScalar;
+                                break;
+                            }
+                        }
+                        // If hook returned undef or we couldn't use the result, continue to next @INC entry
+                        continue;
                     }
 
                     // Original string handling for directory paths

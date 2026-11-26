@@ -266,6 +266,12 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
             addCachedStashEntryFromGlobalKey(
                     namespace, codeEntry.getKey(), uniqueKeys, entries);
         }
+        for (String alias : GlobalVariable.globAliases.keySet()) {
+            addCachedStashEntryFromGlobalKey(namespace, alias, uniqueKeys, entries);
+        }
+        for (String alias : GlobalVariable.inheritedStashCodeAliases.keySet()) {
+            addCachedStashEntryFromGlobalKey(namespace, alias, uniqueKeys, entries);
+        }
         addCachedStashEntriesFromGlobalKeys(
                 namespace, GlobalVariable.visibleGlobalIOKeys(), uniqueKeys, entries);
         addCachedStashEntriesFromGlobalKeys(namespace, GlobalVariable.globalFormatRefs.keySet(), uniqueKeys, entries);
@@ -537,6 +543,16 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
                     && (code.defined() || code.isDeclared)) {
                 return true;
             }
+        }
+        for (String alias : GlobalVariable.globAliases.keySet()) {
+            if (matchesStashPrefix(alias, prefix)
+                    && RuntimeCode.isCodeDefined(
+                            GlobalVariable.globalCodeRefs.get(GlobalVariable.resolveGlobAlias(alias)))) {
+                return true;
+            }
+        }
+        for (String alias : GlobalVariable.inheritedStashCodeAliases.keySet()) {
+            if (matchesStashPrefix(alias, prefix)) return true;
         }
         return false;
     }

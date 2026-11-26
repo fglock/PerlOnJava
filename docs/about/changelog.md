@@ -6,6 +6,7 @@ priorities and future plans.
 
 ## Work in progress
 
+- Fix CODE-slot lookup through glob references, inherited import stash visibility, false file-scope lexical-sub warnings, and caller package reporting in BEGIN closures (#2173, #2165, #2138, #2136, #2102, #2078).
 - Require Net::SSLeay and Crypt::OpenSSL::RSA key generation to use 2048–8192 bits; reject weaker and unbounded sizes and keep the RSA round-trip and padding tests active at the minimum supported size.
 - Retire active lexical owners on explicit `exit` before dispatching `END` blocks (#2043).
 - Track anonymous CODE templates in eval-created optrees on both backends and release their direct-call owners at eval completion or CV teardown (#2043).
@@ -36,7 +37,6 @@ priorities and future plans.
 - Release list-assignment temporary cell owners after returned values reach the caller, so weak fields no longer pin optree constants (#2043).
 - Represent untracked, tracked, and weak-tracked referents separately from their nonnegative owner counts (#2043).
 - Drain scoped owner releases at block exit even while statement flushing is suppressed, preserving earlier pending releases (#2043).
-
 - Fix MakeMaker module lookup, script wrappers and v-string serialization; select the requested JSON XS-compatible backend; add Text::CSV::csv and XML::LibXML node API aliases; match version::qv stringification (#2175, #2164, #2153, #2140, #2116, #2114, #2157, #2126).
 - Parse lexical code attributes, MooseX role calls, legacy spaced `@_`, chained prototype calls, qualified class methods, indirect imports with slash arguments, trailing-text `__END__` markers, and the `socket` DSL term (#2172, #2168, #2161, #2154, #2158, #2139, #2137, #2127).
 - Honor overloaded logical negation, warn on distinct constant-sub redefinitions with equal values, and preserve reference-valued scalar slots through localized glob aliases (#2122, #2075, #1939).

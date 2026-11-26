@@ -548,6 +548,13 @@ public class StatementResolver {
                                 // must use this semantic metadata, never its spelling.
                                 innerVarNode.setAnnotation("lexicalSubStorage", true);
                                 innerVarNode.setAnnotation("lexicalSubName", subName);
+                                boolean fileScopeLexicalSub = !parser.ctx.symbolTable.isInSubroutineBody()
+                                        && parser.parsingRuntimeLoopBodyDepth == 0;
+                                innerVarNode.setAnnotation("fileScopeLexicalSub", fileScopeLexicalSub);
+                                Parser.LexicalSubWarningFrame lexicalSubOwnerFrame =
+                                        parser.lexicalSubWarningFrames == null
+                                                ? null : parser.lexicalSubWarningFrames.peek();
+                                innerVarNode.setAnnotation("lexicalSubWarningFrame", lexicalSubOwnerFrame);
 
                                 // For state variables, assign a unique ID for persistent tracking
                                 if (declaration.equals("state")) {
@@ -560,6 +567,10 @@ public class StatementResolver {
                                 // Store the hidden variable name and declaring package as annotations for lookup
                                 varDecl.setAnnotation("hiddenVarName", hiddenVarName);
                                 varDecl.setAnnotation("declaringPackage", parser.ctx.symbolTable.getCurrentPackage());
+                                varDecl.setAnnotation("lexicalSubStorage", true);
+                                varDecl.setAnnotation("lexicalSubName", subName);
+                                varDecl.setAnnotation("fileScopeLexicalSub", fileScopeLexicalSub);
+                                varDecl.setAnnotation("lexicalSubWarningFrame", lexicalSubOwnerFrame);
 
                                 // IMPORTANT: Manually add the hidden variable to the symbol table
                                 // Since we're returning an assignment node, parseVariableDeclaration won't be called again
@@ -792,6 +803,7 @@ public class StatementResolver {
                                         // A plain assignment leaves a fresh backend compiler
                                         // unaware that the generated name is lexical.
                                         varDecl.setAnnotation("runtimeLexicalSub", true);
+                                        innerVarNode.setAnnotation("runtimeLexicalSub", true);
                                         BinaryOperatorNode lexicalAssignment =
                                                 new BinaryOperatorNode("=", varDecl, anonSub, parser.tokenIndex);
                                         yield lexicalAssignment;
@@ -812,6 +824,7 @@ public class StatementResolver {
                                             || (declaration.equals("state") && packageSubAlreadyDefined);
                                     if (runtimeLexicalSub) {
                                         varDecl.setAnnotation("runtimeLexicalSub", true);
+                                        innerVarNode.setAnnotation("runtimeLexicalSub", true);
                                         varDecl.setAnnotation("lexicalSubScopeIndex",
                                                 parser.ctx.symbolTable.currentScopeIndex());
                                         varDecl.setAnnotation("lexicalSubWarningFrame",

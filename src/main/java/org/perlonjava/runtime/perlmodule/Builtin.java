@@ -352,6 +352,7 @@ public class Builtin extends PerlModuleBase {
                 -1);
         marker.setAnnotation("hiddenVarName", hiddenVarName);
         marker.setAnnotation("declaringPackage", currentPackage);
+        marker.setAnnotation("fileScopeLexicalSub", !scope.isInSubroutineBody());
         if (retainPrototype && codeScalar.value instanceof RuntimeCode code && code.prototype != null) {
             marker.setAnnotation("prototype", code.prototype);
         }

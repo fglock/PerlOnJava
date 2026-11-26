@@ -65,6 +65,7 @@ public class ExporterLexical extends PerlModuleBase {
         OperatorNode declaration = new OperatorNode("my", inner, -1);
         declaration.setAnnotation("hiddenVarName", hiddenName);
         declaration.setAnnotation("declaringPackage", declaringPackage);
+        declaration.setAnnotation("fileScopeLexicalSub", !symbolTable.isInSubroutineBody());
 
         symbolTable.addVariable("$" + hiddenName, "my", inner);
         symbolTable.addVariable("&" + name, "my", declaration);

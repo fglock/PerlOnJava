@@ -23,7 +23,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[3]
 WORKER_PERL = Path(__file__).with_name("worker.pl")
 WORKER_RUBY = Path(__file__).with_name("worker.rb")
-WORKLOADS = ("numeric", "closure", "method", "string", "regex")
+WORKLOADS = ("numeric", "closure", "method", "string", "regex", "eval-string")
 ENGINES = ("perlonjava", "perl", "jruby")
 WORKLOAD_DESCRIPTIONS = {
     "numeric": "Increment a local integer and add each new value to a sink.",
@@ -31,6 +31,7 @@ WORKLOAD_DESCRIPTIONS = {
     "method": "Call a method that increments two object fields and returns their sum.",
     "string": "Uppercase five characters, reverse the next four, concatenate, and count length.",
     "regex": "Match four digits in a fixed ASCII string and add the capture to a sink.",
+    "eval-string": "Compile and evaluate a distinct arithmetic source string on every operation.",
 }
 
 
@@ -71,6 +72,8 @@ def checksum(workload: str, operations: int) -> int:
         return 9 * operations
     if workload == "regex":
         return 1234 * operations
+    if workload == "eval-string":
+        return operations
     raise ValueError(workload)
 
 
