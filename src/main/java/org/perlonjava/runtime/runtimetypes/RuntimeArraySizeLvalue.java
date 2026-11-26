@@ -25,6 +25,16 @@ public class RuntimeArraySizeLvalue extends RuntimeBaseProxy {
         return RuntimeScalarCache.scalarUndef;
     }
 
+    /**
+     * The value a copy of {@code $#array} receives. The proxy's own fields
+     * are a snapshot taken at construction; the array may have grown,
+     * shrunk, or been freed since then.
+     */
+    RuntimeScalar currentValue() {
+        if (isOrphaned()) return new RuntimeScalar();
+        return new RuntimeScalar(parentArray.lastElementIndex());
+    }
+
     private RuntimeScalar warnFreedArray() {
         WarnDie.warn(new RuntimeScalar("Attempt to set length of freed array"),
                 RuntimeScalarCache.scalarEmptyString);

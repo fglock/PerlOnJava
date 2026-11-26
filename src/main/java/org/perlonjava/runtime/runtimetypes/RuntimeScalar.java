@@ -2622,6 +2622,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         } else if (scalar instanceof CurrentFormatVariable) {
             scalar = scalar.getDefinedBoolean()
                     ? new RuntimeScalar(scalar.toString()) : new RuntimeScalar();
+        } else if (scalar instanceof RuntimeArraySizeLvalue sizeLvalue) {
+            scalar = sizeLvalue.currentValue();
         } else if (scalar.type == TIED_SCALAR) {
             scalar = scalar.tiedFetch();
         } else if (scalar.type == READONLY_SCALAR) {
@@ -4289,6 +4291,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         } else if (value instanceof CurrentFormatVariable) {
             value = value.getDefinedBoolean()
                     ? new RuntimeScalar(value.toString()) : new RuntimeScalar();
+        } else if (value instanceof RuntimeArraySizeLvalue sizeLvalue) {
+            value = sizeLvalue.currentValue();
         }
         if (threadShared && value != null
                 && (RuntimeScalarType.isReference(value) || value.type == GLOB)) {
