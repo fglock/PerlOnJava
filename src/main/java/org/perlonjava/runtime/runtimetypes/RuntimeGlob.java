@@ -678,6 +678,12 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 return set((RuntimeScalar) value.value);
             case CODE:
                 String codeSlotName = GlobalVariable.resolveGlobAlias(this.globName);
+                RuntimeScalar currentCodeSlot = GlobalVariable.globalCodeRefs.get(codeSlotName);
+                // Assigning the glob's own CV back (`use subs`) is a
+                // declaration; only a different CV makes the name assumed.
+                if (currentCodeSlot == null || currentCodeSlot.value != value.value) {
+                    GlobalVariable.markAssumedCodeGlob(this.globName);
+                }
                 boolean writesThroughGlobAlias = !codeSlotName.equals(this.globName);
                 // A target that already has any non-IO slot is a full GV.
                 // Exporting a proxy constant into it replaces only CODE; it

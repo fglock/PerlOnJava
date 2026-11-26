@@ -1615,6 +1615,25 @@ public class GlobalVariable {
      * Sets a glob alias. After `*a = *b`, calling setGlobAlias("a", "b") makes
      * all slot assignments to "a" also affect "b" and vice versa.
      */
+    /**
+     * Record that a CODE reference was assigned through this glob name. Perl
+     * keeps this as a flag on the GV, not in the shared GP, so a glob alias
+     * does not inherit it. A later named definition for a flagged glob is a
+     * redefinition even when the current CV has no body.
+     */
+    public static void markAssumedCodeGlob(String globName) {
+        if (globName == null) return;
+        PerlRuntime runtime = PerlRuntime.currentOrNull();
+        if (runtime != null) runtime.globalState().assumedCodeGlobs().add(resolveAliasedFqn(globName));
+    }
+
+    public static boolean isAssumedCodeGlob(String globName) {
+        if (globName == null) return false;
+        PerlRuntime runtime = PerlRuntime.currentOrNull();
+        return runtime != null
+                && runtime.globalState().assumedCodeGlobs().contains(resolveAliasedFqn(globName));
+    }
+
     public static void setGlobAlias(String fromGlob, String toGlob) {
         // Find the canonical name for toGlob (in case it's already an alias)
         String canonical = resolveGlobAlias(toGlob);

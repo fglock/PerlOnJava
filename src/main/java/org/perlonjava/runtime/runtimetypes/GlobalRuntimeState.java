@@ -64,6 +64,8 @@ public final class GlobalRuntimeState {
     private final Map<String, String> stashAliases = new HashMap<>();
     private final Map<String, String> resolvedStashAliases = new HashMap<>();
     private final Map<String, String> globAliases = new HashMap<>();
+    /** Glob names that received a CODE reference by glob assignment (Perl GvASSUMECV). */
+    private final java.util.Set<String> assumedCodeGlobs = new java.util.HashSet<>();
     private final Map<String, List<HashSpecialVariable.StashEntryName>> stashEntryCache =
             new HashMap<>();
     private final Map<String, Boolean> packageExistsCache = new HashMap<>();
@@ -349,6 +351,10 @@ public final class GlobalRuntimeState {
         return globAliases;
     }
 
+    java.util.Set<String> assumedCodeGlobs() {
+        return assumedCodeGlobs;
+    }
+
     Map<String, List<HashSpecialVariable.StashEntryName>> stashEntryCache() {
         return stashEntryCache;
     }
@@ -537,6 +543,7 @@ public final class GlobalRuntimeState {
         invalidateScalarBindingCache();
         resolvedStashAliases.clear();
         globAliases.clear();
+        assumedCodeGlobs.clear();
         stashEntryCache.clear();
         cachedStashEnumerationVersion = -1;
         invalidateStashEnumeration();
@@ -600,6 +607,7 @@ public final class GlobalRuntimeState {
         target.stashAliases.putAll(stashAliases);
         target.resolvedStashAliases.putAll(resolvedStashAliases);
         target.globAliases.putAll(globAliases);
+        target.assumedCodeGlobs.addAll(assumedCodeGlobs);
         target.packageExistsCache.putAll(packageExistsCache);
         target.declaredGlobalVariables.addAll(declaredGlobalVariables);
         target.declaredGlobalArrays.addAll(declaredGlobalArrays);

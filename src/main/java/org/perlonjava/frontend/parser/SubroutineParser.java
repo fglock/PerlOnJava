@@ -2227,6 +2227,8 @@ public class SubroutineParser {
         // compile-time read references that should keep pointing at their
         // original CvGV — only install-site names are resolved.
         fullName = GlobalVariable.resolveAliasedFqn(fullName);
+        // GV flags belong to this name, not to a whole-glob alias target.
+        String definitionGlobName = fullName;
         // A whole-glob alias has a canonical CV slot too. Defining `sub bar`
         // after `*bar = *foo` must replace that shared slot, but a later
         // CODE-only assignment can split the two CV slots while the other
@@ -2261,7 +2263,11 @@ public class SubroutineParser {
             // RuntimeCode implementation fields and overrides defined().  Use
             // that polymorphic contract so a later named declaration replaces
             // an interpreted wrapper just as it replaces a JVM-compiled CV.
-            isRedefinition = existingCode.defined() || existingCode.codeObject != null;
+            // A glob that received a CODE reference by assignment counts as
+            // already defined (Perl GvASSUMECV): defining it again warns and
+            // installs a new CV even after `undef` emptied the old one.
+            isRedefinition = existingCode.defined() || existingCode.codeObject != null
+                    || (block != null && GlobalVariable.isAssumedCodeGlob(definitionGlobName));
             if (isRedefinition) {
                 // Previous sub was compile-time constant iff prototype is "()". (Perl stores "()", not "")
                 isConstantSub = existingCode.isConstantCv
