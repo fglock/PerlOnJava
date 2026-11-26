@@ -200,6 +200,7 @@ public class Parser {
     public final List<LexerToken> tokens;
     // List to store format nodes encountered during parsing.
     private final List<FormatNode> formatNodes = new ArrayList<>();
+    private final List<int[]> formatBodyTokenRanges = new ArrayList<>();
     // List to store completed format nodes after template parsing.
     private final List<FormatNode> completedFormatNodes = new ArrayList<>();
     private final List<String> deferredDiagnostics = new ArrayList<>();
@@ -603,6 +604,16 @@ public class Parser {
             if (dataSectionTokenIndex >= 0 && i >= dataSectionTokenIndex) {
                 break;
             }
+            boolean inFormatBody = false;
+            for (int[] range : formatBodyTokenRanges) {
+                if (i >= range[0] && i < range[1]) {
+                    inFormatBody = true;
+                    break;
+                }
+            }
+            if (inFormatBody) {
+                continue;
+            }
             LexerToken token = tokens.get(i);
             if (token.type == LexerTokenType.CONFLICT_MARKER) {
                 ErrorMessageUtil.SourceLocation location =
@@ -614,6 +625,11 @@ public class Parser {
             }
         }
         return diagnostics.toString();
+    }
+
+    /** Exclude literal format-picture tokens from source-level diagnostics. */
+    public void recordFormatBodyTokenRange(int start, int end) {
+        formatBodyTokenRanges.add(new int[] {start, end});
     }
 
     /** Record a parse-time diagnostic after consuming a recoverable statement. */

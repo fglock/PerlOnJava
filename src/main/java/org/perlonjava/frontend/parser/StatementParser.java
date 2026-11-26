@@ -2444,6 +2444,18 @@ public class StatementParser {
             consumedLeadingLineBreak = true;
         }
 
+        // Test::More::use_ok compiles `use Module; 1;` in a nested eval. A
+        // source filter installed by that use belongs to the enclosing source;
+        // the synthetic true expression is only the eval result and may not be
+        // valid input to the filter. Continue from the suspended outer parser.
+        if (parser.parsingEvalString && "1;".equals(remainingSource.trim())) {
+            Parser enclosingParser = ParserExtensionRegistry.getActiveParser();
+            if (enclosingParser != null && enclosingParser != parser) {
+                applySourceFilterToRemainingTokens(enclosingParser);
+            }
+            return;
+        }
+
         // Step 2: Apply the installed filters
         String filteredSource = FilterUtilCall.applyFilters(remainingSource);
 
