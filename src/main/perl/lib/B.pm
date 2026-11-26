@@ -599,6 +599,12 @@ sub perlstring {
     return qq{"$str"};
 }
 
+# Return the quoted string value used by B for regexps and other scalars.
+sub cstring {
+    require XString;
+    return XString::cstring($_[0]);
+}
+
 # Special SV names
 our @specialsv_name = ('Nullsv', '&PL_sv_undef', '&PL_sv_yes', '&PL_sv_no');
 
