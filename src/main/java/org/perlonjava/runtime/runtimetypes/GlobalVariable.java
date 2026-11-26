@@ -174,9 +174,14 @@ public class GlobalVariable {
 
     /** Advance the compiled CODE-name cache version after an in-place slot change. */
     static void noteGlobalCodeRefSlotMutation(RuntimeScalar slot) {
+        noteGlobalCodeRefSlotMutation(slot, null);
+    }
+
+    static void noteGlobalCodeRefSlotMutation(RuntimeScalar slot, String key) {
         globalState().noteCodeRefMutation();
-        if (slot != null && slot.globalCodeRefFqn != null) {
-            for (String related : compiledDirectCallSiteKeys(slot.globalCodeRefFqn)) {
+        String codeName = key != null ? key : slot == null ? null : slot.globalCodeRefFqn;
+        if (codeName != null) {
+            for (String related : compiledDirectCallSiteKeys(codeName)) {
                 globalState().notifyCompiledDirectCallSites(related, slot, slot);
             }
         }
@@ -2876,6 +2881,7 @@ public class GlobalVariable {
         }
         if (current != null) {
             current.undefine();
+            noteGlobalCodeRefSlotMutation(current, key);
         }
     }
 

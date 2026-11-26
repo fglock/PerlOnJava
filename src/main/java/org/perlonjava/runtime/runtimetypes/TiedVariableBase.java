@@ -19,6 +19,8 @@ public abstract class TiedVariableBase extends RuntimeBaseProxy {
      * The tied object (handler) that implements the tie interface methods.
      */
     protected final RuntimeScalar self;
+    /** Owner token separate from the Perl-visible tied object value cell. */
+    private final RuntimeScalar selfOwner;
 
     /**
      * The package name that this variable is tied to.
@@ -35,7 +37,8 @@ public abstract class TiedVariableBase extends RuntimeBaseProxy {
      */
     public TiedVariableBase(RuntimeScalar tiedObject, String tiedPackage) {
         super();
-        this.self = RuntimeScalar.retainTiedHandlerValue(tiedObject);
+        this.self = tiedObject;
+        this.selfOwner = RuntimeScalar.retainTiedHandlerValue(tiedObject);
         this.tiedPackage = tiedPackage;
 
     }
@@ -224,7 +227,6 @@ public abstract class TiedVariableBase extends RuntimeBaseProxy {
         tiedObjectReleased = true;
         // Array/hash element proxy entries delegate to their parent tied
         // container and intentionally have no handler of their own.
-        if (self == null) return;
-        RuntimeScalar.releaseTiedHandlerValue(self);
+        RuntimeScalar.releaseTiedHandlerValue(selfOwner);
     }
 }

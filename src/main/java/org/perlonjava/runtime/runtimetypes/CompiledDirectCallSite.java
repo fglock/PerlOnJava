@@ -1,15 +1,20 @@
 package org.perlonjava.runtime.runtimetypes;
 
+import java.lang.ref.WeakReference;
+
 /** One compiled named-call edge owned by the CV whose optree contains it. */
 final class CompiledDirectCallSite {
     private final String name;
     private final RuntimeScalar cachedRef;
-    private final boolean compileTimePinned;
+    private final WeakReference<RuntimeScalar> initialCodeSlot;
+    private boolean compileTimePinned;
     private boolean ownsRetiredTarget;
+    private boolean explicitlyUndefined;
 
     CompiledDirectCallSite(
             String name,
             RuntimeScalar cachedRef,
+            RuntimeScalar initialCodeSlot,
             RuntimeCode initialTarget,
             boolean compileTimePinned,
             boolean retainTargetIfDeletedBeforeInstall) {
@@ -17,6 +22,10 @@ final class CompiledDirectCallSite {
         this.cachedRef = cachedRef;
         this.compileTimePinned = compileTimePinned;
         RuntimeScalar visible = GlobalVariable.getVisibleGlobalCodeRefForDirectCall(name);
+        RuntimeScalar observedInitialSlot = initialCodeSlot == null
+                ? visible : initialCodeSlot;
+        this.initialCodeSlot = observedInitialSlot == null
+                ? null : new WeakReference<>(observedInitialSlot);
         boolean targetWasRemovedBeforeInstallation = retainTargetIfDeletedBeforeInstall
                 && initialTarget != null
                 && initialTarget.defined()
@@ -42,14 +51,29 @@ final class CompiledDirectCallSite {
     }
 
     RuntimeScalar resolve() {
-        if (compileTimePinned || ownsRetiredTarget) return cachedRef;
         RuntimeScalar visible = GlobalVariable.getVisibleGlobalCodeRefForDirectCall(name);
+        if (explicitlyUndefined) {
+            return visible == null ? new RuntimeScalar() : visible;
+        }
+        RuntimeScalar compiledSlot = initialCodeSlot == null ? null : initialCodeSlot.get();
+        if (!hasPinnedConstantTarget()
+                && (compileTimePinned || ownsRetiredTarget)
+                && visible != null && visible == compiledSlot
+                && !RuntimeCode.isCodeDefined(visible)) {
+            // `undef *name` empties the original, still-visible CODE slot.
+            // Stash deletion instead removes that slot and may later create a
+            // fresh undefined placeholder; that distinct slot must not revoke
+            // the compiled call site's retired target.
+            compileTimePinned = false;
+            releaseRetiredTarget();
+            return visible;
+        }
+        if (compileTimePinned || ownsRetiredTarget) return cachedRef;
         return visible != null ? visible : GlobalVariable.getGlobalCodeRefForDirectCall(name);
     }
 
     /** Transfer the callsite's lifetime to a CV only when its stash slot is removed. */
     void visibleCodeSlotChanged(RuntimeScalar previous, RuntimeScalar replacement) {
-        if (compileTimePinned) return;
         if (replacement != null) {
             // namespace::clean removes the imported CODE entry by deleting
             // its glob, then restores the other glob components. That restore
@@ -58,6 +82,23 @@ final class CompiledDirectCallSite {
             // placeholder is not a replacement CV and must not retire their
             // owner.
             if (previous == null && !RuntimeCode.isCodeDefined(replacement)) return;
+            if (!RuntimeCode.isCodeDefined(replacement)) {
+                if (hasPinnedConstantTarget()) return;
+                // An explicitly emptied, still-visible glob invalidates
+                // compiled direct calls, even when their parse-time target
+                // had been pinned. Stash deletion is represented by a null
+                // replacement and continues to retain the old target.
+                explicitlyUndefined = true;
+                compileTimePinned = false;
+                releaseRetiredTarget();
+                return;
+            }
+            explicitlyUndefined = false;
+        }
+        if (compileTimePinned) {
+            return;
+        }
+        if (replacement != null) {
             releaseRetiredTarget();
             return;
         }
@@ -75,16 +116,20 @@ final class CompiledDirectCallSite {
     void release() {
         GlobalVariable.unregisterCompiledDirectCallSite(name, this);
         releaseRetiredTarget();
-        cachedRef.type = RuntimeScalarType.UNDEF;
-        cachedRef.value = null;
-        cachedRef.globalCodeRefFqn = null;
+        cachedRef.clearCompiledDirectCallCache(name, cachedRef.compiledDirectCallSiteIndex());
     }
 
     private void releaseRetiredTarget() {
         if (!ownsRetiredTarget) return;
         cachedRef.releaseCodeSlotBinding();
         ownsRetiredTarget = false;
-        cachedRef.initializeCompiledDirectCallCache(name,
-                cachedRef.compiledDirectCallSiteIndex(), null, false);
+        cachedRef.clearCompiledDirectCallCache(name,
+                cachedRef.compiledDirectCallSiteIndex());
     }
+
+    private boolean hasPinnedConstantTarget() {
+        RuntimeCode target = cachedRef.compiledDirectCallInitialTarget();
+        return compileTimePinned && target != null && target.constantValue != null;
+    }
+
 }

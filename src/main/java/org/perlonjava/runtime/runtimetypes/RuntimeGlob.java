@@ -2138,7 +2138,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // The CODE scalar can be pinned separately from the stash-map entry.
         // Undefining a whole glob must invalidate root indexes even when that
         // scalar was not marked as a package-global root itself.
-        GlobalVariable.noteGlobalCodeRefSlotMutation(codeRef);
+        GlobalVariable.noteGlobalCodeRefSlotMutation(codeRef, this.globName);
 
         // Invalidate the method resolution cache
         InheritanceResolver.invalidateCache();

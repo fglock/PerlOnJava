@@ -2,9 +2,12 @@ package org.perlonjava.runtime.runtimetypes;
 
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -117,6 +120,8 @@ public final class PerlOwnerSlot {
     private boolean registeredInOwnerLedger;
     /** Aggregate parent whose loss can invalidate an untracked proxy value edge. */
     private RuntimeBase proxyValueParent;
+    /** Aggregate containers whose stored scalar value is this untracked edge. */
+    private Set<RuntimeBase> untrackedContainerParents;
     /** True only for the direct, counted hold created for one method invocant. */
     private boolean methodInvocantOwner;
     /** Whether an IO_VIA_LAYER identity contributes its paired direct count. */
@@ -237,6 +242,39 @@ public final class PerlOwnerSlot {
         RuntimeBase previousParent = proxyValueParent;
         proxyValueParent = nextParent;
         if (previousParent != null) previousParent.removeProxyValueOwnerSlot(this);
+    }
+
+    /** Keep the reverse index from an aggregate to this scalar's untracked value edge. */
+    synchronized void syncUntrackedContainerOwnerParents(List<RuntimeBase> parents) {
+        if (kind != Kind.UNTRACKED_REFERENCE) {
+            throw new IllegalStateException(
+                    "container owner association requires an untracked-reference slot");
+        }
+        Set<RuntimeBase> nextParents =
+                Collections.newSetFromMap(new IdentityHashMap<>());
+        if (referent != null && registeredInOwnerLedger) {
+            for (RuntimeBase parent : parents) {
+                if (parent != null && parent.addUntrackedScalarContainerOwnerSlot(this)) {
+                    nextParents.add(parent);
+                }
+            }
+        }
+        if (untrackedContainerParents != null) {
+            for (RuntimeBase previous : new ArrayList<>(untrackedContainerParents)) {
+                if (!nextParents.contains(previous)) {
+                    previous.removeUntrackedScalarContainerOwnerSlot(this);
+                }
+            }
+        }
+        untrackedContainerParents = nextParents.isEmpty() ? null : nextParents;
+    }
+
+    private void clearUntrackedContainerOwnerParents() {
+        if (untrackedContainerParents == null) return;
+        for (RuntimeBase parent : new ArrayList<>(untrackedContainerParents)) {
+            parent.removeUntrackedScalarContainerOwnerSlot(this);
+        }
+        untrackedContainerParents = null;
     }
 
     /** Reclassify the live edge when its scalar changes transient ownership state. */
@@ -920,8 +958,9 @@ public final class PerlOwnerSlot {
             PerlRuntime.releaseOwnerSlotReferent(previousState, previous);
         }
         finishDeferredCodeRelease(previous);
+        finishDeferredCodePadConstantRelease(previous, kind);
         finishDeferredScalarCellRelease(previous);
-        WeakRefRegistry.onStrongOwnerSlotReleased(previous);
+        WeakRefRegistry.onStrongOwnerSlotReleased(previous, kind);
     }
 
     /**
@@ -1049,8 +1088,9 @@ public final class PerlOwnerSlot {
             PerlRuntime.releaseOwnerSlotReferent(previousState, previous);
         }
         finishDeferredCodeRelease(previous);
+        finishDeferredCodePadConstantRelease(previous, kind);
         finishDeferredScalarCellRelease(previous);
-        WeakRefRegistry.onStrongOwnerSlotReleased(previous);
+        WeakRefRegistry.onStrongOwnerSlotReleased(previous, kind);
     }
 
     /** Acquire one scalar-backed Perl edge, pairing its identity with refCount. */
@@ -1159,7 +1199,7 @@ public final class PerlOwnerSlot {
         registeredInOwnerLedger = true;
         target.addOwnerSlot(this);
         finishDeferredScalarCellRelease(previous);
-        WeakRefRegistry.onStrongOwnerSlotReleased(previous);
+        WeakRefRegistry.onStrongOwnerSlotReleased(previous, kind);
     }
 
     synchronized void reclassifyCountedIdentity(Kind nextKind) {
@@ -1344,8 +1384,9 @@ public final class PerlOwnerSlot {
             PerlRuntime.releaseOwnerSlotReferent(previousState, previous);
         }
         finishDeferredCodeRelease(previous);
+        finishDeferredCodePadConstantRelease(previous, kind);
         finishDeferredScalarCellRelease(previous);
-        WeakRefRegistry.onStrongOwnerSlotReleased(previous);
+        WeakRefRegistry.onStrongOwnerSlotReleased(previous, kind);
     }
 
     /** Release this slot. Repeated releases are harmless. */
@@ -1354,6 +1395,7 @@ public final class PerlOwnerSlot {
             releaseScalarReferenceContents();
             return;
         }
+        if (kind == Kind.UNTRACKED_REFERENCE) clearUntrackedContainerOwnerParents();
         RuntimeBase previous = referent;
         LifecycleRuntimeState previousState = ownerRuntimeState;
         RuntimeBase previousProxyParent = proxyValueParent;
@@ -1385,8 +1427,9 @@ public final class PerlOwnerSlot {
         }
         registeredInOwnerLedger = false;
         finishDeferredCodeRelease(previous);
+        finishDeferredCodePadConstantRelease(previous, kind);
         finishDeferredScalarCellRelease(previous);
-        WeakRefRegistry.onStrongOwnerSlotReleased(previous);
+        WeakRefRegistry.onStrongOwnerSlotReleased(previous, kind);
         if (kind == Kind.ACTIVE_LEXICAL) {
             WeakRefRegistry.onActiveLexicalOwnerReleased(previous);
         }
@@ -1395,6 +1438,13 @@ public final class PerlOwnerSlot {
     private static void finishDeferredCodeRelease(RuntimeBase previous) {
         if (previous instanceof RuntimeCode code) {
             code.finishActiveCodeOwnerRelease();
+        }
+    }
+
+    /** Clear an optree's exact compiled edges when its last pad-constant owner leaves. */
+    private static void finishDeferredCodePadConstantRelease(RuntimeBase previous, Kind releasedKind) {
+        if (releasedKind == Kind.CODE_PAD_CONSTANT && previous instanceof RuntimeCode code) {
+            code.releasePadConstantsForUntrackedOwnerSlot();
         }
     }
 

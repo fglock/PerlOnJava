@@ -77,6 +77,8 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
 
     /** Values stored in Perl's magical %ENV are byte-oriented strings. */
     public boolean isEnvironmentHash = false;
+    /** True when this hash stores fields for an object allocated by `class`. */
+    public boolean classInstance = false;
 
     /**
      * Constructor for RuntimeHash.
@@ -352,6 +354,8 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 new IdentityHashMap<>();
         private final IdentityHashMap<RuntimeScalar, Integer> valueIdentityCounts =
                 new IdentityHashMap<>();
+        private final Set<RuntimeScalar> destroyableValueCells =
+                Collections.newSetFromMap(new IdentityHashMap<>());
         private long stableMethodFieldCacheRevision;
         private boolean stableMethodFieldCacheable = true;
         private Set<Map.Entry<String, RuntimeScalar>> entrySetView;
@@ -367,7 +371,10 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         }
 
         private void addValueIdentity(RuntimeScalar value) {
-            if (value != null) valueIdentityCounts.merge(value, 1, Integer::sum);
+            if (value != null) {
+                valueIdentityCounts.merge(value, 1, Integer::sum);
+                refreshDestroyableValueIdentity(value);
+            }
         }
 
         private void removeValueIdentity(RuntimeScalar value) {
@@ -375,6 +382,24 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             Integer count = valueIdentityCounts.get(value);
             if (count == null || count <= 1) valueIdentityCounts.remove(value);
             else valueIdentityCounts.put(value, count - 1);
+            refreshDestroyableValueIdentity(value);
+        }
+
+        private void refreshDestroyableValueIdentity(RuntimeScalar value) {
+            if (valueIdentityCounts.containsKey(value)
+                    && RuntimeHash.isDestroyableValue(value)) {
+                destroyableValueCells.add(value);
+            } else {
+                destroyableValueCells.remove(value);
+            }
+        }
+
+        private boolean hasDestroyableValues() {
+            return !destroyableValueCells.isEmpty();
+        }
+
+        private boolean hasAliasedCells() {
+            return !hashAliasCellOwners.isEmpty();
         }
 
         private boolean ownsHashAliasCell(String key, RuntimeScalar cell) {
@@ -938,6 +963,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 }
                 super.clear();
                 valueIdentityCounts.clear();
+                destroyableValueCells.clear();
                 releaseAllHashAliasCellOwners();
                 for (Map.Entry<String, RuntimeScalar> entry : removedEntries) {
                     RuntimeScalar scalar = entry.getValue();
@@ -948,6 +974,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             }
             super.clear();
             valueIdentityCounts.clear();
+            destroyableValueCells.clear();
             releaseAllHashAliasCellOwners();
         }
 
@@ -2587,11 +2614,11 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             resetIterator();
             return this;
         }
-        // Fast path: if no value could possibly fire a DESTROY, use the
-        // old one-shot path (one flush total instead of N flushes). The
-        // slow progressive path below is only required when at least one
-        // value is a blessed reference whose destructor might inspect
-        // the remaining hash entries (op/undef.t 19-35, bug 3096).
+        // Fast path: the maintained value index says no value could fire a
+        // DESTROY, so use the old one-shot path (one flush total instead of
+        // N flushes). The slow progressive path below is required when a
+        // blessed value may inspect the remaining hash entries (op/undef.t
+        // 19-35, bug 3096).
         //
         // Without this fast path, large schema-style hashes paid
         // O(N) flushes + automatic root checks per `undef %hash`, which under
@@ -2649,23 +2676,28 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         return this;
     }
 
-    /**
-     * Quick scan: does this hash contain any value whose DESTROY could be
-     * triggered by undef %hash? Only blessed references qualify — plain
-     * scalars (strings, ints, undef) and unblessed refs never have a
-     * destructor. Used by undefine() to take a fast path that avoids
-     * O(N) MortalList flushes for the common case (e.g. DBIC schema
-     * hashes that hold plain SQL strings or unblessed result-source
-     * structures).
-     */
-    private boolean hasDestroyableValues() {
-        for (RuntimeScalar v : this.elements.values()) {
-            if (v == null) continue;
-            if ((v.type & RuntimeScalarType.REFERENCE_BIT) == 0) continue;
-            if (!(v.value instanceof RuntimeBase b)) continue;
-            if (b.blessId != 0) return true;
+    /** Whether the direct-value index contains a possible DESTROY target. */
+    boolean hasDestroyableValues() {
+        if (!(elements instanceof RuntimeHashElementMap map) || map.hasAliasedCells()) {
+            // Wrapped shared storage and aliased scalar cells do not expose a
+            // mutation-complete direct-value index. Use the semantics-safe
+            // progressive path without scanning the hash to classify it.
+            return true;
         }
-        return false;
+        return map.hasDestroyableValues();
+    }
+
+    void refreshDestroyableValueMembership(RuntimeScalar value) {
+        if (elements instanceof RuntimeHashElementMap map) {
+            map.refreshDestroyableValueIdentity(value);
+        }
+    }
+
+    private static boolean isDestroyableValue(RuntimeScalar value) {
+        return value != null
+                && (value.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                && value.value instanceof RuntimeBase referent
+                && referent.blessId != 0;
     }
 
     /**

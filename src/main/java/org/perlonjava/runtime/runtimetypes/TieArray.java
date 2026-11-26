@@ -37,6 +37,8 @@ public class TieArray extends ArrayList<RuntimeScalar> {
      * The tied object (handler) that implements the tie interface methods.
      */
     private final RuntimeScalar self;
+    /** Ledger edge retaining the handler while {@link #self} remains its Perl value cell. */
+    private final RuntimeScalar selfOwner;
 
     /**
      * The package name that this array is tied to.
@@ -62,7 +64,8 @@ public class TieArray extends ArrayList<RuntimeScalar> {
     public TieArray(String tiedPackage, RuntimeArray previousValue, RuntimeScalar self, RuntimeArray parent) {
         this.tiedPackage = tiedPackage;
         this.previousValue = previousValue;
-        this.self = RuntimeScalar.retainTiedHandlerValue(self);
+        this.self = self;
+        this.selfOwner = RuntimeScalar.retainTiedHandlerValue(self);
         this.parent = parent;
 
     }
@@ -324,7 +327,6 @@ public class TieArray extends ArrayList<RuntimeScalar> {
     public void releaseTiedObject() {
         if (tiedObjectReleased) return;
         tiedObjectReleased = true;
-        if (self == null) return;
-        RuntimeScalar.releaseTiedHandlerValue(self);
+        RuntimeScalar.releaseTiedHandlerValue(selfOwner);
     }
 }

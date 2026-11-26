@@ -465,7 +465,6 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
     public void setBlessId(int blessId) {
         // Don't vivify when blessing - we're not modifying the underlying value,
         // just setting the blessId on the lvalue itself
-        this.blessId = blessId;
-        if (blessId != 0) noteBlessedObject();
+        super.setBlessId(blessId);
     }
 }

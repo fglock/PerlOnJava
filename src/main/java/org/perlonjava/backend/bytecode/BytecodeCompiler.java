@@ -7862,7 +7862,15 @@ public class BytecodeCompiler implements Visitor {
         // Step 5: Create closure or simple code ref
         int codeReg = allocateRegister();
 
-        if (closureVarIndices.isEmpty() && !subCode.inheritsSelfReference
+        if (node.name == null || node.name.equals("<anon>")) {
+            subCode.isOptreeCodeTemplate = true;
+        }
+
+        boolean namedLexicalSub =
+                node.getAnnotation("lexicalSubDisplayName") instanceof String;
+        if (closureVarIndices.isEmpty()
+                && ((node.name != null && !node.name.equals("<anon>")) || namedLexicalSub)
+                && !subCode.inheritsSelfReference
                 && (node.attributes == null || !node.attributes.contains("const"))
                 && !subCompiler.hasStateVariableDeclarations) {
             // No closures - just wrap the InterpretedCode

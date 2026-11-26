@@ -7,6 +7,7 @@ import org.perlonjava.runtime.nativ.ffm.FFMPosixInterface;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.io.IOException;
+import java.lang.ref.WeakReference;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.NoSuchFileException;
@@ -29,6 +30,16 @@ public class Stat {
 
     private static RuntimeScalar dereferenceAndFetch(RuntimeScalar scalar) {
         return RuntimeScalar.dereferenceAndFetchOnce(scalar);
+    }
+
+    private static void rememberOpenedFileHandleStat(
+            FileTestOperator.State state, CustomFileChannel channel) {
+        state.lastBasicAttr = channel.getOpenedBasicAttributes();
+        state.lastStatFileChannel = new WeakReference<>(channel);
+        Path path = channel.getFilePath();
+        if (path != null) {
+            state.lastFileHandle.set(new RuntimeScalar(path.toString()));
+        }
     }
 
     private record WindowsMode(Object fileKey, long creationMillis, int mode) {}
@@ -202,7 +213,8 @@ public class Stat {
         state().lastFileHandle.set(snapshotStatArgument(arg));
         RuntimeList res = new RuntimeList();
 
-        if (arg.type == RuntimeScalarType.GLOB || arg.type == RuntimeScalarType.GLOBREFERENCE) {
+        if (arg.type == RuntimeScalarType.GLOB || arg.type == RuntimeScalarType.GLOBREFERENCE
+                || FileTestOperator.isIORef(arg)) {
             RuntimeIO fh = arg.getRuntimeIO();
             if (fh == null) {
                 getGlobalVariable("main::!").set(9);
@@ -246,6 +258,7 @@ public class Stat {
                             state.lastBasicAttr = openedBasic;
                             state.lastPosixAttr = null;
                             state.lastNativeStatFields = null;
+                            rememberOpenedFileHandleStat(state, cfc);
                             return res;
                         } catch (IOException e) {
                             getGlobalVariable("main::!").set(5);
@@ -282,7 +295,9 @@ public class Stat {
                         statInternalNative(res, nf);
                         getGlobalVariable("main::!").set(0);
                         updateLastStat(arg, true, 0, false);
-                        state().lastNativeStatFields = nf;
+                        FileTestOperator.State state = state();
+                        state.lastNativeStatFields = nf;
+                        rememberOpenedFileHandleStat(state, cfc);
                         return res;
                     } catch (IOException e) {
                         getGlobalVariable("main::!").set(5);
@@ -356,7 +371,8 @@ public class Stat {
         state().lastFileHandle.set(snapshotStatArgument(arg));
         RuntimeList res = new RuntimeList();
 
-        if (arg.type == RuntimeScalarType.GLOB || arg.type == RuntimeScalarType.GLOBREFERENCE) {
+        if (arg.type == RuntimeScalarType.GLOB || arg.type == RuntimeScalarType.GLOBREFERENCE
+                || FileTestOperator.isIORef(arg)) {
             // Check if this is the special underscore glob (*_ or \*_)
             if (isUnderscoreGlob(arg)) {
                 // lstat on *_ or \*_ after stat should croak

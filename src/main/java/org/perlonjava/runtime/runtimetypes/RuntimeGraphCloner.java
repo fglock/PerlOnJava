@@ -805,6 +805,7 @@ public class RuntimeGraphCloner {
         target.taintEnvironmentAliasDescription = source.taintEnvironmentAliasDescription;
         target.isGlobalPackageHash = source.isGlobalPackageHash;
         target.isEnvironmentHash = source.isEnvironmentHash;
+        target.classInstance = source.classInstance;
 
         if (source.threadShared && source.type == RuntimeHash.PLAIN_HASH) {
             // See cloneArray: class identity is local, contents are shared.

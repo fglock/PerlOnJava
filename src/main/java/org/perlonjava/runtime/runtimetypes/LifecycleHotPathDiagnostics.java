@@ -25,8 +25,6 @@ final class LifecycleHotPathDiagnostics {
     private static final LongAdder AGGREGATE_RELEASE_WALKERS = new LongAdder();
     private static final LongAdder AGGREGATE_RELEASE_WORKSET_ALLOCATIONS = new LongAdder();
     private static final LongAdder AGGREGATE_RELEASE_ROOTS = new LongAdder();
-    private static final LongAdder AGGREGATE_RELEASE_PROBE_WORKSET_ALLOCATIONS = new LongAdder();
-    private static final LongAdder AGGREGATE_RELEASE_PROBE_ROOTS = new LongAdder();
 
     static {
         if (ENABLED && OUTPUT != null && !OUTPUT.isBlank()) {
@@ -98,14 +96,6 @@ final class LifecycleHotPathDiagnostics {
         if (ENABLED) AGGREGATE_RELEASE_ROOTS.increment();
     }
 
-    static void aggregateReleaseProbeWorksetAllocated() {
-        if (ENABLED) AGGREGATE_RELEASE_PROBE_WORKSET_ALLOCATIONS.increment();
-    }
-
-    static void aggregateReleaseProbeRootProcessed() {
-        if (ENABLED) AGGREGATE_RELEASE_PROBE_ROOTS.increment();
-    }
-
     private static void writeReport() {
         long pid = ProcessHandle.current().pid();
         String json = "{\n"
@@ -127,11 +117,7 @@ final class LifecycleHotPathDiagnostics {
                 + "  \"aggregate_release_walkers\": " + AGGREGATE_RELEASE_WALKERS.sum() + ",\n"
                 + "  \"aggregate_release_workset_allocations\": "
                 + AGGREGATE_RELEASE_WORKSET_ALLOCATIONS.sum() + ",\n"
-                + "  \"aggregate_release_roots\": " + AGGREGATE_RELEASE_ROOTS.sum() + ",\n"
-                + "  \"aggregate_release_probe_workset_allocations\": "
-                + AGGREGATE_RELEASE_PROBE_WORKSET_ALLOCATIONS.sum() + ",\n"
-                + "  \"aggregate_release_probe_roots\": "
-                + AGGREGATE_RELEASE_PROBE_ROOTS.sum() + "\n"
+                + "  \"aggregate_release_roots\": " + AGGREGATE_RELEASE_ROOTS.sum() + "\n"
                 + "}\n";
         try {
             Path output = Path.of(OUTPUT + "-" + pid + ".json");

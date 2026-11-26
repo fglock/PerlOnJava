@@ -288,14 +288,17 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         retainCodeTemplateConstants();
     }
 
-    /** Record optree owners for file-compiled anonymous CODE templates. */
+    /** Record this optree's owners for nested anonymous CODE templates. */
     private void retainCodeTemplateConstants() {
-        if (constants == null || sourceName == null || sourceName.startsWith("(eval ")) return;
+        if (constants == null || sourceName == null) return;
         for (Object constant : constants) {
             if (constant instanceof RuntimeScalar scalar
                     && scalar.value instanceof RuntimeCode template
                     && template.isOptreeCodeTemplate) {
                 RuntimeCode.retainOptreeCodeTemplate(this, scalar);
+            } else if (constant instanceof RuntimeCode template
+                    && template.isOptreeCodeTemplate) {
+                RuntimeCode.retainOptreeCodeTemplate(this, template);
             }
         }
     }
@@ -719,9 +722,15 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         copy.signaturePositionalOptional = this.signaturePositionalOptional;
         copy.signatureNamedRequired = this.signatureNamedRequired;
         copy.signatureNamedOptional = this.signatureNamedOptional;
+        copy.signatureParameterTypes = this.signatureParameterTypes;
+        copy.signatureParameterTypeObjects = this.signatureParameterTypeObjects;
+        copy.signatureParameterTypeObjectVariables =
+                this.signatureParameterTypeObjectVariables;
+        copy.signatureTypeReifier = this.signatureTypeReifier;
         copy.signaturePositionalCount = this.signaturePositionalCount;
         copy.signatureSlurpySigil = this.signatureSlurpySigil;
         copy.signatureSlurpyName = this.signatureSlurpyName;
+        copy.signatureKeyword = this.signatureKeyword;
         return copy;
     }
 

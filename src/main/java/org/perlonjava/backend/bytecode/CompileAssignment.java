@@ -2970,7 +2970,9 @@ public class CompileAssignment {
                 if (leftOp.operator.equals("$") && leftOp.operand instanceof IdentifierNode) {
                     String varName = "$" + ((IdentifierNode) leftOp.operand).name;
 
-                    if (bytecodeCompiler.hasVariable(varName) && bytecodeCompiler.isOurVariable(varName)) {
+                    if (bytecodeCompiler.hasVariable(varName)
+                            && bytecodeCompiler.isOurVariable(varName)
+                            && bytecodeCompiler.isDynamicOurVariable(varName)) {
                         SymbolTable.SymbolEntry ourEntry = bytecodeCompiler.symbolTable.getSymbolEntry(varName);
                         String ourPkg = (ourEntry != null && ourEntry.perlPackage() != null)
                                 ? ourEntry.perlPackage()

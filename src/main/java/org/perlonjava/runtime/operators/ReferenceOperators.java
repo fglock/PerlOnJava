@@ -123,6 +123,9 @@ public class ReferenceOperators {
             if (!classConstruction && ClassRegistry.isClass(str)) {
                 throw new PerlCompilerException("Attempt to bless into a class");
             }
+            if (classConstruction && referent instanceof RuntimeHash hash) {
+                hash.classInstance = true;
+            }
             if (referent.blessId != 0
                     && ClassRegistry.isClass(NameNormalizer.getBlessStr(referent.blessId))) {
                 throw new PerlCompilerException("Can't bless an object reference");

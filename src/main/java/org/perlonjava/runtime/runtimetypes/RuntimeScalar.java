@@ -596,6 +596,20 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         globalCodeRefFqn = null;
     }
 
+    /** Clear a retired callsite cache and retire its exact untracked edge. */
+    void clearCompiledDirectCallCache(String name, int index) {
+        compiledDirectCallSiteName = name;
+        compiledDirectCallSiteIndex = index;
+        compiledDirectCallSiteDescriptor = false;
+        compiledDirectCallCompileTimePinned = false;
+        compiledDirectCallInitialSlot = null;
+        compiledDirectCallInitialTarget = null;
+        type = RuntimeScalarType.UNDEF;
+        value = null;
+        globalCodeRefFqn = null;
+        updateUntrackedReferenceOwner(null);
+    }
+
     void setCompiledDirectCallTarget(RuntimeScalar replacement) {
         if (replacement == null) return;
         updatingCompiledDirectCallCache = true;
@@ -685,6 +699,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             if (owner != null) containerOwners.add(owner);
             this.containerOwner = owner;
         }
+        syncUntrackedContainerOwnerIndex();
         associateCountedAggregateOwnerIfAbsent(owner);
         refreshDetachedGlobValueOwner();
     }
@@ -786,6 +801,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 if (containerOwner == null) containerOwner = replacement;
             }
         }
+        syncUntrackedContainerOwnerIndex();
     }
 
     /** Reconcile the fast owner hint with all currently stored container edges. */
@@ -1241,10 +1257,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     /** Whether this scalar still occupies a concrete aggregate storage slot. */
     boolean hasCurrentAggregateStorageSlot() {
-        synchronized (this) {
-            for (RuntimeBase owner : containerOwners) {
-                if (isStoredInContainer(owner)) return true;
-            }
+        for (RuntimeBase owner : containerOwnerSnapshot()) {
+            if (isStoredInContainer(owner)) return true;
         }
         return false;
     }
@@ -1293,25 +1307,25 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                                            boolean requirePersistentContainer,
                                            PerlRuntime runtime) {
         boolean liveOwningContainer = false;
-        synchronized (this) {
-            for (Iterator<RuntimeBase> owners = containerOwners.iterator(); owners.hasNext();) {
-                RuntimeBase owner = owners.next();
-                if (!isStoredInContainer(owner)) {
-                    owners.remove();
-                    prepopulatedPackageAggregateOwners.remove(owner);
-                    if (containerOwner == owner) containerOwner = null;
-                    continue;
-                }
-                boolean liveContainerOwner = hasLiveContainerOwner(
-                        owner, requirePersistentContainer, runtime);
-                if (!requireLiveContainer || liveContainerOwner) liveOwningContainer = true;
+        RuntimeBase replacement = null;
+        for (RuntimeBase owner : containerOwnerSnapshot()) {
+            if (!isStoredInContainer(owner)) {
+                // Querying another aggregate while holding this scalar's
+                // monitor can invert the lock order with concurrent alias
+                // binding. Prune stale identities after releasing the scalar
+                // monitor.
+                removeContainerOwnerTracking(owner);
+                continue;
             }
-            if (containerOwner == null) {
-                for (RuntimeBase owner : containerOwners) {
-                    if (isStoredInContainer(owner)) {
-                        containerOwner = owner;
-                        break;
-                    }
+            if (replacement == null) replacement = owner;
+            boolean liveContainerOwner = hasLiveContainerOwner(
+                    owner, requirePersistentContainer, runtime);
+            if (!requireLiveContainer || liveContainerOwner) liveOwningContainer = true;
+        }
+        if (replacement != null) {
+            synchronized (this) {
+                if (containerOwner == null && containerOwners.contains(replacement)) {
+                    containerOwner = replacement;
                 }
             }
         }
@@ -1464,13 +1478,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // new referent before releasing the previous one, so cleanup callbacks
         // cannot observe a gap where this scalar's current value has no owner.
         untrackedReferenceOwnerSlot.acquireUntrackedIdentity(referent);
+        syncUntrackedContainerOwnerIndex();
     }
 
     void releaseUntrackedReferenceOwner(RuntimeBase expectedReferent) {
         if (untrackedReferenceOwnerSlot == null
                 || untrackedReferenceOwnerSlot.referent() != expectedReferent) return;
         untrackedReferenceOwnerSlot.release();
-        WeakRefRegistry.onStrongOwnerSlotReleased(expectedReferent);
     }
 
     void finalizeUntrackedValueAfterScopeExit(RuntimeBase expectedReferent) {
@@ -1550,15 +1564,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     private boolean hasLocalAggregateContainerOwner() {
+        List<RuntimeBase> owners = containerOwnerSnapshot();
         RuntimeBase currentOwner;
         synchronized (this) {
             currentOwner = containerOwner;
-            if (currentOwner != null && containerOwners.contains(currentOwner)
-                    && isLocalAggregateOwner(currentOwner)) {
-                return true;
-            }
         }
-        return containerOwnerSnapshot().stream().anyMatch(this::isLocalAggregateOwner);
+        return currentOwner != null && owners.contains(currentOwner)
+                && isLocalAggregateOwner(currentOwner)
+                || owners.stream().anyMatch(this::isLocalAggregateOwner);
     }
 
     private boolean isLocalAggregateOwner(RuntimeBase owner) {
@@ -1569,8 +1582,26 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     void refreshUntrackedReferenceOwner() {
         updateUntrackedReferenceOwner((type & RuntimeScalarType.REFERENCE_BIT) != 0
                 && value instanceof RuntimeBase referent ? referent : null);
+        syncUntrackedContainerOwnerIndex();
         refreshSuspendedFrameOwnerSlots();
         refreshDetachedGlobValueOwner();
+    }
+
+    /** Refresh hash cleanup eligibility after this stored cell changes value. */
+    void refreshDestroyableHashMembership() {
+        for (RuntimeBase owner : containerOwnerSnapshot()) {
+            if (owner instanceof RuntimeHash hash) {
+                hash.refreshDestroyableValueMembership(this);
+            }
+        }
+    }
+
+    private void syncUntrackedContainerOwnerIndex() {
+        PerlOwnerSlot slot = untrackedReferenceOwnerSlot;
+        if (slot == null) return;
+        List<RuntimeBase> owners = this instanceof RuntimeBaseProxy
+                ? List.of() : containerOwnerSnapshot();
+        slot.syncUntrackedContainerOwnerParents(owners);
     }
 
     public static final class ArgumentAliasOwner {
@@ -2312,6 +2343,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         untrackedReferenceOwnerSlot = null;
         if (destination.untrackedReferenceOwnerSlot != null) {
             destination.untrackedReferenceOwnerSlot.associateUntrackedScalarOwner(destination);
+            destination.syncUntrackedContainerOwnerIndex();
             RuntimeBase proxyParent = destination instanceof RuntimeBaseProxy proxy
                     ? proxy.argumentAliasContainer() : null;
             destination.untrackedReferenceOwnerSlot.associateUntrackedProxyValueParent(
@@ -2321,10 +2353,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     private static void releaseDetachedUntrackedOwner(PerlOwnerSlot ownerSlot) {
         if (ownerSlot == null) return;
-        RuntimeBase referent = ownerSlot.referent();
         ownerSlot.associateUntrackedScalarOwner(null);
         ownerSlot.release();
-        if (referent != null) WeakRefRegistry.onStrongOwnerSlotReleased(referent);
     }
 
 
@@ -4541,6 +4571,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     updateUntrackedReferenceOwner(this.value instanceof RuntimeBase referent
                             && (this.type & RuntimeScalarType.REFERENCE_BIT) != 0
                             ? referent : null);
+                    refreshDestroyableHashMembership();
                     if (value != this && !stagedValueOwner
                             && this.value instanceof RuntimeBase referent) {
                         MortalList.consumeMortalReturnValue(value, referent);
@@ -4652,24 +4683,22 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             oldBase = (RuntimeBase) this.value;
         }
         boolean oldRefCountOwned = this.refCountOwned;
-        // Scope unwind can clear a cell's payload after scheduling its array
-        // edge release while leaving the stable storage token on the cell.
-        // Retire that exact displaced edge from its token instead of treating
-        // the missing payload as a lost owner and aborting the replacement.
-        if (oldBase == null && oldRefCountOwned && countedOwnerSlot != null
-                && countedOwnerSlot.isActive()
-                && countedOwnerSlot.countedScalarOwner() == this
-                && (countedOwnerSlot.kind() == PerlOwnerSlot.Kind.ARRAY_ELEMENT
-                    || countedOwnerSlot.kind() == PerlOwnerSlot.Kind.HASH_ELEMENT)) {
-            oldBase = countedOwnerSlot.referent();
-        }
-        boolean oldIdentifiedOwner = oldBase != null && oldRefCountOwned
-                && countedOwnerSlot != null && countedOwnerSlot.isActive()
-                && countedOwnerSlot.referent() == oldBase;
+        // The stable owner token is authoritative during scope unwinding:
+        // localized $@ restoration can replace the scalar payload before the
+        // pending owner release runs. Keep the payload referent separate for
+        // storage bookkeeping, and retire the referent actually named by the
+        // token.
+        PerlOwnerSlot displacedCountedOwnerSlot = countedOwnerSlot;
+        RuntimeBase oldCountedOwnerBase = oldRefCountOwned
+                && displacedCountedOwnerSlot != null
+                && displacedCountedOwnerSlot.isActive()
+                && displacedCountedOwnerSlot.countedScalarOwner() == this
+                ? displacedCountedOwnerSlot.referent() : null;
+        boolean oldIdentifiedOwner = oldCountedOwnerBase != null;
         boolean staleAggregateOwner = oldIdentifiedOwner
-                && (countedOwnerSlot.kind() == PerlOwnerSlot.Kind.ARRAY_ELEMENT
-                    || countedOwnerSlot.kind() == PerlOwnerSlot.Kind.HASH_ELEMENT)
-                && !isCurrentAggregateElementOwner(oldBase, countedOwnerSlot);
+                && (displacedCountedOwnerSlot.kind() == PerlOwnerSlot.Kind.ARRAY_ELEMENT
+                    || displacedCountedOwnerSlot.kind() == PerlOwnerSlot.Kind.HASH_ELEMENT)
+                && !isCurrentAggregateElementOwner(oldCountedOwnerBase, displacedCountedOwnerSlot);
         // A live scalar-reference contents slot is the ownership proof for an
         // uncounted scalar cell's current referent. Assigning through $$ref
         // retargets those exact slots below; the historical referencedByScalarReference
@@ -4698,7 +4727,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         boolean oldArgumentAliasReleaseQueued = false;
         boolean retireOldCountedOwnerAfterPublish = false;
         boolean oldOwnerTraceReleasedDuringReplacement = false;
-        PerlOwnerSlot displacedCountedOwnerSlot = countedOwnerSlot;
         PerlOwnerSlot replacementCountedOwnerSlot = null;
         PerlOwnerSlot.PendingRelease oldCountedOwnerRelease = null;
         boolean newOwned = false;
@@ -4717,9 +4745,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 newReferent = nb;
             }
         }
-
         if (oldRefCountOwned && !thisWasWeak) {
-            if (oldBase == null || !oldIdentifiedOwner) {
+            if (!oldIdentifiedOwner) {
                 throw new IllegalStateException(
                         "counted scalar lost its current owner slot during replacement"
                                 + " (scalar=" + System.identityHashCode(this)
@@ -4739,7 +4766,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                                     : System.identityHashCode(
                                         countedOwnerSlot.countedScalarOwner())) + ")");
             }
-            if (staleAggregateOwner && oldBase.refCount <= 0) {
+            if (staleAggregateOwner && oldCountedOwnerBase.refCount <= 0) {
                 // A detached aggregate slot is no longer a Perl edge. Its
                 // identity can outlive the storage mutation in compatibility
                 // paths; retire that token without decrementing a count that
@@ -4755,11 +4782,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                             this, newReferent,
                             "RuntimeScalar.setLargeRefCounted stale aggregate replacement");
                 }
-            } else if (oldBase.refCount <= 0) {
+            } else if (oldCountedOwnerBase.refCount <= 0) {
                 throw new IllegalStateException(
                         "counted scalar replacement requires a positive old reference count");
-            } else if (oldBase.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_ALIAS) != 0) {
-                MortalList.deferDecrementFromArraySlot(oldBase, this,
+            } else if (oldCountedOwnerBase.ownerSlotCount(PerlOwnerSlot.Kind.ARGUMENT_ALIAS) != 0) {
+                MortalList.deferDecrementFromArraySlot(oldCountedOwnerBase, this,
                         "RuntimeScalar.setLargeRefCounted overwrite");
                 oldArgumentAliasReleaseQueued = true;
                 if (newOwned) {
@@ -4770,9 +4797,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             } else if (newOwned) {
                 oldCountedOwnerRelease = countedOwnerSlot
                         .replaceCountedScalarOwnerAndAcquire(
-                                oldBase, newReferent, this,
+                                oldCountedOwnerBase, newReferent, this,
                                 "RuntimeScalar.setLargeRefCounted store");
-                oldOwnerTraceReleasedDuringReplacement = oldBase != newReferent;
+                oldOwnerTraceReleasedDuringReplacement = oldCountedOwnerBase != newReferent;
             } else {
                 retireOldCountedOwnerAfterPublish = true;
             }
@@ -4796,6 +4823,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // Do the assignment
         this.type = value.type;
         this.value = copyScalarPayload(value.type, value.value);
+        refreshDestroyableHashMembership();
         long referenceSlotMutationVersion = noteReferenceSlotMutation();
         this.refCountOwned = newOwned;
         if (replacementCountedOwnerSlot != null) {

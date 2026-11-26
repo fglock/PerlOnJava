@@ -300,34 +300,21 @@ public class WeakRefRegistry {
         return weakRefs != null && !weakRefs.isEmpty();
     }
 
-    /** Drop untracked scalar owners whose storage or proxy slot has gone away. */
-    private static void releaseDetachedUntrackedReferenceOwners(RuntimeBase referent) {
-        for (PerlOwnerSlot slot : referent.untrackedReferenceOwnerSlotsView()) {
-            if (!slot.isActive() || slot.referent() != referent) continue;
-            RuntimeScalar owner = slot.untrackedScalarOwner();
-            if (owner == null && !slot.hasUntrackedScalarOwnerAssociation()) {
-                continue;
-            } else if (owner == null || owner.untrackedReferenceOwnerSlot() != slot) {
-                slot.release();
-            } else if (isweak(owner)
-                    || !(owner.hasLiveCurrentStrongValueSlot()
-                        || ((referent.blessId != 0
-                                || referent.isWeaklyRefCountTracked())
-                            && owner.hasCurrentAggregateStorageSlot()))) {
-                owner.releaseUntrackedReferenceOwner(referent);
-            }
-        }
-    }
-
     /** Finish tracked cleanup when its final owner slot leaves. */
     static void onStrongOwnerSlotReleased(RuntimeBase referent) {
+        onStrongOwnerSlotReleased(referent, null);
+    }
+
+    /** Finish tracked cleanup after an owner slot leaves the referent ledger. */
+    static void onStrongOwnerSlotReleased(RuntimeBase referent,
+            PerlOwnerSlot.Kind releasedKind) {
         if (referent != null && PerlRuntime.currentOrNull() != null) {
-            releaseDetachedUntrackedReferenceOwners(referent);
-            // A proxy can retain an untracked value owner while its lvalue
-            // parent is live. Recheck those exact proxy owners when the parent
-            // loses its final Perl storage owner; no later release on the
-            // value referent is guaranteed to trigger that check for us.
-            referent.recheckProxyValueOwnersIfUnowned();
+            // Scalar-owner releases can be a large batch for one referent. Its
+            // indexed parent will perform the next liveness check; only an
+            // independent owner transition needs to recheck that referent's
+            // untracked scalar cells.
+            referent.recheckUntrackedScalarValueOwnersIfUnowned(
+                    releasedKind != PerlOwnerSlot.Kind.UNTRACKED_REFERENCE);
         }
         if (referent instanceof RuntimeCode code) {
             code.releasePadConstantsForUntrackedOwnerSlot();

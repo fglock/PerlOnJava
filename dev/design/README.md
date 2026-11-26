@@ -121,7 +121,7 @@ Proposals and plans for work that is being considered or is in progress.
 | [project-organization.md](project-organization.md) | Project organization review and cleanup plan | Active — 2026-11-20. Phases 1–3 implemented. AGENTS.md… |
 | [reachability-walk-cache-plan.md](reachability-walk-cache-plan.md) | Reachability Walk Cache for DBIC Scope Cleanup | Phase 3 complete; CPAN verification passed for DateTime… |
 | [reduce-apply-bytecode.md](reduce-apply-bytecode.md) | Design: Reduce Generated apply() Method Bytecode Size | — |
-| [refcount-owner-ledger.md](refcount-owner-ledger.md) | Perl-Exact Reference Ownership and Closure-Pad Lifetime | Active — 2026-11-25 |
+| [refcount-owner-ledger.md](refcount-owner-ledger.md) | Perl-Exact Reference Ownership and Closure-Pad Lifetime | Active — 2026-11-26 |
 | [refcount_alignment_52leaks_plan.md](refcount_alignment_52leaks_plan.md) | DBIC ./jcpan -t DBIx::Class — Refcount Alignment Plan | Active (Phase H in progress) |
 | [refcount_alignment_plan.md](refcount_alignment_plan.md) | Aligning PerlOnJava Reference Counting with Perl Semantics | Proposal / Design Doc |
 | [refcount_alignment_progress.md](refcount_alignment_progress.md) | Refcount Alignment Progress | — |

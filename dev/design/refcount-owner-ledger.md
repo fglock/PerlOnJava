@@ -1,6 +1,6 @@
 # Perl-Exact Reference Ownership and Closure-Pad Lifetime
 
-Status: Active — 2026-11-25
+Status: Active — 2026-11-26
 **Issue:** [#1132](https://github.com/fglock/PerlOnJava/issues/1132)  
 **Related architecture:**
 [Weaken & DESTROY](../architecture/weaken-destroy.md),
@@ -19,14 +19,18 @@ delivery for removing lifecycle decisions based on memory sweeps; #1649 is its
 historical origin. The design replaces selective-refcount heuristics with
 explicit, auditable owner tokens.
 
-## Current Status (2026-11-25 — resumed)
+## Current Status (2026-11-26 — regression continuation)
 
 **Delivery issue:** [#2043](https://github.com/PerlOnJava/issues/2043)
 
 **Target PR:** [#1938](https://github.com/PerlOnJava/pull/1938)
-**Goal:** deliver Perl-exact owner counts, weak-reference lifetime, and deterministic `DESTROY` behavior without memory-sweep lifecycle decisions. The source candidate is `1d3e96f2a6`; current PR head `71896006ff6d3d92dd6b302f7c8c9eaa8b3b2e28` contains the later documentation checkpoint and design-index updates. Stale Java tests for removed sweep, snapshot, and diagnostic internals were removed; `WatcherCleanupDoesNotTraverseLiveAggregateTest` adds behavior-level coverage for direct-slot watcher cleanup. `nice -n 19 timeout 1800 make` passes on the source commit in 8m11 (`/tmp/issue2043-1d3e96f2a6-make.log`).
+**Goal:** deliver Perl-exact owner counts, weak-reference lifetime, and deterministic `DESTROY` behavior without memory-sweep lifecycle decisions. The earlier source candidate is `1d3e96f2a6`; it removed the recursive cleanup walker and one-level eligibility probes.
 
-PR #2171 merged as `fe8f9a3113b81b952c667cf7952a9961cf5573d8`. RSA generation below 2048 bits is rejected in both Net::SSLeay and Crypt::OpenSSL::RSA; round-trip and padding tests remain active at 2048. The former 1024-bit test key was a project-authored speed shortcut, not an upstream Net::SSLeay requirement. Commit `1d3e96f2a6` parses requested sizes as `BigDecimal`, rejects non-integers and out-of-range values before JCE, and preserves Perl `undef` behavior for invalid Net::SSLeay requests. Hosted CodeQL, Ubuntu, Windows, and dependency-submission checks pass on PR head `71896006ff6d3d92dd6b302f7c8c9eaa8b3b2e28`; the CodeQL finding no longer appears. The PR is open, mergeable, and has no recorded review decision.
+The current local continuation is on branch `wip/issue2043-pr1938-20261125` at `71281ce332`, with source changes still uncommitted. It gives eval-created anonymous CV templates explicit owner slots in both eval interpreter paths, releases their direct-call owners at eval completion or CV teardown, removes the global-destruction cleanup-target pre-scan, and indexes every owner-slot kind count on add, release, and reclassification. `ownerSlotCount` now reads the maintained count instead of walking the ledger. The latest change replaces `RuntimeHash.undefine()`'s O(N) destroyability probe with a direct-value identity index maintained by hash mutations, scalar replacement, and blessing; aliases and wrapped shared maps choose progressive cleanup conservatively without scanning values. `RuntimeHashDestroyableValueIndexTest` and `OwnerSlotKindCountIndexTest` pass in the full `nice -n 19 timeout 1800 make` gate (7m22, `/tmp/issue2043-hash-index-make.log`). The `undef_hash_owner_index.t` regression passes system Perl, JVM, and interpreter; `tied_container_undef.t` passes on both PerlOnJava backends. `nice -n 19 make check-links` passes with 1,407 links and no errors. Full output is in `/tmp/issue2043-undef-hash-index-{perl,jvm,interpreter}.log` and `/tmp/issue2043-tied-container-undef-{jvm,interpreter}.log`.
+
+PR #1938 is open at `71281ce332689ead7da3bf1f584544d0f37cdd00`; GitHub reports it conflicting with `master` (checked 2026-11-26). The last recorded hosted checks were on the earlier head `71896006ff6d3d92dd6b302f7c8c9eaa8b3b2e28`. The worktree continuation has not been published. `tied_handler_value_cell_alias.t` still fails only on the interpreter backend and reproduces on master `4a5c33753f`, so it is pre-existing and outside this continuation.
+
+PR #2171 merged as `fe8f9a3113b81b952c667cf7952a9961cf5573d8`. RSA generation below 2048 bits is rejected in both Net::SSLeay and Crypt::OpenSSL::RSA; round-trip and padding tests remain active at 2048. The former 1024-bit test key was a project-authored speed shortcut, not an upstream Net::SSLeay requirement. Commit `1d3e96f2a6` parses requested sizes as `BigDecimal`, rejects non-integers and out-of-range values before JCE, and preserves Perl `undef` behavior for invalid Net::SSLeay requests. Hosted CodeQL, Ubuntu, Windows, and dependency-submission checks passed on PR head `71896006ff6d3d92dd6b302f7c8c9eaa8b3b2e28`; those results are for the earlier head.
 
 The eight-target acceptance gate was rerun on exact PR head `ee827a2ad50e0e070ab0154355528a452967cbdf` (run `20261124-235045-6870`). Five targets passed: Excel::Writer::XLSX (1,263 files / 5,189 tests), PPR (1,255), Image::ExifTool (113 files / 600), DateTime (3,592), and Template Toolkit (121 files / 3,180). The Image::ExifTool run also passed File::RandomAccess (600 tests). DBIx::Class failed 1/43,020 at the known `t/storage/txn.t` source-line mismatch; Catalyst failed 2/3,477 parser assertions; Mojolicious failed 1/3,735 because `t/mojo/asset.t` could not fork (`Resource temporarily unavailable`). These three failures are tracked in [#2170](https://github.com/PerlOnJava/issues/2170), [#2168](https://github.com/PerlOnJava/issues/2168), and [#2169](https://github.com/PerlOnJava/issues/2169). Full output: `/tmp/issue2043-ee827a2ad5-cpan-acceptance.log`; per-target logs: `/tmp/cpan_random_logs/20261124-235045-6870/`. The run regenerated CPAN reports; keep those changes uncommitted.
 
@@ -52,7 +56,7 @@ The DBIx tests are permanent project-owned Perl tests under `src/test/resources/
 
 The exception-unwind regression passes on system Perl, JVM, and interpreter. It fails on the unfixed `aebe3b0742` source (the JVM reports `first` before `second`) and passes on the current candidate. The complete `nice -n 19 timeout 900 make` gate passed after adding it (all five unit shards, Joni, and home integration). A full Make run on the unfixed baseline failed 11 other JVM unit assertions across three shards; the focused regression result is separately captured in `/private/tmp/issue2043-unfixed-lifo-direct.log`.
 
-`nested_untracked_aggregate_owner_release.t` adds six system-Perl-validated checks for nested array/hash release, a surviving shared owner, weak observers, and destructor rescue. It passes on JVM and interpreter. Ordinary final array/hash cleanup now retires direct element owners and lets final child-container release cascade through that container's own slots; it no longer allocates `RecursiveAggregateReleaseWalker` worksets or probes descendants with `CleanupTargetProbe`. Scope-exit's existing liveness guards and one-level eligibility checks remain, as does `CleanupTargetProbe` for global destruction. The package-array root-marking fast path and paired performance/allocation evidence are recorded under Current Work; the measurements cover the Excel workloads and do not claim a portfolio-wide effect.
+`nested_untracked_aggregate_owner_release.t` adds six system-Perl-validated checks for nested array/hash release, a surviving shared owner, weak observers, and destructor rescue. It passes on JVM and interpreter. Ordinary final array/hash cleanup now retires direct element owners and lets final child-container release cascade through that container's own slots; it no longer allocates `RecursiveAggregateReleaseWalker` worksets or probes descendants with `CleanupTargetProbe`. Global destruction traverses nested aggregate roots directly with cycle tracking. Scope-exit liveness checks remain, and owner-kind presence queries use maintained O(1) counts. The package-array root-marking fast path and paired performance/allocation evidence are recorded under Current Work; the measurements cover the Excel workloads and do not claim a portfolio-wide effect.
 
 
 The latest Excel::Writer::XLSX 1.15 run covered all 1,247 distribution test files against the rebuilt candidate: 1,246 passed and the optional `t/utility/xl_parse_date.t` was skipped because Date::Manip and Date::Calc are unavailable. The first `jcpan -t` batch reached its one-hour timeout without failures; a correctly scoped MakeMaker batch passed the remaining 498 files (4,276 assertions), and the optional test was run separately to record its skip. Logs: `/private/tmp/issue2043-excel-writer-xlsx-final-candidate.log`, `/private/tmp/issue2043-excel-writer-xlsx-final-resumed.log`, and `/private/tmp/issue2043-excel-writer-xlsx-final-optional.log`.
@@ -88,6 +92,7 @@ The next narrow allocation change makes `WeakRefRegistry.releaseDetachedUntracke
 | 2026-11-22 | Add focused coverage for DBIx inflated `+select` result shutdown | The regression first exposed four JVM DBIx Storage/Schema/DBH shutdown leaks. The JVM frame-exit fix resolves them; the project regression passes on system Perl and both backends with no LeakTracer-retained references. |
 | 2026-11-22 | Run the full repository gate after adding both DBIx regressions | `nice -n 19 timeout 900 make` passes in 8m01 (`/private/tmp/issue2043-make-with-dbix-regression.log`). The optional external DBIx tests were run separately with `DBIC_CLASS_TEST_ROOT` set. |
 | 2026-11-22 | Revalidate the resultset section after the JVM frame-exit fix | All 12 upstream resultset files pass on JVM with no retained references. System Perl passes 11; interpreter passes 7 and has five 600-second timeouts. The current full repository gate passes in 7m16. |
+| 2026-11-26 | Remove the hash destroyability eligibility scan from `undef %hash` | Maintained direct-value identity index; full Make passes in 7m22. New index unit test passes, and the progressive-destructor regression passes system Perl, JVM, and interpreter. |
 
 The latest full gate, `nice -n 19 timeout 1800 make`, passed in 8m33 on commit `11838413af` (`/private/tmp/issue2043-package-root-make.log`). It completed all five Java/Perl unit shards, Joni tests, home integration tests, and `PackageArrayRootMarkingFastPathTest`. That build's launcher JAR SHA-256 was `dada35bd36b0a0346604193d4ee924664e25f4fb886bf69f1981021854d37404`; the later acceptance build regenerated the same source commit's JAR as recorded above.
 
@@ -104,7 +109,7 @@ Direct runs against the final rebuilt JAR passed `destroy_eval_die.t` (10/10), `
 | Catalyst acceptance | Exact PR head `ee827a2ad5` has the same two parser assertions across ten programs as the current-master reproduction at `1ee4ff572d`; the pre-merge candidate passed the target. | Classified in #2168; no owner-ledger fix is indicated by this result. |
 | Mojolicious acceptance | Exact PR head `ee827a2ad5` fails one assertion in `t/mojo/asset.t` with `Can't fork: Resource temporarily unavailable`, matching the recorded host limitation. | Classified in #2169 and covered by the user's waiver; retain the run log. |
 | Focused compatibility retests | Moo weak accessor and Template Toolkit string tests pass on both backends. Standard Perl passes Moo; its Template Toolkit run could not load `Template::Stash::XS` because the temporary standard-Perl environment lacks that native build. | No focused retest remains; preserve the standard-Perl Template Toolkit environment limitation. |
-| PR review and closure | PR #1938 is open at `71896006ff6d3d92dd6b302f7c8c9eaa8b3b2e28`, clean against `master`; hosted CodeQL, Ubuntu, Windows, and dependency checks pass. | Await human review and maintainer merge. After merge, verify #2043 resolution, move current behavior to `dev/architecture/`, archive this plan, and regenerate the design index. |
+| PR review and closure | PR #1938 is open at `71281ce332689ead7da3bf1f584544d0f37cdd00`; GitHub reports a conflict with `master`. The last recorded hosted checks are for the earlier head `71896006ff6d3d92dd6b302f7c8c9eaa8b3b2e28`. | Reconcile the branch on the same PR, then verify checks and await maintainer review and merge. After merge, verify #2043 resolution, move current behavior to `dev/architecture/`, archive this plan, and regenerate the design index. |
 
 ### Complete step-by-step delivery plan
 
@@ -116,7 +121,7 @@ Direct runs against the final rebuilt JAR passed `destroy_eval_die.t` (10/10), `
 6. **Record completed compatibility gates.** Focused Moo and Template Toolkit checks pass on both backends. The exact-head eight-target run passed Excel::Writer::XLSX, PPR, Image::ExifTool, File::RandomAccess, DateTime, and Template Toolkit. Catalyst, Mojolicious, and DBIx failures are tracked in #2168–#2170 and reproduced on the exact PR head.
 7. **Review and document the final source.** Run `git diff --check`, review all runtime/support code, verify tests are in `src/`, and remove temporary diagnostics that are not needed. The Work in progress changelog now includes the eval exception, async foreach, and owner-slot lifecycle behavior. Run `make check-links` and offline link checking for changed Markdown.
 8. **Commit and run immutable gates.** Commit the reviewed candidate before the final repository gate. Run `nice -n 19 timeout 900 make` on that exact source commit and focused acceptance gates. If any source changes follow, commit them and rerun affected tests plus `make`.
-9. **Verify the published PR candidate.** Done on `71896006ff6d3d92dd6b302f7c8c9eaa8b3b2e28`: the source includes merged #2171, exact-source full Make and eight-target acceptance results are recorded, and hosted CodeQL/Ubuntu/Windows checks pass.
+9. **Verify the published PR candidate.** The earlier published head was `71896006ff6d3d92dd6b302f7c8c9eaa8b3b2e28` and includes merged #2171. GitHub now reports PR #1938 at `71281ce332689ead7da3bf1f584544d0f37cdd00`, conflicting with `master`; rerun checks after reconciling the same PR branch.
 10. **Close delivery after review.** Await human review and maintainer merge. Then verify issue #2043 is resolved, move the current behavior to `dev/architecture/`, archive this design, and regenerate the index with `perl dev/tools/gen_design_index.pl`.
 
 Preflight backups of the dirty source state are `/tmp/wip-unstaged-20261121-144256.patch`, `/tmp/wip-staged-20261121-144256.patch`, `/tmp/wip-status-20261121-144256.txt`, and the later post-timeout snapshot `/tmp/wip-unstaged-20261121-154419.patch`, `/tmp/wip-staged-20261121-154419.patch`, `/tmp/wip-status-20261121-154419.txt`.
@@ -255,8 +260,14 @@ decisions. Temporary leases and suspended-frame owners remain explicit slots.
    recursive walker and one-level eligibility pre-scans are gone from that
    path. Existing liveness guards remain. Tied arrays use raw local storage
    access during slot retirement so cleanup does not call Perl `FETCHSIZE`.
-   Global destruction still uses `CleanupTargetProbe`.
-2. Skip repeated package-root marking when `getGlobalArray` reads an already
+   Global destruction visits each nested aggregate through its existing
+   cycle-detection set and no longer pre-scans aggregates for cleanup targets.
+2. `undef %hash` uses a maintained direct-value identity index to select
+   one-shot versus progressive destructor ordering without a separate full
+   value scan. Aliased cells and wrapped shared maps conservatively use
+   progressive cleanup. The new ordering regression passes system Perl, JVM,
+   and interpreter.
+3. Skip repeated package-root marking when `getGlobalArray` reads an already
    rooted aggregate; global table writes establish the root and array mutation
    paths register later slots. The fast-path regression passes, and the
    seven-pair `chart_axis28.t` comparison against exact parent `2362185545`
@@ -264,13 +275,14 @@ decisions. Temporary leases and suspended-frame owners remain explicit slots.
    normalized workbook checksums. The paired evidence is in
    `/private/tmp/issue2043-package-root-excel-paired.json`; the focused
    package-array workload and JFR samples are retained alongside it.
-3. Exact-head release acceptance is complete. Five targets pass; the three
+4. Exact-head release acceptance is complete. Five targets pass; the three
    failures are classified in #2168–#2170. The run-updated CPAN report files
    remain uncommitted in the worktree.
-4. PR #1938 is updated at `71896006ff6d3d92dd6b302f7c8c9eaa8b3b2e28` and is
-   clean against `master`. Hosted CodeQL, Ubuntu, Windows, and dependency
-   checks pass. The remaining delivery step is human review and maintainer
-   merge; after that, archive this design and update the architecture docs.
+5. PR #1938 is open at `71281ce332689ead7da3bf1f584544d0f37cdd00`; GitHub
+   reports a conflict with `master`. Hosted checks recorded for the earlier
+   head `71896006ff6d3d92dd6b302f7c8c9eaa8b3b2e28` do not verify this head.
+   Reconcile the same PR branch, rerun checks, and then await maintainer
+   review and merge before archiving this design and updating architecture docs.
 
 ## Regression Matrix
 

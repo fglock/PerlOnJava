@@ -1211,7 +1211,7 @@ public class MortalList {
         hash.localBindingExists = false;
         if (!finalRelease) RuntimeCode.releaseActiveLexicalOwner(hash);
         hash.releaseUnownedClosureCaptures();
-        hash.recheckProxyValueOwnersIfUnowned();
+        hash.recheckUntrackedScalarValueOwnersIfUnowned();
         if (!finalRelease && hash.hasClosureCaptureOwner()) {
             hash.scopeExited = true;
             return;
@@ -1221,7 +1221,14 @@ public class MortalList {
         if (hash instanceof RuntimeStash stash) {
             stash.releaseSavedNamespaceMove();
         }
-        for (RuntimeScalar val : hash.elements.values()) {
+        java.util.Collection<RuntimeScalar> cleanupValues = hash.elements.values();
+        if (hash.classInstance) {
+            java.util.List<RuntimeScalar> fieldValues =
+                    new java.util.ArrayList<>(cleanupValues);
+            java.util.Collections.reverse(fieldValues);
+            cleanupValues = fieldValues;
+        }
+        for (RuntimeScalar val : cleanupValues) {
             RuntimeScalar.releaseIoOwner(val);
             if (val != null) val.releaseContainerOwner(hash);
         }
@@ -1235,7 +1242,7 @@ public class MortalList {
         }
         // Retire the direct storage slots. A final child-container owner
         // triggers cleanup of that child's own outgoing slots.
-        for (RuntimeScalar val : hash.elements.values()) {
+        for (RuntimeScalar val : cleanupValues) {
             if (preserveEscapedScalarCellValueOwner(val)) continue;
             deferDecrementRecursive(val);
         }
@@ -1281,7 +1288,7 @@ public class MortalList {
         arr.localBindingExists = false;
         if (!finalRelease) RuntimeCode.releaseActiveLexicalOwner(arr);
         arr.releaseUnownedClosureCaptures();
-        arr.recheckProxyValueOwnersIfUnowned();
+        arr.recheckUntrackedScalarValueOwnersIfUnowned();
         if (!finalRelease && arr.hasClosureCaptureOwner()) {
             arr.scopeExited = true;
             return;
@@ -1458,59 +1465,6 @@ public class MortalList {
                     "MortalList.deferDecrementRecursive zero-count temporary");
             queueDeferredBase(state, base, ownerRelease, null, scalar);
         }
-    }
-
-    /** Reusable scratch for the cleanup-target pre-scan of nested aggregates. */
-    static final class CleanupTargetProbe {
-        private ArrayDeque<RuntimeBase> work;
-        private Set<RuntimeBase> visited;
-
-        boolean mayContainCleanupTargets(RuntimeBase base) {
-            if (!(base instanceof RuntimeArray || base instanceof RuntimeHash)) return false;
-            if (work == null) {
-                work = new ArrayDeque<>();
-                visited = Collections.newSetFromMap(new IdentityHashMap<>());
-                LifecycleHotPathDiagnostics.aggregateReleaseProbeWorksetAllocated();
-            }
-            LifecycleHotPathDiagnostics.aggregateReleaseProbeRootProcessed();
-            work.add(base);
-
-            try {
-                while (!work.isEmpty()) {
-                    RuntimeBase cur = work.poll();
-                    if (cur == null || !visited.add(cur)) continue;
-                    if (cur instanceof RuntimeArray arr) {
-                        for (RuntimeScalar elem : arr.elements) {
-                            if (scalarMayContainCleanupTarget(elem, work)) return true;
-                        }
-                    } else if (cur instanceof RuntimeHash hash) {
-                        for (RuntimeScalar value : hash.elements.values()) {
-                            if (scalarMayContainCleanupTarget(value, work)) return true;
-                        }
-                    }
-                }
-                return false;
-            } finally {
-                work.clear();
-                visited.clear();
-            }
-        }
-    }
-
-    private static boolean scalarMayContainCleanupTarget(RuntimeScalar scalar,
-                                                        ArrayDeque<RuntimeBase> work) {
-        if (scalar == null) return false;
-        if (WeakRefRegistry.hasWeakRefsTo(scalar)) return true;
-        if ((scalar.type & RuntimeScalarType.REFERENCE_BIT) == 0) return false;
-        if (!(scalar.value instanceof RuntimeBase base)) return false;
-        if (WeakRefRegistry.hasWeakRefsTo(base)) return true;
-        if (base.blessId != 0) return true;
-        if (base instanceof RuntimeArray || base instanceof RuntimeHash) {
-            work.add(base);
-        } else if (base instanceof RuntimeCode && base.isRefCountTracked()) {
-            return true;
-        }
-        return false;
     }
 
     /**
@@ -1814,7 +1768,12 @@ public class MortalList {
         // parent owner. Recheck proxy-backed scalar values after the count
         // transition, when the parent may have lost its final Perl owner.
         if (base instanceof RuntimeArray || base instanceof RuntimeHash) {
-            base.recheckProxyValueOwnersIfUnowned();
+            base.recheckUntrackedScalarValueOwnersIfUnowned();
+        } else if (finalRelease) {
+            // The count transition is complete now, so this non-aggregate can
+            // retire detached scalar value edges without revisiting its peers
+            // for every intermediate owner-slot release.
+            base.recheckUntrackedScalarValueOwnersIfUnowned(true);
         }
         if (finalRelease) {
             boolean aggregateReferent = base instanceof RuntimeArray || base instanceof RuntimeHash;

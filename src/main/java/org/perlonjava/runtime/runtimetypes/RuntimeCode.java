@@ -2082,7 +2082,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 || constantValue != null;
     }
 
-    /** Release an untracked CV's pad tree when its last Perl owner leaves. */
+    /** Release an untracked CV's compiled ownership edges when its last Perl owner leaves. */
     void releasePadConstantsForUntrackedOwnerSlot() {
         // The compatibility count can outlive the scalar slot that contributed
         // it. Once a slot release reaches this point, capture liveness comes
@@ -2090,7 +2090,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (PerlRuntime.currentOrNull() == null
                 || hasPerlOwnerForCaptureOtherThan(null)
                 || (padConstantOwnerSlots.isEmpty()
-                    && codeTemplateOwnerSlots.isEmpty())) {
+                    && codeTemplateOwnerSlots.isEmpty()
+                    && compiledDirectCallSiteOwners.isEmpty())) {
             return;
         }
         clearPadConstantWeakRefs();
@@ -5347,6 +5348,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     descriptor.compiledDirectCallRetainTargetIfDeletedBeforeInstall();
             RuntimeScalar initialSlot = descriptor.compiledDirectCallInitialSlot();
             RuntimeScalar pinSlot = descriptor.compiledDirectCallPinSlot();
+            RuntimeScalar visibleCodeSlot = pinSlot == null ? initialSlot : pinSlot;
             RuntimeCode initialTarget = descriptor.compiledDirectCallInitialTarget();
             if (initialTarget == null && descriptor.value instanceof RuntimeCode code) {
                 initialTarget = code;
@@ -5362,7 +5364,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             cache.configureCompiledDirectCallSite(
                     name, siteIndex, null, compileTimePinned, retainTargetIfDeletedBeforeInstall);
             CompiledDirectCallSite callSite =
-                    new CompiledDirectCallSite(name, cache, initialTarget, compileTimePinned,
+                    new CompiledDirectCallSite(name, cache, visibleCodeSlot, initialTarget, compileTimePinned,
                             retainTargetIfDeletedBeforeInstall);
             prepared[index] = cache;
             callSites.add(callSite);
@@ -5546,13 +5548,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 || !(codeReference.value instanceof RuntimeCode template)) {
             return codeReference;
         }
+        retainOptreeCodeTemplate(owner, template);
+        return codeReference;
+    }
+
+    /** Record an optree owner for a nested code template stored directly in bytecode constants. */
+    public static void retainOptreeCodeTemplate(RuntimeCode owner, RuntimeCode template) {
+        if (owner == null || template == null) return;
         Object templateKey = template;
         if (!owner.codeTemplateOwnerSlots.containsKey(templateKey)) {
             PerlOwnerSlot slot = new PerlOwnerSlot(PerlOwnerSlot.Kind.CODE_PAD_CONSTANT);
             slot.acquireCodePadConstantIdentity(template);
             owner.codeTemplateOwnerSlots.put(templateKey, slot);
         }
-        return codeReference;
     }
 
     /** Bind an anonymous code literal to the currently executing optree. */
@@ -5790,6 +5798,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         clone.packageName = this.packageName;
         clone.forwardReferencePackageName = this.forwardReferencePackageName;
         clone.subName = this.subName;
+        clone.lexicalSubDisplayName = this.lexicalSubDisplayName;
         clone.stashInstallPackage = this.stashInstallPackage;
         clone.stashInstallSub = this.stashInstallSub;
         clone.installedViaAnonGlobAssign = this.installedViaAnonGlobAssign;
@@ -6558,6 +6567,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // identities while replacing the metadata, then retire the placeholder's
         // obsolete edges (after any active frame that still uses them returns).
         RetiredCaptureEdges replacedCaptures = new RetiredCaptureEdges(this, codeFrom);
+        boolean preserveLexicalSubDisplayName = lexicalSubDisplayName
+                && subName != null && !subName.isBlank();
+        String preservedLexicalSubName = preserveLexicalSubDisplayName ? subName : null;
         Supplier<Void> sourceCompilerSupplier = codeFrom.compilerSupplier;
         boolean sourceNeedsDelegation = (codeFrom instanceof InterpretedCode && this.hasForwardGlobAlias)
                 || (sourceCompilerSupplier != null
@@ -6605,7 +6617,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         this.inheritsSelfReference = codeFrom.inheritsSelfReference;
         this.isEvalBlock = codeFrom.isEvalBlock;
         this.explicitlyRenamed = codeFrom.explicitlyRenamed;
-        this.lexicalSubDisplayName = codeFrom.lexicalSubDisplayName;
+        this.lexicalSubDisplayName = codeFrom.lexicalSubDisplayName
+                || preserveLexicalSubDisplayName;
+        if (!codeFrom.lexicalSubDisplayName && preserveLexicalSubDisplayName) {
+            this.subName = preservedLexicalSubName;
+        }
         this.deferredClosureWarning = codeFrom.deferredClosureWarning;
         this.deferredClosureWarningLocation = codeFrom.deferredClosureWarningLocation;
         this.deferredConstantCvError = codeFrom.deferredConstantCvError;
@@ -6710,15 +6726,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return s.getInt();
     }
 
-    /**
-     * Returns a cached {@link java.lang.reflect.Constructor} for the class produced by
-     * {@link #evalStringHelper}. Avoids the expensive reflection lookup on cache hits.
-     * No synchronization needed — cache is per-runtime (per-thread), accessed only by
-     * one thread.
-     */
+    /** Returns a constructor cached only when its eval class has no owner constants. */
     @SuppressWarnings("unchecked")
     public static java.lang.reflect.Constructor<?> evalGetCachedConstructor(
             Class<?> clazz, Class<?>[] paramTypes) throws Exception {
+        if (hasEvalPadConstantTree(clazz)) {
+            return clazz.getDeclaredConstructor(paramTypes);
+        }
         Map<Class<?>, java.lang.reflect.Constructor<?>> ctorCache =
                 PerlRuntime.current().runtimeCodeState().evalConstructorCache;
         java.lang.reflect.Constructor<?> ctor = ctorCache.get(clazz);
@@ -6728,23 +6742,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return ctor;
     }
 
-    /**
-     * For no-capture eval classes, cache and reuse the RuntimeScalar code ref.
-     * The eval class instance is stateless (no captures), so the same code ref
-     * is safe to reuse — avoids constructor.newInstance() and makeCodeObject()
-     * on every warm eval invocation.
-     * No synchronization needed — cache is per-runtime (per-thread).
-     */
-    public static RuntimeScalar evalGetOrMakeCachedCodeRef(Class<?> clazz) throws Exception {
-        Map<Class<?>, RuntimeScalar> codeRefCache =
-                PerlRuntime.current().runtimeCodeState().evalCodeRefCache;
-        RuntimeScalar cached = codeRefCache.get(clazz);
-        if (cached != null) return cached;
-        java.lang.reflect.Constructor<?> ctor = clazz.getDeclaredConstructor(EMPTY_CLASSES);
+    private static boolean hasEvalPadConstantTree(Class<?> clazz) {
+        RuntimeCodeRuntimeState state = PerlRuntime.current().runtimeCodeState();
+        String className = clazz.getName().replace('.', '/');
+        RuntimeBase[] directConstants = state.padConstantsByClassName.get(className);
+        if (directConstants != null && directConstants.length > 0) return true;
+        Map<String, RuntimeBase[]> embeddedConstants =
+                state.embeddedPadConstantsByClassName.get(className);
+        return embeddedConstants != null && !embeddedConstants.isEmpty();
+    }
+
+    /** Create a per-invocation eval CV while reusing only its constructor. */
+    public static RuntimeScalar evalMakeNoCaptureCodeRef(Class<?> clazz) throws Exception {
+        java.lang.reflect.Constructor<?> ctor = evalGetCachedConstructor(clazz, EMPTY_CLASSES);
         Object instance = ctor.newInstance((Object[]) null);
-        RuntimeScalar codeRef = makeCodeObject(instance);
-        codeRefCache.put(clazz, codeRef);
-        return codeRef;
+        return makeCodeObject(instance);
     }
 
     public static boolean shouldDecodeEvalbytesUtf8Source(String source) {
@@ -7340,8 +7352,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 storeSourceLines(evalString, actualFileName, ast, tokens, compiledSuccessfully);
             }
 
-            // Cache the result (unless debugging is enabled)
-            if (!isDebugging) {
+            // Eval CV teardown releases its optree owner slots. Keep the
+            // generated class cached only when there is no constant tree to
+            // re-register on the next invocation.
+            if (!isDebugging && !hasEvalPadConstantTree(generatedClass)) {
                 evalCache().put(cacheKey, generatedClass);
             }
 
@@ -8230,6 +8244,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         } finally {
             PerlLanguageProvider.COMPILE_LOCK.lock();
             try {
+            if (interpretedCode != null) {
+                // This eval's bytecode owns its optree constants and anonymous
+                // CV templates only for the duration of this eval invocation.
+                // Release those exact owner slots when execution ends.
+                interpretedCode.releaseCaptures();
+                interpretedCode.clearPadConstantWeakRefs();
+            }
             evalTrace("evalStringWithInterpreter exit tag=" + evalTag + " ctx=" + callContext +
                     " $@=" + GlobalVariable.getGlobalVariable("main::@"));
             // Restore dynamic variables (local) to their state before eval
@@ -9477,6 +9498,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (hasExplicitExpr) {
             frame = args.getFirst().getInt();
         }
+        int requestedFrame = frame;
 
         // Perl executes a defer block as part of the surrounding CV's scope;
         // its implementation closure does not add a caller() frame. The
@@ -9753,13 +9775,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
 
                 RuntimeCode activeCode = activeCodeAtCallerFrame(trackedActiveCodeFrame);
-                // Interpreter frames conventionally spell their own CV name
-                // with a package prefix.  A lexical sub deliberately has no
-                // package-CV identity, so its declaration metadata is more
-                // specific than that synthesized frame spelling.
-                if (currentFrameIsInterpreter && activeCode != null
-                        && activeCode.lexicalSubDisplayName) {
+                // A lexical sub deliberately has no package-CV identity, so
+                // its declaration metadata is more specific than a name
+                // synthesized from either backend's frame representation.
+                if (activeCode != null && activeCode.lexicalSubDisplayName) {
                     subName = callerSubNameForCode(activeCode);
+                }
+                if (requestedFrame == 0 && currentSub != null
+                        && currentSub.type == RuntimeScalarType.CODE
+                        && currentSub.value instanceof RuntimeCode currentCode
+                        && currentCode.lexicalSubDisplayName) {
+                    // The generated JVM frame for a lexical sub can map back
+                    // to its enclosing optree. The direct __SUB__ value names
+                    // the executing lexical CV and is authoritative for
+                    // caller(0) in that case.
+                    subName = callerSubNameForCode(currentCode);
                 }
                 if (currentFrameIsInterpreter && activeCode != null
                         && subName != null && !subName.startsWith("(eval")
@@ -10228,6 +10258,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     private static String callerSubNameForCode(RuntimeCode code) {
+        if (code != null && code.lexicalSubDisplayName
+                && code.subName != null && !code.subName.isEmpty()) {
+            return code.subName;
+        }
         // Installing an anonymous CV in a named glob does not turn it into a
         // named subroutine in Perl.  Keep the stash slot name available for
         // method dispatch, but expose the anonymous identity through caller().
@@ -11689,8 +11723,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             decrementEvalDepth();
             // Release captured variable references from the eval's code object.
             // After eval STRING finishes executing, its captures are no longer needed.
-            if (runtimeScalar.type == RuntimeScalarType.CODE && runtimeScalar.value instanceof RuntimeCode code) {
+            if (runtimeScalar != null && runtimeScalar.type == RuntimeScalarType.CODE
+                    && runtimeScalar.value instanceof RuntimeCode code) {
                 code.releaseCaptures();
+                code.releasePadConstantOwners();
             }
         }
     }

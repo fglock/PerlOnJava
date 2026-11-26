@@ -711,13 +711,13 @@ public class EmitEval {
 
         int paramCount = newEnv.length - skipVariables;
         if (paramCount == 0) {
-            // No-capture eval: use a cached RuntimeScalar code ref to avoid per-call
-            // constructor.newInstance() and makeCodeObject() overhead.
+            // No-capture eval: make a fresh CV so its optree owner slots end
+            // with this eval invocation; the constructor lookup remains cached.
             // Stack: [Class]
             mv.visitMethodInsn(
                     Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
-                    "evalGetOrMakeCachedCodeRef",
+                    "evalMakeNoCaptureCodeRef",
                     "(Ljava/lang/Class;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                     false);
             // Stack: [RuntimeScalar(Code)]

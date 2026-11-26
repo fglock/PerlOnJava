@@ -8,7 +8,7 @@ priorities and future plans.
 
 - Require Net::SSLeay and Crypt::OpenSSL::RSA key generation to use 2048–8192 bits; reject weaker and unbounded sizes and keep the RSA round-trip and padding tests active at the minimum supported size.
 - Retire active lexical owners on explicit `exit` before dispatching `END` blocks (#2043).
-- Retain noncapturing anonymous CODE templates through their source optrees on both backends while allowing eval-created CVs to be released after escape (#2043).
+- Track anonymous CODE templates in eval-created optrees on both backends and release their direct-call owners at eval completion or CV teardown (#2043).
 - Stage temporary anonymous array references as call-argument owners so their elements remain alive through the call and release afterward (#2043).
 - Skip redundant package-root scans when reading an already-rooted global array, while preserving mutation-time ownership of added slots (#2043).
 
@@ -19,10 +19,12 @@ priorities and future plans.
 - Report the active Perl helper argument in `B::REFCNT` for nested hash-slot values during `DESTROY` (#2043).
 - Keep temporary foreach-source values alive until normal or `last` exits in the bytecode interpreter, matching JVM cleanup and preventing premature destruction of list-returned rows (#2043).
 - Remove reachability-based lifetime decisions, root-query state, and sweep-only hooks; use current Perl owner slots for cleanup (#2043).
+- Index every Perl owner-slot kind count during slot changes, removing fallback ledger scans from owner-count queries (#2043).
+- Index hash-held destroyable values so `undef %hash` avoids a full value scan when choosing cleanup order (#2043).
 - Notify destroyed watchers only on scalar slots of the aggregate being released, leaving live nested referents to their own final-owner cleanup (#2043).
 - Reuse cycle-detection worksets while releasing outgoing values from dying arrays and hashes, reducing per-element queue and visited-set initialization (#2043).
 - Restore array-literal flush state on early exits, unwind generated JVM frames at eval/try boundaries, and exclude expression-only owner leases from `B::REFCNT` (#2043).
-- Reuse cleanup-target pre-scan worksets across candidate roots, skip probes for zero-count or currently owned aggregates, and fold direct weak-reference checks into that traversal (#2043).
+- Traverse global destruction aggregate roots directly with cycle tracking instead of pre-scanning them for cleanup targets (#2043).
 - Release abandoned JVM direct-call owners when code generation falls back to the interpreter, allowing redefined CV optree constants to be reaped (#2043).
 - Release DBIx::Class phantom-chain result sources after fresh anonymous hash arguments leave their call frame (#2043).
 - Preserve caller lexical cleanup ownership through interpreter aliases so failed-connect DBIx::Class Storage can be released at scope exit (#2043).

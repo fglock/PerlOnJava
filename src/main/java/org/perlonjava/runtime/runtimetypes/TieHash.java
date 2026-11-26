@@ -31,6 +31,8 @@ public class TieHash extends HashMap<String, RuntimeScalar> {
      * The tied object (handler) that implements the tie interface methods.
      */
     private final RuntimeScalar self;
+    /** Ledger edge retaining the handler while {@link #self} remains its Perl value cell. */
+    private final RuntimeScalar selfOwner;
 
     /**
      * The package name that this hash is tied to.
@@ -54,7 +56,8 @@ public class TieHash extends HashMap<String, RuntimeScalar> {
     public TieHash(String tiedPackage, RuntimeHash previousValue, RuntimeScalar self) {
         this.tiedPackage = tiedPackage;
         this.previousValue = previousValue;
-        this.self = RuntimeScalar.retainTiedHandlerValue(self);
+        this.self = self;
+        this.selfOwner = RuntimeScalar.retainTiedHandlerValue(self);
     }
 
     /**
@@ -243,7 +246,6 @@ public class TieHash extends HashMap<String, RuntimeScalar> {
     public void releaseTiedObject() {
         if (tiedObjectReleased) return;
         tiedObjectReleased = true;
-        if (self == null) return;
-        RuntimeScalar.releaseTiedHandlerValue(self);
+        RuntimeScalar.releaseTiedHandlerValue(selfOwner);
     }
 }

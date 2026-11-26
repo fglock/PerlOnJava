@@ -8,50 +8,6 @@ import static org.junit.jupiter.api.Assertions.*;
 @Tag("unit")
 class TiedHandlerOwnerTest {
     @Test
-    void wrappersHaveDistinctOwnersAndDoNotBorrowTheirSourceCell() {
-        PerlRuntime runtime = new PerlRuntime();
-        try (PerlRuntime.Binding ignored = runtime.bind()) {
-            RuntimeHash handler = new RuntimeHash();
-            handler.setTrackedRefCount(0);
-            RuntimeScalar source = handler.createAnonymousReference();
-            TieHash hash = new TieHash("Handler", new RuntimeHash(), source);
-            TieArray array = new TieArray("Handler", new RuntimeArray(), source, new RuntimeArray());
-            TieScalar scalar = new TieScalar("Handler", new RuntimeScalar(), source);
-            TieHandle handle = new TieHandle("Handler", new RuntimeIO(), source);
-            assertEquals(4, handler.ownerSlotCount(PerlOwnerSlot.Kind.TIE_HANDLER));
-            assertEquals(4, handler.ownerSlotSnapshot().stream()
-                    .map(PerlOwnerSlot::identity).distinct().count());
-            assertEquals(4, handler.refCount);
-            source.set(RuntimeScalarCache.scalarUndef);
-            assertSame(handler, hash.getSelf().value);
-            assertSame(handler, array.getSelf().value);
-            assertSame(handler, scalar.getSelf().value);
-            RuntimeScalar weak = new RuntimeScalar();
-            weak.set(handler.createAnonymousReference());
-            WeakRefRegistry.weaken(weak);
-            hash.releaseTiedObject();
-            assertSame(handler, hash.getSelf().value,
-                    "retired magic can still borrow its snapshot during local restoration");
-            assertFalse(hash.getSelf().refCountOwned);
-            hash.releaseTiedObject();
-            array.releaseTiedObject();
-            array.releaseTiedObject();
-            assertEquals(2, handler.refCount);
-            assertEquals(2, handler.ownerSlotCount(PerlOwnerSlot.Kind.TIE_HANDLER));
-            scalar.releaseTiedObject();
-            scalar.releaseTiedObject();
-            assertEquals(RuntimeScalarType.HASHREFERENCE, weak.type);
-            {
-                handle.releaseTiedObject();
-                handle.releaseTiedObject();
-                assertEquals(RuntimeScalarType.UNDEF, weak.type);
-                assertFalse(handler.hasOwnerSlots());
-                assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, handler.perlLifecycleState());
-            }
-        }
-    }
-
-    @Test
     void finalHashDestructionReleasesMagicDespiteAnExpressionBorrow() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {

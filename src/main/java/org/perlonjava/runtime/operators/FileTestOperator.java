@@ -6,6 +6,7 @@ import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.io.IOException;
+import java.lang.ref.WeakReference;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.LinkOption;
@@ -50,6 +51,7 @@ public class FileTestOperator {
         boolean lastStatOk;
         int lastStatErrno;
         final RuntimeScalar lastStatArg = new RuntimeScalar();
+        WeakReference<CustomFileChannel> lastStatFileChannel;
         boolean lastStatWasLstat;
         BasicFileAttributes lastBasicAttr;
         PosixFileAttributes lastPosixAttr;
@@ -65,6 +67,7 @@ public class FileTestOperator {
         state.lastStatArg.set(snapshotStatArgument(arg));
         state.lastStatOk = ok;
         state.lastStatErrno = errno;
+        state.lastStatFileChannel = null;
         state.lastStatWasLstat = wasLstat;
         state.lastNativeStatFields = null;
         state.hasLastOverloadedFileTestSubject = false;
@@ -81,10 +84,13 @@ public class FileTestOperator {
     static RuntimeScalar snapshotStatArgument(RuntimeScalar arg) {
         if (arg.type == RuntimeScalarType.GLOB || arg.type == RuntimeScalarType.GLOBREFERENCE) {
             // Perl's cached stat buffer retains the result and the displayed
-            // subject, not a new strong reference to the caller's glob. Keep
-            // an immutable scalar snapshot so file-test bookkeeping cannot
-            // extend a lexical handle's lifetime past its last Perl owner.
-            return new RuntimeScalar(arg.toString());
+            // subject, not a new strong reference to the caller's glob. A
+            // blessed glob must use its raw reference string so bookkeeping
+            // cannot invoke user string overloads; ordinary filehandles keep
+            // their normal name for later operations such as -T _.
+            String subject = RuntimeScalarType.blessedId(arg) == 0
+                    ? arg.toString() : arg.toStringRef();
+            return new RuntimeScalar(subject);
         }
         return new RuntimeScalar(arg.toString());
     }
@@ -129,7 +135,7 @@ public class FileTestOperator {
         WarnDie.warn(new RuntimeScalar(msg), callerWhere());
     }
 
-    private static boolean isIORef(RuntimeScalar fileHandle) {
+    static boolean isIORef(RuntimeScalar fileHandle) {
         return (fileHandle.type == RuntimeScalarType.GLOB && fileHandle.value instanceof RuntimeIO)
                 || (fileHandle.type == RuntimeScalarType.GLOBREFERENCE && fileHandle.value instanceof RuntimeIO)
                 || fileHandle.value instanceof RuntimeIO
@@ -184,7 +190,8 @@ public class FileTestOperator {
         // A fresh -e _ is a stat operation, not merely a query of an earlier
         // lstat buffer.  This matters to a following -l _: Perl reports that
         // the preceding operation was stat rather than lstat.
-        if (operator.equals("-e") && state.lastStatArg.type != RuntimeScalarType.GLOB
+        if (operator.equals("-e") && state.lastStatFileChannel == null
+                && state.lastStatArg.type != RuntimeScalarType.GLOB
                 && state.lastStatArg.type != RuntimeScalarType.GLOBREFERENCE) {
             try {
                 Path path = resolvePath(state.lastStatArg.toString());
@@ -198,6 +205,29 @@ public class FileTestOperator {
 
         if (operator.equals("-l") && !state.lastStatWasLstat) {
             throw new PerlCompilerException("The stat preceding -l _ wasn't an lstat");
+        }
+
+        if ((operator.equals("-T") || operator.equals("-B"))
+                && state.lastStatFileChannel != null) {
+            CustomFileChannel channel = state.lastStatFileChannel.get();
+            if (channel != null) {
+                try {
+                    channel.size();
+                } catch (IOException e) {
+                    getGlobalVariable("main::!").set(9);
+                    updateLastStat(state.lastStatArg, false, 9);
+                    return scalarUndef;
+                }
+                try {
+                    RuntimeScalar result = isTextOrBinaryFromHandleAtStart(
+                            channel, operator.equals("-T"));
+                    getGlobalVariable("main::!").set(0);
+                    return result;
+                } catch (IOException e) {
+                    getGlobalVariable("main::!").set(5);
+                    return scalarUndef;
+                }
+            }
         }
 
         // If lastBasicAttr is null (e.g., after testing a JAR path), fall back to re-testing
@@ -283,7 +313,6 @@ public class FileTestOperator {
         }
         fileHandle = RuntimeScalar.fetchTiedOnce(fileHandle);
         state().lastFileTestOperator = operator;
-        state().lastFileHandle.set(snapshotStatArgument(fileHandle));
 
         // File tests participate in Perl's unary operator overloading.  A
         // blessed object may provide a direct (-X method; otherwise the
@@ -308,12 +337,17 @@ public class FileTestOperator {
                     // A following stacked file test (for example
                     // `-r -X $object`) must continue with the overloaded
                     // object as its subject.  There is no native stat result
-                    // to cache, but the bytecode stack form consumes the
-                    // current file-test subject through the same cache slot.
-                    state().lastFileHandle.set(snapshotStatArgument(fileHandle));
-                    updateLastStat(fileHandle, true, 0);
-                    state().lastOverloadedFileTestSubject.set(fileHandle);
-                    state().hasLastOverloadedFileTestSubject = true;
+                    // to cache. Keep its subject separately so this path does
+                    // not stringify the object before or after its overload.
+                    State state = state();
+                    state.lastStatOk = true;
+                    state.lastStatErrno = 0;
+                    state.lastStatWasLstat = false;
+                    state.lastNativeStatFields = null;
+                    state.lastBasicAttr = null;
+                    state.lastPosixAttr = null;
+                    state.lastOverloadedFileTestSubject.set(fileHandle);
+                    state.hasLastOverloadedFileTestSubject = true;
                     return overloaded;
                 }
                 // With no direct (-X method, file tests use the ordinary
@@ -329,6 +363,10 @@ public class FileTestOperator {
                 }
             }
         }
+        // Record the native stat subject only after direct overload dispatch.
+        // Stringifying a blessed reference here can invoke user overload
+        // behavior before the file-test overload receives its original object.
+        state().lastFileHandle.set(snapshotStatArgument(fileHandle));
         // Filehandles are references too, but their tests must continue below
         // through the descriptor-backed path (including anonymous and unlinked
         // temporary files). Stringify only ordinary object references.
@@ -981,6 +1019,21 @@ public class FileTestOperator {
         }
 
         return analyzeTextBinary(buffer, bytesRead, checkForText);
+    }
+
+    private static RuntimeScalar isTextOrBinaryFromHandleAtStart(
+            CustomFileChannel channel, boolean checkForText) throws IOException {
+        long savedPosition = channel.tell().getLong();
+        if (savedPosition < 0 || !channel.seek(0, 0).getBoolean()) {
+            throw new IOException("Unable to seek to the beginning of the cached filehandle");
+        }
+        try {
+            return isTextOrBinaryFromHandle(channel, checkForText);
+        } finally {
+            if (!channel.seek(savedPosition, 0).getBoolean()) {
+                throw new IOException("Unable to restore the cached filehandle position");
+            }
+        }
     }
 
     private static boolean isPerlOnJavaExecutable(Path path) {

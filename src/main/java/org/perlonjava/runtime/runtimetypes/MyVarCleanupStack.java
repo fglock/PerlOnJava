@@ -252,7 +252,7 @@ public class MyVarCleanupStack {
             // proxy-backed scalar can still see this aggregate as live during
             // that first pass. Recheck after registration and active lexical
             // owners have both been retired.
-            base.recheckProxyValueOwnersIfUnowned();
+            base.recheckUntrackedScalarValueOwnersIfUnowned();
         }
     }
 

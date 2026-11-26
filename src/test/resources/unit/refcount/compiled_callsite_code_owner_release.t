@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More tests => 4;
+use Test::More tests => 7;
 use Scalar::Util qw(weaken);
 
 eval q{
@@ -20,9 +20,19 @@ my $compiled_caller = eval q{
 die $@ unless $compiled_caller;
 ok(defined $weak_callee, 'the named CV starts alive');
 
+my $compiled_caller_again = eval q{
+    sub { Ownership::CallSiteLifetimeCallee::target() }
+};
+die $@ unless $compiled_caller_again;
+ok(defined $weak_callee, 'the same eval source creates another live callsite');
+
 delete $Ownership::CallSiteLifetimeCallee::{target};
 ok(defined $weak_callee, 'the compiled caller keeps the deleted callee alive');
 is($compiled_caller->(), 42, 'the compiled callsite still invokes the deleted CV');
+is($compiled_caller_again->(), 42,
+    'a repeated eval class retains its own compiled callsite');
 
 undef $compiled_caller;
-ok(!defined $weak_callee, 'dropping the compiled caller releases its callee owner');
+ok(defined $weak_callee, 'another compiled caller retains its callee owner');
+undef $compiled_caller_again;
+ok(!defined $weak_callee, 'dropping all compiled callers releases the callee owner');
