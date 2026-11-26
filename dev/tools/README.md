@@ -137,10 +137,14 @@ perl dev/tools/cpan_import_sync.pl --update --only Clone-PP
 The tool verifies release identity, archive checksums, package metadata, and
 bundled runtime prerequisite versions before extraction. It writes a porting
 report with each staged candidate. Staging does not apply files to the source
-tree. `--apply` requires a clean checkout, applies the candidate in a temporary
-worktree, runs system Perl tests, `make`, and `make test-bundled-modules`, then
-applies the validated diff to the checkout. `Configure.pl --upgrade-bundled`
-uses this validated apply path. This workflow is separate from
+tree. Optional PerlOnJava patches are listed per distribution in the registry
+and stored under `dev/tools/cpan-import-patches/`; staging fails if a patch no
+longer applies. Directory mappings are refreshed exactly, including removal
+of files no longer present upstream. `--apply` requires a clean checkout,
+applies the candidate in a temporary worktree, runs system Perl tests, `make`,
+and `make test-bundled-modules`, then applies the validated diff to the
+checkout. `Configure.pl --upgrade-bundled` uses this validated apply path.
+This workflow is separate from
 `dev/import-perl5/` syncing, the shipped `jcpan` distroprefs and patches, and
 `make test-bundled-modules`.
 

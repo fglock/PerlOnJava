@@ -8,7 +8,7 @@ use Cwd qw(abs_path getcwd);
 use Digest::SHA ();
 use File::Basename qw(dirname basename);
 use File::Find qw(find);
-use File::Path qw(make_path);
+use File::Path qw(make_path remove_tree);
 use File::Spec;
 use File::Temp qw(tempdir);
 use Getopt::Long qw(GetOptions);
@@ -62,6 +62,7 @@ for my $entry (@{$registry->{modules}}) {
             && $entry->{distribution}
             && $entry->{port_mode}
             && $entry->{upstream_distribution_version};
+    validate_registry_paths($entry);
     die "Duplicate CPAN distribution $entry->{distribution}\n"
         if $distribution_by_name{$entry->{distribution}}++;
     for my $provider (@{$entry->{providers} || []}) {
@@ -151,6 +152,10 @@ sub check_entry {
                     || $path =~ m{\A[A-Za-z]:};
         }
     }
+    for my $patch (@{$entry->{patches} || []}) {
+        push @errors, "declared patch $patch->{path} is missing"
+            unless -f absolute_from_root($patch->{path});
+    }
     for my $provider (@{$entry->{providers} || []}) {
         my $actual = read_declared_version($provider);
         if (!defined $actual) {
@@ -167,6 +172,34 @@ sub check_entry {
     }
     print "$entry->{distribution}: contracts are consistent\n";
     return 0;
+}
+
+sub validate_registry_paths {
+    my ($entry) = @_;
+    for my $mapping (@{$entry->{files} || []}) {
+        for my $field (qw(source target)) {
+            validate_relative_path($mapping->{$field}, "$field mapping");
+        }
+    }
+    for my $patch (@{$entry->{patches} || []}) {
+        die "invalid patch entry in $entry->{distribution}\n"
+            unless ref($patch) eq 'HASH' && defined($patch->{path})
+                && defined($patch->{strip}) && $patch->{strip} =~ /\A\d+\z/;
+        validate_relative_path($patch->{path}, 'patch');
+        die "patches must be stored under dev/tools/cpan-import-patches/\n"
+            unless $patch->{path} =~ m{\Adev/tools/cpan-import-patches/};
+        die "declared patch $patch->{path} is missing\n"
+            unless -f absolute_from_root($patch->{path});
+    }
+}
+
+sub validate_relative_path {
+    my ($path, $kind) = @_;
+    die "invalid $kind path\n" unless defined $path && length $path;
+    die "unsafe $kind path '$path'\n"
+        if File::Spec->file_name_is_absolute($path)
+            || $path =~ m{(?:\A|/)\.\.(?:/|\z)}
+            || $path =~ m{\A[A-Za-z]:};
 }
 
 sub read_declared_version {
@@ -219,11 +252,22 @@ sub stage_release {
     my $destination = File::Spec->catdir($option{stage_dir}, "$entry->{distribution}-$release->{version}");
     die "stage destination already exists: $destination\n" if -e $destination;
     extract_archive($archive_path, $destination, $entry->{distribution}, $release->{version});
+    apply_patches($entry, $destination);
     synchronize_candidate($entry, $release, $destination);
     write_file(File::Spec->catfile($destination, 'PERLONJAVA-PORTING.txt'),
         porting_report($entry, $release));
     print "$entry->{distribution}: staged $release->{version} at $destination\n";
     return $destination;
+}
+
+sub apply_patches {
+    my ($entry, $destination) = @_;
+    for my $patch (@{$entry->{patches} || []}) {
+        my $path = absolute_from_root($patch->{path});
+        my $status = system('patch', '--batch', '--forward', "-p$patch->{strip}",
+            '-d', $destination, '-i', $path);
+        die "patch $patch->{path} failed for $entry->{distribution}\n" if $status != 0;
+    }
 }
 
 sub apply_releases {
@@ -268,6 +312,12 @@ sub apply_candidate {
         die "staged mapping is missing $mapping->{source}\n" unless -e $source;
         my $target = File::Spec->catfile($worktree, split m{/}, $mapping->{target});
         if (-d $source) {
+            if (-e $target || -l $target) {
+                my $errors;
+                remove_tree($target, { error => \$errors });
+                die "cannot remove stale mapped files from $mapping->{target}\n"
+                    if ($errors && @$errors) || -e $target || -l $target;
+            }
             find({
                 wanted => sub {
                     return unless -f $File::Find::name;

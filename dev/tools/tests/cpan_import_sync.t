@@ -261,15 +261,26 @@ like($output, qr/no stable release/, 'absence of a stable release is explicit');
 
 my $apply_root = File::Spec->catdir($temporary, 'apply-repo');
 my $apply_registry = File::Spec->catfile($apply_root, 'dev', 'tools', 'cpan-import-registry.json');
+my $patch_rel = 'dev/tools/cpan-import-patches/MooseX-LocalAttribute/fix.patch';
 my $apply_registry_entry = {
     schema_version => 1,
-    modules => [{ %$consumer, tests => [] }],
+    modules => [{ %$consumer, tests => [], patches => [{ path => $patch_rel, strip => 1 }] }],
 };
 write_json($apply_registry, $apply_registry_entry);
+write_file(File::Spec->catfile($apply_root, split m{/}, $patch_rel), <<'PATCH');
+--- a/lib/MooseX/LocalAttribute.pm
++++ b/lib/MooseX/LocalAttribute.pm
+@@ -1 +1,2 @@
+-package MooseX::LocalAttribute; our $VERSION = '0.8'; 1;
++package MooseX::LocalAttribute; our $VERSION = '0.8';
++our $PERLONJAVA_PATCHED = 1; 1;
+PATCH
 write_file(File::Spec->catfile($apply_root, 'src', 'test', 'java', 'org', 'perlonjava',
     'ModuleTestExecutionTest.java'), 'class ModuleTestExecutionTest {}' . "\n");
 write_file(File::Spec->catfile($apply_root, 'src', 'main', 'perl', 'lib', 'MooseX',
     'LocalAttribute.pm'), "package MooseX::LocalAttribute; our \$VERSION = '0.8'; 1;\n");
+write_file(File::Spec->catfile($apply_root, 'src', 'test', 'resources', 'module',
+    'MooseX-LocalAttribute', 't', 'obsolete.t'), "die 'stale fixture should be removed';\n");
 write_file(File::Spec->catfile($apply_root, 'Makefile'), 'all:' . "\n");
 system('git', '-C', $apply_root, 'init', '--quiet') == 0 or die "cannot initialize apply fixture repository\n";
 system('git', '-C', $apply_root, 'config', 'user.name', 'CPAN updater test') == 0
@@ -321,6 +332,12 @@ ok(-f File::Spec->catfile($apply_root, 'src', 'test', 'resources', 'module',
 like(read_file(File::Spec->catfile($apply_root, 'src', 'main', 'perl', 'lib', 'MooseX',
         'LocalAttribute.pm')), qr/\$VERSION\s*=\s*'1\.0'/,
     'full-import provider version target follows the selected release');
+like(read_file(File::Spec->catfile($apply_root, 'src', 'main', 'perl', 'lib', 'MooseX',
+        'LocalAttribute.pm')), qr/\$PERLONJAVA_PATCHED\s*=\s*1/,
+    'configured PerlOnJava patch is applied before validation');
+ok(!-e File::Spec->catfile($apply_root, 'src', 'test', 'resources', 'module',
+        'MooseX-LocalAttribute', 't', 'obsolete.t'),
+    'removed upstream tests are deleted from the refreshed fixture');
 my $applied_registry = read_json($apply_registry);
 is($applied_registry->{modules}[0]{upstream_distribution_version}, '1.0',
     'apply updates the registry only after validation succeeds');
@@ -339,6 +356,9 @@ isnt($status, 0, 'failed worktree validation rejects apply');
 like(read_file(File::Spec->catfile($failure_root, 'src', 'main', 'perl', 'lib', 'MooseX',
         'LocalAttribute.pm')), qr/\$VERSION\s*=\s*'0\.8'/,
     'failed validation leaves the checkout source unchanged');
+ok(-f File::Spec->catfile($failure_root, 'src', 'test', 'resources', 'module',
+        'MooseX-LocalAttribute', 't', 'obsolete.t'),
+    'failed validation retains the prior fixture files');
 my $failure_status = `git -C "$failure_root" status --porcelain`;
 diag(`git -C "$failure_root" diff -- dev/tools/cpan-import-registry.json`) if length $failure_status;
 is($failure_status, '', 'failed validation leaves no tracked checkout changes');
