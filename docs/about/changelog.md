@@ -43,6 +43,8 @@ priorities and future plans.
 - Apply counted releases for argument-aliased referents immediately and defer only their lifecycle decision, so `my (undef, ...) = @_` no longer adds a visible reference (#2043).
 - List every searched `@INC` entry in `require` errors, reject readonly values from explicit `return` in lvalue subs, keep CORE builtin identity and prototype through glob aliases, and report the called glob alias to `AUTOLOAD` on both backends (#2043).
 - Release a detached thread's child runtime regardless of whether `detach` runs before or after the thread finishes.
+- Run a named body installed through a glob alias into an emptied interpreted or `eval`-compiled CV, report subs compiled by `eval STRING` by name in `caller`, and treat a glob that received a CODE reference as already defined when a named sub is declared for it.
+- Document that `caller` follows the Perl 5.45.4 statement line rule, and patch the DBIx::Class `t/storage/txn.t` expectation through a bundled distropref.
 - Fix MakeMaker module lookup, script wrappers and v-string serialization; select the requested JSON XS-compatible backend; add Text::CSV::csv and XML::LibXML node API aliases; match version::qv stringification (#2175, #2164, #2153, #2140, #2116, #2114, #2157, #2126).
 - Parse lexical code attributes, MooseX role calls, legacy spaced `@_`, chained prototype calls, qualified class methods, indirect imports with slash arguments, trailing-text `__END__` markers, and the `socket` DSL term (#2172, #2168, #2161, #2154, #2158, #2139, #2137, #2127).
 - Honor overloaded logical negation, warn on distinct constant-sub redefinitions with equal values, and preserve reference-valued scalar slots through localized glob aliases (#2122, #2075, #1939).

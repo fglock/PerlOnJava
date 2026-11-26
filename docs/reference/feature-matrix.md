@@ -691,6 +691,13 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **`caller` operator**: `caller` returns `($package, $filename, $line)`.
   - ✅  **Extended call stack information**: the full 11-field `caller($level)` tuple and key subroutine metadata are supported on both backends. See the [caller audit probe](../../dev/tools/feature-audit/caller_fields.t).<br>
     Exact hint and bitmask values remain runtime- and pragma-dependent.
+  - ✅  **Statement line numbers**: `caller`, `warn`, and `die` report the line
+    Perl 5.45.4 and later assign to a statement
+    ([GH #24396](https://github.com/Perl/perl5/issues/24396)). A multi-line
+    call with an anonymous sub argument reports the line where the call
+    starts; Perl 5.44 and earlier report the line where it ends. Tests that
+    hardcode the older line need adjusting, as the bundled DBIx::Class
+    distropref does for `t/storage/txn.t`.
 
 ---
 
