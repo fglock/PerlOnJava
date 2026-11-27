@@ -269,6 +269,8 @@ public class FilterUtilCall extends PerlModuleBase {
                 if (isCodeRef.getBoolean()) {
                     // Closure filter: call the coderef repeatedly
                     RuntimeCode code = (RuntimeCode) filterObj.value;
+                    String savedCodePackage = code.packageName;
+                    code.packageName = packageName.toString();
                     RuntimeScalar currentPackage = InterpreterState.currentPackage.get();
                     String savedPackage = currentPackage.toString();
                     int savedLocalLevel = DynamicVariableManager.getLocalLevel();
@@ -341,6 +343,7 @@ public class FilterUtilCall extends PerlModuleBase {
                     } finally {
                         DynamicVariableManager.popToLocalLevel(savedLocalLevel);
                         currentPackage.set(savedPackage);
+                        code.packageName = savedCodePackage;
                     }
                 } else {
                     // Method filter: call the "filter" method on the blessed filter object
