@@ -3,6 +3,14 @@ use warnings;
 use Test::More;
 use POSIX::strptime qw(strptime);
 
+if ($^O eq 'MSWin32') {
+    my $supported = eval { strptime('10:32:34', '%H:%M:%S'); 1 };
+    ok(!$supported && $@ =~ /not supported on this platform/,
+        'provider reports unsupported platforms explicitly');
+    done_testing;
+    exit;
+}
+
 my @date = strptime('2005-02-04 10:32:34', '%F %T');
 is_deeply([@date[0 .. 5]], [34, 32, 10, 4, 1, 105],
     'exported strptime parses date and time fields');
