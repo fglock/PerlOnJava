@@ -80,6 +80,24 @@ class SystemOperatorWindowsCommandTest {
     }
 
     @Test
+    void currentJperlBatchTransportsNonAsciiArgvAsBase64(@TempDir Path temporary)
+            throws Exception {
+        Path launcher = Files.createFile(temporary.resolve("jperl.bat"));
+        List<String> expected = List.of(launcher.toString(), "-CA", "-e",
+                "print ord shift", "Υ");
+
+        List<String> command = SystemOperator.buildWindowsResolvedCommand(
+                expected, temporary.toFile(), launcher.toString());
+        int launcherClass = command.indexOf(WindowsBatchArgvLauncher.class.getName());
+
+        assertTrue(launcherClass > 0, "non-ASCII argv uses the safe launcher");
+        assertTrue(command.subList(launcherClass + 1, command.size()).stream()
+                .allMatch(value -> value.chars().allMatch(ch -> ch < 0x80)));
+        assertEquals(expected, WindowsBatchArgvLauncher.decodeArguments(
+                command.subList(launcherClass + 1, command.size()).toArray(String[]::new)));
+    }
+
+    @Test
     void otherBatchRemainsOnCmdPath() {
         File currentDirectory = new File("build/a188 work tree").getAbsoluteFile();
         File launcher = new File(currentDirectory, "jperl.bat");

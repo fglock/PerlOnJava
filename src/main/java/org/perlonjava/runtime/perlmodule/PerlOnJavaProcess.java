@@ -144,7 +144,8 @@ public class PerlOnJavaProcess extends PerlModuleBase {
                 File script = new File(argv.getFirst());
                 if (script.isFile() && argv.subList(1, argv.size()).stream()
                         .anyMatch(value -> value.indexOf('\n') >= 0
-                                || value.indexOf('\r') >= 0 || value.indexOf('"') >= 0)) {
+                                || value.indexOf('\r') >= 0 || value.indexOf('"') >= 0
+                                || value.codePoints().anyMatch(codePoint -> codePoint > 0x7f))) {
                     return SystemOperator.buildWindowsBatchCommand(
                             argv, script.getAbsoluteFile().getParentFile());
                 }
