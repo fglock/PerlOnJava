@@ -7,6 +7,7 @@ priorities and future plans.
 ## Work in progress
 
 - Ignore marker-like format picture text during conflict-marker checks; defer filters from synthetic `use_ok` evals and preserve their installing package during callbacks (#2182, #2181).
+- Correct `POSIX::strtod` and `LONG_MAX`, enumerate macOS groups with `getgrent`, and bundle the `POSIX::strptime` 0.13 Java provider (#2071, #2091, #2009, #2163).
 - Preserve interpreter eval caller locations and runtime metadata for tracing and deferred Unicode properties (#2042, #2135, #2118).
 - Fix CODE-slot lookup through glob references, inherited import stash visibility, false file-scope lexical-sub warnings, and caller package reporting in BEGIN closures (#2173, #2170, #2165, #2138, #2136, #2102, #2078).
 - Fix MakeMaker module lookup, script wrappers and v-string serialization; select the requested JSON XS-compatible backend; add Text::CSV::csv and XML::LibXML node API aliases; match version::qv stringification (#2175, #2164, #2153, #2140, #2116, #2114, #2157, #2126).
