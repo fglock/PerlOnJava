@@ -162,16 +162,85 @@ public class GlobalVariable {
     }
 
     private static void invalidateCodeRefNames() {
-        globalState().invalidateCodeRefs();
+        globalState().noteCodeRefMutation();
     }
 
-    private static void noteCodeRefMutation(RuntimeScalar previous, RuntimeScalar replacement) {
-        globalState().noteCodeRefMutation(previous, replacement);
+    private static void noteCodeRefMutation(
+            String key, RuntimeScalar previous, RuntimeScalar replacement) {
+        globalState().noteCodeRefMutation();
+        if (key == null) return;
+        for (String related : compiledDirectCallSiteKeys(key)) {
+            globalState().notifyCompiledDirectCallSites(related, previous, replacement);
+        }
     }
 
-    /** Invalidate CODE-root caches after a stash CODE slot changes in place. */
+    /** Advance the compiled CODE-name cache version after an in-place slot change. */
     static void noteGlobalCodeRefSlotMutation(RuntimeScalar slot) {
-        globalState().noteCodeRefMutation(slot, slot);
+        noteGlobalCodeRefSlotMutation(slot, null);
+    }
+
+    static void noteGlobalCodeRefSlotMutation(RuntimeScalar slot, String key) {
+        globalState().noteCodeRefMutation();
+        String codeName = key != null ? key : slot == null ? null : slot.globalCodeRefFqn;
+        if (codeName != null) {
+            for (String related : compiledDirectCallSiteKeys(codeName)) {
+                globalState().notifyCompiledDirectCallSites(related, slot, slot);
+            }
+        }
+    }
+
+    static void registerCompiledDirectCallSite(String key, CompiledDirectCallSite site) {
+        if (key == null || site == null) return;
+        for (String related : compiledDirectCallSiteKeys(key)) {
+            globalState().registerCompiledDirectCallSite(related, site);
+        }
+    }
+
+    static void unregisterCompiledDirectCallSite(String key, CompiledDirectCallSite site) {
+        if (site != null) globalState().unregisterCompiledDirectCallSite(site);
+    }
+
+    static RuntimeScalar resolveRegisteredCompiledDirectCallSite(String key, int siteIndex) {
+        if (key == null) return new RuntimeScalar();
+        String resolvedKey = resolveAliasedFqn(key);
+        CompiledDirectCallSite site = globalState().findCompiledDirectCallSite(
+                resolvedKey, siteIndex);
+        if (site == null && !resolvedKey.equals(key)) {
+            site = globalState().findCompiledDirectCallSite(key, siteIndex);
+        }
+        return site == null ? getGlobalCodeRefForDirectCall(key) : site.resolve();
+    }
+
+    private static Set<String> compiledDirectCallSiteKeys(String key) {
+        Set<String> keys = new java.util.LinkedHashSet<>();
+        if (key != null) {
+            keys.add(key);
+            String resolved = resolveAliasedFqn(key);
+            if (resolved != null) keys.add(resolved);
+        }
+        return keys;
+    }
+
+    /** Current visible CODE slot for an already compiled direct call, if any. */
+    public static RuntimeScalar getVisibleGlobalCodeRefForDirectCall(String key) {
+        if (key == null) return null;
+        String resolvedKey = resolveAliasedFqn(key);
+        RuntimeScalar current = globalCodeRefs.get(resolvedKey);
+        if (current == null && !resolvedKey.equals(key)) {
+            current = globalCodeRefs.get(key);
+        }
+        return current;
+    }
+
+    /** Release a compile-time compatibility pin after a callsite owns its CV. */
+    static void releaseCompiledDirectCallPin(String key, RuntimeScalar expectedSlot) {
+        if (key == null || expectedSlot == null) return;
+        for (String related : compiledDirectCallSiteKeys(key)) {
+            RuntimeScalar pinned = pinnedCodeRefs().get(related);
+            if (pinned == expectedSlot) {
+                unpinCodeRef(related);
+            }
+        }
     }
 
     private static GlobalRuntimeState globalState() {
@@ -250,7 +319,7 @@ public class GlobalVariable {
         return globalState().localizedCodeRefDepth();
     }
 
-    private static IdentityHashMap<RuntimeScalar, String> displacedLocalizedCodeRefs() {
+    private static IdentityHashMap<RuntimeScalar, ArrayList<String>> displacedLocalizedCodeRefs() {
         return globalState().displacedLocalizedCodeRefs();
     }
 
@@ -334,6 +403,94 @@ public class GlobalVariable {
             }
         }
 
+        private boolean ownsPackageScalarSlots(GlobalRuntimeState state) {
+            return (Object) table.apply(state) == state.scalarValues();
+        }
+
+        private Map<String, PerlOwnerSlot> packageAggregateOwnerSlots(
+                GlobalRuntimeState state) {
+            Object values = table.apply(state);
+            if (values == state.arrayValues()) return state.packageArrayOwnerSlots();
+            if (values == state.hashValues()) return state.packageHashOwnerSlots();
+            return null;
+        }
+
+        private void updatePackageScalarOwner(
+                GlobalRuntimeState state, String key, RuntimeScalar nextScalar) {
+            if (!ownsPackageScalarSlots(state)) return;
+            Map<String, PerlOwnerSlot> slots = state.packageScalarOwnerSlots();
+            PerlOwnerSlot slot = slots.get(key);
+            RuntimeScalar previousScalar = slot != null
+                    && slot.referent() instanceof RuntimeScalar previous ? previous : null;
+            if (nextScalar == null) {
+                if (slot != null) {
+                    slots.remove(key, slot);
+                    slot.release();
+                }
+            } else {
+                if (slot == null) {
+                    slot = new PerlOwnerSlot(PerlOwnerSlot.Kind.PACKAGE_SCALAR_SLOT);
+                    slots.put(key, slot);
+                }
+                slot.acquirePackageScalarIdentity(nextScalar);
+            }
+            if (previousScalar != null && previousScalar != nextScalar) {
+                previousScalar.refreshUntrackedReferenceOwner();
+                WeakRefRegistry.onStrongOwnerSlotReleased(previousScalar);
+            }
+            if (nextScalar != null) nextScalar.refreshUntrackedReferenceOwner();
+        }
+
+        private void updatePackageAggregateOwner(
+                GlobalRuntimeState state, String key, RuntimeBase nextAggregate) {
+            Map<String, PerlOwnerSlot> slots = packageAggregateOwnerSlots(state);
+            if (slots == null) return;
+            PerlOwnerSlot slot = slots.get(key);
+            RuntimeBase previousAggregate = slot == null ? null : slot.referent();
+            if (nextAggregate == null) {
+                if (slot != null) {
+                    slots.remove(key, slot);
+                    slot.release();
+                    WeakRefRegistry.onStrongOwnerSlotReleased(previousAggregate);
+                }
+                return;
+            }
+            if (slot == null) {
+                slot = new PerlOwnerSlot(PerlOwnerSlot.Kind.PACKAGE_AGGREGATE_SLOT);
+                slots.put(key, slot);
+            }
+            slot.acquirePackageAggregateIdentity(nextAggregate);
+            if (previousAggregate != null && previousAggregate != nextAggregate) {
+                WeakRefRegistry.onStrongOwnerSlotReleased(previousAggregate);
+            }
+        }
+
+        private void releasePackageScalarOwners(GlobalRuntimeState state) {
+            if (!ownsPackageScalarSlots(state)) return;
+            Map<String, PerlOwnerSlot> slots = state.packageScalarOwnerSlots();
+            for (Map.Entry<String, PerlOwnerSlot> entry : new ArrayList<>(slots.entrySet())) {
+                RuntimeScalar scalar = entry.getValue().referent() instanceof RuntimeScalar value
+                        ? value : null;
+                entry.getValue().release();
+                if (scalar != null) {
+                    scalar.refreshUntrackedReferenceOwner();
+                    WeakRefRegistry.onStrongOwnerSlotReleased(scalar);
+                }
+            }
+            slots.clear();
+        }
+
+        private void releasePackageAggregateOwners(GlobalRuntimeState state) {
+            Map<String, PerlOwnerSlot> slots = packageAggregateOwnerSlots(state);
+            if (slots == null) return;
+            for (PerlOwnerSlot ownerSlot : new ArrayList<>(slots.values())) {
+                RuntimeBase aggregate = ownerSlot.referent();
+                ownerSlot.release();
+                WeakRefRegistry.onStrongOwnerSlotReleased(aggregate);
+            }
+            slots.clear();
+        }
+
         @Override
         public T get(Object key) {
             return delegate().get(key);
@@ -361,15 +518,25 @@ public class GlobalVariable {
 
         @Override
         public T put(String key, T value) {
+            GlobalRuntimeState state = globalState();
             boolean newKey = !delegate().containsKey(key);
             markStashEntryVisible(key);
-            markPackageGlobalRoot(value);
+            // List operators own their current topic alias through the active
+            // argument frame. Preserve the saved package slot for restoration,
+            // and do not turn the temporary alias into a package owner.
+            boolean temporaryScalarAlias = value instanceof RuntimeScalar scalar
+                    && temporaryGlobalAliases().get(key) == scalar;
+            if (!temporaryScalarAlias) markPackageGlobalRoot(value);
             T previous = delegate().put(key, value);
+            if (!temporaryScalarAlias) {
+                updatePackageScalarOwner(state, key,
+                        value instanceof RuntimeScalar scalar ? scalar : null);
+            }
+            updatePackageAggregateOwner(state, key, value);
             noteScalarBindingMutation();
             if (newKey) {
                 invalidateStashEnumerationCache();
             }
-            invalidatePackageRootSnapshot();
             return previous;
         }
 
@@ -378,6 +545,10 @@ public class GlobalVariable {
             T previous = delegate().get(key);
             if (previous != null) {
                 markPackageGlobalRoot(previous);
+                GlobalRuntimeState state = globalState();
+                updatePackageScalarOwner(state, key,
+                        previous instanceof RuntimeScalar scalar ? scalar : null);
+                updatePackageAggregateOwner(state, key, previous);
                 return previous;
             }
             return put(key, value);
@@ -385,34 +556,43 @@ public class GlobalVariable {
 
         @Override
         public T remove(Object key) {
+            GlobalRuntimeState state = globalState();
             T previous = delegate().remove(key);
             if (previous != null) {
+                if (key == null || key instanceof String) {
+                    updatePackageScalarOwner(state, (String) key, null);
+                    updatePackageAggregateOwner(state, (String) key, null);
+                }
                 noteScalarBindingMutation();
                 invalidateStashEnumerationCache();
-                invalidatePackageRootSnapshot();
             }
             return previous;
         }
 
         @Override
         public void clear() {
-            if (!delegate().isEmpty()) {
+            GlobalRuntimeState state = globalState();
+            boolean hadEntries = !delegate().isEmpty();
+            delegate().clear();
+            releasePackageScalarOwners(state);
+            releasePackageAggregateOwners(state);
+            if (hadEntries) {
                 noteScalarBindingMutation();
                 invalidateStashEnumerationCache();
-                invalidatePackageRootSnapshot();
             }
-            delegate().clear();
         }
 
         @Override
         public Set<Entry<String, T>> entrySet() {
-            Map<String, T> entries = delegate();
+            GlobalRuntimeState ownerState = globalState();
+            Map<String, T> entries = table.apply(ownerState);
             return new AbstractSet<>() {
                 @Override
                 public Iterator<Entry<String, T>> iterator() {
                     Iterator<Entry<String, T>> iterator = entries.entrySet().iterator();
                     return new Iterator<>() {
                         private boolean canRemove;
+                        private String lastKey;
 
                         @Override public boolean hasNext() { return iterator.hasNext(); }
 
@@ -421,6 +601,7 @@ public class GlobalVariable {
                             Entry<String, T> current = iterator.next();
                             canRemove = true;
                             String key = current.getKey();
+                            lastKey = key;
                             return new SimpleEntry<>(key, current.getValue()) {
                                 @Override
                                 public T setValue(T value) {
@@ -435,10 +616,12 @@ public class GlobalVariable {
                         public void remove() {
                             if (!canRemove) throw new IllegalStateException("next() has not been called");
                             iterator.remove();
+                            updatePackageScalarOwner(ownerState, lastKey, null);
+                            updatePackageAggregateOwner(ownerState, lastKey, null);
                             canRemove = false;
+                            lastKey = null;
                             noteScalarBindingMutation();
                             invalidateStashEnumerationCache();
-                            invalidatePackageRootSnapshot();
                         }
                     };
                 }
@@ -459,6 +642,14 @@ public class GlobalVariable {
             return globalState().codeRefs();
         }
 
+        private static RuntimeScalar strongStashSlotValue(RuntimeScalar value) {
+            // A Perl assignment copies a weak reference as a strong value. A
+            // glob CODE slot is an independent owner, so keep its scalar cell
+            // separate from a weakened source cell before acquiring the slot.
+            return value != null && WeakRefRegistry.isweak(value)
+                    ? new RuntimeScalar(value) : value;
+        }
+
         private static void maybeInvalidateMethodCacheForCodeRefPut(String key, RuntimeScalar previous, RuntimeScalar value) {
             if (key == null || value == null) {
                 return;
@@ -473,26 +664,28 @@ public class GlobalVariable {
         @Override
         public RuntimeScalar put(String key, RuntimeScalar value) {
             boolean newKey = !delegate().containsKey(key);
+            RuntimeScalar stashValue = strongStashSlotValue(value);
             markStashEntryVisible(key);
-            markPackageGlobalRoot(value);
-            RuntimeScalar old = delegate().put(key, value);
-            if (old != value) {
-                noteCodeRefMutation(old, value);
+            markPackageGlobalRoot(stashValue);
+            RuntimeScalar old = delegate().put(key, stashValue);
+            if (old != stashValue) {
+                if (stashValue != null) stashValue.retainStashCodeSlotBinding();
+                noteCodeRefMutation(key, old, stashValue);
             }
             if (newKey) {
                 invalidateStashEnumerationCache();
             }
-            invalidatePackageRootSnapshot();
-            if (old != null && old != value) {
+            if (old != null && old != stashValue) {
                 old.globalCodeRefFqn = null;
             }
-            if (value != null) {
-                value.globalCodeRefFqn = key;
-                if (value.value instanceof RuntimeCode code) {
+            if (stashValue != null) {
+                stashValue.globalCodeRefFqn = key;
+                if (stashValue.value instanceof RuntimeCode code) {
                     code.hadStashRef = true;
                 }
             }
-            maybeInvalidateMethodCacheForCodeRefPut(key, old, value);
+            maybeInvalidateMethodCacheForCodeRefPut(key, old, stashValue);
+            if (old != null && old != stashValue) old.releaseStashCodeSlotBinding();
             return old;
         }
 
@@ -510,19 +703,20 @@ public class GlobalVariable {
         public RuntimeScalar remove(Object key) {
             RuntimeScalar prev = delegate().remove(key);
             if (prev != null) {
-                noteCodeRefMutation(prev, null);
+                noteCodeRefMutation(key instanceof String name ? name : null, prev, null);
                 invalidateStashEnumerationCache();
-                invalidatePackageRootSnapshot();
                 prev.globalCodeRefFqn = null;
             }
             if (key instanceof String s) {
                 InheritanceResolver.invalidateMethodLookupCachesForStashSubKey(s);
             }
+            if (prev != null) prev.releaseStashCodeSlotBinding();
             return prev;
         }
 
         @Override
         public void clear() {
+            java.util.List<RuntimeScalar> previous = new java.util.ArrayList<>(delegate().values());
             if (!isEmpty()) {
                 invalidateCodeRefNames();
                 invalidateStashEnumerationCache();
@@ -533,9 +727,11 @@ public class GlobalVariable {
                     }
                     InheritanceResolver.invalidateMethodLookupCachesForStashSubKey(entry.getKey());
                 }
-                invalidatePackageRootSnapshot();
             }
             delegate().clear();
+            for (RuntimeScalar slot : previous) {
+                if (slot != null) slot.releaseStashCodeSlotBinding();
+            }
         }
 
         @Override public RuntimeScalar get(Object key) { return delegate().get(key); }
@@ -576,12 +772,12 @@ public class GlobalVariable {
                             String key = current.getKey();
                             RuntimeScalar value = current.getValue();
                             iterator.remove();
-                            noteCodeRefMutation(value, null);
+                            noteCodeRefMutation(key, value, null);
                             canRemove = false;
                             if (value != null) value.globalCodeRefFqn = null;
                             invalidateStashEnumerationCache();
-                            invalidatePackageRootSnapshot();
                             InheritanceResolver.invalidateMethodLookupCachesForStashSubKey(key);
+                            if (value != null) value.releaseStashCodeSlotBinding();
                         }
                     };
                 }
@@ -592,48 +788,9 @@ public class GlobalVariable {
         }
     }
 
-    /** Read-only, allocation-free view for hot reachability traversals. */
+    /** Read-only view used while running registered global CODE blocks at END. */
     static Collection<RuntimeScalar> globalCodeRefValuesView() {
         return globalState().codeRefs().values();
-    }
-
-    static Set<RuntimeCode> installedGlobalCodeRefsView() {
-        return globalState().installedCodeRefs();
-    }
-
-    static List<RuntimeScalar> globalCodeRefEdgeRootsView() {
-        return globalState().codeRefRootsWithEdges();
-    }
-
-    /** Invalidate the cached CODE-root edge list after capture/state metadata changes. */
-    public static void invalidateGlobalCodeRefGraphRoots() {
-        globalState().invalidateCodeRefGraphRoots();
-        MortalList.invalidateExternalRootSnapshot();
-    }
-
-    /** Read-only backing-map views for reachability walks; bypass map facade entries. */
-    static Collection<RuntimeScalar> globalVariableValuesView() {
-        return globalState().scalarValues().values();
-    }
-
-    static Collection<RuntimeArray> globalArrayValuesView() {
-        return globalState().arrayValues().values();
-    }
-
-    static Collection<RuntimeHash> globalHashValuesView() {
-        return globalState().hashValues().values();
-    }
-
-    static Set<Map.Entry<String, RuntimeScalar>> globalVariableEntriesView() {
-        return globalState().scalarValues().entrySet();
-    }
-
-    static Set<Map.Entry<String, RuntimeArray>> globalArrayEntriesView() {
-        return globalState().arrayValues().entrySet();
-    }
-
-    static Set<Map.Entry<String, RuntimeHash>> globalHashEntriesView() {
-        return globalState().hashValues().entrySet();
     }
 
     /** Runtime-selecting facade for named IO and FORMAT stash slots. */
@@ -648,6 +805,43 @@ public class GlobalVariable {
             return table.apply(globalState());
         }
 
+        private Map<String, PerlOwnerSlot> packageIoGlobOwnerSlots(GlobalRuntimeState state) {
+            return table.apply(state) == state.ioSlots()
+                    ? state.packageIoGlobOwnerSlots() : null;
+        }
+
+        private void updatePackageIoGlobOwner(
+                GlobalRuntimeState state, String key, T value) {
+            RuntimeGlob nextGlob = value instanceof RuntimeGlob glob ? glob : null;
+            if (packageIoGlobOwnerSlots(state) == null) return;
+            updatePackageIoGlobOwnerForState(state, key, nextGlob);
+        }
+
+        private static void updatePackageIoGlobOwnerForState(
+                GlobalRuntimeState state, String key, RuntimeGlob nextGlob) {
+            Map<String, PerlOwnerSlot> ownerSlots = state.packageIoGlobOwnerSlots();
+            if (isSymbolGensymName(key)) {
+                state.hiddenIoSlotsAfterStashDelete().add(key);
+            }
+            if (state.hiddenIoSlotsAfterStashDelete().contains(key)) {
+                nextGlob = null;
+            }
+            PerlOwnerSlot ownerSlot = ownerSlots.get(key);
+            if (nextGlob == null) {
+                if (ownerSlot != null) {
+                    ownerSlots.remove(key, ownerSlot);
+                    ownerSlot.release();
+                }
+                return;
+            }
+            if (ownerSlot != null && ownerSlot.referent() == nextGlob) return;
+            if (ownerSlot == null) {
+                ownerSlot = new PerlOwnerSlot(PerlOwnerSlot.Kind.PACKAGE_GLOB_SLOT);
+                ownerSlots.put(key, ownerSlot);
+            }
+            ownerSlot.acquirePackageGlobIdentity(nextGlob);
+        }
+
         @Override public T get(Object key) { return delegate().get(key); }
         @Override public boolean containsKey(Object key) { return delegate().containsKey(key); }
         @Override public int size() { return delegate().size(); }
@@ -655,8 +849,11 @@ public class GlobalVariable {
 
         @Override
         public T put(String key, T value) {
-            boolean newKey = !delegate().containsKey(key);
-            T previous = delegate().put(key, value);
+            GlobalRuntimeState state = globalState();
+            Map<String, T> entries = table.apply(state);
+            boolean newKey = !entries.containsKey(key);
+            T previous = entries.put(key, value);
+            updatePackageIoGlobOwner(state, key, value);
             if (newKey) {
                 invalidateStashEnumerationCache();
             }
@@ -665,8 +862,11 @@ public class GlobalVariable {
 
         @Override
         public T putIfAbsent(String key, T value) {
-            T previous = delegate().putIfAbsent(key, value);
+            GlobalRuntimeState state = globalState();
+            Map<String, T> entries = table.apply(state);
+            T previous = entries.putIfAbsent(key, value);
             if (previous == null) {
+                updatePackageIoGlobOwner(state, key, value);
                 invalidateStashEnumerationCache();
             }
             return previous;
@@ -674,8 +874,12 @@ public class GlobalVariable {
 
         @Override
         public T remove(Object key) {
-            T previous = delegate().remove(key);
+            GlobalRuntimeState state = globalState();
+            T previous = table.apply(state).remove(key);
             if (previous != null) {
+                if (key instanceof String name) {
+                    updatePackageIoGlobOwner(state, name, null);
+                }
                 invalidateStashEnumerationCache();
             }
             return previous;
@@ -683,15 +887,20 @@ public class GlobalVariable {
 
         @Override
         public void clear() {
+            GlobalRuntimeState state = globalState();
             if (!isEmpty()) {
                 invalidateStashEnumerationCache();
             }
-            delegate().clear();
+            table.apply(state).clear();
+            if (packageIoGlobOwnerSlots(state) != null) {
+                state.releasePackageIoGlobOwnerSlots();
+            }
         }
 
         @Override
         public Set<Entry<String, T>> entrySet() {
-            Map<String, T> entries = delegate();
+            GlobalRuntimeState ownerState = globalState();
+            Map<String, T> entries = table.apply(ownerState);
             return new AbstractSet<>() {
                 @Override
                 public Iterator<Entry<String, T>> iterator() {
@@ -720,7 +929,9 @@ public class GlobalVariable {
                         @Override
                         public void remove() {
                             if (!canRemove) throw new IllegalStateException("next() has not been called");
+                            String key = current.getKey();
                             iterator.remove();
+                            updatePackageIoGlobOwner(ownerState, key, null);
                             canRemove = false;
                             invalidateStashEnumerationCache();
                         }
@@ -731,6 +942,14 @@ public class GlobalVariable {
                 @Override public void clear() { StashSlotMap.this.clear(); }
             };
         }
+
+        private static void refreshPackageIoGlobOwner(GlobalRuntimeState state, String key) {
+            updatePackageIoGlobOwnerForState(state, key, state.ioSlots().get(key));
+        }
+    }
+
+    private static void refreshPackageIoGlobOwner(String key) {
+        StashSlotMap.refreshPackageIoGlobOwner(globalState(), key);
     }
 
     static <T extends RuntimeBase> T markPackageGlobalRoot(T root) {
@@ -750,6 +969,10 @@ public class GlobalVariable {
             }
             for (RuntimeScalar value : hash.elements.values()) {
                 hash.markPackageRootedValue(value);
+                if (value != null) {
+                    value.markPrepopulatedPackageAggregateOwner(hash);
+                    value.refreshUntrackedReferenceOwner();
+                }
             }
         } else if (root instanceof RuntimeArray array) {
             // Package-root marking may race with another thread mutating a
@@ -758,13 +981,27 @@ public class GlobalVariable {
             // fail-fast ConcurrentModificationException into Perl code.
             for (RuntimeScalar value : array.elements.toArray(RuntimeScalar[]::new)) {
                 array.markPackageRootedValue(value);
+                if (value != null) {
+                    value.markPrepopulatedPackageAggregateOwner(array);
+                    value.refreshUntrackedReferenceOwner();
+                }
             }
         }
         return root;
     }
 
-    static void invalidatePackageRootSnapshot() {
-        MortalList.invalidateExternalRootSnapshot();
+    /** Whether an aggregate has a package-root owner slot or a package-root marker. */
+    static boolean isPackageRootedAggregate(RuntimeBase value) {
+        if (PerlRuntime.currentOrNull() == null) return false;
+        if (value instanceof RuntimeArray array) {
+            return array.isPackageGlobalRoot
+                    || array.ownerSlotCount(PerlOwnerSlot.Kind.PACKAGE_AGGREGATE_SLOT) != 0;
+        }
+        if (value instanceof RuntimeHash hash) {
+            return hash.isPackageRootedHash()
+                    || hash.ownerSlotCount(PerlOwnerSlot.Kind.PACKAGE_AGGREGATE_SLOT) != 0;
+        }
+        return false;
     }
 
     /**
@@ -902,7 +1139,6 @@ public class GlobalVariable {
         // Reset lib module static state (ORIG_INC)
         org.perlonjava.runtime.perlmodule.Lib.resetState();
 
-        MortalList.invalidateAllRootSnapshots();
     }
 
     public static void setStashAlias(String dstNamespace, String srcNamespace) {
@@ -911,7 +1147,6 @@ public class GlobalVariable {
         preserveAliasesBeforeStashRebind(dst);
         stashAliases.put(dst, src);
         resolvedStashAliasCache.clear();
-        invalidatePackageRootSnapshot();
         InheritanceResolver.noteIsaMutation();
     }
 
@@ -941,42 +1176,96 @@ public class GlobalVariable {
         RuntimeGlob.NamespaceMove move = new RuntimeGlob.NamespaceMove(
                 sourcePrefix, scalars, arrays, hashes, codes);
 
-        globalCodeRefs.keySet().removeIf(key -> key.startsWith(sourcePrefix));
-        clearGlobalPseudoConstantsForNamespace(sourcePrefix);
-        globalVariables.keySet().removeIf(key -> key.startsWith(sourcePrefix));
-        globalArrays.keySet().removeIf(key -> key.startsWith(sourcePrefix));
-        globalHashes.keySet().removeIf(key -> key.startsWith(sourcePrefix));
-        removeGlobalIORefsForNamespace(sourcePrefix);
-        globalFormatRefs.keySet().removeIf(key -> key.startsWith(sourcePrefix));
-        clearHiddenIORefsForNamespace(sourcePrefix);
-        clearPinnedCodeRefsForNamespace(sourcePrefix);
-        invalidateStashEnumerationCache();
+        // Keep the snapshot alive while the source package owners are removed
+        // and the destination roots are installed. The raw maps in
+        // NamespaceMove are transport data, not Perl owners.
+        RuntimeGlob moveOwner = RuntimeGlob.createDetachedNamespaceMove(move);
+        try {
+            // The source package-slot identities follow the moved roots to one
+            // destination. Additional aliases acquire independent identities
+            // when their package entries are installed below.
+            transferPackageRootOwners(move, destinations.get(0));
 
-        for (String destination : destinations) {
-            installNamespaceMove(move, destination);
-            clearStashAlias(destination);
-        }
+            globalCodeRefs.keySet().removeIf(key -> key.startsWith(sourcePrefix));
+            clearGlobalPseudoConstantsForNamespace(sourcePrefix);
+            globalVariables.keySet().removeIf(key -> key.startsWith(sourcePrefix));
+            globalArrays.keySet().removeIf(key -> key.startsWith(sourcePrefix));
+            globalHashes.keySet().removeIf(key -> key.startsWith(sourcePrefix));
+            removeGlobalIORefsForNamespace(sourcePrefix);
+            globalFormatRefs.keySet().removeIf(key -> key.startsWith(sourcePrefix));
+            clearHiddenIORefsForNamespace(sourcePrefix);
+            clearPinnedCodeRefsForNamespace(sourcePrefix);
+            invalidateStashEnumerationCache();
 
-        // Aliases below a destination may have pointed into the old source
-        // subtree (e.g. Alias::Nested:: -> Source::Inner::). Keep them attached
-        // to the materialised subtree instead of following Source's new binding.
-        for (Map.Entry<String, String> alias : new HashMap<>(stashAliases).entrySet()) {
-            if (!alias.getValue().startsWith(sourcePrefix)) {
-                continue;
+            for (String destination : destinations) {
+                installNamespaceMove(move, destination);
+                clearStashAlias(destination);
             }
-            String destination = null;
-            for (String candidate : destinations) {
-                if (alias.getKey().startsWith(candidate)
-                        && (destination == null || candidate.length() > destination.length())) {
-                    destination = candidate;
+
+            // Aliases below a destination may have pointed into the old source
+            // subtree (e.g. Alias::Nested:: -> Source::Inner::). Keep them attached
+            // to the materialised subtree instead of following Source's new binding.
+            for (Map.Entry<String, String> alias : new HashMap<>(stashAliases).entrySet()) {
+                if (!alias.getValue().startsWith(sourcePrefix)) {
+                    continue;
+                }
+                String destination = null;
+                for (String candidate : destinations) {
+                    if (alias.getKey().startsWith(candidate)
+                            && (destination == null || candidate.length() > destination.length())) {
+                        destination = candidate;
+                    }
+                }
+                if (destination != null) {
+                    stashAliases.put(alias.getKey(),
+                            destination + alias.getValue().substring(sourcePrefix.length()));
                 }
             }
-            if (destination != null) {
-                stashAliases.put(alias.getKey(),
-                        destination + alias.getValue().substring(sourcePrefix.length()));
+            resolvedStashAliasCache.clear();
+        } finally {
+            moveOwner.releaseDetachedComponentsIfUnowned();
+        }
+    }
+
+    private static void transferPackageRootOwners(
+            RuntimeGlob.NamespaceMove move, String destinationPrefix) {
+        GlobalRuntimeState state = globalState();
+        transferPackageRootOwners(
+                state.packageScalarOwnerSlots(), move.scalars,
+                move.sourcePrefix, destinationPrefix);
+        transferPackageRootOwners(
+                state.packageArrayOwnerSlots(), move.arrays,
+                move.sourcePrefix, destinationPrefix);
+        transferPackageRootOwners(
+                state.packageHashOwnerSlots(), move.hashes,
+                move.sourcePrefix, destinationPrefix);
+    }
+
+    private static void transferPackageRootOwners(
+            Map<String, PerlOwnerSlot> ownerSlots,
+            Map<String, ? extends RuntimeBase> movedValues,
+            String sourcePrefix, String destinationPrefix) {
+        for (Map.Entry<String, ? extends RuntimeBase> entry : movedValues.entrySet()) {
+            String sourceKey = entry.getKey();
+            String destinationKey = destinationPrefix
+                    + sourceKey.substring(sourcePrefix.length());
+            if (sourceKey.equals(destinationKey)) continue;
+            PerlOwnerSlot sourceOwner = ownerSlots.get(sourceKey);
+            if (sourceOwner == null) continue;
+            if (sourceOwner.referent() != entry.getValue()) {
+                throw new IllegalStateException(
+                        "package root owner does not match moved namespace slot: " + sourceKey);
+            }
+            ownerSlots.remove(sourceKey, sourceOwner);
+            PerlOwnerSlot displacedOwner = ownerSlots.put(destinationKey, sourceOwner);
+            if (displacedOwner != null && displacedOwner != sourceOwner) {
+                RuntimeBase displacedReferent = displacedOwner.referent();
+                displacedOwner.release();
+                if (displacedReferent instanceof RuntimeScalar scalar) {
+                    scalar.refreshUntrackedReferenceOwner();
+                }
             }
         }
-        resolvedStashAliasCache.clear();
     }
 
     private static <T> Map<String, T> snapshotNamespace(Map<String, T> values, String prefix) {
@@ -989,13 +1278,27 @@ public class GlobalVariable {
         return snapshot;
     }
 
-    static RuntimeGlob.NamespaceMove detachNamespaceForStaleStash(String namespace) {
+    static RuntimeGlob detachNamespaceForStaleStash(
+            String namespace, RuntimeStash staleStash) {
         String prefix = normalizeStashNamespace(namespace);
         Map<String, RuntimeScalar> scalars = snapshotNamespace(globalVariables, prefix);
         Map<String, RuntimeArray> arrays = snapshotNamespace(globalArrays, prefix);
         Map<String, RuntimeHash> hashes = snapshotNamespace(globalHashes, prefix);
         hashes.remove(prefix);
+        // The stash is a root binding, not one of its namespace components.
+        // Its key may use a different spelling from the normalized prefix
+        // (for example `main::Pkg::` versus `Pkg::`). Capturing it by key alone
+        // makes the saved move own the stale stash that owns the saved move,
+        // preventing both from reaching their final release.
+        if (staleStash != null) {
+            hashes.entrySet().removeIf(entry -> entry.getValue() == staleStash);
+        }
         Map<String, RuntimeScalar> codes = snapshotNamespace(globalCodeRefs, prefix);
+        RuntimeGlob.NamespaceMove move = new RuntimeGlob.NamespaceMove(
+                prefix, scalars, arrays, hashes, codes);
+        // The saved move can outlive the package-map transaction. Give it
+        // component identities before removing any package-root identities.
+        RuntimeGlob moveOwner = RuntimeGlob.createDetachedNamespaceMove(move);
         globalVariables.keySet().removeIf(key -> key.startsWith(prefix));
         globalArrays.keySet().removeIf(key -> key.startsWith(prefix));
         globalHashes.keySet().removeIf(key -> key.startsWith(prefix) && !key.equals(prefix));
@@ -1005,7 +1308,7 @@ public class GlobalVariable {
         clearHiddenIORefsForNamespace(prefix);
         clearPinnedCodeRefsForNamespace(prefix);
         invalidateStashEnumerationCache();
-        return new RuntimeGlob.NamespaceMove(prefix, scalars, arrays, hashes, codes);
+        return moveOwner;
     }
 
     static void installNamespaceMove(RuntimeGlob.NamespaceMove move, String destinationPrefix) {
@@ -1030,7 +1333,6 @@ public class GlobalVariable {
         for (Map.Entry<String, RuntimeScalar> entry : move.codes.entrySet()) {
             globalCodeRefs.put(destinationPrefix + entry.getKey().substring(move.sourcePrefix.length()), entry.getValue());
         }
-        invalidatePackageRootSnapshot();
         InheritanceResolver.invalidateCache();
         clearPackageCache();
     }
@@ -1054,7 +1356,6 @@ public class GlobalVariable {
     public static void clearStashAlias(String namespace) {
         String key = namespace.endsWith("::") ? namespace : namespace + "::";
         if (stashAliases.remove(key) != null) {
-            invalidatePackageRootSnapshot();
             InheritanceResolver.noteIsaMutation();
         }
         resolvedStashAliasCache.clear();
@@ -1194,21 +1495,45 @@ public class GlobalVariable {
             invalidateStashEnumerationCache();
             return;
         }
-        if (key != null && globalIORefs.containsKey(key)) {
-            if (hiddenIORefsAfterStashDelete().add(key)) {
-                invalidateStashEnumerationCache();
-            }
+        if (key != null && hiddenIORefsAfterStashDelete().add(key)) {
+            refreshPackageIoGlobOwner(key);
+            invalidateStashEnumerationCache();
+        }
+    }
+
+    static boolean isSymbolGensymName(String key) {
+        if (key == null) return false;
+        String name = key.startsWith("main::") ? key.substring("main::".length()) : key;
+        String prefix = "Symbol::GEN";
+        if (!name.startsWith(prefix) || name.length() == prefix.length()) return false;
+        for (int i = prefix.length(); i < name.length(); i++) {
+            if (!Character.isDigit(name.charAt(i))) return false;
+        }
+        return true;
+    }
+
+    /** Drop a hidden lookup entry after its final scalar IO owner closes. */
+    static void retireHiddenIORef(String key) {
+        if (key == null || !hiddenIORefsAfterStashDelete().contains(key)) return;
+        globalIORefs.remove(key);
+        if (hiddenIORefsAfterStashDelete().remove(key)) {
+            invalidateStashEnumerationCache();
         }
     }
 
     static void markStashEntryVisible(String key) {
         if (key != null) {
+            if (isSymbolGensymName(key)) {
+                hideIORefAfterStashDelete(key);
+                return;
+            }
             PerlRuntime runtime = PerlRuntime.currentOrNull();
             if (runtime != null && runtime.standardIOGlob(key) != null) {
                 runtime.showStandardIOGlob(key);
                 invalidateStashEnumerationCache();
             }
             if (hiddenIORefsAfterStashDelete().remove(key)) {
+                refreshPackageIoGlobOwner(key);
                 invalidateStashEnumerationCache();
             }
         }
@@ -1290,19 +1615,36 @@ public class GlobalVariable {
      * Sets a glob alias. After `*a = *b`, calling setGlobAlias("a", "b") makes
      * all slot assignments to "a" also affect "b" and vice versa.
      */
+    /**
+     * Record that a CODE reference was assigned through this glob name. Perl
+     * keeps this as a flag on the GV, not in the shared GP, so a glob alias
+     * does not inherit it. A later named definition for a flagged glob is a
+     * redefinition even when the current CV has no body.
+     */
+    public static void markAssumedCodeGlob(String globName) {
+        if (globName == null) return;
+        PerlRuntime runtime = PerlRuntime.currentOrNull();
+        if (runtime != null) runtime.globalState().assumedCodeGlobs().add(resolveAliasedFqn(globName));
+    }
+
+    public static boolean isAssumedCodeGlob(String globName) {
+        if (globName == null) return false;
+        PerlRuntime runtime = PerlRuntime.currentOrNull();
+        return runtime != null
+                && runtime.globalState().assumedCodeGlobs().contains(resolveAliasedFqn(globName));
+    }
+
     public static void setGlobAlias(String fromGlob, String toGlob) {
         // Find the canonical name for toGlob (in case it's already an alias)
         String canonical = resolveGlobAlias(toGlob);
         // Don't create self-loops
         if (!fromGlob.equals(canonical)) {
             globAliases.put(fromGlob, canonical);
-            invalidatePackageRootSnapshot();
             invalidateStashEnumerationCache();
         }
         // Also ensure toGlob points to the canonical name (unless it would create a self-loop)
         if (!toGlob.equals(canonical) && !toGlob.equals(fromGlob)) {
             globAliases.put(toGlob, canonical);
-            invalidatePackageRootSnapshot();
             invalidateStashEnumerationCache();
         }
     }
@@ -1371,7 +1713,6 @@ public class GlobalVariable {
             globAliases.put(alias, identity);
         }
         globAliases.remove(globName);
-        invalidatePackageRootSnapshot();
         return identity;
     }
 
@@ -1420,10 +1761,8 @@ public class GlobalVariable {
     static void restoreGlobAlias(String globName, String savedTarget) {
         if (savedTarget == null) {
             if (globAliases.remove(globName) != null) {
-                invalidatePackageRootSnapshot();
             }
         } else if (!savedTarget.equals(globAliases.put(globName, savedTarget))) {
-            invalidatePackageRootSnapshot();
         }
     }
 
@@ -1508,7 +1847,6 @@ public class GlobalVariable {
             markPackageGlobalRoot(var);
             tagGeneratedLexicalSubStorage(storageKey, var);
             globalVariables.put(storageKey, var);
-            invalidatePackageRootSnapshot();
         } else if (temporaryGlobalAliases().get(key) != var) {
             markPackageGlobalRoot(var);
         }
@@ -1571,7 +1909,6 @@ public class GlobalVariable {
         clearForeachGlobalAlias(key);
         markPackageGlobalRoot(var);
         globalVariables.put(key, var);
-        invalidatePackageRootSnapshot();
         return var;
     }
 
@@ -1584,7 +1921,6 @@ public class GlobalVariable {
         clearForeachGlobalAlias(key);
         markPackageGlobalRoot(var);
         globalVariables.put(key, var);
-        invalidatePackageRootSnapshot();
     }
 
     public static void aliasGlobalVariable(String key, RuntimeScalar var) {
@@ -1598,7 +1934,6 @@ public class GlobalVariable {
         }
         markPackageGlobalRoot(var);
         globalVariables.put(key, var);
-        invalidatePackageRootSnapshot();
     }
 
     public static void aliasGlobalArray(String key, RuntimeArray array) {
@@ -1607,24 +1942,23 @@ public class GlobalVariable {
         }
         markPackageGlobalRoot(array);
         globalArrays.put(key, array);
-        invalidatePackageRootSnapshot();
     }
 
     public static void aliasGlobalHash(String key, RuntimeHash hash) {
         markPackageGlobalRoot(hash);
         globalHashes.put(key, hash);
-        invalidatePackageRootSnapshot();
     }
 
     /** Replace a package CODE slot with the supplied code reference. */
     public static void aliasGlobalCodeRef(String key, RuntimeScalar codeRef) {
-        globalCodeRefs.put(key, codeRef);
+        // CODE refaliasing aliases the CV, not the RHS scalar variable.
+        globalCodeRefs.put(key, new RuntimeScalar(codeRef));
     }
 
     /**
      * Temporarily aliases a package scalar without permanently labelling the
      * aliased value as package-global. Operators such as map and grep localize
-     * {@code $_} to each input element; the global slot is a reachability root
+     * {@code $_} to each input element; the global slot is a Perl owner
      * while the alias is installed, but the input SV must become ephemeral
      * again when the operator restores the old slot.
      */
@@ -1632,7 +1966,6 @@ public class GlobalVariable {
         clearForeachGlobalAlias(key);
         temporaryGlobalAliases().put(key, var);
         globalVariables.put(key, var);
-        invalidatePackageRootSnapshot();
     }
 
     public static boolean isTemporaryGlobalAlias(String key) {
@@ -1655,7 +1988,6 @@ public class GlobalVariable {
             temporaryGlobalAliases().remove(key);
         }
         globalVariables.put(key, var);
-        invalidatePackageRootSnapshot();
     }
 
     public static void aliasForeachGlobalVariable(String key, RuntimeScalar var) {
@@ -1675,7 +2007,6 @@ public class GlobalVariable {
         foreachGlobalAliases().put(key, var);
         markPackageGlobalRoot(var);
         globalVariables.put(key, var);
-        invalidatePackageRootSnapshot();
     }
 
     public static void clearForeachGlobalAlias(String key) {
@@ -1689,7 +2020,6 @@ public class GlobalVariable {
     public static void restoreForeachGlobalVariable(String key, RuntimeScalar value) {
         clearForeachGlobalAlias(key);
         globalVariables.put(key, value);
-        invalidatePackageRootSnapshot();
     }
 
     /** Restore a read-only implicit-foreach alias when an IO operator needs its lvalue. */
@@ -1715,20 +2045,11 @@ public class GlobalVariable {
     }
 
     public static void retainForeachAlias(RuntimeScalar scalar) {
-        if (scalar != null
-                && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                && scalar.value instanceof RuntimeBase base) {
-            base.foreachAliasCount++;
-        }
+        if (scalar != null) scalar.retainForeachRefCountOwner();
     }
 
     public static void releaseForeachAlias(RuntimeScalar scalar) {
-        if (scalar != null
-                && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                && scalar.value instanceof RuntimeBase base
-                && base.foreachAliasCount > 0) {
-            base.foreachAliasCount--;
-        }
+        if (scalar != null) scalar.releaseForeachRefCountOwner();
     }
 
     /** Retain a foreach reference and return a stable hold for its referent. */
@@ -1808,7 +2129,6 @@ public class GlobalVariable {
     public static RuntimeScalar removeGlobalVariable(String key) {
         clearGlobalPseudoConstant(key);
         RuntimeScalar removed = globalVariables.remove(key);
-        if (removed != null) invalidatePackageRootSnapshot();
         return removed;
     }
 
@@ -1990,7 +2310,6 @@ public class GlobalVariable {
                     resolved = new RuntimeArray();
                     markPackageGlobalRoot(resolved);
                     globalArrays.put(resolvedKey, resolved);
-                    invalidatePackageRootSnapshot();
                 }
                 if (isaArray || resolvedKey.endsWith("::ISA")) {
                     resolved.markIsaArray(key);
@@ -2032,8 +2351,10 @@ public class GlobalVariable {
                 markPackageGlobalRoot(var);
                 globalArrays.put(key, var);
             }
-            invalidatePackageRootSnapshot();
-        } else {
+        } else if (!var.isPackageGlobalRoot) {
+            // Global-array table writes mark the aggregate, and its mutation
+            // paths mark subsequently stored cells. Rewalking every existing
+            // array on each package-variable read only repeats owner checks.
             markPackageGlobalRoot(var);
         }
         if (isaArray) {
@@ -2067,7 +2388,6 @@ public class GlobalVariable {
     public static RuntimeArray removeGlobalArray(String key) {
         RuntimeArray removed = globalArrays.remove(key);
         if (removed != null) {
-            invalidatePackageRootSnapshot();
             if (key.endsWith("::ISA")) {
                 InheritanceResolver.noteIsaMutation();
             }
@@ -2154,11 +2474,10 @@ public class GlobalVariable {
                 }
                 // D-W6.18: mark as package-global so values stored here
                 // get the storedInPackageGlobal flag (replaces class-name
-                // heuristic in walker gate).
+                // class-name heuristic).
                 markPackageGlobalRoot(var);
                 globalHashes.put(key, var);
             }
-            invalidatePackageRootSnapshot();
         } else if (!var.isPackageGlobalRoot || !var.isGlobalPackageHash) {
             // The first installation marks both the hash and its element-map
             // mutation hooks. Rewalking an already-rooted hash on every package
@@ -2216,7 +2535,6 @@ public class GlobalVariable {
     public static RuntimeHash removeGlobalHash(String key) {
         RuntimeHash removed = globalHashes.remove(key);
         if (removed != null) {
-            invalidatePackageRootSnapshot();
             if (key.endsWith("::") && !key.equals("main::")) {
                 String packageName = key.startsWith("main::") ? key.substring(6) : key;
                 if (packageName.endsWith("::")) {
@@ -2274,7 +2592,7 @@ public class GlobalVariable {
                 }
                 RuntimeScalar resolvedVar = globalCodeRefs.get(resolvedKey);
                 if (resolvedVar != null) {
-                    pinnedCodeRefs().put(resolvedKey, resolvedVar);
+                    pinCodeRef(resolvedKey, resolvedVar);
                     return resolvedVar;
                 }
             }
@@ -2292,13 +2610,12 @@ public class GlobalVariable {
             var = createEmptyCodeRef(key);
             markPackageGlobalRoot(var);
             globalCodeRefs.put(key, var);
-            invalidatePackageRootSnapshot();
         } else {
             markPackageGlobalRoot(var);
         }
 
         // Pin the RuntimeScalar so it survives stash deletion
-        pinnedCodeRefs().put(key, var);
+        pinCodeRef(key, var);
 
         return var;
     }
@@ -2424,7 +2741,7 @@ public class GlobalVariable {
                 RuntimeScalar resolvedVar = globalCodeRefs.get(resolvedKey);
                 if (resolvedVar != null) {
                     if (!deletedCodeRefPins().contains(resolvedKey)) {
-                        pinnedCodeRefs().put(resolvedKey, resolvedVar);
+                        pinCodeRef(resolvedKey, resolvedVar);
                     }
                     return resolvedVar;
                 }
@@ -2436,12 +2753,11 @@ public class GlobalVariable {
             var = createEmptyCodeRef(key);
             markPackageGlobalRoot(var);
             globalCodeRefs.put(key, var);
-            invalidatePackageRootSnapshot();
         } else {
             markPackageGlobalRoot(var);
         }
         if (!deletedCodeRefPins().contains(key)) {
-            pinnedCodeRefs().put(key, var);
+            pinCodeRef(key, var);
         }
         return var;
     }
@@ -2480,15 +2796,13 @@ public class GlobalVariable {
                     if (slot == null) {
                         globalCodeRefs.put(alias, shared);
                     } else {
-                        slot.type = RuntimeScalarType.CODE;
-                        slot.value = sharedCode;
+                        slot.set(new RuntimeScalar(sharedCode));
                     }
                     if (!deletedCodeRefPins().contains(alias)) {
-                        pinnedCodeRefs().put(alias, globalCodeRefs.get(alias));
+                        pinCodeRef(alias, globalCodeRefs.get(alias));
                     }
                 }
                 markPackageGlobalRoot(shared);
-                invalidatePackageRootSnapshot();
                 InheritanceResolver.invalidateCache();
                 return globalCodeRefs.get(key);
             }
@@ -2497,8 +2811,12 @@ public class GlobalVariable {
         RuntimeScalar codeRef = getGlobalCodeRefForFreshLookup(key);
         if (codeRef.type != RuntimeScalarType.CODE || !(codeRef.value instanceof RuntimeCode)) {
             RuntimeScalar fresh = createEmptyCodeRef(key);
-            codeRef.type = fresh.type;
-            codeRef.value = fresh.value;
+            // A named CODE slot may already be bound to the stash while its
+            // value is undef (for example after `local *name` followed by a
+            // runtime `\&name`). Assign through the scalar transition so the
+            // bound slot acquires its own CODE_SLOT count and owner identity.
+            codeRef.set(fresh);
+            codeRef.globalCodeRefFqn = key;
             InheritanceResolver.invalidateCache();
         }
         RuntimeCode runtimeCode = (RuntimeCode) codeRef.value;
@@ -2593,6 +2911,7 @@ public class GlobalVariable {
         }
         if (current != null) {
             current.undefine();
+            noteGlobalCodeRefSlotMutation(current, key);
         }
     }
 
@@ -2628,7 +2947,7 @@ public class GlobalVariable {
                 ref = pinned;
                 markPackageGlobalRoot(ref);
                 globalCodeRefs.put(resolvedKey, ref);
-                invalidatePackageRootSnapshot();
+                ref = globalCodeRefs.get(resolvedKey);
             } else {
                 ref = getGlobalCodeRefForFreshLookup(resolvedKey);
             }
@@ -2637,12 +2956,12 @@ public class GlobalVariable {
         if (!globalCodeRefs.containsKey(resolvedKey)) {
             markPackageGlobalRoot(ref);
             globalCodeRefs.put(resolvedKey, ref);
-            invalidatePackageRootSnapshot();
+            ref = globalCodeRefs.get(resolvedKey);
         } else {
             markPackageGlobalRoot(ref);
         }
         deletedCodeRefPins().remove(resolvedKey);
-        pinnedCodeRefs().put(resolvedKey, ref);
+        pinCodeRef(resolvedKey, ref);
         return ref;
     }
 
@@ -2679,22 +2998,67 @@ public class GlobalVariable {
      * @param key     The glob name key.
      * @param codeRef The new RuntimeScalar to pin (typically a new empty one).
      */
+    private static void pinCodeRef(String key, RuntimeScalar codeRef) {
+        RuntimeScalar previous = pinnedCodeRefs().get(key);
+        if (previous == codeRef) return;
+        if (codeRef != null) codeRef.retainCodeSlotBinding();
+        pinnedCodeRefs().put(key, codeRef);
+        if (previous != null) previous.releaseCodeSlotBinding();
+    }
+
+    private static void unpinCodeRef(String key) {
+        RuntimeScalar previous = pinnedCodeRefs().remove(key);
+        if (previous == null) return;
+        previous.releaseCodeSlotBinding();
+    }
+
+    /** Snapshot and own a parsed direct-call CV until its containing CV is compiled. */
+    public static RuntimeScalar snapshotDeferredDirectCallTarget(RuntimeScalar source) {
+        if (source == null) return null;
+        RuntimeScalar snapshot = new RuntimeScalar();
+        snapshot.type = source.type;
+        snapshot.value = source.value;
+        snapshot.globalCodeRefFqn = source.globalCodeRefFqn;
+        snapshot.retainCodeSlotBinding();
+        snapshot.markDeferredDirectCallOwnerBinding();
+        return snapshot;
+    }
+
+    /** Transfer a deferred parser owner after the compiled callsite has acquired its edge. */
+    public static void releaseDeferredDirectCallOwner(RuntimeScalar codeRef) {
+        if (codeRef != null && codeRef.consumeDeferredDirectCallOwnerBinding()) {
+            codeRef.releaseCodeSlotBinding();
+        }
+    }
+
     static void replacePinnedCodeRef(String key, RuntimeScalar codeRef) {
         if (pinnedCodeRefs().containsKey(key)) {
-            pinnedCodeRefs().put(key, codeRef);
+            pinCodeRef(key, codeRef);
         }
     }
 
     static void enterLocalizedCodeRef(String key, RuntimeScalar displacedCodeRef) {
         localizedCodeRefDepth().merge(key, 1, Integer::sum);
         if (displacedCodeRef != null) {
-            displacedLocalizedCodeRefs().put(displacedCodeRef, key);
+            displacedCodeRef.retainCodeSlotBinding();
+            displacedLocalizedCodeRefs().computeIfAbsent(
+                    displacedCodeRef, ignored -> new ArrayList<>()).add(key);
         }
     }
 
     static void exitLocalizedCodeRef(String key, RuntimeScalar displacedCodeRef) {
         if (displacedCodeRef != null) {
-            displacedLocalizedCodeRefs().remove(displacedCodeRef);
+            ArrayList<String> bindings = displacedLocalizedCodeRefs().get(displacedCodeRef);
+            if (bindings != null) {
+                for (int i = bindings.size() - 1; i >= 0; i--) {
+                    if (java.util.Objects.equals(bindings.get(i), key)) {
+                        bindings.remove(i);
+                        break;
+                    }
+                }
+                if (bindings.isEmpty()) displacedLocalizedCodeRefs().remove(displacedCodeRef);
+            }
+            displacedCodeRef.releaseCodeSlotBinding();
         }
         Integer depth = localizedCodeRefDepth().get(key);
         if (depth == null) {
@@ -2709,7 +3073,8 @@ public class GlobalVariable {
 
     public static RuntimeScalar getLocalizedCodeRefForDirectCall(String key, RuntimeScalar fallback) {
         if ((key == null || key.isEmpty()) && fallback != null) {
-            key = displacedLocalizedCodeRefs().get(fallback);
+            ArrayList<String> bindings = displacedLocalizedCodeRefs().get(fallback);
+            if (bindings != null && !bindings.isEmpty()) key = bindings.getLast();
         }
         if (key == null || key.isEmpty() || !localizedCodeRefDepth().containsKey(key)) {
             return fallback;
@@ -2820,6 +3185,23 @@ public class GlobalVariable {
             return definedGlobalCodeRefAsScalar(glob.globName);
         }
         if (key.type == RuntimeScalarType.CODE && key.value instanceof RuntimeCode runtimeCode) {
+            // A compiled `defined(&name)` probe carries the parse-time CODE
+            // slot scalar. The interpreter can execute that bytecode against
+            // a fresh runtime symbol table, so the scalar may still contain
+            // the parse-time CV after the visible slot has been redefined.
+            // Follow the live slot when it exists, but preserve the compiled
+            // CV behavior after stash deletion instead of vivifying or
+            // retargeting the name to a later unrelated slot.
+            if (key.globalCodeRefFqn != null) {
+                String resolvedName = resolveAliasedFqn(key.globalCodeRefFqn);
+                RuntimeScalar visible = globalCodeRefs.get(resolvedName);
+                if (visible == null && !resolvedName.equals(key.globalCodeRefFqn)) {
+                    visible = globalCodeRefs.get(key.globalCodeRefFqn);
+                }
+                if (visible != null) {
+                    return definedGlobalCodeRefAsScalar(visible);
+                }
+            }
             return runtimeCode.defined() ? scalarTrue : scalarFalse;
         }
 
@@ -2837,13 +3219,9 @@ public class GlobalVariable {
         if (deleted != null || pinnedCodeRefs().containsKey(key)) {
             deletedCodeRefPins().add(key);
             clearPackageCache();
-            invalidatePackageRootSnapshot();
         }
-        // Decrement stashRefCount on the removed CODE ref
         if (deleted != null && deleted.value instanceof RuntimeCode removedCode) {
-            if (removedCode.stashRefCount > 0) {
-                removedCode.stashRefCount--;
-            }
+            removedCode.noteStashOwnerReleased();
         }
         return deleted;
     }
@@ -2880,7 +3258,11 @@ public class GlobalVariable {
      * @param prefix The namespace prefix (e.g., "Foo::") to clear.
      */
     public static void clearPinnedCodeRefsForNamespace(String prefix) {
-        pinnedCodeRefs().keySet().removeIf(k -> k.startsWith(prefix));
+        for (String key : new java.util.ArrayList<>(pinnedCodeRefs().keySet())) {
+            if (!key.startsWith(prefix)) continue;
+            RuntimeScalar removed = pinnedCodeRefs().remove(key);
+            if (removed != null) removed.releaseCodeSlotBinding();
+        }
         deletedCodeRefPins().removeIf(k -> k.startsWith(prefix));
     }
 
@@ -2992,6 +3374,14 @@ public class GlobalVariable {
         RuntimeGlob glob = globalIORefs.get(resolvedKey);
         if (glob == null) {
             glob = new RuntimeGlob(resolvedKey);
+            // Symbol::gensym may return a detached RuntimeGlob without first
+            // materializing its name in this table. Later symbolic handle
+            // access resolves the same name here; preserve the anonymous
+            // slot behavior on that canonical object too.
+            if (isSymbolGensymName(resolvedKey)
+                    || hiddenIORefsAfterStashDelete().contains(resolvedKey)) {
+                glob.symbolGensym = true;
+            }
             globalIORefs.put(resolvedKey, glob);
         }
         RuntimeScalar visibleCode = globalCodeRefs.get(resolvedKey);

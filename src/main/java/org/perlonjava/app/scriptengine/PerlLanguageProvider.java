@@ -132,8 +132,7 @@ public class PerlLanguageProvider {
             resetAllGlobals();
             SpecialBlockParser.resetTopLevelState();
             WeakRefRegistry.resetState();
-            ScalarRefRegistry.resetState();
-            MortalList.clearSuspendedRoots();
+            MortalList.clearTemporaryRoots();
             // A prior script may have closed its Perl-level STDIN glob. Script
             // engine resets run multiple top-level programs in one JVM, so give
             // the next program a fresh wrapper around the process standard input.
@@ -681,23 +680,7 @@ public class PerlLanguageProvider {
      * @return The result of the Perl code execution.
      */
     private static RuntimeList executeCode(RuntimeCode runtimeCode, Node ast, EmitterContext ctx, boolean isMainProgram, int callerContext) throws Exception {
-        // Phase B2a (refcount_alignment_52leaks_plan.md): mark this
-        // body as module-initialization for the sake of the
-        // reachability-walker auto-sweep, UNLESS it's the main
-        // program body. DBIC's LeakTracer and similar leak-detection
-        // code is sensitive to weak refs being cleared mid-initializer
-        // chain, so auto-sweep inhibits itself while this counter is
-        // positive.
-        boolean guardEntered = false;
-        if (!isMainProgram) {
-            ModuleInitGuard.enter();
-            guardEntered = true;
-        }
-        try {
-            return executeCodeImpl(runtimeCode, ast, ctx, isMainProgram, callerContext);
-        } finally {
-            if (guardEntered) ModuleInitGuard.exit();
-        }
+        return executeCodeImpl(runtimeCode, ast, ctx, isMainProgram, callerContext);
     }
 
     private static RuntimeList executeCodeImpl(RuntimeCode runtimeCode, Node ast, EmitterContext ctx, boolean isMainProgram, int callerContext) throws Exception {
@@ -981,6 +964,16 @@ public class PerlLanguageProvider {
                         generatedClass,
                         ctx
                 );
+                RuntimeBase[] padConstants = ctx.javaClassInfo.padConstants == null
+                        ? new RuntimeBase[0]
+                        : ctx.javaClassInfo.padConstants.toArray(new RuntimeBase[0]);
+                if (padConstants.length != 0 || !ctx.javaClassInfo.embeddedPadConstants.isEmpty()) {
+                    compiled.installPadConstantTree(
+                            ctx.javaClassInfo.javaClassName,
+                            padConstants,
+                            ctx.javaClassInfo.embeddedPadConstants,
+                            ctx.javaClassInfo.embeddedPadConstantDescendants);
+                }
                 // File-scope `our` declarations, for PadWalker::peek_our(0) at file scope
                 Map<String, String> ourDeclarations = VariableCollectorVisitor.declaredOurVariables(ast);
                 compiled.declaredOurVariables = ourDeclarations.isEmpty() ? null : ourDeclarations;
@@ -994,6 +987,7 @@ public class PerlLanguageProvider {
                 if (showFallback) {
                     System.err.println("Note: Using interpreter fallback (ASM frame compute crash).");
                 }
+                EmitterMethodCreator.discardUninstalledDirectCallDescriptors(ctx);
                 return fallback.interpretedCode;
             } catch (Throwable e) {
                 // Check if this is a recoverable compilation error that can use interpreter fallback
@@ -1033,6 +1027,7 @@ public class PerlLanguageProvider {
                             ctx.errorUtil
                     );
                     InterpretedCode interpretedCode = compiler.compile(ast, fallbackCtx);
+                    EmitterMethodCreator.discardUninstalledDirectCallDescriptors(ctx);
                     if (ctx.symbolTable != null && fallbackCtx.symbolTable != null) {
                         ctx.symbolTable.copyFlagsFrom(fallbackCtx.symbolTable);
                     }

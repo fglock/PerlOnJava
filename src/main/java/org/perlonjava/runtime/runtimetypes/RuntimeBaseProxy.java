@@ -25,6 +25,16 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
         return lvalue != null;
     }
 
+    /** Whether this proxy still denotes a Perl-owned value slot. */
+    boolean hasLivePerlValueOwner() {
+        return true;
+    }
+
+    /** Whether the value slot is backed by a parent with the requested lifetime. */
+    boolean hasLivePerlValueOwner(boolean requirePersistentParent) {
+        return hasLivePerlValueOwner();
+    }
+
     /**
      * Resolves the backing slot without applying its scalar dereference magic.
      * Callers such as tied()/untie() need the slot itself, not a FETCH result.
@@ -32,6 +42,16 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
     public RuntimeScalar resolveLvalue() {
         vivify();
         return lvalue;
+    }
+
+    /** Aggregate whose element this lvalue aliases, if it is an aggregate slot. */
+    RuntimeBase argumentAliasContainer() {
+        return lvalue == null ? null : lvalue.getContainerOwner();
+    }
+
+    /** Acquire any magic owner that an active argument alias must retain. */
+    RuntimeScalar retainArgumentAliasHandlerOwner() {
+        return null;
     }
 
     /**
@@ -56,12 +76,6 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
      * the specific initialization logic.
      */
     abstract void vivify();
-
-    private static boolean rootEdge(RuntimeScalar scalar) {
-        return scalar != null
-                && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                && scalar.value instanceof RuntimeBase;
-    }
 
     /**
      * Vivifies this proxy as an lvalue. Creates the actual entry in the parent
@@ -92,11 +106,7 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
                 && hpe.getParent() != null
                 && hpe.getParent().isGlobalPackageHash;
         if (globalHashEntry) {
-            boolean invalidatesRootSnapshot = rootEdge(lvalue) || rootEdge(value);
             lvalue.isPackageGlobalRoot = true;
-            if (invalidatesRootSnapshot) {
-                MortalList.invalidateExternalRootSnapshot();
-            }
         }
         this.lvalue.set(value);
         this.type = lvalue.type;
@@ -106,8 +116,8 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
         // D-W6.18: propagate package-global metadata flag.
         // If this proxy is for an element of a package-global hash,
         // mark the stored value's referent as storedInPackageGlobal
-        // so the walker gate at refCount→0 can rescue it across
-        // transient zeros (replaces the class-name heuristic).
+        // so final-release cleanup can recognize it across transient
+        // selective-count zeros (replaces the class-name heuristic).
         if (globalHashEntry && lvalue.value instanceof RuntimeBase rb) {
             rb.storedInPackageGlobal = true;
         }
@@ -223,11 +233,7 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
         if (this instanceof RuntimeHashProxyEntry hpe
                 && hpe.getParent() != null
                 && hpe.getParent().isGlobalPackageHash) {
-            boolean invalidatesRootSnapshot = rootEdge(lvalue);
             lvalue.isPackageGlobalRoot = true;
-            if (invalidatesRootSnapshot) {
-                MortalList.invalidateExternalRootSnapshot();
-            }
         }
         RuntimeScalar ret = lvalue.undefine();
         this.type = lvalue.type;
@@ -459,7 +465,6 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
     public void setBlessId(int blessId) {
         // Don't vivify when blessing - we're not modifying the underlying value,
         // just setting the blessId on the lvalue itself
-        this.blessId = blessId;
-        if (blessId != 0) noteBlessedObject();
+        super.setBlessId(blessId);
     }
 }

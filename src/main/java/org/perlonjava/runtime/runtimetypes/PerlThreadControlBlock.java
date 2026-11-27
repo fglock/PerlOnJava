@@ -25,6 +25,7 @@ public final class PerlThreadControlBlock {
     private final PerlThreadRegistry registry;
     private final PerlRuntime parentRuntime;
     private volatile PerlRuntime childRuntime;
+    private volatile PerlRuntime.RootSnapshot entrySnapshot;
     private volatile EntryPoint entryPoint;
     private volatile Runnable entryCleanup;
     private final int context;
@@ -38,6 +39,8 @@ public final class PerlThreadControlBlock {
     private volatile Throwable error;
     private volatile boolean detached;
     private Thread platformThread;
+    /** Test seam: runs on the child thread after its terminal state is recorded. */
+    volatile Runnable beforeTerminalHandoff;
 
     private PerlThreadControlBlock(PerlRuntime parent, EntryPoint entryPoint) {
         Objects.requireNonNull(parent, "parent");
@@ -68,6 +71,7 @@ public final class PerlThreadControlBlock {
         roots.add(Objects.requireNonNull(code, "code"));
         for (int i = 0; i < args.size(); i++) roots.add(args.get(i));
         PerlRuntime.RootSnapshot snapshot = parent.snapshotCloneForThread(registry, id, roots);
+        this.entrySnapshot = snapshot;
         this.childRuntime = snapshot.runtime();
         this.context = context;
         this.stackSize = stackSize;
@@ -82,46 +86,49 @@ public final class PerlThreadControlBlock {
         RuntimeArray childArgs = new RuntimeArray();
         for (int i = 1; i < cloned.size(); i++) childArgs.push(cloned.get(i).scalar());
         this.entryPoint = runtime -> {
-            runtime.beginThreadEntrySnapshotGrace();
-            try {
-                RuntimeList values = RuntimeCode.apply(childCode, childArgs, context);
-                RuntimeArray retained = new RuntimeArray();
-                for (RuntimeBase value : values.elements) retained.push(value.scalar());
-                return retained;
-            } finally {
-                runtime.endThreadEntrySnapshotGrace();
-            }
+            RuntimeList values = RuntimeCode.apply(childCode, childArgs, context);
+            RuntimeArray retained = new RuntimeArray();
+            for (RuntimeBase value : values.elements) retained.push(value.scalar());
+            return retained;
         };
         this.entryCleanup = () -> {
-            // The thread invocation owns an anonymous entry CV independently
-            // of its parent. Releasing it at thread end drops captured child
-            // lexicals before END, while named package CVs remain stash-owned.
-            if (releaseEntryCode) {
-                if (childCode.value instanceof RuntimeCode entryCode) {
-                    RuntimeScalar[] capturedScalars = entryCode.capturedScalars;
-                    if (capturedScalars != null) {
-                        for (RuntimeScalar captured : capturedScalars) {
-                            // These pads were cloned from the parent's active
-                            // scope, but the child has no enclosing invocation
-                            // that can later retire them. Thread termination is
-                            // their scope boundary in this runtime.
-                            // A shared scalar, including one reached through a
-                            // child-local reference wrapper, is the parent's
-                            // canonical storage. Releasing the child closure
-                            // must drop only its capture; marking that pad
-                            // scope-exited lets child teardown destroy or clear
-                            // a value the parent still owns.
-                            RuntimeBase capturedReferent = SharedPerlStorage.referent(captured);
-                            if (capturedReferent == null || !capturedReferent.threadShared) {
-                                captured.scopeExited = true;
+            try {
+                // The thread invocation owns an anonymous entry CV independently
+                // of its parent. Releasing it at thread end drops captured child
+                // lexicals before END, while named package CVs remain stash-owned.
+                if (releaseEntryCode) {
+                    if (childCode.value instanceof RuntimeCode entryCode) {
+                        RuntimeScalar[] capturedScalars = entryCode.capturedScalars;
+                        if (capturedScalars != null) {
+                            for (RuntimeScalar captured : capturedScalars) {
+                                // These pads were cloned from the parent's active
+                                // scope, but the child has no enclosing invocation
+                                // that can later retire them. Thread termination is
+                                // their scope boundary in this runtime.
+                                // A shared scalar, including one reached through a
+                                // child-local reference wrapper, is the parent's
+                                // canonical storage. Releasing the child closure
+                                // must drop only its capture; marking that pad
+                                // scope-exited lets child teardown destroy or clear
+                                // a value the parent still owns.
+                                RuntimeBase capturedReferent = SharedPerlStorage.referent(captured);
+                                if (capturedReferent == null || !capturedReferent.threadShared) {
+                                    captured.scopeExited = true;
+                                }
                             }
                         }
+                        entryCode.releaseCaptures();
                     }
-                    entryCode.releaseCaptures();
+                    RuntimeScalar.scopeExitCleanup(childCode);
                 }
-                RuntimeScalar.scopeExitCleanup(childCode);
+                MortalList.scopeExitCleanupArray(childArgs);
+                MortalList.flush();
+            } finally {
+                // Child arguments and the anonymous entry CV have finished
+                // their Perl lifetimes. Retire the Java-held snapshot roots
+                // only after their ordinary owner slots have been released.
+                snapshot.close();
             }
-            MortalList.flush();
         };
         registry.register(this);
     }
@@ -233,9 +240,9 @@ public final class PerlThreadControlBlock {
                     RuntimeRegex.emitCurrentRuntimeDebugFreeTraces();
                 }
                 // A child interpreter must not finalize objects whose shared
-                // references remain owned by the parent thread. The process
-                // level pass handles otherwise unreachable reference cycles.
-                GlobalDestruction.runGlobalDestruction(false);
+                // references remain owned by the parent thread. Teardown uses
+                // its package owner slots without scanning unreachable cycles.
+                GlobalDestruction.runGlobalDestruction();
                 return new Outcome(value, failure);
             });
             result = outcome.value();
@@ -243,8 +250,19 @@ public final class PerlThreadControlBlock {
         } catch (Throwable failure) {
             finish(State.FAILED, failure);
         } finally {
-            finished.countDown();
-            if (detached) {
+            Runnable hook = beforeTerminalHandoff;
+            if (hook != null) hook.run();
+            // detach() decides under this lock whether the thread has already
+            // finished. Publishing completion and reading the detached flag
+            // under the same lock makes exactly one side release the
+            // terminal resources, whichever order the two threads take.
+            boolean releaseHere;
+            synchronized (this) {
+                finished.countDown();
+                releaseHere = detached;
+                if (releaseHere) state = State.DETACHED;
+            }
+            if (releaseHere) {
                 reportAbnormalTermination();
                 registry.remove(this);
                 releaseTerminalResources();
@@ -342,12 +360,15 @@ public final class PerlThreadControlBlock {
     public void releaseTerminalResources() {
         PerlRuntime runtime;
         RuntimeBase terminalResult;
+        PerlRuntime.RootSnapshot snapshot;
         synchronized (this) {
             if (state != State.JOINED && state != State.DETACHED) return;
             terminalResult = result;
             result = null;
             entryPoint = null;
             entryCleanup = null;
+            snapshot = entrySnapshot;
+            entrySnapshot = null;
             runtime = childRuntime;
             childRuntime = null;
         }
@@ -356,11 +377,14 @@ public final class PerlThreadControlBlock {
                 if (terminalResult instanceof RuntimeArray values) {
                     MortalList.scopeExitCleanupArray(values);
                 }
+                if (snapshot != null) snapshot.close();
                 MortalList.flush();
                 MortalList.flushDeferredCaptures();
-                GlobalDestruction.runGlobalDestruction(false);
+                GlobalDestruction.runGlobalDestruction();
             });
             runtime.close();
+        } else if (snapshot != null) {
+            snapshot.close();
         }
     }
 

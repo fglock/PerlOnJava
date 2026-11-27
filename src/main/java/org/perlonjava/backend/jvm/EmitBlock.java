@@ -577,6 +577,18 @@ public class EmitBlock {
 
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("generateCodeBlock start context:" + emitterVisitor.ctx.contextType);
         int scopeIndex = emitterVisitor.ctx.symbolTable.enterScope();
+        boolean isSubBody = node.getBooleanAnnotation("blockIsSubroutine");
+        boolean isDoBlock = node.getBooleanAnnotation("blockIsDoBlock");
+        boolean doBlockFreshResult = isDoBlock && DoBlockResultAnalysis.isAlwaysFresh(node);
+        boolean markAtScopeEntry = !isSubBody && doBlockFreshResult;
+        if (markAtScopeEntry) {
+            // The fresh result cannot retain values created in this block.
+            // Mark before evaluating it so constructor mortals are included
+            // with lexical releases at block exit.
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/MortalList",
+                    "pushScopeMark", "()V", false);
+        }
         EmitterVisitor voidVisitor =
                 emitterVisitor.with(RuntimeContextType.VOID); // statements in the middle of the block have context VOID
         List<Node> list = node.elements;
@@ -730,6 +742,7 @@ public class EmitBlock {
         // In this case, we need to evaluate the For1Node's list before emitting the local operator
         For1Node preEvalForNode = null;
         int savedPreEvaluatedArrayIndex = -1;
+        int savedPreEvaluatedForeachSourceOwnerDepthIndex = -1;
 
         if (list.size() >= 2 &&
                 list.get(0) instanceof OperatorNode localOp && localOp.operator.equals("local") &&
@@ -742,10 +755,22 @@ public class EmitBlock {
             EmitForeach.emitForeachSource(emitterVisitor, forNode.list);
             mv.visitVarInsn(Opcodes.ASTORE, tempArrayIndex);
 
+            int ownerDepthIndex = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            mv.visitVarInsn(Opcodes.ALOAD, tempArrayIndex);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/MortalList",
+                    "pushForeachSourceOwners",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)I",
+                    false);
+            mv.visitVarInsn(Opcodes.ISTORE, ownerDepthIndex);
+
             // Mark the For1Node to use the pre-evaluated array
             preEvalForNode = forNode;
             savedPreEvaluatedArrayIndex = forNode.preEvaluatedArrayIndex;
+            savedPreEvaluatedForeachSourceOwnerDepthIndex =
+                    forNode.preEvaluatedForeachSourceOwnerDepthIndex;
             forNode.preEvaluatedArrayIndex = tempArrayIndex;
+            forNode.preEvaluatedForeachSourceOwnerDepthIndex = ownerDepthIndex;
         }
 
         int savedStatementTokenIndex = emitterVisitor.ctx.javaClassInfo.statementTokenIndex;
@@ -853,7 +878,7 @@ public class EmitBlock {
                 if (i < lastNonNullIndex) {
                     mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                             "org/perlonjava/runtime/runtimetypes/MortalList",
-                            "flushAboveMark",
+                            "flushStatementBoundary",
                             "()V",
                             false);
                 }
@@ -863,6 +888,8 @@ public class EmitBlock {
             emitterVisitor.ctx.javaClassInfo.statementTokenIndex = savedStatementTokenIndex;
             if (preEvalForNode != null) {
                 preEvalForNode.preEvaluatedArrayIndex = savedPreEvaluatedArrayIndex;
+                preEvalForNode.preEvaluatedForeachSourceOwnerDepthIndex =
+                        savedPreEvaluatedForeachSourceOwnerDepthIndex;
             }
         }
 
@@ -934,9 +961,6 @@ public class EmitBlock {
         // container. For those we DO flush, fixing op/do.t RT 124248
         // (DESTROY firing on do-block exit for transient my-vars) without
         // risking DBIC's `do { my $x = ...; $x }` patterns.
-        boolean isSubBody = node.getBooleanAnnotation("blockIsSubroutine");
-        boolean isDoBlock = node.getBooleanAnnotation("blockIsDoBlock");
-        boolean doBlockFreshResult = isDoBlock && DoBlockResultAnalysis.isAlwaysFresh(node);
         Object blockResultRegObj = node.getAnnotation("resultRegister");
         boolean hasBlockResultRegister = blockResultRegObj instanceof Integer && (Integer) blockResultRegObj >= 0;
         boolean blockMayNeedResultAfterScopeExit = emitterVisitor.ctx.contextType != RuntimeContextType.VOID
@@ -956,22 +980,26 @@ public class EmitBlock {
         }
         boolean protectReturnedWeakOwner = returnedLvalueSlot >= 0
                 && emitterVisitor.ctx.javaClassInfo.cleanupNeeded;
+        int protectedReturnRootSlot = -1;
         if (protectReturnedWeakOwner) {
-            // A weakly observed local may also be the implicit sub return.
-            // Keep that return value as an explicit root while lexical cleanup
-            // runs so noteVarLeftScope can avoid a global reachability sweep
-            // during the caller's callback dispatch.
+            // Scope cleanup may replace returnedLvalueSlot with a prepared
+            // return snapshot. Keep the original value in a separate local so
+            // the exact root pushed here is also the one popped below.
+            protectedReturnRootSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
             mv.visitVarInsn(Opcodes.ALOAD, returnedLvalueSlot);
+            mv.visitVarInsn(Opcodes.ASTORE, protectedReturnRootSlot);
+            mv.visitVarInsn(Opcodes.ALOAD, protectedReturnRootSlot);
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/MortalList",
                     "pushTemporaryRoot",
                     "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)V",
                     false);
         }
-        EmitStatement.emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex, flushAtScopeExit, returnedLvalueSlot);
+        EmitStatement.emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex, flushAtScopeExit,
+                returnedLvalueSlot, markAtScopeEntry);
         if (returnedLvalueSlot >= 0) {
             if (protectReturnedWeakOwner) {
-                mv.visitVarInsn(Opcodes.ALOAD, returnedLvalueSlot);
+                mv.visitVarInsn(Opcodes.ALOAD, protectedReturnRootSlot);
                 mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                         "org/perlonjava/runtime/runtimetypes/MortalList",
                         "popTemporaryRoot",

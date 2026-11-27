@@ -48,7 +48,7 @@ public class CryptOpenSSLRSA extends PerlModuleBase {
 
     private static final String CLASS_NAME = "Crypt::OpenSSL::RSA";
     private static final String STATE_KEY = "_rsa_state";
-    private static final int MIN_RSA_KEY_BITS = 1024;
+    private static final int MIN_RSA_KEY_BITS = 2048;
     private static final int MAX_RSA_KEY_BITS = 8192;
 
     // Register Bouncy Castle as a JCE provider once, so that signature
@@ -209,11 +209,8 @@ public class CryptOpenSSLRSA extends PerlModuleBase {
             // would require RSAKeyGenParameterSpec with a BigInteger — not worth
             // the dependency on args.get(2) being a valid public exponent for OAuth.
             // NIST SP 800-131A Rev. 2 requires RSA moduli of at least 2048
-            // bits for signature generation. Keep the upstream API's explicit
-            // 1024-bit request as a legacy compatibility exception; it is not
-            // suitable for generating keys for new security-sensitive uses.
+            // bits for signature generation.
             // The 8192-bit cap bounds provider work for caller-controlled sizes.
-            // codeql[java/insufficient-key-size]
 
             kpg.initialize(bits);
             KeyPair kp = kpg.generateKeyPair();
@@ -231,7 +228,7 @@ public class CryptOpenSSLRSA extends PerlModuleBase {
     private static int validateRsaKeySize(RuntimeScalar requestedBits) {
         String message = "RSA key size must be an integer from " + MIN_RSA_KEY_BITS
                 + " through " + MAX_RSA_KEY_BITS + " bits, in multiples of 8"
-                + " (1024-bit generation is retained for legacy compatibility)";
+                + " (RSA keys below 2048 bits are not supported)";
         try {
             BigInteger bitCount;
             int type = RuntimeScalarType.effectiveType(requestedBits);

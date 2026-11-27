@@ -36,26 +36,13 @@ public class Internals extends PerlModuleBase {
             // allowed-but-absent keys separately, so there are no physical
             // placeholder entries to remove.
             internals.registerMethod("hv_clear_placeholders", "hvClearPlaceholders", "\\%");
-            // Phase 0 diagnostic: expose PerlOnJava-internal refcount state
-            // (refCount, flags, tracking mode) for differential testing
-            // against native Perl. See dev/design/refcount_alignment_plan.md.
+            // Ownership diagnostics expose runtime refcount state and owner
+            // slots for focused differential tests against system Perl.
             internals.registerMethod("jperl_refstate", "jperl_refstate", "$");
             internals.registerMethod("jperl_refstate_str", "jperl_refstate_str", "$");
             internals.registerMethod("jperl_owner_trace", "jperlOwnerTrace", "$");
             internals.registerMethod("jperl_reference_by_address", "jperlReferenceByAddress", "$");
-            // Phase 4 (refcount_alignment_plan.md): On-demand reachability
-            // sweep. Walks Perl-visible roots (globals, stashes, rescued
-            // objects) and clears weak refs for unreachable objects. Returns
-            // the number of weak refs cleared.
-            internals.registerMethod("jperl_gc", "jperl_gc", "");
-            internals.registerMethod("jperl_gc_quiet", "jperl_gc_quiet", "");
-            internals.registerMethod("jperl_sweep_destroyables_no_jvm_gc", "jperl_sweep_destroyables_no_jvm_gc", "");
             internals.registerMethod("jperl_freetmps", "jperl_freetmps", "");
-            // Phase 4 diagnostic: trace a reachable path from any Perl root
-            // to the given referent. Returns the first-found path string or
-            // undef if unreachable. Used to debug why an object that should
-            // be GC'd remains reachable from the walker's point of view.
-            internals.registerMethod("jperl_trace_to", "jperl_trace_to", "$");
             internals.registerMethod("initialize_state_variable", "initializeStateVariable", "$$");
             internals.registerMethod("initialize_state_array", "initializeStateArray", "$$");
             internals.registerMethod("initialize_state_hash", "initializeStateHash", "$$");
@@ -80,6 +67,7 @@ public class Internals extends PerlModuleBase {
             internals.registerMethod("jperl_mark_pseudo_constant", "jperlMarkPseudoConstant", "$$");
             internals.registerMethod("jperl_end_av_ref", "jperlEndAvRef", "");
             internals.registerMethod("jperl_b_object_2svref", "jperlBObject2svref", "$");
+            internals.registerMethod("jperl_b_object_store_reference", "jperlBObjectStoreReference", "$$");
             internals.registerMethod("jperl_b_scalar_flags", "jperlBScalarFlags", "$");
             internals.registerMethod("jperl_set_closed_over", "jperlSetClosedOver", null);
             internals.registerMethod("jperl_closed_over", "jperlClosedOver", null);
@@ -98,6 +86,17 @@ public class Internals extends PerlModuleBase {
      */
     public static RuntimeList jperlEndAvRef(RuntimeArray args, int ctx) {
         return SpecialBlock.getEndBlocks().createReference().getList();
+    }
+
+    /** Store a B wrapper's raw referent view without adding a Perl owner. */
+    public static RuntimeList jperlBObjectStoreReference(RuntimeArray args, int ctx) {
+        if (args.size() != 2 || !(args.get(0).value instanceof RuntimeHash wrapper)
+                || !(args.get(1).value instanceof RuntimeBase)) {
+            throw new IllegalArgumentException(
+                    "Usage: Internals::jperl_b_object_store_reference(B_OBJECT, REFERENT)");
+        }
+        wrapper.putBObjectReference("ref", args.get(1));
+        return new RuntimeList();
     }
 
     /** Resolve a reference pseudo-address previously exposed by stringification. */
@@ -399,9 +398,18 @@ public class Internals extends PerlModuleBase {
                 && code.capturedScalars != null) {
             for (int i = 0; i < code.capturedScalars.length; i++) {
                 if (code.capturedScalars[i] == previous) {
-                    scalar.retainClosureCapture();
-                    previous.releaseClosureCapture();
+                    PerlOwnerSlot replacementOwner = scalar.retainClosureCaptureSlot(code);
+                    PerlOwnerSlot[] ownerSlots = code.capturedScalarOwnerSlots;
+                    PerlOwnerSlot previousOwner = ownerSlots != null
+                                    && i < ownerSlots.length
+                            ? ownerSlots[i] : null;
+                    ((RuntimeScalar) previous).releaseClosureCaptureSlot(previousOwner);
                     code.capturedScalars[i] = scalar;
+                    if (ownerSlots == null || ownerSlots.length != code.capturedScalars.length) {
+                        ownerSlots = new PerlOwnerSlot[code.capturedScalars.length];
+                        code.capturedScalarOwnerSlots = ownerSlots;
+                    }
+                    ownerSlots[i] = replacementOwner;
                     return;
                 }
             }
@@ -412,7 +420,7 @@ public class Internals extends PerlModuleBase {
             for (int i = 0; i < code.capturedAggregates.length; i++) {
                 if (code.capturedAggregates[i] == previous) {
                     PerlOwnerSlot replacementOwner =
-                            replacement.retainClosureCaptureOwner();
+                            replacement.retainClosureCaptureOwner(code);
                     PerlOwnerSlot[] ownerSlots = code.capturedAggregateOwnerSlots;
                     PerlOwnerSlot previousOwner = ownerSlots != null
                                     && i < ownerSlots.length
@@ -429,8 +437,70 @@ public class Internals extends PerlModuleBase {
             }
         }
 
-        if (previous != null) previous.releaseClosureCapture();
-        replacement.retainClosureCapture();
+        if (previous instanceof RuntimeScalar previousScalar
+                && replacement instanceof RuntimeScalar replacementScalar) {
+            previousScalar.releaseClosureCapture();
+            appendScalarCapture(code, replacementScalar);
+            return;
+        }
+        if (previous != null && replacement != null) {
+            previous.releaseClosureCapture();
+            appendAggregateCapture(code, replacement);
+        }
+    }
+
+    private static void appendScalarCapture(RuntimeCode code, RuntimeScalar replacement) {
+        RuntimeScalar[] existing = code.capturedScalars == null
+                ? new RuntimeScalar[0] : code.capturedScalars;
+        PerlOwnerSlot[] existingSlots = code.capturedScalarOwnerSlots;
+        java.util.ArrayList<RuntimeScalar> captures = new java.util.ArrayList<>(
+                java.util.Arrays.asList(existing));
+        java.util.ArrayList<PerlOwnerSlot> slots = new java.util.ArrayList<>(existing.length);
+        for (int i = 0; i < existing.length; i++) {
+            PerlOwnerSlot slot = existingSlots != null && i < existingSlots.length
+                    ? existingSlots[i] : null;
+            if (slot == null || !slot.isActive()) {
+                RuntimeScalar captured = existing[i];
+                if (captured.legacyCaptureOwnerCount() > 0) {
+                    captured.releaseClosureCapture();
+                }
+                slot = captured.retainClosureCaptureSlot(code);
+            }
+            slots.add(slot);
+        }
+        if (!captures.contains(replacement)) {
+            captures.add(replacement);
+            slots.add(replacement.retainClosureCaptureSlot(code));
+        }
+        code.capturedScalars = captures.toArray(new RuntimeScalar[0]);
+        code.capturedScalarOwnerSlots = slots.toArray(new PerlOwnerSlot[0]);
+    }
+
+    private static void appendAggregateCapture(RuntimeCode code, RuntimeBase replacement) {
+        RuntimeBase[] existing = code.capturedAggregates == null
+                ? new RuntimeBase[0] : code.capturedAggregates;
+        PerlOwnerSlot[] existingSlots = code.capturedAggregateOwnerSlots;
+        java.util.ArrayList<RuntimeBase> captures = new java.util.ArrayList<>(
+                java.util.Arrays.asList(existing));
+        java.util.ArrayList<PerlOwnerSlot> slots = new java.util.ArrayList<>(existing.length);
+        for (int i = 0; i < existing.length; i++) {
+            PerlOwnerSlot slot = existingSlots != null && i < existingSlots.length
+                    ? existingSlots[i] : null;
+            if (slot == null || !slot.isActive()) {
+                RuntimeBase captured = existing[i];
+                if (captured.legacyCaptureOwnerCount() > 0) {
+                    captured.releaseClosureCapture();
+                }
+                slot = captured.retainClosureCaptureOwner(code);
+            }
+            slots.add(slot);
+        }
+        if (!captures.contains(replacement)) {
+            captures.add(replacement);
+            slots.add(replacement.retainClosureCaptureOwner(code));
+        }
+        code.capturedAggregates = captures.toArray(new RuntimeBase[0]);
+        code.capturedAggregateOwnerSlots = slots.toArray(new PerlOwnerSlot[0]);
     }
 
     /**
@@ -504,13 +574,34 @@ public class Internals extends PerlModuleBase {
         }
         if (base != null) {
             int rc = base.refCount;
-            if (rc == Integer.MIN_VALUE) return new RuntimeScalar(0).getList();
-            int nativeCaptureOwners = base.nativeCaptureOwnerCount();
-            if (rc < 0) {
-                if (nativeCaptureOwners == 0) return new RuntimeScalar(1).getList(); // untracked
-                rc = nativeCaptureOwners;
+            boolean compileHintsHash = base == GlobalVariable.getGlobalHash(
+                    GlobalContext.encodeSpecialVar("H"));
+            // Expression leases keep runtime temporaries alive while values
+            // cross statement and foreach boundaries. They are not Perl SV
+            // owners, so hide both their native identities and any paired
+            // selective counts from SvREFCNT.
+            int expressionOwners = base.ownerSlotCount(PerlOwnerSlot.Kind.EXPRESSION_VALUE);
+            int countedExpressionOwners = base.countedNativeOwnerSlotCount(
+                    PerlOwnerSlot.Kind.EXPRESSION_VALUE);
+            int nativeOwners = base.nativeOwnerSlotCount() - expressionOwners;
+            if (base.isRefCountTracked()) rc -= countedExpressionOwners;
+            if (compileHintsHash) {
+                // The package-root identity records the strong table edge for
+                // lifecycle cleanup, but Perl's SvREFCNT helper deliberately
+                // hides this special global slot from the reported count.
+                nativeOwners -= base.ownerSlotCount(PerlOwnerSlot.Kind.PACKAGE_AGGREGATE_SLOT);
+            } else if (nativeOwners > 0 && base.localBindingExists
+                    && base.ownerSlotCount(PerlOwnerSlot.Kind.ACTIVE_LEXICAL) > 0) {
+                // ACTIVE_LEXICAL is the lifecycle identity for a named pad
+                // edge. The lexical-binding adjustment below already reports
+                // that same Perl owner, so do not count its identity twice.
+                nativeOwners--;
+            }
+            if (!base.isRefCountTracked()) {
+                if (nativeOwners == 0) return new RuntimeScalar(1).getList(); // untracked
+                rc = nativeOwners;
             } else {
-                rc += nativeCaptureOwners;
+                rc += nativeOwners;
             }
             // An ampersand-style call may pass a weak qr// scalar directly
             // (qr-72922's refcount_is helper does this).  The call-frame alias
@@ -554,26 +645,8 @@ public class Internals extends PerlModuleBase {
             // runtime, but Perl's core refcount helper does not expose that
             // bookkeeping slot as a lexical pad owner. Its helper also
             // compensates for the ampersand-call argument alias below.
-            boolean compileHintsHash = base == GlobalVariable.getGlobalHash(
-                    GlobalContext.encodeSpecialVar("H"));
             int extra = (base.localBindingExists && !compileHintsHash ? 1 : 0)
                     + base.foreachAliasCount;
-            if (rc == 2
-                    && args.size() > 1
-                    && args.get(1).getBoolean()
-                    && DestroyDispatch.isInsideDestroy()
-                    && !ReachabilityWalker.hasLiveStrongScalarReferentOtherThan(base, arg)) {
-                // B::SV's private hash slot is one of the two selective
-                // owners.  Ordinarily it is the temporary owner discounted
-                // below (a single live lexical therefore reports one).  If
-                // there is no independently live scalar pad, the other owner
-                // is a real aggregate slot, as in DBIx::Class Schema's source
-                // registry during DESTROY, and must remain visible to B. This
-                // distinction is only meaningful while DESTROY is active:
-                // outside it, an unregistered lexical can look identical and
-                // must still report its single owner.
-                extra++;
-            }
             // Legacy fudge: anonymous tracked container with no counted
             // owners -- still report 1 to indicate "live SV". Used by
             // Sub::Quote / Moo introspection paths that probe for liveness.
@@ -589,20 +662,39 @@ public class Internals extends PerlModuleBase {
             boolean fieldOwnedMethodResult = rc == 1
                     && !base.localBindingExists
                     && base.hashSlotOwnerCount > 0
-                    && !ReachabilityWalker.hasLiveStrongScalarReferentOtherThan(base, arg);
+                    && !base.hasLiveStrongScalarOwnerSlotOtherThan(arg);
             boolean bObjectProbe = args.size() > 1 && args.get(1).getBoolean();
             int adjust = compileHintsHash
                     ? -1
                     : base.localBindingExists || fieldOwnedMethodResult ? 0 : -1;
-            // B::SV keeps its referent in a PerlOnJava hash slot, unlike the
-            // native B object which stores an SV pointer without owning the
-            // referent. For named aggregates, the local-binding adjustment
-            // already accounts for the pad, so discount this extra wrapper
-            // slot instead of counting both as Perl owners.
-            if (bObjectProbe && base.localBindingExists && !compileHintsHash) {
-                adjust = -1;
+            if (bObjectProbe) {
+                // B's raw pointer view is not a Perl owner, so the query itself
+                // contributes no argument reference to discount. Keep the
+                // ordinary anonymous-value adjustment only for ordinary probes;
+                // any actual active argument-frame owners are discounted exactly.
+                if (!compileHintsHash && !base.localBindingExists && !fieldOwnedMethodResult) {
+                    adjust++;
+                }
+                int argumentFrameOwners = base.currentArgumentFrameReferentOwnerCount();
+                adjust -= argumentFrameOwners;
+                boolean pendingBlessTemporary = fieldOwnedMethodResult
+                        && argumentFrameOwners == 0
+                        && MortalList.hasPendingBlessTemporaryFor(base);
+                boolean activeArgumentOwner = fieldOwnedMethodResult
+                        && argumentFrameOwners == 0
+                        && RuntimeCode.hasUncountedActiveHashArgumentOwner(base);
+                if (pendingBlessTemporary) {
+                    // The first bless result remains a mortal Perl owner until
+                    // its deferred temp boundary drains. The hash slot is a
+                    // second owner but is not in the selective refCount bridge.
+                    adjust++;
+                }
+                if (activeArgumentOwner) {
+                    adjust++;
+                }
             }
-            return new RuntimeScalar(rc + extra + adjust).getList();
+            int reported = rc + extra + adjust;
+            return new RuntimeScalar(reported).getList();
         }
         return new RuntimeScalar(1).getList();
     }
@@ -709,152 +801,12 @@ public class Internals extends PerlModuleBase {
     }
 
     /**
-     * Phase 4 (refcount_alignment_plan.md): Run a reachability sweep from
-     * Perl roots (globals, rescued objects) and clear weak refs for
-     * unreachable objects. Returns the number of weak refs cleared. This
-     * is jperl-only; under native Perl it should be treated as a no-op.
-     */
-    public static RuntimeList jperl_gc(RuntimeArray args, int ctx) {
-        // Two passes: the first pass fires DESTROY on unreachable
-        // objects, which may break circular refs and make more objects
-        // unreachable. The second pass catches those cascades.
-        int cleared = ReachabilityWalker.sweepWeakRefs();
-        int secondPass = ReachabilityWalker.sweepWeakRefs();
-        return new RuntimeScalar(cleared + secondPass).getList();
-    }
-
-    /**
-     * Quiet statement-boundary sweep. Unlike jperl_gc(), this does not drain
-     * rescued DBIC-style objects before END-time cleanup.
-     */
-    public static RuntimeList jperl_gc_quiet(RuntimeArray args, int ctx) {
-        int cleared = ReachabilityWalker.sweepWeakRefs(true);
-        int secondPass = ReachabilityWalker.sweepWeakRefs(true);
-        return new RuntimeScalar(cleared + secondPass).getList();
-    }
-
-    /**
      * Drain Perl-style mortal temporaries without asking the JVM to run GC.
      * This mirrors Perl's FREETMPS boundary for refcounted RuntimeBase objects.
      */
     public static RuntimeList jperl_freetmps(RuntimeArray args, int ctx) {
         MortalList.flush();
         return new RuntimeScalar(0).getList();
-    }
-
-    /**
-     * Reconcile destroyable objects that require deterministic DESTROY side
-     * effects but are not weak-ref referents, without clearing arbitrary weak
-     * refs and without forcing HotSpot GC. Used by DBI statement polling to
-     * match Perl's cursor DESTROY/finish timing.
-     */
-    public static RuntimeList jperl_sweep_destroyables_no_jvm_gc(RuntimeArray args, int ctx) {
-        int destroyed = ReachabilityWalker.sweepDestroyableObjects(false);
-        if (destroyed > 0) {
-            destroyed += ReachabilityWalker.sweepDestroyableObjects(false);
-        }
-        return new RuntimeScalar(destroyed).getList();
-    }
-
-    /**
-     * Phase 4 diagnostic: find a reachable path from Perl roots to the
-     * given referent. Returns the path as a string ("$some::global{key}[3]")
-     * or undef if unreachable.
-     */
-    public static RuntimeList jperl_trace_to(RuntimeArray args, int ctx) {
-        RuntimeScalar arg = args.get(0);
-        if (!(arg.value instanceof RuntimeBase base)) {
-            return new RuntimeScalar().getList();
-        }
-        // Phase I: when JPERL_TRACE_SKIP_LEX=1, omit ScalarRefRegistry seeds
-        // from path discovery — forces the trace through Perl-semantic
-        // roots so diagnostics show which global/stash data structure
-        // keeps the object alive (not just "live-lexical").
-        boolean skipLex = System.getenv("JPERL_TRACE_SKIP_LEX") != null;
-        java.util.List<String> path = ReachabilityWalker.findPathTo(base, skipLex);
-        if (path == null) return new RuntimeScalar().getList();
-        // Also dump all direct lexical-holders for debugging deep leaks
-        if (System.getenv("JPERL_TRACE_ALL") != null) {
-            System.err.println("jperl_trace_to target addr="
-                    + System.identityHashCode(base)
-                    + " class=" + base.getClass().getSimpleName());
-            int matchIdx = 0;
-            int totalLexIdx = 0;
-            // Collect candidate parent hashes (those with any key pointing at base)
-            // when no direct holder exists. Useful for traces like
-            // "<live-lexical#N>{random_results}" where target is reached via
-            // a parent hash rather than directly held.
-            java.util.ArrayList<RuntimeScalar> parentScalars = new java.util.ArrayList<>();
-            for (RuntimeScalar sc : ScalarRefRegistry.snapshot()) {
-                if (sc == null) continue;
-                if (sc.captureCount > 0) continue;
-                if (WeakRefRegistry.isweak(sc)) continue;
-                if (!RuntimeScalarType.isReference(sc)) continue;
-                totalLexIdx++;
-                if (sc.value == base) {
-                    System.err.println("  direct holder #" + (matchIdx++)
-                            + " scId=" + System.identityHashCode(sc)
-                            + " type=" + sc.type
-                            + " rcO=" + sc.refCountOwned
-                            + " captureCount=" + sc.captureCount);
-                    Throwable st = ScalarRefRegistry.stackFor(sc);
-                    if (st != null) {
-                        StackTraceElement[] frames = st.getStackTrace();
-                        int shown = Math.min(frames.length, 40);
-                        for (int fi = 0; fi < shown; fi++) {
-                            System.err.println("      at " + frames[fi]);
-                        }
-                        if (frames.length > shown) {
-                            System.err.println("      ... "
-                                    + (frames.length - shown) + " more");
-                        }
-                    }
-                } else if (sc.value instanceof RuntimeHash h
-                        && h.elements.values().stream().anyMatch(v -> v != null && v.value == base)) {
-                    parentScalars.add(sc);
-                } else if (sc.value instanceof RuntimeArray a
-                        && a.elements.stream().anyMatch(v -> v != null && v.value == base)) {
-                    parentScalars.add(sc);
-                }
-            }
-            System.err.println("  total direct holders=" + matchIdx
-                    + " total lexicals scanned=" + totalLexIdx);
-            if (matchIdx == 0 && !parentScalars.isEmpty()) {
-                System.err.println("  --- parent-holder candidates ("
-                        + parentScalars.size() + ") ---");
-                int pIdx = 0;
-                for (RuntimeScalar ps : parentScalars) {
-                    System.err.println("  parent #" + (pIdx++)
-                            + " scId=" + System.identityHashCode(ps)
-                            + " type=" + ps.type
-                            + " rcO=" + ps.refCountOwned
-                            + " parentClass="
-                            + (ps.value != null ? ps.value.getClass().getSimpleName() : "null"));
-                    if (ps.value instanceof RuntimeHash ph) {
-                        java.util.List<String> keys = new java.util.ArrayList<>();
-                        for (Map.Entry<String, RuntimeScalar> ent : ph.elements.entrySet()) {
-                            if (ent.getValue() != null && ent.getValue().value == base) {
-                                keys.add(ent.getKey());
-                            }
-                        }
-                        System.err.println("    via keys: " + keys);
-                    }
-                    Throwable pst = ScalarRefRegistry.stackFor(ps);
-                    if (pst != null) {
-                        StackTraceElement[] frames = pst.getStackTrace();
-                        int shown = Math.min(frames.length, 30);
-                        for (int fi = 0; fi < shown; fi++) {
-                            System.err.println("      at " + frames[fi]);
-                        }
-                    }
-                    if (pIdx >= 5) {
-                        System.err.println("    ... " + (parentScalars.size() - 5) + " more parents");
-                        break;
-                    }
-                }
-            }
-        }
-        return new RuntimeScalar(String.join(" -> ", path)).getList();
     }
 
     /**

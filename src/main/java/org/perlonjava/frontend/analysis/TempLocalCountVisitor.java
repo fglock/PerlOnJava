@@ -98,6 +98,15 @@ public class TempLocalCountVisitor implements Visitor {
 
     @Override
     public void visit(BlockNode node) {
+        if (node.elements.size() == 2
+                && node.elements.get(0) instanceof OperatorNode localOp
+                && localOp.operator.equals("local")
+                && node.elements.get(1) instanceof For1Node forNode
+                && forNode.needsArrayOfAlias) {
+            // EmitBlock pre-evaluates the foreach source and retains its owner
+            // depth across the skipped `local $_` statement boundary.
+            countTemp();
+        }
         for (Node element : node.elements) {
             if (element != null) {
                 element.accept(this);

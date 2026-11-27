@@ -32,21 +32,48 @@ public class Disassemble {
                     case Opcodes.MORTAL_FLUSH:
                         sb.append("MORTAL_FLUSH\n");
                         break;
+                    case Opcodes.MORTAL_STATEMENT_FLUSH:
+                        sb.append("MORTAL_STATEMENT_FLUSH\n");
+                        break;
                     case Opcodes.MORTAL_PUSH_MARK:
                         sb.append("MORTAL_PUSH_MARK\n");
                         break;
                     case Opcodes.MORTAL_POP_FLUSH:
                         sb.append("MORTAL_POP_FLUSH\n");
                         break;
+                    case Opcodes.MORTAL_PUSH_SCOPE_MARK:
+                        sb.append("MORTAL_PUSH_SCOPE_MARK\n");
+                        break;
+                    case Opcodes.MORTAL_POP_SCOPE_FLUSH:
+                        sb.append("MORTAL_POP_SCOPE_FLUSH\n");
+                        break;
                     case Opcodes.SCOPE_EXIT_CLEANUP:
                         int secReg = interpretedCode.bytecode[pc++];
                         sb.append("SCOPE_EXIT_CLEANUP r").append(secReg).append("\n");
+                        break;
+                    case Opcodes.DEREF_SCALAR_STRICT_TEMP:
+                        int dstStrictTemp = interpretedCode.bytecode[pc++];
+                        int srcStrictTemp = interpretedCode.bytecode[pc++];
+                        sb.append("DEREF_SCALAR_STRICT_TEMP r").append(dstStrictTemp)
+                                .append(" = ${r").append(srcStrictTemp).append("}\n");
                         break;
                     case Opcodes.UNBIND_ACTIVE_LEXICAL:
                         int ualReg = interpretedCode.bytecode[pc++];
                         int ualName = interpretedCode.bytecode[pc++];
                         sb.append("UNBIND_ACTIVE_LEXICAL r").append(ualReg)
                                 .append(" ").append(interpretedCode.stringPool[ualName]).append("\n");
+                        break;
+                    case Opcodes.SNAPSHOT_SCOPE_RESULT:
+                        int ssrDestination = interpretedCode.bytecode[pc++];
+                        int ssrSource = interpretedCode.bytecode[pc++];
+                        int ssrContext = interpretedCode.bytecode[pc++];
+                        sb.append("SNAPSHOT_SCOPE_RESULT r").append(ssrDestination)
+                                .append(" source=r").append(ssrSource)
+                                .append(" context=").append(ssrContext).append("\n");
+                        break;
+                    case Opcodes.PREPARE_SCOPE_RETURN:
+                        int psrReturnReg = interpretedCode.bytecode[pc++];
+                        sb.append("PREPARE_SCOPE_RETURN return=r").append(psrReturnReg).append("\n");
                         break;
                     case Opcodes.RETURN_SCOPE_CLEANUP:
                         int rscReg = interpretedCode.bytecode[pc++];
@@ -127,9 +154,12 @@ public class Disassemble {
                         sb.append("GOTO_IF_TRUE_NO_OVERLOAD r").append(condReg).append(" -> ").append(target).append("\n");
                         break;
                     case Opcodes.ALIAS:
+                    case Opcodes.ALIAS_PRESERVE_READONLY:
                         int dest = interpretedCode.bytecode[pc++];
                         int src = interpretedCode.bytecode[pc++];
-                        sb.append("ALIAS r").append(dest).append(" = r").append(src).append("\n");
+                        sb.append(opcode == Opcodes.ALIAS_PRESERVE_READONLY
+                                ? "ALIAS_PRESERVE_READONLY r" : "ALIAS r")
+                                .append(dest).append(" = r").append(src).append("\n");
                         break;
                     case Opcodes.LOAD_CONST:
                         int rd = interpretedCode.bytecode[pc++];
@@ -1604,6 +1634,10 @@ public class Disassemble {
                         rs = interpretedCode.bytecode[pc++];
                         sb.append("ITERATOR_NEXT r").append(rd).append(" = r").append(rs).append(".next()\n");
                         break;
+                    case Opcodes.FOREACH_SOURCE_RELEASE:
+                        rs = interpretedCode.bytecode[pc++];
+                        sb.append("FOREACH_SOURCE_RELEASE r").append(rs).append("\n");
+                        break;
                     case Opcodes.FOREACH_NEXT_OR_EXIT: {
                         rd = interpretedCode.bytecode[pc++];
                         int iterReg = interpretedCode.bytecode[pc++];
@@ -1823,6 +1857,14 @@ public class Disassemble {
                         rs = interpretedCode.bytecode[pc++];
                         nameIdx = interpretedCode.bytecode[pc++];
                         sb.append("DEREF_SCALAR_NONSTRICT r").append(rd).append(" = ${r").append(rs).append("} pkg=").append(interpretedCode.stringPool[nameIdx]).append("\n");
+                        break;
+                    case Opcodes.DEREF_SCALAR_NONSTRICT_TEMP:
+                        rd = interpretedCode.bytecode[pc++];
+                        rs = interpretedCode.bytecode[pc++];
+                        nameIdx = interpretedCode.bytecode[pc++];
+                        sb.append("DEREF_SCALAR_NONSTRICT_TEMP r").append(rd)
+                                .append(" = ${r").append(rs).append("} pkg=")
+                                .append(interpretedCode.stringPool[nameIdx]).append("\n");
                         break;
                     case Opcodes.CODE_DEREF_NONSTRICT:
                         rd = interpretedCode.bytecode[pc++];

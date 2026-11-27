@@ -130,7 +130,18 @@ public class CoreSubroutineGenerator {
                 || "lock".equals(operatorName)) {
             code.attributes = new java.util.ArrayList<>(java.util.List.of("lvalue"));
         }
-        GlobalVariable.getGlobalCodeRef(fullName).set(new RuntimeScalar(code));
+        RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(fullName);
+        if (codeRef.value instanceof RuntimeCode placeholder
+                && !placeholder.defined()
+                && "CORE".equals(placeholder.packageName)
+                && operatorName.equals(placeholder.subName)) {
+            // A CORE CV may already have been aliased while its wrapper was
+            // still lazy. Preserve that CV identity so every alias observes
+            // the generated definition when the first call materializes it.
+            placeholder.adoptDefinitionFrom(code);
+        } else {
+            codeRef.set(new RuntimeScalar(code));
+        }
         return true;
     }
 

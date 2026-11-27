@@ -1099,6 +1099,7 @@ public class OpcodeHandlerExtended {
         // Without this, scopeExitCleanup() doesn't know the variable is still alive
         // via this closure, and may prematurely clear weak references to its value.
         java.util.List<RuntimeScalar> capturedScalars = new java.util.ArrayList<>();
+        java.util.List<PerlOwnerSlot> capturedScalarOwnerSlots = new java.util.ArrayList<>();
         java.util.List<RuntimeBase> capturedAggregates = new java.util.ArrayList<>();
         java.util.List<PerlOwnerSlot> capturedAggregateOwnerSlots = new java.util.ArrayList<>();
         java.util.Set<RuntimeScalar> seenScalars = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
@@ -1107,16 +1108,18 @@ public class OpcodeHandlerExtended {
             if (captured instanceof RuntimeScalar s) {
                 if (!seenScalars.add(s)) continue;
                 capturedScalars.add(s);
-                s.retainClosureCapture();
+                capturedScalarOwnerSlots.add(s.retainClosureCaptureSlot(closureCode));
             } else if (captured instanceof RuntimeArray || captured instanceof RuntimeHash) {
                 if (!seenAggregates.add(captured)) continue;
                 capturedAggregates.add(captured);
-                PerlOwnerSlot ownerSlot = captured.retainClosureCaptureOwner();
+                PerlOwnerSlot ownerSlot = captured.retainClosureCaptureOwner(closureCode);
                 capturedAggregateOwnerSlots.add(ownerSlot);
             }
         }
         if (!capturedScalars.isEmpty()) {
             closureCode.capturedScalars = capturedScalars.toArray(new RuntimeScalar[0]);
+            closureCode.capturedScalarOwnerSlots =
+                    capturedScalarOwnerSlots.toArray(new PerlOwnerSlot[0]);
         }
         if (!capturedAggregates.isEmpty()) {
             closureCode.capturedAggregates = capturedAggregates.toArray(new RuntimeBase[0]);
@@ -1124,7 +1127,7 @@ public class OpcodeHandlerExtended {
                     new PerlOwnerSlot[0]);
         }
         if (!capturedScalars.isEmpty() || !capturedAggregates.isEmpty()) {
-            closureCode.refCount = 0;
+            closureCode.startRefCountTracking();
         }
 
         // Wrap in RuntimeScalar and set __SUB__ for self-reference
@@ -1152,12 +1155,53 @@ public class OpcodeHandlerExtended {
         int rs = bytecode[pc++];
 
         RuntimeBase iterable = registers[rs];
-        java.util.Iterator<RuntimeScalar> iterator = iterable.iterator();
-
-        // Store iterator as a constant (preserve the Iterator object)
-        // Wrap in RuntimeScalar for storage
-        registers[rd] = new RuntimeScalar(iterator);
+        int sourceOwnerDepth = MortalList.pushForeachSourceOwners(iterable);
+        try {
+            java.util.Iterator<RuntimeScalar> iterator = iterable.iterator();
+            registers[rd] = new RuntimeScalar(
+                    new ForeachSourceIterator(iterator, sourceOwnerDepth));
+        } catch (RuntimeException | Error failure) {
+            MortalList.restoreForeachSourceOwnerDepth(sourceOwnerDepth);
+            throw failure;
+        }
         return pc;
+    }
+
+    /** Release the source-value owners paired with an interpreted foreach iterator. */
+    public static void releaseForeachSourceOwners(RuntimeScalar iteratorScalar) {
+        if (iteratorScalar != null
+                && iteratorScalar.value instanceof ForeachSourceIterator iterator) {
+            iterator.releaseSourceOwners();
+        }
+    }
+
+    private static final class ForeachSourceIterator
+            implements java.util.Iterator<RuntimeScalar> {
+        private final java.util.Iterator<RuntimeScalar> delegate;
+        private final int sourceOwnerDepth;
+        private boolean released;
+
+        private ForeachSourceIterator(
+                java.util.Iterator<RuntimeScalar> delegate, int sourceOwnerDepth) {
+            this.delegate = delegate;
+            this.sourceOwnerDepth = sourceOwnerDepth;
+        }
+
+        @Override
+        public boolean hasNext() {
+            return delegate.hasNext();
+        }
+
+        @Override
+        public RuntimeScalar next() {
+            return delegate.next();
+        }
+
+        private void releaseSourceOwners() {
+            if (released) return;
+            released = true;
+            MortalList.restoreForeachSourceOwnerDepth(sourceOwnerDepth);
+        }
     }
 
     /**

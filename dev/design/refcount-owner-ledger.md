@@ -1,163 +1,141 @@
 # Perl-Exact Reference Ownership and Closure-Pad Lifetime
 
-**Status:** Design in progress  
-**Issue:** [#1132](https://github.com/fglock/PerlOnJava/issues/1132)  
-**Related architecture:**
-[Weaken & DESTROY](../architecture/weaken-destroy.md),
-[Refcount alignment plan](refcount_alignment_plan.md), and
-[Refcount alignment progress](refcount_alignment_progress.md)
+Status: Active — 2026-11-26
+
+**Delivery issue:** [#2043](https://github.com/fglock/PerlOnJava/issues/2043)
+(origin [#1132](https://github.com/fglock/PerlOnJava/issues/1132), history in #1649).
+**Target PR:** [#1938](https://github.com/fglock/PerlOnJava/pull/1938).
+**Related:** [Weaken & DESTROY](../architecture/weaken-destroy.md),
+[Refcount alignment plan](refcount_alignment_plan.md),
+[Refcount alignment progress](refcount_alignment_progress.md).
 
 ## Objective
 
-Align PerlOnJava's observable reference counts, weak-reference lifetime, closure
-capture lifetime, cycles, and deterministic `DESTROY` behavior with system Perl.
-The implementation must distinguish real Perl ownership from JVM reachability
-and compiler-generated capture metadata.
+Align PerlOnJava's observable reference counts, weak-reference lifetime,
+closure capture lifetime, cycles, and deterministic `DESTROY` with system
+Perl, using explicit owner tokens instead of JVM reachability or
+selective-refcount heuristics.
 
-Issue #1132 is the first delivery milestone. The complete design also replaces
-remaining selective-refcount heuristics with explicit, auditable owner tokens.
+Issue #2043 adds one constraint: no lifecycle decision may depend on a memory
+scan. Reference counts, weak-observer clearing, and destruction timing must
+follow maintained owner-slot state. Do not add tree walks, snapshots, or
+proxy-list sweeps to fix a failure; fix the owner transition or maintain an
+index.
 
-## New Findings
+## Current state (2026-11-26)
 
-### Phase 1 owner-source inventory (2026-10-04)
+| Item | Value |
+|---|---|
+| Local branch | `wip/issue2043-pr1938-20261125`, tracking `origin/wip/alias-cell-ownership-20261030-185849` (the PR head branch) |
+| Gated commit | `ad2ad2f3e7`: the fixes below and two master merges (`4e2c8a471e`, `513d00c0fa`) on top of `7288fb4faf` |
+| Full gate | `nice -n 19 make` on `ad2ad2f3e7`: exit 0 (`/tmp/issue2043-final-make7.log`). Full imported `perl5_t` suite (`perl_test_runner.pl --timeout 600 perl5_t/t`): 576 files, 0 not ok; `compare_test_logs.pl` against the maintainer baseline `test_20261022_120000_1992.log` reports 0 regressions (`/tmp/issue2043-perl5t.log`). Mergeable with `origin/master` `859ab46dde` |
+| Next step | Hosted CI on the pushed head, then maintainer review |
 
-A strict source search across `src/main/java/org/perlonjava` finds 135
-non-comment lines that mutate `refCount` (17 `++`, 13 `--`, and 105 direct
-assignments) and 36 lines that assign `refCountOwned`. This is a static source
-inventory, not a runtime instruction count. It includes lifecycle/sentinel
-transitions as well as ownership changes.
+### Delivered in this batch
 
-| Owner or lifecycle path | Main implementation sites | Classification |
+| Commit | Change | Regression coverage |
 |---|---|---|
-| Scalar and lexical slots | `RuntimeScalar.setLargeRefCounted`, `undefine`, `ReferenceOperators` | Counted strong stores can set `refCountOwned` and record an active scalar owner. Some references remain untracked (`refCount == -1`); promoted values can have earlier stores that were never recorded. |
-| Array and hash elements | `incrementRefCountForContainerStore`, `RuntimeArray`, `RuntimeHash`, `RuntimeList` | Ordinary stored cells can acquire counted ownership. Alias arrays, borrowed copies, list materialization, and pop/shift/delete paths transfer or deliberately omit a count; the slot flag alone does not describe these transitions. |
-| Package globals, stashes, and globs | `GlobalRuntimeScalar/Array/Hash`, `RuntimeStash`, `RuntimeGlob` | Globals and stash entries are strong Perl roots, but several paths use local-binding or root-map state instead of a matching scalar-owner token. Root membership must remain represented independently. |
-| Closures and CODE | `RuntimeCode`, `RuntimeScalar` capture transitions, `BytecodeInterpreter`, `SlowOpcodeHandler` | Semantic pad ownership is distinct from conservative captures and temporary invocation holds. `semanticCaptureOwners` models captured pad cells; general `activeOwners` does not. |
-| Temporaries and deferred release | `MortalList`, `RuntimeCode`, `DestroyDispatch`, `RuntimeBase` | Some holds are scalar-owned and deferred; others are non-scalar dispatch/rescue holds. Their count is temporary and cannot be treated as a persistent Perl slot. |
-| Weakening, sweeping, and destruction | `WeakRefRegistry`, `ReachabilityWalker`, `DestroyDispatch` | `-1`, `WEAKLY_TRACKED`, and `Integer.MIN_VALUE` are tracking or lifecycle states, not owner cardinalities. Sweeps also adjust counts when reconciling stale ownership. |
-| Tied, regex, I/O, and thread wrappers | `Tie*`, `RuntimeRegex*`, `runtime/io/*`, `RuntimeGraphCloner` | These classes have resource- or runtime-specific reference holds. Thread cloning reconstructs ownership for cloned cells; it cannot be inferred from the source cell's current flag. |
+| `3d0d924a2f` | `require` errors list every searched `@INC` entry; lvalue subs reject readonly values from explicit `return`; CORE builtin identity and prototype survive glob aliases; JVM `AUTOLOAD` reports the called alias | Six new unit tests, all passing system Perl |
+| `49a4895009` | Anonymous `[...]`/`{...}` literals queue a lifecycle-only-at-zero mortal at the JVM and interpreter literal sites, so a dereferenced, unowned literal is freed at statement end. Java module constructors that share `createReferenceWithTrackedElements` are unchanged | `anonymous_literal_statement_temporary.t`; fails 4 of 9 on master and PR head |
+| `1993fde9da` | Copies through `\$#array` read the current last index, and `undef` after the array is freed | `array_last_index_reference_current_value.t`; fails 3 of 4 on master and PR head |
+| `42bd3500da` | A counted release on a referent reached through an active argument alias completes its count transition at once; only the zero-count lifecycle decision waits for the frame. Fixes `op/inccode.t` test 60, which was the first `my (undef, ...) = @_` call in the file, not an `@INC` hook leak | `list_assign_undef_target_argument_refcount.t`; fails on PR head |
+| `219240d2a6` | Interpreter direct calls of an undefined CV through a glob alias compare the call site with the name `apply` reports, so `AUTOLOAD` sees the alias | `autoload_named_glob_alias_name.t` |
+| `1d41d3f85e` | `PerlThreadControlBlock` hands terminal release to exactly one of `detach()` and the finishing child. Pre-existing on master; found as an intermittent gate failure | JUnit `detachBetweenFinishAndCompletionReleasesChildRuntime`; scratch harness shows the leak before the fix (`/tmp/issue2043-detach-race-unfixed.log`) |
+| `6e0d709701` | A lifecycle-only token on an aggregate that has gained a counted owner only completes, and literal entries carry no owner scalar. Restores the cost of a literal-heavy loop (2 million stored `[..]`/`{..}`) to the level before the literal mortal; it had been about 10% slower | Interleaved timings in the commit message; lifetime probes, focused matrix, and `unit/refcount/` rerun on the change |
+| `663dac7e80` | An emptied interpreted or `eval`-compiled CV that receives a named body through a glob alias runs that body. Fixes the interpreter failure of `glob_alias_named_sub_identity.t` | `undef_anon_cv_named_redefinition.t` (8); fails on the previous PR head on both backends |
+| `9b5db46e9a` | `caller` names subs compiled by `eval STRING`: a JVM-compiled sub called from an interpreter eval block, and interpreted named or anonymous subs whose frames keep the `(eval N)` source name | `caller_eval_block_eval_defined_sub.t` (8); 7/8 JVM and 4/8 interpreter on the previous PR head |
+| `5308fe8d1f` | A glob that received a different CV by assignment counts as already defined (Perl `GvASSUMECV`), so `sub NAME {...}` warns and installs a new CV; aliases and `use subs` do not inherit the flag | `assigned_code_glob_redefinition.t` (10); 5/10 JVM on the previous PR head |
+| `2941f76d04` | Bundled distropref for DBIx-Class-0.082844 adjusts the `t/storage/txn.t` line expectation to the Perl 5.45.4 rule (GH #24396) that PerlOnJava follows and `op/caller.t` test 50 requires | Patched file 90/90 on JVM; `cpan_generic_patch_paths.t` 160/160 |
+| `30931e0b87` | `require` searches the bundled library as an implicit fallback without adding it to `@INC` or to the "entries checked" diagnostic. Fixes `op/require_errors.t` 63-73, a regression from the earlier diagnostic change found by maintainer UAT | `op/require_errors.t` 73/73 on both backends; `require_error_lists_all_searched_paths.t` |
+| `ad2ad2f3e7` | A reference to an anonymous array's `$#` proxy keeps the array alive, matching the reference-counted stack PerlOnJava reports (`Internals::stack_refcounted`). Fixes `op/array.t` 83-84, a regression from the statement-end literal release found by maintainer UAT. Two tests added in this PR now follow `stack_refcounted` like `op/array.t` | `op/array.t` 199/199 on both backends; both tests pass system Perl, blead, and both backends |
 
-This inventory confirms that neither `refCount > 0` nor `activeOwners` can
-authorize skipping the AnyEvent weak-reference root walk. `refCount` combines
-counted slots, untracked references, local-binding state, transient holds, and
-sentinels. `activeOwners` is populated only after tracking activation and only
-by selected scalar-store paths. The next audit pass must trace the exact
-AnyEvent referent's owners through each owning storage class before choosing
-any sweep shortcut.
+The `MortalList.pushMark()` wrapper around `invokeIncHook`, the
+`UNTRACKED_REFERENCE` orphaning hook in `PerlOwnerSlot`, and a brace-only
+`RuntimeBase` edit were removed as ineffective.
 
-The latest unchanged `AnyEvent::Tools/t/02_rw_mutex.t` trace reports repeated
-scope-exit requests for `RuntimeArray` targets with `refCount=2` and
-`activeOwners=0`. A diagnostic scan of the scalar registry finds 4 to 13
-nonweak cells pointing at these arrays across successive requests; all show
-`refCountOwned=false` and `captureRefCountOwned=0`. The cells include `$self`,
-`$timer`, and captured `$t` values. Optional registration stacks include
-assignments from `AnyEvent::Loop.pm` and the test's timer callbacks, as well as
-array materialization paths. These are observed scalar holders, not verified
-Perl owner tokens: the flags do not distinguish a shared pad, a temporary
-alias, or a stale cell. The two counted references have not yet been traced to
-their actual slots. Do not use the positive count or this holder list as a
-fast-path until those ownership transitions are established.
+### Final focused matrix
 
-The original issue #1132 plan proposed adding one referent token for each
-closure capture when the captured scalar did not already have a
-`refCountOwned` token. Verification exposed two problems with that model:
+Every cell passes on JVM and interpreter after the second master merge
+(`/tmp/issue2043-final3/`): `op/inccode.t` and `op/inccode-tie.t` 75 of 75;
+`array_last_index_anon_array_owner.t` 3 of 3; `autoload_named_glob_alias_name.t`,
+`core_builtin_reference_alias.t`, `core_prototype_alias_origin.t`,
+`lvalue_sub_explicit_return_readonly.t`, `require_error_lists_all_searched_paths.t`,
+`eval_regex_code_hints_refcount.t`, `goto_tailcall_cleanup.t`,
+`readonly_coercion_argument_lifetime.t`, the three new tests above, and master's
+`nested_require_dependency_package_context.t`, `require_package_context.t`, and
+`nested_require_preserves_package.t`. All nine new tests pass system Perl
+(`/tmp/issue2043-final/perl.txt`). `op/array.t` stays at 197 passes, and the
+`unit/refcount/` directory has no failures on JVM.
 
-1. The focused issue reproducer captures a pad scalar that already has
-   `refCountOwned = true`. A borrowed-only token does not protect its referent
-   from a weak-reference sweep on either backend.
-2. Adding one referent token for every closure makes the issue reproducer live,
-   but overcounts real Perl references. It regresses existing captured-scalar,
-   weak-callback, tail-call, and exact-refcount tests.
-3. The existing `activeOwners` set is not an authoritative ledger. A referent
-   activates it only when `weaken()` is first called, and earlier
-   `recordActiveOwner()` calls are discarded while the set is null. The current
-   implementation avoids backfilling from `ScalarRefRegistry` because that
-   path regressed DBIx::Class leak tests. Thus an `activeOwnerCount()` of zero
-   can mean either “no counted scalar owns this referent” or “its stores
-   happened before tracking began.” It cannot justify skipping a complete
-   sweep.
-4. In the failing HTML::Tree interpreter test, temporary instrumentation sees
-   two surviving `HTML::TreeBuilder` objects and two `HTML::Element` objects
-   after the first tree is dropped; their observer slots still report weak.
-   A minimal nested hash/array graph with a weak parent edge passes on both
-   backends, so the parity regression depends on the real parser construction
-   path. The weak edge itself is installed; the unresolved lifetime is an
-   extra strong owner or stale owner count.
+## Completed phases
 
-A system Perl oracle confirms that a lexical's referent count remains one when
-one or two closures share that lexical:
+| Date | Delivered scope | Source and evidence |
+|---|---|---|
+| 2026-11-19 | Maintained owner-kind counts and narrow identity indexes; correct nested hash-slot `B::REFCNT` during `DESTROY` | Owner-ledger unit gate; DBIx `t/60core.t`, `t/101populate_rs.t` |
+| 2026-11-21 | Interpreter foreach source owners retained through normal and `last` exits; overwritten temporary call-argument owners released | `4edc5faa51`, `eb8907f362`; system Perl, JVM, interpreter |
+| 2026-11-21 | eval/die `DESTROY` LIFO order; weak-tracked scalar storage, raw untracked slots, and async foreach owner restoration | Fails on unfixed `aebe3b0742`; full `make` passed |
+| 2026-11-21 | Ordinary aggregate cleanup retires direct outgoing slots; `RecursiveAggregateReleaseWalker` and `CleanupTargetProbe` removed from that path | `nested_untracked_aggregate_owner_release.t` on system Perl and both backends |
+| 2026-11-22 | Scope-exit pre-scans removed; tied arrays use raw storage during slot retirement | Full `make` passed |
+| 2026-11-22 | Runtime-only eval captures separated from semantic closure owners; JVM frame-exit owner release | All 12 DBIx `t/resultset/*.t` pass on JVM with LeakTracer clean |
+| 2026-11-22 | Anonymous array call arguments stage an owner token; explicit `exit` unwinds lexical owners before `END` | `dbix_schema_init_shutdown_lifecycle.t`; DBIx `t/relationship/core.t`, `t/inflate/*.t` |
+| 2026-11-22 | Package-array root marking skipped for already rooted aggregates | `11838413af`; `PackageArrayRootMarkingFastPathTest` |
+| 2026-11-24 | `releaseDetachedUntrackedReferenceOwners` iterates the untracked-owner index instead of an owner-slot snapshot | `339bf5cd7a`; full `make` passed |
+| 2026-11-24 | Eight-target CPAN acceptance on exact PR head | `ee827a2ad5`; see Acceptance evidence |
+| 2026-11-26 | Reachability scans removed: eval-created CV templates own explicit slots, the global-destruction cleanup pre-scan is gone, and `ownerSlotCount` reads maintained per-kind counts | `9d22a6a6ce`; `OwnerSlotKindCountIndexTest` |
+| 2026-11-26 | `undef %hash` selects destructor ordering from a maintained direct-value identity index | `RuntimeHashDestroyableValueIndexTest`, `undef_hash_owner_index.t` |
+| 2026-11-26 | Master merged into the PR branch | `2edf51f698`; full `make` passed in 8m18; hosted checks green |
+| 2026-11-26 | Regression fixes for `op/inccode.t`, `\$#{[]}`, interpreter `AUTOLOAD` aliases; statement-end release of unowned anonymous literals; detached-thread release race; master merged twice | `544f830ada`; full `make` passed in 7m24; see Current state |
 
-```text
-lexical=1
-one_closure=1
-two_closures=1
-```
+## Design
 
-The closure retains the lexical pad scalar. The pad scalar, in turn, owns one
-strong edge to its referent. Multiple closures sharing the pad do not each own
-the referent independently.
-
-The current reachability walker deliberately excludes captured and
-scope-exited scalars to avoid treating conservative captures as Perl roots.
-Consequently, a weak sweep can destroy an issue #1132 referent even while the
-captured pad retains a positive selective count. The fix therefore requires an
-authoritative ownership distinction, not broader walking or unconditional
-capture increments.
-
-## Semantic Ownership Model
+### Ownership model
 
 ```text
 RuntimeCode --semantic capture--> RuntimeScalar pad cell --strong slot--> referent
 ```
 
-These edges have different meanings:
-
 - The declaring scope and semantic closure captures own the pad cell.
-- A strong pad cell owns exactly one referent token.
-- A weak pad cell owns no referent token.
-- Multiple closures can share one pad cell without changing the referent count.
-- Conservative compiler metadata and generated JVM object fields are not Perl
-  roots and own neither the pad nor its referent.
+- A strong pad cell owns exactly one referent token; a weak pad cell owns none.
+- Closures sharing one pad cell do not change the referent count.
+- Compiler metadata and generated JVM object fields are not Perl roots and
+  own neither the pad nor its referent.
 
-### Required invariants
+### Invariants
 
-1. A live pad cell owns at most one token for its current referent.
-2. A strong, live pad cell owns exactly one token when its referent is tracked.
-3. `semanticCaptureCount` affects pad lifetime, not referent cardinality.
-4. Metadata captures never affect Perl lifetime.
-5. Reassignment releases the old pad token before acquiring the new one.
-6. `weaken()` releases the pad token and captures do not recreate it.
-7. The final pad owner releases the token exactly once.
-8. Weak sweeping cannot destroy a referent with authoritative strong owners.
-9. Java reachability alone cannot create a Perl owner.
-10. Strong Perl cycles remain alive until a strong edge is explicitly broken.
+1. A live pad cell owns at most one token for its current referent, and
+   exactly one when the cell is strong and the referent is tracked.
+2. `semanticCaptureCount` affects pad lifetime, not referent cardinality.
+3. Metadata captures never affect Perl lifetime.
+4. Reassignment releases the old token before acquiring the new one.
+5. `weaken()` releases the pad token; captures do not recreate it.
+6. The final pad owner releases the token exactly once.
+7. Lifecycle decisions follow owner slots. Java reachability neither creates
+   nor retires a Perl owner.
+8. Strong Perl cycles stay alive until a strong edge is explicitly broken.
+9. No root traversal, snapshot, or sweep changes reference counts, weak
+   observers, or destruction timing.
 
-## Runtime State
+### Runtime state
 
-The scalar and closure state should make ownership explicit:
-
-- `slotOwnsReferent`: the scalar slot owns one strong referent token. The
-  existing `refCountOwned` field can initially implement this state, but its
-  meaning must be narrowed and documented.
+- `slotOwnsReferent` (currently `refCountOwned`): the scalar slot owns one
+  strong referent token.
 - `scopeOwnerAlive`: the declaring lexical scope still owns the pad cell.
-- `semanticCaptureCount`: number of live Perl closures sharing the pad cell.
-- `metadataCaptureCount`: conservative or diagnostic captures that do not
-  affect Perl ownership.
+- `semanticCaptureCount`: live Perl closures sharing the pad cell.
+- `metadataCaptureCount`: conservative or diagnostic captures with no
+  ownership effect.
 - `CaptureBinding`: a `RuntimeCode` record pairing a pad cell with capture
-  provenance. Each semantic binding is released exactly once.
+  provenance; each semantic binding is released exactly once.
 
-`scopeExited` may remain during migration, but it must become derived lifecycle
-state rather than an ownership heuristic.
+`scopeExited` is derived lifecycle state, not an ownership heuristic.
 
-## State Transitions
+### State transitions
 
 | Event | Pad ownership | Referent ownership |
 |---|---|---|
 | Strong lexical assignment | Scope owns pad | Pad owns one token |
-| First semantic closure capture | Add pad owner | Unchanged |
-| Additional closure capture | Add pad owner | Unchanged |
+| Semantic closure capture (first or additional) | Add pad owner | Unchanged |
 | Metadata capture | Unchanged | Unchanged |
-| Declaring scope exits | Remove scope owner | Retain token while semantic captures remain |
+| Declaring scope exits | Remove scope owner | Token kept while semantic captures remain |
 | One of several closures is released | Remove one pad owner | Unchanged |
 | Final closure is released after scope exit | Pad becomes dead | Release one token |
 | Captured scalar is reassigned | Pad remains live | Release old token; acquire one new token |
@@ -165,149 +143,101 @@ state rather than an ownership heuristic.
 | Captured scalar is unweakened | Pad remains live and strong | Acquire one token |
 
 A borrowed scalar promoted into a semantic captured pad acquires one pad-slot
-token. Further closures sharing that pad do not acquire additional tokens.
+token. Further closures sharing that pad acquire none.
 
-## Exact Capture Provenance
+### Capture provenance
 
-Both execution backends must produce equivalent capture descriptors.
+Both backends produce equivalent capture descriptors.
 
-### JVM backend
+- **JVM:** attach semantic `CaptureBinding` records at compile time. Do not
+  infer ownership from reflected generated fields.
+- **Interpreter:** distinguish lexicals the closure references from
+  conservative snapshots of visible registers. Preserve `eval STRING` access
+  to lexicals without making unrelated registers permanent owners. Release
+  bindings through `RuntimeCode.releaseCaptures()`, as the JVM backend does.
+- **Threads:** rebuild slot ownership and semantic captures in an ithread
+  clone from capture descriptors, not from the source scalar's transient
+  `refCountOwned`.
 
-- Attach semantic `CaptureBinding` records during compilation.
-- Do not infer Perl ownership solely from reflected generated fields.
-- Keep generated closure objects and compiler metadata opaque to ownership.
+### Owner ledger
 
-### Interpreter backend
+Every owner-producing path names an owner kind: scalar or pad slot, aggregate
+element, package global, glob or stash slot, CODE storage, tie wrapper, pad
+constant, temporary call hold, explicit destruction rescue, or another
+runtime-specific strong Perl edge. Debug validation asserts
+`refCount == sum(authoritative owner tokens)`. Temporary aliases, generated
+fields, and conservative captures produce no token.
 
-- Distinguish lexicals referenced by the closure from conservative snapshots of
-  all visible registers.
-- Preserve `eval STRING` access to lexicals without making unrelated register
-  metadata permanent owners.
-- Release semantic bindings through the same `RuntimeCode.releaseCaptures()`
-  path as the JVM backend.
+A referent stays alive while any strong Perl slot remains, including edges in
+strong cycles. Releasing the final slot performs cleanup through the ordinary
+container and lifecycle paths. Temporary leases and suspended-frame owners
+are explicit slots.
 
-### Threads
+### Scan-free mechanisms
 
-- Reconstruct slot ownership and semantic captures in an independent ithread
-  snapshot from capture descriptors.
-- Do not infer cloned ownership from the source scalar's transient
-  `refCountOwned` value.
+| Decision | Mechanism |
+|---|---|
+| Owner-kind presence and counts | Per-kind counts maintained on add, release, and reclassification |
+| Final array and hash cleanup | Retire direct element owners; child containers cascade through their own slots |
+| `undef %hash` destructor ordering | Direct-value identity index maintained by hash mutation, scalar replacement, and blessing; aliased cells and wrapped shared maps take progressive cleanup |
+| Global destruction | Visit each nested aggregate once through the existing cycle-detection set; no cleanup-target pre-scan |
+| Eval-created anonymous CVs | Explicit owner slots, released at eval completion or CV teardown |
+| Package-array roots | Global table writes establish the root; reads of a rooted aggregate skip re-marking |
+| Detached untracked owners | Iterate the untracked-owner index |
+| `\$#array` proxies (`RuntimeArraySizeLvalue`) | Generation identity on the array; orphaning replaces the generation, and copies read the current value |
 
-## Authoritative Owner Ledger
+## Acceptance evidence
 
-Tracked referents need an authoritative count separate from conservative JVM
-reachability and historical selective-count drift. Every owner-producing path
-must identify an owner kind:
+**CPAN, `f1b900b129` (2026-11-26).** `make test-cpan-release-acceptance`
+exited 2 (`/tmp/issue2043-acceptance-make.log`, per-target logs in
+`/tmp/cpan_random_logs/20261126-145614-6579/`). PPR (1,255 tests), DateTime
+(3,592), Excel::Writer::XLSX, Template Toolkit, and Image::ExifTool pass. Each
+failure was rerun against master and an earlier build:
 
-- Scalar or pad slot
-- Aggregate element
-- Package global
-- Glob or stash slot
-- CODE storage
-- Tie wrapper
-- Pad constant
-- Temporary call hold
-- Explicit destruction rescue
-- Other runtime-specific strong Perl edges
+| Target | Failure | Classification |
+|---|---|---|
+| Catalyst | 24 of 3,820: `t/arg_constraints.t` 21 and `t/query_constraints.t` 3 return `Bad Request` for Type::Tiny argument constraints | Master regression: first bad `a4ee1c0c99` (#2176), parent `c9f4de5f3b` passes 18/18; identical on master `859ab46dde`; [#2194](https://github.com/fglock/PerlOnJava/issues/2194) |
+| Mojolicious | `t/mojo/template.t` 24 of 226 lose template error line and context | Master regression: first bad `e75f4d39d9` (#2187), parent `357bccf2c9` passes 226/226; identical on master; [#2195](https://github.com/fglock/PerlOnJava/issues/2195) |
+| Mojolicious | `t/mojo/asset.t` cannot fork | Waived by the maintainer, [#2169](https://github.com/fglock/PerlOnJava/issues/2169) |
+| DBIx::Class | 1 of 43,020: `t/storage/txn.t` test 89 expects the closing line (451) of a multi-line nested `txn_do` call | The test hardcodes the pre-5.45.4 rule. Blead 5.45.5 and PerlOnJava report the opening line, as `op/caller.t` test 50 requires; system Perl 5.42 reports the closing line. Handled by the DBIx-Class distropref in `2941f76d04`; [#2196](https://github.com/fglock/PerlOnJava/issues/2196) corrected |
 
-Debug validation should assert:
+The earlier run on `ee827a2ad5` (2026-11-24) passed the same five targets and
+had the same `txn.t` failure, then attributed to #2170.
 
-```text
-refCount == sum(authoritative owner tokens)
-```
+**DBIx::Class leak coverage.** `diamond_prefetch_cursor_leak.t`,
+`diamond_prefetch_cursor_leak_permutations.t`, and
+`diamond_prefetch_shutdown_leak.t` under `src/test/resources/unit/refcount/`
+require `DBIC_CLASS_TEST_ROOT` and skip without it. They pass on system Perl
+and both backends. Upstream `t/prefetch/diamond.t`, `t/60core.t`,
+`t/52leaks.t`, and all 12 `t/resultset/*.t` pass on JVM with LeakTracer clean.
 
-Temporary aliases, generated fields, and conservative captures must not produce
-authoritative tokens. During migration, legacy or uncertain holds must be
-recorded separately so they cannot prevent weak cleanup indefinitely.
+**Performance, `chart_axis28.t`, seven checksum-matched pairs at nice 19–20.**
+Results are per workload and are not a portfolio-wide claim; JFR figures are
+sampled weights.
 
-## Weak Sweeping and Reachability
+| Change | Throughput ratio (95% interval) | Allocation |
+|---|---|---|
+| Direct-slot cleanup against the recursive walker | 0.970 [0.869, 1.075] and 0.993 [0.886, 1.128]: no reliable change | Unchanged (7.80 GB) |
+| Package-array root fast path (`11838413af` against `2362185545`) | 11.92 [10.53, 13.68] | Not measured |
+| Untracked-owner index (`339bf5cd7a` against `3e97440c60`) | 1.074 [1.061, 1.088] | 8.126 GB to 7.617 GB |
 
-Weak-reference cleanup must follow these rules:
+## Known limitations
 
-1. Never clear or destroy a referent with authoritative strong owners.
-2. Do not traverse arbitrary closure fields or conservative captures as Perl
-   roots.
-3. Use explicit semantic pad ownership to protect captured referents.
-4. Preserve strong cycles because their real strong edges keep authoritative
-   counts positive, matching Perl reference counting.
-5. Use `ReachabilityWalker` only for still-unmodelled roots, diagnostics, and
-   migration checks—not as the source of closure semantics.
-6. Gradually eliminate `WEAKLY_TRACKED` heuristics by reconstructing real
-   scalar, aggregate, and package owners when an untracked referent first
-   requires weak-reference accounting.
+- `tied_handler_value_cell_alias.t` fails only on the interpreter and
+  reproduces on master `4a5c33753f`.
+- Five DBIx `t/resultset/*.t` files exceed 600 seconds on the interpreter;
+  unclassified. All-backend DBIx acceptance is not claimed.
+- System Perl reports three `update_delete.t` SQL-status mismatches in the
+  DBIx resultset sweep, unrelated to leak witnesses.
+- A full `jcpan -t DBIx::Class` run does not finish within one hour.
+- #2037 and #2034 are separate follow-up work.
 
-## Implementation Phases
+## Regression matrix
 
-### Phase 0: Preserve and specify
+New or changed Perl tests must pass system Perl before PerlOnJava output is
+used to drive a fix.
 
-- Keep the pre-flight patches and WIP snapshot of the failed walker experiment.
-- Replace the current partial capture-token implementation before runtime work
-  proceeds.
-- Retain the new issue regression test, but align its assertions with shared-pad
-  ownership rather than per-closure tokens.
-- Document invariants and owner transitions in this design.
-
-### Phase 1: Perl oracle and owner instrumentation
-
-- Add system-Perl-validated tests for stable `B::REFCNT` observations.
-- Add owner-ledger tracing and balance assertions without changing behavior.
-- Inventory every direct refcount increment, decrement, promotion, and
-  `Integer.MIN_VALUE` transition.
-- Record which existing counts are authoritative, conservative, or temporary.
-
-### Phase 2: Captured-pad lifecycle
-
-- Implement semantic versus metadata capture counts.
-- Preserve the pad's single referent token after declaring-scope exit.
-- Release the token when both scope ownership and semantic captures reach zero.
-- Promote borrowed semantic captures to one pad-slot owner.
-- Make reassignment, weakening, unweakening, and closure release generation-safe
-  so deferred decrements cannot target a newly assigned referent.
-- Update CODE recursion and ithread clone paths.
-
-### Phase 3: Weak-sweep authority
-
-- Make authoritative owner tokens protect weak referents.
-- Remove captured-pad dependence on broad capture walking.
-- Keep generated and conservative captures opaque.
-- Assert that the walker cannot destroy a referent with authoritative owners.
-- Preserve DBIx::Class, Moo, Sub::Quote, and Sub::Defer cleanup by ensuring
-  metadata captures never enter the owner ledger.
-
-Issue #1132 is deliverable after Phases 0 through 3 pass their acceptance gates.
-
-### Phase 4: Complete owner-source migration
-
-Audit and convert all ownership paths:
-
-- Scalar assignments, aliases, references, localization, and returns
-- Hash and array stores, removals, and clears
-- Globals, stashes, globs, and CODE slots
-- Arguments, temporaries, tail calls, and lvalue returns
-- Tied variables and handlers
-- Pad constants and installed subroutines
-- Resurrection and repeated `DESTROY`
-- Threads and runtime graph cloning
-
-Direct refcount mutation outside the owner API should become forbidden except
-inside the destruction state machine.
-
-### Phase 5: Remove superseded heuristics
-
-- Remove `WEAKLY_TRACKED` premature-clearing heuristics where owner coverage is
-  complete.
-- Retire class-specific and capture-specific walker exceptions superseded by
-  authoritative ownership.
-- Keep the walker for diagnostics and explicit graph queries.
-- Add property tests for balanced owners, cycles, weak edges, and deterministic
-  destruction.
-
-## Regression Matrix
-
-Every new or changed Perl test must pass system Perl before PerlOnJava is used
-as an implementation oracle.
-
-### Pad and closure ownership
+**Pad and closure ownership**
 
 - Zero, one, and two closures sharing one lexical retain one referent owner.
 - Independent lexical copies produce independent referent owners.
@@ -316,242 +246,54 @@ as an implementation oracle.
 - The final release clears weak observers and invokes `DESTROY` exactly once.
 - Nested closures and returned closures share the correct pad cell.
 - Argument aliases and borrowed captures are promoted exactly once.
-- Self-capturing CODE and strong closure cycles match Perl behavior.
+- Self-capturing CODE and strong closure cycles match Perl.
 
-### Mutation
+**Mutation**
 
-- Weakening a captured slot makes it non-owning.
-- Unweakening a live captured slot restores one owner.
-- Reassignment releases the old referent and retains the new referent.
+- Weakening a captured slot makes it non-owning; unweakening restores one owner.
+- Reassignment releases the old referent and retains the new one.
 - Repeated reassignment cannot release a stale referent through deferred work.
 - Ordinary weak references clear when no strong owner exists.
 
-### Capture provenance
+**Capture provenance**
 
 - JVM and interpreter closures report equivalent semantic captures.
-- Conservative interpreter register snapshots do not retain unrelated objects.
+- Interpreter register snapshots do not retain unrelated objects.
 - `eval STRING` retains only the Perl-visible lexical environment for the
   correct code-object lifetime.
 - Generated JVM objects and reflected fields do not become Perl roots.
 - ithread clones reconstruct independent ownership.
 
-### Existing compatibility guards
-
-Preserve and run:
+**Compatibility guards to keep green**
 
 - `unit/weak_localized_cache_lifetime.t`
-- Closure-cycle, captured-scalar, weak-callback, Sub::Quote, and Sub::Defer tests
-  under `unit/refcount/`
-- Focused Moo and Sub::Quote tests
-- DBIx::Class leak-tracer and weak-registry tests
+- Closure-cycle, captured-scalar, weak-callback, Sub::Quote, and Sub::Defer
+  tests under `unit/refcount/`
+- Focused Moo and Sub::Quote tests, DBIx::Class leak-tracer and weak-registry
+  tests
 - Exact-refcount tests using `B::REFCNT` or `Test2::Tools::Refcount`
+- Issue #1132: the Future reproducer prints `completed=1`,
+  `Future::Utils::repeat` prints `ready=1 result=final`, and
+  Net::Async::HTTP `t/05redir.t`, `t/30timeout.t`, and `t/32remove.t` pass on
+  both backends
 
-## Issue #1132 and Ecosystem Acceptance
+## Final gates
 
-Run on JVM and interpreter backends with `timeout` and complete output logs:
+- Every new or changed Perl test passes system Perl first.
+- The focused test fails on the unfixed parent, with the log kept.
+- Focused tests pass on JVM and interpreter.
+- `make` passes with complete captured output on the exact source commit.
+- `make check-links` passes.
+- No unexpected high-CPU PerlOnJava JVM remains.
 
-1. The issue #1132 Future reproducer prints `completed=1` without a lost-sequence
-   warning.
-2. `Future::Utils::repeat` prints `ready=1 result=final`.
-3. `Net::Async::HTTP` `t/05redir.t` completes without warning or timeout.
-4. Full Future and Net::Async::HTTP distributions complete.
-5. Cookie and Bzip2 failures remain separately classified.
-6. Focused Moo, Sub::Quote, and DBIx::Class leak tests remain green.
+## History
 
-## Final Gates
+The [ownership rewrite handoff](perl-ownership-rewrite.md#current-handoff-2026-11-15)
+and PR [#1204](https://github.com/fglock/PerlOnJava/pull/1204) (branch
+`fix/issue-1132-closure-lifetime`) record the earlier issue #1132 delivery.
+Both are superseded by the current state above.
 
-- Run every new or changed Perl test with system Perl first.
-- Retain evidence that the focused issue test fails on the unfixed parent.
-- Run focused tests on both PerlOnJava backends.
-- Run `make` with complete captured output and zero failures.
-- Run `make check-links` and offline `lychee` where required.
-- Verify no unexpected high-CPU PerlOnJava JVM remains.
-- Rebase onto current `master`, rerun focused and full gates on the exact commit,
-  and only then mark the issue-fix PR ready.
+## Open question
 
-## Progress Tracking
-
-### Current Status: Net::Async::HTTP captured-owner, hash-slice, and eval-capture finalization fixes complete
-
-The designated issue branch, `fix/issue-1132-closure-lifetime`, includes the
-handoff commits below. On 2026-09-01, the required pre-change `make` rebuilt
-the classes and JAR but its four unit-test workers were SIGKILLed (exit 137)
-while concurrent PerlOnJava worktrees exhausted host resources. This is an
-invalid gate, not a test assertion failure; rerun a clean full gate after the
-external workload has drained before changing runtime source.
-
-### Completed Work
-
-- [x] Closure captures now retain tracked referents through captured pads, and
-  weak callback targets with semantic capture owners are not cleared early.
-  The focused Future regression is covered by
-  `unit/refcount/closure_capture_weak_callback_slot.t`.
-- [x] `IO::Handle` supplies `fileno` for normal and tied handles. Direct
-  `IO::Socket->socketpair` and `IO::Async::OS->pipepair` fileno probes work on
-  both backends.
-- [x] Return-scope cleanup preserves IO ownership for materialized list
-  returns, including the interpreter path used by `IO::Async::OS->socketpair`.
-- [x] Added `unit/io_socket_method_fileno.t`. System Perl passes its 12
-  assertions, including the callback-captured socket-pair shape used by
-  IO::Async.
-- [x] JVM explicit-return cleanup now leaves constructor-captured scalar pads
-  to their enclosing frame. A callback can retain one end of
-  `IO::Async::OS->socketpair` while returning the other.
-- [x] The focused regression passes on JVM and interpreter; `make` passes.
-  Net::Async::HTTP `t/05redir.t` and its socket/stream follow-on tests pass.
-- [x] `B::SV::REFCNT` no longer applies its DBIx destruction-only aggregate
-  adjustment to ordinary lexical probes. The new fresh-runtime regression
-  passes on system Perl and both PerlOnJava backends.
-- [x] Future's exact-count programs `10wait_all`, `11wait_any`,
-  `12needs_all`, `13needs_any`, and `25retain` now pass on the JVM.
-- [x] `Internals::jperl_refstate` reports active scalar-store and semantic
-  captured-pad owner counts for focused ownership diagnosis.
-- [x] Reproduced the remaining Net::Async::HTTP exact-count failures in the
-  distribution's normal socket-enabled environment. `t/30timeout.t` reports
-  3 rather than 1 references at EOF; after the script scope drains, the raw
-  `$http` count is 2, so the `B::REFCNT` probe supplies the third reference.
-  `t/32remove.t` similarly reports 7 rather than 4 and 4 rather than 1; its
-  raw connection count is 3 after script-scope cleanup.
-- [x] Scoped `PJ_REFCOUNT_TRACE` confirms these residual counts are not
-  semantic captured-pad owners. It also exposed a diagnostic gap: the trace
-  removes a scalar's provenance when `deferDecrementIfTracked()` queues its
-  decrement, before the deferred work is applied. A residual raw count can
-  therefore outlive all entries in the shutdown owner dump without revealing
-  the originating scalar-store path.
-- [x] Deferred owner-release tracing now retains immutable provenance from
-  `deferDecrementIfTracked()` queueing until the matching drain or explicit
-  runtime-state cancellation; a still-pending record is included in the
-  shutdown report. The record includes the source scalar
-  identity, stable referent generation, acquisition site, queue site, and
-  drain site. The parallel queue metadata is trace-only, so it creates no
-  runtime owner or reachability edge. Files: `RuntimeBase.java`,
-  `LifecycleRuntimeState.java`, and `MortalList.java`. `make` passes; a
-  `PJ_REFCOUNT_TRACE` smoke run reports the retained pending provenance.
-- [x] Added `Internals::jperl_owner_trace($referent)`, a referent-filtered
-  assertion-boundary snapshot of active scalar-store tokens and queued
-  deferred releases. It is observational when `PJ_REFCOUNT_TRACE` is absent;
-  when tracing is enabled it reports the source scalar identity, referent
-  generation, acquisition site, and queue site without retaining runtime
-  objects. `unit/refcount/owner_trace_snapshot.t` passes on system Perl
-  (guarded skip), JVM, and interpreter. Files: `RuntimeBase.java`,
-  `Internals.java`, and `owner_trace_snapshot.t`.
-- [x] Rebuilt the provenance instrumentation and ran the normal socket-enabled
-  `Net::Async::HTTP` `t/30timeout.t` with a scoped trace. The final assertion
-  still observes three refs where Perl expects one; after the script-scope
-  token drains, `$http` has the known raw count of two. Neither surplus is an
-  active scalar-store owner. The shutdown report currently includes a large
-  number of unrelated queued releases, so the next diagnostic step needs an
-  assertion-boundary snapshot filtered to the selected referent rather than a
-  broader trace or any capture-accounting adjustment.
-- [x] Ran the filtered snapshot at the normal socket-enabled Net assertion
-  boundaries. `t/30timeout.t` shows one active scalar-store token and no
-  semantic capture owner for `$http`; `t/32remove.t` shows the same for
-  `$conn`. An explicit `jperl_freetmps()` does not reduce either failing
-  count. The surplus is therefore not a missed boundary drain, captured pad,
-  or currently ledgered scalar-store token. Historic queued-release trace
-  records also do not account for the raw count and must not be treated as
-  live owners.
-- [x] Added trace-only non-scalar owner kinds for method-invocant holds and
-  first-bless mortal temporaries. Parallel owner metadata is now removed in
-  lockstep with deferred entries during `flushAboveMark()` and
-  `popAndFlush()`, eliminating false unpaired trace releases. The full
-  `make` gate passes. Net tracing shows `transient=[]` at the failing boundary:
-  those two owner kinds balance correctly.
-- [x] Mapped `$http` through the Net timeout lifecycle: it has one active
-  scalar-store token after construction, two after loop registration, four
-  before loop removal (while still showing only those two active tokens), and
-  three after removal (one active token). The extra two counts are introduced
-  by request processing, not loop registration/removal, captured pads,
-  method holds, or bless temporaries.
-- [x] Added balanced trace-only tokens for scalar-reference contents,
-  weak-reference promotion, closure-capture referents, and all tie-wrapper
-  holds (`TiedVariableBase`, `TieHash`, `TieArray`, and `TieHandle`). The
-  scalar-reference regression now enables tracing before the hold is acquired
-  and verifies that its release leaves `transient=[]`; it passes on both
-  execution backends. Full `make` passes.
-- [x] Re-ran normal socket-enabled `Net::Async::HTTP` `t/30timeout.t` with
-  the expanded ledger. On the JVM, the failing boundary still has raw count 3
-  with one scalar-store token and `transient=[]`; no `unweaken` event or
-  closure-capture/tie token was acquired for that referent. The interpreter
-  remains balanced (two owners before loop removal, one after) and exits 0.
-  These direct mutation paths are therefore not the JVM's two surplus
-  request-path owners.
-- [x] Added the existing semantic captured-pad owner count to the
-  assertion-boundary snapshot. The focused diagnostic passes on JVM and
-  interpreter; the JVM Net boundary reports `semanticCaptureOwners=0` both
-  before and after loop removal. Captured-pad transfer cannot account for the
-  two surplus raw counts. Focused JVM/interpreter tests and `make check-links`
-  pass. Full `make` is deliberately handed to the receiving worker because a
-  concurrent external workload caused the local full-gate attempt to time out
-  after its unit shards completed.
-- [x] Installed `Net::Async::HTTP` 0.50 and its CPAN dependency chain through
-  `jcpan`. In the socket-enabled distribution environment, JVM
-  `t/30timeout.t` reproduces the documented final `$http` count of 3 rather
-  than 1; the interpreter reaches 1. At the exact assertion, both backends
-  have one active scalar-store owner and no pending, transient, or semantic
-  capture owner. The JVM's two surplus counts therefore originate in compiled
-  `IO::Async::Loop`/`Notifier` cleanup before the final top-level flush, not
-  captured pads or method-invocant holds. `t/32remove.t` also has broader
-  connection-count drift in this newly installed environment (JVM 7/4 and
-  interpreter 8/5), which remains a separate investigation.
-- [x] Tested and rejected two JVM-only cleanup hypotheses against clean full
-  `make` gates: including compiler-marked captures at ordinary block exit and
-  flushing untracked compiled-sub return values. Neither changed the JVM
-  `t/30timeout.t` count of 3. The surplus is not a deferred mortal awaiting a
-  block or return boundary; continue from direct unledgered increment and
-  release paths rather than widening capture or flush behavior.
-- [x] Direct increment tracing found two JVM-only
-  `releaseCapturedDecrement()` ownership transfers for the failing `$http`.
-  Root-path tracing showed that the temporary global
-  `$IO::Async::Loop::ONE_TRUE_LOOP->{notifiers}` registration triggered each
-  transfer. The loop later removes that entry correctly, but the discarded
-  capture token was never restored, leaving two surplus counts. Captured
-  owners now always schedule their ordinary deferred decrement. Added
-  `unit/refcount/captured_global_owner_release.t`: the test passes on system
-  Perl and both PerlOnJava backends, while the unfixed implementation reported
-  two references. The normal socket-enabled Net::Async::HTTP `t/30timeout.t`
-  now passes all 25 assertions on JVM and interpreter. Full `make` passed in
-  6m 08s before the final source-comment cleanup.
-- [x] The remaining interpreter-only `Net::Async::HTTP` `t/32remove.t`
-  difference was traced to `HASH_SLICE_SET`: the compiler-created RHS array
-  and its `addToArray()` staging copies each retained a scalar-store owner
-  after `RuntimeHash.setSlice()` had created the durable slot. The interpreter
-  now transfers both temporary owners immediately. Added
-  `unit/refcount/interpreter_hash_slice_staging_ownership.t`; it passes on
-  system Perl and both PerlOnJava backends, while the unfixed interpreter
-  reported 3 then 2 references instead of 2 then 1. `t/32remove.t` now passes
-  its exact 4 then 1 checks on JVM and interpreter, and `t/30timeout.t` passes
-  all 25 assertions on both backends. Full `make` passed on 2026-09-01.
-- [x] A scope-exited typed lexical captured only by a discarded `eval STRING`
-  no longer retains a stale semantic capture owner through global destruction.
-  The pre-`END` reachability pass now releases that owner only after proving
-  that no `END` block can reach the capture. Existing permanent core coverage
-  in `perl5_t/t/run/fresh_perl.t` test 75 now passes, restoring the baseline
-  73/91 result; the other 18 historical failures are unchanged. Full `make`
-  passed in the isolated PR worktree on 2026-09-02.
-
-### Handoff: issue #1132 / PR #1204
-
-This work must be continued on the issue-linked PR
-[#1204](https://github.com/fglock/PerlOnJava/pull/1204), branch
-`fix/issue-1132-closure-lifetime` (not on a new owner-ledger PR). The commits
-to retain are `5b693177f`, `1702edb70`, `4832540d6`, `9fcab6e81`, and
-`87b4fdee3`. The receiving worker must run a clean full `make` before further
-source changes or PR completion; the prior full gate was invalidated only by
-an external concurrent workload and timed out after test shards completed.
-
-The Net::Async::HTTP 0.50 distribution is installed through `jcpan` in the
-local CPAN cache. JVM and interpreter `t/30timeout.t` and `t/32remove.t` now
-pass. Preserve both focused ownership regressions when evolving the ledger.
-
-### Next Steps
-
-1. Continue the owner-source migration inventory and remove only diagnosed
-   ownership heuristics with permanent system-Perl-validated regressions.
-2. Keep Cookie2 formatting and content-coding exception handling separate from
-   this ownership work.
-
-### Open Questions
-
-- Can additional compiler-created aggregate temporaries be made explicit in
-  the owner ledger, rather than relying on opcode-specific transfers?
+Can the remaining compiler-created aggregate temporaries be made explicit in
+the owner ledger instead of relying on opcode-specific transfers?

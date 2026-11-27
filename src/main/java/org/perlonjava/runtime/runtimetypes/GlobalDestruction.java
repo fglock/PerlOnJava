@@ -11,7 +11,7 @@ import java.util.Set;
  * Handles global destruction at program exit.
  * <p>
  * Walks all package stashes and global variables to find blessed objects
- * with refCount >= 0 that still need DESTROY. This covers globals, stash
+ * whose count tracking is active and still need DESTROY. This covers globals, stash
  * entries, and values inside global arrays and hashes.
  * <p>
  * Matches Perl 5 behavior where global destruction runs after END blocks.
@@ -23,15 +23,12 @@ public class GlobalDestruction {
      * on any tracked blessed references that haven't been destroyed yet.
      */
     public static void runGlobalDestruction() {
-        runGlobalDestruction(true);
-    }
-
-    /** Run global destruction, optionally scanning otherwise unreachable cycles. */
-    public static void runGlobalDestruction(boolean scanUnrootedCycles) {
         // Set ${^GLOBAL_PHASE} to "DESTRUCT"
         PerlRuntime.current().executionState.globalDestruction = true;
         GlobalVariable.getGlobalVariable(GlobalContext.GLOBAL_PHASE).set("DESTRUCT");
         Set<RuntimeBase> visited =
+                Collections.newSetFromMap(new IdentityHashMap<>());
+        Set<RuntimeCode> deferredCodeCleanup =
                 Collections.newSetFromMap(new IdentityHashMap<>());
 
         // Snapshot the collections before iterating: a DESTROY callback may
@@ -44,7 +41,7 @@ public class GlobalDestruction {
 
         // Walk all global scalars
         for (RuntimeScalar val : new ArrayList<>(GlobalVariable.scalarSlots().values())) {
-            destroyIfTracked(val, visited);
+            destroyIfTracked(val, visited, deferredCodeCleanup);
         }
 
         // CODE slots are kept in a separate namespace map from ordinary
@@ -54,12 +51,18 @@ public class GlobalDestruction {
             if (code != null && code.value instanceof RuntimeCode runtimeCode) {
                 runtimeCode.releaseCaptures();
             }
-            destroyIfTracked(code, visited);
+            destroyIfTracked(code, visited, deferredCodeCleanup);
         }
 
-        // Walk global arrays for blessed ref elements
+        // A typeglob can install a blessed array reference as the package's
+        // array storage itself. Its package owner keeps that object alive
+        // until this boundary, so dispatch the direct root before examining
+        // its elements.
         for (RuntimeArray arr : new ArrayList<>(GlobalVariable.globalArrays.values())) {
             if (arr == null) continue;  // defensive: rare null entries seen during END
+            if (arr.blessId != 0 && !arr.destroyFired) {
+                destroyBaseIfTracked(arr, visited, deferredCodeCleanup);
+            }
             // Skip tied arrays — iterating them calls FETCHSIZE/FETCH on the
             // tie object, which may already be destroyed or invalid at global
             // destruction time (e.g., broken ties from eval+last).  The tie
@@ -72,13 +75,18 @@ public class GlobalDestruction {
                 continue;
             }
             for (RuntimeScalar elem : new ArrayList<>(arr.elements)) {
-                destroyIfTracked(elem, visited);
+                destroyIfTracked(elem, visited, deferredCodeCleanup);
             }
         }
 
-        // Walk global hashes for blessed ref values
+        // A typeglob can install a blessed hash reference as the package's
+        // hash storage itself. Handle that direct package root before its
+        // stored values.
         for (RuntimeHash hash : new ArrayList<>(GlobalVariable.globalHashes.values())) {
             if (hash == null) continue;  // defensive
+            if (hash.blessId != 0 && !hash.destroyFired) {
+                destroyBaseIfTracked(hash, visited, deferredCodeCleanup);
+            }
             // Skip tied hashes — iterating them dispatches through FIRSTKEY/
             // NEXTKEY/FETCH which may fail if the tie object is already gone.
             // The tie handler itself is still owned by the global hash, though,
@@ -90,24 +98,7 @@ public class GlobalDestruction {
                 continue;
             }
             for (RuntimeScalar elem : new ArrayList<>(hash.elements.values())) {
-                destroyIfTracked(elem, visited);
-            }
-        }
-
-        // File-scope lexical roots can disappear before this pass while
-        // leaving blessed objects in reference cycles. Perl still invokes
-        // their DESTROY methods during global destruction. The runtime keeps
-        // weak records of all live objects whose classes define DESTROY;
-        // these records find cycle members without extending their lifetime.
-        // Use the same visited set so objects reached through both package
-        // roots and the cycle registry are dispatched only once.
-        if (scanUnrootedCycles) {
-            ReachabilityWalker.RootReachabilitySnapshot perlRoots =
-                    ReachabilityWalker.reachableFromRootsSnapshotWithStatus();
-            for (RuntimeBase object : DestroyDispatch.snapshotGlobalDestroyables()) {
-                if (!perlRoots.isReachable(object)) {
-                    destroyBaseIfTracked(object, visited);
-                }
+                destroyIfTracked(elem, visited, deferredCodeCleanup);
             }
         }
 
@@ -118,6 +109,15 @@ public class GlobalDestruction {
         // RuntimeIO.closeAllHandles() closes the stream.
         destroyStandardOutputHandle(visited);
 
+        // Let blessed objects in package aggregates finish DESTROY before
+        // releasing the CODE slots their methods use. Global stashes and
+        // method caches are walked in an order where eager CV cleanup here
+        // would clear imported direct-call owners before objects in global
+        // arrays and hashes receive their destructor call.
+        MortalList.flush();
+        for (RuntimeCode code : deferredCodeCleanup) {
+            DestroyDispatch.callDestroy(code);
+        }
         // Releasing a global closure can enqueue the final decrement for a
         // captured lexical. Drain that decrement before global teardown ends.
         MortalList.flush();
@@ -141,51 +141,66 @@ public class GlobalDestruction {
             stdout.setBlessId(blessId);
         }
         if (!visited.add(stdout)) return;
-        stdout.refCount = Integer.MIN_VALUE;
         DestroyDispatch.callDestroy(stdout);
     }
 
     /**
-     * Call DESTROY on a scalar if it holds a tracked blessed reference.
+     * Call DESTROY on a blessed scalar cell or a tracked blessed reference
+     * held by a scalar.
      */
-    private static void destroyIfTracked(RuntimeScalar val, Set<RuntimeBase> visited) {
+    private static void destroyIfTracked(
+            RuntimeScalar val,
+            Set<RuntimeBase> visited,
+            Set<RuntimeCode> deferredCodeCleanup) {
+        // `*name = bless \\$cell, $class` installs the blessed scalar cell as
+        // the package's SCALAR slot. It is the object root itself, rather than
+        // a reference value stored inside an unblessed scalar wrapper.
+        if (val != null && val.blessId != 0 && !val.destroyFired) {
+            destroyBaseIfTracked(val, visited, deferredCodeCleanup);
+            return;
+        }
         if (val != null
                 && (val.type & RuntimeScalarType.REFERENCE_BIT) != 0
                 && val.value instanceof RuntimeBase base
                 // A global object can be blessed before its class installs
                 // DESTROY.  Its initial transient cleanup then leaves the
-                // object untracked (or at MIN_VALUE), but a later method
+                // object untracked, but a later method
                 // definition must still be observed at global destruction.
-                && (base.refCount >= 0 || (base.blessId != 0 && !base.destroyFired))) {
-            destroyBaseIfTracked(base, visited);
+                && (base.isRefCountTracked() || (base.blessId != 0 && !base.destroyFired))) {
+            destroyBaseIfTracked(base, visited, deferredCodeCleanup);
         }
     }
 
-    private static void destroyBaseIfTracked(RuntimeBase base, Set<RuntimeBase> visited) {
+    private static void destroyBaseIfTracked(
+            RuntimeBase base,
+            Set<RuntimeBase> visited,
+            Set<RuntimeCode> deferredCodeCleanup) {
         if (base == null
-                || (base.refCount < 0 && (base.blessId == 0 || base.destroyFired))
+                || (!base.isRefCountTracked() && (base.blessId == 0 || base.destroyFired))
                 || !visited.add(base)) {
             return;
         }
-        if (base.blessId != 0 || WeakRefRegistry.hasWeakRefsTo(base) || base instanceof RuntimeCode) {
-            if (base instanceof RuntimeCode code) {
-                // A global named subroutine can be the last owner of a
-                // closure's lexical pad. Release that pad before dispatching
-                // destruction so objects held only by captured lexicals are
-                // also finalized during global destruction.
-                code.releaseCaptures();
+        if (base instanceof RuntimeCode code) {
+            code.releaseCaptures();
+            if (base.blessId == 0) {
+                // Methods remain callable while global aggregates dispatch
+                // destructors. Retire their state only after those roots have
+                // had their final DESTROY opportunity.
+                deferredCodeCleanup.add(code);
+                return;
             }
-            base.refCount = Integer.MIN_VALUE;
+        }
+        if (base.blessId != 0 || WeakRefRegistry.hasWeakRefsTo(base) || base instanceof RuntimeCode) {
             DestroyDispatch.callDestroy(base);
             return;
         }
-        if (base instanceof RuntimeArray arr && MortalList.containerMayContainCleanupTargets(base)) {
+        if (base instanceof RuntimeArray arr) {
             for (RuntimeScalar elem : new ArrayList<>(arr.elements)) {
-                destroyIfTracked(elem, visited);
+                destroyIfTracked(elem, visited, deferredCodeCleanup);
             }
-        } else if (base instanceof RuntimeHash hash && MortalList.containerMayContainCleanupTargets(base)) {
+        } else if (base instanceof RuntimeHash hash) {
             for (RuntimeScalar elem : new ArrayList<>(hash.elements.values())) {
-                destroyIfTracked(elem, visited);
+                destroyIfTracked(elem, visited, deferredCodeCleanup);
             }
         }
     }

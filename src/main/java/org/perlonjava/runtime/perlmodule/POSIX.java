@@ -1327,18 +1327,18 @@ public class POSIX extends PerlModuleBase {
             int origFd = source.getAssignedFileno();
             if (origFd < 0) origFd = oldFd;
             DupIOHandle[] pair = DupIOHandle.createPairAt(sourceHandle, origFd, newFd);
-            source.ioHandle = pair[0]; // Replace source's handle with ref-counted wrapper
+            source.replaceIOHandle(pair[0]); // Replace source's handle with ref-counted wrapper
             dupHandle = pair[1];
         }
 
         if (target != null) {
             // Reuse existing RuntimeIO — just replace its ioHandle in-place.
             // This preserves references from Perl glob variables.
-            target.ioHandle = dupHandle;
+            target.replaceIOHandle(dupHandle);
         } else {
             // No existing RuntimeIO at newFd — create a fresh one
             target = new RuntimeIO();
-            target.ioHandle = dupHandle;
+            target.replaceIOHandle(dupHandle);
             target.registerExternalFd(newFd);
             IOOperator.registerFileDescriptor(newFd, target);
         }
@@ -1397,7 +1397,8 @@ public class POSIX extends PerlModuleBase {
         return new RuntimeScalar(2).getList();
     }
 
-    // C long is 32 bits on Windows and follows the pointer width on Unix.
+    // C long is 32 bits on Windows (including 64-bit Windows) and follows
+    // the pointer width on the supported Unix platforms.
     public static RuntimeList const_LONG_MAX(RuntimeArray args, int ctx) {
         String os = System.getProperty("os.name", "").toLowerCase();
         String model = System.getProperty("sun.arch.data.model", "64");

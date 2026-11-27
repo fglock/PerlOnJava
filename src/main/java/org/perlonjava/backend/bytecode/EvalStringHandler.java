@@ -343,6 +343,7 @@ public class EvalStringHandler {
         String evalFileName = null;
         Node evalAst = null;
         boolean compiledSuccessfully = false;
+        InterpretedCode evalCode = null;
         try {
             evalTrace("EvalStringHandler enter ctx=" + callContext + " srcName=" + sourceName +
                     " srcLine=" + sourceLine + " codeLen=" + (perlCode != null ? perlCode.length() : -1) +
@@ -659,7 +660,7 @@ public class EvalStringHandler {
                     errorUtil,
                     adjustedRegistry  // Pass adjusted registry for variable capture
             );
-            InterpretedCode evalCode = compiler.compile(ast, ctx);  // Pass ctx for context propagation
+            evalCode = compiler.compile(ast, ctx);  // Pass ctx for context propagation
             compiledSuccessfully = true;
             // Keep the package resolved while parsing this particular eval on its
             // frame.  Eval filenames are only `(eval N)` and are reused by other
@@ -681,10 +682,16 @@ public class EvalStringHandler {
 
             // Step 5: Attach captured variables to eval'd code
             if (capturedVars.length > 0) {
-                evalCode = evalCode.withCapturedVars(capturedVars);
+                InterpretedCode compiledEvalCode = evalCode;
+                evalCode = compiledEvalCode.withCapturedVars(capturedVars);
+                compiledEvalCode.releaseCaptures();
+                compiledEvalCode.clearPadConstantWeakRefs();
             } else if (currentCode != null && currentCode.capturedVars != null) {
                 // Fallback: share captured variables from parent scope (nested evals)
-                evalCode = evalCode.withCapturedVars(currentCode.capturedVars);
+                InterpretedCode compiledEvalCode = evalCode;
+                evalCode = compiledEvalCode.withCapturedVars(currentCode.capturedVars);
+                compiledEvalCode.releaseCaptures();
+                compiledEvalCode.clearPadConstantWeakRefs();
             }
 
             // Compiler-only aliases and scope must be restored before another
@@ -756,6 +763,10 @@ public class EvalStringHandler {
             // scalar count of `+() = eval ...` when this backend is selected.
             return new RuntimeList();
         } finally {
+            if (evalCode != null) {
+                evalCode.releaseCaptures();
+                evalCode.clearPadConstantWeakRefs();
+            }
             PerlLanguageProvider.COMPILE_LOCK.lock();
             try {
                 deactivateEvalSeedAliases(seedAliases);
@@ -836,6 +847,7 @@ public class EvalStringHandler {
                 PerlLanguageProvider.acquireCompilationLock();
         ScopedSymbolTable savedCurrentScope = SpecialBlockParser.getCurrentScope();
         ScopedSymbolTable compileTimeMutationScope = SpecialBlockParser.getCompileTimeMutationScope();
+        InterpretedCode evalCode = null;
         try {
             // Clear $@ at start
             GlobalVariable.setGlobalVariable("main::@", "");
@@ -901,7 +913,7 @@ public class EvalStringHandler {
                     sourceLine,
                     errorUtil
             );
-            InterpretedCode evalCode = compiler.compile(ast, ctx);  // Pass ctx for context propagation
+            evalCode = compiler.compile(ast, ctx);  // Pass ctx for context propagation
             if (RuntimeCode.isDisassemble()) {
                 System.out.println(Disassemble.disassemble(evalCode));
             }
@@ -913,7 +925,10 @@ public class EvalStringHandler {
             }
 
             // Attach captured variables
-            evalCode = evalCode.withCapturedVars(capturedVars);
+            InterpretedCode compiledEvalCode = evalCode;
+            evalCode = compiledEvalCode.withCapturedVars(capturedVars);
+            compiledEvalCode.releaseCaptures();
+            compiledEvalCode.clearPadConstantWeakRefs();
 
             if (compileTimeMutationScope != savedCurrentScope) {
                 savedCurrentScope.copyFlagsFrom(compileTimeMutationScope);
@@ -944,6 +959,10 @@ public class EvalStringHandler {
             WarnDie.catchEval(e);
             return RuntimeScalarCache.scalarUndef;
         } finally {
+            if (evalCode != null) {
+                evalCode.releaseCaptures();
+                evalCode.clearPadConstantWeakRefs();
+            }
             PerlLanguageProvider.COMPILE_LOCK.lock();
             try {
                 if (compileTimeMutationScope != savedCurrentScope) {

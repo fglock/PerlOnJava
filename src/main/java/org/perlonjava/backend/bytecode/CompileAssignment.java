@@ -2510,6 +2510,11 @@ public class CompileAssignment {
                                 }
                                 bytecodeCompiler.emit(Opcodes.REGISTER_MY_VAR);
                                 bytecodeCompiler.emitReg(reg);
+                                if (leftOp.getBooleanAnnotation("signatureParameterDeclaration")) {
+                                    // Signature defaults bypass lexical-alias resolution,
+                                    // so bind their fresh scalar cell explicitly.
+                                    bytecodeCompiler.emitActiveLexicalBinding(reg, varName);
+                                }
                                 bytecodeCompiler.emitVarAttrsIfNeeded(leftOp, reg, "$");
                                 bytecodeCompiler.emit(Opcodes.SET_SCALAR);
                                 bytecodeCompiler.emitReg(reg);
@@ -2523,6 +2528,9 @@ public class CompileAssignment {
                                 }
                                 bytecodeCompiler.emit(Opcodes.REGISTER_MY_VAR);
                                 bytecodeCompiler.emitReg(reg);
+                                if (leftOp.getBooleanAnnotation("signatureParameterDeclaration")) {
+                                    bytecodeCompiler.emitActiveLexicalBinding(reg, varName);
+                                }
                                 bytecodeCompiler.emit(Opcodes.SET_SCALAR);
                                 bytecodeCompiler.emitReg(reg);
                                 bytecodeCompiler.emitReg(valueReg);
@@ -2827,6 +2835,11 @@ public class CompileAssignment {
                                         }
                                         bytecodeCompiler.emit(Opcodes.REGISTER_MY_VAR);
                                         bytecodeCompiler.emitReg(varReg);
+                                        if (leftOp.getBooleanAnnotation("signatureParameterDeclaration")) {
+                                            // Signature parameters skip APPLY_LEXICAL_ALIAS;
+                                            // bind the constructed pad cell after registration.
+                                            bytecodeCompiler.emitActiveLexicalBinding(varReg, varName);
+                                        }
                                         bytecodeCompiler.emitVarAttrsIfNeeded(leftOp, varReg, sigil);
                                     }
                                     varRegs.add(varReg);
@@ -2957,7 +2970,9 @@ public class CompileAssignment {
                 if (leftOp.operator.equals("$") && leftOp.operand instanceof IdentifierNode) {
                     String varName = "$" + ((IdentifierNode) leftOp.operand).name;
 
-                    if (bytecodeCompiler.hasVariable(varName) && bytecodeCompiler.isOurVariable(varName)) {
+                    if (bytecodeCompiler.hasVariable(varName)
+                            && bytecodeCompiler.isOurVariable(varName)
+                            && bytecodeCompiler.isDynamicOurVariable(varName)) {
                         SymbolTable.SymbolEntry ourEntry = bytecodeCompiler.symbolTable.getSymbolEntry(varName);
                         String ourPkg = (ourEntry != null && ourEntry.perlPackage() != null)
                                 ? ourEntry.perlPackage()
@@ -3955,6 +3970,15 @@ public class CompileAssignment {
                                 bytecodeCompiler.emit(Opcodes.ALIAS);
                                 bytecodeCompiler.emitReg(targetReg);
                                 bytecodeCompiler.emitReg(sourceReg);
+                            }
+                            if (!bytecodeCompiler.isStateVariable(varName)) {
+                                // Refaliasing makes this lexical name another
+                                // owner of the shared cell. Keep its pad
+                                // identity attached to the aliased cell so the
+                                // source lexical can leave scope without
+                                // releasing the final owner.
+                                bytecodeCompiler.emitActiveLexicalBinding(
+                                        targetReg, varName);
                             }
                             // `\$left = \$right` is itself a reference
                             // expression.  Keep the original RHS reference

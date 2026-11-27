@@ -790,7 +790,7 @@ public class InlineOpcodeHandler {
             array = new RuntimeArray(list);
         }
 
-        registers[rd] = array.createReferenceWithTrackedElements();
+        registers[rd] = MortalList.anonymousLiteral(array.createReferenceWithTrackedElements());
         return pc;
     }
 
@@ -1218,7 +1218,7 @@ public class InlineOpcodeHandler {
         RuntimeBase list = registers[listReg];
         RuntimeHash hash = RuntimeHash.createHash(list);
 
-        registers[rd] = hash.createReferenceWithTrackedElements();
+        registers[rd] = MortalList.anonymousLiteral(hash.createReferenceWithTrackedElements());
         return pc;
     }
 

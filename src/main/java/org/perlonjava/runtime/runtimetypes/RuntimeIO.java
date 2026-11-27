@@ -94,6 +94,12 @@ public class RuntimeIO extends RuntimeScalar {
         return ownerGlob == null ? null : ownerGlob.get();
     }
 
+    /** Replace the IO handle held by this filehandle scalar. */
+    public void replaceIOHandle(IOHandle next) {
+        if (ioHandle == next) return;
+        ioHandle = next;
+    }
+
     /** Glob slot currently owning this IO object, when it has one. */
     private static final ThreadLocal<RuntimeIO> lastReadlineHandle = new ThreadLocal<>();
     private static final ThreadLocal<RuntimeScalar> lastAccessedScalar = new ThreadLocal<>();
@@ -554,7 +560,7 @@ public class RuntimeIO extends RuntimeScalar {
      * @param ioHandle the IOHandle implementation to wrap
      */
     public RuntimeIO(IOHandle ioHandle) {
-        this.ioHandle = ioHandle;
+        replaceIOHandle(ioHandle);
     }
 
     /**
@@ -594,7 +600,7 @@ public class RuntimeIO extends RuntimeScalar {
         this.currentLineNumber = other.currentLineNumber;
         this.currentChunkNumber = other.currentChunkNumber;
         this.slurpReadAttempted = other.slurpReadAttempted;
-        this.ioHandle = other.ioHandle;
+        replaceIOHandle(other.ioHandle);
         this.explicitlyClosed = other.explicitlyClosed;
         this.explicitlyClosedDirectory = other.explicitlyClosedDirectory;
         this.directoryIO = other.directoryIO;
@@ -858,10 +864,10 @@ public class RuntimeIO extends RuntimeScalar {
             }
             if (mode.equals(">") || mode.equals(">>")) {
                 // ">-" or just ">" means stdout
-                fh.ioHandle = new CustomOutputStreamHandle(System.out);
+                fh.replaceIOHandle(new CustomOutputStreamHandle(System.out));
             } else {
                 // "<-" or just "<" means stdin
-                fh.ioHandle = new StandardIO(System.in);
+                fh.replaceIOHandle(new StandardIO(System.in));
             }
             return fh;
         } else {
@@ -1028,7 +1034,7 @@ public class RuntimeIO extends RuntimeScalar {
                         return null;
                     }
                     // Use SeekableJarHandle to support seek operations (needed by Module::Metadata)
-                    fh.ioHandle = new SeekableJarHandle(is);
+                    fh.replaceIOHandle(new SeekableJarHandle(is));
                     addHandle(fh.ioHandle);
                     if (!fh.applyOpenLayers(ioLayers, mode)) {
                         return null;
@@ -1065,9 +1071,9 @@ public class RuntimeIO extends RuntimeScalar {
             if (Files.isDirectory(filePath)
                     && options.contains(StandardOpenOption.READ)
                     && !options.contains(StandardOpenOption.WRITE)) {
-                fh.ioHandle = new DirectoryReadErrorHandle();
+                fh.replaceIOHandle(new DirectoryReadErrorHandle());
             } else {
-                fh.ioHandle = new CustomFileChannel(filePath, options);
+                fh.replaceIOHandle(new CustomFileChannel(filePath, options));
             }
 
             // Reserve the virtual descriptor immediately.  Handles can be
@@ -1249,7 +1255,7 @@ public class RuntimeIO extends RuntimeScalar {
             scalarIO.setAppendMode(true);
         }
 
-        fh.ioHandle = scalarIO;
+        fh.replaceIOHandle(scalarIO);
         addHandle(fh.ioHandle);
 
         // PerlIO::scalar is not a real OS file descriptor, so a plain scalar
@@ -1325,16 +1331,16 @@ public class RuntimeIO extends RuntimeScalar {
             if (">".equals(mode)) {
                 // When noShell is true, always use list constructor to bypass shell
                 if (strings.size() == 1 && !noShell) {
-                    fh.ioHandle = new PipeOutputChannel(strings.getFirst());
+                    fh.replaceIOHandle(new PipeOutputChannel(strings.getFirst()));
                 } else {
-                    fh.ioHandle = new PipeOutputChannel(strings);
+                    fh.replaceIOHandle(new PipeOutputChannel(strings));
                 }
             } else if ("<".equals(mode)) {
                 // When noShell is true, always use list constructor to bypass shell
                 if (strings.size() == 1 && !noShell) {
-                    fh.ioHandle = new PipeInputChannel(strings.getFirst());
+                    fh.replaceIOHandle(new PipeInputChannel(strings.getFirst()));
                 } else {
-                    fh.ioHandle = new PipeInputChannel(strings);
+                    fh.replaceIOHandle(new PipeInputChannel(strings));
                 }
             } else {
                 handleIOError("open failed: invalid mode for pipe");
@@ -1372,9 +1378,9 @@ public class RuntimeIO extends RuntimeScalar {
                     occurrence + ":" + ProcessHandle.current().pid());
             List<String> invocation = org.perlonjava.runtime.ForkOpenState.currentInvocation();
             if ("-|".equals(mode)) {
-                fh.ioHandle = new PipeInputChannel(invocation, marker);
+                fh.replaceIOHandle(new PipeInputChannel(invocation, marker));
             } else {
-                fh.ioHandle = new PipeOutputChannel(invocation, marker);
+                fh.replaceIOHandle(new PipeOutputChannel(invocation, marker));
             }
             addHandle(fh.ioHandle);
             return fh;
@@ -1807,7 +1813,7 @@ public class RuntimeIO extends RuntimeScalar {
             if (originalHandle instanceof LayeredIOHandle layered) {
                 layered.popAllLayers();
             }
-            ioHandle = baseHandle;
+            replaceIOHandle(baseHandle);
             return scalarTrue;
         }
 
@@ -1820,7 +1826,7 @@ public class RuntimeIO extends RuntimeScalar {
         if (originalHandle instanceof LayeredIOHandle layered) {
             layered.popAllLayers();
         }
-        ioHandle = wrappedHandle;
+        replaceIOHandle(wrappedHandle);
         return scalarTrue;
     }
 
@@ -1934,7 +1940,7 @@ public class RuntimeIO extends RuntimeScalar {
         if (ioError) {
             return scalarFalse;
         }
-        ioHandle = new ClosedIOHandle();
+        replaceIOHandle(new ClosedIOHandle());
         explicitlyClosed = true;
         // Reset line number to 0 on close, matching Perl 5 behavior.
         // This ensures $. becomes 0 and error messages don't include

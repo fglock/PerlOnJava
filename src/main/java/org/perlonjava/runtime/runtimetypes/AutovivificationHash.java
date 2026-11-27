@@ -48,7 +48,9 @@ public class AutovivificationHash extends HashMap<String, RuntimeScalar> {
 
             hashProxy.scalarToAutovivify.value = hash;
             hashProxy.scalarToAutovivify.type = HASHREFERENCE;
-            RuntimeScalar.incrementRefCountForContainerStore(hashProxy.scalarToAutovivify);
+            RuntimeScalar.incrementRefCountForContainerStore(
+                    hashProxy.scalarToAutovivify,
+                    hashProxy.scalarToAutovivify.countedOwnerKind());
         }
     }
 

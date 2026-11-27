@@ -23,11 +23,13 @@ public class ControlFlowMarker {
     /**
      * The arguments for TAILCALL (goto &NAME)
      */
-    public final RuntimeArray args;
+    public RuntimeArray args;
     /** Ownership-only carrier for temporary aliases transferred from {@link #args}. */
-    public final RuntimeArray ownedArgs;
+    public RuntimeArray ownedArgs;
+    /** Active source {@code @_} value owners carried to the target frame. */
+    RuntimeCode.TailCallArgumentOwners argumentOwners;
     /** Snapshot identity of the source call's pristine argument frame. */
-    public final Object argumentFrame;
+    public Object argumentFrame;
     public final String namedTarget;
     public final String evalScope;
     /** Whether the tail call itself was issued by the active sort comparator. */
@@ -75,6 +77,7 @@ public class ControlFlowMarker {
         this.codeRef = null;
         this.args = null;
         this.ownedArgs = null;
+        this.argumentOwners = null;
         this.argumentFrame = null;
         this.namedTarget = null;
         this.evalScope = evalScope;
@@ -103,12 +106,21 @@ public class ControlFlowMarker {
         this.codeRef = codeRef;
         this.args = args;
         this.ownedArgs = args != null ? args.takeTailCallOwnership() : null;
+        this.argumentOwners = RuntimeCode.takeTailCallArgumentOwners(args);
         this.argumentFrame = args != null && !args.elements.isEmpty()
                 ? RuntimeCode.currentArgumentAliasFrame(args.elements.get(0)) : null;
         this.namedTarget = namedTarget;
         this.evalScope = evalScope;
         this.tailCallFromSortComparator = RuntimeCode.isCurrentSortComparatorBlock();
         this.switchControlOperator = null;
+    }
+
+    /** Drop the consumed source frame and argument graph after tail-call handoff. */
+    void clearTailCallHandoff() {
+        args = null;
+        ownedArgs = null;
+        argumentOwners = null;
+        argumentFrame = null;
     }
 
     /**

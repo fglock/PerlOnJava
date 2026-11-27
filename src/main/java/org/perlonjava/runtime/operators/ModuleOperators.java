@@ -129,38 +129,22 @@ public class ModuleOperators {
 
     /**
      * JVM-backend wrapper for `do FILE` that accepts the compile-time
-     * current package. We temporarily override the runtime package tracker
-     * so the loaded file inherits the caller's namespace (Perl 5 semantics).
+     * current package as a fallback when the runtime package is not available.
+     * An active package established by runtime eval remains authoritative.
      */
     public static RuntimeBase doFileInPackage(RuntimeScalar runtimeScalar, int ctx, String callerPackage) {
         try (PerlRuntime.Binding ignored = PerlRuntime.current().bind()) {
-        String savedPackage = InterpreterState.currentPackage.get().toString();
-        try {
-            if (callerPackage != null && !callerPackage.isEmpty()) {
-                InterpreterState.currentPackage.get().set(callerPackage);
-            }
-            return doFile(runtimeScalar, true, false, ctx);
-        } finally {
-            InterpreterState.currentPackage.get().set(savedPackage);
-        }
+            return doFile(runtimeScalar, true, false, ctx, callerPackage);
         }
     }
 
     /**
      * JVM-backend wrapper for `require FILE` that accepts the compile-time
-     * current package (see doFileInPackage above).
+     * current package as a fallback (see doFileInPackage above).
      */
     public static RuntimeScalar requireInPackage(RuntimeScalar runtimeScalar, String callerPackage) {
         try (PerlRuntime.Binding ignored = PerlRuntime.current().bind()) {
-        String savedPackage = InterpreterState.currentPackage.get().toString();
-        try {
-            if (callerPackage != null && !callerPackage.isEmpty()) {
-                InterpreterState.currentPackage.get().set(callerPackage);
-            }
-            return require(runtimeScalar);
-        } finally {
-            InterpreterState.currentPackage.get().set(savedPackage);
-        }
+            return require(runtimeScalar, callerPackage);
         }
     }
 
@@ -204,6 +188,25 @@ public class ModuleOperators {
      * @return Result of execution (undef on error, with $@ or $! set)
      */
     private static RuntimeBase doFile(RuntimeScalar runtimeScalar, boolean setINC, boolean isRequire, int ctx) {
+        return doFile(runtimeScalar, setINC, isRequire, ctx, null);
+    }
+
+    private static String initialPackageForLoad(String runtimePackage, String explicitPackage,
+                                               String callerPackage) {
+        if (isNonMainPackage(runtimePackage)) return runtimePackage;
+        if (isNonMainPackage(explicitPackage)) return explicitPackage;
+        if (isNonMainPackage(callerPackage)) return callerPackage;
+        if (runtimePackage != null && !runtimePackage.isEmpty()) return runtimePackage;
+        if (explicitPackage != null && !explicitPackage.isEmpty()) return explicitPackage;
+        return callerPackage;
+    }
+
+    private static boolean isNonMainPackage(String packageName) {
+        return packageName != null && !packageName.isEmpty() && !"main".equals(packageName);
+    }
+
+    private static RuntimeBase doFile(RuntimeScalar runtimeScalar, boolean setINC, boolean isRequire, int ctx,
+                                      String explicitInitialPackage) {
         List<String> incEntriesChecked = INC_ENTRIES_CHECKED.get();
         incEntriesChecked.clear();
         if (runtimeScalar == null || !runtimeScalar.getDefinedBoolean()
@@ -599,10 +602,10 @@ public class ModuleOperators {
                 RuntimeArray prefetchedIncArray = incArray;
 
                 // The launcher may supply only project test paths. Keep the
-                // bundled library available for runtime loading, but do not
-                // claim this synthesized fallback as a user-searched @INC
-                // entry in Perl's diagnostic.
-                boolean syntheticBundledInc = false;
+                // bundled library available as an implicit fallback searched
+                // after the visible entries. Perl never modifies @INC during
+                // require, so the fallback is neither added to @INC nor
+                // listed in the "@INC entries checked" diagnostic.
                 boolean seenBundledInc = false;
                 Map<Integer, CachedTiedIncEntry> prefetchedTiedEntries = new HashMap<>();
                 for (int i = 0; i < incArray.size(); i++) {
@@ -617,18 +620,24 @@ public class ModuleOperators {
                         break;
                     }
                 }
-                if (!seenBundledInc) {
-                    incArray.push(new RuntimeScalar(GlobalContext.JAR_PERLLIB));
-                    syntheticBundledInc = true;
-                }
+                boolean bundledFallbackPending = !seenBundledInc;
 
                 // Re-fetch the global array on every iteration. An @INC hook
                 // may replace @INC entirely; Perl continues with the entry at
                 // the current numeric position in that replacement.
                 for (int i = 0; fullName == null; i++) {
                     incArray = GlobalVariable.getGlobalArray("main::INC");
-                    if (i >= incArray.size()) break;
-                    RuntimeScalar dirScalar = incArray.get(i);
+                    boolean bundledFallback = false;
+                    RuntimeScalar dirScalar;
+                    if (i < incArray.size()) {
+                        dirScalar = incArray.get(i);
+                    } else if (bundledFallbackPending) {
+                        bundledFallbackPending = false;
+                        bundledFallback = true;
+                        dirScalar = new RuntimeScalar(GlobalContext.JAR_PERLLIB);
+                    } else {
+                        break;
+                    }
 
                     // If this is a tied scalar, fetch the actual value
                     if (dirScalar.type == RuntimeScalarType.TIED_SCALAR) {
@@ -640,8 +649,7 @@ public class ModuleOperators {
                             dirScalar = dirScalar.tiedFetch();
                         }
                     }
-                    if (!(syntheticBundledInc
-                            && GlobalContext.JAR_PERLLIB.equals(dirScalar.toString()))) {
+                    if (!bundledFallback) {
                         incEntriesChecked.add(dirScalar.toString());
                     }
 
@@ -851,18 +859,13 @@ public class ModuleOperators {
         // declarations in the JVM backend (see EmitOperator.handlePackageOperator).
         CallerStack.CallerInfo loadCaller = CallerStack.peek(0);
         String callerPackage = loadCaller == null ? null : loadCaller.packageName();
-        // A package supplied by requireInPackage (or selected by a package
-        // declaration while executing a module) is more precise than the
-        // caller stack. In particular, `use` can leave its caller's frame on
-        // the stack while the loaded module performs a nested require. Use the
-        // caller frame when the runtime tracker has no non-main package.
-        boolean hasSavedPackage = savedPackage != null
-                && !savedPackage.isEmpty() && !"main".equals(savedPackage);
-        parsedArgs.initialPackage = hasSavedPackage
-                ? savedPackage
-                : callerPackage != null && !callerPackage.isEmpty()
-                        ? callerPackage
-                        : savedPackage;
+        // The runtime package is scoped by `package` statements, including
+        // package declarations inside eval STRING. It is therefore more
+        // accurate than a CallerStack frame when a runtime eval dispatches a
+        // nested do/require. Use the compiler-supplied package or caller frame
+        // only when the active package is still main/unknown.
+        parsedArgs.initialPackage = initialPackageForLoad(
+                savedPackage, explicitInitialPackage, callerPackage);
         
         // Save and clear %^H (hints hash) to prevent hint leakage into required modules.
         // In Perl >= 5.11 (which we emulate), hints don't leak into require'd files.
@@ -1059,6 +1062,11 @@ public class ModuleOperators {
      */
     public static RuntimeScalar require(RuntimeScalar runtimeScalar) {
         try (PerlRuntime.Binding ignored = PerlRuntime.current().bind()) {
+            return require(runtimeScalar, null);
+        }
+    }
+
+    private static RuntimeScalar require(RuntimeScalar runtimeScalar, String explicitInitialPackage) {
         LAST_LOADED_SCOPE.remove();
         // https://perldoc.perl.org/functions/require
 
@@ -1118,7 +1126,8 @@ public class ModuleOperators {
 
         // Call doFile with require-specific behavior - set %INC optimistically
         // require always runs in scalar context
-        RuntimeBase baseResult = doFile(runtimeScalar, true, true, RuntimeContextType.SCALAR);
+        RuntimeBase baseResult = doFile(runtimeScalar, true, true, RuntimeContextType.SCALAR,
+                explicitInitialPackage);
         RuntimeScalar result = baseResult.scalar();
 
         String requireDebug = System.getenv("JPERL_REQUIRE_DEBUG");
@@ -1186,7 +1195,6 @@ public class ModuleOperators {
         // If module_true was disabled, result will be the module's actual return value
         runRequireAfterHooks(postAction, fileName);
         return result;
-        }
     }
 
     private static RuntimeScalar runRequireBeforeHook(RuntimeScalar fileName) {

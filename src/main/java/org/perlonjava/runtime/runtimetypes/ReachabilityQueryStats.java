@@ -1,6 +1,6 @@
 package org.perlonjava.runtime.runtimetypes;
 
-/** Optional per-runtime counters for deterministic reachability cost tests. */
+/** Optional counters retained for owner-ledger lifecycle regression tests. */
 final class ReachabilityQueryStats {
     long rootQueries;
     long rootsSeeded;
@@ -14,11 +14,8 @@ final class ReachabilityQueryStats {
     long liveRootSnapshotsBuilt;
     long liveRootSnapshotNodesVisited;
     long globalCodeCaptureRootsWalked;
-    long weakBackrefCaptureRootsWalked;
-    long weakBackrefCaptureNodesVisited;
-    long weakBackrefCaptureEdgesInspected;
-    long weakBackrefCaptureSnapshotsBuilt;
     long unblessedAggregateDrainPositiveProofsCached;
     long scalarReachabilityQueries;
     long scalarReachabilityRootWalks;
+    long codeOwnerSlotRestorations;
 }

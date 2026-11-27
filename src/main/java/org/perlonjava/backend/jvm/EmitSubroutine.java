@@ -263,6 +263,8 @@ public class EmitSubroutine {
         JavaClassInfo newJavaClassInfo = new JavaClassInfo();
         newJavaClassInfo.isSubroutineBody = !node.useTryCatch
                 || node.name != null && !node.name.equals("(eval)");
+        newJavaClassInfo.isTryExpressionWrapper =
+                node.getBooleanAnnotation("tryExpressionWrapper");
         newJavaClassInfo.isSmartmatchPredicate = node.getBooleanAnnotation("smartmatchPredicate");
         newJavaClassInfo.isSortComparator = node.getBooleanAnnotation("isSortComparator");
         // Eval blocks are compiled as separate methods, but a goto inside one
@@ -441,11 +443,35 @@ public class EmitSubroutine {
                 deparseFlags |= RuntimeCode.DEPARSE_FLAG_WARNINGS;
             }
 
-            // Transfer pad constants (cached string literals referenced via \) from compile time
-            // to a registry so makeCodeObject() can attach them to the RuntimeCode at runtime.
-            if (subCtx.javaClassInfo.padConstants != null && !subCtx.javaClassInfo.padConstants.isEmpty()) {
+            // Register this optree's constants and nested anonymous optrees.
+            // The parent CV owns nested anonymous constants as the template
+            // from which later closure instances are created.
+            RuntimeBase[] padConstants = subCtx.javaClassInfo.padConstants == null
+                    ? new RuntimeBase[0]
+                    : subCtx.javaClassInfo.padConstants.toArray(new RuntimeBase[0]);
+            Map<String, RuntimeBase[]> embeddedPadConstants =
+                    subCtx.javaClassInfo.embeddedPadConstants;
+            Map<String, Set<String>> embeddedPadDescendants =
+                    subCtx.javaClassInfo.embeddedPadConstantDescendants;
+            if (padConstants.length != 0 || !embeddedPadConstants.isEmpty()) {
                 RuntimeCode.registerPadConstants(subCtx.javaClassInfo.javaClassName,
-                        subCtx.javaClassInfo.padConstants.toArray(new RuntimeBase[0]));
+                        padConstants, embeddedPadConstants, embeddedPadDescendants);
+                // Eval-block code is still a persistent part of its parent
+                // CV's compiled body. The try/catch wrapper changes how the
+                // block executes, not who owns its direct-call sites and pad
+                // constants across repeated executions.
+                boolean embeddedAnonymousOptree = node.useTryCatch
+                            || node.name == null || node.name.equals("<anon>")
+                            || node.getBooleanAnnotation("isMapGrepBlock")
+                            || node.getBooleanAnnotation("inheritsSelfReference")
+                            || node.getBooleanAnnotation("regexCallbackPseudoBlock");
+                if (embeddedAnonymousOptree && ctx.javaClassInfo != null) {
+                    ctx.javaClassInfo.addEmbeddedPadConstants(
+                            subCtx.javaClassInfo.javaClassName,
+                            padConstants,
+                            embeddedPadConstants,
+                            embeddedPadDescendants);
+                }
             }
 
             // Direct instantiation approach - no reflection needed!
@@ -584,14 +610,6 @@ public class EmitSubroutine {
                         "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                         false);
             }
-            if (node.getAnnotation("lexicalSubDisplayName") instanceof String lexicalName) {
-                mv.visitLdcInsn(lexicalName);
-                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                        "org/perlonjava/runtime/runtimetypes/RuntimeCode",
-                        "setLexicalSubDisplayName",
-                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
-                        false);
-            }
             if (node.block.getAnnotation("deferredClosureWarning") instanceof String warning) {
                 mv.visitLdcInsn(warning);
                 mv.visitLdcInsn((String) node.block.getAnnotation("deferredClosureWarningLocation"));
@@ -688,6 +706,18 @@ public class EmitSubroutine {
                         "prototype",
                         "Ljava/lang/String;");
             }
+        }
+
+        // The annotation applies to both generated JVM CVs and interpreter
+        // fallbacks. Apply it after the backend branch so __SUB__ sees the
+        // same lexical display name on either path.
+        if (node.getAnnotation("lexicalSubDisplayName") instanceof String lexicalName) {
+            mv.visitLdcInsn(lexicalName);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "setLexicalSubDisplayName",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
         }
 
         // Set isMapGrepBlock on the RuntimeCode so RuntimeCode.apply() can propagate
@@ -941,6 +971,21 @@ public class EmitSubroutine {
                     false);
         }
 
+        // A noncapturing anonymous CV is a literal template owned by this
+        // optree, even after its result is stored and later cleared.
+        if ((node.name == null || node.name.equals("<anon>"))
+                && (visibleVariables.size() <= skipVariables
+                    || node.getBooleanAnnotation("lexicalLiteralConstantCv"))) {
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "retainActiveOptreeCodeTemplate",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)"
+                            + "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+            mv.visitInsn(Opcodes.POP);
+        }
+
         // 6. Clean up the stack if context is VOID
         if (ctx.contextType == RuntimeContextType.VOID) {
             mv.visitInsn(Opcodes.POP); // Remove the RuntimeScalar object from the stack
@@ -1021,31 +1066,42 @@ public class EmitSubroutine {
             RuntimeScalar parseTimeCodeRef = operatorNode.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar codeRef
                     ? codeRef
                     : null;
+            RuntimeScalar deferredCallTarget =
+                    operatorNode.getAnnotation("deferredDirectCallTarget") instanceof RuntimeScalar target
+                            ? target : null;
             RuntimeScalar emissionTimeCodeRef = parseTimeCodeRef == null
                     ? null
-                    : GlobalVariable.getGlobalCodeRefForDirectCall(directName);
-            if (parseTimeCodeRef != null && emissionTimeCodeRef != parseTimeCodeRef) {
-                // A BEGIN block displaced this call site's original CV while
-                // the surrounding file was still compiling. Perl keeps that
-                // already-compiled call bound to the original CV.
-                int codeRefId = GlobalVariable.registerCompiledCodeRef(parseTimeCodeRef);
-                mv.visitLdcInsn(codeRefId);
-                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                        "org/perlonjava/runtime/runtimetypes/GlobalVariable",
-                        "getCompiledCodeRef",
-                        "(I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
-                        false);
-            } else {
-                if (parseTimeCodeRef == null) {
-                    GlobalVariable.getGlobalCodeRefForFreshLookup(directName);
-                }
-                mv.visitLdcInsn(directName);
-                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                        "org/perlonjava/runtime/runtimetypes/GlobalVariable",
-                        "getGlobalCodeRefForDirectCall",
-                        "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
-                        false);
-            }
+                    : GlobalVariable.getVisibleGlobalCodeRefForDirectCall(directName);
+            // Each generated CV owns one direct-call edge.  The callsite
+            // descriptor carries the parse-time target only as metadata; the
+            // RuntimeCode installs an owner identity when it receives this
+            // pad-constant tree.
+            RuntimeScalar initialCallRef = parseTimeCodeRef != null
+                    ? deferredCallTarget != null ? deferredCallTarget : parseTimeCodeRef
+                    : emissionTimeCodeRef != null
+                            ? emissionTimeCodeRef
+                            : GlobalVariable.getGlobalCodeRefForFreshLookup(directName);
+            boolean compileTimePinned = parseTimeCodeRef != null
+                    && emissionTimeCodeRef != parseTimeCodeRef;
+            boolean retainTargetIfDeletedBeforeCallsiteInstall =
+                    operatorNode.getBooleanAnnotation("retainTargetIfDeletedBeforeCallsiteInstall");
+            RuntimeScalar descriptor = new RuntimeScalar();
+            String className = emitterVisitor.ctx.javaClassInfo.javaClassName;
+            int siteIndex = emitterVisitor.ctx.javaClassInfo.addPadConstant(descriptor);
+            descriptor.configureCompiledDirectCallSite(
+                    directName, siteIndex, initialCallRef, compileTimePinned,
+                    retainTargetIfDeletedBeforeCallsiteInstall);
+            descriptor.setCompiledDirectCallHasDeferredParseOwner(
+                    deferredCallTarget != null);
+            descriptor.setCompiledDirectCallPinSlot(parseTimeCodeRef);
+            mv.visitLdcInsn(directName);
+            mv.visitLdcInsn(className);
+            mv.visitLdcInsn(siteIndex);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "resolveCompiledDirectCallForActive",
+                    "(Ljava/lang/String;Ljava/lang/String;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
         } else if (node.left instanceof OperatorNode operatorNode
                 && operatorNode.operator.equals("&")
                 && operatorNode.operand instanceof IdentifierNode identifierNode) {
@@ -1233,7 +1289,8 @@ public class EmitSubroutine {
         mv.visitLdcInsn(subroutineName);
         mv.visitVarInsn(Opcodes.ASTORE, nameSlot);
 
-        // Generate native RuntimeBase[] array for parameters instead of RuntimeList
+        // Keep evaluated arguments in a staging frame. A returned temporary can
+        // otherwise be released before the generated call reaches applyAtLocation.
         ListNode paramList = ListNode.makeList(node.right);
         if (paramList.elements.size() >= 2
                 && unwrapScalarAnonymousInvocation(paramList.elements.get(0)) instanceof BinaryOperatorNode invocation
@@ -1254,14 +1311,23 @@ public class EmitSubroutine {
             argsArraySlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
         }
 
-        if (argCount <= 5) {
-            mv.visitInsn(Opcodes.ICONST_0 + argCount);
-        } else if (argCount <= 127) {
-            mv.visitIntInsn(Opcodes.BIPUSH, argCount);
+        boolean stagedArguments = argCount > 0;
+        if (stagedArguments) {
+            if (argCount <= 5) {
+                mv.visitInsn(Opcodes.ICONST_0 + argCount);
+            } else if (argCount <= 127) {
+                mv.visitIntInsn(Opcodes.BIPUSH, argCount);
+            } else {
+                mv.visitIntInsn(Opcodes.SIPUSH, argCount);
+            }
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode", "newCallArguments",
+                    "(I)Lorg/perlonjava/runtime/runtimetypes/RuntimeCode$CallArguments;", false);
         } else {
-            mv.visitIntInsn(Opcodes.SIPUSH, argCount);
+            mv.visitInsn(Opcodes.ICONST_0);
+            mv.visitTypeInsn(Opcodes.ANEWARRAY,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeBase");
         }
-        mv.visitTypeInsn(Opcodes.ANEWARRAY, "org/perlonjava/runtime/runtimetypes/RuntimeBase");
         mv.visitVarInsn(Opcodes.ASTORE, argsArraySlot);
 
         EmitterVisitor listVisitor = emitterVisitor.with(RuntimeContextType.LIST);
@@ -1271,6 +1337,11 @@ public class EmitSubroutine {
                 && node.left != null && node.left.getIndex() > 0) {
             emitterVisitor.ctx.javaClassInfo.callerLineTokenOverride = node.left.getIndex();
         }
+        Label argumentsStart = stagedArguments ? new Label() : null;
+        Label argumentsEnd = stagedArguments ? new Label() : null;
+        Label argumentsFailure = stagedArguments ? new Label() : null;
+        Label argumentsReady = stagedArguments ? new Label() : null;
+        if (stagedArguments) mv.visitLabel(argumentsStart);
         try {
             for (int index = 0; index < argCount; index++) {
                 int argSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
@@ -1292,16 +1363,12 @@ public class EmitSubroutine {
                     mv.visitVarInsn(Opcodes.ASTORE, argSlot);
                 }
 
-                mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
-                if (index <= 5) {
-                    mv.visitInsn(Opcodes.ICONST_0 + index);
-                } else if (index <= 127) {
-                    mv.visitIntInsn(Opcodes.BIPUSH, index);
-                } else {
-                    mv.visitIntInsn(Opcodes.SIPUSH, index);
-                }
                 mv.visitVarInsn(Opcodes.ALOAD, argSlot);
-                mv.visitInsn(Opcodes.AASTORE);
+                mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
+                mv.visitInsn(Opcodes.SWAP);
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeCode$CallArguments", "add",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)V", false);
 
                 if (pooledArg) {
                     emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
@@ -1310,6 +1377,19 @@ public class EmitSubroutine {
         } finally {
             emitterVisitor.ctx.javaClassInfo.callerLineTokenOverride =
                     savedArgumentCallerLineOverride;
+        }
+        if (stagedArguments) {
+            mv.visitLabel(argumentsEnd);
+            mv.visitJumpInsn(Opcodes.GOTO, argumentsReady);
+            mv.visitLabel(argumentsFailure);
+            mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
+            mv.visitInsn(Opcodes.SWAP);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode$CallArguments", "abandon",
+                    "(Ljava/lang/Throwable;)Ljava/lang/Throwable;", false);
+            mv.visitInsn(Opcodes.ATHROW);
+            mv.visitLabel(argumentsReady);
+            mv.visitTryCatchBlock(argumentsStart, argumentsEnd, argumentsFailure, null);
         }
 
         // Undefined direct-call diagnostics report the line containing the
@@ -1398,7 +1478,9 @@ public class EmitSubroutine {
                 Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                 "applyAtLocation",
-                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;ILjava/lang/String;Ljava/lang/String;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
+                stagedArguments
+                        ? "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;Lorg/perlonjava/runtime/runtimetypes/RuntimeCode$CallArguments;ILjava/lang/String;Ljava/lang/String;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;"
+                        : "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;ILjava/lang/String;Ljava/lang/String;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
                 false); // Generate an .apply() call
 
         if (pooledArgsArray) {

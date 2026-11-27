@@ -391,7 +391,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         copy.failedParseDebugTrace = this.failedParseDebugTrace;
         // replacement and callerArgs are not copied — they are set per-substitution
         // matched is not copied — each qr// object tracks its own m?PAT? state
-        copy.refCount = 0;  // Enable refCount tracking
+        copy.startRefCountTracking();
         return copy;
     }
 
@@ -410,16 +410,32 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
     private void setExecutableCallbacks(List<RuntimeRegexCallback> callbacks) {
         List<RuntimeRegexCallback> retained = List.copyOf(callbacks);
-        for (RuntimeRegexCallback callback : retained) callback.retainOwner();
+        int retainedCount = 0;
+        try {
+            for (RuntimeRegexCallback callback : retained) {
+                callback.retainOwner(this);
+                retainedCount++;
+            }
+        } catch (RuntimeException | Error failure) {
+            for (int i = 0; i < retainedCount; i++) {
+                retained.get(i).releaseOwner(this);
+            }
+            throw failure;
+        }
+        List<RuntimeRegexCallback> previous = executableCallbacks;
+        boolean previousReleased = executableCallbacksReleased;
         executableCallbacks = retained;
         executableCallbacksReleased = false;
+        if (!previousReleased) {
+            for (RuntimeRegexCallback callback : previous) callback.releaseOwner(this);
+        }
     }
 
     /** Release closure captures owned by this tracked qr// value. */
     public void releaseExecutableCallbacks() {
-        if (executableCallbacksReleased || executableCallbacks.isEmpty()) return;
+        if (executableCallbacksReleased) return;
         executableCallbacksReleased = true;
-        for (RuntimeRegexCallback callback : executableCallbacks) callback.releaseOwner();
+        for (RuntimeRegexCallback callback : executableCallbacks) callback.releaseOwner(this);
     }
 
     /** Strong Perl references held by this qr//'s executable callbacks. */
@@ -2925,7 +2941,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             regex.regexFlags = mergeRegexFlags(originalRegex.regexFlags, modifierStr, originalRegex.patternString);
             regex.hasPreservesMatch = regex.hasPreservesMatch || regex.regexFlags.preservesMatch();
             regex.useGAssertion = regex.regexFlags.useGAssertion();
-            regex.refCount = 0;  // Track for proper weak ref handling
+            regex.startRefCountTracking();
 
             return new RuntimeScalar(regex).propagateTaint(patternString);
         }
@@ -2975,7 +2991,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     regex.regexFlags = mergeRegexFlags(originalRegex.regexFlags, modifierStr, originalRegex.patternString);
                     regex.hasPreservesMatch = regex.hasPreservesMatch || regex.regexFlags.preservesMatch();
                     regex.useGAssertion = regex.regexFlags.useGAssertion();
-                    regex.refCount = 0;  // Track for proper weak ref handling
+                    regex.startRefCountTracking();
 
                     return new RuntimeScalar(regex).propagateTaint(patternString, overloadedResult);
                 }
@@ -3568,7 +3584,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         regex.trustedCalloutCount = resolvedRegex.trustedCalloutCount;
         regex.compiledRegexCacheKey = resolvedRegex.compiledRegexCacheKey;
         regex.userPropertyPackage = resolvedRegex.userPropertyPackage;
-        regex.executableCallbacks = resolvedRegex.executableCallbacks;
+        regex.setExecutableCallbacks(resolvedRegex.executableCallbacks);
         regex.patternString = resolvedRegex.patternString;
         regex.debugPatternString = resolvedRegex.debugPatternString;
         regex.sourcePatternByteBacked = resolvedRegex.sourcePatternByteBacked;
@@ -3619,7 +3635,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 regex.trustedCalloutCount = recompiledRegex.trustedCalloutCount;
                 regex.compiledRegexCacheKey = recompiledRegex.compiledRegexCacheKey;
                 regex.userPropertyPackage = recompiledRegex.userPropertyPackage;
-                regex.executableCallbacks = resolvedRegex.executableCallbacks;
+                regex.setExecutableCallbacks(resolvedRegex.executableCallbacks);
                 regex.patternString = recompiledRegex.patternString;
                 regex.debugPatternString = recompiledRegex.debugPatternString;
                 regex.sourcePatternByteBacked =

@@ -257,12 +257,11 @@ public class Storable extends PerlModuleBase {
             RuntimeScalar data = args.get(0);
             CloneContext cloneContext = new CloneContext();
             RuntimeScalar result = deepClone(data, cloneContext);
-            // The returned scalar is a live strong owner while dclone is
-            // finishing, just as a Perl temporary SV is. Acquire that owner
-            // before restoring weak child-to-root edges; otherwise a graph
-            // whose root is referenced only weakly from within itself reaches
-            // refCount zero before the caller can receive it.
-            RuntimeScalar.incrementRefCountForContainerStore(result);
+            // Use the caller's exact deferred return owner while restoring
+            // weak child-to-root edges. A separate counted helper scalar here
+            // would survive after RuntimeCode copied the result into its own
+            // return slot, leaving an owner with no Perl storage.
+            result = RuntimeScalar.copyToMortalReturnSlot(result);
             // Restore weak edges only after every strong container edge has
             // acquired ownership. Weakening during recursion can take a
             // newly-created referent to refCount zero when the weak edge
@@ -349,10 +348,8 @@ public class Storable extends PerlModuleBase {
             if (elem == null) continue;
             if (elem.refCountOwned && elem.value instanceof RuntimeBase base
                     && base.refCount > 0) {
-                base.releaseOwner(elem, "Storable.releaseApplyArgs");
-                base.releaseActiveOwner(elem);
-                base.refCount--;
-                elem.refCountOwned = false;
+                MortalList.releaseCountedOwnerImmediately(
+                        elem, "Storable.releaseApplyArgs");
             }
         }
         args.elements.clear();

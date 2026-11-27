@@ -15,13 +15,16 @@ BEGIN {
         };
 }
 
-plan tests => 7;
+plan tests => 10;
 
 for my $case (
     [ 0, 'zero-bit RSA key' ],
     [ 512, '512-bit RSA key' ],
-    [ 1023, 'sub-1024-bit RSA key' ],
+    [ 1023, 'sub-2048-bit RSA key' ],
+    [ 1024, 'legacy 1024-bit RSA key' ],
+    [ 2047, 'RSA key below the 2048-bit minimum' ],
     [ 8193, 'RSA key above the generation limit' ],
+    [ 2048.5, 'fractional RSA key size' ],
     [ 'not-a-number', 'nonnumeric RSA key size' ],
 ) {
     my ($bits, $description) = @$case;
@@ -33,7 +36,7 @@ for my $case (
     ok($completed && !defined($key), "$description returns undef");
 }
 
-my $legacyKey = Net::SSLeay::RSA_generate_key(1024, 65537);
-ok(defined($legacyKey), 'the bundled fast round-trip test size remains available');
-is(Net::SSLeay::RSA_size($legacyKey), 128, 'legacy 1024-bit RSA size is preserved');
-Net::SSLeay::RSA_free($legacyKey);
+my $minimumKey = Net::SSLeay::RSA_generate_key(2048, 65537);
+ok(defined($minimumKey), '2048-bit RSA generation is accepted at the minimum');
+is(Net::SSLeay::RSA_size($minimumKey), 256, 'minimum RSA key size is 2048 bits');
+Net::SSLeay::RSA_free($minimumKey);

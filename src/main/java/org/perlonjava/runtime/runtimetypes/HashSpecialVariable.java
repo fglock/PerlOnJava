@@ -398,7 +398,6 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
 
             // Any stash mutation can affect method lookup; clear method resolution caches.
             InheritanceResolver.invalidateCache();
-            GlobalVariable.invalidatePackageRootSnapshot();
 
             return oldValue;
         }
@@ -422,9 +421,8 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
                 return scalarUndef;
             }
 
-            // Remove only from the visible stash, not from pinned code refs:
-            // compiled call sites keep their CV, while future lookups must see
-            // the deletion and create an undefined slot.
+            // Removing the visible slot notifies compiled call sites first;
+            // each caller then owns its CV until that caller is released.
             RuntimeScalar code = GlobalVariable.removeGlobalCodeRefForStashDelete(fullKey);
             GlobalVariable.clearGlobalPseudoConstant(fullKey);
             RuntimeScalar scalar = GlobalVariable.scalarSlots().remove(fullKey);
@@ -435,7 +433,6 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
                 GlobalVariable.hideIORefAfterStashDelete(fullKey);
             }
             RuntimeScalar format = GlobalVariable.globalFormatRefs.remove(fullKey);
-            GlobalVariable.invalidatePackageRootSnapshot();
 
             // Any stash mutation can affect method lookup; clear method resolution caches.
             InheritanceResolver.invalidateCache();
@@ -462,7 +459,6 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
             GlobalVariable.globalFormatRefs.keySet().removeIf(k -> k.startsWith(prefix));
             GlobalVariable.invalidateStashEnumerationCache();
             GlobalVariable.clearHiddenIORefsForNamespace(prefix);
-            GlobalVariable.invalidatePackageRootSnapshot();
 
             InheritanceResolver.invalidateCache();
             GlobalVariable.clearPackageCache();

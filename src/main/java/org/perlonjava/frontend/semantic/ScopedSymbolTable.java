@@ -502,6 +502,11 @@ public class ScopedSymbolTable {
                 }
             }
         }
+        // Perl destroys lexical hashes in reverse declaration order. The
+        // symbol maps are HashMaps, so their iteration order cannot define
+        // observable DESTROY ordering. Pad indices increase with declaration
+        // order and remain unique across the active scope chain.
+        indices.sort(java.util.Comparator.reverseOrder());
         return indices;
     }
 
@@ -519,6 +524,8 @@ public class ScopedSymbolTable {
                 }
             }
         }
+        // Native Perl clears lexical arrays in declaration order.
+        indices.sort(java.util.Comparator.naturalOrder());
         return indices;
     }
 
@@ -540,6 +547,9 @@ public class ScopedSymbolTable {
                 }
             }
         }
+        // DESTROY order is observable; scalar pads leave scope in reverse
+        // declaration order, independent of HashMap iteration order.
+        indices.sort(java.util.Comparator.reverseOrder());
         return indices;
     }
 

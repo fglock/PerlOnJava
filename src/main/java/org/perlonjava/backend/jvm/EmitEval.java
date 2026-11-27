@@ -219,6 +219,16 @@ public class EmitEval {
         Label tryEnd = new Label();
         Label catchBlock = new Label();
         Label endCatch = new Label();
+        int temporaryRootDepthSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        int foreachSourceOwnerDepthSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/MortalList",
+                "temporaryRootDepth", "()I", false);
+        mv.visitVarInsn(Opcodes.ISTORE, temporaryRootDepthSlot);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/MortalList",
+                "foreachSourceOwnerDepth", "()I", false);
+        mv.visitVarInsn(Opcodes.ISTORE, foreachSourceOwnerDepthSlot);
         mv.visitTryCatchBlock(tryStart, tryEnd, catchBlock, "java/lang/Throwable");
         mv.visitLabel(tryStart);
 
@@ -255,6 +265,14 @@ public class EmitEval {
                 "(Ljava/lang/Throwable;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                 false);
         mv.visitInsn(Opcodes.POP);
+        mv.visitVarInsn(Opcodes.ILOAD, temporaryRootDepthSlot);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/MortalList",
+                "restoreTemporaryRootDepth", "(I)V", false);
+        mv.visitVarInsn(Opcodes.ILOAD, foreachSourceOwnerDepthSlot);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/MortalList",
+                "restoreForeachSourceOwnerDepth", "(I)V", false);
         if (emitterVisitor.ctx.contextType == RuntimeContextType.LIST) {
             mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeList");
             mv.visitInsn(Opcodes.DUP);
@@ -693,13 +711,13 @@ public class EmitEval {
 
         int paramCount = newEnv.length - skipVariables;
         if (paramCount == 0) {
-            // No-capture eval: use a cached RuntimeScalar code ref to avoid per-call
-            // constructor.newInstance() and makeCodeObject() overhead.
+            // No-capture eval: make a fresh CV so its optree owner slots end
+            // with this eval invocation; the constructor lookup remains cached.
             // Stack: [Class]
             mv.visitMethodInsn(
                     Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
-                    "evalGetOrMakeCachedCodeRef",
+                    "evalMakeNoCaptureCodeRef",
                     "(Ljava/lang/Class;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                     false);
             // Stack: [RuntimeScalar(Code)]

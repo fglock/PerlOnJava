@@ -96,6 +96,12 @@ public class EmitLiteral {
                 "suppressFlush", "(Z)Z", false);
         int wasFlushingSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
         mv.visitVarInsn(Opcodes.ISTORE, wasFlushingSlot);
+        int arrayLiteralThrowableSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        Label arrayLiteralTryStart = new Label();
+        Label arrayLiteralTryEnd = new Label();
+        Label arrayLiteralCatch = new Label();
+        Label arrayLiteralDone = new Label();
+        mv.visitLabel(arrayLiteralTryStart);
 
         // Create a new RuntimeArray instance
         mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeArray");
@@ -131,7 +137,11 @@ public class EmitLiteral {
         // preventing premature destruction of referents stored in anonymous arrays.
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase",
                 "createReferenceWithTrackedElements", "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/runtimetypes/MortalList",
+                "anonymousLiteral",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
         // Stack: [RuntimeScalar]  (the array reference we'll return)
+        mv.visitLabel(arrayLiteralTryEnd);
 
         // Restore previous suppressFlush state. We deliberately do NOT call
         // MortalList.flush() here: doing so would drain the entire pending
@@ -159,6 +169,25 @@ public class EmitLiteral {
                 "org/perlonjava/runtime/runtimetypes/MortalList",
                 "suppressFlush", "(Z)Z", false);
         mv.visitInsn(Opcodes.POP);
+        mv.visitJumpInsn(Opcodes.GOTO, arrayLiteralDone);
+
+        // If evaluating an element throws, abandon this literal's suppression
+        // scope before an enclosing eval or Perl try handler sees the exception.
+        mv.visitLabel(arrayLiteralCatch);
+        mv.visitVarInsn(Opcodes.ASTORE, arrayLiteralThrowableSlot);
+        mv.visitVarInsn(Opcodes.ILOAD, wasFlushingSlot);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/MortalList",
+                "suppressFlush", "(Z)Z", false);
+        mv.visitInsn(Opcodes.POP);
+        mv.visitVarInsn(Opcodes.ALOAD, arrayLiteralThrowableSlot);
+        mv.visitInsn(Opcodes.ATHROW);
+
+        mv.visitLabel(arrayLiteralDone);
+        // Register after nested handlers emitted by array elements so inner
+        // eval/try blocks retain their normal chance to catch exceptions first.
+        mv.visitTryCatchBlock(arrayLiteralTryStart, arrayLiteralTryEnd,
+                arrayLiteralCatch, "java/lang/Throwable");
 
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("visit(ArrayLiteralNode) end");
     }
@@ -205,6 +234,9 @@ public class EmitLiteral {
                 "org/perlonjava/runtime/runtimetypes/RuntimeHash",
                 "createHashRef",
                 "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/runtimetypes/MortalList",
+                "anonymousLiteral",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
 
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("visit(HashLiteralNode) end");
     }
@@ -359,16 +391,10 @@ public class EmitLiteral {
     }
 
     /**
-     * Emits a string operand for {@code \\} (ref-to-literal) using the string cache's
-     * <strong>singleton</strong> scalars ({@link RuntimeScalarCache#getScalarByteString(int)} /
-     * {@link RuntimeScalarCache#getScalarString(int)}) for cacheable literals, and records
-     * them on {@link JavaClassInfo#addPadConstant}.
-     *
-     * <p>Ordinary {@link #emitString} uses {@link RuntimeScalarCache#materializeByteStringLiteral(int)}
-     * / {@link RuntimeScalarCache#materializeStringLiteral(int)} so each literal <em>occurrence</em>
-     * has a distinct SV (needed for {@code pos()} / {@code \\G}). Ref-to-literal in Perl shares one
-     * const SV in the CV; weak refs (e.g. Moo {@code weak_ref}) and {@link RuntimeCode#clearPadConstantWeakRefs}
-     * must target that same object identity.</p>
+     * Emits the stable scalar owned by this optree for a backslash-addressed
+     * string literal. Each source occurrence gets its own read-only scalar;
+     * the owning CV and any enclosing anonymous-code template retain it by
+     * explicit pad-constant slots.
      */
     public static void emitStringForRefToLiteral(EmitterContext ctx, StringNode node) {
         if (ctx.contextType == RuntimeContextType.VOID) {
@@ -379,54 +405,56 @@ public class EmitLiteral {
             emitStringValue(mv, node.value);
             return;
         }
-        if (node.isVString) {
-            // No cache slot; same as plain literal (optree reaping may not match Perl for \\v).
+        if (ctx.javaClassInfo == null) {
+            // Some deferred compilation contexts do not have an owning class yet.
             emitString(ctx, node);
             return;
         }
 
-        if (!node.forceUnicodeString && (node.forceByteString
-                || (!ctx.symbolTable.isStrictOptionEnabled(HINT_UTF8)
-                        && !ctx.compilerOptions.isUnicodeSource))) {
-            boolean hasWideChars = false;
+        // RuntimeScalarCache is only an interning aid for ordinary literals. A
+        // backslash-addressed literal is a distinct Perl scalar identity even
+        // when it is too large for that cache or represents a v-string. Build
+        // that identity once while compiling and let the generated CODE retain
+        // it through its explicit pad-constant owner slot.
+        RuntimeScalarReadOnly constant = new RuntimeScalarReadOnly(node.value);
+        if (node.isVString) {
+            constant.type = RuntimeScalarType.VSTRING;
+        } else if (isByteStringLiteral(ctx, node)) {
+            constant.type = RuntimeScalarType.BYTE_STRING;
+        }
+        int padIndex = ctx.javaClassInfo.addPadConstant(constant);
+        emitPadConstantReference(ctx, padIndex);
+    }
+
+    private static boolean isByteStringLiteral(EmitterContext ctx, StringNode node) {
+        if (node.forceUnicodeString) return false;
+        if (!node.forceByteString) {
+            boolean asciiOnly = true;
             for (int i = 0; i < node.value.length(); i++) {
-                if (node.value.charAt(i) > 255) {
-                    hasWideChars = true;
+                if (node.value.charAt(i) > 127) {
+                    asciiOnly = false;
                     break;
                 }
             }
-            if (!hasWideChars) {
-                int stringIndex = RuntimeScalarCache.getOrCreateByteStringIndex(node.value);
-                if (stringIndex >= 0) {
-                    mv.visitLdcInsn(stringIndex);
-                    mv.visitMethodInsn(
-                            Opcodes.INVOKESTATIC,
-                            "org/perlonjava/runtime/runtimetypes/RuntimeScalarCache",
-                            "getScalarByteString",
-                            "(I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
-                            false);
-                    ctx.javaClassInfo.addPadConstant(RuntimeScalarCache.getScalarByteString(stringIndex));
-                    return;
-                }
-                emitString(ctx, node);
-                return;
+            if (!asciiOnly && ctx.symbolTable.isStrictOptionEnabled(HINT_UTF8)) {
+                return false;
             }
-            // fall through — wide chars use UTF-8 string path (same as emitString)
         }
+        for (int i = 0; i < node.value.length(); i++) {
+            if (node.value.charAt(i) > 255) return false;
+        }
+        return true;
+    }
 
-        int stringIndex = RuntimeScalarCache.getOrCreateStringIndex(node.value);
-        if (stringIndex >= 0) {
-            mv.visitLdcInsn(stringIndex);
-            mv.visitMethodInsn(
-                    Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/runtimetypes/RuntimeScalarCache",
-                    "getScalarString",
-                    "(I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
-                    false);
-            ctx.javaClassInfo.addPadConstant(RuntimeScalarCache.getScalarString(stringIndex));
-        } else {
-            emitString(ctx, node);
-        }
+    private static void emitPadConstantReference(EmitterContext ctx, int padIndex) {
+        MethodVisitor mv = ctx.mv;
+        mv.visitLdcInsn(ctx.javaClassInfo.javaClassName);
+        mv.visitLdcInsn(padIndex);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                "getPadConstant",
+                "(Ljava/lang/String;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                false);
     }
 
     /**

@@ -295,6 +295,9 @@ public class BytecodeCompiler implements Visitor {
     // Non-final so the cached eval constructor can inject a pooled instance instead of
     // creating a fresh one for each of 2M warm-path eval compilations.
     ScopedSymbolTable symbolTable;
+    /** Names for lexical scalar registers, retained after their scopes leave the symbol table. */
+    private final Map<Integer, java.util.LinkedHashSet<String>> myScalarNamesByRegister =
+            new LinkedHashMap<>();
     // Goto label support: maps label names to their PC addresses for intra-function goto.
     // pendingGotos tracks forward references (goto before label) needing patch-up.
     // These are null by default; initialized lazily in compile() only when goto/labels are present.
@@ -574,6 +577,8 @@ public class BytecodeCompiler implements Visitor {
     final int sourceLine;
     // Non-final + no field initializer: pooled on the cached eval path (round 21).
     private List<Object> constants;
+    /** Read-only scalar literals addressed by backslash in this optree. */
+    private final List<RuntimeBase> padConstants = new ArrayList<>();
     private List<String> stringPool;
     private final Map<String, Integer> stringPoolIndex = new HashMap<>(16);  // O(1) lookup
     private final Map<Object, Integer> constantPoolIndex = new HashMap<>(16);  // O(1) lookup
@@ -651,6 +656,10 @@ public class BytecodeCompiler implements Visitor {
     // Track current calling context for subroutine calls
     int currentCallContext = RuntimeContextType.LIST; // Default to LIST
     Map<String, Integer> capturedVarIndices;  // Name → register index
+    // Register identities for actual captured pad cells. capturedVarIndices also
+    // includes synthetic reservations for referenced names, so it cannot decide
+    // which lexical slots scope cleanup must leave alone.
+    private final Set<Integer> capturedPadRegisterIndices = new HashSet<>();
     // Declaration metadata for captured package variables.  Keep this
     // separately from the register table because closure analysis may first
     // materialize a reference as a lexical before the body reaches `local`.
@@ -834,6 +843,7 @@ public class BytecodeCompiler implements Visitor {
                 int regIndex = entry.getValue();
                 if (regIndex >= 3) {
                     capturedVarIndices.put(varName, regIndex);
+                    capturedPadRegisterIndices.add(regIndex);
                 }
             }
 
@@ -1170,10 +1180,14 @@ public class BytecodeCompiler implements Visitor {
      *              is on the stack.
      */
     private void exitScope(boolean flush) {
+        exitScope(flush, false);
+    }
+
+    private void exitScope(boolean flush, boolean markAtScopeEntry) {
         if (!scopeIndices.isEmpty()) {
             int scopeIdx = scopeIndices.pop();
 
-            emitScopeCleanup(scopeIdx, flush);
+            emitScopeCleanup(scopeIdx, flush, markAtScopeEntry);
 
             symbolTable.exitScope(scopeIdx);
             if (!savedNextRegister.isEmpty()) {
@@ -1194,23 +1208,41 @@ public class BytecodeCompiler implements Visitor {
         }
     }
 
+    int separateReturnRegister(int sourceReg) {
+        int resultReg = allocateRegister();
+        emit(Opcodes.ALIAS_PRESERVE_READONLY);
+        emitReg(resultReg);
+        emitReg(sourceReg);
+        return resultReg;
+    }
+
     private void emitScopeCleanup(int scopeIdx, boolean flush) {
+        emitScopeCleanup(scopeIdx, flush, false);
+    }
+
+    private void emitScopeCleanup(int scopeIdx, boolean flush, boolean markAtScopeEntry) {
         // Gather variable indices to determine if cleanup is needed.
-        java.util.List<Integer> scalarIndices = symbolTable.getMyScalarIndicesInScope(scopeIdx);
+        java.util.List<Integer> scalarIndices = myScalarCleanupIndicesInScope(scopeIdx);
         java.util.Map<Integer, String> scalarNames = symbolTable.getMyScalarNamesInScope(scopeIdx);
-        java.util.List<Integer> hashIndices = symbolTable.getMyHashIndicesInScope(scopeIdx);
-        java.util.List<Integer> arrayIndices = symbolTable.getMyArrayIndicesInScope(scopeIdx);
+        for (Map.Entry<Integer, String> entry : scalarNames.entrySet()) {
+            myScalarNamesByRegister.computeIfAbsent(
+                    entry.getKey(), ignored -> new java.util.LinkedHashSet<>())
+                    .add(entry.getValue());
+        }
+        java.util.List<Integer> hashIndices = myHashCleanupIndicesInScope(scopeIdx);
+        java.util.List<Integer> arrayIndices = myArrayCleanupIndicesInScope(scopeIdx);
 
-        // Only emit pushMark/popAndFlush when there are variables that need cleanup.
-        // Scopes with no my-variables skip this entirely.
-        boolean needsCleanup = flush
-                && (!scalarIndices.isEmpty() || !hashIndices.isEmpty() || !arrayIndices.isEmpty());
+        // Ordinary scopes need a local mark only when lexical cleanup can add
+        // releases. Fresh-result do blocks already pushed their mark at entry,
+        // and must close it even when they declare no lexicals.
+        boolean hasScopeVariables = !scalarIndices.isEmpty()
+                || !hashIndices.isEmpty() || !arrayIndices.isEmpty();
+        boolean needsCleanup = flush && (markAtScopeEntry || hasScopeVariables);
 
-        // Push mark so popAndFlush only drains entries added by
-        // scopeExitCleanup. Entries from method returns within the block
-        // that are below the mark will be processed by the next setLarge()
-        // or undefine() flush, or by the enclosing scope's exit.
-        if (needsCleanup) {
+        // For ordinary scopes, push immediately before cleanup so only
+        // cleanup releases drain here. A fresh-result do block uses its
+        // earlier entry mark to include temporaries created by its body.
+        if (needsCleanup && !markAtScopeEntry) {
             emit(Opcodes.MORTAL_PUSH_MARK);
         }
 
@@ -1220,33 +1252,47 @@ public class BytecodeCompiler implements Visitor {
         // implicit `($left, $right)` return closes both socketpair ends before
         // the caller receives them.
         boolean preserveImplicitReturn = scopeIndices.isEmpty() && lastResultReg >= 0;
-
-        // Emit SCOPE_EXIT_CLEANUP for each my-scalar register in the exiting scope.
-        // This calls RuntimeScalar.scopeExitCleanup() which handles:
-        // 1. IO fd recycling for anonymous filehandle globs
-        // 2. refCount decrement for blessed references with DESTROY
-        for (int reg : scalarIndices) {
-            // Remove the active eval lexical binding while the register still
-            // contains its cell.  SCOPE_EXIT_CLEANUP clears it afterwards.
-            String name = scalarNames.get(reg);
-            if (name != null && !preserveImplicitReturn) {
-                emit(Opcodes.UNBIND_ACTIVE_LEXICAL);
-                emitReg(reg);
-                emit(addToStringPool(name));
-            }
-            emit(preserveImplicitReturn
-                    ? Opcodes.RETURN_SCOPE_CLEANUP : Opcodes.SCOPE_EXIT_CLEANUP);
-            emitReg(reg);
-            if (preserveImplicitReturn) emitReg(lastResultReg);
+        if (preserveImplicitReturn) {
+            // Return materialization replaces this register with an owned RV
+            // snapshot. Keep it separate from every lexical register, since
+            // an earlier local's cleanup can prepare a later local's value.
+            lastResultReg = separateReturnRegister(lastResultReg);
+            emit(Opcodes.PREPARE_SCOPE_RETURN);
+            emitReg(lastResultReg);
         }
 
-        // Walk hash/array variables for nested blessed references.
+        // Perl releases hash values before scalar pads and arrays at scope exit.
+        // DESTROY methods can observe objects released earlier in this sequence,
+        // so keep this order identical in both execution backends.
         for (int reg : hashIndices) {
             emit(preserveImplicitReturn
                     ? Opcodes.RETURN_SCOPE_CLEANUP_HASH : Opcodes.SCOPE_EXIT_CLEANUP_HASH);
             emitReg(reg);
             if (preserveImplicitReturn) emitReg(lastResultReg);
         }
+
+        // Emit SCOPE_EXIT_CLEANUP for each my-scalar register in the exiting scope.
+        // This calls RuntimeScalar.scopeExitCleanup() which handles:
+        // 1. IO fd recycling for anonymous filehandle globs
+        // 2. refCount decrement for blessed references with DESTROY
+        for (int reg : scalarIndices) {
+            String name = scalarNames.get(reg);
+            emit(preserveImplicitReturn
+                    ? Opcodes.RETURN_SCOPE_CLEANUP : Opcodes.SCOPE_EXIT_CLEANUP);
+            emitReg(reg);
+            if (preserveImplicitReturn) emitReg(lastResultReg);
+            // Keep the active pad slot through scalar cleanup. A scalar cell
+            // whose final owner is this lexical may need scopeExitCleanup to
+            // clear localBindingExists before releasing the pad identity can
+            // finish its weak-reference lifecycle.
+            if (name != null && !preserveImplicitReturn) {
+                emit(Opcodes.UNBIND_ACTIVE_LEXICAL);
+                emitReg(reg);
+                emit(addToStringPool(name));
+            }
+        }
+
+        // Walk array variables last, after hash values and scalar pads.
         for (int reg : arrayIndices) {
             emit(preserveImplicitReturn
                     ? Opcodes.RETURN_SCOPE_CLEANUP_ARRAY : Opcodes.SCOPE_EXIT_CLEANUP_ARRAY);
@@ -1256,8 +1302,42 @@ public class BytecodeCompiler implements Visitor {
 
         // Pop mark and flush only entries added since the mark.
         if (needsCleanup) {
-            emit(Opcodes.MORTAL_POP_FLUSH);
+            emit(markAtScopeEntry
+                    ? Opcodes.MORTAL_POP_SCOPE_FLUSH : Opcodes.MORTAL_POP_FLUSH);
         }
+    }
+
+    private boolean isCapturedVariableIndex(int index) {
+        return capturedPadRegisterIndices.contains(index);
+    }
+
+    private List<Integer> withoutCapturedVariables(List<Integer> indices) {
+        if (indices.isEmpty() || capturedVarIndices == null || capturedVarIndices.isEmpty()) {
+            return indices;
+        }
+        List<Integer> filtered = new ArrayList<>(indices.size());
+        for (int index : indices) {
+            if (!isCapturedVariableIndex(index)) {
+                filtered.add(index);
+            }
+        }
+        return filtered;
+    }
+
+    List<Integer> myScalarCleanupIndicesInScope(int scopeIdx) {
+        return withoutCapturedVariables(symbolTable.getMyScalarIndicesInScope(scopeIdx));
+    }
+
+    List<Integer> myHashCleanupIndicesInScope(int scopeIdx) {
+        return withoutCapturedVariables(symbolTable.getMyHashIndicesInScope(scopeIdx));
+    }
+
+    List<Integer> myArrayCleanupIndicesInScope(int scopeIdx) {
+        return withoutCapturedVariables(symbolTable.getMyArrayIndicesInScope(scopeIdx));
+    }
+
+    List<Integer> myVariableCleanupIndicesInScope(int scopeIdx) {
+        return withoutCapturedVariables(symbolTable.getMyVariableIndicesInScope(scopeIdx));
     }
 
     private void emitLoopControlScopeCleanup(LoopInfo loopInfo) {
@@ -1296,10 +1376,10 @@ public class BytecodeCompiler implements Visitor {
 
     private MyVarCleanupRegisters myVariablesAddedSince(Set<Integer> before) {
         return new MyVarCleanupRegisters(
-                indicesAddedSince(symbolTable.getMyScalarIndicesInScope(0), before),
-                indicesAddedSince(symbolTable.getMyHashIndicesInScope(0), before),
-                indicesAddedSince(symbolTable.getMyArrayIndicesInScope(0), before),
-                indicesAddedSince(symbolTable.getMyVariableIndicesInScope(0), before));
+                indicesAddedSince(myScalarCleanupIndicesInScope(0), before),
+                indicesAddedSince(myHashCleanupIndicesInScope(0), before),
+                indicesAddedSince(myArrayCleanupIndicesInScope(0), before),
+                indicesAddedSince(myVariableCleanupIndicesInScope(0), before));
     }
 
     private void emitMyVarCleanup(MyVarCleanupRegisters cleanup, boolean flush) {
@@ -1307,12 +1387,13 @@ public class BytecodeCompiler implements Visitor {
             return;
         }
 
-        for (int reg : cleanup.scalarRegs) {
-            emit(Opcodes.SCOPE_EXIT_CLEANUP);
-            emitReg(reg);
-        }
+        // Keep the lexical cleanup order used by normal scope exit.
         for (int reg : cleanup.hashRegs) {
             emit(Opcodes.SCOPE_EXIT_CLEANUP_HASH);
+            emitReg(reg);
+        }
+        for (int reg : cleanup.scalarRegs) {
+            emit(Opcodes.SCOPE_EXIT_CLEANUP);
             emitReg(reg);
         }
         for (int reg : cleanup.arrayRegs) {
@@ -1828,6 +1909,24 @@ public class BytecodeCompiler implements Visitor {
                 evalSitePragmaFlags.isEmpty() ? null : evalSitePragmaFlags,
                 warningBitsString
         );
+        Map<Integer, java.util.List<String>> lexicalNames = new LinkedHashMap<>();
+        for (Map.Entry<Integer, java.util.LinkedHashSet<String>> entry
+                : myScalarNamesByRegister.entrySet()) {
+            lexicalNames.put(entry.getKey(), new ArrayList<>(entry.getValue()));
+        }
+        code.setMyScalarNamesByRegister(lexicalNames);
+        List<RuntimeBase> ownedPadConstants = new ArrayList<>(padConstants);
+        for (Object constant : constants) {
+            RuntimeCode nestedCode = constant instanceof RuntimeCode codeConstant
+                    ? codeConstant
+                    : constant instanceof RuntimeScalar codeRef
+                            && codeRef.value instanceof RuntimeCode codeValue
+                                    ? codeValue : null;
+            if (nestedCode != null) {
+                Collections.addAll(ownedPadConstants, nestedCode.padConstantOwnerReferents());
+            }
+        }
+        code.installPadConstants(ownedPadConstants.toArray(new RuntimeBase[0]));
         if (metadataScope != null) {
             code.setLexicalDisabledWarningCategories(
                     metadataScope.getDisabledWarningCategories());
@@ -1939,6 +2038,7 @@ public class BytecodeCompiler implements Visitor {
             // by the closure body.
             if (usedVars != null && !usedVars.contains(name)) continue;
             capturedVarIndices.put(name, reg);
+            capturedPadRegisterIndices.add(reg);
             outerVarNames.add(name);
             outerVarDecls.add(entry.decl());
             outerVarPackages.add(entry.perlPackage());
@@ -2139,6 +2239,18 @@ public class BytecodeCompiler implements Visitor {
         if (node.getBooleanAnnotation("givenBlock")) givenBlockDepth++;
         enterScope();
 
+        // A fresh-result do block can flush its complete dynamic extent: its
+        // result cannot retain any value created inside the block. Record the
+        // boundary before evaluating the body so constructor mortals created
+        // there are included in the exit flush.
+        boolean isSubroutineBlock = node.getBooleanAnnotation("blockIsSubroutine");
+        boolean isDoBlock = node.getBooleanAnnotation("blockIsDoBlock");
+        boolean freshDoBlockScope = !isSubroutineBlock && isDoBlock
+                && DoBlockResultAnalysis.isAlwaysFresh(node);
+        if (freshDoBlockScope) {
+            emit(Opcodes.MORTAL_PUSH_SCOPE_MARK);
+        }
+
         int regexSaveReg = -1;
         if (evalStringHasEvalOrRegex
                 && !node.getBooleanAnnotation("blockIsSubroutine")
@@ -2335,7 +2447,7 @@ public class BytecodeCompiler implements Visitor {
             }
 
             if (i < lastMeaningfulIndex) {
-                emit(Opcodes.MORTAL_FLUSH);
+                emit(Opcodes.MORTAL_STATEMENT_FLUSH);
             }
 
             // Recycle temporary registers after each statement
@@ -2401,11 +2513,9 @@ public class BytecodeCompiler implements Visitor {
         // may still refer to an inner lexical. A do-block ending in an always-fresh
         // scalar operator is safe: its result is independent, so FREETMPS can run at
         // block exit and transient objects are destroyed before the caller proceeds.
-        boolean isSubroutine = node.getBooleanAnnotation("blockIsSubroutine");
-        boolean isDoBlock = node.getBooleanAnnotation("blockIsDoBlock");
-        boolean flushAtScopeExit = !isSubroutine
-                && (isDoBlock ? DoBlockResultAnalysis.isAlwaysFresh(node) : outerResultReg < 0);
-        exitScope(flushAtScopeExit);
+        boolean flushAtScopeExit = !isSubroutineBlock
+                && (isDoBlock ? freshDoBlockScope : outerResultReg < 0);
+        exitScope(flushAtScopeExit, freshDoBlockScope);
         if (blockLoopInfo != null) {
             emit(Opcodes.POP_CONTROL_BLOCK);
         }
@@ -3221,7 +3331,7 @@ public class BytecodeCompiler implements Visitor {
         // local @hash{...} needs key-aware proxies so dynamic restore can
         // re-resolve entries after hash mutation and remove newly-created keys.
         int rdSlice = allocateRegister();
-        emit(shouldEmitHashFetchForLocal()
+        emit(shouldEmitHashSliceForLocal()
                 ? Opcodes.HASH_SLICE_FOR_LOCAL
                 : Opcodes.HASH_SLICE);
         emitReg(rdSlice);
@@ -4023,9 +4133,8 @@ public class BytecodeCompiler implements Visitor {
                         }
                         if (op.equals("my")) {
                             // The BEGIN cell becomes the live lexical pad slot
-                            // when the main code retrieves it. Keep it visible
-                            // to interpreter reachability sweeps from this
-                            // point until the declaring scope exits.
+                            // when the main code retrieves it. Register that
+                            // slot with its declaring scope for normal cleanup.
                             emit(Opcodes.REGISTER_MY_VAR);
                             emitReg(reg);
                         }
@@ -4159,13 +4268,10 @@ public class BytecodeCompiler implements Visitor {
                     }
                     emit(Opcodes.REGISTER_MY_VAR);
                     emitReg(reg);
-                    if (sigil.equals("$")) {
-                        // Keep the active CV pad visible to deferred format
-                        // argument evaluation. Format declarations can occur
-                        // after a write in the source while Perl still binds
-                        // the format to this invocation's lexical cell.
-                        emitActiveLexicalBinding(reg, varName);
-                    }
+                    // Keep the active CV pad visible to runtime lexical lookup.
+                    // Deferred format argument evaluation can also refer to
+                    // scalar cells declared earlier in the invocation.
+                    emitActiveLexicalBinding(reg, varName);
 
                     // Runtime attribute dispatch for my variables with attributes
                     emitVarAttrsIfNeeded(node, reg, sigil);
@@ -4591,9 +4697,11 @@ public class BytecodeCompiler implements Visitor {
 
                                 emit(Opcodes.REGISTER_MY_VAR);
                                 emitReg(reg);
-                                if (sigil.equals("$")) {
-                                    emitActiveLexicalBinding(reg, varName);
-                                }
+                                // Signature parameters skip EMIT_LEXICAL_ALIAS
+                                // because they bind fresh value cells. Bind all
+                                // sigils here so slurpy array/hash pads acquire
+                                // their ACTIVE_LEXICAL owner after registration.
+                                emitActiveLexicalBinding(reg, varName);
 
                                 // Runtime attribute dispatch for list variable declarations.
                                 // Attributes are stored on the parent my/state node, propagate to each element.
@@ -6224,13 +6332,13 @@ public class BytecodeCompiler implements Visitor {
                 int rd = allocateOutputRegister();
                 if (isStrictRefsEnabled()) {
                     // strict refs: scalarDeref() — throws for non-refs
-                    emitWithToken(Opcodes.DEREF_SCALAR_STRICT, node.getIndex());
+                    emitWithToken(Opcodes.DEREF_SCALAR_STRICT_TEMP, node.getIndex());
                     emitReg(rd);
                     emitReg(blockResultReg);
                 } else {
                     // no strict refs: scalarDerefNonStrict(pkg) — allows symrefs
                     int pkgIdx = addToStringPool(getCurrentPackage());
-                    emitWithToken(Opcodes.DEREF_SCALAR_NONSTRICT, node.getIndex());
+                    emitWithToken(Opcodes.DEREF_SCALAR_NONSTRICT_TEMP, node.getIndex());
                     emitReg(rd);
                     emitReg(blockResultReg);
                     emit(pkgIdx);
@@ -6572,10 +6680,33 @@ public class BytecodeCompiler implements Visitor {
                 if (node.getBooleanAnnotation("directNamedCall")) {
                     int rd = allocateOutputRegister();
                     int nameIdx = addToStringPool(subName);
-                    RuntimeScalar cachedCallRef = node.getBooleanAnnotation("preserveHashConstantCall")
-                            && node.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar codeRef
-                                    ? codeRef : new RuntimeScalar();
+                    RuntimeScalar parseTimeCallRef =
+                            node.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar codeRef
+                                    ? codeRef : null;
+                    RuntimeScalar deferredCallTarget =
+                            node.getAnnotation("deferredDirectCallTarget") instanceof RuntimeScalar target
+                                    ? target : null;
+                    RuntimeScalar emissionTimeCallRef =
+                            GlobalVariable.getVisibleGlobalCodeRefForDirectCall(subName);
+                    RuntimeScalar initialCallRef = parseTimeCallRef != null
+                            ? deferredCallTarget != null ? deferredCallTarget : parseTimeCallRef
+                            : emissionTimeCallRef != null
+                                    ? emissionTimeCallRef
+                                    : GlobalVariable.getGlobalCodeRefForFreshLookup(subName);
+                    boolean compileTimePinned = parseTimeCallRef != null
+                            && emissionTimeCallRef != parseTimeCallRef;
+                    boolean retainTargetIfDeletedBeforeCallsiteInstall =
+                            node.getBooleanAnnotation("retainTargetIfDeletedBeforeCallsiteInstall");
+                    RuntimeScalar cachedCallRef = new RuntimeScalar();
+                    int siteIndex = padConstants.size();
+                    cachedCallRef.configureCompiledDirectCallSite(
+                            subName, siteIndex, initialCallRef, compileTimePinned,
+                            retainTargetIfDeletedBeforeCallsiteInstall);
+                    cachedCallRef.setCompiledDirectCallHasDeferredParseOwner(
+                            deferredCallTarget != null);
+                    cachedCallRef.setCompiledDirectCallPinSlot(parseTimeCallRef);
                     int cacheIdx = addToConstantPool(cachedCallRef);
+                    padConstants.add(cachedCallRef);
                     Object classMethod = node.getAnnotation("directClassMethod");
                     int classNameIdx = classMethod instanceof String className
                             ? addToStringPool(className) : -1;
@@ -6769,6 +6900,7 @@ public class BytecodeCompiler implements Visitor {
                         emit(Opcodes.LOAD_CONST);
                         emitReg(valueReg);
                         emit(addToConstantPool(constant));
+                        padConstants.add(constant);
                         if (emitterContext != null && emitterContext.javaClassInfo != null) {
                             emitterContext.javaClassInfo.addPadConstant(constant);
                         }
@@ -7204,6 +7336,17 @@ public class BytecodeCompiler implements Visitor {
     }
 
     private boolean shouldEmitHashFetchForLocal() {
+        return (currentCallContext == RuntimeContextType.LVALUE
+                || currentCallContext == RuntimeContextType.LVALUE_LIST
+                || localHashLvalueCompileDepth > 0 || compilingForeachList)
+                && suppressLocalHashFetchForLocal == 0;
+    }
+
+    private boolean shouldEmitHashSliceForLocal() {
+        // HASH_SLICE_FOR_LOCAL is specifically for Perl's local @hash{...}.
+        // Ordinary lvalue slices must keep their element cells and scalarize
+        // from the slice values; returning localization proxies changes both
+        // their postincrement value and their writeback behavior.
         return (localHashLvalueCompileDepth > 0 || compilingForeachList)
                 && suppressLocalHashFetchForLocal == 0;
     }
@@ -7719,10 +7862,19 @@ public class BytecodeCompiler implements Visitor {
         // Step 5: Create closure or simple code ref
         int codeReg = allocateRegister();
 
-        if (closureVarIndices.isEmpty() && !subCode.inheritsSelfReference
+        if (node.name == null || node.name.equals("<anon>")) {
+            subCode.isOptreeCodeTemplate = true;
+        }
+
+        boolean namedLexicalSub =
+                node.getAnnotation("lexicalSubDisplayName") instanceof String;
+        if (closureVarIndices.isEmpty()
+                && ((node.name != null && !node.name.equals("<anon>")) || namedLexicalSub)
+                && !subCode.inheritsSelfReference
                 && (node.attributes == null || !node.attributes.contains("const"))
                 && !subCompiler.hasStateVariableDeclarations) {
             // No closures - just wrap the InterpretedCode
+            subCode.isOptreeCodeTemplate = true;
             RuntimeScalar codeScalar = new RuntimeScalar(subCode);
             subCode.__SUB__ = codeScalar;  // Set __SUB__ for self-reference
             RuntimeScalar compileTimeAttributeCodeRef =
@@ -8560,6 +8712,12 @@ public class BytecodeCompiler implements Visitor {
             patchJump(explicitLoopExitPatch, loopEndPc);
         }
 
+        // The JVM emitter restores temporary foreach source owners at this
+        // boundary. The bytecode interpreter retains the same source values
+        // from ITERATOR_CREATE until every normal or `last` exit reaches here.
+        emit(Opcodes.FOREACH_SOURCE_RELEASE);
+        emitReg(iterReg);
+
         if (!multiVarRegs.isEmpty()) {
             for (int heldReg : multiVarAliasHeldRegs) {
                 if (heldReg >= 0) {
@@ -9154,6 +9312,23 @@ public class BytecodeCompiler implements Visitor {
             patchIntOffset(gotoEndPos + 1, endPos);
             lastResultReg = resultReg;
         }
+        boolean conditionOwnsLocals = !myScalarCleanupIndicesInScope(ifScopeIndex).isEmpty()
+                || !myHashCleanupIndicesInScope(ifScopeIndex).isEmpty()
+                || !myArrayCleanupIndicesInScope(ifScopeIndex).isEmpty();
+        if (conditionOwnsLocals) {
+            if (lastResultReg >= 0 && currentCallContext != RuntimeContextType.VOID) {
+                // A conditional can yield its declaring lexical, including a
+                // false overloaded reference or a reference to a local hash.
+                // Acquire the expression's own owners before retiring that scope.
+                int sourceReg = lastResultReg;
+                lastResultReg = allocateRegister();
+                emit(Opcodes.SNAPSHOT_SCOPE_RESULT);
+                emitReg(lastResultReg);
+                emitReg(sourceReg);
+                emit(currentCallContext);
+            }
+            emitScopeCleanup(ifScopeIndex, true);
+        }
         symbolTable.exitScope(ifScopeIndex);
     }
 
@@ -9340,7 +9515,14 @@ public class BytecodeCompiler implements Visitor {
 
     void emitTryFinallyReturn(int valueReg) {
         TryFinallyReturnTarget target = tryFinallyReturnTargets.peek();
-        emitAliasWithTarget(target.valueReg, valueReg);
+        // A return crossing the synthetic try/finally wrapper must acquire its
+        // result owner before the wrapper's lexical cleanup runs. Keep the
+        // source register intact because it may be a lexical cell that cleanup
+        // will retire before RETURN_NONLOCAL reaches the enclosing subroutine.
+        int returnReg = separateReturnRegister(valueReg);
+        emit(Opcodes.PREPARE_SCOPE_RETURN);
+        emitReg(returnReg);
+        emitAliasWithTarget(target.valueReg, returnReg);
         emit(Opcodes.LOAD_INT);
         emitReg(target.pendingReg);
         emitInt(1);

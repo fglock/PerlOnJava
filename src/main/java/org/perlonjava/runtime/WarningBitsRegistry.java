@@ -375,23 +375,6 @@ public class WarningBitsRegistry {
     }
 
     /**
-     * Phase I diagnostic: snapshot all scalars currently held in the
-     * caller-hint-hash stack (including the active frame). Used by
-     * ReachabilityWalker.findPathTo to identify when an object is kept
-     * alive via a preserved %^H snapshot on the caller stack.
-     */
-    public static java.util.List<org.perlonjava.runtime.runtimetypes.RuntimeScalar> snapshotHintHashStackScalars() {
-        java.util.ArrayList<org.perlonjava.runtime.runtimetypes.RuntimeScalar> out = new java.util.ArrayList<>();
-        CompilationRuntimeState state = state();
-        Deque<java.util.Map<String, org.perlonjava.runtime.runtimetypes.RuntimeScalar>> stack = state.callerHintHashStack;
-        for (java.util.Map<String, org.perlonjava.runtime.runtimetypes.RuntimeScalar> frame : stack) {
-            out.addAll(frame.values());
-        }
-        out.addAll(state.callSiteHintHash.values());
-        return out;
-    }
-    
-    /**
      * Restores the caller's %^H from the caller stack.
      * Called by RuntimeCode.apply() after a subroutine returns.
      */

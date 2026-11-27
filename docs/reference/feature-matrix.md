@@ -691,6 +691,13 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **`caller` operator**: `caller` returns `($package, $filename, $line)`.
   - ✅  **Extended call stack information**: the full 11-field `caller($level)` tuple and key subroutine metadata are supported on both backends. See the [caller audit probe](../../dev/tools/feature-audit/caller_fields.t).<br>
     Exact hint and bitmask values remain runtime- and pragma-dependent.
+  - ✅  **Statement line numbers**: `caller`, `warn`, and `die` report the line
+    Perl 5.45.4 and later assign to a statement
+    ([GH #24396](https://github.com/Perl/perl5/issues/24396)). A multi-line
+    call with an anonymous sub argument reports the line where the call
+    starts; Perl 5.44 and earlier report the line where it ends. Tests that
+    hardcode the older line need adjusting, as the bundled DBIx::Class
+    distropref does for `t/storage/txn.t`.
 
 ---
 
@@ -942,10 +949,8 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **YAML::Syck** compatibility module backed by bundled `YAML::PP`.
 - ✅  **IO::Socket::SSL** module backed by Java `javax.net.ssl` SSLEngine.
 - ✅  **Net::SSLeay** module backed by Java security APIs (2327 CPAN tests pass).
-  `RSA_generate_key` accepts 1024–8192-bit requests. The 1024-bit legacy floor
-  remains because `netssleay_phase5_6.t` uses it to keep the RSA round-trip test
-  fast; 1024-bit RSA is not suitable for new key material. Use at least 2048
-  bits for new keys ([CodeQL guidance](https://codeql.github.com/codeql-query-help/java/java-insufficient-key-size/));
+  `RSA_generate_key` accepts 2048–8192-bit requests, rejecting weaker and
+  unbounded sizes ([CodeQL guidance](https://codeql.github.com/codeql-query-help/java/java-insufficient-key-size/));
   3072 bits provides 128-bit NIST security strength ([SP 800-57, Part 1 Rev. 5](https://csrc.nist.gov/pubs/sp/800/57/pt1/r5/final)).
 - ✅  **Plack::Handler::Netty** PSGI web server with HTTP/HTTPS, streaming, 32k+ req/sec. See [Web Server Guide](../../examples/http_server_plack/README.md).
 

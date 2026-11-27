@@ -1,0 +1,12 @@
+---
+comment: |
+  PerlOnJava distroprefs for DBIx::Class.
+
+  t/storage/txn.t hardcodes the line that caller() reported for a statement
+  containing an anonymous sub before Perl 5.45.4 (GH #24396). PerlOnJava
+  follows 5.45.4, which reports the statement's own line. Patch that one
+  expectation to accept the 5.45.4 line; leave every other test unchanged.
+match:
+  distribution: "^RIBASUSHI/DBIx-Class-0\\.082844"
+patches:
+  - "DBIx-Class/TxnAnonSubLineNumber.patch"

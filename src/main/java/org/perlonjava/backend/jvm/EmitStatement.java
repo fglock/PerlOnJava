@@ -77,11 +77,10 @@ public class EmitStatement {
      * Same as {@link #emitScopeExitNullStores(EmitterContext, int)} but with
      * an option to flush the MortalList after cleanup.
      * <p>
-     * When {@code flush} is true, emits a scoped flush using
-     * {@code MortalList.pushMark()} before cleanup and
-     * {@code MortalList.popAndFlush()} after. This only processes entries
-     * added by the scope-exit cleanup itself (not entries from outer scopes
-     * or prior operations), matching Perl 5's SAVETMPS/FREETMPS scoping.
+     * When {@code flush} is true, flushes entries above the active function
+     * boundary after cleanup. Callers that opened a mark at block entry use
+     * the overload with {@code markAtScopeEntry=true} to pop and flush that
+     * complete block extent, including temporaries created before cleanup.
      * <p>
      * {@code flush=true} is safe for bare blocks, loops, and control structures.
      * It must be {@code false} for subroutine body blocks where the implicit
@@ -97,7 +96,13 @@ public class EmitStatement {
     }
 
     static void emitScopeExitNullStores(EmitterContext ctx, int scopeIndex, boolean flush, int returnedLvalueSlot) {
-        emitScopeExitNullStores(ctx, scopeIndex, flush, returnedLvalueSlot, false);
+        emitScopeExitNullStores(ctx, scopeIndex, flush, returnedLvalueSlot, false, false);
+    }
+
+    static void emitScopeExitNullStores(EmitterContext ctx, int scopeIndex, boolean flush,
+                                        int returnedLvalueSlot, boolean markAtScopeEntry) {
+        emitScopeExitNullStores(ctx, scopeIndex, flush, returnedLvalueSlot, false,
+                markAtScopeEntry);
     }
 
     static void emitLoopControlScopeExit(EmitterContext ctx, int scopeIndex) {
@@ -107,12 +112,12 @@ public class EmitStatement {
         // captures from an enclosing class retain their original `my`
         // declaration metadata, so exclude their known slots just like an
         // ordinary scope exit; they belong to the enclosing scope.
-        emitScopeExitNullStores(ctx, scopeIndex, true, -1, false);
+        emitScopeExitNullStores(ctx, scopeIndex, true, -1, false, false);
     }
 
     private static void emitScopeExitNullStores(
             EmitterContext ctx, int scopeIndex, boolean flush,
-            int returnedLvalueSlot, boolean includeCaptured) {
+            int returnedLvalueSlot, boolean includeCaptured, boolean markAtScopeEntry) {
         // Gather variable indices for this scope first, to determine if cleanup is needed.
         java.util.List<Integer> scalarIndices = includeCaptured
                 ? ctx.symbolTable.getMyScalarIndicesInScope(scopeIndex)
@@ -124,7 +129,9 @@ public class EmitStatement {
                 ? ctx.symbolTable.getMyArrayIndicesInScope(scopeIndex)
                 : withoutCaptured(ctx, ctx.symbolTable.getMyArrayIndicesInScope(scopeIndex));
 
-        // Record my-variable indices for eval exception cleanup.
+        java.util.Map<Integer, String> scalarNames =
+                ctx.symbolTable.getMyScalarNamesInScope(scopeIndex);
+        // Record my-variable indices and scalar pad names for eval exception cleanup.
         // When evalCleanupLocals is non-null (set by EmitterMethodCreator for eval blocks),
         // we record all my-variable local indices so the catch handler can emit cleanup
         // for variables whose normal SCOPE_EXIT_CLEANUP was skipped by die.
@@ -132,6 +139,9 @@ public class EmitStatement {
             ctx.javaClassInfo.evalCleanupLocals.addAll(scalarIndices);
             ctx.javaClassInfo.evalCleanupLocals.addAll(hashIndices);
             ctx.javaClassInfo.evalCleanupLocals.addAll(arrayIndices);
+            if (ctx.javaClassInfo.evalCleanupScalarNames != null) {
+                ctx.javaClassInfo.evalCleanupScalarNames.putAll(scalarNames);
+            }
         }
 
         // Fast path: when CleanupNeededVisitor proved the sub has no
@@ -170,7 +180,29 @@ public class EmitStatement {
         // scope exits (e.g., Foo->new()->method() chain temporaries) may need processing.
         boolean needsCleanup = !scalarIndices.isEmpty() || !hashIndices.isEmpty() || !arrayIndices.isEmpty();
 
-        // Phase 1: Run scopeExitCleanup for scalar variables.
+        if (needsCleanup && returnedLvalueSlot >= 0) {
+            ctx.mv.visitVarInsn(Opcodes.ALOAD, returnedLvalueSlot);
+            ctx.mv.visitVarInsn(Opcodes.ILOAD, 2);
+            ctx.mv.visitInsn(ctx.javaClassInfo.isLvalueSubroutine ? Opcodes.ICONST_0 : Opcodes.ICONST_1);
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode", "prepareScopeReturn",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;IZ)Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;",
+                    false);
+            ctx.mv.visitVarInsn(Opcodes.ASTORE, returnedLvalueSlot);
+        }
+
+        // Perl releases hash values before scalar pads and arrays at scope exit.
+        // DESTROY methods can observe objects released earlier in this sequence.
+        for (int idx : hashIndices) {
+            ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/MortalList",
+                    "scopeExitCleanupHash",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;)V",
+                    false);
+        }
+
+        // Run scopeExitCleanup for scalar variables after hash values.
         // This defers refCount decrements for blessed references with DESTROY,
         // and handles IO fd recycling for anonymous filehandle globs.
         for (int idx : scalarIndices) {
@@ -190,20 +222,36 @@ public class EmitStatement {
                         false);
             }
         }
-        // Phase 1b: Walk hash/array variables for nested blessed references.
-        // When a hash/array goes out of scope, any blessed refs stored inside
-        // (or nested inside sub-containers) need their refCounts decremented.
-        for (int idx : hashIndices) {
+        // The JVM keeps one RuntimeScalar cell for refaliased lexical names.
+        // Retire the exact pad binding as that name leaves scope; ordinary
+        // unregister only sees the shared cell identity and cannot distinguish
+        // it from another still-live lexical name for the same cell.
+        for (int idx : scalarIndices) {
+            String name = scalarNames.get(idx);
+            if (name == null) continue;
             ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
+            ctx.mv.visitLdcInsn(name);
             ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/runtimetypes/MortalList",
-                    "scopeExitCleanupHash",
-                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;)V",
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "unbindCurrentActiveLexical",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;Ljava/lang/String;)V",
                     false);
         }
+        // Arrays are released after hash values and scalar pads.
         for (int idx : arrayIndices) {
-            ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
             if (returnedLvalueSlot >= 0) {
+                ctx.mv.visitVarInsn(Opcodes.ALOAD, returnedLvalueSlot);
+                ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
+                ctx.mv.visitVarInsn(Opcodes.ILOAD, 2);
+                ctx.mv.visitInsn(ctx.javaClassInfo.isLvalueSubroutine
+                        ? Opcodes.ICONST_0 : Opcodes.ICONST_1);
+                ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                        "prepareLocalArrayReturn",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;IZ)Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;",
+                        false);
+                ctx.mv.visitVarInsn(Opcodes.ASTORE, returnedLvalueSlot);
+                ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
                 ctx.mv.visitVarInsn(Opcodes.ALOAD, returnedLvalueSlot);
                 ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                         "org/perlonjava/runtime/runtimetypes/MortalList",
@@ -212,6 +260,7 @@ public class EmitStatement {
                         false);
                 continue;
             }
+            ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
             ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/MortalList",
                     "scopeExitCleanupArray",
@@ -224,15 +273,9 @@ public class EmitStatement {
         java.util.List<Integer> allIndices = includeCaptured
                 ? ctx.symbolTable.getMyVariableIndicesInScope(scopeIndex)
                 : withoutCaptured(ctx, ctx.symbolTable.getMyVariableIndicesInScope(scopeIndex));
-        // Phase E (refcount_alignment_52leaks_plan.md): deregister each
-        // my-variable from MyVarCleanupStack before nulling the local slot.
-        // Without this, the static stack holds strong references to
-        // block-scoped scalars until the enclosing subroutine returns,
-        // preventing JVM GC and keeping their RuntimeBase targets alive
-        // past their Perl-level scope. The reachability walker would then
-        // treat the scalar as a live lexical and mark its referent as
-        // reachable, causing false-positive leaks (basic rerefrozen in
-        // DBIC's t/52leaks.t).
+        // Deregister each my-variable before nulling its local slot. Otherwise
+        // the cleanup stack retains a stale lexical cell after its Perl scope
+        // ends and lifecycle checks can treat it as live.
         //
         // When skipMyVarCleanup is true (CleanupNeededVisitor proved this
         // sub never uses bless/weaken/user-sub-calls/etc.), the stack is
@@ -264,7 +307,7 @@ public class EmitStatement {
         if (flush) {
             ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/MortalList",
-                    "flushAboveMark",
+                    markAtScopeEntry ? "popScopeMarkAndFlush" : "flushAboveMark",
                     "()V",
                     false);
         }
@@ -438,8 +481,7 @@ public class EmitStatement {
 
                 int scopeIndex = emitterVisitor.ctx.symbolTable.enterScope();
                 node.thenBranch.accept(branchVisitor(emitterVisitor, node.thenBranch));
-                emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex,
-                        emitterVisitor.ctx.contextType == RuntimeContextType.VOID);
+                emitConditionalScopeExit(emitterVisitor.ctx, scopeIndex);
                 emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
 
                 for (int i = 0; i < branchLabelsPushed; i++) {
@@ -454,8 +496,7 @@ public class EmitStatement {
 
                     int scopeIndex = emitterVisitor.ctx.symbolTable.enterScope();
                     node.elseBranch.accept(branchVisitor(emitterVisitor, node.elseBranch));
-                    emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex,
-                            emitterVisitor.ctx.contextType == RuntimeContextType.VOID);
+                    emitConditionalScopeExit(emitterVisitor.ctx, scopeIndex);
                     emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
 
                     for (int i = 0; i < branchLabelsPushed; i++) {
@@ -562,8 +603,7 @@ public class EmitStatement {
         emitterVisitor.ctx.mv.visitLabel(endLabel);
 
         // Exit the scope in the symbol table
-        emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex,
-                emitterVisitor.ctx.contextType == RuntimeContextType.VOID);
+        emitConditionalScopeExit(emitterVisitor.ctx, scopeIndex);
         emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
 
         for (int i = 0; i < branchLabelsPushed; i++) {
@@ -571,6 +611,31 @@ public class EmitStatement {
         }
 
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("IF end");
+    }
+
+    /** The conditional's result must own returned references before its lexicals end. */
+    private static void emitConditionalScopeExit(EmitterContext ctx, int scopeIndex) {
+        if (ctx.contextType != RuntimeContextType.VOID
+                && !ctx.symbolTable.getMyVariableIndicesInScope(scopeIndex).isEmpty()) {
+            if (ctx.contextType == RuntimeContextType.RUNTIME) {
+                ctx.mv.visitVarInsn(Opcodes.ILOAD, 2);
+            } else {
+                ctx.mv.visitLdcInsn(ctx.contextType);
+            }
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode", "prepareScopeResult",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;",
+                    false);
+            // Native magic cleanup can flush its own releases. Keep result
+            // owners below this mark until the caller receives the expression.
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/MortalList", "pushMark", "()V", false);
+            emitScopeExitNullStores(ctx, scopeIndex, false);
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/MortalList", "popAndFlush", "()V", false);
+            return;
+        }
+        emitScopeExitNullStores(ctx, scopeIndex, ctx.contextType == RuntimeContextType.VOID);
     }
 
     /** Return the branch that emitIf will retain, or null when both branches remain dynamic. */
@@ -1019,6 +1084,14 @@ public class EmitStatement {
             emitterVisitor.ctx.javaClassInfo.activeTryFinallyContext = tryFinallyContext;
         }
 
+        int jvmFrameDepthSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.jvmFrameStateSlot);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                "jvmFrameDepth",
+                "(Lorg/perlonjava/runtime/runtimetypes/ExecutionRuntimeState;)I", false);
+        mv.visitVarInsn(Opcodes.ISTORE, jvmFrameDepthSlot);
+
         // Define the try-catch block before visiting labels for maximum ASM compatibility
         mv.visitTryCatchBlock(tryStart, tryEnd, catchBlock, "java/lang/Throwable");
 
@@ -1035,6 +1108,13 @@ public class EmitStatement {
 
         // Exception handler
         mv.visitLabel(catchBlock);
+
+        mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.jvmFrameStateSlot);
+        mv.visitVarInsn(Opcodes.ILOAD, jvmFrameDepthSlot);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                "unwindJvmFramesToDepth",
+                "(Lorg/perlonjava/runtime/runtimetypes/ExecutionRuntimeState;I)V", false);
 
         // --------- Store the exception in the catch parameter ---------
         // Preserve a reference passed to die; non-Perl exceptions become strings.

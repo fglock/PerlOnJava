@@ -36,6 +36,7 @@ public class TieHandle extends RuntimeIO {
      */
     private final RuntimeScalar self;
     private final boolean holdsSelfReference;
+    private boolean tiedObjectReleased;
 
     /**
      * The package name that this handle is tied to.
@@ -61,16 +62,9 @@ public class TieHandle extends RuntimeIO {
     public TieHandle(String tiedPackage, RuntimeIO previousValue, RuntimeScalar self, boolean holdSelfReference) {
         this.tiedPackage = tiedPackage;
         this.previousValue = previousValue;
-        this.self = self;
+        this.self = holdSelfReference ? RuntimeScalar.retainTiedHandlerValue(self) : self;
         this.holdsSelfReference = holdSelfReference;
-        // Increment refCount: the tie wrapper holds a strong reference to the tied object.
-        if (holdSelfReference
-                && self != null && (self.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                && self.value instanceof RuntimeBase base
-                && base.refCount >= 0) {
-            base.refCount++;
-            base.acquireTransientTraceOwner("tie wrapper", "TieHandle");
-        }
+
     }
 
     /**
@@ -355,16 +349,8 @@ public class TieHandle extends RuntimeIO {
      * Decrements refCount and triggers DESTROY if it reaches 0.
      */
     public void releaseTiedObject() {
-        if (!holdsSelfReference) {
-            return;
-        }
-        if ((self.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                && self.value instanceof RuntimeBase base) {
-            base.releaseTransientTraceOwner("tie wrapper", "TieHandle");
-            if (base.refCount > 0 && --base.refCount == 0) {
-                base.refCount = Integer.MIN_VALUE;
-                DestroyDispatch.callDestroy(base);
-            }
-        }
+        if (!holdsSelfReference || tiedObjectReleased) return;
+        tiedObjectReleased = true;
+        RuntimeScalar.releaseTiedHandlerValue(self);
     }
 }

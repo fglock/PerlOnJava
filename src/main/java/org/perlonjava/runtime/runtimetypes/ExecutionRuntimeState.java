@@ -16,9 +16,26 @@ import java.util.Set;
 /** Per-interpreter execution and dynamic-scope state migrated in Phase 5. */
 public final class ExecutionRuntimeState {
     final PerlRuntime ownerRuntime;
+    private final IdentityHashMap<Object, Boolean> suspendedContinuations =
+            new IdentityHashMap<>();
 
     ExecutionRuntimeState(PerlRuntime ownerRuntime) {
         this.ownerRuntime = ownerRuntime;
+    }
+
+    /** Register one live continuation so reset cannot discard its active frame. */
+    public synchronized void registerSuspendedContinuation(Object continuation) {
+        if (continuation != null) suspendedContinuations.put(continuation, Boolean.TRUE);
+    }
+
+    /** Retire one continuation after its frame owners have been released. */
+    public synchronized void unregisterSuspendedContinuation(Object continuation) {
+        if (continuation != null) suspendedContinuations.remove(continuation);
+    }
+
+    /** Whether reset would discard a still-live suspended continuation. */
+    public synchronized boolean hasSuspendedContinuations() {
+        return !suspendedContinuations.isEmpty();
     }
 
     /** Set once the interpreter enters its global destruction phase. */
@@ -39,7 +56,7 @@ public final class ExecutionRuntimeState {
     final Stack<Object> globalScalarStates = new Stack<>();
     final Stack<Object> globalArrayStates = new Stack<>();
     final Stack<Object> globalHashStates = new Stack<>();
-    final Stack<RuntimeScalar> hashProxyStates = new Stack<>();
+    final Stack<RuntimeHashProxyEntry.SavedHashElement> hashProxyStates = new Stack<>();
     final Stack<Integer> arrayProxyIndexStates = new Stack<>();
     final Stack<RuntimeScalar> arrayProxyStates = new Stack<>();
     final Stack<Integer> arrayProxySavedSizes = new Stack<>();
@@ -73,9 +90,19 @@ public final class ExecutionRuntimeState {
     public final Deque<RuntimeCode.EvalSourceFrame> activeEvalSources = new ArrayDeque<>();
     public final ArrayDeque<ArrayList<String>> syntheticCallerFrames = new ArrayDeque<>();
     public final Deque<RuntimeArray> argsStack = new ArrayDeque<>();
-    /** Weak roots for JVM call arguments while their expressions are evaluated. */
-    final ArrayList<java.lang.ref.WeakReference<RuntimeCode.CallArguments>> callArgumentFrames =
+    final Deque<List<RuntimeScalar.ArgumentAliasOwner>> argumentAliasOwnerFrames =
+            new ArrayDeque<>();
+    /** Source-frame alias owners awaiting adoption by a tail-call target frame. */
+    final Deque<RuntimeCode.TailCallArgumentOwners> pendingTailCallArgumentOwners =
+            new ArrayDeque<>();
+    /** Counted owners for aggregates containing the active aliased argument slots. */
+    final Deque<List<RuntimeCode.ArgumentContainerOwner>> argumentContainerOwnerFrames =
+            new ArrayDeque<>();
+    /** Explicit owners for staged arguments, retired by call completion or frame exit. */
+    final ArrayList<RuntimeCode.CallArguments> callArgumentFrames =
             new ArrayList<>();
+    /** Temporary chained-method invocant owners active in the generated caller. */
+    final ArrayList<RuntimeBase> methodInvocantHolds = new ArrayList<>();
     public final Deque<RuntimeCode> activeCodeStack = new ArrayDeque<>();
     /** Perl source callsites aligned with the active Perl code frames. */
     public final Deque<CallerStack.CallerInfo> activeCodeCallSites = new ArrayDeque<>();
@@ -85,6 +112,8 @@ public final class ExecutionRuntimeState {
     public final Deque<RuntimeScalar> activeJvmSelfReferences = new ArrayDeque<>();
     /** Sort pseudo-block state for active JVM-generated Perl methods. */
     public final Deque<Boolean> activeJvmSortComparators = new ArrayDeque<>();
+    /** Dynamic state captured at entry to JVM-generated Perl method frames. */
+    public final Deque<RuntimeCode.JvmFrameSnapshot> activeJvmFrameSnapshots = new ArrayDeque<>();
     /** Dynamic extent of a sort comparator invocation, including called subs. */
     public int activeSortComparatorInvocations;
     /** Combined Perl frame depth immediately before each sort comparator call. */
@@ -99,6 +128,8 @@ public final class ExecutionRuntimeState {
     public Object reusableActiveLexicalFrame;
     /** Lexical cells owned by the top-level compilation unit. */
     public final Map<String, RuntimeBase> topLevelLexicals = new LinkedHashMap<>();
+    /** Owner identities for aggregate cells held by top-level lexical names. */
+    final Map<String, PerlOwnerSlot> topLevelLexicalOwnerSlots = new LinkedHashMap<>();
     public final Deque<List<RuntimeScalar>> pristineArgsStack = new ArrayDeque<>();
     /** Reusable one-scalar return lists, populated only after scalar extraction. */
     final Deque<RuntimeList> availableScalarResultLists = new ArrayDeque<>();
@@ -123,7 +154,6 @@ public final class ExecutionRuntimeState {
     public boolean taintMode;
     public boolean taintWarnings;
     public boolean joinTaint;
-    public int moduleInitDepth;
     public final IdentityHashMap<Throwable, Boolean> unhandledDieHandlerSeen =
             new IdentityHashMap<>();
     public boolean insideUnhandledDieHandler;
@@ -139,7 +169,6 @@ public final class ExecutionRuntimeState {
 
     final ArrayList<Object> myVarCleanupStack = new ArrayList<>();
     final IdentityHashMap<Object, Integer> registeredMyVarCounts = new IdentityHashMap<>();
-    final IdentityHashMap<Object, Integer> liveMyVarCounts = new IdentityHashMap<>();
 
     private final IdentityHashMap<RuntimeCode, CallDepthState> callDepths = new IdentityHashMap<>();
     private RuntimeCode lastCallDepthCode;

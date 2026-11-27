@@ -1,0 +1,71 @@
+package org.perlonjava.runtime.runtimetypes;
+
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+@Tag("unit")
+class RuntimeScalarUncountedOwnerRepairTest {
+    @Test
+    void uncountedContainerSlotKeepsWeakReferentAliveWithoutRootWalk() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeHash target = new RuntimeHash();
+            target.blessId = NameNormalizer.getBlessId(
+                    "RuntimeScalarUncountedOwnerRepairTest::Target");
+            target.markRefCountUntracked();
+
+            RuntimeArray ownerContainer = new RuntimeArray();
+            RuntimeScalar uncountedOwner = referenceTo(target);
+            ownerContainer.elements.add(uncountedOwner);
+            PerlOwnerSlot ownerSlot = uncountedOwner.untrackedReferenceOwnerSlot();
+            assertNotNull(ownerSlot);
+            assertEquals(1, target.ownerSlotCount(PerlOwnerSlot.Kind.UNTRACKED_REFERENCE));
+
+            RuntimeScalar countedOwner = new RuntimeScalar();
+            countedOwner.set(target.createAnonymousReference());
+            RuntimeScalar weakObserver = target.createAnonymousReference();
+            WeakRefRegistry.weaken(weakObserver);
+            assertTrue(WeakRefRegistry.isweak(weakObserver));
+
+            try {
+                // Model a transient selective-count undercount. Releasing this
+                // last counted slot leaves the array element as the strong owner.
+                target.setTrackedRefCount(1);
+                {
+                    countedOwner.set(new RuntimeScalar());
+
+                    assertEquals(RuntimeBase.RefCountTrackingState.WEAKLY_TRACKED, target.refCountTrackingState());
+                    assertTrue(WeakRefRegistry.isweak(weakObserver));
+                    assertFalse(target.destroyFired);
+                }
+
+                uncountedOwner.set(new RuntimeScalar());
+
+                assertFalse(ownerSlot.isActive());
+                assertFalse(WeakRefRegistry.isweak(weakObserver),
+                        "the last uncounted owner release clears weak observers");
+                assertEquals(RuntimeScalarType.UNDEF, weakObserver.type);
+                assertEquals(RuntimeBase.PerlLifecycleState.DESTROYED, target.perlLifecycleState());
+                assertEquals(0, target.refCount);
+            } finally {
+                if (WeakRefRegistry.isweak(weakObserver)) {
+                    WeakRefRegistry.unweaken(weakObserver);
+                }
+                if (ownerSlot.isActive()) uncountedOwner.set(new RuntimeScalar());
+                countedOwner.set(new RuntimeScalar());
+            }
+        }
+    }
+
+    private static RuntimeScalar referenceTo(RuntimeBase referent) {
+        RuntimeScalar scalar = new RuntimeScalar();
+        scalar.type = RuntimeScalarType.REFERENCE;
+        scalar.value = referent;
+        return scalar;
+    }
+}

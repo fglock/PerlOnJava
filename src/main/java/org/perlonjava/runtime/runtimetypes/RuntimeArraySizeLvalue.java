@@ -11,16 +11,28 @@ import java.util.List;
 public class RuntimeArraySizeLvalue extends RuntimeBaseProxy {
     private record SavedSize(int lastIndex, List<RuntimeScalar> tail) {}
     private final Stack<SavedSize> savedSizes = new Stack<>();
+    private final RuntimeArray parentArray;
+    private Object parentGeneration;
 
     private boolean isOrphaned() {
-        return lvalue != null
-                && lvalue.value instanceof RuntimeArray parent
-                && parent.arrayLengthLvalueOrphaned
-                && parent.refCount <= 0;
+        return parentArray != null
+                && (!parentArray.isArraySizeLvalueGenerationActive(parentGeneration)
+                    || (parentArray.arrayLengthLvalueOrphaned
+                        && parentArray.refCount <= 0));
     }
 
     private RuntimeScalar orphanedValue() {
         return RuntimeScalarCache.scalarUndef;
+    }
+
+    /**
+     * The value a copy of {@code $#array} receives. The proxy's own fields
+     * are a snapshot taken at construction; the array may have grown,
+     * shrunk, or been freed since then.
+     */
+    RuntimeScalar currentValue() {
+        if (isOrphaned()) return new RuntimeScalar();
+        return new RuntimeScalar(parentArray.lastElementIndex());
     }
 
     private RuntimeScalar warnFreedArray() {
@@ -38,26 +50,53 @@ public class RuntimeArraySizeLvalue extends RuntimeBaseProxy {
         // $#array is an lvalue proxy, not an escaped \@array reference.
         // Keeping a tracked reference here would prevent lexical cleanup from
         // orphaning the proxy after `local @array` unwinds.
+        this.parentArray = parent;
         this.lvalue = new RuntimeScalar();
         this.lvalue.type = RuntimeScalarType.ARRAYREFERENCE;
         this.lvalue.value = parent;
         this.type = RuntimeScalarType.INTEGER;
         this.value = parent.lastElementIndex();
-        // A fresh $# proxy can only be constructed after the operand resolved
-        // to a usable array. An array reference returned through intermediate
-        // list/scalar temporaries may reach this point before its counted owner
-        // is installed, even though scope teardown already orphaned its older
-        // proxies. Revive the array for this new access; proxies orphaned at
-        // teardown have already been changed to undef and stay that way.
-        if (parent.arrayLengthLvalueOrphaned && parent.refCount <= 0) {
-            parent.arrayLengthLvalueOrphaned = false;
-        }
-        parent.registerArraySizeLvalue(this);
+        parentGeneration = parent.arraySizeLvalueGeneration();
     }
 
-    void orphan() {
-        type = RuntimeScalarType.UNDEF;
-        value = null;
+    RuntimeArray parentArray() {
+        return parentArray;
+    }
+
+    /**
+     * PerlOnJava reports a reference-counted stack (Internals::stack_refcounted),
+     * under which the \$# magic variable keeps a temporary array alive: after
+     * {@code my $r = \$#{[]}}, {@code $$r} is -1 and assigning to it does not
+     * warn. A reference to this proxy therefore retains an anonymous parent
+     * that has no other owner. A lexical array is still orphaned at scope exit.
+     */
+    @Override
+    public RuntimeScalar createReference() {
+        if (parentArray != null && parentArray.isRefCountTracked()
+                && !parentArray.localBindingExists) {
+            parentArray.retainedByArraySizeReference = true;
+        }
+        return super.createReference();
+    }
+
+    @Override
+    RuntimeBase argumentAliasContainer() {
+        return parentArray != null && !parentArray.isPerlDestroyed()
+                && (parentArray.refCount > 0 || parentArray.hasPerlStrongOwnerIdentity())
+                ? parentArray : null;
+    }
+
+    @Override
+    boolean hasLivePerlValueOwner() {
+        // The $#array proxy is a lvalue for the AV length, not an element
+        // slot in that AV. A scalar reference to this proxy must not keep an
+        // anonymous or lexical parent array alive.
+        return false;
+    }
+
+    @Override
+    boolean hasLivePerlValueOwner(boolean requirePersistentParent) {
+        return false;
     }
 
     /**
@@ -96,19 +135,14 @@ public class RuntimeArraySizeLvalue extends RuntimeBaseProxy {
 
     @Override
     public void dynamicSaveState() {
-        RuntimeArray parent = lvalue.arrayDeref();
-        int lastIndex = parent.lastElementIndex();
-        savedSizes.push(new SavedSize(lastIndex, new ArrayList<>(parent.elements)));
+        // Perl treats `local $#array` as an ordinary array-size assignment;
+        // the assignment is not undone when the dynamic scope exits.
     }
 
     @Override
     public void dynamicRestoreState() {
-        if (!savedSizes.empty() && !isOrphaned()) {
-            RuntimeArray parent = lvalue.arrayDeref();
-            SavedSize saved = savedSizes.pop();
-            parent.elements.clear();
-            parent.elements.addAll(saved.tail);
-        }
+        // Do not restore element wrappers whose counted owner slots were
+        // retired when the localized size assignment removed them.
     }
 
     @Override

@@ -37,6 +37,8 @@ public class TieArray extends ArrayList<RuntimeScalar> {
      * The tied object (handler) that implements the tie interface methods.
      */
     private final RuntimeScalar self;
+    /** Ledger edge retaining the handler while {@link #self} remains its Perl value cell. */
+    private final RuntimeScalar selfOwner;
 
     /**
      * The package name that this array is tied to.
@@ -63,27 +65,30 @@ public class TieArray extends ArrayList<RuntimeScalar> {
         this.tiedPackage = tiedPackage;
         this.previousValue = previousValue;
         this.self = self;
+        this.selfOwner = RuntimeScalar.retainTiedHandlerValue(self);
         this.parent = parent;
-        // Increment refCount: the tie wrapper holds a strong reference to the tied object.
-        if (self != null && (self.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                && self.value instanceof RuntimeBase base
-                && base.refCount >= 0) {
-            base.refCount++;
-            base.acquireTransientTraceOwner("tie wrapper", "TieArray");
-        }
+
     }
 
     /**
      * Helper method to call methods on the tied object.
      */
     private static RuntimeList tieCall(RuntimeArray array, String method, RuntimeBase... args) {
-        return tieCall(array, method, RuntimeContextType.SCALAR, args);
+        return tieCall((TieArray) array.elements, method, RuntimeContextType.SCALAR, args);
     }
 
     private static RuntimeList tieCall(RuntimeArray array, String method, int ctx, RuntimeBase... args) {
-        TieArray tieArray = (TieArray) array.elements;
+        return tieCall((TieArray) array.elements, method, ctx, args);
+    }
+
+    private static RuntimeList tieCall(
+            TieArray tieArray, String method, RuntimeBase... args) {
+        return tieCall(tieArray, method, RuntimeContextType.SCALAR, args);
+    }
+
+    private static RuntimeList tieCall(
+            TieArray tieArray, String method, int ctx, RuntimeBase... args) {
         RuntimeScalar self = tieArray.getSelf();
-        String className = tieArray.getTiedPackage();
 
         // Call the Perl method
         return RuntimeCode.call(
@@ -127,12 +132,23 @@ public class TieArray extends ArrayList<RuntimeScalar> {
         return tieCall(array, "FETCH", index).getFirst();
     }
 
+    /** Fetch through the tie magic captured by an element alias before untie. */
+    public static RuntimeScalar tiedFetch(TieArray tieArray, RuntimeScalar index) {
+        return tieCall(tieArray, "FETCH", index).getFirst();
+    }
+
     /**
      * Stores an element into a tied array (delegates to STORE).
      */
     public static RuntimeScalar tiedStore(RuntimeArray array, RuntimeScalar index, RuntimeScalar value) {
         array.clearTiedLocalSizeOverride();
         return tieCall(array, "STORE", index, value).getFirst();
+    }
+
+    /** Store through the tie magic captured by an element alias before untie. */
+    public static RuntimeScalar tiedStore(
+            TieArray tieArray, RuntimeScalar index, RuntimeScalar value) {
+        return tieCall(tieArray, "STORE", index, value).getFirst();
     }
 
     /**
@@ -290,6 +306,16 @@ public class TieArray extends ArrayList<RuntimeScalar> {
         return tiedFetchSize(parent).getInt();
     }
 
+    /** Returns the locally stored slots without invoking tied FETCHSIZE. */
+    int rawStorageSize() {
+        return super.size();
+    }
+
+    /** Returns a locally stored slot without invoking tied FETCH. */
+    RuntimeScalar rawStorageGet(int index) {
+        return super.get(index);
+    }
+
     public RuntimeScalar get(int i) {
         return parent.get(i);
     }
@@ -301,14 +327,6 @@ public class TieArray extends ArrayList<RuntimeScalar> {
     public void releaseTiedObject() {
         if (tiedObjectReleased) return;
         tiedObjectReleased = true;
-        if (self == null) return;
-        if ((self.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                && self.value instanceof RuntimeBase base) {
-            base.releaseTransientTraceOwner("tie wrapper", "TieArray");
-            if (base.refCount > 0 && --base.refCount == 0) {
-                base.refCount = Integer.MIN_VALUE;
-                DestroyDispatch.callDestroy(base);
-            }
-        }
+        RuntimeScalar.releaseTiedHandlerValue(selfOwner);
     }
 }

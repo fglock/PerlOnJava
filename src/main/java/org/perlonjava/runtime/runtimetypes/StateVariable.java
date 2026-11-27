@@ -130,8 +130,12 @@ public class StateVariable {
                 return tagGeneratedLexicalSub(GlobalVariable.getGlobalVariable(beginVar), var);
             }
             variable = new RuntimeScalar();
-            code.stateVariable.put(beginVar, variable);
-            GlobalVariable.invalidateGlobalCodeRefGraphRoots();
+            // The persistent pad is a binding even though this SV is not on
+            // the per-invocation lexical cleanup stack. A returned \$state
+            // must keep the cell's value after the CV releases that binding.
+            variable.startRefCountTracking();
+            variable.localBindingExists = true;
+            code.bindStateScalar(beginVar, variable);
             return tagGeneratedLexicalSub(variable, var);
         }
     }
@@ -185,8 +189,7 @@ public class StateVariable {
                 return GlobalVariable.getGlobalArray(beginVar);
             }
             variable = new RuntimeArray();
-            code.stateArray.put(beginVar, variable);
-            GlobalVariable.invalidateGlobalCodeRefGraphRoots();
+            code.bindStateArray(beginVar, variable);
             return variable;
         }
     }
@@ -197,8 +200,7 @@ public class StateVariable {
         if (!codeRef.getDefinedBoolean()) {
             GlobalVariable.aliasGlobalArray(beginVar, array);
         } else {
-            ((RuntimeCode) codeRef.value).stateArray.put(beginVar, array);
-            GlobalVariable.invalidateGlobalCodeRefGraphRoots();
+            ((RuntimeCode) codeRef.value).bindStateAggregateAlias(beginVar, array);
         }
         markInitializedStateVariable(codeRef, var, id);
     }
@@ -222,8 +224,7 @@ public class StateVariable {
         if (!codeRef.getDefinedBoolean()) {
             GlobalVariable.aliasGlobalHash(beginVar, hash);
         } else {
-            ((RuntimeCode) codeRef.value).stateHash.put(beginVar, hash);
-            GlobalVariable.invalidateGlobalCodeRefGraphRoots();
+            ((RuntimeCode) codeRef.value).bindStateAggregateAlias(beginVar, hash);
         }
         markInitializedStateVariable(codeRef, var, id);
     }
@@ -289,8 +290,7 @@ public class StateVariable {
                 return GlobalVariable.getGlobalHash(beginVar);
             }
             variable = new RuntimeHash();
-            code.stateHash.put(beginVar, variable);
-            GlobalVariable.invalidateGlobalCodeRefGraphRoots();
+            code.bindStateHash(beginVar, variable);
             return variable;
         }
     }
