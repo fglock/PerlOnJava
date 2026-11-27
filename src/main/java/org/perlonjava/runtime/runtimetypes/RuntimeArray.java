@@ -34,6 +34,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         return array != null ? array : new RuntimeArray();
     }
 
+    /** A reference to one of this anonymous array's {@code $#} proxies keeps it alive. */
+    boolean retainedByArraySizeReference;
     /** Identity shared by live {@code $#array} proxies for the current AV state. */
     private Object arraySizeLvalueGeneration = new Object();
     /** Active local-array generations, including ancestors whose proxies survive localization. */

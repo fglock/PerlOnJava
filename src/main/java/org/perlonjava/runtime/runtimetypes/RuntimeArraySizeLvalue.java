@@ -63,6 +63,22 @@ public class RuntimeArraySizeLvalue extends RuntimeBaseProxy {
         return parentArray;
     }
 
+    /**
+     * PerlOnJava reports a reference-counted stack (Internals::stack_refcounted),
+     * under which the \$# magic variable keeps a temporary array alive: after
+     * {@code my $r = \$#{[]}}, {@code $$r} is -1 and assigning to it does not
+     * warn. A reference to this proxy therefore retains an anonymous parent
+     * that has no other owner. A lexical array is still orphaned at scope exit.
+     */
+    @Override
+    public RuntimeScalar createReference() {
+        if (parentArray != null && parentArray.isRefCountTracked()
+                && !parentArray.localBindingExists) {
+            parentArray.retainedByArraySizeReference = true;
+        }
+        return super.createReference();
+    }
+
     @Override
     RuntimeBase argumentAliasContainer() {
         return parentArray != null && !parentArray.isPerlDestroyed()

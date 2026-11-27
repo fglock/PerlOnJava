@@ -1748,6 +1748,14 @@ public class MortalList {
                                             RuntimeBase.PendingOwnerRelease ownerRelease,
                                             String transientOwnerKind) {
         if (ownerRelease != null && ownerRelease.isLifecycleOnlyAtZero()
+                && base.refCount == 0 && transientOwnerKind == null
+                && base instanceof RuntimeArray array && array.retainedByArraySizeReference) {
+            // A reference to the array's $# proxy keeps it alive; see
+            // RuntimeArraySizeLvalue.createReference.
+            base.completeQueuedOwnerRelease(ownerRelease, "MortalList.processDeferredBase");
+            return;
+        }
+        if (ownerRelease != null && ownerRelease.isLifecycleOnlyAtZero()
                 && base.refCount > 0 && transientOwnerKind == null
                 && (base instanceof RuntimeArray || base instanceof RuntimeHash)) {
             // A lifecycle-only token asks for cleanup only if the aggregate is

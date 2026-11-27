@@ -19,6 +19,13 @@ $#array = 0;
 $copy = $$last_index;
 is($copy, 0, 'scalar copy sees a shortened array');
 
-my $freed = \$#{ [ 1, 2 ] };
-$copy = $$freed;
-ok(!defined $copy, 'copy of $# for a freed anonymous array is undef');
+# On a reference-counted stack the $# reference keeps the anonymous array
+# alive (see op/array.t test_arylen); otherwise the array is freed.
+my $temporary = \$#{ [ 1, 2 ] };
+$copy = $$temporary;
+if (Internals::stack_refcounted() & 1) {
+    is($copy, 1, 'copy of $# for a retained anonymous array is its last index');
+}
+else {
+    ok(!defined $copy, 'copy of $# for a freed anonymous array is undef');
+}
