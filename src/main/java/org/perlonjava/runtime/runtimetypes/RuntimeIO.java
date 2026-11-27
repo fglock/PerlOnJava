@@ -510,6 +510,8 @@ public class RuntimeIO extends RuntimeScalar {
     public IOHandle ioHandle = new ClosedIOHandle(); // Initialize with ClosedIOHandle
     /** Distinguishes an explicitly closed handle from a never-opened IO placeholder. */
     public boolean explicitlyClosed;
+    /** Package DATA streams remain owned by their glob when a FileHandle wrapper dies. */
+    private boolean packageDataHandle;
     /** Marks a closed directory so a destructor's repeated closedir is quiet. */
     public boolean explicitlyClosedDirectory;
     /**
@@ -602,6 +604,7 @@ public class RuntimeIO extends RuntimeScalar {
         this.slurpReadAttempted = other.slurpReadAttempted;
         replaceIOHandle(other.ioHandle);
         this.explicitlyClosed = other.explicitlyClosed;
+        this.packageDataHandle = other.packageDataHandle;
         this.explicitlyClosedDirectory = other.explicitlyClosedDirectory;
         this.directoryIO = other.directoryIO;
         this.openedPath = other.openedPath;
@@ -1129,6 +1132,15 @@ public class RuntimeIO extends RuntimeScalar {
         }
         RuntimeScalar status = binmode(ioLayers);
         if (status.getBoolean()) {
+            // PerlIO::via layers receive FILENO during open, before their first
+            // READ or WRITE callback. Some layers initialize their lower stream
+            // in this callback.
+            if (containsViaLayer(ioLayers)) {
+                // RuntimeIO.fileno() can return a registered virtual descriptor
+                // before consulting the active PerlIO layers. Open-time layer
+                // initialization must invoke the top layer's callback directly.
+                ioHandle.fileno();
+            }
             return true;
         }
 
@@ -1139,6 +1151,21 @@ public class RuntimeIO extends RuntimeScalar {
 
         close();
         return false;
+    }
+
+    /** Mark a parser-created package DATA stream as owned by its package glob. */
+    public void markPackageDataHandle() {
+        packageDataHandle = true;
+    }
+
+    /** Preserve DATA ownership when cloning an inherited handle. */
+    public void markPackageDataHandleIf(boolean value) {
+        if (value) packageDataHandle = true;
+    }
+
+    /** True when DESTROY must leave this package-owned DATA stream open. */
+    public boolean isPackageDataHandle() {
+        return packageDataHandle;
     }
 
     /** Apply lexical {@code use open} hints to sysopen, otherwise stay raw. */

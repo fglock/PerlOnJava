@@ -6,6 +6,7 @@ priorities and future plans.
 
 ## Work in progress
 
+- Preserve merged stdout and stderr write order, initialize PerlIO::via layers with FILENO before writes, retain package DATA handles through FileHandle wrappers, and honor localized imported `say` calls (#2198, #2162, #2039, #2160).
 - Ignore marker-like format picture text during conflict-marker checks; defer filters from synthetic `use_ok` evals and preserve their installing package during callbacks (#2182, #2181).
 - Correct `POSIX::strtod` and `LONG_MAX`, enumerate macOS groups with `getgrent`, and bundle the `POSIX::strptime` 0.13 Java provider (#2071, #2091, #2009, #2163).
 - Preserve interpreter eval caller locations and runtime metadata for tracing and deferred Unicode properties (#2042, #2135, #2118).
