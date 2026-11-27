@@ -1,13 +1,14 @@
 # Perl-Exact Reference Ownership and Closure-Pad Lifetime
 
-Status: Active — 2026-11-26
+Status: Implemented — 2026-11-27. Merged as `48c56dbfb8` (PR #1938); issue #2043 closed.
+Current behaviour is described in [dev/architecture/refcount-owner-ledger.md](../../architecture/refcount-owner-ledger.md); this plan is kept for its evidence and history.
 
 **Delivery issue:** [#2043](https://github.com/fglock/PerlOnJava/issues/2043)
 (origin [#1132](https://github.com/fglock/PerlOnJava/issues/1132), history in #1649).
 **Target PR:** [#1938](https://github.com/fglock/PerlOnJava/pull/1938).
-**Related:** [Weaken & DESTROY](../architecture/weaken-destroy.md),
-[Refcount alignment plan](refcount_alignment_plan.md),
-[Refcount alignment progress](refcount_alignment_progress.md).
+**Related:** [Weaken & DESTROY](../../architecture/weaken-destroy.md),
+[Refcount alignment plan](../../design/refcount_alignment_plan.md),
+[Refcount alignment progress](../../design/refcount_alignment_progress.md).
 
 ## Objective
 
@@ -288,7 +289,7 @@ used to drive a fix.
 
 ## History
 
-The [ownership rewrite handoff](perl-ownership-rewrite.md#current-handoff-2026-11-15)
+The [ownership rewrite handoff](../../design/perl-ownership-rewrite.md#current-handoff-2026-11-15)
 and PR [#1204](https://github.com/fglock/PerlOnJava/pull/1204) (branch
 `fix/issue-1132-closure-lifetime`) record the earlier issue #1132 delivery.
 Both are superseded by the current state above.

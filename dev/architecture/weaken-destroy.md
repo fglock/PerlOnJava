@@ -7,6 +7,7 @@
 - 2935/2935 Template-Toolkit subtests (100%)
 - `dev/sandbox/destroy_weaken/*.t`: 213/213
 
+Owner-slot model: [refcount-owner-ledger.md](refcount-owner-ledger.md).
 See also [dev/design/refcount_alignment_plan.md](../design/refcount_alignment_plan.md),
 [dev/design/refcount_alignment_progress.md](../design/refcount_alignment_progress.md),
 [dev/design/refcount_alignment_52leaks_plan.md](../design/refcount_alignment_52leaks_plan.md),
