@@ -315,8 +315,8 @@ dependencies {
     implementation libs.bcpkix                         // Bouncy Castle PEM/PKCS parsing
     implementation libs.snappy.java                    // Official Sereal Java codec compression
     implementation libs.zstd.jni                       // Official Sereal Java codec compression
-    implementation 'org.jruby.jcodings:jcodings:1.0.64' // Encoding support for vendored Joni
-    implementation 'io.netty:netty-codec-http:4.1.115.Final'  // Netty HTTP codec for PSGI server
+    implementation 'org.jruby.jcodings:jcodings:1.0.67' // Encoding support for vendored Joni
+    implementation 'io.netty:netty-codec-http:4.2.21.Final'  // Netty HTTP codec for PSGI server
 
     // Testing dependencies
     testImplementation libs.junit.jupiter.api
