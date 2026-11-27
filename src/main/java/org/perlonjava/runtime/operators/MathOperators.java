@@ -61,17 +61,14 @@ public class MathOperators {
     }
 
     private static RuntimeScalar numericOperand(RuntimeScalar scalar, String operation) {
-        // Numeric conversion operates on an SV's numeric slot. Do not mark
-        // the original array/hash/lvalue slot as numified while evaluating a
-        // non-mutating binary operator.
-        RuntimeScalar operand = scalar.type == READONLY_SCALAR
-                || isStringLike(scalar) ? new RuntimeScalar(scalar) : scalar;
+        // Perl records numeric conversion on the source scalar as well as
+        // returning a numeric value, so B and Data::Dumper can observe it.
+        RuntimeScalar operand = scalar.type == READONLY_SCALAR ? new RuntimeScalar(scalar) : scalar;
         return operand.getNumber(operation);
     }
 
     private static RuntimeScalar numericOperandWarn(RuntimeScalar scalar, String operation) {
-        RuntimeScalar operand = scalar.type == READONLY_SCALAR
-                || isStringLike(scalar) ? new RuntimeScalar(scalar) : scalar;
+        RuntimeScalar operand = scalar.type == READONLY_SCALAR ? new RuntimeScalar(scalar) : scalar;
         return operand.getNumberWarn(operation);
     }
 

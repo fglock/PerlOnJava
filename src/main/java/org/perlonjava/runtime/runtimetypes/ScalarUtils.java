@@ -2,7 +2,9 @@ package org.perlonjava.runtime.runtimetypes;
 
 import org.perlonjava.frontend.parser.NumberParser;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.math.RoundingMode;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
 
@@ -336,7 +338,9 @@ public class ScalarUtils {
                 // To get 15 significant figures, we need that position + 14 more digits
                 decimalPlaces = -(int) Math.floor(Math.log10(absValue)) + 14;
             }
-            String result = String.format("%." + decimalPlaces + "f", value);
+            String result = new BigDecimal(value)
+                    .setScale(decimalPlaces, RoundingMode.HALF_EVEN)
+                    .toPlainString();
             // Remove trailing zeros and decimal point if not needed
             result = result.replaceAll("0+$", "").replaceAll("\\.$", "");
             return result;

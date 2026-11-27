@@ -214,20 +214,50 @@ sub _extract_source_visible_block {
     my ($brace, $end) = @{$candidates[0]};
 
     my $body = substr($source, $brace + 1, $end - $brace - 1);
-    $body =~ s/^\s+//;
-    $body =~ s/\s+$//;
+    if ($body =~ /\n/) {
+        $body =~ s/\A[ \t]*\n//;
+        $body =~ s/\n[ \t]*\z//;
+    } else {
+        $body =~ s/\A\s+//;
+        $body =~ s/\s+\z//;
+    }
     return if defined($source_offset) && $source_offset == -1
-        && $body =~ /\A\{\s*use\s+(?:strict|warnings)\b/s;
+        && do { my $probe = $body; $probe =~ s/\A[ \t]+//; $probe =~ /\A\{\s*use\s+(?:strict|warnings)\b/s };
     $body .= ';' if length($body) && $body !~ /[;}]\z/;
     $body = _fold_simple_integer_expression($body);
     if ($flags) {
         my @lines;
         push @lines, 'use warnings;' if $flags & 2;
         push @lines, 'use strict;' if $flags & 1;
-        push @lines, split /\n/, $body;
+        push @lines, _normalise_source_body($body);
+        return "{\n" . join('', map { "    $_\n" } @lines) . "}";
+    }
+    if ($body =~ /\n/) {
+        my @lines = _normalise_source_body($body);
         return "{\n" . join('', map { "    $_\n" } @lines) . "}";
     }
     return "{ $body }";
+}
+
+sub _normalise_source_body {
+    my ($body) = @_;
+    my @lines = split /\n/, $body;
+    my @indents = map { length($_) } map { /\A([ \t]*)\S/ ? $1 : () } @lines;
+    my $indent = @indents ? (sort { $a <=> $b } @indents)[0] : 0;
+
+    for my $line (@lines) {
+        substr($line, 0, $indent, '') if $indent && length($line) >= $indent;
+        $line =~ s/[ \t]+\z//;
+        next if $line =~ /^\s*#/;
+
+        # B::Deparse omits redundant parentheses for these unambiguous
+        # built-in statement forms. Keep the rewrite line-local so quoted
+        # source and nested expressions remain unchanged.
+        $line =~ s/\A(\s*(?:my\s+\$[A-Za-z_]\w*\s*=\s*)?)shift\s*\(\s*\@_\s*\)(\s*;?)\z/${1}shift \@_${2}/;
+        $line =~ s/\A(\s*)print\s*\(\s*("(?:\\.|[^"\\])*")\s*\)(\s*;?)\z/${1}print ${2}${3}/;
+        $line =~ s/\A(\s*)return\s*\(\s*([^()]+?)\s*\)(\s*;?)\z/${1}return ${2}${3}/;
+    }
+    return @lines;
 }
 
 sub _fold_simple_integer_expression {

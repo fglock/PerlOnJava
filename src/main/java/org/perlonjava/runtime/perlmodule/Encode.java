@@ -735,6 +735,11 @@ public class Encode extends PerlModuleBase {
             return dispatchToEncodingObject(perlEncObj, "decode", args, 1, 2, ctx);
         }
 
+        RuntimeScalar input = args.get(1);
+        if (input.type == STRING && input.toString().codePoints().anyMatch(cp -> cp > 0xFF)) {
+            throw new PerlCompilerException("Wide character in Encode::decode");
+        }
+
         String octets = args.get(1).toString();
         if (isHzEncodingName(encodingName)) {
             return new RuntimeScalar(decodeHz(octets)).getList();

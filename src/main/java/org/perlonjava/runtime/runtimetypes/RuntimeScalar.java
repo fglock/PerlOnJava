@@ -2890,6 +2890,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (scalar.type == READONLY_SCALAR) {
             scalar = (RuntimeScalar) scalar.value;
         }
+        if (scalar.type == DUALVAR) {
+            DualVar dual = (DualVar) scalar.value;
+            if (!dual.numericValue().toString().equals(dual.stringValue().toString())) {
+                return false;
+            }
+            scalar = dual.numericValue();
+        }
         if (scalar.type != INTEGER && scalar.type != DOUBLE
                 && (!scalar.numericContextSeen || !(scalar.type == STRING || scalar.type == BYTE_STRING))) {
             return false;
