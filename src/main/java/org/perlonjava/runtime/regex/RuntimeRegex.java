@@ -685,7 +685,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
     private static String currentUserPropertyPackage(String pattern) {
         String packageName = currentUserPropertyPackage();
-        String activeCallerPackage = RuntimeCode.getActiveRegexPropertyCallerPackage();
+        String activeCallerPackage = RuntimeCode.getActiveNamedSubroutinePackage();
         if (activeCallerPackage == null || activeCallerPackage.isBlank()
                 || activeCallerPackage.equals(packageName)) {
             return packageName;
@@ -703,7 +703,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     }
 
     static String currentDynamicUserPropertyPackage() {
-        String activeCallerPackage = RuntimeCode.getActiveRegexPropertyCallerPackage();
+        String activeCallerPackage = RuntimeCode.getActiveNamedSubroutinePackage();
         return activeCallerPackage != null ? activeCallerPackage : currentUserPropertyPackage();
     }
 

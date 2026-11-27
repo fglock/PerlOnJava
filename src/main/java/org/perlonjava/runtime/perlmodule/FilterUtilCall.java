@@ -1,5 +1,7 @@
 package org.perlonjava.runtime.perlmodule;
 
+import org.perlonjava.backend.bytecode.InterpreterState;
+import org.perlonjava.runtime.runtimetypes.DynamicVariableManager;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
@@ -267,68 +269,81 @@ public class FilterUtilCall extends PerlModuleBase {
                 if (isCodeRef.getBoolean()) {
                     // Closure filter: call the coderef repeatedly
                     RuntimeCode code = (RuntimeCode) filterObj.value;
+                    String savedCodePackage = code.packageName;
+                    code.packageName = packageName.toString();
+                    RuntimeScalar currentPackage = InterpreterState.currentPackage.get();
+                    String savedPackage = currentPackage.toString();
+                    int savedLocalLevel = DynamicVariableManager.getLocalLevel();
+                    DynamicVariableManager.pushLocalVariable(currentPackage);
+                    currentPackage.set(packageName.toString());
                     boolean continueFiltering = true;
 
-                    while (continueFiltering) {
-                        // Call the filter
-                        RuntimeBase result = code.apply(new RuntimeArray(), RuntimeContextType.SCALAR);
+                    try {
+                        while (continueFiltering) {
+                            // Call the filter
+                            RuntimeBase result = code.apply(new RuntimeArray(), RuntimeContextType.SCALAR);
 
-                        // Get the modified $_
-                        String chunk = GlobalVariable.getGlobalVariable("main::_").toString();
-                        if (!chunk.isEmpty()) {
-                            filteredCode.append(chunk);
-                            if (debug) {
-                                System.err.println("[FILTER] Got chunk: " + chunk);
+                            // Get the modified $_
+                            String chunk = GlobalVariable.getGlobalVariable("main::_").toString();
+                            if (!chunk.isEmpty()) {
+                                filteredCode.append(chunk);
+                                if (debug) {
+                                    System.err.println("[FILTER] Got chunk: " + chunk);
+                                }
+
+                                // Check if the chunk ends with __DATA__, __END__, or "no Module;" terminator
+                                // If so, stop filtering and append remaining source unchanged
+                                // This is important for Filter::Simple which stops at these terminators
+                                // Pattern matches:
+                                // - __DATA__ or __END__ at end of line
+                                // - "no ModuleName;" at start of line (with optional comment)
+                                if (chunk.matches("(?sm).*^__(?:DATA|END)__\\s*$") ||
+                                    chunk.matches("(?sm).*^\\s*no\\s+[\\w:]+\\s*;.*$")) {
+                                    // Append remaining source unchanged
+                                    if (debug) {
+                                        System.err.println("[FILTER] Hit terminator, currentLine=" + context.currentLine +
+                                            ", totalLines=" + context.sourceLines.length);
+                                    }
+                                    while (context.currentLine < context.sourceLines.length) {
+                                        filteredCode.append(context.sourceLines[context.currentLine]);
+                                        context.currentLine++;
+                                    }
+                                    continueFiltering = false;
+                                    if (debug) {
+                                        System.err.println("[FILTER] Hit __DATA__/__END__ terminator, appending remaining source unchanged");
+                                    }
+                                }
                             }
 
-                            // Check if the chunk ends with __DATA__, __END__, or "no Module;" terminator
-                            // If so, stop filtering and append remaining source unchanged
-                            // This is important for Filter::Simple which stops at these terminators
-                            // Pattern matches:
-                            // - __DATA__ or __END__ at end of line
-                            // - "no ModuleName;" at start of line (with optional comment)
-                            if (chunk.matches("(?sm).*^__(?:DATA|END)__\\s*$") ||
-                                chunk.matches("(?sm).*^\\s*no\\s+[\\w:]+\\s*;.*$")) {
-                                // Append remaining source unchanged
-                                if (debug) {
-                                    System.err.println("[FILTER] Hit terminator, currentLine=" + context.currentLine + 
-                                        ", totalLines=" + context.sourceLines.length);
-                                }
+                            // A one-shot source filter commonly calls filter_del()
+                            // from inside its callback after injecting one chunk.
+                            // Do not invoke the now-deleted callback again; append
+                            // the untouched source that follows the insertion.
+                            if (context.filterStack.isEmpty()) {
                                 while (context.currentLine < context.sourceLines.length) {
-                                    filteredCode.append(context.sourceLines[context.currentLine]);
-                                    context.currentLine++;
+                                    filteredCode.append(context.sourceLines[context.currentLine++]);
                                 }
                                 continueFiltering = false;
-                                if (debug) {
-                                    System.err.println("[FILTER] Hit __DATA__/__END__ terminator, appending remaining source unchanged");
-                                }
+                                continue;
                             }
-                        }
 
-                        // A one-shot source filter commonly calls filter_del()
-                        // from inside its callback after injecting one chunk.
-                        // Do not invoke the now-deleted callback again; append
-                        // the untouched source that follows the insertion.
-                        if (context.filterStack.isEmpty()) {
-                            while (context.currentLine < context.sourceLines.length) {
-                                filteredCode.append(context.sourceLines[context.currentLine++]);
+                            // Check status - convert to scalar if it's a list
+                            RuntimeScalar statusScalar = result.scalar();
+                            int status = statusScalar.getInt();
+                            if (debug) {
+                                System.err.println("[FILTER] Status: " + status);
                             }
-                            continueFiltering = false;
-                            continue;
-                        }
+                            if (status <= 0) {
+                                continueFiltering = false;
+                            }
 
-                        // Check status - convert to scalar if it's a list
-                        RuntimeScalar statusScalar = result.scalar();
-                        int status = statusScalar.getInt();
-                        if (debug) {
-                            System.err.println("[FILTER] Status: " + status);
+                            // Prepare for next iteration
+                            GlobalVariable.getGlobalVariable("main::_").set("");
                         }
-                        if (status <= 0) {
-                            continueFiltering = false;
-                        }
-
-                        // Prepare for next iteration
-                        GlobalVariable.getGlobalVariable("main::_").set("");
+                    } finally {
+                        DynamicVariableManager.popToLocalLevel(savedLocalLevel);
+                        currentPackage.set(savedPackage);
+                        code.packageName = savedCodePackage;
                     }
                 } else {
                     // Method filter: call the "filter" method on the blessed filter object
