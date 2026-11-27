@@ -6803,7 +6803,9 @@ public class BytecodeCompiler implements Visitor {
                 if (node.operand instanceof OperatorNode operandOp
                         && operandOp.operator.equals("&")) {
                     if (operandOp.operand instanceof IdentifierNode idNode) {
-                        if (operandOp.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar codeRef) {
+                        if (operandOp.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar codeRef
+                                && !(codeRef.value instanceof RuntimeCode code
+                                        && (code.isConstantCv || code.constantValue != null))) {
                             RuntimeScalar codeSnapshot = new RuntimeScalar();
                             codeSnapshot.type = codeRef.type;
                             codeSnapshot.value = codeRef.value;

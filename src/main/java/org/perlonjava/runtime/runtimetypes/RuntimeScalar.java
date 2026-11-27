@@ -4089,7 +4089,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 || !hasLiveIo(glob)) {
             return;
         }
-        attachIoOwnerSlot(scalar, acquireIoOwnerSlot(glob));
+        PerlOwnerSlot ownerSlot = acquireIoOwnerSlot(glob);
+        attachIoOwnerSlot(scalar, ownerSlot);
     }
 
     /** Retain a non-socket anonymous IO handle copied into a hash element slot. */
@@ -7266,7 +7267,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         finishIoOwnerRelease(ownerRelease);
     }
 
+    /** Release an IO holder while retiring the durable hash element that owns it. */
+    public static void releaseIoOwnerFromHashSlot(RuntimeScalar scalar) {
+        IoOwnerRelease ownerRelease = releaseIoOwnerSlot(scalar);
+        finishIoOwnerRelease(ownerRelease, true);
+    }
+
     private static void finishIoOwnerRelease(IoOwnerRelease ownerRelease) {
+        finishIoOwnerRelease(ownerRelease, false);
+    }
+
+    private static void finishIoOwnerRelease(
+            IoOwnerRelease ownerRelease, boolean finalHashSlotRelease) {
         if (ownerRelease != null) {
             RuntimeGlob glob = ownerRelease.glob();
             if (ownerRelease.remainingHolders() <= 0 && isUnstashedIoGlob(glob)) {
@@ -7275,14 +7287,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                         && !(io.ioHandle instanceof ClosedIOHandle)) {
                     // Closing is required for stream sockets: merely dropping
                     // the synthetic fileno does not send EOF to the peer.
-                    // Let a Perl DESTROY method close blessed handles so it
-                    // can still inspect the live descriptor. Plain anonymous
-                    // globs have no destructor, so their final owner closes
-                    // the channel here and releases locks promptly.
+                    // Closing ordinary handles is safe when retiring their
+                    // durable hash slot; other scalar aliases may not have a
+                    // resource lease of their own.
                     String className = NameNormalizer.getBlessStr(glob.blessId);
                     boolean hasDestroy = className != null
                             && DestroyDispatch.classHasDestroy(glob.blessId, className);
-                    if (!hasDestroy) io.close();
+                    if (isSocketIOHandle(io.ioHandle)
+                            || (finalHashSlotRelease && !hasDestroy)) io.close();
                 }
                 GlobalVariable.retireHiddenIORef(glob.globName);
             }

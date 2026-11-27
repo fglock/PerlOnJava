@@ -2096,6 +2096,8 @@ public class EmitOperator {
                 if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("Handle \\& " + operatorNode.operand);
                 if (operatorNode.operand instanceof IdentifierNode identifierNode) {
                     if (operatorNode.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar codeRef
+                            && !(codeRef.value instanceof RuntimeCode code
+                                    && (code.isConstantCv || code.constantValue != null))
                             && emitterVisitor.ctx.javaClassInfo != null) {
                         RuntimeScalar codeSnapshot = new RuntimeScalar();
                         codeSnapshot.type = codeRef.type;
