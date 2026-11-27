@@ -67,6 +67,6 @@ owner-lifecycle defect, separate from the `B::SV` presentation adjustment.
 
 ## Related Documents
 
-- [Refcount owner ledger](refcount-owner-ledger.md)
+- [Refcount owner ledger](../architecture/refcount-owner-ledger.md)
 - [Reference-count alignment plan](refcount_alignment_plan.md)
 - [Weaken and DESTROY architecture](../architecture/weaken-destroy.md)

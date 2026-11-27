@@ -960,7 +960,7 @@ files, so its aggregate counts are not directly comparable.
 ## Related documents and skills
 
 - [Issue batch evidence](../archive/design/parser-high-impact-issues-20261002.md)
-- [Reference owner ledger](refcount-owner-ledger.md)
+- [Reference owner ledger](../architecture/refcount-owner-ledger.md)
 - [Runtime profiling skill](../../.agents/skills/profile-perlonjava/SKILL.md)
 - [Debugging skill](../../.agents/skills/debug-perlonjava/SKILL.md)
 
