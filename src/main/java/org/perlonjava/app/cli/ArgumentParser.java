@@ -104,6 +104,10 @@ public class ArgumentParser {
         return parsedArgs;
     }
 
+    private static RuntimeScalar toArgvScalar(String argument) {
+        return new RuntimeScalar(argument.getBytes(StandardCharsets.UTF_8));
+    }
+
     /**
      * Processes the PERL5OPT environment variable to preset command-line options.
      * Supported options: -D, -I, -M, -T, -U, -W, -d, -m, -t, and -w.
@@ -309,7 +313,7 @@ public class ArgumentParser {
                         if (arg.equals("--") || !arg.startsWith("-")) {
                             // This is where we start adding to @ARGV
                             for (int j = i; j < args.length; j++) {
-                                RuntimeArray.push(parsedArgs.argumentList, new RuntimeScalar(args[j]));
+                                RuntimeArray.push(parsedArgs.argumentList, toArgvScalar(args[j]));
                             }
                             break;
                         }
@@ -324,7 +328,7 @@ public class ArgumentParser {
             }
         } else {
             // If code is already set, treat the argument as a runtime argument
-            RuntimeArray.push(parsedArgs.argumentList, new RuntimeScalar(args[index]));
+            RuntimeArray.push(parsedArgs.argumentList, toArgvScalar(args[index]));
         }
     }
 
@@ -1788,7 +1792,7 @@ public class ArgumentParser {
             String arg = args[i];
             if (arg.equals("--") || !arg.startsWith("-")) {
                 for (int j = i; j < args.length; j++) {
-                    RuntimeArray.push(parsedArgs.argumentList, new RuntimeScalar(args[j]));
+                    RuntimeArray.push(parsedArgs.argumentList, toArgvScalar(args[j]));
                 }
                 return;
             }

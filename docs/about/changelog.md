@@ -8,7 +8,7 @@ priorities and future plans.
 
 - Ignore marker-like format picture text during conflict-marker checks; defer filters from synthetic `use_ok` evals and preserve their installing package during callbacks (#2182, #2181).
 - Correct `POSIX::strtod` and `LONG_MAX`, enumerate macOS groups with `getgrent`, and bundle the `POSIX::strptime` 0.13 Java provider (#2071, #2091, #2009, #2163).
-- Reject wide-character input passed to `Encode::decode` instead of replacing it, preserve arithmetic numification and Perl-compatible floating-point rounding for scalar introspection, add `B::cstring`, and normalize multiline source-visible `B::Deparse` output (#2174, #2184, #2109, #1290).
+- Reject wide-character input passed to `Encode::decode` instead of replacing it, preserve UTF-8 octets in command-line arguments, arithmetic numification and Perl-compatible floating-point rounding for scalar introspection, add `B::cstring`, and normalize multiline source-visible `B::Deparse` output (#2174, #2184, #2109, #1290).
 - Preserve interpreter eval caller locations and runtime metadata for tracing and deferred Unicode properties (#2042, #2135, #2118).
 - Fix CODE-slot lookup through glob references, inherited import stash visibility, false file-scope lexical-sub warnings, and caller package reporting in BEGIN closures (#2173, #2170, #2165, #2138, #2136, #2102, #2078).
 - Require Net::SSLeay and Crypt::OpenSSL::RSA key generation to use 2048–8192 bits; reject weaker and unbounded sizes and keep the RSA round-trip and padding tests active at the minimum supported size.
