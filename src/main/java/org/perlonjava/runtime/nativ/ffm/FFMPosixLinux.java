@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.nativ.ffm;
 
 import java.lang.foreign.Arena;
+import java.lang.foreign.AddressLayout;
 import java.lang.foreign.FunctionDescriptor;
 import java.lang.foreign.Linker;
 import java.lang.foreign.MemoryLayout;
@@ -153,6 +154,8 @@ public class FFMPosixLinux implements FFMPosixInterface {
     private static long GR_PASSWD_OFFSET;
     private static long GR_GID_OFFSET;
     private static long GR_MEMBERS_OFFSET;
+    private static final AddressLayout UNALIGNED_ADDRESS =
+            ValueLayout.ADDRESS.withByteAlignment(1);
     
     /**
      * Initialize FFM components lazily.
@@ -819,7 +822,7 @@ public class FFMPosixLinux implements FFMPosixInterface {
         if (membersPtr.address() != 0) {
             MemorySegment memberVector = membersPtr.reinterpret(8L * 4096);
             for (long i = 0; i < 4096; i++) {
-                MemorySegment member = memberVector.get(ValueLayout.ADDRESS, i * 8);
+                MemorySegment member = memberVector.get(UNALIGNED_ADDRESS, i * 8);
                 if (member.address() == 0) break;
                 memberNames.add(readCString(member));
             }

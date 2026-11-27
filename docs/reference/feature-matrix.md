@@ -877,6 +877,7 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - 🚧  **DynaLoader** placeholder module.
 - 🚧  **HTTP::Tiny** some features untested: proxy settings.
 - 🚧  **POSIX** module.
+- ✅ **POSIX::strptime 0.13** on 64-bit Linux and macOS, backed by libc `strptime`; Windows is unsupported.
 - ✅  **Unicode::Normalize**: canonical and compatibility normalization passes the focused audit batch.
 - ✅  **Archive::Tar** module.
 - ✅  **Archive::Zip** module.

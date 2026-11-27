@@ -364,6 +364,7 @@ These are loaded automatically or via `use`:
 | `Time::Local` | Perl | |
 | `DateTime` | Java + Perl | Java backend bundled; install `DateTime` from CPAN with `jcpan -i DateTime` (timezone data gets frequent updates) |
 | `POSIX` | Java | Includes `strftime`, `mktime`, etc. |
+| `POSIX::strptime` | Java XS + Perl | Bundled 0.13 wrapper and provider; libc-backed on 64-bit Linux and macOS |
 
 ### Math
 

@@ -75,6 +75,11 @@ public final class ParserExtensionRegistry {
         if (parsers.isEmpty()) ACTIVE_PARSERS.remove();
     }
 
+    public static Parser getActiveParser() {
+        Deque<Parser> parsers = ACTIVE_PARSERS.get();
+        return parsers.isEmpty() ? null : parsers.peek();
+    }
+
     /** Apply a runtime import callback to the parser currently compiling BEGIN/use. */
     public static void applyDynamicFunctionParametersImport(
             boolean enabled, RuntimeList arguments) {

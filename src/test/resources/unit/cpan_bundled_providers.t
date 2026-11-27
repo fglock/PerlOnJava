@@ -14,10 +14,13 @@ if ($is_perlonjava) {
 ok(PerlOnJava::ProviderManifest->can('provider_for'), 'loaded provider manifest');
 
 my @providers = PerlOnJava::ProviderManifest->providers;
-is(scalar(@providers), 13, 'bundled-provider manifest has thirteen module entries');
+is(scalar(@providers), 16, 'bundled-provider manifest has sixteen module entries');
 
 my %expected = (
     DBI                  => [ '1.643',  'bundled-perl' ],
+    'Object::Pad'        => [ '0.800',  'compatibility-shim' ],
+    'Compress::Raw::Zlib' => [ '2.224', 'java-xs' ],
+    'Compress::Raw::Bzip2' => [ '2.224', 'java-xs' ],
     Moose                => [ '2.4000', 'compatibility-shim' ],
     'Crypt::PRNG'        => [ '0.089',  'compatibility-shim' ],
     'HTML::Parser'       => [ '3.83',   'java-xs' ],
@@ -47,7 +50,7 @@ is_deeply(
 );
 
 SKIP: {
-    skip 'CPAN integration and provider runtime smoke are PerlOnJava-specific', 38
+    skip 'CPAN integration and provider runtime smoke are PerlOnJava-specific', 48
         unless $is_perlonjava;
 
     require CPAN::Module;
@@ -95,6 +98,33 @@ SKIP: {
     is($bad_status, -1, 'incompatible forbidden provider fails dependency resolution');
     like($message, qr/version 1\.643.*does not satisfy.*shadowing.*forbidden/s,
         'incompatible-provider failure explains the policy');
+
+    $requirements = CPAN::Meta::Requirements->new;
+    $requirements->add_minimum('Object::Pad', '0.805');
+    my $object_pad = bless { ID => 'Object::Pad' }, 'Local::ProviderModule';
+    my ($pad_status, $pad_message) = CPAN::Distribution::_perlonjava_provider_requirement(
+        $object_pad, $requirements, 'Object::Pad');
+    is($pad_status, -1, 'Object::Pad 0.800 does not satisfy an 0.805 consumer');
+    like($pad_message, qr/Object::Pad is version 0\.800 and does not satisfy.*0\.805/s,
+        'Object::Pad compatibility diagnostic reports actual and required versions');
+
+    for my $module (qw(Compress::Raw::Zlib Compress::Raw::Bzip2)) {
+        my $compress_provider = bless { ID => $module }, 'Local::ProviderModule';
+        $requirements = CPAN::Meta::Requirements->new;
+        $requirements->add_minimum($module, '2.224');
+        my ($compatible_status) = CPAN::Distribution::_perlonjava_provider_requirement(
+            $compress_provider, $requirements, $module);
+        is($compatible_status, 1, "$module 2.224 satisfies IO::Compress 2.224");
+
+        $requirements = CPAN::Meta::Requirements->new;
+        $requirements->add_minimum($module, '2.225');
+        my ($incompatible_status, $compress_message) =
+            CPAN::Distribution::_perlonjava_provider_requirement(
+                $compress_provider, $requirements, $module);
+        is($incompatible_status, -1, "$module rejects a requirement above its supported version");
+        like($compress_message, qr/$module is version 2\.224 and does not satisfy.*2\.225/s,
+            "$module dependency diagnostic reports actual and required versions");
+    }
 
     $requirements = CPAN::Meta::Requirements->new;
     $requirements->add_minimum('XML::LibXML', '2.0000');

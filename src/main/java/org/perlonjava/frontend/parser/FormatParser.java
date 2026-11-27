@@ -74,11 +74,13 @@ public class FormatParser {
         // scope or become captured by the RuntimeFormat itself.
         int formatScope = parser.ctx.symbolTable.enterScope();
         List<FormatLine> templateLines;
+        int formatBodyStart = parser.tokenIndex;
         try {
             templateLines = parseFormatTemplateContentImmediate(parser);
         } finally {
             parser.ctx.symbolTable.exitScope(formatScope);
         }
+        parser.recordFormatBodyTokenRange(formatBodyStart, parser.tokenIndex);
 
         // Create a format node with the parsed template content
         FormatNode formatNode = new FormatNode(formatName, templateLines, tokenIndex);

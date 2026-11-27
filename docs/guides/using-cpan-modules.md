@@ -172,7 +172,7 @@ listed below; for the complete list see
 
 ### Time
 - `Time::HiRes`, `Time::Piece`
-- `POSIX` (including strftime)
+- `POSIX` (including strftime) and `POSIX::strptime`
 
 ## Alternative Installation Methods
 

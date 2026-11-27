@@ -1925,13 +1925,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return active == null ? null : active.packageName;
     }
 
-    /**
-     * Return the package of the active Perl caller around a deferred regex
-     * callback. The callback's synthetic CV retains the package where the
-     * regex was compiled, while runtime user-property lookup follows the
-     * package that invoked the match.
-     */
-    public static String getActiveRegexPropertyCallerPackage() {
+    /** Return the package of the nearest active named Perl subroutine. */
+    public static String getActiveNamedSubroutinePackage() {
         RuntimeCode previous = null;
         for (RuntimeCode active : activeCodeStack()) {
             if (isCompilerWrapperPair(active, previous)) {
@@ -1947,6 +1942,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
         }
         return null;
+    }
+
+    public static String getActiveSymbolicCallPackage() {
+        String packageName = getActiveNamedSubroutinePackage();
+        if (packageName == null || packageName.isBlank()) {
+            packageName = InterpreterState.currentPackage.get().toString();
+        }
+        return packageName == null || packageName.isBlank() ? "main" : packageName;
     }
 
     public static void popActiveCode(RuntimeCode code) {
@@ -6209,7 +6212,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
 
             if (curScalar.type == STRING || curScalar.type == BYTE_STRING) {
-                String varName = NameNormalizer.normalizeVariableName(curScalar.toString(), "main");
+                String varName = NameNormalizer.normalizeVariableName(
+                        curScalar.toString(), getActiveSymbolicCallPackage());
                 curScalar = GlobalVariable.getGlobalCodeRef(varName);
                 continue;
             }
@@ -11519,7 +11523,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
 
         if (curScalar.type == STRING || curScalar.type == BYTE_STRING) {
-            String varName = NameNormalizer.normalizeVariableName(curScalar.toString(), "main");
+            String varName = NameNormalizer.normalizeVariableName(
+                    curScalar.toString(), getActiveSymbolicCallPackage());
             curScalar = GlobalVariable.getGlobalCodeRef(varName);
             continue;
         }
@@ -12305,7 +12310,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
 
         if (runtimeScalar.type == STRING || runtimeScalar.type == BYTE_STRING) {
-            String varName = NameNormalizer.normalizeVariableName(runtimeScalar.toString(), "main");
+            String varName = NameNormalizer.normalizeVariableName(
+                    runtimeScalar.toString(), getActiveSymbolicCallPackage());
             RuntimeScalar resolved = GlobalVariable.getGlobalCodeRef(varName);
             return apply(resolved, subroutineName, args, callContext);
         }
@@ -12724,7 +12730,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
 
         if (runtimeScalar.type == STRING || runtimeScalar.type == BYTE_STRING) {
-            String varName = NameNormalizer.normalizeVariableName(runtimeScalar.toString(), "main");
+            String varName = NameNormalizer.normalizeVariableName(
+                    runtimeScalar.toString(), getActiveSymbolicCallPackage());
             RuntimeScalar resolved = GlobalVariable.getGlobalCodeRef(varName);
             return apply(resolved, subroutineName, list, callContext);
         }

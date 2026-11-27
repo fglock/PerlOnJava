@@ -6,6 +6,8 @@ priorities and future plans.
 
 ## Work in progress
 
+- Ignore marker-like format picture text during conflict-marker checks; defer filters from synthetic `use_ok` evals and preserve their installing package during callbacks (#2182, #2181).
+- Correct `POSIX::strtod` and `LONG_MAX`, enumerate macOS groups with `getgrent`, and bundle the `POSIX::strptime` 0.13 Java provider (#2071, #2091, #2009, #2163).
 - Preserve interpreter eval caller locations and runtime metadata for tracing and deferred Unicode properties (#2042, #2135, #2118).
 - Fix CODE-slot lookup through glob references, inherited import stash visibility, false file-scope lexical-sub warnings, and caller package reporting in BEGIN closures (#2173, #2170, #2165, #2138, #2136, #2102, #2078).
 - Require Net::SSLeay and Crypt::OpenSSL::RSA key generation to use 2048–8192 bits; reject weaker and unbounded sizes and keep the RSA round-trip and padding tests active at the minimum supported size.
@@ -46,6 +48,7 @@ priorities and future plans.
 - Run a named body installed through a glob alias into an emptied interpreted or `eval`-compiled CV, report subs compiled by `eval STRING` by name in `caller`, and treat a glob that received a CODE reference as already defined when a named sub is declared for it.
 - Document that `caller` follows the Perl 5.45.4 statement line rule, and patch the DBIx::Class `t/storage/txn.t` expectation through a bundled distropref.
 - Fix MakeMaker module lookup, script wrappers and v-string serialization; select the requested JSON XS-compatible backend; add Text::CSV::csv and XML::LibXML node API aliases; match version::qv stringification (#2175, #2164, #2153, #2140, #2116, #2114, #2157, #2126).
+- Normalize MakeMaker prerequisite v-strings, handle semicolon Perl env shebangs, add validated CPAN release staging and apply, run Module::Build code generation during XS fallback, and record process capacity during serialized release acceptance (#2126, #2018, #1294, #2169, #1278, #1114).
 - Parse lexical code attributes, MooseX role calls, legacy spaced `@_`, chained prototype calls, qualified class methods, indirect imports with slash arguments, trailing-text `__END__` markers, and the `socket` DSL term (#2172, #2168, #2161, #2154, #2158, #2139, #2137, #2127).
 - Honor overloaded logical negation, warn on distinct constant-sub redefinitions with equal values, and preserve reference-valued scalar slots through localized glob aliases (#2122, #2075, #1939).
 - Preserve the `Can't use a hash as a reference` diagnostic for `%$hashref->{key}` and hash slices (#2132).
