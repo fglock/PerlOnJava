@@ -7275,11 +7275,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                         && !(io.ioHandle instanceof ClosedIOHandle)) {
                     // Closing is required for stream sockets: merely dropping
                     // the synthetic fileno does not send EOF to the peer.
-                    // Ordinary handles can still have transient IO::File
-                    // aliases whose Perl ownership is not represented by this
-                    // resource lease, so they keep the unregister-only path.
-                    if (isSocketIOHandle(io.ioHandle)) io.close();
-                    else io.unregisterFileno();
+                    // Let a Perl DESTROY method close blessed handles so it
+                    // can still inspect the live descriptor. Plain anonymous
+                    // globs have no destructor, so their final owner closes
+                    // the channel here and releases locks promptly.
+                    String className = NameNormalizer.getBlessStr(glob.blessId);
+                    boolean hasDestroy = className != null
+                            && DestroyDispatch.classHasDestroy(glob.blessId, className);
+                    if (!hasDestroy) io.close();
                 }
                 GlobalVariable.retireHiddenIORef(glob.globName);
             }

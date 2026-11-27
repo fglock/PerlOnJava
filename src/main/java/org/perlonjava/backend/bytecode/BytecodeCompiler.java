@@ -6797,17 +6797,27 @@ public class BytecodeCompiler implements Visitor {
             // Reference operator: \$x, \@x, \%x, \*x, etc.
             if (node.operand != null) {
                 // Special case: \&name — CODE is already a reference type.
-                // Emit LOAD_GLOBAL_CODE directly without CREATE_REF, matching JVM compiler.
-                // Also set isSymbolicReference so defined(\&stub) returns true, matching
-                // the JVM backend's createCodeReference behavior.
+                // Emit a CODE value directly without wrapping it in another
+                // reference. Parse-time CVs survive stash cleanup; unresolved
+                // names keep the runtime lookup used for forward glob installs.
                 if (node.operand instanceof OperatorNode operandOp
                         && operandOp.operator.equals("&")) {
                     if (operandOp.operand instanceof IdentifierNode idNode) {
-                        // \&name is evaluated at runtime, just like the JVM
-                        // createCodeReference emitter. This is distinct from a
-                        // direct named call: a preceding glob assignment may
-                        // install the CV, while a preceding stash deletion must
-                        // expose a fresh undefined slot rather than a pinned CV.
+                        if (operandOp.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar codeRef) {
+                            RuntimeScalar codeSnapshot = new RuntimeScalar();
+                            codeSnapshot.type = codeRef.type;
+                            codeSnapshot.value = codeRef.value;
+                            int rd = allocateOutputRegister();
+                            int constIdx = addToConstantPool(codeSnapshot);
+                            emit(Opcodes.LOAD_CONST);
+                            emitReg(rd);
+                            emit(constIdx);
+                            lastResultReg = rd;
+                            return;
+                        }
+                        // If no CV existed when this expression was parsed,
+                        // resolve \&name at runtime. A parse-time CV is retained
+                        // above, as Perl coderefs survive later stash cleanup.
                         String subName = NameNormalizer.normalizeVariableName(
                                 idNode.name, getCurrentPackage());
                         int rd = allocateOutputRegister();
