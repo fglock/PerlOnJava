@@ -602,8 +602,10 @@ public class ModuleOperators {
                 RuntimeArray prefetchedIncArray = incArray;
 
                 // The launcher may supply only project test paths. Keep the
-                // bundled library available for runtime loading and include it
-                // in diagnostics because the search does consult this entry.
+                // bundled library available as an implicit fallback searched
+                // after the visible entries. Perl never modifies @INC during
+                // require, so the fallback is neither added to @INC nor
+                // listed in the "@INC entries checked" diagnostic.
                 boolean seenBundledInc = false;
                 Map<Integer, CachedTiedIncEntry> prefetchedTiedEntries = new HashMap<>();
                 for (int i = 0; i < incArray.size(); i++) {
@@ -618,17 +620,24 @@ public class ModuleOperators {
                         break;
                     }
                 }
-                if (!seenBundledInc) {
-                    incArray.push(new RuntimeScalar(GlobalContext.JAR_PERLLIB));
-                }
+                boolean bundledFallbackPending = !seenBundledInc;
 
                 // Re-fetch the global array on every iteration. An @INC hook
                 // may replace @INC entirely; Perl continues with the entry at
                 // the current numeric position in that replacement.
                 for (int i = 0; fullName == null; i++) {
                     incArray = GlobalVariable.getGlobalArray("main::INC");
-                    if (i >= incArray.size()) break;
-                    RuntimeScalar dirScalar = incArray.get(i);
+                    boolean bundledFallback = false;
+                    RuntimeScalar dirScalar;
+                    if (i < incArray.size()) {
+                        dirScalar = incArray.get(i);
+                    } else if (bundledFallbackPending) {
+                        bundledFallbackPending = false;
+                        bundledFallback = true;
+                        dirScalar = new RuntimeScalar(GlobalContext.JAR_PERLLIB);
+                    } else {
+                        break;
+                    }
 
                     // If this is a tied scalar, fetch the actual value
                     if (dirScalar.type == RuntimeScalarType.TIED_SCALAR) {
@@ -640,7 +649,9 @@ public class ModuleOperators {
                             dirScalar = dirScalar.tiedFetch();
                         }
                     }
-                    incEntriesChecked.add(dirScalar.toString());
+                    if (!bundledFallback) {
+                        incEntriesChecked.add(dirScalar.toString());
+                    }
 
                     // For absolute/relative paths (starting with /, ./, ../), only try hooks
                     // Regular directory entries should be skipped for such paths
