@@ -23,6 +23,12 @@ subtest 'reduce' => sub {
     my $concat = reduce { $a . $b } 'a'..'d';
     is($concat, 'abcd', 'reduce string concatenation');
 
+    my $returned_sum = reduce { return $a + $b } 2, 4, 6;
+    is($returned_sum, 12, 'return in reduce callback returns its value');
+
+    my $returned_loop_sum = reduce { while (1) { return $a + $b } } 2, 4, 6;
+    is($returned_loop_sum, 12, 'return in reduce callback loop returns its value');
+
     # Edge cases
     is((reduce { $a + $b } ()), undef, 'reduce empty list');
     is((reduce { $a + $b } (42)), 42, 'reduce single element');
@@ -120,6 +126,10 @@ subtest 'first' => sub {
     is((first { defined $_ } (undef, undef, 'hello')), 'hello', 'first defined');
     is((first { $_ > 15 } 1..10), undef, 'first - no match');
     is((first { $_ > 0 } ()), undef, 'first - empty list');
+    is((first { return ($_ > 6) } 2, 4, 6, 12), 12,
+        'return in first callback returns its value');
+    is((first { while (1) { return ($_ > 6) } } 2, 4, 6, 12), 12,
+        'return in first callback loop returns its value');
 };
 
 # Test min/max
