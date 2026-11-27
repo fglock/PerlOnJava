@@ -27,9 +27,9 @@ index.
 | Item | Value |
 |---|---|
 | Local branch | `wip/issue2043-pr1938-20261125`, tracking `origin/wip/alias-cell-ownership-20261030-185849` (the PR head branch) |
-| Gated commit | `36cb9b28b0`: the fixes below and two master merges (`4e2c8a471e`, `513d00c0fa`) on top of `7288fb4faf`; PR #1938 is at `9e3fb0dfdc` until this batch is pushed |
-| Full gate | `nice -n 19 make` on `36cb9b28b0`: `BUILD SUCCESSFUL` in 10m31, exit 0 (`/tmp/issue2043-final-make6.log`); `5308fe8d1f` passed in 13m07 before the distropref and documentation commits. Mergeable with `origin/master` `859ab46dde` |
-| Next step | Push, confirm hosted CI on both builds, then maintainer review |
+| Gated commit | `ad2ad2f3e7`: the fixes below and two master merges (`4e2c8a471e`, `513d00c0fa`) on top of `7288fb4faf` |
+| Full gate | `nice -n 19 make` on `ad2ad2f3e7`: exit 0 (`/tmp/issue2043-final-make7.log`). Full imported `perl5_t` suite (`perl_test_runner.pl --timeout 600 perl5_t/t`): 576 files, 0 not ok; `compare_test_logs.pl` against the maintainer baseline `test_20261022_120000_1992.log` reports 0 regressions (`/tmp/issue2043-perl5t.log`). Mergeable with `origin/master` `859ab46dde` |
+| Next step | Hosted CI on the pushed head, then maintainer review |
 
 ### Delivered in this batch
 
@@ -46,6 +46,8 @@ index.
 | `9b5db46e9a` | `caller` names subs compiled by `eval STRING`: a JVM-compiled sub called from an interpreter eval block, and interpreted named or anonymous subs whose frames keep the `(eval N)` source name | `caller_eval_block_eval_defined_sub.t` (8); 7/8 JVM and 4/8 interpreter on the previous PR head |
 | `5308fe8d1f` | A glob that received a different CV by assignment counts as already defined (Perl `GvASSUMECV`), so `sub NAME {...}` warns and installs a new CV; aliases and `use subs` do not inherit the flag | `assigned_code_glob_redefinition.t` (10); 5/10 JVM on the previous PR head |
 | `2941f76d04` | Bundled distropref for DBIx-Class-0.082844 adjusts the `t/storage/txn.t` line expectation to the Perl 5.45.4 rule (GH #24396) that PerlOnJava follows and `op/caller.t` test 50 requires | Patched file 90/90 on JVM; `cpan_generic_patch_paths.t` 160/160 |
+| `30931e0b87` | `require` searches the bundled library as an implicit fallback without adding it to `@INC` or to the "entries checked" diagnostic. Fixes `op/require_errors.t` 63-73, a regression from the earlier diagnostic change found by maintainer UAT | `op/require_errors.t` 73/73 on both backends; `require_error_lists_all_searched_paths.t` |
+| `ad2ad2f3e7` | A reference to an anonymous array's `$#` proxy keeps the array alive, matching the reference-counted stack PerlOnJava reports (`Internals::stack_refcounted`). Fixes `op/array.t` 83-84, a regression from the statement-end literal release found by maintainer UAT. Two tests added in this PR now follow `stack_refcounted` like `op/array.t` | `op/array.t` 199/199 on both backends; both tests pass system Perl, blead, and both backends |
 
 The `MortalList.pushMark()` wrapper around `invokeIncHook`, the
 `UNTRACKED_REFERENCE` orphaning hook in `PerlOwnerSlot`, and a brace-only
