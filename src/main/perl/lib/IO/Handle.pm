@@ -498,7 +498,8 @@ sub DESTROY {
     # alone cannot close a blessed IO::Handle when its Perl owner goes away.
     # Close here to preserve Perl's scope-exit behavior for IO::Socket objects
     # and other handles whose IO slot lives on the blessed glob.
-    CORE::close($fh) if defined fileno($fh);
+    CORE::close($fh)
+        if defined fileno($fh) && !_is_package_data_handle($fh);
 }
 
 1;

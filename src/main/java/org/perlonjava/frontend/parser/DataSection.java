@@ -84,6 +84,7 @@ public class DataSection {
         // Create an empty placeholder file handle that will be populated later
         RuntimeScalar emptyContent = new RuntimeScalar("");
         var fileHandle = RuntimeIO.open(emptyContent.createReference(), "<");
+        if (fileHandle != null) fileHandle.markPackageDataHandle();
         GlobalVariable.getGlobalIO(handleName).setIO(fileHandle);
     }
 
@@ -291,6 +292,7 @@ public class DataSection {
         RuntimeIO existingIO = GlobalVariable.getGlobalIO(handleName).getRuntimeIO();
 
         if (existingIO != null) {
+            existingIO.markPackageDataHandle();
             // Update the existing IO handle with new content instead of replacing it
             // This ensures that any aliased handles (like *ARGV = *DATA) continue to work
             RuntimeScalar contentScalar = dataContentScalar(content);
@@ -302,6 +304,7 @@ public class DataSection {
             // Fallback: create new handle if no placeholder exists
             RuntimeScalar contentScalar = dataContentScalar(content);
             var fileHandle = RuntimeIO.open(contentScalar.createReference(), "<");
+            if (fileHandle != null) fileHandle.markPackageDataHandle();
             fileHandle.ioHandle.seek(initialPosition, IOHandle.SEEK_SET);
             GlobalVariable.getGlobalIO(handleName).setIO(fileHandle);
             if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("Created new DATA handle");

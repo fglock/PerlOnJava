@@ -884,6 +884,7 @@ public class RuntimeGraphCloner {
             copyBase(source, target);
             target.currentLineNumber = source.currentLineNumber;
             target.globName = source.globName;
+            target.markPackageDataHandleIf(source.isPackageDataHandle());
             target.setCloneFlags(source.needsFlushForThreadClone(), source.isAutoFlush());
             return target;
         }
@@ -892,6 +893,7 @@ public class RuntimeGraphCloner {
         clones.put(source, target);
         target.currentLineNumber = source.currentLineNumber;
         target.globName = source.globName;
+        target.markPackageDataHandleIf(source.isPackageDataHandle());
         target.setCloneFlags(source.needsFlushForThreadClone(), source.isAutoFlush());
 
         if (source.directoryIO != null) {

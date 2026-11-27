@@ -48,13 +48,16 @@ public class StandardIO implements IOHandle {
 
     public StandardIO(OutputStream outputStream, boolean isStdout) {
         this.outputStream = outputStream;
-        this.bufferedOutputStream = new BufferedOutputStream(outputStream, BUFFER_SIZE);
+        // Perl buffers STDOUT when it is redirected, but STDERR is unbuffered.
+        // Keep their write order when both descriptors target the same pipe.
+        this.bufferedOutputStream = isStdout
+                ? new BufferedOutputStream(outputStream, BUFFER_SIZE) : null;
         this.fileno = isStdout ? STDOUT_FILENO : STDERR_FILENO;
     }
 
     @Override
     public RuntimeScalar write(String string) {
-        if (bufferedOutputStream == null) {
+        if (outputStream == null) {
             return RuntimeScalarCache.scalarFalse;
         }
         try {
@@ -71,7 +74,12 @@ public class StandardIO implements IOHandle {
                 byte[] data = hasWideChars
                         ? string.getBytes(StandardCharsets.UTF_8)
                         : string.getBytes(StandardCharsets.ISO_8859_1);
-                bufferedOutputStream.write(data);
+                if (bufferedOutputStream != null) {
+                    bufferedOutputStream.write(data);
+                } else {
+                    outputStream.write(data);
+                    outputStream.flush();
+                }
             }
             return RuntimeScalarCache.scalarTrue;
         } catch (IOException e) {
@@ -85,13 +93,17 @@ public class StandardIO implements IOHandle {
 
     @Override
     public RuntimeScalar flush() {
-        if (bufferedOutputStream == null) {
+        if (outputStream == null) {
             return RuntimeScalarCache.scalarTrue;
         }
 
         try {
             synchronized (writeLock) {
-                bufferedOutputStream.flush();
+                if (bufferedOutputStream != null) {
+                    bufferedOutputStream.flush();
+                } else {
+                    outputStream.flush();
+                }
             }
         } catch (IOException e) {
             return handleIOException(e, "Flush operation failed");

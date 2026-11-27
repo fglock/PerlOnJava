@@ -1378,6 +1378,21 @@ public class IOOperator {
      * @return A RuntimeScalar indicating the result of the write operation.
      */
     public static RuntimeScalar say(RuntimeList runtimeList, RuntimeScalar fileHandle) {
+        String callPackage = RuntimeCode.getActiveSymbolicCallPackage();
+        String importedSayName = (callPackage == null || callPackage.isBlank()
+                ? "main" : callPackage) + "::say";
+        if (GlobalVariable.isSubs.getOrDefault(importedSayName, false)) {
+            RuntimeScalar importedSay = GlobalVariable.getGlobalCodeRef(importedSayName);
+            if (importedSay != null) {
+                // The parser may see the core say feature before a runtime
+                // import has installed an overriding subroutine. Honor the
+                // imported call at execution time, as Perl does for use subs
+                // and Exporter imports.
+                return RuntimeCode.apply(importedSay, new RuntimeArray(runtimeList),
+                        RuntimeContextType.SCALAR).getFirst();
+            }
+        }
+
         RuntimeIO fh = fileHandle.getRuntimeIO();
         if (fh instanceof TieHandle tieHandle) {
             // Perl implements say on a tied handle as a localized print with

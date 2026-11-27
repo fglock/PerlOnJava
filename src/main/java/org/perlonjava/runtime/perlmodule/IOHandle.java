@@ -30,6 +30,7 @@ public class IOHandle extends PerlModuleBase {
             ioHandle.registerMethod("_setvbuf", null);
             ioHandle.registerMethod("_untaint", null);
             ioHandle.registerMethod("_set_input_line_number", null);
+            ioHandle.registerMethod("_is_package_data_handle", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing IOHandle method: " + e.getMessage());
         }
@@ -75,6 +76,15 @@ public class IOHandle extends PerlModuleBase {
             return RuntimeScalarCache.scalarUndef.getList();
         }
         return fh.fileno().getList();
+    }
+
+    /** Whether a FileHandle wrapper may leave a package-owned DATA stream open. */
+    public static RuntimeList _is_package_data_handle(RuntimeArray args, int ctx) {
+        if (args.size() != 1) {
+            throw new IllegalArgumentException("_is_package_data_handle requires one argument");
+        }
+        RuntimeIO fh = RuntimeIO.getRuntimeIO(args.get(0));
+        return new RuntimeList(new RuntimeScalar(fh != null && fh.isPackageDataHandle() ? 1 : 0));
     }
 
     /**
