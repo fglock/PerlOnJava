@@ -60,6 +60,14 @@ sub filter_add($)
     Filter::Util::Call::real_import($obj, (caller)[0], $coderef) ;
 }
 
+sub filter_add_with_package($$)
+{
+    my($obj, $filter_package) = @_ ;
+    my $coderef = (ref $obj eq 'CODE');
+    die "filter_add_with_package requires a code reference" unless $coderef;
+    Filter::Util::Call::real_import($obj, $filter_package, 1) ;
+}
+
 XSLoader::load('Filter::Util::Call');
 
 1;

@@ -194,7 +194,7 @@ sub gen_filter_import {
         elsif (!exists $terminator->{terminator}) {
             $terminator{terminator} = $def_terminator;
         }
-        filter_add(
+        Filter::Util::Call::filter_add_with_package(
             sub {
                 my ($status, $lastline);
                 my $count = 0;
@@ -224,7 +224,7 @@ sub gen_filter_import {
                 }
                 return $count;
             }
-        );
+        , $class);
         if ($prev_import) {
             goto &$prev_import;
         }
