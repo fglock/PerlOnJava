@@ -770,7 +770,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                                 GlobalVariable.getGlobalCodeRefForFreshLookup(sourceName);
                         if (sourceContainer.value instanceof RuntimeCode sourceCode) {
                             sourceCode.hasForwardGlobAlias = true;
-                            if (aliasedCode.requiresForwardGlobAliasGroup) {
+                            // A runtime LOAD_GLOBAL_CODE can materialize a
+                            // different forward CV from the parser's
+                            // placeholder. Preserve the interpreter's alias
+                            // group marker on the live CV that STORE_GLOB sees.
+                            if (RuntimeCode.isUseInterpreter()) {
                                 sourceCode.requiresForwardGlobAliasGroup = true;
                             }
                             value = sourceContainer;
