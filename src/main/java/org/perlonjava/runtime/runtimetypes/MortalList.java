@@ -1229,7 +1229,7 @@ public class MortalList {
             cleanupValues = fieldValues;
         }
         for (RuntimeScalar val : cleanupValues) {
-            RuntimeScalar.releaseIoOwner(val);
+            RuntimeScalar.releaseIoOwnerFromHashSlot(val);
             if (val != null) val.releaseContainerOwner(hash);
         }
         if (!RuntimeBase.blessedObjectExists() && !WeakRefRegistry.weakRefsExist()

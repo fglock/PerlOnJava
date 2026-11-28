@@ -5938,10 +5938,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     public static boolean isCodeDefined(RuntimeScalar codeRef) {
-        return codeRef != null
-                && codeRef.type == RuntimeScalarType.CODE
-                && codeRef.value instanceof RuntimeCode code
-                && code.defined();
+        if (codeRef == null
+                || codeRef.type != RuntimeScalarType.CODE
+                || !(codeRef.value instanceof RuntimeCode code)) {
+            return false;
+        }
+        if (code.defined()) {
+            return true;
+        }
+        // A forward glob alias can keep a separate destination placeholder
+        // while the source CV is still being compiled. Method lookup must
+        // recognize the alias once that source has a body, or it rejects the
+        // call before apply() can resolve the alias to the live CV.
+        return resolveLateDefinedForwardCodeRef(codeRef, code) != null;
     }
 
     private static RuntimeScalar resolveDirectCallTarget(RuntimeScalar runtimeScalar, String subroutineName) {

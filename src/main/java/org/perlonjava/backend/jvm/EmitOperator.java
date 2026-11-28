@@ -2095,6 +2095,24 @@ public class EmitOperator {
                     operatorNode.operator.equals("&")) {
                 if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("Handle \\& " + operatorNode.operand);
                 if (operatorNode.operand instanceof IdentifierNode identifierNode) {
+                    if (operatorNode.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar codeRef
+                            && !(codeRef.value instanceof RuntimeCode code
+                                    && (code.isConstantCv || code.constantValue != null))
+                            && emitterVisitor.ctx.javaClassInfo != null) {
+                        RuntimeScalar codeSnapshot = new RuntimeScalar();
+                        codeSnapshot.type = codeRef.type;
+                        codeSnapshot.value = codeRef.value;
+                        int padIndex = emitterVisitor.ctx.javaClassInfo.addPadConstant(codeSnapshot);
+                        emitterVisitor.ctx.mv.visitLdcInsn(emitterVisitor.ctx.javaClassInfo.javaClassName);
+                        emitterVisitor.ctx.mv.visitLdcInsn(padIndex);
+                        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                                "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                                "getPadConstant",
+                                "(Ljava/lang/String;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                                false);
+                        handleVoidContext(emitterVisitor);
+                        return;
+                    }
                     emitterVisitor.ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
                     emitterVisitor.ctx.mv.visitInsn(Opcodes.DUP);
                     emitterVisitor.ctx.mv.visitLdcInsn(identifierNode.name);

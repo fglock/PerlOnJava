@@ -33,21 +33,6 @@ import static org.perlonjava.frontend.parser.ParserNodeUtils.scalarUnderscore;
  * ; - separates required from optional arguments
  */
 public class PrototypeArgs {
-    private static boolean isListUtilCallback(String subName) {
-        if (subName == null || subName.isEmpty()) {
-            return false;
-        }
-        String baseName = subName;
-        int idx = baseName.lastIndexOf("::");
-        if (idx >= 0) {
-            baseName = baseName.substring(idx + 2);
-        }
-        return switch (baseName) {
-            case "reduce", "reductions", "any", "all", "none", "notall",
-                    "first", "pairmap", "pairgrep", "pairfirst" -> true;
-            default -> false;
-        };
-    }
 
     private static boolean isOpenDupMode(Node modeNode) {
         if (modeNode instanceof StringNode stringNode) {
@@ -1095,9 +1080,6 @@ public class PrototypeArgs {
                 }
                 Node block = new SubroutineNode(null, null, null,
                         callbackBody, false, parser.tokenIndex);
-                if (isListUtilCallback(parser.ctx.symbolTable.getCurrentSubroutine())) {
-                    block.setAnnotation("isMapGrepBlock", true);
-                }
                 TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
                 // Code references/blocks are evaluated in SCALAR context
                 block.setAnnotation("context", "SCALAR");

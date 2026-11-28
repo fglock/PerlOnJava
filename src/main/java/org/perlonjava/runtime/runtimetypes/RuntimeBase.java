@@ -383,13 +383,27 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         if (pendingClosureCaptureReleases != 0) {
             throw new IllegalStateException("closure capture release is still pending");
         }
-        int slotCount = ownerSlotCount(ownerKind);
+        int slotCount = ownerKind == PerlOwnerSlot.Kind.CLOSURE_PAD
+                ? closurePadCaptureOwnerSlotCount() : ownerSlotCount(ownerKind);
         int legacyCount = legacyCaptureOwnerCount();
         if (captureCount != slotCount + legacyCount) {
             throw new IllegalStateException("closure capture owner mismatch: count="
                     + captureCount + ", slots=" + slotCount + ", legacy=" + legacyCount
                     + ", kind=" + ownerKind);
         }
+    }
+
+    private synchronized int closurePadCaptureOwnerSlotCount() {
+        if (ownerSlots == null) return 0;
+        int count = 0;
+        for (PerlOwnerSlot slot : ownerSlots) {
+            if (slot.isActive()
+                    && slot.kind() == PerlOwnerSlot.Kind.CLOSURE_PAD
+                    && slot.padCell() == null) {
+                count++;
+            }
+        }
+        return count;
     }
 
     /** Whether an explicit, compatibility, or in-flight capture owner remains. */

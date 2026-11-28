@@ -63,7 +63,10 @@ public class Clone extends PerlModuleBase {
 
         // Check for already-cloned references (circular reference handling)
         if (scalar.value != null && cloned.containsKey(scalar.value)) {
-            return cloned.get(scalar.value);
+            // The cached value identifies the cloned referent. Each incoming
+            // reference occupies its own scalar cell, even when two cells
+            // point at the same referent.
+            return new RuntimeScalar(cloned.get(scalar.value));
         }
 
         int blessId = RuntimeScalarType.blessedId(scalar);
@@ -72,7 +75,7 @@ public class Clone extends PerlModuleBase {
             case RuntimeScalarType.HASHREFERENCE -> {
                 RuntimeHash origHash = (RuntimeHash) scalar.value;
                 RuntimeHash newHash = new RuntimeHash();
-                RuntimeScalar newRef = newHash.createReference();
+                RuntimeScalar newRef = newHash.createAnonymousReference();
                 cloned.put(scalar.value, newRef);
 
                 // Preserve blessing
@@ -103,7 +106,7 @@ public class Clone extends PerlModuleBase {
             case RuntimeScalarType.ARRAYREFERENCE -> {
                 RuntimeArray origArray = (RuntimeArray) scalar.value;
                 RuntimeArray newArray = new RuntimeArray();
-                RuntimeScalar newRef = newArray.createReference();
+                RuntimeScalar newRef = newArray.createAnonymousReference();
                 cloned.put(scalar.value, newRef);
 
                 // Preserve blessing
@@ -125,7 +128,7 @@ public class Clone extends PerlModuleBase {
                     }
                 } else {
                     for (RuntimeScalar element : origArray.elements) {
-                        newArray.elements.add(deepClone(element, cloned, nextDepth));
+                        newArray.addClonedElement(deepClone(element, cloned, nextDepth));
                     }
                 }
                 yield newRef;

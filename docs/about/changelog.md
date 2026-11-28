@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Preserve filehandle descriptor reuse across PerlIO layer pops (#2067).
+- Resolve interpreter method calls through forward code-glob aliases after later sub definitions (#2000).
+- Preserve cloned reference-slot independence and destructor timing, retain imported CVs captured before namespace cleanup, preserve constant-glob downgrade after eval, validate closure-pad ownership during Module::Metadata loading, and close anonymous file handles when their final hash slot is released (#2159, #2130, #2208, #2067).
 - Preserve merged stdout and stderr write order, initialize PerlIO::via layers with FILENO before writes, retain package DATA handles through FileHandle wrappers, and honor localized imported `say` calls (#2198, #2162, #2039, #2160).
 - Ignore marker-like format picture text during conflict-marker checks; defer filters from synthetic `use_ok` evals and preserve their installing package during callbacks (#2182, #2181).
 - Correct `POSIX::strtod` and `LONG_MAX`, enumerate macOS groups with `getgrent`, and bundle the `POSIX::strptime` 0.13 Java provider (#2071, #2091, #2009, #2163).
@@ -72,7 +75,7 @@ priorities and future plans.
 - Preserve explicit empty split fields in fixed-arity assignments, restore parsed XML attribute order and `XML::LibXML` ID indexing, decode HTML href character references, and add a JSON::PP-backed `JSON::SL` compatibility subset (#2088, #1323, #1332, #2097, #1321).
 - Preserve list context for localized hash slices, overloaded readline and `pairgrep`; preserve map block versus nested-subroutine `wantarray` contexts; honor overloaded `&{}` replacements and retain overload exceptions during post-increment (#2081, #2080, #2084, #2046, #2062).
 - Resolve registered warning categories from blessed objects passed to `warnings::warnif` (#2063).
-- Install MakeMaker `install_share` data with portable Windows file-copy handling and module paths, expose B's unsigned-integer flag, preserve unsigned 64-bit numeric conversion in parsing and packing, and keep integer precision in `List::Util::uniqnum` (#2068, #2000).
+- Install MakeMaker `install_share` data with portable Windows file-copy handling and module paths, expose B's unsigned-integer flag, preserve unsigned 64-bit numeric conversion in parsing and packing, keep integer precision in `List::Util::uniqnum`, and preserve local `return` behavior in List::Util callbacks (#2068, #2000).
 - Resolve PadWalker caller pads through Perl wrappers, keep `CORE::GLOBAL::caller` overrides dynamic across eval callbacks, apply `set_closed_over` replacements when lazy JVM subs materialize, and preserve autodie errors when caller-stack traversal is exhausted (#2069, #2064, #2060, #2032).
 - Preserve `PerlIO::via` layer reconfiguration and seek callbacks for BOM-aware decoding, report malformed UTF-8 through `:encoding` layers, resolve `Cwd::realpath` for a missing final component, and bound memory allocation for large `sysread` requests (#2058, #2055, #2047).
 - Fix Perl parser handling of postfix increment in concatenated `print` arguments, commented DATA/END markers, the punctuation hash `%;`, and semicolon-disambiguated hash dereferences (#2066, #2065, #2061, #2054).
