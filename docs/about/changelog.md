@@ -6,6 +6,8 @@ priorities and future plans.
 
 ## Work in progress
 
+- Preserve filehandle descriptor reuse across PerlIO layer pops (#2067).
+- Resolve interpreter method calls through forward code-glob aliases after later sub definitions (#2000).
 - Preserve cloned reference-slot independence and destructor timing, retain imported CVs captured before namespace cleanup, preserve constant-glob downgrade after eval, validate closure-pad ownership during Module::Metadata loading, and close anonymous file handles when their final hash slot is released (#2159, #2130, #2208, #2067).
 - Preserve merged stdout and stderr write order, initialize PerlIO::via layers with FILENO before writes, retain package DATA handles through FileHandle wrappers, and honor localized imported `say` calls (#2198, #2162, #2039, #2160).
 - Ignore marker-like format picture text during conflict-marker checks; defer filters from synthetic `use_ok` evals and preserve their installing package during callbacks (#2182, #2181).

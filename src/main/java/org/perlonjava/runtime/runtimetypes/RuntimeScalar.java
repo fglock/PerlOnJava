@@ -7287,14 +7287,19 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                         && !(io.ioHandle instanceof ClosedIOHandle)) {
                     // Closing is required for stream sockets: merely dropping
                     // the synthetic fileno does not send EOF to the peer.
-                    // Closing ordinary handles is safe when retiring their
-                    // durable hash slot; other scalar aliases may not have a
-                    // resource lease of their own.
+                    // A hash slot may be retired while a lexical alias still
+                    // owns the glob. Keep ordinary handles live until the last
+                    // tracked Perl owner is gone; a bare final hash-held handle
+                    // can close here for deterministic DESTROY-like cleanup.
                     String className = NameNormalizer.getBlessStr(glob.blessId);
                     boolean hasDestroy = className != null
                             && DestroyDispatch.classHasDestroy(glob.blessId, className);
                     if (isSocketIOHandle(io.ioHandle)
-                            || (finalHashSlotRelease && !hasDestroy)) io.close();
+                            || (finalHashSlotRelease && !hasDestroy && glob.refCount <= 0)) {
+                        io.close();
+                    } else if (!finalHashSlotRelease || hasDestroy) {
+                        io.unregisterFileno();
+                    }
                 }
                 GlobalVariable.retireHiddenIORef(glob.globName);
             }
